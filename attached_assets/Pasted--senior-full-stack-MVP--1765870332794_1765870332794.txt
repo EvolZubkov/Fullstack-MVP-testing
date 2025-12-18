@@ -1,0 +1,179 @@
+Ты — senior full-stack разработчик и архитектор. Нужен MVP+ для веб-приложения “Конструктор тестов” с экспортом в SCORM 2004 (4th edition) и отслеживанием прохождения в LMS.
+
+## 1) Цель
+Сделать приложение, где автор (админ/методист) создает банк вопросов, группирует их по темам, собирает тест из тем с выборкой вопросов по каждой теме, задает проходные критерии (общие и/или по темам), а учащийся проходит тест и получает отчет:
+- общий результат (процент и “сдан/не сдан”)
+- результат по каждой теме (например “IPTV: 3 из 5”)
+- при провале темы — показать рекомендации курсов, заданные в теме
+- после создания теста — экспорт в SCORM 2004 v4 пакет (zip) для загрузки в LMS, с передачей результатов (score/completion/success + по темам и взаимодействиям)
+
+## 2) Роли
+- Author/Admin: управляет темами, вопросами, тестами, экспортом SCORM
+- Learner: проходит тест и видит результаты
+Сделай простую авторизацию (session/cookie). Для MVP можно 2 фиксированных аккаунта через seed, но лучше CRUD пользователей.
+
+## 3) Типы вопросов (обязательно)
+1) Single choice (одиночный выбор) — 1 правильный вариант
+2) Multiple choice (множественный выбор) — несколько правильных
+3) Matching (сопоставление) — пары “слева–справа”
+4) Ranking (ранжирование) — порядок элементов
+
+### Оценивание (по умолчанию)
+- Каждый вопрос = 1 балл (можно расширить weight, но MVP достаточно 1).
+- Single: 1 если выбран правильный, иначе 0
+- Multiple: 1 только если выбран ТОЧНЫЙ набор правильных (без лишних). (Опционально позже partial credit, но сейчас строго)
+- Matching: 1 если все пары верные, иначе 0
+- Ranking: 1 если порядок полностью совпал, иначе 0
+
+## 4) Темы (Question Groups)
+Тема содержит:
+- name, description
+- список вопросов (с привязкой)
+- recommendedCourses: массив объектов {title, url} (можно пусто)
+
+## 5) Тест (Test)
+Тест состоит из “секции по теме”:
+- topicId
+- questionCountToDraw (сколько вопросов случайно выбрать из темы при прохождении)
+- passRuleForTopic (опционально): 
+  - type = "absolute" (например 4 из 5)
+  - type = "percent" (например 80%)
+  - или null (тогда тема не имеет отдельного проходного критерия)
+Тест также имеет общий passRuleOverall:
+- type = "percent" (например 80%)
+- или "absolute" (например 7 из 10)
+Правило: тест “сдан”, если выполнено общее правило И (если задано) выполнены все topic pass rules.
+
+## 6) Прохождение теста (Attempt)
+- При старте: генерируй “вариант” — для каждой темы случайно выбирай questionCountToDraw вопросов без повторов.
+- Сохраняй попытку в БД: userId, testId, startedAt, finishedAt, ответы, результаты.
+- После завершения: покажи:
+  - общий процент и статус “сдан/не сдан”
+  - по каждой теме: “правильно X из Y” (+ проценты)
+  - если тема не пройдена (по ее passRule или по общему порогу — на твой выбор, но минимум: если тема не прошла по topic rule) — показывай блок “Рекомендуемые курсы” из темы (список ссылок).
+
+## 7) Экспорт SCORM 2004 4th edition (обязательно)
+Сделай кнопку “Export SCORM 2004 (4th ed)” на странице теста.
+Экспорт должен создавать .zip, содержащий:
+- imsmanifest.xml (SCORM 2004 4th edition)
+- index.html (launch page)
+- runtime.js (SCORM API wrapper)
+- app bundle (простая страница прохождения, можно без React внутри пакета — допустимо чистым HTML/JS)
+- встроенное определение теста (JSON) ВНУТРИ пакета, чтобы SCORM работал автономно (без обращения к серверу)
+
+### Что передавать в LMS через SCORM API
+Используй SCORM 2004 API (pipwerks или свой мини-wrapper).
+На завершении попытки устанавливай:
+- cmi.completion_status = "completed"
+- cmi.success_status = "passed" или "failed"
+- cmi.score.raw (0..100)
+- cmi.score.scaled (0..1)
+- cmi.score.max = 100
+- cmi.score.min = 0
+- cmi.progress_measure (0..1) (можно = 1)
+- cmi.exit = "normal"
+Плюс детализация:
+- По темам как objectives:
+  - cmi.objectives.n.id = "topic_<topicId>"
+  - cmi.objectives.n.score.raw = percent по теме
+  - cmi.objectives.n.success_status = passed/failed (если у темы есть passRule; иначе можно "unknown")
+- По вопросам как interactions (минимум):
+  - cmi.interactions.n.id = "q_<questionId>"
+  - cmi.interactions.n.type = choice / multiple_choice / matching / sequencing (ranking)
+  - cmi.interactions.n.result = correct/incorrect
+  - cmi.interactions.n.learner_response = краткая сериализация ответа
+
+SCORM flow:
+- On load: Initialize("")
+- During test: можно SetValue периодически
+- On finish: SetValue(...) + Commit("") + Terminate("")
+
+### Важно
+- Пакет должен быть SCORM 2004 4th edition совместим (schema/version в манифесте).
+- Сделай генерацию zip на сервере (endpoint /api/tests/:id/export/scorm) и отдавай файл.
+- Manifest: один organization + один item, resource с href="index.html".
+
+## 8) Трекинг “передачу данных в ЛМС”
+Для SCORM это и есть передача — через SCORM API.
+Но дополнительно (полезно): сделай опциональную настройку “Webhook URL” в настройках теста:
+- если указан, то SCORM пакет после завершения отправляет POST (fetch) на этот URL с attempt summary (userId если доступен, score, perTopic breakdown, timestamp).
+- Если CORS мешает, просто реализуй, но делай gracefully fail (не блокировать завершение).
+(В UI сервера также хранить attempts не обязательно для SCORM-пакета, но для веб-версии приложения — обязательно.)
+
+## 9) Технологии (выбери и реализуй полностью)
+Предпочтительно:
+- Backend: Node.js + Express
+- DB: SQLite + Prisma
+- Frontend: React + Vite (для веб-приложения конструктора)
+- Styling: простая CSS/utility, без сложных библиотек
+- Zip: archiver (npm)
+- Для SCORM runtime внутри пакета: чистый JS (без сборки) или минимальная сборка, главное — работоспособность
+
+## 10) API (примерный список)
+- Auth:
+  - POST /api/auth/login
+  - POST /api/auth/logout
+  - GET /api/auth/me
+- Topics:
+  - CRUD /api/topics
+  - CRUD /api/topics/:id/questions
+- Questions:
+  - CRUD /api/questions (type, prompt, options/pairs/items, correctAnswer)
+- Tests:
+  - CRUD /api/tests
+  - PUT /api/tests/:id/sections (topics + drawCount + passRuleForTopic)
+  - POST /api/tests/:id/publish (опционально)
+  - GET /api/tests/:id/export/scorm  -> zip download
+- Attempts (web-версия):
+  - POST /api/tests/:id/attempts/start
+  - POST /api/attempts/:attemptId/answer
+  - POST /api/attempts/:attemptId/finish
+  - GET /api/attempts/:attemptId/result
+
+## 11) UI (обязательно)
+Сделай 2 зоны:
+A) Author dashboard:
+- список тем
+- создание/редактирование темы, курсы рекомендации
+- создание/редактирование вопросов (4 типа, удобные формы)
+- создание теста:
+  - выбрать темы, задать выборку по каждой теме (drawCount)
+  - задать overall pass rule
+  - задать topic pass rules (optional)
+  - кнопка Export SCORM
+B) Learner:
+- список доступных тестов
+- прохождение теста (web)
+- страница результата с breakdown + рекомендации курсов
+
+## 12) Данные (Prisma schema минимум)
+- User(id, email, passwordHash, role)
+- Topic(id, name, description)
+- TopicCourse(id, topicId, title, url)
+- Question(id, topicId, type, prompt, dataJson, correctJson)
+- Test(id, title, description, overallPassRuleJson, webhookUrl nullable)
+- TestSection(id, testId, topicId, drawCount, topicPassRuleJson nullable)
+- Attempt(id, userId, testId, variantJson, answersJson, resultJson, startedAt, finishedAt)
+
+## 13) Критерии готовности (Definition of Done)
+- Автор может создать темы IPTV/WIFI, добавить по 10 вопросов разных типов
+- Автор может собрать тест и выставить: тема IPTV — выбрать 5 вопросов, WIFI — 3 вопроса
+- Можно задать общий проходной 80% и/или по теме IPTV “4 из 5”
+- Учащийся проходит тест, получает общий результат + по темам, и рекомендации курсов по темам где провал
+- Экспорт SCORM создает zip, который:
+  - запускается в браузере (локально для демо)
+  - содержит imsmanifest.xml и index.html
+  - при завершении вызывает SCORM API методы (Initialize/SetValue/Commit/Terminate)
+  - пишет score + success/completion + objectives/interactions
+- Код запускается в Replit без ручной магии: npm install && npm run dev (или аналог)
+
+## 14) План работ (сделай сам)
+1) Сгенерируй проект (server + client)
+2) Схема Prisma + миграция + seed (создай admin и learner)
+3) Реализуй CRUD + UI для тем/вопросов/тестов
+4) Реализуй engine сборки варианта и оценивание
+5) Реализуй web-прохождение и результаты
+6) Реализуй SCORM exporter (manifest + index.html + runtime.js + embedded test JSON) + zip download
+7) Добавь минимальные тестовые данные
+
+Начинай с реализации. Пиши аккуратный код, валидацию входных данных и понятные сообщения ошибок. В README опиши запуск и как проверить SCORM экспорт.
