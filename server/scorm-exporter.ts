@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import archiver from "archiver";
 import { Writable } from "stream";
 import type { Test, TestSection, Topic, Question, TopicCourse, PassRule } from "@shared/schema";
@@ -23,17 +26,20 @@ export function generateScormPackage(data: ExportData): Promise<Buffer> {
     archive.on("end", () => resolve(Buffer.concat(chunks)));
 
     archive.pipe(writable);
-
+    
     const testJson = buildTestJson(data);
     const manifest = buildManifest(data.test, data);
     const indexHtml = buildIndexHtml(data.test.title);
     const runtimeJs = buildRuntimeJs();
     const appJs = buildAppJs(testJson);
     const metadataXml = buildMetadataXml(data.test);
+    const stylesCss = buildStylesCss();
+    
 
     archive.append(manifest, { name: "imsmanifest.xml" });
     archive.append(metadataXml, { name: "metadata.xml" });
     archive.append(indexHtml, { name: "index.html" });
+    archive.append(stylesCss, { name: "styles.css" }); 
     archive.append(runtimeJs, { name: "runtime.js" });
     archive.append(appJs, { name: "app.js" });
 
@@ -159,6 +165,7 @@ function buildManifest(test: Test, data: ExportData): string {
   <resources>
     <resource identifier="res_${id}" type="webcontent" adlcp:scormType="sco" href="index.html">
       <file href="index.html"/>
+      <file href="styles.css"/>
       <file href="runtime.js"/>
       <file href="app.js"/>
     </resource>
@@ -225,132 +232,14 @@ function buildIndexHtml(title: string): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeXml(title)}</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: #f5f5f5;
-      min-height: 100vh;
-      padding: 20px;
-    }
-    .container { max-width: 800px; margin: 0 auto; }
-    h1 { font-size: 24px; margin-bottom: 20px; color: #1a1a1a; }
-    .card {
-      background: white;
-      border-radius: 8px;
-      padding: 24px;
-      margin-bottom: 16px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }
-    .question-text { font-size: 18px; margin-bottom: 16px; color: #333; }
-    .option {
-      display: flex;
-      align-items: center;
-      padding: 12px 16px;
-      border: 2px solid #e0e0e0;
-      border-radius: 8px;
-      margin-bottom: 8px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .option:hover { border-color: #2563eb; background: #f0f7ff; }
-    .option.correct-answer { border-color: #16a34a; background: #dcfce7; }
-    .option.incorrect-answer { border-color: #dc2626; background: #fee2e2; }
-    .matching-row.correct-answer { background: #dcfce7; border-radius: 4px; padding: 4px 8px; }
-    .matching-row.incorrect-answer { background: #fee2e2; border-radius: 4px; padding: 4px 8px; }
-    .ranking-item.correct-answer { background: #dcfce7; border-radius: 4px; }
-    .ranking-item.incorrect-answer { background: #fee2e2; border-radius: 4px; }
-    .option.selected { border-color: #2563eb; background: #eff6ff; }
-    .option input { margin-right: 12px; }
-    .progress-bar {
-      height: 8px;
-      background: #e0e0e0;
-      border-radius: 4px;
-      margin-bottom: 20px;
-      overflow: hidden;
-    }
-    .progress-fill {
-      height: 100%;
-      background: #2563eb;
-      transition: width 0.3s;
-    }
-    .btn {
-      display: inline-block;
-      padding: 12px 24px;
-      background: #2563eb;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    .btn:hover { background: #1d4ed8; }
-    .btn:disabled { background: #94a3b8; cursor: not-allowed; }
-    .btn-outline { background: white; color: #2563eb; border: 2px solid #2563eb; }
-    .btn-outline:hover { background: #eff6ff; }
-    .navigation { display: flex; justify-content: space-between; margin-top: 20px; }
-    .result-hero { text-align: center; padding: 40px 20px; }
-    .result-score { font-size: 64px; font-weight: bold; }
-    .result-passed { color: #16a34a; }
-    .result-failed { color: #dc2626; }
-    .result-status { font-size: 24px; margin-top: 10px; }
-    .topic-result {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 16px;
-      border-bottom: 1px solid #e0e0e0;
-    }
-    .topic-result:last-child { border-bottom: none; }
-    .course-link {
-      display: block;
-      padding: 12px 16px;
-      background: #f0f7ff;
-      border-radius: 8px;
-      margin-top: 8px;
-      color: #2563eb;
-      text-decoration: none;
-    }
-    .course-link:hover { background: #dbeafe; }
-    .matching-row { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
-    .matching-item { flex: 1; padding: 12px; background: #f5f5f5; border-radius: 8px; }
-    select {
-      padding: 10px;
-      border: 2px solid #e0e0e0;
-      border-radius: 8px;
-      font-size: 14px;
-      min-width: 120px;
-    }
-    .ranking-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 16px;
-      background: white;
-      border: 2px solid #e0e0e0;
-      border-radius: 8px;
-      margin-bottom: 8px;
-    }
-    .ranking-controls button {
-      background: #e0e0e0;
-      border: none;
-      width: 28px;
-      height: 28px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-    }
-    .ranking-controls button:hover { background: #d0d0d0; }
-    .ranking-controls button:disabled { opacity: 0.3; cursor: not-allowed; }
-    #loading { text-align: center; padding: 60px; color: #666; }
-  </style>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div class="container">
     <div id="app">
       <div id="loading">Загрузка теста...</div>
     </div>
+    <div id="toast-root"></div>
   </div>
   <script src="runtime.js"></script>
   <script src="app.js"></script>
@@ -593,6 +482,7 @@ function generateVariant() {
       });
     });
   });
+  state.flatQuestions = shuffle(state.flatQuestions);
 }
 
 function shuffle(arr) {
@@ -744,7 +634,58 @@ function startTest() {
   render();
 }
 
+function showToast(message, kind) {
+  var root = document.getElementById('toast-root');
+  if (!root) return;
+
+  var el = document.createElement('div');
+  el.className = 'toast' + (kind ? (' ' + kind) : '');
+  el.textContent = message;
+
+  root.appendChild(el);
+
+  setTimeout(function() {
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }, 2500);
+}
+
+function hasAnswer(q, answer) {
+  if (!q) return true;
+
+  if (q.type === 'single') return typeof answer === 'number';
+  if (q.type === 'multiple') return Array.isArray(answer) && answer.length > 0;
+
+  if (q.type === 'matching') {
+    if (!answer || typeof answer !== 'object') return false;
+    var need = (q.data && Array.isArray(q.data.left)) ? q.data.left.length : 0;
+    var keys = Object.keys(answer);
+    return keys.length === need && keys.every(function(k) {
+      return typeof answer[k] === 'number';
+    });
+  }
+
+  // ranking: порядок всегда есть (дефолтный тоже), считаем ответом
+  if (q.type === 'ranking') return true;
+
+  return answer !== undefined && answer !== null;
+}
+
+function requireAnswerOrToast() {
+  var fq = state.flatQuestions[state.currentIndex];
+  if (!fq) return true;
+
+  var q = fq.question;
+  var answer = state.answers[q.id];
+
+  if (!hasAnswer(q, answer)) {
+    showToast('Сначала ответьте на вопрос', 'warn');
+    return false;
+  }
+  return true;
+}
+
 function confirmAnswer() {
+  if (!requireAnswerOrToast()) return;
   state.feedbackShown = true;
   render();
 }
@@ -923,8 +864,9 @@ function moveRank(qId, pos, dir) {
   render();
 }
 
-
 function next() {
+  if (!requireAnswerOrToast()) return;
+
   if (state.currentIndex < state.flatQuestions.length - 1) {
     state.currentIndex++;
     state.feedbackShown = false;
@@ -932,61 +874,130 @@ function next() {
   }
 }
 
+
 function submit() {
   if (state.submitted) return;
+  if (!requireAnswerOrToast()) return;
+
   state.submitted = true;
-  
+
   if (state.timerInterval) {
     clearInterval(state.timerInterval);
     state.timerInterval = null;
   }
-  
+
   state.currentIndex = state.flatQuestions.length;
   render();
 }
+
 
 function renderResults() {
   var results = calculateResults();
   var app = document.getElementById('app');
 
-  var html = '<div class="result-hero">';
-  html += '<div class="result-score ' + (results.passed ? 'result-passed' : 'result-failed') + '">' + Math.round(results.percent) + '%</div>';
-  html += '<div class="result-status">' + (results.passed ? 'ПРОЙДЕН' : 'НЕ ПРОЙДЕН') + '</div>';
-  html += '<div style="margin-top:10px;color:#666">Полностью верных: ' + results.correct + ' из ' + results.totalQuestions + '</div>';
-  html += '<div style="color:#666">Баллы: ' + results.earnedPoints.toFixed(1) + ' / ' + results.possiblePoints + '</div>';
-  html += '</div>';
+  var pct = Math.round(results.percent);
+  var passed = !!results.passed;
+
+  // ring math
+  var r = 68;
+  var c = 2 * Math.PI * r;
+  var offset = c - (pct / 100) * c;
+
+  var html = '';
+  html += '<div class="card summary-card">';
+  html +=   '<div class="summary-head">';
+  html +=     '<div class="hero-title">' + (passed ? 'Тест пройден' : 'Тест не пройден') + '</div>';
+  html +=     '<div class="hero-subtitle">' + escapeHtml(TEST_DATA.title || '') + '</div>';
+  html +=   '</div>';
+
+  html +=   '<div class="ring-wrap">';
+  html +=     '<div class="ring">';
+  html +=       '<svg viewBox="0 0 160 160">';
+  html +=         '<circle cx="80" cy="80" r="' + r + '" stroke="rgba(255,255,255,0.12)" stroke-width="14" fill="none"></circle>';
+  html +=         '<circle cx="80" cy="80" r="' + r + '" stroke="currentColor" stroke-width="14" fill="none" stroke-linecap="round"';
+  html +=           ' style="stroke-dasharray:' + c.toFixed(2) + ';stroke-dashoffset:' + offset.toFixed(2) + '"></circle>';
+  html +=       '</svg>';
+  html +=       '<div class="center">';
+  html +=         '<div class="pct">' + pct + '%</div>';
+  html +=         '<div class="label">результат</div>';
+  html +=       '</div>';
+  html +=     '</div>';
+
+  html +=     '<div class="pill ' + (passed ? 'pass' : 'fail') + '">' + (passed ? 'ПРОЙДЕНО' : 'НЕ ПРОЙДЕНО') + '</div>';
+
+  html +=     '<div class="stats-row">';
+  html +=       '<div class="stat"><div class="v">' + results.correct + '</div><div class="l">верно</div></div>';
+  html +=       '<div class="stat"><div class="v">' + results.totalQuestions + '</div><div class="l">всего</div></div>';
+  html +=       '<div class="stat"><div class="v">' + results.earnedPoints.toFixed(1) + '</div><div class="l">баллы</div></div>';
+  html +=     '</div>';
+  html +=   '</div>';
 
   if (TEST_DATA.testFeedback) {
-    html += '<div class="card"><div style="color:#333">' + escapeHtml(TEST_DATA.testFeedback) + '</div></div>';
+    html += '<div style="margin-top:14px;color:hsl(var(--muted-foreground))">' + escapeHtml(TEST_DATA.testFeedback) + '</div>';
   }
 
-  var failedTopics = results.topicResults.filter(function(tr) { return !tr.passed; });
-  
-  if (failedTopics.length > 0) {
-    html += '<div class="card"><h2 style="margin-bottom:16px">Темы, требующие доработки</h2>';
-    failedTopics.forEach(function(tr) {
-      html += '<div class="topic-result">';
-      html += '<div><strong>' + escapeHtml(tr.topicName) + '</strong></div>';
-      html += '<div>' + tr.earnedPoints.toFixed(1) + '/' + tr.possiblePoints + ' (' + Math.round(tr.percent) + '%)</div>';
-      html += '</div>';
-      if (tr.topicFeedback) {
-        html += '<div style="padding:0 16px 8px;color:#666;font-size:14px;">' + escapeHtml(tr.topicFeedback) + '</div>';
-      }
-      if (tr.recommendedCourses && tr.recommendedCourses.length > 0) {
-        html += '<div style="padding:0 16px 16px">';
-        html += '<div style="color:#666;font-size:14px;margin-bottom:8px">Рекомендуемые курсы:</div>';
-        tr.recommendedCourses.forEach(function(c) {
-          html += '<a class="course-link" href="' + escapeHtml(c.url) + '" target="_blank">' + escapeHtml(c.title) + '</a>';
-        });
-        html += '</div>';
-      }
-    });
+  html += '</div>';
+
+  html += '<div class="section-title">Результаты по темам</div>';
+  html += '<div class="topic-grid">';
+
+  results.topicResults.forEach(function(tr) {
+    var tpct = Math.round(tr.percent || 0);
+    var tpass = (tr.passed === null) ? null : !!tr.passed;
+
+    html += '<div class="card topic-card">';
+    html +=   '<div class="topic-head">';
+    html +=     '<div class="topic-name">' + escapeHtml(tr.topicName || '') + '</div>';
+    if (tpass !== null) {
+      html += '<div class="pill ' + (tpass ? 'pass' : 'fail') + '">' + (tpass ? 'ОК' : 'НЕТ') + '</div>';
+    }
+    html +=   '</div>';
+
+    html +=   '<div class="topic-meta">' + tpct + '% • ' + tr.correct + ' / ' + tr.total + '</div>';
+    html +=   '<div class="topic-bar ' + (tpass ? 'pass' : '') + '"><div style="width:' + Math.min(100, Math.max(0, tpct)) + '%"></div></div>';
+
+    if (tr.topicFeedback) {
+      html += '<div style="margin-top:10px;color:hsl(var(--muted-foreground))">' + escapeHtml(tr.topicFeedback) + '</div>';
+    }
+
+    if (Array.isArray(tr.recommendedCourses) && tr.recommendedCourses.length) {
+      tr.recommendedCourses.forEach(function(c) {
+        html += '<a class="course-link" target="_blank" rel="noopener noreferrer" href="' + escapeHtml(c.url) + '">' + escapeHtml(c.title) + '</a>';
+      });
+    }
+
     html += '</div>';
-  }
+  });
+
+  html += '</div>';
+
+  html += '<div class="footer-actions">';
+  html +=   '<button class="btn btn-outline" onclick="restart()">Пройти ещё раз</button>';
+  html += '</div>';
 
   app.innerHTML = html;
 
   finishScorm(results);
+}
+
+function restart() {
+  state.phase = 'start';
+  state.currentIndex = 0;
+  state.answers = {};
+  state.variant = null;
+  state.flatQuestions = [];
+  state.submitted = false;
+  state.feedbackShown = false;
+  state.timeExpired = false;
+
+  if (state.timerInterval) {
+    clearInterval(state.timerInterval);
+    state.timerInterval = null;
+  }
+  state.remainingSeconds = null;
+
+  generateVariant();
+  render();
 }
 
 function calculateResults() {
@@ -1217,4 +1228,314 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 `;
+}
+function buildStylesCss(): string {
+  const tokens = loadAppThemeTokensCss();
+  const { light, dark } = tokens;
+
+  const darkAsMedia = dark
+    ? `@media (prefers-color-scheme: dark) { :root ${extractBodyFromBlock(dark)} }`
+    : "";
+
+  return `
+/* ===== App theme tokens (copied/extracted from client/src/index.css) ===== */
+${light || ""}
+
+${darkAsMedia}
+
+/* optional manual override */
+${dark || ""}
+
+/* ===== SCORM UI on tokens ===== */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 9%;
+  --border: 0 0% 89%;
+  --card: 0 0% 98%;
+  --card-foreground: 0 0% 9%;
+  --card-border: 0 0% 94%;
+  --primary: 217 91% 42%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 217 12% 90%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 217 10% 92%;
+  --muted-foreground: 0 0% 35%;
+  --accent: 217 8% 93%;
+  --accent-foreground: 0 0% 9%;
+  --destructive: 0 84% 38%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 217 91% 42%;
+  --chart-3: 160 75% 32%;
+  --font-sans: 'Inter', sans-serif;
+  --radius: .5rem;
+  --shadow-sm: 0px 1px 2px rgba(0,0,0,.06);
+  --shadow: 0px 1px 3px rgba(0,0,0,.10);
+
+  /* SCORM additions */
+  --success: var(--chart-3);
+  --success-foreground: 0 0% 98%;
+}
+
+/* DARK MODE (как в .dark из client/src/index.css) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: 0 0% 9%;
+    --foreground: 0 0% 98%;
+    --border: 0 0% 18%;
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 98%;
+    --card-border: 0 0% 14%;
+    --primary: 217 91% 35%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 217 12% 19%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 217 10% 17%;
+    --muted-foreground: 0 0% 68%;
+    --accent: 217 8% 17%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 84% 32%;
+    --destructive-foreground: 0 0% 98%;
+    --ring: 217 91% 55%;
+    --chart-3: 160 75% 58%;
+
+    --shadow-sm: 0px 1px 2px rgba(0,0,0,.35);
+    --shadow: 0px 1px 3px rgba(0,0,0,.45);
+
+    --success: var(--chart-3);
+  }
+}
+
+/* manual override (если окружение добавит .dark) */
+.dark {
+  --background: 0 0% 9%;
+  --foreground: 0 0% 98%;
+  --border: 0 0% 18%;
+  --card: 0 0% 11%;
+  --card-foreground: 0 0% 98%;
+  --card-border: 0 0% 14%;
+  --primary: 217 91% 35%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 217 12% 19%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 217 10% 17%;
+  --muted-foreground: 0 0% 68%;
+  --accent: 217 8% 17%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 84% 32%;
+  --destructive-foreground: 0 0% 98%;
+  --ring: 217 91% 55%;
+  --chart-3: 160 75% 58%;
+  --success: var(--chart-3);
+}
+
+/* ===== SCORM UI styles (через токены) ===== */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.container { max-width: 860px; margin: 0 auto; }
+
+h1 {
+  font-size: 24px;
+  margin: 0 0 20px;
+  color: hsl(var(--foreground));
+}
+
+.card {
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--card-border));
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+
+.question-text { font-size: 18px; margin-bottom: 16px; }
+
+.option {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border: 2px solid hsl(var(--border));
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  background: hsl(var(--card));
+}
+
+.option:hover {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--accent));
+}
+
+.option.selected {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--accent));
+}
+
+.option.correct-answer {
+  border-color: hsl(var(--success));
+  background: hsl(var(--success) / 0.18);
+}
+
+.option.incorrect-answer {
+  border-color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.18);
+}
+
+.option input { margin-right: 12px; }
+
+.progress-bar {
+  height: 8px;
+  background: hsl(var(--muted));
+  border-radius: 999px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: hsl(var(--primary));
+  transition: width 0.3s;
+}
+
+.btn {
+  display: inline-block;
+  padding: 12px 24px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: 1px solid hsl(var(--primary));
+  border-radius: var(--radius);
+  font-size: 16px;
+  cursor: pointer;
+}
+.btn:hover { filter: brightness(1.03); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.btn-outline {
+  background: transparent;
+  color: hsl(var(--primary));
+  border: 2px solid hsl(var(--primary));
+}
+.btn-outline:hover { background: hsl(var(--accent)); }
+
+.navigation { display: flex; justify-content: space-between; margin-top: 20px; }
+
+.result-hero { text-align: center; padding: 40px 20px; }
+.result-score { font-size: 64px; font-weight: 700; }
+.result-passed { color: hsl(var(--success)); }
+.result-failed { color: hsl(var(--destructive)); }
+.result-status { font-size: 24px; margin-top: 10px; }
+
+.topic-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.topic-result:last-child { border-bottom: none; }
+
+.course-link {
+  display: block;
+  padding: 12px 16px;
+  background: hsl(var(--accent));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  margin-top: 8px;
+  color: hsl(var(--primary));
+  text-decoration: none;
+}
+.course-link:hover { filter: brightness(1.02); }
+
+.matching-row { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+.matching-item { flex: 1; padding: 12px; background: hsl(var(--muted)); border-radius: var(--radius); }
+.matching-row.correct-answer { background: hsl(var(--success) / 0.12); border-radius: var(--radius); padding: 4px 8px; }
+.matching-row.incorrect-answer { background: hsl(var(--destructive) / 0.12); border-radius: var(--radius); padding: 4px 8px; }
+
+select {
+  padding: 10px;
+  border: 2px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border-radius: var(--radius);
+  font-size: 14px;
+  min-width: 140px;
+}
+
+.ranking-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: hsl(var(--card));
+  border: 2px solid hsl(var(--border));
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+}
+.ranking-item.correct-answer { background: hsl(var(--success) / 0.12); }
+.ranking-item.incorrect-answer { background: hsl(var(--destructive) / 0.12); }
+
+.ranking-controls button {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ranking-controls button:hover { filter: brightness(1.03); }
+.ranking-controls button:disabled { opacity: 0.35; cursor: not-allowed; }
+
+#loading { text-align: center; padding: 60px; color: hsl(var(--muted-foreground)); }
+`.trim();
+}
+
+
+function loadAppThemeTokensCss(): { light: string | null; dark: string | null } {
+  // Пытаемся прочитать реальные токены темы из client/src/index.css
+  // (они у тебя в :root и .dark) 
+  const candidates = [
+    path.resolve(process.cwd(), "client/src/index.css"),
+    path.resolve(process.cwd(), "client/index.css"),
+  ];
+
+  for (const p of candidates) {
+    try {
+      const css = fs.readFileSync(p, "utf8");
+      const light = extractBlock(css, ":root");
+      const dark = extractBlock(css, ".dark");
+      if (light) return { light, dark };
+    } catch {
+      // ignore
+    }
+  }
+
+  // Фолбэк (чтобы экспорт не падал, если исходников нет на сервере)
+  return {
+    light: `:root { --background: 0 0% 100%; --foreground: 0 0% 9%; --border: 0 0% 89%; --card: 0 0% 98%; --primary: 217 91% 42%; --primary-foreground: 0 0% 98%; --secondary: 217 12% 90%; --muted: 217 10% 92%; --muted-foreground: 0 0% 35%; --accent: 217 8% 93%; --destructive: 0 84% 38%; --font-sans: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; --radius: .5rem; --chart-3: 160 75% 32%; }`,
+    dark: `.dark { --background: 0 0% 9%; --foreground: 0 0% 98%; --border: 0 0% 18%; --card: 0 0% 11%; --primary: 217 91% 35%; --primary-foreground: 0 0% 98%; --secondary: 217 12% 19%; --muted: 217 10% 17%; --muted-foreground: 0 0% 68%; --accent: 217 8% 17%; --destructive: 0 84% 32%; --chart-3: 160 75% 42%; }`,
+  };
+}
+
+function extractBlock(css: string, selector: string): string | null {
+  const re = new RegExp(`\\${selector}\\s*\\{[\\s\\S]*?\\}`, "m");
+  const m = css.match(re);
+  return m ? m[0] : null;
+}
+
+function extractBodyFromBlock(block: string): string {
+  const m = block.match(/\{([\s\S]*?)\}/m);
+  return m ? `{${m[1]}}` : "{}";
 }
