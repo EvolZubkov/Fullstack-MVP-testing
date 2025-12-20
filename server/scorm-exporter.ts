@@ -346,12 +346,26 @@ var SCORM = (function() {
       this.setValue('cmi.objectives.' + index + '.success_status', successStatus);
     },
 
-    setInteraction: function(index, id, type, result, learnerResponse) {
+    setInteraction: function(index, id, type, result, learnerResponse, correctPattern, description) {
       this.setValue('cmi.interactions.' + index + '.id', id);
       this.setValue('cmi.interactions.' + index + '.type', type);
       this.setValue('cmi.interactions.' + index + '.result', result);
       this.setValue('cmi.interactions.' + index + '.learner_response', learnerResponse);
+
+      log('Interaction ' + index + ' correctPattern=' + correctPattern);
+      log('Interaction ' + index + ' description=' + description);
+
+      // ✅ "Верный ответ" в WebSoft
+      if (correctPattern !== undefined && correctPattern !== null && String(correctPattern) !== '') {
+        this.setValue('cmi.interactions.' + index + '.correct_responses.0.pattern', correctPattern);
+      }
+
+      // ✅ "Описание" (можно положить текст вопроса)
+      if (description) {
+        this.setValue('cmi.interactions.' + index + '.description', description);
+      }
     },
+
 
     finish: function(earnedPoints, possiblePoints, passed, objectives, interactions) {
       // Report earned points as raw score, possible points as max, scaled as ratio
@@ -369,7 +383,15 @@ var SCORM = (function() {
 
       for (var j = 0; j < interactions.length; j++) {
         var int = interactions[j];
-        this.setInteraction(j, int.id, int.type, int.result, int.response);
+        this.setInteraction(
+          j,
+          int.id,
+          int.type,
+          int.result,
+          int.response,
+          int.correct,      // ✅ новое поле
+          int.description   // ✅ новое поле
+        );
       }
 
       this.commit();
@@ -404,9 +426,38 @@ var state = {
 // Initialize
 window.onload = function() {
   SCORM.init();
+  bindRankingClicksOnce();
   generateVariant();
   render();
 };
+
+var __rankClickBound = false;
+
+function bindRankingClicksOnce() {
+  if (__rankClickBound) return;
+  __rankClickBound = true;
+
+  document.addEventListener('click', function(e) {
+    var el = e.target;
+
+    // fallback если closest нет
+    while (el && el !== document) {
+      if (el.classList && el.classList.contains('rank-btn')) break;
+      el = el.parentNode;
+    }
+    if (!el || el === document) return;
+
+    if (el.disabled) return;
+
+    var qId = el.getAttribute('data-qid');
+    var pos = parseInt(el.getAttribute('data-pos'), 10);
+    var dir = parseInt(el.getAttribute('data-dir'), 10);
+
+    if (!qId || Number.isNaN(pos) || Number.isNaN(dir)) return;
+
+    moveRank(qId, pos, dir);
+  });
+}
 
 function initTimer() {
   if (TEST_DATA.timeLimitMinutes && TEST_DATA.timeLimitMinutes > 0) {
@@ -604,71 +655,108 @@ function render() {
 
 function renderStartPage() {
   var app = document.getElementById('app');
+  var used = getAttemptsUsed();
+  var hasLimit = !!TEST_DATA.maxAttempts;
+  var left = hasLimit ? Math.max(0, TEST_DATA.maxAttempts - used) : null;
   
-  var iconQuestions = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';
-  var iconPass = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
-  var iconTime = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
-  var iconAttempts = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>';
+  var iconQuestions = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';
+  var iconPass = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+  var iconTime = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+  var iconAttempts = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>';
   
-  var html = '<div style="max-width:600px;margin:40px auto;">';
-  html += '<div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:16px 16px 0 0;padding:32px;text-align:center;">';
-  html += '<h1 style="color:white;margin:0;font-size:28px;font-weight:600;">' + escapeHtml(TEST_DATA.title) + '</h1>';
+  var html = '<div class="start-page" style="max-width:600px;margin:40px auto;padding:0 18px;">';
+  
+  // Header card
+  html += '<div class="card" style="padding:32px;text-align:center;margin-bottom:24px;background:hsl(var(--card));border:1px solid hsl(var(--border));">';
+  html += '<h1 style="color:hsl(var(--foreground));margin:0;font-size:28px;font-weight:700;">' + escapeHtml(TEST_DATA.title) + '</h1>';
   if (TEST_DATA.description) {
-    html += '<p style="color:rgba(255,255,255,0.9);margin-top:12px;margin-bottom:0;">' + escapeHtml(TEST_DATA.description) + '</p>';
+    html += '<p style="color:hsl(var(--muted-foreground));margin-top:12px;margin-bottom:0;font-size:15px;">' + escapeHtml(TEST_DATA.description) + '</p>';
   }
   html += '</div>';
   
-  html += '<div style="background:white;border-radius:0 0 16px 16px;padding:24px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">';
-  html += '<h2 style="margin:0 0 20px 0;font-size:18px;color:#374151;">Информация о тесте</h2>';
+  // Info section
+  html += '<div class="card" style="padding:24px;background:hsl(var(--card));border:1px solid hsl(var(--border));">';
+  html += '<h2 style="margin:0 0 20px 0;font-size:18px;font-weight:700;color:hsl(var(--foreground));">Информация о тесте</h2>';
   
   html += '<div style="display:grid;gap:12px;">';
   
-  html += '<div style="display:flex;align-items:center;gap:12px;padding:16px;background:linear-gradient(135deg,#eef2ff,#e0e7ff);border-radius:12px;">';
-  html += '<div style="flex-shrink:0;">' + iconQuestions + '</div>';
-  html += '<div><div style="font-weight:600;color:#374151;">Количество вопросов</div><div style="color:#6b7280;font-size:14px;">' + TEST_DATA.totalQuestions + '</div></div>';
+  // Количество вопросов
+  html += '<div style="display:flex;align-items:center;gap:12px;padding:16px;background:hsl(var(--muted));border-radius:12px;border:1px solid hsl(var(--border));">';
+  html += '<div style="flex-shrink:0;color:#4f46e5;">' + iconQuestions + '</div>';
+  html += '<div style="flex:1;"><div style="font-weight:600;color:hsl(var(--foreground));font-size:14px;">Количество вопросов</div><div style="color:hsl(var(--muted-foreground));font-size:13px;margin-top:2px;">' + TEST_DATA.totalQuestions + '</div></div>';
   html += '</div>';
   
-  html += '<div style="display:flex;align-items:center;gap:12px;padding:16px;background:linear-gradient(135deg,#ecfdf5,#d1fae5);border-radius:12px;">';
-  html += '<div style="flex-shrink:0;">' + iconPass + '</div>';
-  html += '<div><div style="font-weight:600;color:#374151;">Проходной балл</div><div style="color:#6b7280;font-size:14px;">' + TEST_DATA.passPercent + '%</div></div>';
+  // Проходной балл
+  html += '<div style="display:flex;align-items:center;gap:12px;padding:16px;background:hsl(var(--muted));border-radius:12px;border:1px solid hsl(var(--border));">';
+  html += '<div style="flex-shrink:0;color:#16a34a;">' + iconPass + '</div>';
+  html += '<div style="flex:1;"><div style="font-weight:600;color:hsl(var(--foreground));font-size:14px;">Проходной балл</div><div style="color:hsl(var(--muted-foreground));font-size:13px;margin-top:2px;">' + TEST_DATA.passPercent + '%</div></div>';
   html += '</div>';
   
+  // Ограничение времени
   if (TEST_DATA.timeLimitMinutes) {
-    html += '<div style="display:flex;align-items:center;gap:12px;padding:16px;background:linear-gradient(135deg,#fffbeb,#fef3c7);border-radius:12px;">';
-    html += '<div style="flex-shrink:0;">' + iconTime + '</div>';
-    html += '<div><div style="font-weight:600;color:#374151;">Ограничение времени</div><div style="color:#6b7280;font-size:14px;">' + TEST_DATA.timeLimitMinutes + ' минут</div></div>';
+    html += '<div style="display:flex;align-items:center;gap:12px;padding:16px;background:hsl(var(--muted));border-radius:12px;border:1px solid hsl(var(--border));">';
+    html += '<div style="flex-shrink:0;color:#f59e0b;">' + iconTime + '</div>';
+    html += '<div style="flex:1;"><div style="font-weight:600;color:hsl(var(--foreground));font-size:14px;">Ограничение времени</div><div style="color:hsl(var(--muted-foreground));font-size:13px;margin-top:2px;">' + TEST_DATA.timeLimitMinutes + ' минут</div></div>';
     html += '</div>';
   }
   
+  // Количество попыток
   if (TEST_DATA.maxAttempts) {
-    html += '<div style="display:flex;align-items:center;gap:12px;padding:16px;background:linear-gradient(135deg,#f5f3ff,#ede9fe);border-radius:12px;">';
-    html += '<div style="flex-shrink:0;">' + iconAttempts + '</div>';
-    html += '<div><div style="font-weight:600;color:#374151;">Количество попыток</div><div style="color:#6b7280;font-size:14px;">' + TEST_DATA.maxAttempts + '</div></div>';
+    html += '<div style="display:flex;align-items:center;gap:12px;padding:16px;background:hsl(var(--muted));border-radius:12px;border:1px solid hsl(var(--border));">';
+    html += '<div style="flex-shrink:0;color:#8b5cf6;">' + iconAttempts + '</div>';
+    html += '<div style="flex:1;"><div style="font-weight:600;color:hsl(var(--foreground));font-size:14px;">Попытки</div><div style="color:hsl(var(--muted-foreground));font-size:13px;margin-top:2px;">' 
+    + (hasLimit ? ('осталось ' + left + ' из ' + TEST_DATA.maxAttempts) : 'без ограничений')
+    + '</div></div>';
     html += '</div>';
   }
   
   html += '</div>';
   
+  // Custom content
   if (TEST_DATA.startPageContent) {
-    html += '<div style="margin-top:20px;padding:16px;background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:12px;border-left:4px solid #3b82f6;">';
-    html += '<div style="color:#1e40af;font-size:14px;line-height:1.6;">' + escapeHtml(TEST_DATA.startPageContent) + '</div>';
+    html += '<div style="margin-top:20px;padding:16px;background:hsl(var(--muted));border-radius:12px;border-left:4px solid hsl(var(--primary));border:1px solid hsl(var(--border));">';
+    html += '<div style="color:hsl(var(--foreground));font-size:14px;line-height:1.6;">' + escapeHtml(TEST_DATA.startPageContent) + '</div>';
     html += '</div>';
   }
   
+  // Start button
+  var noAttempts = hasLimit && left <= 0;
+
   html += '<div style="margin-top:24px;text-align:center;">';
-  html += '<button class="btn" onclick="startTest()" style="padding:14px 40px;font-size:16px;font-weight:600;border-radius:12px;">Начать тестирование</button>';
+  html += '<button class="btn" '
+    + (noAttempts ? 'disabled ' : '')
+    + 'onclick="' + (noAttempts ? 'return false;' : 'startTest()') + '" '
+    + 'style="padding:14px 40px;font-size:16px;font-weight:600;'
+    + (noAttempts ? 'opacity:.55;cursor:not-allowed;' : '')
+    + '">'
+    + (noAttempts ? 'Попытки закончились' : 'Начать тестирование')
+    + '</button>';
   html += '</div>';
-  
+
+  // закрываем карточку и обёртку страницы
   html += '</div></div>';
   
   app.innerHTML = html;
 }
 
 function startTest() {
+  if (!hasAttemptsLeft()) {
+    showToast('Попытки закончились', 'warn');
+    return;
+  }
+
+  // фиксируем начало попытки
+  var ok = registerAttemptStart();
+  if (!ok) {
+    showToast('Попытки закончились', 'warn');
+    return;
+  }
+
   state.phase = 'question';
   initTimer();
   render();
 }
+
 
 function showToast(message, kind) {
   var root = document.getElementById('toast-root');
@@ -723,7 +811,227 @@ function requireAnswerOrToast() {
 function confirmAnswer() {
   if (!requireAnswerOrToast()) return;
   state.feedbackShown = true;
-  render();
+  
+  // Вместо render() - обновляем DOM точечно
+  var fq = state.flatQuestions[state.currentIndex];
+  var q = fq.question;
+  var answer = state.answers[q.id];
+  var scoreRatio = checkAnswer(q, answer);
+  var isCorrect = scoreRatio === 1;
+  
+  // Блокируем варианты ответов (добавляем disabled и меняем курсор)
+  lockAnswerOptions(q);
+  
+  // Показываем правильные/неправильные ответы
+  if (TEST_DATA.showCorrectAnswers) {
+    highlightCorrectAnswers(q, answer);
+  }
+  
+  // Вставляем feedback после вопроса
+  insertFeedback(q, isCorrect, scoreRatio);
+  
+  // Меняем кнопку "Принять" на "Далее"/"Завершить"
+  updateNavigationButton();
+}
+
+function lockAnswerOptions(q) {
+  // кликабельные .option
+  var options = document.querySelectorAll('.option');
+  options.forEach(function(opt) {
+    opt.style.cursor = 'default';
+    opt.onclick = null;
+  });
+
+  // все инпуты
+  var inputs = document.querySelectorAll('input');
+  inputs.forEach(function(input) {
+    input.disabled = true;
+  });
+
+  // все селекты (matching)
+  var selects = document.querySelectorAll('select');
+  selects.forEach(function(sel) {
+    sel.disabled = true;
+  });
+
+  // ranking buttons
+  var rankButtons = document.querySelectorAll('.ranking-controls button');
+  rankButtons.forEach(function(btn) {
+    btn.disabled = true;
+  });
+}
+
+
+function highlightCorrectAnswers(q, answer) {
+  var correct = q.correct || {};
+  
+  if (q.type === 'single') {
+    var correctIndex = correct.correctIndex;
+    var options = document.querySelectorAll('.option');
+    options.forEach(function(opt) {
+      var dataIndex = opt.getAttribute('data-index');
+      if (dataIndex !== null) {
+        var idx = parseInt(dataIndex, 10);
+        if (idx === correctIndex) {
+          opt.classList.add('correct-answer');
+        } else if (idx === answer) {
+          opt.classList.add('incorrect-answer');
+        }
+      }
+    });
+  }
+  
+  if (q.type === 'multiple') {
+    var correctSet = correct.correctIndices || [];
+    var selectedSet = Array.isArray(answer) ? answer : [];
+    var options = document.querySelectorAll('.option');
+    options.forEach(function(opt) {
+      var dataIndex = opt.getAttribute('data-index');
+      if (dataIndex !== null) {
+        var idx = parseInt(dataIndex, 10);
+        var isCorrect = correctSet.indexOf(idx) !== -1;
+        var isSelected = selectedSet.indexOf(idx) !== -1;
+        
+        if (isCorrect) {
+          opt.classList.add('correct-answer');
+        } else if (isSelected && !isCorrect) {
+          opt.classList.add('incorrect-answer');
+        }
+      }
+    });
+  }
+  
+  // MATCHING
+  if (q.type === 'matching') {
+    highlightMatching(q, answer);
+    return;
+  }
+
+  // RANKING
+  if (q.type === 'ranking') {
+    highlightRanking(q, answer);
+    return;
+  }
+}
+
+function highlightMatching(q, answer) {
+  var pairs = (answer && typeof answer === 'object') ? answer : {};
+  var correctPairsArr = Array.isArray((q.correct || {}).pairs) ? q.correct.pairs : [];
+
+  var correctMap = {};
+  correctPairsArr.forEach(function(p) { correctMap[p.left] = p.right; });
+
+  // displayIdx -> originalRightIdx
+  var mappingObj = state.shuffleMappings[q.id];
+  var rightMapping = (mappingObj && mappingObj.right) ? mappingObj.right : q.data.right.map(function(_, i){ return i; });
+
+  document.querySelectorAll('.matching-row').forEach(function(row) {
+    row.classList.remove('correct-answer', 'incorrect-answer');
+
+    var leftAttr = row.getAttribute('data-left');
+    if (leftAttr === null) return;
+
+    var leftIdx = parseInt(leftAttr, 10);
+    if (Number.isNaN(leftIdx)) return;
+
+    var selectedOriginalRight = pairs[leftIdx];
+    var correctOriginalRight = correctMap[leftIdx];
+
+    var slot = row.querySelector('.match-hint-slot');
+    if (slot) slot.textContent = '';
+
+    if (selectedOriginalRight === undefined) return;
+
+    if (Number(selectedOriginalRight) === Number(correctOriginalRight)) {
+      row.classList.add('correct-answer');
+      return;
+    }
+
+    row.classList.add('incorrect-answer');
+
+    // правильная буква в ОТОБРАЖАЕМОМ (перемешанном) списке
+    var correctDisplayIdx = rightMapping.indexOf(correctOriginalRight);
+    if (correctDisplayIdx >= 0 && slot) {
+      slot.textContent = '(Правильно: ' + String.fromCharCode(65 + correctDisplayIdx) + ')';
+    }
+  });
+}
+
+function highlightRanking(q, answer) {
+  var order = Array.isArray(answer) ? answer : [];
+  var correctOrder = Array.isArray((q.correct || {}).correctOrder) ? q.correct.correctOrder : [];
+
+  if (!order.length || !correctOrder.length) return;
+
+  document.querySelectorAll('#ranking_' + q.id + ' .ranking-item').forEach(function(row, pos) {
+    row.classList.remove('correct-answer', 'incorrect-answer');
+
+    var itemIdx = order[pos];
+    var ok = (itemIdx === correctOrder[pos]);
+
+    var slot = row.querySelector('.rank-hint-slot');
+    if (slot) slot.textContent = '';
+
+    if (ok) {
+      row.classList.add('correct-answer');
+      return;
+    }
+
+    row.classList.add('incorrect-answer');
+
+    // где должен быть этот itemIdx
+    var shouldBePos = correctOrder.indexOf(itemIdx);
+    if (shouldBePos >= 0 && slot) {
+      slot.textContent = '(Должен быть: ' + (shouldBePos + 1) + ')';
+    }
+  });
+}
+
+function insertFeedback(q, isCorrect, scoreRatio) {
+  // Проверяем что feedback ещё не вставлен
+  var existing = document.querySelector('.feedback-block');
+  if (existing) return;
+  
+  var statusColor = isCorrect ? '#16a34a' : '#dc2626';
+  var statusBg = isCorrect ? '#dcfce7' : '#fee2e2';
+  var statusText = isCorrect ? 'Правильно!' : (scoreRatio > 0 ? 'Частично правильно' : 'Неправильно');
+  
+  var feedbackText = null;
+  if (q.feedbackMode === 'conditional') {
+    feedbackText = isCorrect ? q.feedbackCorrect : q.feedbackIncorrect;
+  } else {
+    feedbackText = q.feedback;
+  }
+  
+  var html = '<div class="feedback-block" style="margin-top:16px;padding:12px;border-radius:8px;background:' + statusBg + ';border:1px solid ' + statusColor + ';">';
+  html += '<div style="font-weight:600;color:' + statusColor + ';margin-bottom:4px;">' + statusText + '</div>';
+  
+  if (feedbackText) {
+    html += '<div style="color:#333;font-size:14px;">' + escapeHtml(feedbackText) + '</div>';
+  }
+  html += '</div>';
+  
+  // Вставляем после .card
+  var card = document.querySelector('.card');
+  if (card) {
+    card.insertAdjacentHTML('beforeend', html);
+  }
+}
+
+function updateNavigationButton() {
+  var navBtn = document.querySelector('.navigation .btn');
+  if (!navBtn) return;
+  
+  var total = state.flatQuestions.length;
+  var current = state.currentIndex;
+  
+  if (current < total - 1) {
+    navBtn.textContent = 'Далее';
+    navBtn.onclick = next;
+  } else {
+    navBtn.textContent = 'Завершить тест';
+    navBtn.onclick = submit;
+  }
 }
 
 function renderQuestionMedia(q) {
@@ -752,8 +1060,8 @@ function renderQuestionInput(q) {
     var correctIndex = (typeof correct.correctIndex === 'number') ? correct.correctIndex : -1;
     var displayOrder = shuffleMapping || q.data.options.map(function(_, i) { return i; });
     var html = '';
-    
-    displayOrder.forEach(function(originalIndex, displayIndex) {
+
+    displayOrder.forEach(function(originalIndex) {
       var selected = answer === originalIndex ? 'selected' : '';
       var correctClass = '';
       if (locked) {
@@ -761,7 +1069,7 @@ function renderQuestionInput(q) {
         else if (answer === originalIndex && originalIndex !== correctIndex) correctClass = ' incorrect-answer';
       }
       var clickHandler = locked ? '' : 'onclick="selectSingle(\\'' + q.id + '\\',' + originalIndex + ')"';
-      html += '<div class="option ' + selected + correctClass + '" ' + clickHandler + ' style="' + (locked ? 'cursor:default;' : '') + '">';
+      html += '<div class="option ' + selected + correctClass + '" data-index="' + originalIndex + '" ' + clickHandler + ' style="' + (locked ? 'cursor:default;' : '') + '">';
       html += '<input type="radio" name="q_' + q.id + '" ' + (answer === originalIndex ? 'checked' : '') + ' ' + (locked ? 'disabled' : '') + '>';
       html += escapeHtml(q.data.options[originalIndex]) + '</div>';
     });
@@ -770,156 +1078,169 @@ function renderQuestionInput(q) {
 
   // MULTIPLE
   if (q.type === 'multiple') {
-    var selected = Array.isArray(answer) ? answer : [];
+    var selectedArr = Array.isArray(answer) ? answer : [];
     var correctSet = Array.isArray(correct.correctIndices) ? correct.correctIndices : [];
-    var displayOrder = shuffleMapping || q.data.options.map(function(_, i) { return i; });
-    var html = '';
-    
-    displayOrder.forEach(function(originalIndex, displayIndex) {
-      var isSelected = selected.indexOf(originalIndex) !== -1;
+    var displayOrder2 = shuffleMapping || q.data.options.map(function(_, i) { return i; });
+    var html2 = '';
+
+    displayOrder2.forEach(function(originalIndex) {
+      var isSelected = selectedArr.indexOf(originalIndex) !== -1;
       var isCorrect = correctSet.indexOf(originalIndex) !== -1;
-      var correctClass = '';
+      var correctClass2 = '';
       if (locked) {
-        if (isCorrect) correctClass = ' correct-answer';
-        else if (isSelected && !isCorrect) correctClass = ' incorrect-answer';
+        if (isCorrect) correctClass2 = ' correct-answer';
+        else if (isSelected && !isCorrect) correctClass2 = ' incorrect-answer';
       }
-      var clickHandler = locked ? '' : 'onclick="toggleMultiple(\\'' + q.id + '\\',' + originalIndex + ')"';
-      html += '<div class="option ' + (isSelected ? 'selected' : '') + correctClass + '" ' + clickHandler + ' style="' + (locked ? 'cursor:default;' : '') + '">';
-      html += '<input type="checkbox" ' + (isSelected ? 'checked' : '') + ' ' + (locked ? 'disabled' : '') + '>';
-      html += escapeHtml(q.data.options[originalIndex]) + '</div>';
+      var clickHandler2 = locked ? '' : 'onclick="toggleMultiple(\\'' + q.id + '\\',' + originalIndex + ')"';
+      html2 += '<div class="option ' + (isSelected ? 'selected' : '') + correctClass2 + '" data-index="' + originalIndex + '" ' + clickHandler2 + ' style="' + (locked ? 'cursor:default;' : '') + '">';
+      html2 += '<input type="checkbox" ' + (isSelected ? 'checked' : '') + ' ' + (locked ? 'disabled' : '') + '>';
+      html2 += escapeHtml(q.data.options[originalIndex]) + '</div>';
     });
-    return html;
+    return html2;
   }
 
   // MATCHING
   if (q.type === 'matching') {
     var pairs = (answer && typeof answer === 'object') ? answer : {};
+
+    var mappingObj = shuffleMapping || {};
+    var leftMapping = mappingObj.left ? mappingObj.left : q.data.left.map(function(_, i) { return i; });
+    var rightMapping = mappingObj.right ? mappingObj.right : q.data.right.map(function(_, i) { return i; });
+
     var correctPairsArr = Array.isArray(correct.pairs) ? correct.pairs : [];
     var correctMap = {};
     correctPairsArr.forEach(function(p) { correctMap[p.left] = p.right; });
 
-    var leftMapping = shuffleMapping && shuffleMapping.left ? shuffleMapping.left : q.data.left.map(function(_, i) { return i; });
-    var rightMapping = shuffleMapping && shuffleMapping.right ? shuffleMapping.right : q.data.right.map(function(_, i) { return i; });
+    var html3 = '<div style="margin-top:8px">';
 
-    var html = '<div style="margin-top:8px">';
     leftMapping.forEach(function(originalLeftIdx, displayLeftIdx) {
       var selectedOriginalRightIdx = pairs[originalLeftIdx];
-      var selectedDisplayRightIdx = selectedOriginalRightIdx !== undefined ? rightMapping.indexOf(selectedOriginalRightIdx) : -1;
-      
-      var isCorrect = locked && Number(pairs[originalLeftIdx]) === correctMap[originalLeftIdx];
-      var isIncorrect = locked && pairs[originalLeftIdx] !== undefined && Number(pairs[originalLeftIdx]) !== correctMap[originalLeftIdx];
+      var selectedDisplayRightIdx = (selectedOriginalRightIdx !== undefined)
+        ? rightMapping.indexOf(selectedOriginalRightIdx)
+        : -1;
+
+      var isCorrect = locked && selectedOriginalRightIdx !== undefined && Number(selectedOriginalRightIdx) === Number(correctMap[originalLeftIdx]);
+      var isIncorrect = locked && selectedOriginalRightIdx !== undefined && Number(selectedOriginalRightIdx) !== Number(correctMap[originalLeftIdx]);
+
       var rowClass = isCorrect ? 'correct-answer' : (isIncorrect ? 'incorrect-answer' : '');
-      
-      html += '<div class="matching-row ' + rowClass + '">';
-      html += '<div class="matching-item">' + (displayLeftIdx + 1) + '. ' + escapeHtml(q.data.left[originalLeftIdx]) + '</div>';
-      html += '<span style="margin:0 8px;">→</span>';
-      html += '<select onchange="setMatchWithMapping(\\'' + q.id + '\\',' + originalLeftIdx + ',this.value,\\'' + JSON.stringify(rightMapping).replace(/"/g, '&quot;') + '\\')"' + (locked ? ' disabled' : '') + '>';
-      html += '<option value="">Выберите...</option>';
-      
+
+      html3 += '<div class="matching-row ' + rowClass + '" data-left="' + originalLeftIdx + '">';
+      html3 +=   '<div class="matching-item">' + (displayLeftIdx + 1) + '. ' + escapeHtml(q.data.left[originalLeftIdx]) + '</div>';
+      html3 +=   '<span style="margin:0 8px;">→</span>';
+      html3 +=   '<select onchange="setMatchWithMapping(\\'' + q.id + '\\',' + originalLeftIdx + ',this.value)"' + (locked ? ' disabled' : '') + '>';
+      html3 +=     '<option value="">Выберите...</option>';
+
       rightMapping.forEach(function(originalRightIdx, displayRightIdx) {
-        var sel = selectedDisplayRightIdx === displayRightIdx ? 'selected' : '';
-        html += '<option value="' + displayRightIdx + '" ' + sel + '>' + String.fromCharCode(65 + displayRightIdx) + '. ' + escapeHtml(q.data.right[originalRightIdx]) + '</option>';
+        var sel = (selectedDisplayRightIdx === displayRightIdx) ? 'selected' : '';
+        html3 += '<option value="' + displayRightIdx + '" ' + sel + '>' +
+          String.fromCharCode(65 + displayRightIdx) + '. ' + escapeHtml(q.data.right[originalRightIdx]) +
+          '</option>';
       });
-      html += '</select>';
 
-      if (locked && isIncorrect) {
-        var correctDisplayRightIdx = rightMapping.indexOf(correctMap[originalLeftIdx]);
-        html += '<span style="color:#16a34a;margin-left:8px;font-size:12px;">(Правильно: ' + String.fromCharCode(65 + correctDisplayRightIdx) + ')</span>';
-      }
+      html3 +=   '</select>';
 
-      html += '</div>';
+      // ВАЖНО: слот под подсказку (чтобы не "дёргалось" при вставке)
+      html3 +=   '<span class="match-hint-slot" style="margin-left:8px;font-size:12px;color:#16a34a;"></span>';
+
+      html3 += '</div>';
     });
-    html += '</div>';
-    return html;
+
+    html3 += '</div>';
+    return html3;
   }
-  
+
   // RANKING
   if (q.type === 'ranking') {
     var defaultOrder = shuffleMapping || q.data.items.map(function(_, i) { return i; });
     var order = Array.isArray(answer) ? answer : defaultOrder;
+
     var correctOrder = Array.isArray(correct.correctOrder) ? correct.correctOrder : defaultOrder;
 
-    var html = '<div>';
-    order.forEach(function(itemIdx, pos) {
-      var isCorrectPos = locked && itemIdx === correctOrder[pos];
-      var rowClass = locked ? (isCorrectPos ? 'correct-answer' : 'incorrect-answer') : '';
-      html += '<div class="ranking-item ' + rowClass + '">';
-      html += '<div class="ranking-controls">';
-      html += '<button onclick="moveRank(\\'' + q.id + '\\',' + pos + ',-1)"' + (pos === 0 || locked ? ' disabled' : '') + '>▲</button>';
-      html += '<button onclick="moveRank(\\'' + q.id + '\\',' + pos + ',1)"' + (pos === order.length - 1 || locked ? ' disabled' : '') + '>▼</button>';
-      html += '</div>';
-      html += '<span>' + (pos + 1) + '.</span>';
-      html += '<span>' + escapeHtml(q.data.items[itemIdx]) + '</span>';
-      if (locked && !isCorrectPos) {
-        html += '<span style="color:#16a34a;margin-left:8px;font-size:12px;">(Должен быть: ' + (correctOrder.indexOf(itemIdx) + 1) + ')</span>';
-      }
-      html += '</div>';
-    });
-    html += '</div>';
-    return html;
+    var html4 = '<div id="ranking_' + q.id + '">';
+    html4 += buildRankingBlockHtml(q, q.id, order, locked, correctOrder);
+    html4 += '</div>';
+    return html4;
   }
 
+  // IMPORTANT: закрываем функцию правильно
   return '<div>Неизвестный тип вопроса</div>';
 }
 
+function buildRankingBlockHtml(q, qId, order, locked, correctOrder) {
+  var html = '';
+
+  order.forEach(function(itemIdx, pos) {
+    var isCorrectPos = locked && itemIdx === correctOrder[pos];
+    var rowClass = locked ? (isCorrectPos ? 'correct-answer' : 'incorrect-answer') : '';
+
+    html += '<div class="ranking-item ' + rowClass + '" data-pos="' + pos + '" data-item="' + itemIdx + '">';
+    html +=   '<div class="ranking-controls">';
+    html +=     '<button type="button" class="rank-btn" data-qid="' + escapeHtml(qId) + '" data-pos="' + pos + '" data-dir="-1"' + (pos === 0 || locked ? ' disabled' : '') + '>▲</button>';
+    html +=     '<button type="button" class="rank-btn" data-qid="' + escapeHtml(qId) + '" data-pos="' + pos + '" data-dir="1"' + (pos === order.length - 1 || locked ? ' disabled' : '') + '>▼</button>';
+    html +=   '</div>';
+    html +=   '<span>' + (pos + 1) + '.</span>';
+    html +=   '<span>' + escapeHtml(q.data.items[itemIdx]) + '</span>';
+    html +=   '<span class="rank-hint-slot" style="margin-left:8px;font-size:12px;color:#16a34a;"></span>';
+    html += '</div>';
+  });
+
+  return html;
+}
 
 function selectSingle(qId, idx) {
   if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
   state.answers[qId] = idx;
   
-  // Update DOM without full re-render
-  var options = document.querySelectorAll('input[name="q_' + qId + '"]');
-  options.forEach(function(radio, i) {
-    var parent = radio.parentElement;
-    if (parent) {
-      if (radio.checked && i !== idx) {
-        radio.checked = false;
-        parent.classList.remove('selected');
-      } else if (!radio.checked && radio.parentElement.onclick && radio.parentElement.onclick.toString().includes(',' + idx + ')')) {
-        radio.checked = true;
-        parent.classList.add('selected');
-      }
-    }
+  // Убрать selected у всех опций этого вопроса
+  var allOptions = document.querySelectorAll('input[name="q_' + qId + '"]');
+  allOptions.forEach(function(radio) {
+    radio.checked = false;
+    radio.parentElement.classList.remove('selected');
   });
+  
+  // Добавить selected к выбранному
+  var selectedOption = document.querySelector('.option[data-index="' + idx + '"]');
+  if (selectedOption) {
+    selectedOption.classList.add('selected');
+    var radio = selectedOption.querySelector('input[type="radio"]');
+    if (radio) radio.checked = true;
+  }
 }
 
 function toggleMultiple(qId, idx) {
   if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
-  var current = state.answers[qId] || [];
+
+  var current = Array.isArray(state.answers[qId]) ? state.answers[qId].slice() : [];
   var pos = current.indexOf(idx);
-  if (pos === -1) {
-    current.push(idx);
-  } else {
-    current.splice(pos, 1);
-  }
+
+  if (pos === -1) current.push(idx);
+  else current.splice(pos, 1);
+
   state.answers[qId] = current;
-  
-  // Update DOM without full re-render - just toggle the clicked checkbox
-  var checkboxes = document.querySelectorAll('.option input[type="checkbox"]');
-  checkboxes.forEach(function(cb) {
-    var parent = cb.parentElement;
-    if (parent && parent.onclick && parent.onclick.toString().includes(qId) && parent.onclick.toString().includes(',' + idx + ')')) {
-      cb.checked = current.indexOf(idx) !== -1;
-      if (cb.checked) {
-        parent.classList.add('selected');
-      } else {
-        parent.classList.remove('selected');
-      }
-    }
-  });
+
+  // точечное обновление DOM через data-index
+  var opt = document.querySelector('.option[data-index="' + idx + '"]');
+  if (opt) {
+    var cb = opt.querySelector('input[type="checkbox"]');
+    var checked = current.indexOf(idx) !== -1;
+    if (cb) cb.checked = checked;
+    opt.classList.toggle('selected', checked);
+  }
 }
 
-function setMatchWithMapping(qId, originalLeftIdx, displayRightVal, rightMappingJson) {
+function setMatchWithMapping(qId, originalLeftIdx, displayRightVal) {
   if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
 
-  var rightMapping = JSON.parse(rightMappingJson);
+  var mappingObj = state.shuffleMappings[qId];
+  var rightMapping = (mappingObj && mappingObj.right) ? mappingObj.right : null;
+
   var pairs = state.answers[qId] || {};
 
   if (displayRightVal === '' || displayRightVal === null || displayRightVal === undefined) {
     delete pairs[originalLeftIdx];
   } else {
     var displayRightIdx = parseInt(displayRightVal, 10);
-    if (!Number.isNaN(displayRightIdx) && rightMapping[displayRightIdx] !== undefined) {
+    if (!Number.isNaN(displayRightIdx) && rightMapping && rightMapping[displayRightIdx] !== undefined) {
       pairs[originalLeftIdx] = rightMapping[displayRightIdx];
     }
   }
@@ -943,19 +1264,36 @@ function setMatch(qId, leftIdx, rightVal) {
   state.answers[qId] = pairs;
 }
 
-
 function moveRank(qId, pos, dir) {
   if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
-  var q = state.flatQuestions.find(function(fq) { return fq.question.id === qId; }).question;
-  var order = state.answers[qId] || q.data.items.map(function(_, i) { return i; });
+
+  var fq = state.flatQuestions.find(function(fq) { return fq.question.id === qId; });
+  if (!fq) return;
+
+  var q = fq.question;
+
+  var order = Array.isArray(state.answers[qId])
+    ? state.answers[qId].slice()
+    : q.data.items.map(function(_, i) { return i; });
+
   var newPos = pos + dir;
   if (newPos < 0 || newPos >= order.length) return;
+
   var temp = order[pos];
   order[pos] = order[newPos];
   order[newPos] = temp;
+
   state.answers[qId] = order;
-  render();
+
+  // точечный перерендер только ranking-блока
+  var container = document.getElementById('ranking_' + qId);
+  if (container) {
+    var locked = false;
+    var correctOrder = Array.isArray((q.correct || {}).correctOrder) ? q.correct.correctOrder : order;
+    container.innerHTML = buildRankingBlockHtml(q, qId, order, locked, correctOrder);
+  }
 }
+
 
 function next() {
   if (!requireAnswerOrToast()) return;
@@ -1084,6 +1422,47 @@ function renderResults() {
   });
 
   html +=   '</div>';
+
+  // ========== ДОБАВЬ ЭТОТ КОД ==========
+  // Recommended Courses Section (только для непройденных тем)
+  var failedTopics = results.topicResults.filter(function(tr) {
+    return tr.passed === false && tr.recommendedCourses && tr.recommendedCourses.length > 0;
+  });
+
+  if (failedTopics.length > 0) {
+    html += '<div class="results-section-title">Рекомендуемые курсы</div>';
+    html += '<div style="margin-bottom:14px;color:hsl(var(--muted-foreground));font-size:14px;">';
+    html += 'Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.';
+    html += '</div>';
+    
+    failedTopics.forEach(function(tr) {
+      html += '<div class="card" style="padding:18px;margin-bottom:12px;">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">';
+      html += '<div class="topic-icon is-fail">';
+      html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">';
+      html += '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>';
+      html += '</svg>';
+      html += '</div>';
+      html += '<div class="topic-name">' + escapeHtml(tr.topicName) + '</div>';
+      html += '</div>';
+      
+      tr.recommendedCourses.forEach(function(course) {
+        html += '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:hsl(var(--muted)/.5);border-radius:8px;margin-top:8px;">';
+        html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="hsl(var(--primary))" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
+        html += '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>';
+        html += '</svg>';
+        html += '<a href="' + escapeHtml(course.url) + '" target="_blank" rel="noopener noreferrer" style="flex:1;color:hsl(var(--primary));text-decoration:none;font-weight:500;font-size:14px;">';
+        html += escapeHtml(course.title);
+        html += '</a>';
+        html += '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="hsl(var(--muted-foreground))" stroke-width="2">';
+        html += '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/>';
+        html += '</svg>';
+        html += '</div>';
+      });
+      
+      html += '</div>';
+    });
+  }
 
   // Actions
   html +=   '<div class="results-actions">';
@@ -1280,38 +1659,99 @@ function finishScorm(results) {
     };
   });
 
-  var interactions = [];
+    var interactions = [];
+
+  function to1(x) { return (typeof x === 'number') ? (x + 1) : x; }
+
+  function mapScormType(q) {
+    if (q.type === 'single') return 'choice';
+    if (q.type === 'multiple') return 'multiple_choice';
+    if (q.type === 'matching') return 'matching';
+    if (q.type === 'ranking') return 'sequencing';
+    return 'other';
+  }
+
+  function formatResponse(q, ans, oneBased) {
+    if (ans === undefined || ans === null) return '';
+
+    if (q.type === 'single') {
+      return String(oneBased ? to1(ans) : ans);
+    }
+
+    if (q.type === 'multiple') {
+      var arr = Array.isArray(ans) ? ans : [];
+      return arr.map(function(v){ return oneBased ? to1(v) : v; }).join(',');
+    }
+
+    if (q.type === 'ranking') {
+      var ord = Array.isArray(ans) ? ans : [];
+      return ord.map(function(v){ return oneBased ? to1(v) : v; }).join(',');
+    }
+
+    if (q.type === 'matching') {
+      var pairs = (ans && typeof ans === 'object') ? ans : {};
+      // сортируем по left, чтобы всегда одинаково
+      return Object.keys(pairs)
+        .sort(function(a,b){ return Number(a) - Number(b); })
+        .map(function(k) {
+          var left = Number(k);
+          var right = pairs[k];
+          return (oneBased ? to1(left) : left) + '-' + (oneBased ? to1(right) : right);
+        })
+        .join(',');
+    }
+
+    return '';
+  }
+
+  function getCorrectAnswerFor(q) {
+    var c = q.correct || {};
+
+    if (q.type === 'single') return (typeof c.correctIndex === 'number') ? c.correctIndex : null;
+
+    if (q.type === 'multiple') return Array.isArray(c.correctIndices) ? c.correctIndices : [];
+
+    if (q.type === 'ranking') return Array.isArray(c.correctOrder) ? c.correctOrder : [];
+
+    if (q.type === 'matching') {
+      // хотим объект left->right как у user answer
+      var map = {};
+      (Array.isArray(c.pairs) ? c.pairs : []).forEach(function(p){
+        map[p.left] = p.right;
+      });
+      return map;
+    }
+
+    return null;
+  }
+
   state.flatQuestions.forEach(function(fq, i) {
     var q = fq.question;
     var answer = state.answers[q.id];
     var scoreRatio = checkAnswer(q, answer);
 
-    var type = q.type;
-    if (type === 'single') type = 'choice';
-    if (type === 'multiple') type = 'multiple_choice';
-    if (type === 'ranking') type = 'sequencing';
+    var scormType = mapScormType(q);
 
-    var response = '';
-    if (q.type === 'single') {
-      response = answer !== undefined ? String(answer) : '';
-    } else if (q.type === 'multiple') {
-      response = (answer || []).join(',');
-    } else if (q.type === 'matching') {
-      var pairs = answer || {};
-      response = Object.keys(pairs).map(function(k) { return k + '-' + pairs[k]; }).join(',');
-    } else if (q.type === 'ranking') {
-      response = (answer || []).join(',');
-    }
+    // 1-based вывод в LMS (чтобы было 1,2,3 вместо 0,1,2)
+    var response = formatResponse(q, answer, true);
 
-    // SCORM result: 'correct' for full credit, 'incorrect' for no credit, 
-    // for partial credit use numeric value
+    // ✅ верный ответ
+    var correctAns = getCorrectAnswerFor(q);
+    var correctPattern = formatResponse(q, correctAns, true);
+
+    // ✅ описание = текст вопроса
+    var description = q.prompt ? String(q.prompt) : '';
+
+    // SCORM result
     var result = scoreRatio === 1 ? 'correct' : (scoreRatio === 0 ? 'incorrect' : scoreRatio.toFixed(2));
 
     interactions.push({
       id: 'q_' + q.id,
-      type: type,
+      type: scormType,
       result: result,
-      response: response
+      response: response,
+      correct: correctPattern,
+      description: description
     });
   });
 
@@ -1344,23 +1784,70 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+    function readSuspendObj() {
+  try {
+    var raw = SCORM.getValue('cmi.suspend_data') || '';
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch (e) {
+    return {};
+  }
+}
+
+function writeSuspendObj(obj) {
+  try {
+    var raw = JSON.stringify(obj || {});
+    // SCORM 2004 suspend_data обычно до ~64KB, нам хватит
+    SCORM.setValue('cmi.suspend_data', raw);
+    SCORM.commit();
+  } catch (e) {}
+}
+
+function getAttemptsUsed() {
+  var s = readSuspendObj();
+  return typeof s.attemptsUsed === 'number' ? s.attemptsUsed : 0;
+}
+
+function setAttemptsUsed(n) {
+  var s = readSuspendObj();
+  s.attemptsUsed = n;
+  s.lastUpdated = new Date().toISOString();
+  writeSuspendObj(s);
+}
+
+function hasAttemptsLeft() {
+  if (!TEST_DATA.maxAttempts) return true; // если лимит не задан — не ограничиваем
+  return getAttemptsUsed() < TEST_DATA.maxAttempts;
+}
+
+// Увеличиваем попытку 1 раз на запуск теста
+function registerAttemptStart() {
+  if (!TEST_DATA.maxAttempts) return true;
+
+  var used = getAttemptsUsed();
+  if (used >= TEST_DATA.maxAttempts) return false;
+
+  setAttemptsUsed(used + 1);
+  return true;
+}
+
 `;
 }
 function buildStylesCss(): string {
   return `
 /* ===== Modern Dark Theme SCORM Package ===== */
 :root {
-  --background: 20 14% 10%;
+  --background:  225 7% 7%;
   --foreground: 0 0% 98%;
   --border: 0 0% 22%;
-  --card: 20 14% 14%;
+  --card: 225 14% 14%;
   --card-foreground: 0 0% 98%;
   --card-border: 0 0% 24%;
   --primary: 217 91% 42%;
   --primary-foreground: 0 0% 98%;
-  --muted: 20 10% 20%;
+  --muted: 225 10% 20%;
   --muted-foreground: 0 0% 65%;
-  --accent: 20 8% 22%;
+  --accent: 225 8% 22%;
   --destructive: 0 84% 52%;
   --success: 142 76% 36%;
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -1977,9 +2464,18 @@ select:focus {
 
 .results-topics-grid{
   display:grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
+
+@media (max-width: 1100px){
+  .results-topics-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px){
+  .results-topics-grid{ grid-template-columns: 1fr; }
+}
+
+
 
 .topic-card{ padding: 18px; text-align:left; }
 .topic-head{
@@ -1989,9 +2485,12 @@ select:focus {
   gap: 12px;
   margin-bottom: 14px;
 }
-.topic-left{ display:flex; align-items:center; gap: 10px; }
+.topic-left{ display:flex; align-items:flex-start; gap: 10px; }
 .topic-icon{
   width: 26px; height: 26px;
+  min-width: 26px; 
+  min-height: 26px;
+  flex-shrink: 0;
   border-radius: 999px;
   display:inline-flex;
   align-items:center;
@@ -2016,7 +2515,7 @@ select:focus {
 .topic-bar{
   height: 8px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.10);
+  background: hsl(var(--muted));
   overflow:hidden;
   margin-top: 12px;
 }
@@ -2030,11 +2529,32 @@ select:focus {
   color: hsl(var(--muted-foreground));
 }
 
-.results-actions{ы
+.results-actions{
   display:flex;
   justify-content:center;
   gap: 12px;
   margin-top: 22px;
+}
+
+/* ===== Recommended Courses ===== */
+.course-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: hsl(var(--muted) / 0.5);
+  border-radius: 8px;
+  margin-top: 8px;
+  text-decoration: none;
+  color: hsl(var(--primary));
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.course-link:hover {
+  background: hsl(var(--muted));
+  transform: translateX(4px);
 }
 `.trim();
 }
