@@ -434,370 +434,10 @@ window.onload = function() {
     try { SCORM.commit(); } catch (e) {}
     try { SCORM.terminate(); } catch (e) {}
   });
-  bindMatchingDnDOnce();
-  bindRankingDnDOnce();
+  bindRankingClicksOnce();
   generateVariant();
   render();
-  window.addEventListener('resize', function(){ syncMatchingHeights(); });
 };
-
-var __matchHeightRAF = 0;
-function syncMatchingHeights() {
-  try {
-    if (__matchHeightRAF) cancelAnimationFrame(__matchHeightRAF);
-  } catch (e) {}
-
-  __matchHeightRAF = requestAnimationFrame(function() {
-    var roots = document.querySelectorAll('.matching-board');
-    for (var i = 0; i < roots.length; i++) {
-      var root = roots[i];
-      if (!root || !root.style) continue;
-
-      // reset to auto for measurement
-      root.style.setProperty('--matchRowH', 'auto');
-
-      // measure after next frame so layout is updated
-      (function(r) {
-        requestAnimationFrame(function() {
-          var nodes = r.querySelectorAll('.match-tile, .match-empty');
-          var maxH = 0;
-          for (var j = 0; j < nodes.length; j++) {
-            var h = nodes[j].offsetHeight || 0;
-            if (h > maxH) maxH = h;
-          }
-          if (maxH < 44) maxH = 56; // safety
-          r.style.setProperty('--matchRowH', String(maxH) + 'px');
-        });
-      })(root);
-    }
-  });
-}
-
-var __matchDndBound = false;
-
-function bindMatchingDnDOnce() {
-  if (__matchDndBound) return;
-  __matchDndBound = true;
-
-  function closestByClass(node, cls) {
-    var el = node;
-    while (el && el !== document) {
-      if (el.classList && el.classList.contains(cls)) return el;
-      el = el.parentNode;
-    }
-    return null;
-  }
-
-    var __matchOverEl = null;
-
-  function clearMatchOver() {
-    if (__matchOverEl) __matchOverEl.classList.remove('is-over');
-    __matchOverEl = null;
-  }
-
-  function setMatchOver(el) {
-    if (__matchOverEl && __matchOverEl !== el) __matchOverEl.classList.remove('is-over');
-    __matchOverEl = el;
-    if (__matchOverEl) __matchOverEl.classList.add('is-over');
-  }
-
-  function parsePayloadFromEvent(e) {
-    var raw = '';
-    try { raw = e.dataTransfer.getData('application/json'); } catch (err) {}
-    if (!raw) {
-      try { raw = e.dataTransfer.getData('text/plain'); } catch (err2) {}
-    }
-    if (!raw) return null;
-
-    // JSON first
-    try {
-      var obj = JSON.parse(raw);
-      if (obj && obj.qid) return obj;
-    } catch (e1) {}
-
-    // fallback: qid|leftIdx|from|poolIndex|rightIdx
-    var parts = String(raw).split('|');
-    if (parts.length < 2) return null;
-
-    var qid = parts[0];
-    var leftIdx = parseInt(parts[1], 10);
-    if (!qid || Number.isNaN(leftIdx)) return null;
-
-    var payload = { qid: qid, leftIdx: leftIdx, from: parts[2] || 'pool' };
-    if (parts[3]) {
-      var pi = parseInt(parts[3], 10);
-      if (!Number.isNaN(pi)) payload.poolIndex = pi;
-    }
-    if (parts[4]) {
-      var ri = parseInt(parts[4], 10);
-      if (!Number.isNaN(ri)) payload.rightIdx = ri;
-    }
-    return payload;
-  }
-
-  function getCurrentQuestionById(qid) {
-    var current = state.flatQuestions[state.currentIndex] && state.flatQuestions[state.currentIndex].question;
-    if (current && String(current.id) === String(qid)) return current;
-
-    for (var i = 0; i < state.flatQuestions.length; i++) {
-      var q = state.flatQuestions[i].question;
-      if (q && String(q.id) === String(qid)) return q;
-    }
-    return null;
-  }
-
-  function normalizePool(qid, leftMapping, ans) {
-    if (!state.matchingPools) state.matchingPools = {};
-    if (!Array.isArray(state.matchingPools[qid])) state.matchingPools[qid] = leftMapping.slice();
-
-    var pool = state.matchingPools[qid];
-
-    // used left
-    var used = {};
-    Object.keys(ans || {}).forEach(function(k) {
-      var li = parseInt(k, 10);
-      if (!Number.isNaN(li)) used[li] = true;
-    });
-
-    // remove used from pool
-    var next = [];
-    for (var i = 0; i < pool.length; i++) {
-      var li2 = pool[i];
-      if (!used[li2]) next.push(li2);
-    }
-
-    // add missing unused in leftMapping order
-    for (var j = 0; j < leftMapping.length; j++) {
-      var li3 = leftMapping[j];
-      if (used[li3]) continue;
-      if (next.indexOf(li3) === -1) next.push(li3);
-    }
-
-    state.matchingPools[qid] = next;
-    return next;
-  }
-
-  function removeFromPool(pool, leftIdx, poolIndex) {
-    if (!Array.isArray(pool)) return -1;
-
-    if (typeof poolIndex === 'number' && poolIndex >= 0 && poolIndex < pool.length && pool[poolIndex] === leftIdx) {
-      pool.splice(poolIndex, 1);
-      return poolIndex;
-    }
-
-    var idx = pool.indexOf(leftIdx);
-    if (idx >= 0) {
-      pool.splice(idx, 1);
-      return idx;
-    }
-
-    return -1;
-  }
-
-  function insertIntoPool(pool, leftIdx, index) {
-    if (!Array.isArray(pool)) return;
-    var i = (typeof index === 'number') ? index : pool.length;
-    if (i < 0) i = 0;
-    if (i > pool.length) i = pool.length;
-    pool.splice(i, 0, leftIdx);
-  }
-
-  function leftForRight(ans, rightIdx) {
-    var keys = Object.keys(ans || {});
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i];
-      if (ans[k] === rightIdx) return parseInt(k, 10);
-    }
-    return null;
-  }
-
-  function removeLeftFromAnswers(ans, leftIdx) {
-    if (!ans || typeof ans !== 'object') return;
-    if (ans.hasOwnProperty(leftIdx)) delete ans[leftIdx];
-    if (ans.hasOwnProperty(String(leftIdx))) delete ans[String(leftIdx)];
-  }
-
-  // dragstart
-  document.addEventListener('dragstart', function(e) {
-    var card = closestByClass(e.target, 'match-chip');
-    if (!card) return;
-
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) {
-      e.preventDefault();
-      return;
-    }
-
-    var qid = card.getAttribute('data-qid');
-    var left = parseInt(card.getAttribute('data-left'), 10);
-    if (!qid || Number.isNaN(left)) return;
-
-    var from = card.getAttribute('data-from') || 'pool';
-    var payload = { qid: qid, leftIdx: left, from: from };
-
-    var piStr = card.getAttribute('data-pool-index');
-    if (piStr !== null && piStr !== '') {
-      var pi = parseInt(piStr, 10);
-      if (!Number.isNaN(pi)) payload.poolIndex = pi;
-    }
-
-    var riStr = card.getAttribute('data-right');
-    if (riStr !== null && riStr !== '') {
-      var ri = parseInt(riStr, 10);
-      if (!Number.isNaN(ri)) payload.rightIdx = ri;
-    }
-
-    try {
-      e.dataTransfer.setData('application/json', JSON.stringify(payload));
-      e.dataTransfer.setData(
-        'text/plain',
-        payload.qid + '|' + payload.leftIdx + '|' + payload.from + '|' +
-        (payload.poolIndex !== undefined ? payload.poolIndex : '') + '|' +
-        (payload.rightIdx !== undefined ? payload.rightIdx : '')
-      );
-      e.dataTransfer.effectAllowed = 'move';
-    } catch (err) {}
-  });
-
-  // dragover
-   document.addEventListener('dragover', function(e) {
-    var rightDrop = closestByClass(e.target, 'match-drop-right');
-    var leftDrop = closestByClass(e.target, 'match-drop-left');
-    var dropEl = rightDrop || leftDrop;
-    if (!dropEl) return;
-
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
-
-    e.preventDefault();
-    setMatchOver(dropEl);
-    try { e.dataTransfer.dropEffect = 'move'; } catch (err) {}
-  });
-
-
-    document.addEventListener('dragleave', function(e) {
-    var rightDrop = closestByClass(e.target, 'match-drop-right');
-    var leftDrop = closestByClass(e.target, 'match-drop-left');
-    var dropEl = rightDrop || leftDrop;
-    if (!dropEl) return;
-
-    // снимаем подсветку только если реально вышли из текущего drop
-    if (__matchOverEl === dropEl && (!e.relatedTarget || !dropEl.contains(e.relatedTarget))) {
-      clearMatchOver();
-    }
-  });
-
-
-  // drop
-  document.addEventListener('drop', function(e) {
-    clearMatchOver();
-    var rightDrop = closestByClass(e.target, 'match-drop-right');
-    var leftDrop = closestByClass(e.target, 'match-drop-left');
-    var dropEl = rightDrop || leftDrop;
-    if (!dropEl) return;
-
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
-
-    e.preventDefault();
-    dropEl.classList.remove('is-over');
-
-    var payload = parsePayloadFromEvent(e);
-    if (!payload || !payload.qid || Number.isNaN(payload.leftIdx)) return;
-
-    var q = getCurrentQuestionById(payload.qid);
-    if (!q || q.type !== 'matching') return;
-
-    var ans = (state.answers[payload.qid] && typeof state.answers[payload.qid] === 'object') ? state.answers[payload.qid] : {};
-
-    var shuffleMapping = state.shuffleMappings[q.id] || {};
-    var leftMapping = shuffleMapping.left ? shuffleMapping.left : q.data.left.map(function(_, i){ return i; });
-
-    var pool = normalizePool(payload.qid, leftMapping, ans);
-
-    var poolSlotStr = dropEl.getAttribute('data-pool-slot');
-    var targetRightStr = dropEl.getAttribute('data-right');
-    var isPoolDrop = (poolSlotStr !== null && poolSlotStr !== '');
-
-    if (isPoolDrop) {
-      var targetSlot = parseInt(poolSlotStr, 10);
-      if (Number.isNaN(targetSlot)) return;
-
-      if (payload.from === 'pool') {
-        var removedAt = removeFromPool(pool, payload.leftIdx, payload.poolIndex);
-        if (removedAt >= 0 && removedAt < targetSlot) targetSlot = targetSlot - 1;
-      } else {
-        removeLeftFromAnswers(ans, payload.leftIdx);
-      }
-
-      insertIntoPool(pool, payload.leftIdx, targetSlot);
-
-      state.answers[payload.qid] = ans;
-      state.matchingPools[payload.qid] = pool;
-      render();
-      return;
-    }
-
-    var targetRight = parseInt(targetRightStr, 10);
-    if (Number.isNaN(targetRight)) return;
-
-    if (payload.from === 'pool') {
-      removeFromPool(pool, payload.leftIdx, payload.poolIndex);
-    } else {
-      removeLeftFromAnswers(ans, payload.leftIdx);
-    }
-
-    var oldLeft = leftForRight(ans, targetRight);
-    if (oldLeft !== null && !Number.isNaN(oldLeft)) {
-      removeLeftFromAnswers(ans, oldLeft);
-
-      if (payload.from === 'pool' && typeof payload.poolIndex === 'number') {
-        insertIntoPool(pool, oldLeft, payload.poolIndex);
-      } else {
-        insertIntoPool(pool, oldLeft, pool.length);
-      }
-    }
-
-    ans[payload.leftIdx] = targetRight;
-
-    Object.keys(ans).forEach(function(k) {
-      var li = parseInt(k, 10);
-      if (li !== payload.leftIdx && ans[k] === targetRight) delete ans[k];
-    });
-
-    state.answers[payload.qid] = ans;
-    state.matchingPools[payload.qid] = pool;
-    render();
-  });
-
-  // dblclick matched -> return to pool
-  document.addEventListener('dblclick', function(e) {
-    var card = closestByClass(e.target, 'match-chip');
-    if (!card) return;
-
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
-
-    var from = card.getAttribute('data-from');
-    if (from !== 'match') return;
-
-    var qid = card.getAttribute('data-qid');
-    var leftIdx = parseInt(card.getAttribute('data-left'), 10);
-    if (!qid || Number.isNaN(leftIdx)) return;
-
-    var q = getCurrentQuestionById(qid);
-    if (!q || q.type !== 'matching') return;
-
-    var ans = (state.answers[qid] && typeof state.answers[qid] === 'object') ? state.answers[qid] : {};
-    var shuffleMapping = state.shuffleMappings[q.id] || {};
-    var leftMapping = shuffleMapping.left ? shuffleMapping.left : q.data.left.map(function(_, i){ return i; });
-
-    var pool = normalizePool(qid, leftMapping, ans);
-
-    removeLeftFromAnswers(ans, leftIdx);
-    insertIntoPool(pool, leftIdx, pool.length);
-
-    state.answers[qid] = ans;
-    state.matchingPools[qid] = pool;
-    render();
-  });
-}
 
 var __rankClickBound = false;
 
@@ -1019,7 +659,6 @@ function render() {
   html += '</div>';
 
   app.innerHTML = html;
-  syncMatchingHeights();
 }
 
 function renderStartPage() {
@@ -1228,14 +867,6 @@ function lockAnswerOptions(q) {
   rankButtons.forEach(function(btn) {
     btn.disabled = true;
   });
-
-    // ranking DnD
-  var rankItems = document.querySelectorAll('.rank-draggable');
-  rankItems.forEach(function(el) {
-    el.setAttribute('draggable', 'false');
-    el.style.cursor = 'default';
-  });
-
 }
 
 
@@ -1295,63 +926,74 @@ function highlightMatching(q, answer) {
   var pairs = (answer && typeof answer === 'object') ? answer : {};
   var correctPairsArr = Array.isArray((q.correct || {}).pairs) ? q.correct.pairs : [];
 
-  // correct: rightIdx -> leftIdx
-  var correctRightToLeft = {};
-  correctPairsArr.forEach(function(p) { correctRightToLeft[p.right] = p.left; });
+  var correctMap = {};
+  correctPairsArr.forEach(function(p) { correctMap[p.left] = p.right; });
 
-  // user: rightIdx -> leftIdx
-  var userRightToLeft = {};
-  Object.keys(pairs).forEach(function(k){
-    var l = parseInt(k, 10);
-    var r = pairs[k];
-    if (typeof r === 'number') userRightToLeft[r] = l;
-  });
+  // displayIdx -> originalRightIdx
+  var mappingObj = state.shuffleMappings[q.id];
+  var rightMapping = (mappingObj && mappingObj.right) ? mappingObj.right : q.data.right.map(function(_, i){ return i; });
 
-  document.querySelectorAll('.matching-line[data-qid="' + q.id + '"]').forEach(function(line) {
-    line.classList.remove('correct-answer', 'incorrect-answer');
+  document.querySelectorAll('.matching-row').forEach(function(row) {
+    row.classList.remove('correct-answer', 'incorrect-answer');
 
-    var rightAttr = line.getAttribute('data-right');
-    if (rightAttr === null) return;
+    var leftAttr = row.getAttribute('data-left');
+    if (leftAttr === null) return;
 
-    var rightIdx = parseInt(rightAttr, 10);
-    if (Number.isNaN(rightIdx)) return;
+    var leftIdx = parseInt(leftAttr, 10);
+    if (Number.isNaN(leftIdx)) return;
 
-    if (!userRightToLeft.hasOwnProperty(rightIdx)) return;
+    var selectedOriginalRight = pairs[leftIdx];
+    var correctOriginalRight = correctMap[leftIdx];
 
-    var userLeft = userRightToLeft[rightIdx];
-    var correctLeft = correctRightToLeft[rightIdx];
+    var slot = row.querySelector('.match-hint-slot');
+    if (slot) slot.textContent = '';
 
-    if (Number(userLeft) === Number(correctLeft)) {
-      line.classList.add('correct-answer');
-    } else {
-      line.classList.add('incorrect-answer');
+    if (selectedOriginalRight === undefined) return;
+
+    if (Number(selectedOriginalRight) === Number(correctOriginalRight)) {
+      row.classList.add('correct-answer');
+      return;
+    }
+
+    row.classList.add('incorrect-answer');
+
+    // правильная буква в ОТОБРАЖАЕМОМ (перемешанном) списке
+    var correctDisplayIdx = rightMapping.indexOf(correctOriginalRight);
+    if (correctDisplayIdx >= 0 && slot) {
+      slot.textContent = '(Правильно: ' + String.fromCharCode(65 + correctDisplayIdx) + ')';
     }
   });
 }
 
 function highlightRanking(q, answer) {
+  var order = Array.isArray(answer) ? answer : [];
   var correctOrder = Array.isArray((q.correct || {}).correctOrder) ? q.correct.correctOrder : [];
-  if (!correctOrder.length) return;
 
-  var rows = document.querySelectorAll('.ranking-board[data-qid="' + q.id + '"] .rank-item');
-  if (!rows || !rows.length) return;
+  if (!order.length || !correctOrder.length) return;
 
-  rows.forEach(function(row, pos) {
+  document.querySelectorAll('#ranking_' + q.id + ' .ranking-item').forEach(function(row, pos) {
     row.classList.remove('correct-answer', 'incorrect-answer');
 
-    var itemIdx = parseInt(row.getAttribute('data-item'), 10);
-    if (Number.isNaN(itemIdx)) return;
-
+    var itemIdx = order[pos];
     var ok = (itemIdx === correctOrder[pos]);
+
+    var slot = row.querySelector('.rank-hint-slot');
+    if (slot) slot.textContent = '';
 
     if (ok) {
       row.classList.add('correct-answer');
-    } else {
-      row.classList.add('incorrect-answer');
+      return;
+    }
+
+    row.classList.add('incorrect-answer');
+
+    // где должен быть этот itemIdx
+    var shouldBePos = correctOrder.indexOf(itemIdx);
+    if (shouldBePos >= 0 && slot) {
+      slot.textContent = '(Должен быть: ' + (shouldBePos + 1) + ')';
     }
   });
 }
-
 
 function insertFeedback(q, isCorrect, scoreRatio) {
   // Проверяем что feedback ещё не вставлен
@@ -1465,89 +1107,48 @@ function renderQuestionInput(q) {
     return html2;
   }
 
-  // MATCHING (Joined Drag & Drop like in UI)
+  // MATCHING
   if (q.type === 'matching') {
     var pairs = (answer && typeof answer === 'object') ? answer : {};
 
     var mappingObj = shuffleMapping || {};
-    var leftMapping = mappingObj.left ? mappingObj.left : q.data.left.map(function(_, i){ return i; });
-    var rightMapping = mappingObj.right ? mappingObj.right : q.data.right.map(function(_, i){ return i; });
+    var leftMapping = mappingObj.left ? mappingObj.left : q.data.left.map(function(_, i) { return i; });
+    var rightMapping = mappingObj.right ? mappingObj.right : q.data.right.map(function(_, i) { return i; });
 
-    // rightIdx -> leftIdx
-    var rightToLeft = {};
-    Object.keys(pairs).forEach(function(k){
-      var l = parseInt(k, 10);
-      var r = pairs[k];
-      if (typeof r === 'number') rightToLeft[r] = l;
-    });
+    var correctPairsArr = Array.isArray(correct.pairs) ? correct.pairs : [];
+    var correctMap = {};
+    correctPairsArr.forEach(function(p) { correctMap[p.left] = p.right; });
 
-    // normalize pool
-    if (!state.matchingPools) state.matchingPools = {};
-    if (!Array.isArray(state.matchingPools[q.id])) state.matchingPools[q.id] = leftMapping.slice();
+    var html3 = '<div style="margin-top:8px">';
 
-    var pool = state.matchingPools[q.id];
+    leftMapping.forEach(function(originalLeftIdx, displayLeftIdx) {
+      var selectedOriginalRightIdx = pairs[originalLeftIdx];
+      var selectedDisplayRightIdx = (selectedOriginalRightIdx !== undefined)
+        ? rightMapping.indexOf(selectedOriginalRightIdx)
+        : -1;
 
-    var usedLeft = {};
-    Object.keys(pairs).forEach(function(k){
-      var li = parseInt(k, 10);
-      if (!Number.isNaN(li)) usedLeft[li] = true;
-    });
+      var isCorrect = locked && selectedOriginalRightIdx !== undefined && Number(selectedOriginalRightIdx) === Number(correctMap[originalLeftIdx]);
+      var isIncorrect = locked && selectedOriginalRightIdx !== undefined && Number(selectedOriginalRightIdx) !== Number(correctMap[originalLeftIdx]);
 
-    var nextPool = [];
-    for (var pi = 0; pi < pool.length; pi++) {
-      if (!usedLeft[pool[pi]]) nextPool.push(pool[pi]);
-    }
+      var rowClass = isCorrect ? 'correct-answer' : (isIncorrect ? 'incorrect-answer' : '');
 
-    leftMapping.forEach(function(li){
-      if (usedLeft[li]) return;
-      if (nextPool.indexOf(li) === -1) nextPool.push(li);
-    });
+      html3 += '<div class="matching-row ' + rowClass + '" data-left="' + originalLeftIdx + '">';
+      html3 +=   '<div class="matching-item">' + (displayLeftIdx + 1) + '. ' + escapeHtml(q.data.left[originalLeftIdx]) + '</div>';
+      html3 +=   '<span style="margin:0 8px;">→</span>';
+      html3 +=   '<select onchange="setMatchWithMapping(\\'' + q.id + '\\',' + originalLeftIdx + ',this.value)"' + (locked ? ' disabled' : '') + '>';
+      html3 +=     '<option value="">Выберите...</option>';
 
-    pool = nextPool;
-    state.matchingPools[q.id] = pool;
+      rightMapping.forEach(function(originalRightIdx, displayRightIdx) {
+        var sel = (selectedDisplayRightIdx === displayRightIdx) ? 'selected' : '';
+        html3 += '<option value="' + displayRightIdx + '" ' + sel + '>' +
+          String.fromCharCode(65 + displayRightIdx) + '. ' + escapeHtml(q.data.right[originalRightIdx]) +
+          '</option>';
+      });
 
-    var html3 = '<div class="matching-board" data-qid="' + escapeHtml(q.id) + '" style="--matchRowH:auto;">';
+      html3 +=   '</select>';
 
-    // pool раскладываем по НЕзаполненным строкам справа
-    var poolSlot = 0;
-
-    rightMapping.forEach(function(rightIdx) {
-      var matchedLeft = rightToLeft.hasOwnProperty(rightIdx) ? rightToLeft[rightIdx] : null;
-      var isJoined = (matchedLeft !== null);
-
-      html3 += '<div class="matching-line' + (isJoined ? ' is-joined' : '') + '" data-qid="' + escapeHtml(q.id) + '" data-right="' + rightIdx + '">';
-
-      // LEFT
-      if (isJoined) {
-        html3 += '<div class="match-tile match-left-slot match-drop-left" data-qid="' + escapeHtml(q.id) + '" data-right="' + rightIdx + '">';
-        html3 +=   '<div class="match-chip" draggable="true" data-qid="' + escapeHtml(q.id) + '" data-left="' + matchedLeft + '" data-from="match" data-right="' + rightIdx + '">'
-              + escapeHtml(q.data.left[matchedLeft])
-              + '</div>';
-        html3 += '</div>';
-      } else {
-        var poolLeft = (poolSlot < pool.length) ? pool[poolSlot] : null;
-
-        if (poolLeft !== null && poolLeft !== undefined) {
-          html3 += '<div class="match-tile match-left-slot match-drop-left" data-qid="' + escapeHtml(q.id) + '" data-right="' + rightIdx + '" data-pool-slot="' + poolSlot + '">';
-          html3 +=   '<div class="match-chip" draggable="true" data-qid="' + escapeHtml(q.id) + '" data-left="' + poolLeft + '" data-from="pool" data-pool-index="' + poolSlot + '">'
-                + escapeHtml(q.data.left[poolLeft])
-                + '</div>';
-          html3 += '</div>';
-        } else {
-          html3 += '<div class="match-empty match-left-slot match-drop-left" data-qid="' + escapeHtml(q.id) + '" data-right="' + rightIdx + '" data-pool-slot="' + poolSlot + '">'
-                + '<span class="slot-placeholder">Перетащите вариант</span>'
-                + '</div>';
-        }
-
-        poolSlot++;
-      }
-
-      html3 += '<div class="matching-gap"></div>';
-
-      // RIGHT (drop target)
-      html3 += '<div class="match-tile match-right-tile match-drop-right" data-qid="' + escapeHtml(q.id) + '" data-right="' + rightIdx + '">'
-            + escapeHtml(q.data.right[rightIdx])
-            + '</div>';
+      // ВАЖНО: слот под подсказку (чтобы не "дёргалось" при вставке)
+      html3 +=   '<span class="match-hint-slot" style="margin-left:8px;font-size:12px;color:#16a34a;"></span>';
 
       html3 += '</div>';
     });
@@ -1556,183 +1157,43 @@ function renderQuestionInput(q) {
     return html3;
   }
 
-  // RANKING (Drag & Drop reorder)
+  // RANKING
   if (q.type === 'ranking') {
-    var items = (q.data && Array.isArray(q.data.items)) ? q.data.items : [];
+    var defaultOrder = shuffleMapping || q.data.items.map(function(_, i) { return i; });
+    var order = Array.isArray(answer) ? answer : defaultOrder;
 
-    // ответ храним как массив индексов исходных items: [2,0,1,...]
-    var userOrder = Array.isArray(answer) ? answer.slice() : null;
+    var correctOrder = Array.isArray(correct.correctOrder) ? correct.correctOrder : defaultOrder;
 
-    // если ответа ещё нет — ставим стартовый порядок 0..n-1
-    if (!userOrder || userOrder.length !== items.length) {
-      userOrder = items.map(function(_, i){ return i; });
-      state.answers[q.id] = userOrder;
-    }
-
-    var html = '<div class="ranking-board" data-qid="' + escapeHtml(q.id) + '">';
-
-    userOrder.forEach(function(itemIdx, pos){
-      var text = (items[itemIdx] != null) ? String(items[itemIdx]) : ('#' + itemIdx);
-
-      html += ''
-        + '<div class="rank-item rank-draggable"'
-        + ' draggable="true"'
-        + ' data-qid="' + escapeHtml(q.id) + '"'
-        + ' data-pos="' + pos + '"'
-        + ' data-item="' + itemIdx + '">'
-        +   '<span class="rank-grip">' + burgerSvgInline() + '</span>'
-        +   '<span class="rank-text">' + escapeHtml(text) + '</span>'
-        + '</div>';
-    });
-
-    html += '</div>';
-    return html;
+    var html4 = '<div id="ranking_' + q.id + '">';
+    html4 += buildRankingBlockHtml(q, q.id, order, locked, correctOrder);
+    html4 += '</div>';
+    return html4;
   }
-
-  // маленький helper для “бургер-иконки”
-  function burgerSvgInline(){
-    return ''
-      + '<svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
-      + '<path d="M2.5 4.99524H17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>'
-      + '<path d="M14.1667 9.9952H2.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>'
-      + '<path d="M2.5 14.9951H10.8333" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>'
-      + '</svg>';
-  }
-
 
   // IMPORTANT: закрываем функцию правильно
   return '<div>Неизвестный тип вопроса</div>';
 }
 
-var __rankDndBound = false;
-function bindRankingDnDOnce(){
-  if (__rankDndBound) return;
-  __rankDndBound = true;
+function buildRankingBlockHtml(q, qId, order, locked, correctOrder) {
+  var html = '';
 
-  var dragPayload = null; // { qid, fromPos, itemIdx }
+  order.forEach(function(itemIdx, pos) {
+    var isCorrectPos = locked && itemIdx === correctOrder[pos];
+    var rowClass = locked ? (isCorrectPos ? 'correct-answer' : 'incorrect-answer') : '';
 
-  function closestByClass(node, cls) {
-    var el = node;
-    while (el && el !== document) {
-      if (el.classList && el.classList.contains(cls)) return el;
-      el = el.parentNode;
-    }
-    return null;
-  }
-
-  // function clearOver(){
-  //   document.querySelectorAll('.rank-item.is-over').forEach(function(n){
-  //     n.classList.remove('is-over');
-  //   });
-  // }
-
-  function getPayload(e){
-    try {
-      var raw = e.dataTransfer.getData('application/json');
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch (err) { return null; }
-  }
-
-  function moveInArray(arr, from, to){
-    if (from === to) return arr;
-    var copy = arr.slice();
-    var item = copy.splice(from, 1)[0];
-    copy.splice(to, 0, item);
-    return copy;
-  }
-
-  document.addEventListener('dragstart', function(e){
-    var el = closestByClass(e.target, 'rank-draggable');
-    if (!el) return;
-
-    // блокируем DnD после принятия
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) {
-      e.preventDefault();
-      return;
-    }
-
-    var qid = el.getAttribute('data-qid');
-    var fromPos = parseInt(el.getAttribute('data-pos'), 10);
-    var itemIdx = parseInt(el.getAttribute('data-item'), 10);
-    if (!qid || Number.isNaN(fromPos) || Number.isNaN(itemIdx)) return;
-
-    dragPayload = { qid: qid, fromPos: fromPos, itemIdx: itemIdx };
-    el.classList.add('dragging');
-
-    try{
-      e.dataTransfer.setData('application/json', JSON.stringify(dragPayload));
-      e.dataTransfer.effectAllowed = 'move';
-    }catch(err){}
+    html += '<div class="ranking-item ' + rowClass + '" data-pos="' + pos + '" data-item="' + itemIdx + '">';
+    html +=   '<div class="ranking-controls">';
+    html +=     '<button type="button" class="rank-btn" data-qid="' + escapeHtml(qId) + '" data-pos="' + pos + '" data-dir="-1"' + (pos === 0 || locked ? ' disabled' : '') + '>▲</button>';
+    html +=     '<button type="button" class="rank-btn" data-qid="' + escapeHtml(qId) + '" data-pos="' + pos + '" data-dir="1"' + (pos === order.length - 1 || locked ? ' disabled' : '') + '>▼</button>';
+    html +=   '</div>';
+    html +=   '<span>' + (pos + 1) + '.</span>';
+    html +=   '<span>' + escapeHtml(q.data.items[itemIdx]) + '</span>';
+    html +=   '<span class="rank-hint-slot" style="margin-left:8px;font-size:12px;color:#16a34a;"></span>';
+    html += '</div>';
   });
 
-  document.addEventListener('dragend', function(e){
-    var el = closestByClass(e.target, 'rank-draggable');
-    if (el) el.classList.remove('dragging');
-    dragPayload = null;
-    clearMatchOver();
-    // clearOver();
-  });
-
-  document.addEventListener('dragover', function(e){
-    var over = closestByClass(e.target, 'rank-item');
-    if (!over) return;
-
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
-
-    e.preventDefault();
-    // clearOver();
-    over.classList.add('is-over');
-
-    try{ e.dataTransfer.dropEffect = 'move'; }catch(err){}
-  });
-
-  document.addEventListener('drop', function(e){
-    var over = closestByClass(e.target, 'rank-item');
-    if (!over) return;
-
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
-
-    e.preventDefault();
-    over.classList.remove('is-over');
-
-    var p = getPayload(e) || dragPayload;\
-    if (!p) return;
-
-    var qid = over.getAttribute('data-qid');
-    if (!qid || qid !== p.qid) return;
-
-    var toPos = parseInt(over.getAttribute('data-pos'), 10);
-    if (Number.isNaN(toPos)) return;
-
-    var current = state.answers[qid];
-    if (!Array.isArray(current)) return;
-
-    state.answers[qid] = moveInArray(current, p.fromPos, toPos);
-    render();
-  });
+  return html;
 }
-
-// function buildRankingBlockHtml(q, qId, order, locked, correctOrder) {
-//   var html = '';
-
-//   order.forEach(function(itemIdx, pos) {
-//     var isCorrectPos = locked && itemIdx === correctOrder[pos];
-//     var rowClass = locked ? (isCorrectPos ? 'correct-answer' : 'incorrect-answer') : '';
-
-//     html += '<div class="ranking-item ' + rowClass + '" data-pos="' + pos + '" data-item="' + itemIdx + '">';
-//     html +=   '<div class="ranking-controls">';
-//     html +=     '<button type="button" class="rank-btn" data-qid="' + escapeHtml(qId) + '" data-pos="' + pos + '" data-dir="-1"' + (pos === 0 || locked ? ' disabled' : '') + '>▲</button>';
-//     html +=     '<button type="button" class="rank-btn" data-qid="' + escapeHtml(qId) + '" data-pos="' + pos + '" data-dir="1"' + (pos === order.length - 1 || locked ? ' disabled' : '') + '>▼</button>';
-//     html +=   '</div>';
-//     html +=   '<span>' + (pos + 1) + '.</span>';
-//     html +=   '<span>' + escapeHtml(q.data.items[itemIdx]) + '</span>';
-//     html +=   '<span class="rank-hint-slot" style="margin-left:8px;font-size:12px;color:#16a34a;"></span>';
-//     html += '</div>';
-//   });
-
-//   return html;
-// }
 
 function selectSingle(qId, idx) {
   if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
@@ -1811,35 +1272,35 @@ function setMatch(qId, leftIdx, rightVal) {
   state.answers[qId] = pairs;
 }
 
-// function moveRank(qId, pos, dir) {
-//   if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
+function moveRank(qId, pos, dir) {
+  if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
 
-//   var fq = state.flatQuestions.find(function(fq) { return fq.question.id === qId; });
-//   if (!fq) return;
+  var fq = state.flatQuestions.find(function(fq) { return fq.question.id === qId; });
+  if (!fq) return;
 
-//   var q = fq.question;
+  var q = fq.question;
 
-//   var order = Array.isArray(state.answers[qId])
-//     ? state.answers[qId].slice()
-//     : q.data.items.map(function(_, i) { return i; });
+  var order = Array.isArray(state.answers[qId])
+    ? state.answers[qId].slice()
+    : q.data.items.map(function(_, i) { return i; });
 
-//   var newPos = pos + dir;
-//   if (newPos < 0 || newPos >= order.length) return;
+  var newPos = pos + dir;
+  if (newPos < 0 || newPos >= order.length) return;
 
-//   var temp = order[pos];
-//   order[pos] = order[newPos];
-//   order[newPos] = temp;
+  var temp = order[pos];
+  order[pos] = order[newPos];
+  order[newPos] = temp;
 
-//   state.answers[qId] = order;
+  state.answers[qId] = order;
 
-//   // точечный перерендер только ranking-блока
-//   var container = document.getElementById('ranking_' + qId);
-//   if (container) {
-//     var locked = false;
-//     var correctOrder = Array.isArray((q.correct || {}).correctOrder) ? q.correct.correctOrder : order;
-//     container.innerHTML = buildRankingBlockHtml(q, qId, order, locked, correctOrder);
-//   }
-// }
+  // точечный перерендер только ranking-блока
+  var container = document.getElementById('ranking_' + qId);
+  if (container) {
+    var locked = false;
+    var correctOrder = Array.isArray((q.correct || {}).correctOrder) ? q.correct.correctOrder : order;
+    container.innerHTML = buildRankingBlockHtml(q, qId, order, locked, correctOrder);
+  }
+}
 
 
 function next() {
@@ -2766,199 +2227,107 @@ h1 {
   margin-top: 32px;
 }
 
-/* ===== Matching DnD (MATCHING) ===== */
-/* Новый формат: строка = левый слот + gap + правый ответ, при совпадении "склеиваются" в одну плашку */
-.matching-board{
-  --matchRowH: auto;
-  display:flex;
-  flex-direction:column;
-  gap: 12px;
-  margin-top: 10px;
+/* ===== Matching Questions ===== */
+.matching-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 6px;
+  border-radius: 10px;
+  transition: background 0.2s;
 }
 
-.matching-line{
-  display:flex;
-  align-items:stretch;
+.matching-item {
+  flex: 1;
+  padding: 14px 18px;
+  background: hsl(var(--muted));
+  border-radius: 8px;
+  font-size: 15px;
 }
 
-.matching-gap{
-  flex: 0 0 18px;
+.matching-row.correct-answer {
+  background: hsl(var(--success) / 0.15);
 }
 
-.match-tile{
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 14px;
-  border-radius: 12px;
+.matching-row.incorrect-answer {
+  background: hsl(var(--destructive) / 0.15);
+}
+
+select {
+  padding: 12px 14px;
+  border: 2px solid hsl(var(--border));
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  box-shadow: var(--shadow);
-  display:flex;
-  align-items:center;
-  height: var(--matchRowH);
-  overflow: hidden;
-  font-size: 14px;
-  line-height: 1.35;
+  color: hsl(var(--card-foreground));
+  border-radius: 8px;
+  font-size: 15px;
+  min-width: 180px;
+  cursor: pointer;
+  transition: border-color 0.2s;
 }
 
-.match-left-slot{
-  justify-content:flex-start;
-  gap: 10px;
+select:hover {
+  border-color: hsl(var(--primary));
 }
 
-.match-right-tile{
-  color: hsl(var(--foreground));
-  opacity: .92;
-  white-space: normal;
+select:focus {
+  outline: none;
+  border-color: hsl(var(--primary));
 }
 
-.match-empty{
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 14px;
-  border-radius: 12px;
-  background: transparent;
-  border: 1px dashed hsl(var(--border));
-  display:flex;
-  align-items:center;
-  height: var(--matchRowH);
-}
-
-.match-chip{
-  user-select:none;
-  width: 100%;
-  padding: 10px 12px;
-  // border-radius: 12px;
-  // background: hsl(var(--muted) / .35);
-  // border: 1px solid hsl(var(--border));
-  color: hsl(var(--foreground));
-  cursor: grab;
-  font-size: 14px;
-  line-height: 1.25;
-  white-space: normal;
-}
-.match-chip:active{ cursor: grabbing; }
-
-/* dragover подсветка */
-.match-drop-right.is-over,
-.match-drop-left.is-over{
-  outline: 2px solid hsl(var(--primary));
-  outline-offset: 2px;
-}
-
-/* Joined state */
-.matching-line.is-joined{
+/* ===== Ranking Questions ===== */
+.ranking-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
   background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  overflow:hidden;
+  border: 2px solid hsl(var(--border));
+  border-radius: 10px;
+  margin-bottom: 10px;
+  transition: all 0.2s;
 }
 
-.matching-line.is-joined .match-tile,
-.matching-line.is-joined .match-empty{
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  border-radius: 0;
+.ranking-item:hover {
+  border-color: hsl(var(--primary) / 0.5);
 }
 
-.matching-line.is-joined .match-left-slot{
-  border-top-left-radius: 12px;
-  border-bottom-left-radius: 12px;
+.ranking-item.correct-answer {
+  background: hsl(var(--success) / 0.15);
+  border-color: hsl(var(--success) / 0.4);
 }
 
-.matching-line.is-joined .match-right-tile{
-  border-top-right-radius: 12px;
-  border-bottom-right-radius: 12px;
+.ranking-item.incorrect-answer {
+  background: hsl(var(--destructive) / 0.15);
+  border-color: hsl(var(--destructive) / 0.4);
 }
 
-/* Результаты */
-.matching-line.correct-answer{
-  border-color: hsl(var(--success));
-  background: color-mix(in oklab, hsl(var(--success)) 12%, hsl(var(--card)));
-}
-.matching-line.incorrect-answer{
-  border-color: hsl(var(--destructive));
-  background: color-mix(in oklab, hsl(var(--destructive)) 10%, hsl(var(--card)));
-}
-
-.slot-placeholder{
-  color: hsl(var(--muted-foreground));
-  font-size: 13px;
-}
-  
-.match-left-stack{
+.ranking-controls {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  min-width: 0;
+  gap: 4px;
 }
 
-.match-wrong-hint{
-  font-size: 12px;
-  line-height: 1.2;
-  color: hsl(var(--muted-foreground));
-  opacity: .9;
-}
-
-
-/* ===== Ranking DnD (RANKING) ===== */
-.ranking-board{
-  display:flex;
-  flex-direction:column;
-  gap: 12px;
-  margin-top: 10px;
-}
-
-.rank-item{
-  user-select:none;
-  padding: 14px;
-  border-radius: 12px;
-  background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  box-shadow: var(--shadow);
-  display:flex;
-  align-items:center;
-  gap: 10px;
-  cursor: grab;
-  min-width: 0;
-}
-
-.rank-item:active{ cursor: grabbing; }
-
-.rank-grip{
-  flex: 0 0 auto;
-  display:flex;
-  align-items:center;
-  opacity: .85;
-}
-
-.rank-text{
-  min-width: 0;
-  white-space: normal;
+.ranking-controls button {
+  background: hsl(var(--muted));
   color: hsl(var(--foreground));
-  opacity: .92;
-  font-size: 14px;
-  line-height: 1.35;
+  border: 1px solid hsl(var(--border));
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 12px;
 }
 
-.rank-item.dragging{ opacity: .7; }
-
-.rank-item.is-over{
-  outline: 2px solid hsl(var(--primary));
-  outline-offset: 2px;
+.ranking-controls button:hover {
+  background: hsl(var(--accent));
+  border-color: hsl(var(--primary));
 }
 
-/* (необязательно) подсветка после проверки */
-.rank-item.correct-answer{
-  border-color: hsl(var(--success));
-  background: color-mix(in oklab, hsl(var(--success)) 12%, hsl(var(--card)));
-}
-.rank-item.incorrect-answer{
-  border-color: hsl(var(--destructive));
-  background: color-mix(in oklab, hsl(var(--destructive)) 10%, hsl(var(--card)));
+.ranking-controls button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 /* ===== Loading State ===== */
