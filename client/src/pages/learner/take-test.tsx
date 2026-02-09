@@ -981,7 +981,7 @@ export default function TakeTestPage() {
                   {testMode === "adaptive" ? (
                     <>
                       <div className="font-semibold">Количество тем</div>
-                      <div className="text-sm text-muted-foreground">{testInfo.sections?.length || 0}</div>
+                      <div className="text-sm text-muted-foreground">{(testInfo as any).sections?.length || 0}</div>
                     </>
                   ) : (
                     <>
@@ -1293,14 +1293,11 @@ export default function TakeTestPage() {
                   {!lastAnswerResult.isCorrect && lastAnswerResult.correctAnswer !== undefined && (
                     <div className="text-sm mb-2">
                       <span className="font-medium">Правильный ответ: </span>
-                      {currentQ.type === "single" && currentQ.data?.options && (
-                        <span>{currentQ.data.options[lastAnswerResult.correctAnswer.correctIndex]}</span>
+                      {currentQ.type === "single" && (currentQ.dataJson as any)?.options && (
+                        <span>{(currentQ.dataJson as any).options[lastAnswerResult.correctAnswer.correctIndex]}</span>
                       )}
-                      {currentQ.type === "multiple" && currentQ.data?.options && Array.isArray(lastAnswerResult.correctAnswer.correctIndices) && (
-                        <span>{lastAnswerResult.correctAnswer.correctIndices.map((idx: number) => currentQ.data?.options?.[idx]).join(", ")}</span>
-                      )}
-                      {currentQ.type === "text" && (
-                        <span>{String(lastAnswerResult.correctAnswer.correctText || lastAnswerResult.correctAnswer)}</span>
+                      {currentQ.type === "multiple" && (currentQ.dataJson as any)?.options && Array.isArray(lastAnswerResult.correctAnswer.correctIndices) && (
+                        <span>{lastAnswerResult.correctAnswer.correctIndices.map((idx: number) => (currentQ.dataJson as any)?.options?.[idx]).join(", ")}</span>
                       )}
                     </div>
                   )}
@@ -2077,6 +2074,7 @@ function RankingQuestion({ question, answer, onAnswer, shuffleMapping, disabled 
                   onClick={() => moveItem(position, position - 1)}
                   disabled={disabled || position === 0}
                   className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                  aria-label="Move up"
                 >
                   <ArrowUp className="h-4 w-4" />
                 </button>
@@ -2085,6 +2083,7 @@ function RankingQuestion({ question, answer, onAnswer, shuffleMapping, disabled 
                   onClick={() => moveItem(position, position + 1)}
                   disabled={disabled || position === order.length - 1}
                   className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+                  aria-label="Move down"
                 >
                   <ArrowDown className="h-4 w-4" />
                 </button>

@@ -252,7 +252,7 @@ function formatUserAnswer(answer: DetailedAnswer): string {
     case "matching":
       if (typeof userAnswer === "object" && !Array.isArray(userAnswer) && leftItems && rightItems) {
         return Object.entries(userAnswer)
-          .map(([left, right]) => `${leftItems[+left]} → ${rightItems[+right as number]}`)
+          .map(([left, right]) => `${leftItems[+left]} → ${rightItems[+(right as string)]}`)
           .join("; ");
       }
       // Если уже отформатирован

@@ -62,7 +62,7 @@ export function LearnerLayout({ children }: LearnerLayoutProps) {
                 <User className="h-3 w-3" />
               </AvatarFallback>
             </Avatar>
-            <span className="text-sm font-medium">{user?.username}</span>
+            <span className="text-sm font-medium">{user?.name || user?.email}</span>
           </div>
           <Button variant="ghost" size="icon" onClick={handleLogout} data-testid="button-logout">
             <LogOut className="h-4 w-4" />

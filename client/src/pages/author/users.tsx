@@ -676,10 +676,10 @@ export default function UsersPage() {
                   id: selectedUser.id,
                   data: {
                     email: formData.email,
-                    name: formData.name || null,
+                    name: formData.name || undefined,
                     role: formData.role,
                     mustChangePassword: formData.mustChangePassword,
-                    expiresAt: formData.expiresAt || null,
+                    expiresAt: formData.expiresAt || undefined,
                   },
                 })
               }

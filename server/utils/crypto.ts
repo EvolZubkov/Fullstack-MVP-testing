@@ -1,4 +1,3 @@
-import Crypto from "@vvlad1973/crypto";
 import { createHash } from "crypto";
 
 // Секретный ключ для шифрования (из переменных окружения)
@@ -11,30 +10,44 @@ const IV_SEED = createHash("sha256")
   .digest()
   .slice(0, 16); // 16 байт для AES
 
-// Создаём единственный экземпляр с фиксированным IV
-const cryptoInstance = new Crypto({
-  password: ENCRYPTION_PASSWORD,
-  salt: ENCRYPTION_SALT,
-  algorithm: "SHA512",
-  iterations: 10000,
-  keyLength: 32,
-  iv: IV_SEED, // Фиксированный IV
-});
+// Lazy initialization for ESM module compatibility
+let cryptoInstance: any = null;
 
-/**
- * Шифрует email для хранения в базе
- */
-export function encryptEmail(email: string): string {
-  const normalizedEmail = email.toLowerCase().trim();
-  return cryptoInstance.encrypt(normalizedEmail);
+async function getCryptoInstance() {
+  if (!cryptoInstance) {
+    const { default: Crypto } = await import("@vvlad1973/crypto");
+    cryptoInstance = new Crypto({
+      password: ENCRYPTION_PASSWORD,
+      salt: ENCRYPTION_SALT,
+      algorithm: "SHA512",
+      iterations: 10000,
+      keyLength: 32,
+      iv: IV_SEED,
+    });
+  }
+  return cryptoInstance;
 }
 
 /**
- * Дешифрует email из базы
+ * Encrypts email for database storage.
+ * @param email - The email to encrypt
+ * @returns Encrypted email string
  */
-export function decryptEmail(encryptedEmail: string): string {
+export async function encryptEmail(email: string): Promise<string> {
+  const normalizedEmail = email.toLowerCase().trim();
+  const crypto = await getCryptoInstance();
+  return crypto.encrypt(normalizedEmail);
+}
+
+/**
+ * Decrypts email from database.
+ * @param encryptedEmail - The encrypted email string
+ * @returns Decrypted email or empty string on error
+ */
+export async function decryptEmail(encryptedEmail: string): Promise<string> {
   try {
-    return cryptoInstance.decrypt(encryptedEmail);
+    const crypto = await getCryptoInstance();
+    return crypto.decrypt(encryptedEmail);
   } catch (error) {
     console.error("Failed to decrypt email:", error);
     return "";

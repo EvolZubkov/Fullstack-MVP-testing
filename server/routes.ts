@@ -32,7 +32,7 @@ const mediaUpload = multer({
       file.mimetype.startsWith("image/") ||
       file.mimetype.startsWith("audio/") ||
       file.mimetype.startsWith("video/");
-    cb(ok ? null : new Error("Unsupported media type"), ok);
+    cb(ok ? null : new Error("Unsupported media type") as any, ok);
   },
 });
 
@@ -5036,7 +5036,7 @@ app.post("/api/export/excel-lms", requireAuthor, async (req: Request, res: Respo
     const packageMap = new Map(packages.map(p => [p.id, p]));
     
     // Фильтруем пакеты по выбранным тестам
-    const relevantPackages = packages.filter(p => testIds.includes(p.testId));
+    const relevantPackages = packages.filter(p => p.testId && testIds.includes(p.testId));
     const relevantPackageIds = new Set(relevantPackages.map(p => p.id));
 
     const allAttempts = await storage.getAllScormAttempts();
@@ -5248,10 +5248,11 @@ app.post("/api/export/excel-lms", requireAuthor, async (req: Request, res: Respo
         const answers = attemptAnswers.get(attempt.id) || [];
         for (const ans of answers) {
           const q = questionMap.get(ans.questionId);
-          const key = `${pkg.testId}:${ans.questionId}`;
-          const s = stat.get(key) || { 
+          const testId = pkg.testId || "";
+          const key = `${testId}:${ans.questionId}`;
+          const s = stat.get(key) || {
             prompt: ans.questionPrompt || q?.prompt || "—",
-            testId: pkg.testId,
+            testId,
             total: 0, 
             correct: 0,
             topicName: ans.topicName || topicMap.get(ans.topicId || q?.topicId || "") || "—",
