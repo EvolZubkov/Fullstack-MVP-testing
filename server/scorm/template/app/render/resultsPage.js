@@ -36,6 +36,12 @@ function finishAndClose() {
   console.log('💾 Результат сохранен в suspend_data');
 
   // ===== ТЕЛЕМЕТРИЯ: отправляем РЕАЛЬНЫЙ результат текущей попытки =====
+  // Собираем рекомендации для проваленных тем
+  var failedTopicCourses = collectFailedTopicCourses(
+    isAdaptive ? state.adaptiveState.result : results
+  );
+  console.log('📚 failedTopicCourses:', JSON.stringify(failedTopicCourses));
+  
   Telemetry.finish({
     percent: results.percent,
     passed: results.passed,  // Реальный результат!
@@ -43,7 +49,8 @@ function finishAndClose() {
     possiblePoints: results.possiblePoints,
     totalQuestions: results.totalQuestions,
     correct: results.correct,
-    achievedLevels: results.achievedLevels || null
+    achievedLevels: results.achievedLevels || null,
+    failedTopicCourses: failedTopicCourses
   });
   console.log('📤 Телеметрия: реальный результат попытки:', Math.round(results.percent) + '%, passed:', results.passed);
 
@@ -300,6 +307,46 @@ function checkPassRuleWithPartial(rule, percent, fullyCorrectCount) {
   return fullyCorrectCount >= rule.value;
 }
 
+// Собирает уникальные рекомендованные курсы для проваленных тем
+function collectFailedTopicCourses(results) {
+  var courses = [];
+  var seenTitles = {};
+  
+  if (!results || !results.topicResults) return courses;
+  
+  results.topicResults.forEach(function(topic) {
+    // Для обычного теста: passed === false ИЛИ (passed === null и процент < 100)
+    // Для адаптивного: achievedLevelIndex === null (нет достигнутого уровня)
+    var isFailed = topic.passed === false || 
+                   (topic.passed === null && topic.percent < 100) ||
+                   (topic.achievedLevelIndex !== undefined && topic.achievedLevelIndex === null);
+    
+    if (!isFailed) return;
+    
+    // Обычный тест - recommendedCourses
+    if (topic.recommendedCourses && topic.recommendedCourses.length > 0) {
+      topic.recommendedCourses.forEach(function(course) {
+        if (!seenTitles[course.title]) {
+          seenTitles[course.title] = true;
+          courses.push({ title: course.title, url: course.url });
+        }
+      });
+    }
+    
+    // Адаптивный тест - recommendedLinks
+    if (topic.recommendedLinks && topic.recommendedLinks.length > 0) {
+      topic.recommendedLinks.forEach(function(link) {
+        if (!seenTitles[link.title]) {
+          seenTitles[link.title] = true;
+          courses.push({ title: link.title, url: link.url });
+        }
+      });
+    }
+  });
+  
+  return courses;
+}
+
 function finishScorm(results, passedForLms) {
   var objectives = results.topicResults.map(function(tr) {
     return {
@@ -367,6 +414,8 @@ function finishScorm(results, passedForLms) {
   var percentScore = Math.round(results.percent);
 
   // Отправляем телеметрию с РЕАЛЬНЫМ результатом (не хак для LMS)
+  var failedTopicCourses = collectFailedTopicCourses(results);
+  
   Telemetry.finish({
     percent: results.percent,
     passed: results.passed,  // Реальный результат, не хак!
@@ -374,7 +423,8 @@ function finishScorm(results, passedForLms) {
     possiblePoints: results.possiblePoints,
     totalQuestions: results.totalQuestions,
     correct: results.correct,
-    achievedLevels: results.achievedLevels || null
+    achievedLevels: results.achievedLevels || null,
+    failedTopicCourses: failedTopicCourses
   });
   
   // В LMS отправляем с хаком (passedForLms может быть true даже если failed)

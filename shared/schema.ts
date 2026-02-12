@@ -661,6 +661,9 @@ export const scormAttempts = pgTable("scorm_attempts", {
   
   // Для адаптивных тестов
   achievedLevelsJson: jsonb("achieved_levels_json"),
+  
+  // Рекомендованные курсы для проваленных тем
+  failedTopicCoursesJson: jsonb("failed_topic_courses_json"),
 }, (table) => ({
   // Уникальный индекс: одна комбинация package+session+attemptNumber
   sessionAttemptIdx: uniqueIndex("scorm_attempts_session_attempt_idx")
