@@ -50,6 +50,31 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // Проверка SESSION_SECRET
+  const SESSION_SECRET = process.env.SESSION_SECRET;
+  if (!SESSION_SECRET) {
+    if (isProduction) {
+      throw new Error(
+        "CRITICAL: SESSION_SECRET environment variable must be set in production.\n" +
+        "Generate using: node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\""
+      );
+    }
+
+    console.warn(
+      "\n⚠️  WARNING: SESSION_SECRET is not set!\n" +
+      "   Using default value for development only.\n" +
+      "   Generate secure value for production:\n" +
+      "   node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\"\n"
+    );
+  }
+
+  // Trust proxy если за nginx/reverse proxy
+  if (isProduction) {
+    app.set("trust proxy", 1);
+  }
+
   // CORS для телеметрии SCORM
   app.use("/api/scorm-telemetry", (req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
@@ -65,12 +90,14 @@ export async function registerRoutes(
   app.use(
     session({
       store: new MemStore({ checkPeriod: 86400000 }),
-      secret: process.env.SESSION_SECRET || "scorm-test-constructor-secret",
+      secret: SESSION_SECRET ?? "dev-only-session-secret",
       resave: false,
       saveUninitialized: false,
       cookie: {
-        secure: false,
-        maxAge: 24 * 60 * 60 * 1000,
+        secure: isProduction,        // HTTPS only in production
+        httpOnly: true,              // Prevent XSS access to cookie
+        sameSite: "lax",             // CSRF protection
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
       },
     })
   );
