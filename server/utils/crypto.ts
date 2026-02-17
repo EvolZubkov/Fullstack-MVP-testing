@@ -30,20 +30,8 @@ const IV_SEED = createHash("sha256")
   .digest()
   .slice(0, 16); // 16 байт для AES
 
-<<<<<<< HEAD
 // Lazy initialization for ESM module compatibility
 let cryptoInstance: any = null;
-=======
-// Создаём единственный экземпляр с фиксированным IV
-const cryptoInstance = new Crypto({
-  password: PASSWORD,
-  salt: SALT,
-  algorithm: "SHA512",
-  iterations: 10000,
-  keyLength: 32,
-  iv: IV_SEED,
-});
->>>>>>> dev
 
 async function getCryptoInstance() {
   if (!cryptoInstance) {
