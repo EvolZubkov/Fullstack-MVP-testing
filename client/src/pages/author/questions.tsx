@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +79,12 @@ export default function QuestionsPage() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(new Set());
   const [importFile, setImportFile] = useState<File | null>(null);
+
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [exportMode, setExportMode] = useState<"all" | "topics" | "test">("all");
+  const [exportTopicIds, setExportTopicIds] = useState<string[]>([]);
+  const [exportTestId, setExportTestId] = useState<string>("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -88,6 +94,10 @@ export default function QuestionsPage() {
 
   const { data: topics } = useQuery<Topic[]>({
     queryKey: ["/api/topics"],
+  });
+
+  const { data: tests } = useQuery<any[]>({
+    queryKey: ["/api/tests"],
   });
 
   const form = useForm({
@@ -193,7 +203,32 @@ export default function QuestionsPage() {
   });
 
   const handleExport = () => {
-    window.location.href = "/api/questions/export";
+    let url = "/api/questions/export";
+    const params: string[] = [];
+
+    if (exportMode === "topics" && exportTopicIds.length > 0) {
+      params.push(`topicIds=${exportTopicIds.join(",")}`);
+    } else if (exportMode === "test" && exportTestId) {
+      params.push(`testId=${exportTestId}`);
+    }
+
+    if (params.length > 0) {
+      url += "?" + params.join("&");
+    }
+
+    window.location.href = url;
+    setIsExportDialogOpen(false);
+    setExportMode("all");
+    setExportTopicIds([]);
+    setExportTestId("");
+  };
+
+  const toggleExportTopic = (topicId: string) => {
+    setExportTopicIds((prev) =>
+      prev.includes(topicId)
+        ? prev.filter((id) => id !== topicId)
+        : [...prev, topicId]
+    );
   };
 
   const handleImport = () => {
@@ -201,7 +236,7 @@ export default function QuestionsPage() {
       importMutation.mutate(importFile);
     }
   };
-    const guessMediaType = (mime: string): "image" | "audio" | "video" | "" => {
+  const guessMediaType = (mime: string): "image" | "audio" | "video" | "" => {
     if (!mime) return "";
     if (mime.startsWith("image/")) return "image";
     if (mime.startsWith("audio/")) return "audio";
@@ -408,7 +443,7 @@ export default function QuestionsPage() {
       });
       return;
     }
-  
+
     if (mediaUrl && isDataUrl(mediaUrl)) {
       toast({
         variant: "destructive",
@@ -516,7 +551,7 @@ export default function QuestionsPage() {
               <Upload className="h-4 w-4 mr-2" />
               {t.questions.import}
             </Button>
-            <Button variant="outline" onClick={handleExport} data-testid="button-export-questions">
+            <Button variant="outline" onClick={() => setIsExportDialogOpen(true)} data-testid="button-export-questions">
               <Download className="h-4 w-4 mr-2" />
               {t.questions.export}
             </Button>
@@ -846,7 +881,7 @@ export default function QuestionsPage() {
                     </Select>
                   </div>
                 </div>
-                                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     variant="outline"
@@ -951,7 +986,7 @@ export default function QuestionsPage() {
                     <span className="text-xs text-muted-foreground">{t.questions.feedbackModeConditional}</span>
                   </div>
                 </div>
-                
+
                 {feedbackMode === "general" ? (
                   <div className="space-y-2">
                     <Textarea
@@ -1083,6 +1118,107 @@ export default function QuestionsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Export Dialog */}
+      <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Экспорт вопросов</DialogTitle>
+            <DialogDescription>
+              Выберите какие вопросы экспортировать в Excel
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label>Режим экспорта</Label>
+              <RadioGroup
+                value={exportMode}
+                onValueChange={(val) => {
+                  setExportMode(val as "all" | "topics" | "test");
+                  setExportTopicIds([]);
+                  setExportTestId("");
+                }}
+                className="space-y-2"
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="all" id="export-all" />
+                  <Label htmlFor="export-all" className="cursor-pointer">
+                    Все вопросы
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="topics" id="export-topics" />
+                  <Label htmlFor="export-topics" className="cursor-pointer">
+                    Выбрать темы
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="test" id="export-test" />
+                  <Label htmlFor="export-test" className="cursor-pointer">
+                    По тесту (все темы теста)
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            {exportMode === "topics" && (
+              <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                {topics?.map((topic) => (
+                  <div key={topic.id} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`export-topic-${topic.id}`}
+                      checked={exportTopicIds.includes(topic.id)}
+                      onCheckedChange={() => toggleExportTopic(topic.id)}
+                    />
+                    <Label htmlFor={`export-topic-${topic.id}`} className="cursor-pointer text-sm">
+                      {topic.name}
+                    </Label>
+                  </div>
+                ))}
+                {(!topics || topics.length === 0) && (
+                  <p className="text-sm text-muted-foreground">Нет тем</p>
+                )}
+              </div>
+            )}
+
+            {exportMode === "test" && (
+              <Select value={exportTestId} onValueChange={setExportTestId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Выберите тест" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tests?.map((test) => (
+                    <SelectItem key={test.id} value={test.id}>
+                      {test.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {exportMode === "topics" && exportTopicIds.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                Выбрано тем: {exportTopicIds.length}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsExportDialogOpen(false)}>
+              {t.common.cancel}
+            </Button>
+            <Button
+              onClick={handleExport}
+              disabled={
+                (exportMode === "topics" && exportTopicIds.length === 0) ||
+                (exportMode === "test" && !exportTestId)
+              }
+              data-testid="button-confirm-export"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              {t.questions.export}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1122,11 +1258,10 @@ function QuestionPreview({ question }: { question: Question }) {
           {data.options?.map((opt: string, i: number) => (
             <div
               key={i}
-              className={`text-sm p-2 rounded ${
-                i === correct.correctIndex
+              className={`text-sm p-2 rounded ${i === correct.correctIndex
                   ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
                   : "text-muted-foreground"
-              }`}
+                }`}
             >
               {i + 1}. {opt}
             </div>
@@ -1144,11 +1279,10 @@ function QuestionPreview({ question }: { question: Question }) {
           {data.options?.map((opt: string, i: number) => (
             <div
               key={i}
-              className={`text-sm p-2 rounded ${
-                correct.correctIndices?.includes(i)
+              className={`text-sm p-2 rounded ${correct.correctIndices?.includes(i)
                   ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
                   : "text-muted-foreground"
-              }`}
+                }`}
             >
               {i + 1}. {opt}
             </div>

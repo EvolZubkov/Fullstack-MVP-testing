@@ -1,17 +1,49 @@
 import { createHash } from "crypto";
 
-// Секретный ключ для шифрования (из переменных окружения)
-const ENCRYPTION_PASSWORD = process.env.ENCRYPTION_PASSWORD || "default-encryption-key-change-me";
-const ENCRYPTION_SALT = process.env.ENCRYPTION_SALT || "default-salt-change-me";
+// Проверяем наличие обязательных переменных окружения
+const ENCRYPTION_PASSWORD = process.env.ENCRYPTION_PASSWORD;
+const ENCRYPTION_SALT = process.env.ENCRYPTION_SALT;
+
+if (!ENCRYPTION_PASSWORD || !ENCRYPTION_SALT) {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "CRITICAL: ENCRYPTION_PASSWORD and ENCRYPTION_SALT environment variables must be set.\n" +
+      "Generate secure values using: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+    );
+  }
+
+  console.warn(
+    "\n⚠️  WARNING: ENCRYPTION_PASSWORD and ENCRYPTION_SALT are not set!\n" +
+    "   Using default values for development only.\n" +
+    "   Generate secure values for production:\n" +
+    "   node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"\n"
+  );
+}
+
+// В dev режиме используем дефолты, в prod — упадёт раньше на throw
+const PASSWORD = ENCRYPTION_PASSWORD ?? "dev-default-key";
+const SALT = ENCRYPTION_SALT ?? "dev-default-salt";
 
 // Фиксированный IV (генерируем из пароля и соли для воспроизводимости)
 const IV_SEED = createHash("sha256")
-  .update(ENCRYPTION_PASSWORD + ENCRYPTION_SALT)
+  .update(PASSWORD + SALT)
   .digest()
   .slice(0, 16); // 16 байт для AES
 
+<<<<<<< HEAD
 // Lazy initialization for ESM module compatibility
 let cryptoInstance: any = null;
+=======
+// Создаём единственный экземпляр с фиксированным IV
+const cryptoInstance = new Crypto({
+  password: PASSWORD,
+  salt: SALT,
+  algorithm: "SHA512",
+  iterations: 10000,
+  keyLength: 32,
+  iv: IV_SEED,
+});
+>>>>>>> dev
 
 async function getCryptoInstance() {
   if (!cryptoInstance) {
@@ -56,7 +88,6 @@ export async function decryptEmail(encryptedEmail: string): Promise<string> {
 
 /**
  * Создаёт хеш email для поиска в базе
- * Используем SHA-256 — быстрый и достаточный для поиска
  */
 export function hashEmail(email: string): string {
   const normalizedEmail = email.toLowerCase().trim();

@@ -206,6 +206,7 @@ interface ExportConfig {
     answers: boolean;
     questionStats: boolean;
     levelStats: boolean;
+    recommendations: boolean;
   };
 }
 
@@ -216,7 +217,7 @@ interface ExportConfig {
 
 function formatUserAnswer(answer: DetailedAnswer): string {
   const { questionType, userAnswer } = answer;
-  
+
   // Получаем данные вопроса из questionData
   const questionData = (answer as any).questionData || {};
   const options = questionData.options || (answer as any).options;
@@ -281,7 +282,7 @@ function formatUserAnswer(answer: DetailedAnswer): string {
 
 function formatCorrectAnswer(answer: DetailedAnswer): string {
   const { questionType, correctAnswer } = answer;
-  
+
   // Получаем данные вопроса из questionData
   const questionData = (answer as any).questionData || {};
   const options = questionData.options || (answer as any).options;
@@ -814,8 +815,8 @@ function AttemptDetailsDialog({
                     <Card
                       key={answer.questionId}
                       className={`${answer.isCorrect
-                          ? "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30"
-                          : "border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30"
+                        ? "border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/30"
+                        : "border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30"
                         }`}
                     >
                       <CardContent className="pt-4">
@@ -864,8 +865,8 @@ function AttemptDetailsDialog({
                             </Label>
                             <div
                               className={`p-3 rounded-lg text-sm ${answer.isCorrect
-                                  ? "bg-green-100 dark:bg-green-900/50"
-                                  : "bg-red-100 dark:bg-red-900/50"
+                                ? "bg-green-100 dark:bg-green-900/50"
+                                : "bg-red-100 dark:bg-red-900/50"
                                 }`}
                             >
                               {formatUserAnswer(answer)}
@@ -922,10 +923,10 @@ function AttemptDetailsDialog({
                         <div className="w-full bg-muted rounded-full h-2 mt-3">
                           <div
                             className={`rounded-full h-2 ${topic.passed === null
-                                ? "bg-blue-500"
-                                : topic.passed
-                                  ? "bg-green-500"
-                                  : "bg-red-500"
+                              ? "bg-blue-500"
+                              : topic.passed
+                                ? "bg-green-500"
+                                : "bg-red-500"
                               }`}
                             style={{ width: `${Math.min(topic.percent ?? 0, 100)}%` }}
                           />
@@ -1060,6 +1061,7 @@ function ExportSection() {
       answers: true,
       questionStats: true,
       levelStats: true,
+      recommendations: true,
     },
   });
 
@@ -1132,7 +1134,7 @@ function ExportSection() {
       const newGroupIds = prev.groupIds.includes(groupId)
         ? prev.groupIds.filter(id => id !== groupId)
         : [...prev.groupIds, groupId];
-      
+
       // При изменении групп сбрасываем выбор пользователей
       return {
         ...prev,
@@ -1416,7 +1418,7 @@ function ExportSection() {
                   </div>
                 </div>
 
-               {/* Группы (только для Web) */}
+                {/* Группы (только для Web) */}
                 {config.source !== "lms" && filters?.groups && filters.groups.length > 0 && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -1546,6 +1548,7 @@ function ExportSection() {
                       { key: "answers", label: "Ответы" },
                       { key: "questionStats", label: "Статистика вопросов" },
                       { key: "levelStats", label: "Статистика уровней", adaptive: true },
+                      { key: "recommendations", label: "Рекомендации", adaptive: true },
                     ].map(({ key, label, adaptive }) => (
                       <div key={key} className="flex items-center gap-2">
                         <Checkbox

@@ -164,12 +164,13 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const adaptiveRenderJs = tryReadAsset([
     "app/render/adaptiveRender.js",
   ]);
+  const telemetryEnabled = !!(data.telemetry && data.telemetry.enabled);
 
-  const telemetryJs = tryReadAsset([
-    "app/telemetry/telemetry.js",
-  ]);
+  const telemetryJs = telemetryEnabled
+    ? tryReadAsset(["app/telemetry/telemetry.js"])
+    : "";
 
-  const appJs = joinJsParts([
+  let appJs = joinJsParts([
     escapeHtmlJs,
     telemetryJs, 
     shuffleJs,
@@ -197,6 +198,10 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     feedbackJs,
     bootstrapMainJs,
   ]).replace("__TEST_JSON_B64__", testJsonB64);
+  
+  if (!telemetryEnabled) {
+    appJs = stripTelemetryArtifacts(appJs);
+  }
 
   const mediaHrefs = Object.keys(assets);
 
@@ -244,4 +249,22 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   }
 
   return buildZip(files);
+}
+
+function stripTelemetryArtifacts(src: string) {
+  // 1) убрать Telemetry.finish({ ... }, ...); и Telemetry.answer({ ... });
+  src = src.replace(/Telemetry\.(finish|answer)\(\s*\{[\s\S]*?\}\s*(?:,\s*[^)]*)?\);\s*/g, "");
+
+  // 2) убрать простые вызовы Telemetry.*
+  src = src.replace(/^\s*Telemetry\.(init|start|startNewAttempt)\([^)]*\);\s*$/gm, "");
+  src = src.replace(/^\s*Telemetry\.(start|startNewAttempt)\(\);\s*$/gm, "");
+
+  // 3) убрать присваивания attemptNumber из телеметрии (обычно используются только для логов/finish)
+  src = src.replace(/^\s*var\s+\w+\s*=\s*Telemetry\.getAttemptNumber\(\);\s*$/gm, "");
+
+  // 4) убрать комментарии и логи, где вообще упоминается телеметрия/Telemetry
+  src = src.replace(/^\s*\/\/.*(telemetr|Telemetry).*$/gim, "");
+  src = src.replace(/^\s*console\.log\(.*(telemetr|Telemetry).*?\);\s*$/gim, "");
+
+  return src;
 }
