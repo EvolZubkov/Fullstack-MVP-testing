@@ -1,20 +1,15 @@
 import express, { type Express, Request, Response, NextFunction } from "express";
-import { createServer, type Server } from "http";
+import { type Server } from "http";
 import session from "express-session";
 import MemoryStore from "memorystore";
 import multer from "multer";
-import * as XLSX from "xlsx";
 import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
-import { storage } from "./storage";
-import { generateScormPackage } from "./scorm-exporter";
-import type { TestVariant, AttemptResult, TopicResult, PassRule, Question } from "@shared/schema";
-import { sendPasswordResetEmail } from "./email";
-import { maskEmail } from "./utils/mask-email";
 
+import { routerConfig } from "./routes/index";
 
-const upload = multer({ storage: multer.memoryStorage() });
+// Media upload configuration
 const mediaDir = path.resolve(process.cwd(), "uploads", "media");
 fs.mkdirSync(mediaDir, { recursive: true });
 
@@ -26,7 +21,7 @@ const mediaUpload = multer({
       cb(null, `${Date.now()}_${crypto.randomUUID()}${ext}`);
     },
   }),
-  limits: { fileSize: 200 * 1024 * 1024 }, // 200MB на dev, подстрой
+  limits: { fileSize: 200 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ok =
       file.mimetype.startsWith("image/") ||
@@ -36,24 +31,10 @@ const mediaUpload = multer({
   },
 });
 
-
 declare module "express-session" {
   interface SessionData {
     userId: string;
   }
-}
-
-function rejectBase64MediaUrl(mediaUrl: unknown, res: Response) {
-  if (typeof mediaUrl !== "string") return false;
-  const v = mediaUrl.trim();
-  if (v.startsWith("data:")) {
-    res.status(413).json({
-      error:
-        "Base64 (data:...) запрещён. Загрузи файл через /api/media/upload и сохрани url вида /uploads/media/...",
-    });
-    return true;
-  }
-  return false;
 }
 
 const MemStore = MemoryStore(session);
@@ -65,41 +46,36 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-async function requireAuthor(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  try {
-    const user = await storage.getUser(req.session.userId);
-    if (!user || user.role !== "author") {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-    next();
-  } catch (error) {
-    return res.status(500).json({ error: "Authorization error" });
-  }
-}
-
-async function requireLearner(req: Request, res: Response, next: NextFunction) {
-  if (!req.session.userId) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
-  try {
-    const user = await storage.getUser(req.session.userId);
-    if (!user || user.role !== "learner") {
-      return res.status(403).json({ error: "Forbidden - Learner access required" });
-    }
-    next();
-  } catch (error) {
-    return res.status(500).json({ error: "Authorization error" });
-  }
-}
-
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // CORS для телеметрии SCORM (временно для тестирования)
+  const isProduction = process.env.NODE_ENV === "production";
+
+  // Проверка SESSION_SECRET
+  const SESSION_SECRET = process.env.SESSION_SECRET;
+  if (!SESSION_SECRET) {
+    if (isProduction) {
+      throw new Error(
+        "CRITICAL: SESSION_SECRET environment variable must be set in production.\n" +
+        "Generate using: node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\""
+      );
+    }
+
+    console.warn(
+      "\n⚠️  WARNING: SESSION_SECRET is not set!\n" +
+      "   Using default value for development only.\n" +
+      "   Generate secure value for production:\n" +
+      "   node -e \"console.log(require('crypto').randomBytes(64).toString('hex'))\"\n"
+    );
+  }
+
+  // Trust proxy если за nginx/reverse proxy
+  if (isProduction) {
+    app.set("trust proxy", 1);
+  }
+
+  // CORS для телеметрии SCORM
   app.use("/api/scorm-telemetry", (req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -110,63 +86,31 @@ export async function registerRoutes(
     next();
   });
 
+  // Session middleware
   app.use(
     session({
       store: new MemStore({ checkPeriod: 86400000 }),
-      secret: process.env.SESSION_SECRET || "scorm-test-constructor-secret",
+      secret: SESSION_SECRET ?? "dev-only-session-secret",
       resave: false,
       saveUninitialized: false,
       cookie: {
-        secure: false,
-        maxAge: 24 * 60 * 60 * 1000,
+        secure: isProduction,        // HTTPS only in production
+        httpOnly: true,              // Prevent XSS access to cookie
+        sameSite: "lax",             // CSRF protection
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
       },
     })
   );
+
+  // Static files
   app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
-  // Auth routes
-  app.post("/api/auth/login", async (req, res) => {
-    try {
-      const { email, password } = req.body;
-      if (!email || !password) {
-        return res.status(400).json({ error: "Email and password required" });
-      }
 
-      const user = await storage.validatePassword(email, password);
-      if (!user) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
+  // ========== Модульные роуты ==========
+  for (const { path, router } of routerConfig) {
+    app.use(path, router);
+  }
 
-      // Проверяем статус пользователя
-      if (user.status === "inactive") {
-        return res.status(403).json({ error: "Account is deactivated. Please contact administrator." });
-      }
-
-      // Обновляем lastLoginAt
-      await storage.updateUserLastLogin(user.id);
-
-      req.session.userId = user.id;
-      res.json({ 
-        user: { 
-          id: user.id, 
-          email: user.email, 
-          name: user.name,
-          role: user.role,
-          status: user.status,
-          mustChangePassword: user.mustChangePassword,
-          gdprConsent: user.gdprConsent,
-        } 
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Login failed" });
-    }
-  });
-
-  app.post("/api/auth/logout", (req, res) => {
-    req.session.destroy(() => {
-      res.json({ success: true });
-    });
-  });
-
+  // ========== Media Upload ==========
   app.post(
     "/api/media/upload",
     requireAuth,
@@ -5989,68 +5933,4 @@ app.get("/api/analytics/combined-full", requireAuthor, async (req: Request, res:
 });
 
   return httpServer;
-}
-
-// Returns a score between 0 and 1 (all-or-nothing scoring)
-function checkAnswer(question: any, answer: any): number {
-  if (answer === undefined || answer === null) return 0;
-
-  const correct = question.correctJson as any;
-
-  if (question.type === "single") {
-    // Single choice: all or nothing
-    return answer === correct.correctIndex ? 1 : 0;
-  }
-
-  if (question.type === "multiple") {
-    // Multiple choice: all or nothing
-    // Must select ALL correct options and NO incorrect options
-    const correctIndices = new Set(correct.correctIndices as number[]);
-    const answerList = (answer || []) as number[];
-    const answerSet = new Set(answerList);
-    
-    // Check if sets are equal
-    if (correctIndices.size !== answerSet.size) return 0;
-    
-    for (const idx of correctIndices) {
-      if (!answerSet.has(idx)) return 0;
-    }
-    
-    return 1;
-  }
-
-  if (question.type === "matching") {
-    // Matching: all or nothing - all pairs must be correct
-    const pairs = answer || {};
-    const correctPairs = correct.pairs || [];
-    
-    if (correctPairs.length === 0) return 0;
-    
-    for (const p of correctPairs) {
-      if (pairs[p.left] !== p.right) {
-        return 0;
-      }
-    }
-    
-    return 1;
-  }
-
-  if (question.type === "ranking") {
-    // Ranking: all or nothing - order must be exactly correct
-    const order = answer || [];
-    const correctOrder = correct.correctOrder;
-    
-    if (correctOrder.length === 0) return 0;
-    if (order.length !== correctOrder.length) return 0;
-    
-    for (let i = 0; i < correctOrder.length; i++) {
-      if (order[i] !== correctOrder[i]) {
-        return 0;
-      }
-    }
-    
-    return 1;
-  }
-
-  return 0;
 }

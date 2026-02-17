@@ -282,7 +282,8 @@ var Telemetry = (function() {
         possiblePoints: results.possiblePoints,
         totalQuestions: results.totalQuestions,
         correctAnswers: results.correct,
-        achievedLevels: results.achievedLevels || null
+        achievedLevels: results.achievedLevels || null,
+        failedTopicCourses: results.failedTopicCourses || null
       });
     },
 
