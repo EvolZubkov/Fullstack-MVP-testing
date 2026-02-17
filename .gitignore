@@ -8,3 +8,10 @@ server/scorm-exporter_rab.ts.bak
 server/scorm-exporter.ts.bak
 components.zip
 .env
+CLAUDE.md
+tmp/
+
+# Docker deploy
+docker/config/deploy.env
+docker/build/
+coverage/

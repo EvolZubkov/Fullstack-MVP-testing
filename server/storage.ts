@@ -147,7 +147,7 @@ export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     if (user) {
-      return { ...user, email: decryptEmail(user.email) };
+      return { ...user, email: await decryptEmail(user.email) };
     }
     return undefined;
   }
@@ -156,8 +156,7 @@ export class DatabaseStorage implements IStorage {
     const emailHashValue = hashEmail(email);
     const [user] = await db.select().from(users).where(eq(users.emailHash, emailHashValue));
     if (user) {
-      // Дешифруем email для возврата
-      return { ...user, email: decryptEmail(user.email) };
+      return { ...user, email: await decryptEmail(user.email) };
     }
     return undefined;
   }
@@ -165,9 +164,9 @@ export class DatabaseStorage implements IStorage {
   async createUser(insertUser: InsertUser & { createdBy?: string }): Promise<User> {
     const id = randomUUID();
     const hashedPassword = await bcrypt.hash(insertUser.passwordHash, 10);
-    const emailEncrypted = encryptEmail(insertUser.email);
+    const emailEncrypted = await encryptEmail(insertUser.email);
     const emailHashValue = hashEmail(insertUser.email);
-    
+
     const [user] = await db.insert(users).values({
       id,
       email: emailEncrypted,
@@ -181,9 +180,8 @@ export class DatabaseStorage implements IStorage {
       createdAt: new Date(),
       createdBy: insertUser.createdBy || null,
     }).returning();
-    
-    // Возвращаем с расшифрованным email
-    return { ...user, email: decryptEmail(user.email) };
+
+    return { ...user, email: await decryptEmail(user.email) };
   }
 
   async validatePassword(email: string, password: string): Promise<User | null> {
@@ -199,25 +197,23 @@ export class DatabaseStorage implements IStorage {
 
   async getUsers(): Promise<User[]> {
     const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
-    // Дешифруем email для каждого пользователя
-    return allUsers.map(user => ({ ...user, email: decryptEmail(user.email) }));
+    return Promise.all(allUsers.map(async user => ({ ...user, email: await decryptEmail(user.email) })));
   }
 
   async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
-    // Если обновляется email — шифруем его
     const updateData: any = { ...data };
     if (data.email) {
-      updateData.email = encryptEmail(data.email);
+      updateData.email = await encryptEmail(data.email);
       updateData.emailHash = hashEmail(data.email);
     }
-    
+
     const [updated] = await db.update(users)
       .set(updateData)
       .where(eq(users.id, id))
       .returning();
-    
+
     if (updated) {
-      return { ...updated, email: decryptEmail(updated.email) };
+      return { ...updated, email: await decryptEmail(updated.email) };
     }
     return undefined;
   }
@@ -303,7 +299,7 @@ export class DatabaseStorage implements IStorage {
       .from(userGroups)
       .innerJoin(users, eq(userGroups.userId, users.id))
       .where(eq(userGroups.groupId, groupId));
-    return result.map(r => ({ ...r.user, email: decryptEmail(r.user.email) }));
+    return Promise.all(result.map(async r => ({ ...r.user, email: await decryptEmail(r.user.email) })));
   }
 
   async addUserToGroup(userId: string, groupId: string): Promise<UserGroup> {
