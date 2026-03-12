@@ -1,6 +1,6 @@
 import { useState, useRef, type ChangeEvent } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, FileQuestion, GripVertical, ArrowRight, Image, Music, Video, Copy, Upload, Download } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, FileQuestion, GripVertical, ArrowRight, Image, Music, Video, Copy, Upload, Download } from "lucide-react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -53,6 +53,7 @@ export default function QuestionsPage() {
   const [filterTopicId, setFilterTopicId] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [filterDifficulty, setFilterDifficulty] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [singleOptions, setSingleOptions] = useState<string[]>(["", "", "", ""]);
   const [singleCorrect, setSingleCorrect] = useState<number>(0);
@@ -493,6 +494,7 @@ export default function QuestionsPage() {
   const filteredQuestions = questions?.filter((q) => {
     if (filterTopicId !== "all" && q.topicId !== filterTopicId) return false;
     if (filterType !== "all" && q.type !== filterType) return false;
+    if (searchQuery && !q.prompt.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (filterDifficulty !== "all") {
       const diff = q.difficulty ?? 50;
       if (filterDifficulty === "easy" && diff > 33) return false;
@@ -609,6 +611,15 @@ export default function QuestionsPage() {
               <SelectItem value="hard">{t.questions.difficultyHard}</SelectItem>
             </SelectContent>
           </Select>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Поиск по тексту вопроса..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -1259,8 +1270,8 @@ function QuestionPreview({ question }: { question: Question }) {
             <div
               key={i}
               className={`text-sm p-2 rounded ${i === correct.correctIndex
-                  ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                  : "text-muted-foreground"
+                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                : "text-muted-foreground"
                 }`}
             >
               {i + 1}. {opt}
@@ -1280,8 +1291,8 @@ function QuestionPreview({ question }: { question: Question }) {
             <div
               key={i}
               className={`text-sm p-2 rounded ${correct.correctIndices?.includes(i)
-                  ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                  : "text-muted-foreground"
+                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
+                : "text-muted-foreground"
                 }`}
             >
               {i + 1}. {opt}

@@ -126,6 +126,25 @@ export default function TakeTestPage() {
     return shuffleArray(indices);
   };
 
+  const createAdaptiveShuffleMapping = (question: any): any => {
+    if (!question || question.shuffleAnswers === false) return null;
+    const type = question.type;
+    const data = question.dataJson as any;
+    if (type === "single" || type === "multiple") {
+      return createShuffleMapping(data.options.length);
+    }
+    if (type === "matching") {
+      return {
+        left: createShuffleMapping(data.left.length),
+        right: createShuffleMapping(data.right.length),
+      };
+    }
+    if (type === "ranking") {
+      return createShuffleMapping(data.items.length);
+    }
+    return null;
+  };
+
   // Timer effect
   useEffect(() => {
     if (remainingSeconds === null || remainingSeconds <= 0) return;
@@ -160,7 +179,7 @@ export default function TakeTestPage() {
         title: "Время истекло",
         description: "Тест будет автоматически завершён",
       });
-      
+
       // Автоматически завершаем тест
       if (testMode === "standard" && attempt) {
         // Принудительное завершение без проверки ответов
@@ -217,10 +236,10 @@ export default function TakeTestPage() {
 
         setTestInfo(test);
         setTestMode(test.mode || "standard");
-        
+
         // Считаем общее количество вопросов
         const totalQuestions = test.sections?.reduce((sum: number, s: any) => sum + s.drawCount, 0) || 0;
-        
+
         // Получаем проходной балл из overallPassRule
         let passPercent: number | null = null;
         if (test.overallPassRuleJson) {
@@ -229,7 +248,7 @@ export default function TakeTestPage() {
             passPercent = passRule.value;
           }
         }
-        
+
         // Проверяем есть ли незавершённая попытка
         const hasInProgress = test.inProgressAttemptId !== null;
 
@@ -264,7 +283,7 @@ export default function TakeTestPage() {
   // Функция начала теста
   const handleStartTest = async () => {
     if (!testInfo) return;
-    
+
     setIsStarting(true);
     try {
       if (testMode === "adaptive") {
@@ -288,17 +307,17 @@ export default function TakeTestPage() {
   // Функция продолжения незавершённого теста
   const handleResumeTest = async () => {
     if (!testInfo) return;
-    
+
     setIsStarting(true);
     try {
       const res = await fetch(`/api/tests/${testId}/resume`, {
         credentials: "include",
       });
-      
+
       if (!res.ok) throw new Error("Failed to resume");
-      
+
       const data = await res.json();
-      
+
       if (!data.hasInProgress) {
         // Нет незавершённой попытки — начинаем новую
         await handleStartTest();
@@ -320,7 +339,7 @@ export default function TakeTestPage() {
       setShowCorrectAnswers(data.attempt.showCorrectAnswers || false);
       setAnswers(data.savedAnswers || {});
       setCurrentIndex(data.currentIndex || 0);
-      
+
       // Инициализация таймера (с учётом прошедшего времени)
       if (data.attempt.timeLimitMinutes && data.attempt.timeLimitMinutes > 0) {
         const startedAt = new Date(data.attempt.startedAt).getTime();
@@ -328,10 +347,10 @@ export default function TakeTestPage() {
         const elapsedSeconds = Math.floor((now - startedAt) / 1000);
         const totalSeconds = data.attempt.timeLimitMinutes * 60;
         const remaining = Math.max(0, totalSeconds - elapsedSeconds);
-        
+
         setTimeLimitMinutes(data.attempt.timeLimitMinutes);
         setRemainingSeconds(remaining);
-        
+
         if (remaining <= 0) {
           toast({
             variant: "destructive",
@@ -393,7 +412,7 @@ export default function TakeTestPage() {
       setFlatQuestions(questions);
       setShuffleMappings(mappings);
       setPhase("question");
-      
+
       toast({
         title: "Тест восстановлен",
         description: `Продолжаем с вопроса ${data.currentIndex + 1}`,
@@ -432,7 +451,7 @@ export default function TakeTestPage() {
     const data = await res.json();
     setAttempt(data);
     setShowCorrectAnswers(data.showCorrectAnswers || false);
-    
+
     // Инициализация таймера
     if (data.timeLimitMinutes && data.timeLimitMinutes > 0) {
       setTimeLimitMinutes(data.timeLimitMinutes);
@@ -490,8 +509,8 @@ export default function TakeTestPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ 
-        answers: {}, 
+      body: JSON.stringify({
+        answers: {},
         currentIndex: 0,
         shuffleMappings: mappings,
       }),
@@ -519,6 +538,13 @@ export default function TakeTestPage() {
     }
     const data = await res.json();
 
+    if (data.currentQuestion) {
+      setShuffleMappings(prev => ({
+        ...prev,
+        [data.currentQuestion.question.id]: createAdaptiveShuffleMapping(data.currentQuestion.question),
+      }));
+    }
+
     setAdaptiveState({
       attemptId: data.attemptId,
       testTitle: data.testTitle,
@@ -533,7 +559,7 @@ export default function TakeTestPage() {
       result: null,
       questionsAnswered: 0,
     });
-    
+
     // Инициализация таймера
     if (data.timeLimitMinutes && data.timeLimitMinutes > 0) {
       setTimeLimitMinutes(data.timeLimitMinutes);
@@ -545,7 +571,7 @@ export default function TakeTestPage() {
   const handleAnswer = (questionId: string, answer: any) => {
     setAnswers((prev) => {
       const newAnswers = { ...prev, [questionId]: answer };
-      
+
       // Автосохранение прогресса
       if (attempt) {
         fetch(`/api/attempts/${attempt.id}/save-progress`, {
@@ -555,7 +581,7 @@ export default function TakeTestPage() {
           body: JSON.stringify({ answers: newAnswers, currentIndex }),
         }).catch(err => console.error("Auto-save error:", err));
       }
-      
+
       return newAnswers;
     });
   };
@@ -568,7 +594,7 @@ export default function TakeTestPage() {
     if (question.type === "single") {
       return answer === correct.correctIndex;
     }
-    
+
     if (question.type === "multiple") {
       const correctSet = new Set(correct.correctIndices || []);
       const answerSet = new Set(answer || []);
@@ -578,7 +604,7 @@ export default function TakeTestPage() {
       }
       return true;
     }
-    
+
     if (question.type === "matching") {
       const pairs = correct.pairs || [];
       const userPairs = answer || {};
@@ -587,7 +613,7 @@ export default function TakeTestPage() {
       }
       return true;
     }
-    
+
     if (question.type === "ranking") {
       const correctOrder = correct.correctOrder || [];
       const userOrder = answer || [];
@@ -597,7 +623,7 @@ export default function TakeTestPage() {
       }
       return true;
     }
-    
+
     return false;
   };
 
@@ -640,7 +666,7 @@ export default function TakeTestPage() {
   const handleStandardContinue = () => {
     setStandardFeedbackShown(false);
     setStandardAnswerResult(null);
-    
+
     if (currentIndex < flatQuestions.length - 1) {
       setCurrentIndex((i) => i + 1);
     }
@@ -800,6 +826,12 @@ export default function TakeTestPage() {
     setLastAnswerResult(null);
 
     // Показываем переход если включено
+    if (data.nextQuestion) {
+      setShuffleMappings(prev => ({
+        ...prev,
+        [data.nextQuestion.question.id]: createAdaptiveShuffleMapping(data.nextQuestion.question),
+      }));
+    }
     if (adaptiveState.showDifficultyLevel && (data.levelTransition || data.topicTransition)) {
       setShowTransition(true);
 
@@ -875,6 +907,12 @@ export default function TakeTestPage() {
       const data = await res.json();
 
       // Show transition if level changed AND showDifficultyLevel is enabled
+      if (data.nextQuestion) {
+        setShuffleMappings(prev => ({
+          ...prev,
+          [data.nextQuestion.question.id]: createAdaptiveShuffleMapping(data.nextQuestion.question),
+        }));
+      }
       if (adaptiveState.showDifficultyLevel && (data.levelTransition || data.topicTransition)) {
         setShowTransition(true);
         setAdaptiveState({
@@ -949,14 +987,14 @@ export default function TakeTestPage() {
 
   // Start page
   if (phase === "start" && testInfo && testMetadata) {
-    const attemptsExhausted = testMetadata.maxAttempts !== null && 
+    const attemptsExhausted = testMetadata.maxAttempts !== null &&
       testMetadata.completedAttempts >= testMetadata.maxAttempts;
-    const attemptsLeft = testMetadata.maxAttempts !== null 
-      ? testMetadata.maxAttempts - testMetadata.completedAttempts 
+    const attemptsLeft = testMetadata.maxAttempts !== null
+      ? testMetadata.maxAttempts - testMetadata.completedAttempts
       : null;
 
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
         <div className="max-w-2xl mx-auto px-6 py-12">
           {/* Header Card */}
           <Card className="text-center mb-6">
@@ -1021,8 +1059,8 @@ export default function TakeTestPage() {
                   <div>
                     <div className="font-semibold">Попытки</div>
                     <div className={`text-sm ${attemptsExhausted ? "text-red-500" : "text-muted-foreground"}`}>
-                      {attemptsExhausted 
-                        ? "Попытки закончились" 
+                      {attemptsExhausted
+                        ? "Попытки закончились"
                         : `осталось ${attemptsLeft} из ${testMetadata.maxAttempts}`
                       }
                     </div>
@@ -1052,8 +1090,8 @@ export default function TakeTestPage() {
               </>
             ) : testMetadata.hasInProgress ? (
               <>
-                <Button 
-                  onClick={handleResumeTest} 
+                <Button
+                  onClick={handleResumeTest}
                   disabled={isStarting}
                   className="w-full max-w-xs"
                   size="lg"
@@ -1065,9 +1103,9 @@ export default function TakeTestPage() {
                     </>
                   )}
                 </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={handleStartTest} 
+                <Button
+                  variant="outline"
+                  onClick={handleStartTest}
                   disabled={isStarting}
                   className="w-full max-w-xs"
                 >
@@ -1080,8 +1118,8 @@ export default function TakeTestPage() {
               </>
             ) : (
               <>
-                <Button 
-                  onClick={handleStartTest} 
+                <Button
+                  onClick={handleStartTest}
                   disabled={isStarting}
                   className="w-full max-w-xs"
                   size="lg"
@@ -1120,45 +1158,38 @@ export default function TakeTestPage() {
             <CardHeader className="text-center">
               <Trophy className="h-16 w-16 mx-auto text-primary mb-4" />
               <CardTitle className="text-2xl">Тест завершён!</CardTitle>
+              <p className="text-muted-foreground mt-1">{adaptiveState.testTitle}</p>
             </CardHeader>
             <CardContent className="space-y-6">
               {adaptiveState.result?.topicResults?.map((tr: any, idx: number) => (
-                <div key={idx} className="p-4 rounded-lg border">
+                <div key={idx} className="p-4 rounded-lg border space-y-3">
                   <h3 className="font-semibold text-lg">{tr.topicName}</h3>
-                  <div className="mt-2 space-y-2">
-                    {tr.achievedLevelName ? (
-                      <div className="flex items-center gap-2">
-                        <Badge variant="default" className="bg-green-600">
-                          {tr.achievedLevelName}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">
-                          ({Math.round(tr.levelPercent)}% правильных)
-                        </span>
-                      </div>
-                    ) : (
-                      <Badge variant="destructive">Уровень не достигнут</Badge>
-                    )}
-                    <p className="text-sm text-muted-foreground">
-                      Вопросов: {tr.totalQuestionsAnswered}, правильных: {tr.totalCorrect}
-                    </p>
-                    {tr.feedback && (
-                      <p className="text-sm mt-2 p-2 bg-muted rounded">{tr.feedback}</p>
-                    )}
-                    {tr.recommendedLinks?.length > 0 && (
-                      <div className="mt-2">
-                        <p className="text-sm font-medium">Рекомендуемые материалы:</p>
-                        <ul className="list-disc list-inside text-sm">
-                          {tr.recommendedLinks.map((link: any, i: number) => (
-                            <li key={i}>
-                              <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                {link.title}
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
+                  {tr.achievedLevelName ? (
+                    <Badge variant="default" className="bg-green-600 text-base px-4 py-1">
+                      {tr.achievedLevelName}
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive" className="text-base px-4 py-1">
+                      {tr.feedback || "Уровень не достигнут"}
+                    </Badge>
+                  )}
+                  {tr.achievedLevelName && tr.feedback && (
+                    <p className="text-sm text-muted-foreground">{tr.feedback}</p>
+                  )}
+                  {tr.recommendedLinks?.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Рекомендуемые материалы:</p>
+                      <ul className="space-y-1">
+                        {tr.recommendedLinks.map((link: any, i: number) => (
+                          <li key={i}>
+                            <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                              {link.title}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -1218,9 +1249,9 @@ export default function TakeTestPage() {
     const currentQ = currentQuestion.question;
 
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
         <div className="max-w-3xl mx-auto px-6 py-12">
-         <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-xl font-semibold">{testTitle}</h1>
               <p className="text-sm text-muted-foreground mt-1">
@@ -1272,7 +1303,7 @@ export default function TakeTestPage() {
                 question={currentQ}
                 answer={adaptiveState.answer}
                 onAnswer={feedbackShown ? () => { } : handleAdaptiveAnswer}
-                shuffleMapping={null}
+                shuffleMapping={shuffleMappings[currentQ.id]}
                 disabled={feedbackShown}
                 showCorrectAnswer={feedbackShown}
                 correctAnswer={lastAnswerResult?.correctAnswer}
@@ -1281,8 +1312,8 @@ export default function TakeTestPage() {
               {/* Фидбек после ответа */}
               {feedbackShown && lastAnswerResult && (
                 <div className={`p-4 rounded-lg border ${lastAnswerResult.isCorrect
-                    ? "bg-green-50 dark:bg-green-900/20 border-green-500"
-                    : "bg-red-50 dark:bg-red-900/20 border-red-500"
+                  ? "bg-green-50 dark:bg-green-900/20 border-green-500"
+                  : "bg-red-50 dark:bg-red-900/20 border-red-500"
                   }`}>
                   <div className={`font-semibold mb-2 ${lastAnswerResult.isCorrect ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
                     }`}>
@@ -1354,7 +1385,7 @@ export default function TakeTestPage() {
     const isLastQuestion = currentIndex === flatQuestions.length - 1;
 
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
         <div className="fixed top-0 left-0 right-0 h-2 bg-muted z-50">
           <Progress value={progress} className="h-2" />
         </div>
@@ -1406,7 +1437,7 @@ export default function TakeTestPage() {
               <QuestionInput
                 question={currentQ.question}
                 answer={answers[currentQ.question.id]}
-                onAnswer={standardFeedbackShown ? () => {} : (answer) => handleAnswer(currentQ.question.id, answer)}
+                onAnswer={standardFeedbackShown ? () => { } : (answer) => handleAnswer(currentQ.question.id, answer)}
                 shuffleMapping={shuffleMappings[currentQ.question.id]}
                 disabled={standardFeedbackShown}
                 showCorrectAnswer={standardFeedbackShown}
@@ -1415,16 +1446,14 @@ export default function TakeTestPage() {
 
               {/* Фидбек после ответа */}
               {standardFeedbackShown && standardAnswerResult && (
-                <div className={`p-4 rounded-lg border ${
-                  standardAnswerResult.isCorrect
-                    ? "bg-green-50 dark:bg-green-900/20 border-green-500"
-                    : "bg-red-50 dark:bg-red-900/20 border-red-500"
-                }`}>
-                  <div className={`font-semibold mb-2 ${
-                    standardAnswerResult.isCorrect 
-                      ? "text-green-600 dark:text-green-400" 
-                      : "text-red-600 dark:text-red-400"
+                <div className={`p-4 rounded-lg border ${standardAnswerResult.isCorrect
+                  ? "bg-green-50 dark:bg-green-900/20 border-green-500"
+                  : "bg-red-50 dark:bg-red-900/20 border-red-500"
                   }`}>
+                  <div className={`font-semibold mb-2 ${standardAnswerResult.isCorrect
+                    ? "text-green-600 dark:text-green-400"
+                    : "text-red-600 dark:text-red-400"
+                    }`}>
                     {standardAnswerResult.isCorrect ? "Правильно!" : "Неправильно"}
                   </div>
 
@@ -1529,7 +1558,7 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
 
           let borderClass = "border-border hover:border-primary/50";
           let bgClass = "";
-          
+
           if (showCorrectAnswer) {
             if (isCorrect) {
               borderClass = "border-green-500";
@@ -1546,9 +1575,8 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
           return (
             <div
               key={displayIndex}
-              className={`flex items-center space-x-3 p-4 rounded-lg border transition-colors ${
-                disabled ? "cursor-default" : "cursor-pointer"
-              } ${borderClass} ${bgClass}`}
+              className={`flex items-center space-x-3 p-4 rounded-lg border transition-colors ${disabled ? "cursor-default" : "cursor-pointer"
+                } ${borderClass} ${bgClass}`}
               onClick={() => !disabled && onAnswer(originalIndex)}
             >
               <RadioGroupItem value={String(originalIndex)} id={`opt-${question.id}-${displayIndex}`} disabled={disabled} />
@@ -1594,7 +1622,7 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
 
           let borderClass = "border-border hover:border-primary/50";
           let bgClass = "";
-          
+
           if (showCorrectAnswer) {
             if (isCorrect) {
               borderClass = "border-green-500";
@@ -1611,9 +1639,8 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
           return (
             <div
               key={displayIndex}
-              className={`flex items-center space-x-3 p-4 rounded-lg border transition-colors select-none ${
-                disabled ? "cursor-default" : "cursor-pointer"
-              } ${borderClass} ${bgClass}`}
+              className={`flex items-center space-x-3 p-4 rounded-lg border transition-colors select-none ${disabled ? "cursor-default" : "cursor-pointer"
+                } ${borderClass} ${bgClass}`}
               onClick={() => toggle(originalIndex)}
             >
               <Checkbox
@@ -1696,7 +1723,7 @@ function MatchingQuestion({ question, answer, onAnswer, shuffleMapping, disabled
   const pairs: Record<number, number> = answer || {};
 
   // Build correct pairs mapping for highlighting
-  const correctPairs: Array<{left: number, right: number}> = correctAnswer?.pairs || [];
+  const correctPairs: Array<{ left: number, right: number }> = correctAnswer?.pairs || [];
   const correctLeftToRight: Record<number, number> = {};
   correctPairs.forEach(p => {
     correctLeftToRight[p.left] = p.right;
@@ -1828,7 +1855,7 @@ function MatchingQuestion({ question, answer, onAnswer, shuffleMapping, disabled
 
           let borderClass = "border-border";
           let chipBgClass = "bg-primary text-primary-foreground";
-          
+
           if (showCorrectAnswer) {
             if (isCorrectMatch) {
               borderClass = "border-green-500";
@@ -1884,8 +1911,8 @@ function MatchingQuestion({ question, answer, onAnswer, shuffleMapping, disabled
             {/* LEFT SIDE - Slot with draggable chip */}
             <div
               className={`flex-1 min-h-[56px] rounded-lg border transition-all flex items-center px-3 ${dragOverTarget === leftTargetId
-                  ? 'border-primary border-2 bg-primary/5'
-                  : 'border-border bg-card'
+                ? 'border-primary border-2 bg-primary/5'
+                : 'border-border bg-card'
                 }`}
               onDragOver={(e) => handleDragOver(e, leftTargetId)}
               onDragLeave={handleDragLeave}
@@ -1917,8 +1944,8 @@ function MatchingQuestion({ question, answer, onAnswer, shuffleMapping, disabled
             {/* RIGHT SIDE - Drop target with text */}
             <div
               className={`flex-1 min-h-[56px] rounded-lg border transition-all flex items-center px-4 ${dragOverTarget === rightTargetId
-                  ? 'border-primary border-2 bg-primary/5'
-                  : 'border-border bg-muted/30'
+                ? 'border-primary border-2 bg-primary/5'
+                : 'border-border bg-muted/30'
                 }`}
               onDragOver={(e) => handleDragOver(e, rightTargetId)}
               onDragLeave={handleDragLeave}
@@ -2024,7 +2051,7 @@ function RankingQuestion({ question, answer, onAnswer, shuffleMapping, disabled 
 
         let borderClass = "border-border hover:border-primary/50";
         let bgClass = "bg-card";
-        
+
         if (showCorrectAnswer) {
           if (isCorrectPosition) {
             borderClass = "border-green-500";
@@ -2048,9 +2075,8 @@ function RankingQuestion({ question, answer, onAnswer, shuffleMapping, disabled 
             onDragEnd={handleDragEnd}
             onDragOver={(e) => handleDragOver(e, position)}
             onDrop={(e) => handleDrop(e, position)}
-            className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${
-              disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"
-            } ${borderClass} ${bgClass}`}
+            className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"
+              } ${borderClass} ${bgClass}`}
           >
             {/* Drag handle */}
             <GripVertical className="h-5 w-5 text-muted-foreground shrink-0" />

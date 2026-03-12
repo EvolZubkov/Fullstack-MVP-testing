@@ -136,7 +136,7 @@ function confirmAdaptiveAnswer() {
 
   // Check answer correctness but DON'T submit yet - just show feedback
   var isCorrect = checkAnswer(qData.question, answer) === 1;
-  
+
   state.lastAdaptiveResult = {
     isCorrect: isCorrect,
     questionId: qData.id
@@ -155,10 +155,10 @@ function continueAfterFeedback() {
   if (!qData) return;
 
   var answer = state.answers[qData.id];
-  
+
   // Now actually submit the answer
   var result = submitAdaptiveAnswer(qData.id, answer);
-  
+
   // Reset feedback state
   state.feedbackShown = false;
   state.lastAdaptiveResult = null;
@@ -292,7 +292,7 @@ function renderAdaptiveTransition(result) {
   app.innerHTML = html;
 
   // Auto-continue after delay
-  setTimeout(function() {
+  setTimeout(function () {
     if (state.pendingTransition) {
       continueAfterTransition();
     }
@@ -332,7 +332,7 @@ function renderAdaptiveResults() {
   html += '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M12 3c7.2 0 9 1.8 9 9s-1.8 9-9 9-9-1.8-9-9 1.8-9 9-9z"/></svg>';
   html += '</div>';
   html += '<div class="results-hero-title">Результаты теста</div>';
-  html += '<div class="results-hero-sub">Адаптивное тестирование</div>';
+  html += '<div class="results-hero-sub">' + escapeHtml(TEST_DATA.title) + '</div>';
   html += '</div>';
 
   // Topic results
@@ -349,33 +349,33 @@ function renderAdaptiveResults() {
   gridStyle += 'max-width:100%;';
   html += '<div style="' + gridStyle + '" class="results-topics-adaptive">';
 
-  result.topicResults.forEach(function(tr) {
+  result.topicResults.forEach(function (tr) {
     var achieved = tr.achievedLevelIndex !== null;
 
     html += '<div class="card topic-card">';
-    
+
     // Topic header (без иконки)
     html += '<div class="topic-head">';
     html += '<div class="topic-name" style="font-weight:600;font-size:16px;">' + escapeHtml(tr.topicName) + '</div>';
-    
+
     // Achieved level badge (нейтральный стиль)
     if (achieved) {
-      html += '<div class="results-pill" style="background:#1e40af;color:#bfdbfe;">' + escapeHtml(tr.achievedLevelName) + '</div>';
+      html += '<div class="results-pill" style="background:#1e40af;color:#bfdbfe;font-size:15px;padding:6px 16px;">' + escapeHtml(tr.achievedLevelName) + '</div>';
     } else {
-      html += '<div class="results-pill" style="background:#374151;color:#9ca3af;">Не достигнут</div>';
+      html += '<div class="results-pill" style="background:#374151;color:#9ca3af;font-size:15px;padding:6px 16px;">Не достигнут</div>';
     }
     html += '</div>';
 
-    // Stats
-    html += '<div class="topic-row">';
-    html += '<div class="k">Вопросов</div>';
-    html += '<div class="val">' + tr.totalQuestionsAnswered + '</div>';
-    html += '</div>';
+    // // Stats
+    // html += '<div class="topic-row">';
+    // html += '<div class="k">Вопросов</div>';
+    // html += '<div class="val">' + tr.totalQuestionsAnswered + '</div>';
+    // html += '</div>';
 
-    html += '<div class="topic-row">';
-    html += '<div class="k">Правильных</div>';
-    html += '<div class="val">' + tr.totalCorrect + ' (' + Math.round(tr.levelPercent) + '%)</div>';
-    html += '</div>';
+    // html += '<div class="topic-row">';
+    // html += '<div class="k">Правильных</div>';
+    // html += '<div class="val">' + tr.totalCorrect + ' (' + Math.round(tr.levelPercent) + '%)</div>';
+    // html += '</div>';
 
     // Feedback
     if (tr.feedback) {
@@ -388,7 +388,7 @@ function renderAdaptiveResults() {
     if (tr.recommendedLinks && tr.recommendedLinks.length > 0) {
       html += '<div style="margin-top:12px;">';
       html += '<div style="font-size:12px;color:hsl(var(--muted-foreground));margin-bottom:6px;">Рекомендуемые материалы:</div>';
-      tr.recommendedLinks.forEach(function(link) {
+      tr.recommendedLinks.forEach(function (link) {
         html += '<a href="' + escapeHtml(link.url) + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:6px;padding:8px;background:hsl(var(--muted)/.5);border-radius:6px;margin-top:4px;text-decoration:none;color:hsl(var(--primary));font-size:13px;">';
         html += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/></svg>';
         html += escapeHtml(link.title);
@@ -405,10 +405,10 @@ function renderAdaptiveResults() {
   // Actions
   html += '<div class="results-actions">';
   html += '<button class="btn btn-outline" onclick="downloadPDF()">📄 Скачать PDF</button>';
-  
+
   var hasLimit = !!TEST_DATA.maxAttempts;
   var canRetry = hasAttemptsLeft();
-  
+
   if (!hasLimit) {
     // Нет лимита - обе кнопки
     html += '<button class="btn btn-outline" onclick="restartAdaptive()">Пройти заново</button>';
@@ -435,7 +435,7 @@ function restartAdaptive() {
   // Сохраняем текущую попытку если ещё не сохранена
   if (state.adaptiveState && state.adaptiveState.result) {
     var results = getAdaptiveResultForScorm();
-    results.achievedLevels = state.adaptiveState.result.topicResults.map(function(tr) {
+    results.achievedLevels = state.adaptiveState.result.topicResults.map(function (tr) {
       return {
         topicId: tr.topicId,
         topicName: tr.topicName,
@@ -443,7 +443,7 @@ function restartAdaptive() {
         levelName: tr.achievedLevelName
       };
     });
-    
+
     // Телеметрия finish для текущей попытки
     Telemetry.finish(results);
   }
@@ -451,16 +451,16 @@ function restartAdaptive() {
   // Сброс adaptive state
   state.adaptiveState = null;
   state.answers = {};
-  
+
   // Новая попытка в телеметрии
   Telemetry.startNewAttempt();
-  
+
   // Регистрация попытки в SCORM
   registerAttemptStart();
-  
+
   // Переинициализация адаптивного теста
   initAdaptiveTest();
-  
+
   // Запуск
   state.phase = 'question';
   render();

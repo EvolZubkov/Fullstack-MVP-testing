@@ -146,22 +146,6 @@ export default function LoginPage() {
                 </div>
               </form>
             </Form>
-
-            <div className="mt-6 pt-6 border-t">
-              <p className="text-sm text-muted-foreground text-center mb-3">
-                {t.auth.demoAccounts}
-              </p>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="p-3 rounded-md bg-muted">
-                  <p className="font-medium">{t.auth.author}</p>
-                  <p className="text-muted-foreground font-mono text-xs">admin / admin123</p>
-                </div>
-                <div className="p-3 rounded-md bg-muted">
-                  <p className="font-medium">{t.auth.learner}</p>
-                  <p className="text-muted-foreground font-mono text-xs">learner / learner123</p>
-                </div>
-              </div>
-            </div>
           </CardContent>
         </Card>
       </main>

@@ -45,9 +45,10 @@ export default function LearnerTestListPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {tests.map((test) => {
+            const isAdaptive = test.mode === "adaptive";
             const totalQuestions = test.sections.reduce((sum, s) => sum + s.drawCount, 0);
             const estimatedMinutes = Math.ceil(totalQuestions * 1.5);
-            
+
             // Проверяем ограничение попыток
             const maxAttempts = test.maxAttempts || null;
             const completedAttempts = test.completedAttempts || 0;
@@ -65,16 +66,18 @@ export default function LearnerTestListPage() {
                   )}
                 </CardHeader>
                 <CardContent>
-                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <BookOpen className="h-4 w-4" />
-                      <span>{formatQuestions(totalQuestions)}</span>
+                  {!isAdaptive && (
+                    <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <BookOpen className="h-4 w-4" />
+                        <span>{formatQuestions(totalQuestions)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        <span>~{estimatedMinutes} мин</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-4 w-4" />
-                      <span>~{estimatedMinutes} мин</span>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Информация о попытках */}
                   {maxAttempts !== null && (

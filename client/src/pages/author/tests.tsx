@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, ClipboardList, Download, Settings, ChevronRight, BarChart3, UserPlus } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, ClipboardList, Download, Settings, ChevronRight, BarChart3, UserPlus } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -113,6 +113,7 @@ export default function TestsPage() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignTestId, setAssignTestId] = useState<string | null>(null);
   const [assignTestTitle, setAssignTestTitle] = useState<string>("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: tests, isLoading: testsLoading } = useQuery<TestWithSections[]>({
     queryKey: ["/api/tests"],
@@ -121,6 +122,11 @@ export default function TestsPage() {
   const { data: topics } = useQuery<TopicWithQuestionCount[]>({
     queryKey: ["/api/topics"],
   });
+
+  const filteredTests = tests?.filter((test) =>
+    test.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (test.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const form = useForm<TestFormData>({
     resolver: zodResolver(testFormSchema),
@@ -297,10 +303,13 @@ export default function TestsPage() {
       if (!response.ok) throw new Error("Export failed");
 
       const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const filenameMatch = disposition.match(/filename\*=UTF-8''([^;]+)/) || disposition.match(/filename="([^"]+)"/);
+      const filename = filenameMatch ? decodeURIComponent(filenameMatch[1]) : `test_${exportTestId}_scorm.zip`;
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = downloadUrl;
-      a.download = `test_${exportTestId}_scorm.zip`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -608,7 +617,17 @@ export default function TestsPage() {
         }
       />
 
-      {!tests || tests.length === 0 ? (
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          className="pl-9"
+          placeholder="Поиск тестов..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </div>
+
+      {!filteredTests || filteredTests.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
           title={t.tests.noTests}
@@ -618,7 +637,7 @@ export default function TestsPage() {
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {tests.map((test) => {
+          {filteredTests.map((test) => {
             const passRule = test.overallPassRuleJson as any;
             const totalQuestions = test.sections.reduce((sum, s) => sum + s.drawCount, 0);
 

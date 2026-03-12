@@ -7,16 +7,16 @@ function finishAndClose() {
   // Определяем режим и получаем результаты
   var isAdaptive = TEST_DATA.mode === 'adaptive' && state.adaptiveState;
   var results;
-  
+
   if (isAdaptive) {
     // Адаптивный режим - строим результат если ещё не построен
     if (!state.adaptiveState.result) {
       state.adaptiveState.result = buildAdaptiveResult();
     }
     results = getAdaptiveResultForScorm();
-    
+
     // Добавляем achievedLevels для телеметрии
-    results.achievedLevels = state.adaptiveState.result.topicResults.map(function(tr) {
+    results.achievedLevels = state.adaptiveState.result.topicResults.map(function (tr) {
       return {
         topicId: tr.topicId,
         topicName: tr.topicName,
@@ -28,23 +28,22 @@ function finishAndClose() {
     // Стандартный режим
     results = calculateResults();
   }
-  
+
   console.log('🎯 Завершение теста (' + (isAdaptive ? 'адаптивный' : 'стандартный') + '), процент:', Math.round(results.percent));
 
   saveAttemptResult(results);
-  
+
   console.log('💾 Результат сохранен в suspend_data');
 
   // ===== ТЕЛЕМЕТРИЯ: отправляем РЕАЛЬНЫЙ результат текущей попытки =====
-  // Собираем рекомендации для проваленных тем
   var failedTopicCourses = collectFailedTopicCourses(
     isAdaptive ? state.adaptiveState.result : results
   );
   console.log('📚 failedTopicCourses:', JSON.stringify(failedTopicCourses));
-  
+
   Telemetry.finish({
     percent: results.percent,
-    passed: results.passed,  // Реальный результат!
+    passed: results.passed,
     earnedPoints: results.earnedPoints,
     possiblePoints: results.possiblePoints,
     totalQuestions: results.totalQuestions,
@@ -80,35 +79,32 @@ function finishAndClose() {
 
   var bestAttempt = getBestAttempt();
   console.log('🏆 Лучшая попытка:', bestAttempt ? Math.round(bestAttempt.percent) + '%' : 'none');
-  
+
   var resultsForLms = bestAttempt || results;
   var bestPassed = !!resultsForLms.passed;
-  
+
   if (forcePassedHack) {
     console.log('🔓 Хак активирован - переопределяем passed на true');
     bestPassed = true;
   }
-  
+
   console.log('📤 Отправляем в LMS:', Math.round(resultsForLms.percent) + '%, passed:', bestPassed);
 
   // Отправляем в LMS
   if (isAdaptive) {
-    // Для адаптивного режима всегда завершаем как passed (для корректного закрытия в LMS)
-    // Реальный результат уже отправлен в телеметрию
     console.log('🔵 Адаптивный тест: принудительно passed=true для LMS');
     finishScormAdaptive(resultsForLms, true);
   } else {
-    // Для стандартного режима - с детальными interactions
     if (bestAttempt && bestAttempt !== results) {
       console.log('🔄 Восстанавливаем state из лучшей попытки для LMS');
       var savedAnswers = state.answers;
       var savedFlatQuestions = state.flatQuestions;
-      
+
       state.answers = bestAttempt.answers || {};
       state.flatQuestions = bestAttempt.flatQuestions || [];
-      
+
       finishScormLmsOnly(resultsForLms, bestPassed);
-      
+
       state.answers = savedAnswers;
       state.flatQuestions = savedFlatQuestions;
     } else {
@@ -116,16 +112,16 @@ function finishAndClose() {
     }
   }
 
-  try { SCORM.commit(); } catch (e) {}
-  try { SCORM.terminate(); } catch (e) {}
-  try { window.close(); } catch (e) {}
+  try { SCORM.commit(); } catch (e) { }
+  try { SCORM.terminate(); } catch (e) { }
+  try { window.close(); } catch (e) { }
 }
 
 /**
- * Finish SCORM for adaptive mode (simplified - no detailed interactions)
+ * Finish SCORM for adaptive mode
  */
 function finishScormAdaptive(results, passedForLms) {
-  var objectives = results.topicResults.map(function(tr) {
+  var objectives = results.topicResults.map(function (tr) {
     return {
       id: 'topic_' + tr.topicId,
       score: Math.round(tr.percent),
@@ -134,38 +130,109 @@ function finishScormAdaptive(results, passedForLms) {
   });
 
   var percentScore = Math.round(results.percent);
-  
+
   // Вычисляем максимальный достигнутый уровень (числом)
   var maxAchievedLevel = 0;
   if (state.adaptiveState && state.adaptiveState.result) {
-    state.adaptiveState.result.topicResults.forEach(function(tr) {
+    state.adaptiveState.result.topicResults.forEach(function (tr) {
       if (tr.achievedLevelIndex !== null && tr.achievedLevelIndex + 1 > maxAchievedLevel) {
-        maxAchievedLevel = tr.achievedLevelIndex + 1; // +1 чтобы уровни были 1,2,3 а не 0,1,2
+        maxAchievedLevel = tr.achievedLevelIndex + 1;
       }
     });
   }
-  
+
+  var interactions = [];
+
+  // --- Блок 1: детальные ответы на вопросы ---
+  if (state.adaptiveState && state.adaptiveState.topics) {
+    state.adaptiveState.topics.forEach(function (topic) {
+      var topicData = TEST_DATA.adaptiveTopics.find(function (t) {
+        return t.topicId === topic.topicId;
+      });
+      if (!topicData) return;
+
+      topic.levelsState.forEach(function (level) {
+        level.answeredQuestionIds.forEach(function (qId) {
+          var question = topicData.questions.find(function (q) { return q.id === qId; });
+          if (!question) return;
+
+          var answer = state.answers[qId];
+          var isCorrect = checkAnswer(question, answer) === 1;
+
+          interactions.push({
+            id: 'q_' + qId,
+            type: 'other',
+            result: isCorrect ? 'correct' : 'incorrect',
+            response: answer !== undefined && answer !== null ? JSON.stringify(answer) : '',
+            correct: '',
+            description: question.prompt || ''
+          });
+        });
+      });
+    });
+  }
+
+  // --- Блок 2: достигнутый уровень по каждой теме ---
+  var topicResults = (state.adaptiveState && state.adaptiveState.result)
+    ? state.adaptiveState.result.topicResults
+    : (results.topicResults || []);
+
+  topicResults.forEach(function (tr) {
+    var levelValue = tr.achievedLevelName ? tr.achievedLevelName : 'Уровень не достигнут';
+    interactions.push({
+      id: 'topic_' + tr.topicId + '_level',
+      type: 'other',
+      result: 'neutral',
+      response: levelValue,
+      correct: '',
+      description: tr.topicName + ': уровень'
+    });
+  });
+
+  // --- Блок 3: рекомендованные курсы для тем без достигнутого уровня ---
+  topicResults.forEach(function (tr) {
+    if (tr.achievedLevelIndex === null && tr.recommendedLinks && tr.recommendedLinks.length > 0) {
+      tr.recommendedLinks.forEach(function (link, i) {
+        var objectId = '';
+        try {
+          var match = link.url.match(/object_id=([^&]+)/);
+          if (match) objectId = match[1];
+        } catch (e) {}
+        if (!objectId) return;
+
+        interactions.push({
+          id: 'topic_' + tr.topicId + '_course_' + i,
+          type: 'other',
+          result: 'neutral',
+          response: objectId,
+          correct: '',
+          description: tr.topicName + ': рекомендованный курс'
+        });
+      });
+    }
+  });
+
   // Отправляем в LMS
-  SCORM.finish(percentScore, 100, passedForLms, objectives, []);
-  
-  // Записываем уровень ПОСЛЕ finish (т.к. finish очищает location)
+  SCORM.finish(percentScore, 100, passedForLms, objectives, interactions);
+
+  // Записываем уровень ПОСЛЕ finish
   try {
     SCORM.setValue('cmi.location', 'level:' + maxAchievedLevel);
     SCORM.commit();
-  } catch (e) {}
+  } catch (e) { }
 }
 
 window.finishAndClose = finishAndClose;
 
 
 function calculateResults() {
-  var totalEarnedPoints = 0;  // Sum of earned points (weighted by question points)
-  var totalPossiblePoints = 0; // Total possible points
-  var totalFullyCorrect = 0; // Fully correct count
+  var totalEarnedPoints = 0;
+  var totalPossiblePoints = 0;
+  var totalFullyCorrect = 0;
   var totalQuestions = 0;
   var topicData = {};
 
-  state.flatQuestions.forEach(function(fq) {
+  state.flatQuestions.forEach(function (fq) {
     var q = fq.question;
     var answer = state.answers[q.id];
     var scoreRatio = checkAnswer(q, answer);
@@ -177,7 +244,7 @@ function calculateResults() {
     if (scoreRatio === 1) totalFullyCorrect++;
 
     if (!topicData[fq.topicId]) {
-      var section = TEST_DATA.sections.find(function(s) { return s.topicId === fq.topicId; });
+      var section = TEST_DATA.sections.find(function (s) { return s.topicId === fq.topicId; });
       topicData[fq.topicId] = {
         topicId: fq.topicId,
         topicName: fq.topicName,
@@ -196,17 +263,14 @@ function calculateResults() {
     if (scoreRatio === 1) topicData[fq.topicId].correct++;
   });
 
-  // Use point-based percentage for overall score (matches backend)
   var overallPercent = totalPossiblePoints > 0 ? (totalEarnedPoints / totalPossiblePoints) * 100 : 0;
-  // Pass rule evaluation: percent type uses point-based percentage, count type uses fully correct count
   var overallPassed = checkPassRuleWithPartial(TEST_DATA.overallPassRule, overallPercent, totalFullyCorrect);
 
   var topicResults = [];
   var allTopicsPassed = true;
 
-  Object.keys(topicData).forEach(function(tid) {
+  Object.keys(topicData).forEach(function (tid) {
     var td = topicData[tid];
-    // Use point-based percentage (matches backend)
     td.percent = td.possiblePoints > 0 ? (td.earnedPoints / td.possiblePoints) * 100 : 0;
     if (td.passRule) {
       td.passed = checkPassRuleWithPartial(td.passRule, td.percent, td.correct);
@@ -236,12 +300,10 @@ function checkAnswer(q, answer) {
 
   var correct = q.correct || {};
 
-  // SINGLE
   if (q.type === 'single') {
     return answer === correct.correctIndex ? 1 : 0;
   }
 
-  // MULTIPLE — строгое совпадение множеств
   if (q.type === 'multiple') {
     var correctIndices = Array.isArray(correct.correctIndices) ? correct.correctIndices.slice() : [];
     var user = Array.isArray(answer) ? answer.slice() : [];
@@ -258,7 +320,6 @@ function checkAnswer(q, answer) {
     return 1;
   }
 
-  // MATCHING — все пары должны совпасть
   if (q.type === 'matching') {
     var pairs = (answer && typeof answer === 'object') ? answer : {};
     var correctPairs = Array.isArray(correct.pairs) ? correct.pairs : [];
@@ -272,7 +333,6 @@ function checkAnswer(q, answer) {
     return 1;
   }
 
-  // RANKING — порядок должен совпасть полностью
   if (q.type === 'ranking') {
     var order = Array.isArray(answer) ? answer : [];
     var correctOrder = Array.isArray(correct.correctOrder) ? correct.correctOrder : [];
@@ -296,9 +356,6 @@ function checkPassRule(rule, correct, total) {
   return correct >= rule.value;
 }
 
-// Pass rule check that properly handles partial credit
-// For percent rules, uses the already-calculated percent (from earned/possible)
-// For count rules, uses the fully correct count
 function checkPassRuleWithPartial(rule, percent, fullyCorrectCount) {
   if (!rule) return true;
   if (rule.type === 'percent') {
@@ -311,31 +368,27 @@ function checkPassRuleWithPartial(rule, percent, fullyCorrectCount) {
 function collectFailedTopicCourses(results) {
   var courses = [];
   var seenTitles = {};
-  
+
   if (!results || !results.topicResults) return courses;
-  
-  results.topicResults.forEach(function(topic) {
-    // Для обычного теста: passed === false ИЛИ (passed === null и процент < 100)
-    // Для адаптивного: achievedLevelIndex === null (нет достигнутого уровня)
-    var isFailed = topic.passed === false || 
-                   (topic.passed === null && topic.percent < 100) ||
-                   (topic.achievedLevelIndex !== undefined && topic.achievedLevelIndex === null);
-    
+
+  results.topicResults.forEach(function (topic) {
+    var isFailed = topic.passed === false ||
+      (topic.passed === null && topic.percent < 100) ||
+      (topic.achievedLevelIndex !== undefined && topic.achievedLevelIndex === null);
+
     if (!isFailed) return;
-    
-    // Обычный тест - recommendedCourses
+
     if (topic.recommendedCourses && topic.recommendedCourses.length > 0) {
-      topic.recommendedCourses.forEach(function(course) {
+      topic.recommendedCourses.forEach(function (course) {
         if (!seenTitles[course.title]) {
           seenTitles[course.title] = true;
           courses.push({ title: course.title, url: course.url });
         }
       });
     }
-    
-    // Адаптивный тест - recommendedLinks
+
     if (topic.recommendedLinks && topic.recommendedLinks.length > 0) {
-      topic.recommendedLinks.forEach(function(link) {
+      topic.recommendedLinks.forEach(function (link) {
         if (!seenTitles[link.title]) {
           seenTitles[link.title] = true;
           courses.push({ title: link.title, url: link.url });
@@ -343,12 +396,12 @@ function collectFailedTopicCourses(results) {
       });
     }
   });
-  
+
   return courses;
 }
 
 function finishScorm(results, passedForLms) {
-  var objectives = results.topicResults.map(function(tr) {
+  var objectives = results.topicResults.map(function (tr) {
     return {
       id: 'topic_' + tr.topicId,
       score: Math.round(tr.percent),
@@ -376,7 +429,7 @@ function finishScorm(results, passedForLms) {
     if (q.type === 'ranking') return ans.map(to1).join(',');
     if (q.type === 'matching') {
       return Object.keys(ans)
-        .sort((a,b)=>a-b)
+        .sort((a, b) => a - b)
         .map(k => to1(+k) + '-' + to1(ans[k]))
         .join(',');
     }
@@ -390,13 +443,13 @@ function finishScorm(results, passedForLms) {
     if (q.type === 'ranking') return c.correctOrder || [];
     if (q.type === 'matching') {
       var m = {};
-      (c.pairs || []).forEach(function(p){ m[p.left] = p.right; });
+      (c.pairs || []).forEach(function (p) { m[p.left] = p.right; });
       return m;
     }
     return null;
   }
 
-  state.flatQuestions.forEach(function(fq) {
+  state.flatQuestions.forEach(function (fq) {
     var q = fq.question;
     var ans = state.answers[q.id];
     var fullCorrect = checkAnswer(q, ans) === 1;
@@ -411,14 +464,36 @@ function finishScorm(results, passedForLms) {
     });
   });
 
+  // --- Рекомендации для проваленных тем: передаём object_id курса ---
+  results.topicResults.forEach(function (tr) {
+    if (tr.passed === false && tr.recommendedCourses && tr.recommendedCourses.length > 0) {
+      tr.recommendedCourses.forEach(function (course, i) {
+        var objectId = '';
+        try {
+          var match = course.url.match(/object_id=([^&]+)/);
+          if (match) objectId = match[1];
+        } catch (e) {}
+        if (!objectId) return;
+
+        interactions.push({
+          id: 'topic_' + tr.topicId + '_course_' + i,
+          type: 'other',
+          result: 'neutral',
+          response: objectId,
+          correct: '',
+          description: tr.topicName + ': рекомендованный курс'
+        });
+      });
+    }
+  });
+
   var percentScore = Math.round(results.percent);
 
-  // Отправляем телеметрию с РЕАЛЬНЫМ результатом (не хак для LMS)
   var failedTopicCourses = collectFailedTopicCourses(results);
-  
+
   Telemetry.finish({
     percent: results.percent,
-    passed: results.passed,  // Реальный результат, не хак!
+    passed: results.passed,
     earnedPoints: results.earnedPoints,
     possiblePoints: results.possiblePoints,
     totalQuestions: results.totalQuestions,
@@ -426,14 +501,13 @@ function finishScorm(results, passedForLms) {
     achievedLevels: results.achievedLevels || null,
     failedTopicCourses: failedTopicCourses
   });
-  
-  // В LMS отправляем с хаком (passedForLms может быть true даже если failed)
+
   SCORM.finish(percentScore, 100, passedForLms, objectives, interactions);
 }
 
 // Версия finishScorm БЕЗ отправки телеметрии (используется когда телеметрия уже отправлена)
 function finishScormLmsOnly(results, passedForLms) {
-  var objectives = results.topicResults.map(function(tr) {
+  var objectives = results.topicResults.map(function (tr) {
     return {
       id: 'topic_' + tr.topicId,
       score: Math.round(tr.percent),
@@ -457,17 +531,17 @@ function finishScormLmsOnly(results, passedForLms) {
     }
     if (q.type === 'multiple') {
       var arr = Array.isArray(answer) ? answer : [];
-      return arr.map(function(i) { return i + 1; }).join(',');
+      return arr.map(function (i) { return i + 1; }).join(',');
     }
     if (q.type === 'matching') {
       var pairs = answer || {};
-      return Object.keys(pairs).map(function(l) {
+      return Object.keys(pairs).map(function (l) {
         return (parseInt(l, 10) + 1) + '-' + (pairs[l] + 1);
       }).join(',');
     }
     if (q.type === 'ranking') {
       var order = Array.isArray(answer) ? answer : [];
-      return order.map(function(i) { return i + 1; }).join(',');
+      return order.map(function (i) { return i + 1; }).join(',');
     }
     return '';
   }
@@ -479,13 +553,13 @@ function finishScormLmsOnly(results, passedForLms) {
     if (q.type === 'ranking') return c.correctOrder;
     if (q.type === 'matching') {
       var m = {};
-      (c.pairs || []).forEach(function(p){ m[p.left] = p.right; });
+      (c.pairs || []).forEach(function (p) { m[p.left] = p.right; });
       return m;
     }
     return null;
   }
 
-  state.flatQuestions.forEach(function(fq) {
+  state.flatQuestions.forEach(function (fq) {
     var q = fq.question;
     var ans = state.answers[q.id];
     var fullCorrect = checkAnswer(q, ans) === 1;
@@ -500,9 +574,31 @@ function finishScormLmsOnly(results, passedForLms) {
     });
   });
 
+  // --- Рекомендации для проваленных тем: передаём object_id курса ---
+  results.topicResults.forEach(function (tr) {
+    if (tr.passed === false && tr.recommendedCourses && tr.recommendedCourses.length > 0) {
+      tr.recommendedCourses.forEach(function (course, i) {
+        var objectId = '';
+        try {
+          var match = course.url.match(/object_id=([^&]+)/);
+          if (match) objectId = match[1];
+        } catch (e) {}
+        if (!objectId) return;
+
+        interactions.push({
+          id: 'topic_' + tr.topicId + '_course_' + i,
+          type: 'other',
+          result: 'neutral',
+          response: objectId,
+          correct: '',
+          description: tr.topicName + ': рекомендованный курс'
+        });
+      });
+    }
+  });
+
   var percentScore = Math.round(results.percent);
 
   // НЕ отправляем телеметрию - она уже отправлена в finishAndClose()
-  // Только отправляем в LMS
   SCORM.finish(percentScore, 100, passedForLms, objectives, interactions);
 }

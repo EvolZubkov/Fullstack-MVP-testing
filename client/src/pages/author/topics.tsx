@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, FolderOpen, ExternalLink, BookMarked, Copy, CheckSquare, Square, Folder, ChevronRight, ChevronDown, FolderPlus } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, FolderOpen, ExternalLink, BookMarked, Copy, CheckSquare, Square, Folder, ChevronRight, ChevronDown, FolderPlus } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -60,6 +60,7 @@ export default function TopicsPage() {
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: topics, isLoading: topicsLoading } = useQuery<TopicWithDetails[]>({
     queryKey: ["/api/topics"],
@@ -252,9 +253,9 @@ export default function TopicsPage() {
 
   const handleOpenEdit = (topic: Topic) => {
     setEditingTopic(topic);
-    form.reset({ 
-      name: topic.name, 
-      description: topic.description || "", 
+    form.reset({
+      name: topic.name,
+      description: topic.description || "",
       feedback: topic.feedback || "",
       folderId: topic.folderId || null
     });
@@ -345,8 +346,16 @@ export default function TopicsPage() {
 
   const rootFolders = folders?.filter((f) => !f.parentId) || [];
   const getChildFolders = (parentId: string) => folders?.filter((f) => f.parentId === parentId) || [];
-  const getTopicsInFolder = (folderId: string | null) => 
+  const getTopicsInFolder = (folderId: string | null) =>
     topics?.filter((topic) => topic.folderId === folderId) || [];
+
+  const searchedTopics = searchQuery
+    ? topics?.filter((topic) =>
+      topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (topic.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+    ) || []
+    : null;
+
   const rootTopics = getTopicsInFolder(null);
 
   const renderTopicCard = (topic: TopicWithDetails) => (
@@ -567,6 +576,16 @@ export default function TopicsPage() {
         }
       />
 
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          className="pl-9"
+          placeholder="Поиск тем..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </div>
+
       {(!topics || topics.length === 0) && (!folders || folders.length === 0) ? (
         <EmptyState
           icon={FolderOpen}
@@ -577,20 +596,30 @@ export default function TopicsPage() {
         />
       ) : (
         <div className="space-y-6">
-          {rootFolders.map((folder) => renderFolder(folder))}
-          
-          {rootTopics.length > 0 && (
-            <div>
-              {rootFolders.length > 0 && (
-                <div className="flex items-center gap-2 mb-4 text-muted-foreground">
-                  <FolderOpen className="h-4 w-4" />
-                  <span className="text-sm font-medium">{t.folders.root}</span>
+          {searchedTopics ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {searchedTopics.length === 0
+                ? <p className="text-muted-foreground col-span-3">Ничего не найдено</p>
+                : searchedTopics.map(renderTopicCard)
+              }
+            </div>
+          ) : (
+            <>
+              {rootFolders.map((folder) => renderFolder(folder))}
+              {rootTopics.length > 0 && (
+                <div>
+                  {rootFolders.length > 0 && (
+                    <div className="flex items-center gap-2 mb-4 text-muted-foreground">
+                      <FolderOpen className="h-4 w-4" />
+                      <span className="text-sm font-medium">{t.folders.root}</span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {rootTopics.map(renderTopicCard)}
+                  </div>
                 </div>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {rootTopics.map(renderTopicCard)}
-              </div>
-            </div>
+            </>
           )}
         </div>
       )}
