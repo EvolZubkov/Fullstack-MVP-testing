@@ -15,6 +15,8 @@ echo "=== Extracting $(basename "$ARCHIVE") ==="
 DEPLOY_DIR=$(mktemp -d)
 tar -xzf "$ARCHIVE" -C "$DEPLOY_DIR"
 
+find "$DEPLOY_DIR" -type f \( -name "*.sh" -o -name "*.env" -o -name "*.yml" -o -name "*.yaml" -o -name "Dockerfile" \) -exec sed -i 's/\r$//' {} +
+
 # Load configuration
 source "$DEPLOY_DIR/config/deploy.env"
 
