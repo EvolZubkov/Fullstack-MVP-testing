@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
 import { requireAuthor } from "../middleware/auth";
+import { logger } from "../logger";
 
 const router = Router();
 
@@ -47,7 +48,7 @@ function verifyTelemetrySignature(
   
   // Check timestamp freshness (5 minutes)
   if (isNaN(ts) || Math.abs(now - ts) > 5 * 60 * 1000) {
-    console.log("[Telemetry] Timestamp expired:", { ts, now, diff: Math.abs(now - ts) });
+    logger.warn(`Timestamp expired: ts=${ts} now=${now} diff=${Math.abs(now - ts)}`, "scorm");
     return false;
   }
   
@@ -115,15 +116,15 @@ router.post("/scorm-telemetry/start", async (req: Request, res: Response) => {
         startedAt: new Date(),
         lastActivityAt: new Date(),
       });
-      console.log("[Telemetry] New attempt created:", attempt.id, "attemptNumber:", attemptNumber);
+      logger.info(`New attempt created: ${attempt.id} #${attemptNumber} session=${sessionId} pkg=${packageId}`, "scorm");
     } else {
       await storage.updateScormAttempt(attempt.id, { lastActivityAt: new Date() });
-      console.log("[Telemetry] Existing attempt resumed:", attempt.id, "attemptNumber:", attemptNumber);
+      logger.info(`Attempt resumed: ${attempt.id} #${attemptNumber} session=${sessionId}`, "scorm");
     }
     
     res.json({ success: true, attemptId: attempt.id, attemptNumber });
   } catch (error) {
-    console.error("Telemetry start error:", error);
+    logger.error("Telemetry start error: " + (error as Error).message, "scorm");
     res.status(500).json({ error: "Failed to start attempt" });
   }
 });
@@ -192,7 +193,7 @@ router.post("/scorm-telemetry/answer", async (req: Request, res: Response) => {
     
     res.json({ success: true });
   } catch (error) {
-    console.error("Telemetry answer error:", error);
+    logger.error("Telemetry answer error: " + (error as Error).message, "scorm");
     res.status(500).json({ error: "Failed to save answer" });
   }
 });
@@ -231,7 +232,7 @@ router.post("/scorm-telemetry/finish", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Attempt not found" });
     }
     
-    console.log("[Telemetry] Received data.failedTopicCourses:", JSON.stringify(data?.failedTopicCourses));
+    logger.debug(`Finish received failedTopicCourses: ${JSON.stringify(data?.failedTopicCourses)}`, "scorm");
     
     await storage.updateScormAttempt(attempt.id, {
       finishedAt: new Date(),
@@ -246,14 +247,11 @@ router.post("/scorm-telemetry/finish", async (req: Request, res: Response) => {
       failedTopicCoursesJson: data?.failedTopicCourses || null,
     });
     
-    console.log("[Telemetry] Attempt finished:", attempt.id, "attemptNumber:", attemptNumber, {
-      percent: data?.percent,
-      passed: data?.passed,
-    });
+    logger.info(`Attempt finished: ${attempt.id} #${attemptNumber} percent=${data?.percent}% passed=${data?.passed}`, "scorm");
     
     res.json({ success: true });
   } catch (error) {
-    console.error("Telemetry finish error:", error);
+    logger.error("Telemetry finish error: " + (error as Error).message, "scorm");
     res.status(500).json({ error: "Failed to finish attempt" });
   }
 });
@@ -283,7 +281,7 @@ router.get("/scorm-packages", requireAuthor, async (req: Request, res: Response)
     
     res.json(packagesWithStats);
   } catch (error) {
-    console.error("Get SCORM packages error:", error);
+    logger.error("Get SCORM packages error: " + (error as Error).message, "scorm")
     res.status(500).json({ error: "Failed to get packages" });
   }
 });
@@ -303,7 +301,7 @@ router.get("/scorm-packages/:id", requireAuthor, async (req: Request, res: Respo
       attempts,
     });
   } catch (error) {
-    console.error("Get SCORM package error:", error);
+    logger.error("Get SCORM package error: " + (error as Error).message, "scorm");
     res.status(500).json({ error: "Failed to get package" });
   }
 });
@@ -321,13 +319,14 @@ router.post("/scorm-packages/:id/regenerate-key", requireAuthor, async (req: Req
     await storage.updateScormPackage(pkg.id, {
       secretKey: newSecretKey,
     });
+    logger.info(`Secret key regenerated for package: ${pkg.id}`, "scorm");
     
     res.json({ 
       success: true, 
       message: "Secret key regenerated. Old SCORM packages will no longer work.",
     });
   } catch (error) {
-    console.error("Regenerate key error:", error);
+    logger.error("Regenerate key error: " + (error as Error).message, "scorm");
     res.status(500).json({ error: "Failed to regenerate key" });
   }
 });
@@ -343,10 +342,11 @@ router.post("/scorm-packages/:id/deactivate", requireAuthor, async (req: Request
     await storage.updateScormPackage(pkg.id, {
       isActive: false,
     });
+    logger.info(`Package deactivated: ${pkg.id}`, "scorm");
     
     res.json({ success: true });
   } catch (error) {
-    console.error("Deactivate package error:", error);
+    logger.error("Deactivate package error: " + (error as Error).message, "scorm");
     res.status(500).json({ error: "Failed to deactivate package" });
   }
 });
@@ -362,10 +362,11 @@ router.post("/scorm-packages/:id/activate", requireAuthor, async (req: Request, 
     await storage.updateScormPackage(pkg.id, {
       isActive: true,
     });
+    logger.info(`Package activated: ${pkg.id}`, "scorm");
     
     res.json({ success: true });
   } catch (error) {
-    console.error("Activate package error:", error);
+    logger.error("Activate package error: " + (error as Error).message, "scorm");
     res.status(500).json({ error: "Failed to activate package" });
   }
 });

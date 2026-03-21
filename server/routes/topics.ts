@@ -21,7 +21,7 @@ router.get("/", requireAuth, async (req, res) => {
     );
     res.json(topicsWithDetails);
   } catch (error) {
-    console.error("Get topics error:", error);
+    logger.error("Get topics error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get topics" });
   }
 });
@@ -36,7 +36,7 @@ router.post("/", requireAuthor, async (req, res) => {
     const topic = await storage.createTopic({ name, description, feedback, folderId });
     res.status(201).json(topic);
   } catch (error) {
-    console.error("Create topic error:", error);
+    logger.error("Create topic error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create topic" });
   }
 });
@@ -51,7 +51,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
     }
     res.json(updated);
   } catch (error) {
-    console.error("Update topic error:", error);
+    logger.error("Update topic error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to update topic" });
   }
 });
@@ -65,7 +65,7 @@ router.delete("/:id", requireAuthor, async (req, res) => {
     }
     res.json({ success: true });
   } catch (error) {
-    console.error("Delete topic error:", error);
+    logger.error("Delete topic error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to delete topic" });
   }
 });
@@ -80,7 +80,7 @@ router.post("/bulk-delete", requireAuthor, async (req, res) => {
     const deletedCount = await storage.deleteTopicsBulk(ids);
     res.json({ success: true, deletedCount });
   } catch (error) {
-    console.error("Bulk delete topics error:", error);
+    logger.error("Bulk delete topics error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to delete topics" });
   }
 });
@@ -94,7 +94,7 @@ router.post("/:id/duplicate", requireAuthor, async (req, res) => {
     }
     res.status(201).json(result);
   } catch (error) {
-    console.error("Duplicate topic error:", error);
+    logger.error("Duplicate topic error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to duplicate topic" });
   }
 });
@@ -113,7 +113,7 @@ router.post("/:topicId/courses", requireAuthor, async (req, res) => {
     });
     res.status(201).json(course);
   } catch (error) {
-    console.error("Create course error:", error);
+    logger.error("Create course error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create course" });
   }
 });
@@ -127,7 +127,7 @@ router.delete("/courses/:id", requireAuthor, async (req, res) => {
     }
     res.json({ success: true });
   } catch (error) {
-    console.error("Delete course error:", error);
+    logger.error("Delete course error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to delete course" });
   }
 });
@@ -136,26 +136,58 @@ router.delete("/courses/:id", requireAuthor, async (req, res) => {
 router.get("/:topicId/difficulty-distribution", requireAuthor, async (req, res) => {
   try {
     const questions = await storage.getQuestionsByTopic(req.params.topicId);
+    const totalQuestions = questions.length;
 
-    const distribution = {
-      easy: questions.filter((q) => (q.difficulty || 50) <= 33).length,
-      medium: questions.filter((q) => (q.difficulty || 50) > 33 && (q.difficulty || 50) <= 66).length,
-      hard: questions.filter((q) => (q.difficulty || 50) > 66).length,
-    };
-
-    const byDifficulty: Record<number, number> = {};
-    questions.forEach((q) => {
-      const d = q.difficulty || 50;
-      byDifficulty[d] = (byDifficulty[d] || 0) + 1;
+    const BUCKET_COUNT = 10;
+    const BUCKET_SIZE = 100 / BUCKET_COUNT;
+    const histogram = Array.from({ length: BUCKET_COUNT }, (_, i) => {
+      const min = Math.round(i * BUCKET_SIZE);
+      const max = i === BUCKET_COUNT - 1 ? 100 : Math.round((i + 1) * BUCKET_SIZE) - 1;
+      const count = questions.filter((q) => {
+        const d = q.difficulty ?? 50;
+        return i === BUCKET_COUNT - 1 ? d >= min && d <= max : d >= min && d < min + BUCKET_SIZE;
+      }).length;
+      return { min, max, count };
     });
 
-    res.json({
-      total: questions.length,
-      distribution,
-      byDifficulty,
-    });
+    const suggestedLevels = [
+      {
+        levelName: "Лёгкий",
+        minDifficulty: 0,
+        maxDifficulty: 33,
+        questionCount: questions.filter((q) => (q.difficulty ?? 50) <= 33).length,
+      },
+      {
+        levelName: "Средний",
+        minDifficulty: 34,
+        maxDifficulty: 66,
+        questionCount: questions.filter((q) => {
+          const d = q.difficulty ?? 50;
+          return d > 33 && d <= 66;
+        }).length,
+      },
+      {
+        levelName: "Сложный",
+        minDifficulty: 67,
+        maxDifficulty: 100,
+        questionCount: questions.filter((q) => (q.difficulty ?? 50) > 66).length,
+      },
+    ];
+
+    const warnings: string[] = [];
+    if (totalQuestions === 0) {
+      warnings.push("В теме нет вопросов");
+    } else if (totalQuestions < 10) {
+      warnings.push(`Мало вопросов для адаптивного теста (${totalQuestions}). Рекомендуется минимум 10.`);
+    }
+    const emptyLevels = suggestedLevels.filter((l) => l.questionCount === 0);
+    if (emptyLevels.length > 0) {
+      warnings.push(`Нет вопросов для уровней: ${emptyLevels.map((l) => l.levelName).join(", ")}`);
+    }
+
+    res.json({ totalQuestions, histogram, suggestedLevels, warnings });
   } catch (error) {
-    console.error("Get difficulty distribution error:", error);
+    logger.error("Get difficulty distribution error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get difficulty distribution" });
   }
 });

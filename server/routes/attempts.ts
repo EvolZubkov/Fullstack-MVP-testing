@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { logger } from "../logger";
 import { storage } from "../storage";
 import { requireLearner } from "../middleware/auth";
 import { checkAnswer } from "../utils/check-answer";
@@ -37,7 +38,7 @@ router.get("/learner/tests", requireLearner, async (req, res) => {
 
     res.json(testsWithSections);
   } catch (error) {
-    console.error("Get learner tests error:", error);
+    logger.error("Get learner tests error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch tests" });
   }
 });
@@ -107,7 +108,7 @@ router.post("/tests/:testId/attempts/start", requireLearner, async (req, res) =>
       questions: questionsForClient,
     });
   } catch (error) {
-    console.error("Start attempt error:", error);
+    logger.error("Start attempt error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to start attempt" });
   }
 });
@@ -245,7 +246,7 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
       currentTopicIndex: 0,
     });
   } catch (error) {
-    console.error("Start adaptive attempt error:", error);
+    logger.error("Start adaptive attempt error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to start adaptive attempt" });
   }
 });
@@ -434,7 +435,7 @@ router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, 
 
     res.json(response);
   } catch (error) {
-    console.error("Answer adaptive error:", error);
+    logger.error("Answer adaptive error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to process answer" });
   }
 });
@@ -473,7 +474,7 @@ router.post("/attempts/:attemptId/save-progress", requireLearner, async (req, re
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Save progress error:", error);
+    logger.error("Save progress error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to save progress" });
   }
 });
@@ -514,7 +515,7 @@ router.get("/tests/:testId/resume", requireLearner, async (req, res) => {
       currentIndex: variant.currentIndex || 0,
     });
   } catch (error) {
-    console.error("Resume attempt error:", error);
+    logger.error("Resume attempt error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to resume attempt" });
   }
 });
@@ -635,7 +636,7 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
 
     res.json({ success: true, result });
   } catch (error) {
-    console.error("Finish attempt error:", error);
+    logger.error("Finish attempt error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to finish attempt" });
   }
 });
@@ -673,7 +674,7 @@ router.get("/attempts/:attemptId/result", requireLearner, async (req, res) => {
           : null,
     });
   } catch (error) {
-    console.error("Get result error:", error);
+    logger.error("Get result error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch result" });
   }
 });
@@ -709,6 +710,13 @@ router.get("/learner/attempts", requireLearner, async (req, res) => {
         };
       }
 
+      const isAdaptive = (result as any)?.mode === "adaptive";
+      const adaptiveResult = isAdaptive ? (result as any) : null;
+      const achievedCount = adaptiveResult
+        ? adaptiveResult.topicResults.filter((tr: any) => tr.achievedLevelIndex !== null).length
+        : null;
+      const totalTopics = adaptiveResult ? adaptiveResult.topicResults.length : null;
+
       groupedByTest[attempt.testId].attempts.push({
         id: attempt.id,
         testVersion: attempt.testVersion,
@@ -717,6 +725,9 @@ router.get("/learner/attempts", requireLearner, async (req, res) => {
         overallPassed: result?.overallPassed || false,
         totalEarnedPoints: result?.totalEarnedPoints || 0,
         totalPossiblePoints: result?.totalPossiblePoints || 0,
+        isAdaptive,
+        achievedCount,
+        totalTopics,
       });
     }
 
@@ -746,7 +757,7 @@ router.get("/learner/attempts", requireLearner, async (req, res) => {
 
     res.json(testGroups);
   } catch (error) {
-    console.error("Fetch learner attempts error:", error);
+    logger.error("Fetch learner attempts error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch attempt history" });
   }
 });

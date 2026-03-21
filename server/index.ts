@@ -11,7 +11,7 @@ import {
   checkDatabaseHealth,
   getDatabaseStatus,
 } from "./db";
-
+import { logger } from "./logger";
 
 
 const app = express();
@@ -23,18 +23,6 @@ declare module "http" {
   }
 }
 
-app.use((req, _res, next) => {
-  console.log(
-    "REQ",
-    req.method,
-    req.originalUrl,
-    "ct=",
-    req.headers["content-type"],
-    "len=",
-    req.headers["content-length"],
-  );
-  next();
-});
 
 app.use(
   express.json({
@@ -48,14 +36,7 @@ app.use(
 app.use(express.urlencoded({ extended: false, limit: "50mb" }));
 
 export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
+  logger.info(message, source);
 }
 
 app.use((req, res, next) => {
@@ -71,12 +52,9 @@ app.use((req, res, next) => {
 
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
+    if (path.startsWith("/api") && !path.startsWith("/api/logs")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
+      // Не логируем тело ответа — может быть огромным и вызвать петлю
       log(logLine);
     }
   });

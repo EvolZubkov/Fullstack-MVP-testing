@@ -19,6 +19,9 @@ interface AttemptData {
   totalPossiblePoints: number;
   delta: number | null;
   isOutdated: boolean;
+  isAdaptive?: boolean;
+  achievedCount?: number | null;
+  totalTopics?: number | null;
 }
 
 interface TestGroup {
@@ -87,21 +90,31 @@ export default function HistoryPage() {
                     data-testid={`row-attempt-${attempt.id}`}
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                      {attempt.overallPassed ? (
+                      {attempt.isAdaptive ? (
+                        <CheckCircle className="h-5 w-5 text-blue-500 shrink-0" />
+                      ) : attempt.overallPassed ? (
                         <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
                       ) : (
                         <XCircle className="h-5 w-5 text-red-500 shrink-0" />
                       )}
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-medium">
-                            {attempt.overallPercent.toFixed(1)}%
-                          </span>
-                          <span className="text-sm text-muted-foreground">
-                            ({attempt.totalEarnedPoints}/{attempt.totalPossiblePoints} {t.common.points})
-                          </span>
-                          {attempt.delta !== null && (
-                            <Badge 
+                          {attempt.isAdaptive ? (
+                            <span className="font-medium">
+                              {attempt.achievedCount ?? 0}/{attempt.totalTopics ?? 0} тем
+                            </span>
+                          ) : (
+                            <>
+                              <span className="font-medium">
+                                {attempt.overallPercent.toFixed(1)}%
+                              </span>
+                              <span className="text-sm text-muted-foreground">
+                                ({attempt.totalEarnedPoints}/{attempt.totalPossiblePoints} {t.common.points})
+                              </span>
+                            </>
+                          )}
+                          {!attempt.isAdaptive && attempt.delta !== null && (
+                            <Badge
                               variant={attempt.delta > 0 ? "secondary" : attempt.delta < 0 ? "destructive" : "outline"}
                               className="text-xs"
                               data-testid={`badge-delta-${attempt.id}`}

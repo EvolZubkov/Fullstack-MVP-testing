@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { logger } from "../logger";
 
 // Проверяем наличие обязательных переменных окружения
 const ENCRYPTION_PASSWORD = process.env.ENCRYPTION_PASSWORD;
@@ -12,7 +13,7 @@ if (!ENCRYPTION_PASSWORD || !ENCRYPTION_SALT) {
     );
   }
 
-  console.warn(
+  logger.warn(
     "\n⚠️  WARNING: ENCRYPTION_PASSWORD and ENCRYPTION_SALT are not set!\n" +
     "   Using default values for development only.\n" +
     "   Generate secure values for production:\n" +
@@ -69,7 +70,7 @@ export async function decryptEmail(encryptedEmail: string): Promise<string> {
     const crypto = await getCryptoInstance();
     return crypto.decrypt(encryptedEmail);
   } catch (error) {
-    console.error("Failed to decrypt email:", error);
+    logger.error("Failed to decrypt email: " + (error as Error).message);
     return "";
   }
 }

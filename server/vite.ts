@@ -1,4 +1,5 @@
 import { type Express } from "express";
+import { logger } from "./logger";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
@@ -55,7 +56,7 @@ export async function setupVite(_server: Server, app: Express) {
       page = page.replace(/<script[^>]*src="[^"]*@vite\/client[^"]*"[^>]*><\/script>/gi, '');
       // Log if vite client is still present (for debugging)
       if (page.includes('@vite/client')) {
-        console.warn('[vite] WARNING: @vite/client still present in HTML');
+        logger.warn('[vite] WARNING: @vite/client still present in HTML');
       }
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {

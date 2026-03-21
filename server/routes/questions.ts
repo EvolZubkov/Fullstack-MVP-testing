@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { logger } from "../logger";
 import * as XLSX from "xlsx";
 import { storage } from "../storage";
 import { requireAuth, requireAuthor } from "../middleware/auth";
@@ -80,7 +81,7 @@ router.get("/", requireAuth, async (_req: Request, res: Response) => {
 
     res.json(questionsWithTopics);
   } catch (error) {
-    console.error("Get questions error:", error);
+    logger.error("Get questions error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get questions" });
   }
 });
@@ -135,7 +136,7 @@ router.post(
 
       res.status(201).json(question);
     } catch (error) {
-      console.error("Create question error:", error);
+      logger.error("Create question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to create question" });
     }
   }
@@ -191,7 +192,7 @@ router.put(
 
       res.json(updated);
     } catch (error) {
-      console.error("Update question error:", error);
+      logger.error("Update question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to update question" });
     }
   }
@@ -211,7 +212,7 @@ router.delete(
       }
       res.json({ success: true });
     } catch (error) {
-      console.error("Delete question error:", error);
+      logger.error("Delete question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to delete question" });
     }
   }
@@ -232,7 +233,7 @@ router.post(
       const deletedCount = await storage.deleteQuestionsBulk(ids);
       res.json({ success: true, deletedCount });
     } catch (error) {
-      console.error("Bulk delete questions error:", error);
+      logger.error("Bulk delete questions error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to delete questions" });
     }
   }
@@ -252,7 +253,7 @@ router.post(
       }
       res.status(201).json(result);
     } catch (error) {
-      console.error("Duplicate question error:", error);
+      logger.error("Duplicate question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to duplicate question" });
     }
   }
@@ -378,7 +379,7 @@ router.get(
       res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`);
       res.send(buffer);
     } catch (error) {
-      console.error("Export questions error:", error);
+      logger.error("Export questions error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to export questions" });
     }
   }
@@ -545,7 +546,7 @@ router.post(
         errors: results.errors,
       });
     } catch (error) {
-      console.error("Import questions error:", error);
+      logger.error("Import questions error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to import questions" });
     }
   }

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { logger } from "../logger";
 import { storage } from "../storage";
 import { requireAuthor } from "../middleware/auth";
 
@@ -16,7 +17,7 @@ router.get("/", requireAuthor, async (req, res) => {
     );
     res.json(usersWithGroups);
   } catch (error) {
-    console.error("Get users error:", error);
+    logger.error("Get users error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get users" });
   }
 });
@@ -31,7 +32,7 @@ router.get("/:id", requireAuthor, async (req, res) => {
     const groups = await storage.getUserGroups(user.id);
     res.json({ ...user, groups });
   } catch (error) {
-    console.error("Get user error:", error);
+    logger.error("Get user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get user" });
   }
 });
@@ -68,7 +69,7 @@ router.post("/", requireAuthor, async (req, res) => {
     const groups = await storage.getUserGroups(user.id);
     res.status(201).json({ ...user, groups });
   } catch (error) {
-    console.error("Create user error:", error);
+    logger.error("Create user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create user" });
   }
 });
@@ -102,7 +103,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
     const groups = await storage.getUserGroups(userId);
     res.json({ ...updated, groups });
   } catch (error) {
-    console.error("Update user error:", error);
+    logger.error("Update user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to update user" });
   }
 });
@@ -125,7 +126,7 @@ router.post("/:id/reset-password", requireAuthor, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Reset password error:", error);
+    logger.error("Reset password error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to reset password" });
   }
 });
@@ -145,7 +146,7 @@ router.post("/:id/deactivate", requireAuthor, async (req, res) => {
     await storage.deactivateUser(user.id);
     res.json({ success: true });
   } catch (error) {
-    console.error("Deactivate user error:", error);
+    logger.error("Deactivate user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to deactivate user" });
   }
 });
@@ -161,7 +162,7 @@ router.post("/:id/activate", requireAuthor, async (req, res) => {
     await storage.activateUser(user.id);
     res.json({ success: true });
   } catch (error) {
-    console.error("Activate user error:", error);
+    logger.error("Activate user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to activate user" });
   }
 });
@@ -188,7 +189,7 @@ router.post("/:id/reset-attempts", requireAuthor, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Reset attempts error:", error);
+    logger.error("Reset attempts error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to reset attempts" });
   }
 });
@@ -239,7 +240,7 @@ router.get("/:id/attempts-summary", requireAuthor, async (req, res) => {
 
     res.json(summary.filter((s) => s.totalAttempts > 0));
   } catch (error) {
-    console.error("Get attempts summary error:", error);
+    logger.error("Get attempts summary error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get attempts summary" });
   }
 });
@@ -255,7 +256,7 @@ router.get("/:id/groups", requireAuthor, async (req, res) => {
     const groups = await storage.getUserGroups(user.id);
     res.json(groups);
   } catch (error) {
-    console.error("Get user groups error:", error);
+    logger.error("Get user groups error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get user groups" });
   }
 });
@@ -280,7 +281,7 @@ router.put("/:id/groups", requireAuthor, async (req, res) => {
     const groups = await storage.getUserGroups(userId);
     res.json(groups);
   } catch (error) {
-    console.error("Update user groups error:", error);
+    logger.error("Update user groups error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to update user groups" });
   }
 });

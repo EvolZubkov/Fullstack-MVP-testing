@@ -9,6 +9,7 @@ import {
   User,
   Users,
   UsersRound,
+  ScrollText,
 } from "lucide-react";
 import {
   Sidebar,

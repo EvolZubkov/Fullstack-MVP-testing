@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { requireAuthor } from "../../middleware/auth";
 import type { AttemptResult } from "@shared/schema";
@@ -158,7 +159,7 @@ router.get("/", requireAuthor, async (_req: Request, res: Response) => {
 
     res.json({ summary, testStats, topicStats, trends });
   } catch (error) {
-    console.error("Analytics error:", error);
+    logger.error("Analytics error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch analytics" });
   }
 });

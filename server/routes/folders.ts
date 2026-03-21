@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { logger } from "../logger";
 import { storage } from "../storage";
 import { requireAuth, requireAuthor } from "../middleware/auth";
 
@@ -10,7 +11,7 @@ router.get("/", requireAuth, async (req, res) => {
     const folders = await storage.getFolders();
     res.json(folders);
   } catch (error) {
-    console.error("Get folders error:", error);
+    logger.error("Get folders error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get folders" });
   }
 });
@@ -25,7 +26,7 @@ router.post("/", requireAuthor, async (req, res) => {
     const folder = await storage.createFolder({ name, parentId: parentId || null });
     res.status(201).json(folder);
   } catch (error) {
-    console.error("Create folder error:", error);
+    logger.error("Create folder error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create folder" });
   }
 });
@@ -40,7 +41,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
     }
     res.json(updated);
   } catch (error) {
-    console.error("Update folder error:", error);
+    logger.error("Update folder error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to update folder" });
   }
 });
@@ -54,7 +55,7 @@ router.delete("/:id", requireAuthor, async (req, res) => {
     }
     res.json({ success: true });
   } catch (error) {
-    console.error("Delete folder error:", error);
+    logger.error("Delete folder error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to delete folder" });
   }
 });

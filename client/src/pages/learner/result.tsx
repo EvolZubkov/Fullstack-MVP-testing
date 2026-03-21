@@ -48,32 +48,38 @@ export default function ResultPage() {
   }
 
   const result = attempt.result;
+
+  if (!result) {
+    return (
+      <div className="max-w-3xl mx-auto px-6 py-12 text-center">
+        <h1 className="text-2xl font-semibold mb-4">{t.common.resultsNotFound}</h1>
+        <p className="text-muted-foreground mb-6">
+          Результаты этой попытки ещё не сформированы или были потеряны.
+        </p>
+        <Button onClick={() => navigate("/learner")}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          {t.result.backToTests}
+        </Button>
+      </div>
+    );
+  }
+
+  // Адаптивный тест — отдельный рендер
+  if ((result as any).mode === "adaptive") {
+    return <AdaptiveResultPage attempt={attempt} result={result as any} />;
+  }
+
   const passed = result.overallPassed;
-  const failedTopics = result.topicResults.filter((topic) => topic.passed === false);
+  const failedTopics = result.topicResults?.filter((topic) => topic.passed === false) ?? [];
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-12">
       <div className="text-center mb-8">
-        <div
-          className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 ${
-            passed
-              ? "bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-300"
-              : "bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-300"
-          }`}
-        >
-          {passed ? (
-            <Trophy className="h-10 w-10" />
-          ) : (
-            <Target className="h-10 w-10" />
-          )}
+        <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 ${passed ? "bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-300"}`}>
+          {passed ? <Trophy className="h-10 w-10" /> : <Target className="h-10 w-10" />}
         </div>
-
-        <h1 className="text-3xl font-bold mb-2">
-          {passed ? t.common.congratulations : t.common.keepLearning}
-        </h1>
-        <p className="text-lg text-muted-foreground">
-          {passed ? t.common.passedMessage : t.common.failedMessage}
-        </p>
+        <h1 className="text-3xl font-bold mb-2">{passed ? t.common.congratulations : t.common.keepLearning}</h1>
+        <p className="text-lg text-muted-foreground">{passed ? t.common.passedMessage : t.common.failedMessage}</p>
       </div>
 
       <Card className="mb-8">
@@ -103,12 +109,12 @@ export default function ResultPage() {
                   strokeWidth="12"
                   strokeLinecap="round"
                   strokeDasharray={2 * Math.PI * 70}
-                  strokeDashoffset={2 * Math.PI * 70 * (1 - result.overallPercent / 100)}
+                  strokeDashoffset={2 * Math.PI * 70 * (1 - (result.overallPercent ?? 0) / 100)}
                   className={passed ? "text-green-500" : "text-red-500"}
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-4xl font-bold">{Math.round(result.overallPercent)}%</span>
+                <span className="text-4xl font-bold">{Math.round(result.overallPercent ?? 0)}%</span>
                 <span className="text-sm text-muted-foreground">{t.result.score}</span>
               </div>
             </div>
@@ -264,13 +270,12 @@ function TopicResultCard({ topic }: { topic: TopicResult }) {
           </div>
           <Progress
             value={topic.percent}
-            className={`h-2 ${
-              passed === false
-                ? "[&>div]:bg-red-500"
-                : passed === true
+            className={`h-2 ${passed === false
+              ? "[&>div]:bg-red-500"
+              : passed === true
                 ? "[&>div]:bg-green-500"
                 : ""
-            }`}
+              }`}
           />
           {hasPassRule && topic.passRule && (
             <p className="text-xs text-muted-foreground">
@@ -283,5 +288,89 @@ function TopicResultCard({ topic }: { topic: TopicResult }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function AdaptiveResultPage({ attempt, result }: { attempt: AttemptWithResult; result: any }) {
+  const [, navigate] = useLocation();
+  const passed = result.overallPassed;
+
+  return (
+    <div className="max-w-4xl mx-auto px-6 py-12">
+      <div className="text-center mb-8">
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300">
+          <Trophy className="h-10 w-10" />
+        </div>
+        <h1 className="text-3xl font-bold mb-2">Тест завершён!</h1>
+        <p className="text-lg text-muted-foreground">{attempt.testTitle}</p>
+      </div>
+
+      <h2 className="text-xl font-semibold mb-4">Результаты по темам</h2>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        {result.topicResults.map((tr: any) => (
+          <Card key={tr.topicId}>
+            <CardContent className="pt-6">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="flex items-center gap-2">
+                  {tr.achievedLevelIndex !== null
+                    ? <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
+                    : <XCircle className="h-5 w-5 text-red-500 shrink-0" />
+                  }
+                  <h3 className="font-semibold">{tr.topicName}</h3>
+                </div>
+                <Badge className={tr.achievedLevelIndex !== null
+                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                  : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                }>
+                  {tr.achievedLevelName ?? "Не достигнут"}
+                </Badge>
+              </div>
+
+              {tr.feedback && (
+                <p className="text-sm text-muted-foreground bg-muted rounded-lg p-3 mb-3">
+                  {tr.feedback}
+                </p>
+              )}
+
+              {tr.recommendedLinks && tr.recommendedLinks.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Рекомендуемые материалы:</p>
+                  {tr.recommendedLinks.map((link: any, i: number) => ( <a
+                    
+                      key={i}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 p-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+                    >
+                      <ExternalLink className="h-4 w-4 text-primary shrink-0" />
+                      <span className="text-sm font-medium">{link.title}</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <Button variant="outline" asChild>
+          <Link href="/learner">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            {t.result.backToTests}
+          </Link>
+        </Button>
+        {attempt.canRetake && (
+          <Button asChild>
+            <Link href={`/learner/test/${attempt.testId}`}>
+              <RotateCcw className="h-4 w-4 mr-2" />
+              {t.common.retakeTest}
+            </Link>
+          </Button>
+        )}
+      </div>
+    </div >
   );
 }

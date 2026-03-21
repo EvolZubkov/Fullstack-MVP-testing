@@ -254,6 +254,7 @@ export const t = {
     users: "Пользователи",
     groups: "Группы",
     history: "История",
+    logs: "Логи",
     logout: "Выход",
     testCenter: "Центр тестирования",
   },

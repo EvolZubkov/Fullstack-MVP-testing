@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { logger } from "./logger";
 
 // Конфигурация из переменных окружения
 const SMTP_HOST = process.env.SMTP_HOST || "";
@@ -14,7 +15,7 @@ let transporter: nodemailer.Transporter | null = null;
 
 function getTransporter(): nodemailer.Transporter | null {
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    console.log("SMTP not configured. Email sending disabled.");
+    logger.info("SMTP not configured. Email sending disabled.");
     return null;
   }
 
@@ -41,11 +42,11 @@ export async function sendPasswordResetEmail(
   const transport = getTransporter();
   
   if (!transport) {
-    console.log("===========================================");
-    console.log("PASSWORD RESET LINK (SMTP not configured):");
-    console.log(resetLink);
-    console.log("For user:", to);
-    console.log("===========================================");
+    logger.info("===========================================");
+    logger.info("PASSWORD RESET LINK (SMTP not configured):");
+    logger.info(resetLink);
+    logger.info("For user: " + to);
+    logger.info("===========================================");
     return false;
   }
 
@@ -120,16 +121,16 @@ ${resetLink}
       text,
       html,
     });
-    console.log(`Password reset email sent to ${to}`);
+    logger.info(`Password reset email sent to ${to}`);
     return true;
   } catch (error) {
-    console.error("Failed to send password reset email:", error);
+    logger.error("Failed to send password reset email: " + (error as Error).message);
     // Выводим ссылку в консоль как fallback
-    console.log("===========================================");
-    console.log("PASSWORD RESET LINK (email send failed):");
-    console.log(resetLink);
-    console.log("For user:", to);
-    console.log("===========================================");
+    logger.info("===========================================");
+    logger.info("PASSWORD RESET LINK (email send failed):");
+    logger.info(resetLink);
+    logger.info("For user: " + to);
+    logger.info("===========================================");
     return false;
   }
 }
@@ -140,10 +141,10 @@ export async function verifySmtpConnection(): Promise<boolean> {
 
   try {
     await transport.verify();
-    console.log("SMTP connection verified successfully");
+    logger.info("SMTP connection verified successfully");
     return true;
   } catch (error) {
-    console.error("SMTP connection verification failed:", error);
+    logger.error("SMTP connection verification failed: " + (error as Error).message);
     return false;
   }
 }

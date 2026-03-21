@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { requireAuthor } from "../../middleware/auth";
 import { checkAnswer } from "../../utils/check-answer";
@@ -68,7 +69,7 @@ router.get("/tests/:testId/attempts", requireAuthor, async (req: Request, res: R
     });
 
   } catch (error) {
-    console.error("Test attempts list error:", error);
+    logger.error("Test attempts list error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch attempts list" });
   }
 });
@@ -243,7 +244,7 @@ router.get("/attempts/:attemptId", requireAuthor, async (req: Request, res: Resp
     });
 
   } catch (error) {
-    console.error("Attempt detail error:", error);
+    logger.error("Attempt detail error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch attempt details" });
   }
 });

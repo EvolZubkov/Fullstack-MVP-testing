@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { logger } from "../../logger";
 import * as XLSX from "xlsx";
 import { storage } from "../../storage";
 import { requireAuthor } from "../../middleware/auth";
@@ -291,7 +292,7 @@ router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, re
     res.send(buffer);
 
   } catch (error) {
-    console.error("Excel export error:", error);
+    logger.error("Excel export error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to export Excel" });
   }
 });
@@ -385,7 +386,7 @@ router.get("/export/filters", requireAuthor, async (_req: Request, res: Response
       scormPackages: scormOptions,
     });
   } catch (error) {
-    console.error("Export filters error:", error);
+    logger.error("Export filters error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch export filters" });
   }
 });
@@ -666,6 +667,81 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
       XLSX.utils.book_append_sheet(wb, sh, "Статистика вопросов");
     }
 
+    // Sheet: Level stats — кто какой уровень достиг
+    if (includeSheets.levelStats) {
+      const rows: any[][] = [["Пользователь", "Email", "Тест", "Тема", "Достигнутый уровень", "Дата"]];
+
+      for (const attempt of completed) {
+        const result = attempt.resultJson as any;
+        if (result?.mode !== "adaptive") continue;
+
+        const userName = userMap.get(attempt.userId) || attempt.userId;
+        const testTitle = testTitleMap.get(attempt.testId) || attempt.testId;
+        const date = attempt.finishedAt
+          ? new Date(attempt.finishedAt).toLocaleDateString("ru-RU")
+          : "—";
+
+        for (const tr of result?.topicResults || []) {
+          rows.push([
+            userName,
+            "—",
+            testTitle,
+            tr.topicName || "—",
+            tr.achievedLevelName || "Не достигнут",
+            date,
+          ]);
+        }
+      }
+
+      if (rows.length > 1) {
+        const sh = XLSX.utils.aoa_to_sheet(rows);
+        sh["!cols"] = [{ wch: 25 }, { wch: 30 }, { wch: 30 }, { wch: 25 }, { wch: 20 }, { wch: 15 }];
+        XLSX.utils.book_append_sheet(wb, sh, "Статистика уровней");
+      }
+    }
+
+    // Sheet: Recommendations (web — и адаптивные и стандартные)
+    if (includeSheets.recommendations) {
+      const userCourses = new Map<string, Set<string>>();
+
+      for (const attempt of completed) {
+        const result = attempt.resultJson as any;
+        const userName = userMap.get(attempt.userId) || attempt.userId;
+
+        if (result?.mode === "adaptive") {
+          // Адаптивный — берём recommendedLinks из topicResults
+          for (const tr of result?.topicResults || []) {
+            for (const link of tr.recommendedLinks || []) {
+              if (!userCourses.has(userName)) userCourses.set(userName, new Set());
+              userCourses.get(userName)!.add(link.title);
+            }
+          }
+        } else {
+          // Стандартный — берём recommendedCourses из проваленных тем
+          for (const tr of result?.topicResults || []) {
+            if (tr.passed === false) {
+              for (const course of tr.recommendedCourses || []) {
+                if (!userCourses.has(userName)) userCourses.set(userName, new Set());
+                userCourses.get(userName)!.add(course.title);
+              }
+            }
+          }
+        }
+      }
+
+      if (userCourses.size > 0) {
+        const rows: any[][] = [["Пользователь", "Рекомендуемый курс"]];
+        for (const [userName, courses] of userCourses.entries()) {
+          for (const course of courses) {
+            rows.push([userName, course]);
+          }
+        }
+        const sh = XLSX.utils.aoa_to_sheet(rows);
+        sh["!cols"] = [{ wch: 30 }, { wch: 50 }];
+        XLSX.utils.book_append_sheet(wb, sh, "Рекомендации");
+      }
+    }
+
     const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
     const filename = `report_${new Date().toISOString().split("T")[0]}.xlsx`;
@@ -676,7 +752,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
     res.send(buffer);
 
   } catch (e) {
-    console.error("POST /api/export/excel error:", e);
+    logger.error("POST /api/export/excel error: " + (e as Error).message);
     res.status(500).json({ error: "Failed to export Excel" });
   }
 });
@@ -949,47 +1025,36 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
       XLSX.utils.book_append_sheet(wb, sh, "Статистика вопросов");
     }
 
-    // Sheet: Level stats (adaptive)
+    // Sheet: Level stats — кто какой уровень достиг (LMS)
     if (includeSheets.levelStats) {
-      const levelStat = new Map<string, { testTitle: string; topicName: string; levelName: string; total: number; correct: number }>();
+      const rows: any[][] = [["Пользователь", "Email", "Тест", "Тема", "Достигнутый уровень", "Дата"]];
 
       for (const attempt of completed) {
         const pkg = packageMap.get(attempt.packageId);
-        if (!pkg || pkg.testMode !== "adaptive") continue;
+        if (pkg?.testMode !== "adaptive") continue;
 
-        const answers = attemptAnswers.get(attempt.id) || [];
-        for (const ans of answers) {
-          if (!ans.levelName) continue;
+        const achievedLevels = attempt.achievedLevelsJson as any[] | null;
+        if (!achievedLevels || achievedLevels.length === 0) continue;
 
-          const key = `${pkg.testId}:${ans.topicId}:${ans.levelIndex}`;
-          const s = levelStat.get(key) || {
-            testTitle: pkg.testTitle,
-            topicName: ans.topicName || "—",
-            levelName: ans.levelName,
-            total: 0,
-            correct: 0,
-          };
-          s.total++;
-          if (ans.isCorrect) s.correct++;
-          levelStat.set(key, s);
+        const date = attempt.finishedAt
+          ? new Date(attempt.finishedAt).toLocaleDateString("ru-RU")
+          : "—";
+
+        for (const level of achievedLevels) {
+          rows.push([
+            attempt.lmsUserName || attempt.lmsUserId || "—",
+            attempt.lmsUserEmail || "—",
+            pkg?.testTitle || "—",
+            level.topicName || "—",
+            level.levelName || "Не достигнут",
+            date,
+          ]);
         }
       }
 
-      if (levelStat.size > 0) {
-        const rows: any[][] = [["Тест", "Тема", "Уровень", "Всего ответов", "Правильных", "% правильных"]];
-        for (const [_, s] of levelStat.entries()) {
-          rows.push([
-            s.testTitle,
-            s.topicName,
-            s.levelName,
-            s.total,
-            s.correct,
-            s.total ? `${((s.correct / s.total) * 100).toFixed(1)}%` : "0%",
-          ]);
-        }
-
+      if (rows.length > 1) {
         const sh = XLSX.utils.aoa_to_sheet(rows);
-        sh["!cols"] = [{ wch: 24 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
+        sh["!cols"] = [{ wch: 25 }, { wch: 30 }, { wch: 30 }, { wch: 25 }, { wch: 20 }, { wch: 15 }];
         XLSX.utils.book_append_sheet(wb, sh, "Статистика уровней");
       }
     }
@@ -1045,7 +1110,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
     res.send(buffer);
 
   } catch (e) {
-    console.error("POST /api/export/excel-lms error:", e);
+    logger.error("POST /api/export/excel-lms error: " + (e as Error).message);
     res.status(500).json({ error: "Failed to export LMS Excel" });
   }
 });

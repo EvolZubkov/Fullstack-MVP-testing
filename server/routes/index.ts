@@ -9,6 +9,7 @@ import attemptsRouter from "./attempts";
 import assignmentsRouter from "./assignments";
 import analyticsRouter from "./analytics/index";
 import scormTelemetryRouter from "./scorm-telemetry";
+import logsRouter from "./logs";
 
 export {
   foldersRouter,
@@ -22,6 +23,7 @@ export {
   assignmentsRouter,
   analyticsRouter,
   scormTelemetryRouter,
+  logsRouter,
 };
 
 // Конфигурация монтирования роутеров
@@ -38,4 +40,5 @@ export const routerConfig = [
   { path: "/api/analytics", router: analyticsRouter },
   { path: "/api", router: analyticsRouter }, // для /api/export/*
   { path: "/api", router: scormTelemetryRouter },
+  { path: "/api/logs", router: logsRouter },
 ];

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { requireAuthor } from "../../middleware/auth";
 
@@ -43,7 +44,7 @@ router.get("/scorm-attempts", requireAuthor, async (_req: Request, res: Response
 
     res.json(enrichedAttempts);
   } catch (error) {
-    console.error("Get SCORM attempts error:", error);
+    logger.error("Get SCORM attempts error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get SCORM attempts" });
   }
 });
@@ -154,7 +155,7 @@ router.get("/scorm-attempts/:attemptId", requireAuthor, async (req: Request, res
       source: "lms",
     });
   } catch (error) {
-    console.error("Get SCORM attempt details error:", error);
+    logger.error("Get SCORM attempt details error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get attempt details" });
   }
 });

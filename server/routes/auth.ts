@@ -4,6 +4,7 @@ import { storage } from "../storage";
 import { requireAuth } from "../middleware/auth";
 import { sendPasswordResetEmail } from "../email";
 import { maskEmail } from "../utils/mask-email";
+import { logger } from "../logger";
 
 const router = Router();
 
@@ -15,16 +16,20 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Email and password required" });
     }
 
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
     const user = await storage.validatePassword(email, password);
     if (!user) {
+      logger.warn(`Failed login attempt: ${email} from ${ip}`, "auth");
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     if (user.status === "inactive") {
+      logger.warn(`Login blocked - account inactive: ${email} from ${ip}`, "auth");
       return res.status(403).json({ error: "Account is deactivated. Please contact administrator." });
     }
 
     await storage.updateUserLastLogin(user.id);
+    logger.info(`User logged in: ${email} (${user.role}) from ${ip}`, "auth");
 
     req.session.userId = user.id;
     res.json({
@@ -39,13 +44,18 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Login error:", error);
+    logger.error("Login error: " + (error as Error).message, "auth")
     res.status(500).json({ error: "Login failed" });
   }
 });
 
 // POST /api/auth/logout
-router.post("/logout", (req, res) => {
+router.post("/logout", async (req, res) => {
+  const userId = req.session.userId;
+  if (userId) {
+    const user = await storage.getUser(userId).catch(() => null);
+    logger.info(`User logged out: ${user?.email ?? userId}`, "auth");
+  }
   req.session.destroy(() => {
     res.json({ success: true });
   });
@@ -72,7 +82,7 @@ router.post("/change-password", requireAuth, async (req, res) => {
     await storage.updateUserPassword(user.id, newPassword);
     res.json({ success: true });
   } catch (error) {
-    console.error("Change password error:", error);
+    logger.error("Change password error: " + (error as Error).message, "auth");
     res.status(500).json({ error: "Failed to change password" });
   }
 });
@@ -107,7 +117,7 @@ router.get("/me", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Get me error:", error);
+    logger.error("Get me error: " + (error as Error).message, "auth");
     res.status(500).json({ error: "Failed to get user" });
   }
 });
@@ -123,7 +133,7 @@ router.post("/check-email", async (req, res) => {
     const user = await storage.getUserByEmail(email);
     res.json({ exists: !!user });
   } catch (error) {
-    console.error("Check email error:", error);
+    logger.error("Check email error: " + (error as Error).message, "auth")
     res.status(500).json({ error: "Failed to check email" });
   }
 });
@@ -168,6 +178,7 @@ router.post("/forgot-password", async (req, res) => {
 
     // Отправляем email
     const emailSent = await sendPasswordResetEmail(user.email, resetLink);
+    logger.info(`Password reset requested: ${maskEmail(user.email)} from ${requestIp}`, "auth");
 
     res.json({
       success: true,
@@ -176,7 +187,7 @@ router.post("/forgot-password", async (req, res) => {
       ...(process.env.NODE_ENV === "development" && !emailSent && { devLink: resetLink }),
     });
   } catch (error) {
-    console.error("Forgot password error:", error);
+    logger.error("Forgot password error: " + (error as Error).message, "auth");
     res.status(500).json({ error: "Failed to process request" });
   }
 });
@@ -210,7 +221,7 @@ router.get("/verify-reset-token", async (req, res) => {
       emailHint: user ? maskEmail(user.email) : null,
     });
   } catch (error) {
-    console.error("Verify reset token error:", error);
+    logger.error("Verify reset token error: " + (error as Error).message, "auth");
     res.status(500).json({ error: "Failed to verify token" });
   }
 });
@@ -254,9 +265,10 @@ router.post("/reset-password", async (req, res) => {
       await storage.updateUser(resetToken.userId, { status: "active" });
     }
 
+    logger.info(`Password reset completed for user: ${resetToken.userId}`, "auth");
     res.json({ success: true, message: "Password has been reset successfully" });
   } catch (error) {
-    console.error("Reset password error:", error);
+    logger.error("Reset password error: " + (error as Error).message, "auth");
     res.status(500).json({ error: "Failed to reset password" });
   }
 });
@@ -316,7 +328,7 @@ router.post("/complete-first-login", requireAuth, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Complete first login error:", error);
+    logger.error("Complete first login error: " + (error as Error).message, "auth");
     res.status(500).json({ error: "Failed to complete first login" });
   }
 });

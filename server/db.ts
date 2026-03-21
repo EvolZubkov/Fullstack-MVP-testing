@@ -8,6 +8,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@shared/schema";
+import { logger } from "./logger";
 
 const { Pool } = pg;
 
@@ -41,7 +42,7 @@ export const pool = new Pool({
  * These errors occur when a client becomes disconnected while idle.
  */
 pool.on("error", (err) => {
-  console.error("Unexpected error on idle database client:", err.message);
+  logger.error("Unexpected error on idle client: " + err.message, "db")
   isConnected = false;
 });
 
@@ -49,13 +50,13 @@ pool.on("error", (err) => {
  * Handle pool connection events for logging and state tracking.
  */
 pool.on("connect", () => {
-  console.log("New database client connected");
+  logger.info("New database client connected", "db")
   isConnected = true;
   connectionAttempts = 0;
 });
 
 pool.on("remove", () => {
-  console.log("Database client removed from pool");
+  logger.debug("Database client removed from pool", "db")
 });
 
 /**
@@ -74,7 +75,7 @@ export async function checkDatabaseHealth(): Promise<boolean> {
     }
   } catch (error) {
     isConnected = false;
-    console.error("Database health check failed:", (error as Error).message);
+    logger.error("Health check failed: " + (error as Error).message, "db")
     return false;
   }
 }
@@ -127,9 +128,7 @@ export async function withRetry<T>(
         throw lastError;
       }
 
-      console.warn(
-        `Database operation failed (attempt ${attempt}/${maxRetries}): ${lastError.message}. Retrying in ${delayMs}ms...`
-      );
+      logger.warn(`DB retry attempt ${attempt}/${maxRetries}: ${lastError.message}`, "db");
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
   }
@@ -142,13 +141,13 @@ export async function withRetry<T>(
  * Should be called during application shutdown.
  */
 export async function closeDatabaseConnection(): Promise<void> {
-  console.log("Closing database connections...");
+  logger.info("Closing database connections...", "db")
   try {
     await pool.end();
     isConnected = false;
-    console.log("Database connections closed successfully");
+    logger.info("Database connections closed", "db")
   } catch (error) {
-    console.error("Error closing database connections:", (error as Error).message);
+    logger.error("Error closing database connections: " + (error as Error).message, "db");
     throw error;
   }
 }
@@ -160,7 +159,7 @@ export async function closeDatabaseConnection(): Promise<void> {
  * @throws Error if max attempts exceeded
  */
 export async function waitForDatabase(): Promise<boolean> {
-  console.log("Waiting for database connection...");
+  logger.info("Waiting for database connection...", "db");
 
   while (connectionAttempts < MAX_RECONNECT_ATTEMPTS) {
     connectionAttempts++;
@@ -169,17 +168,15 @@ export async function waitForDatabase(): Promise<boolean> {
     try {
       const healthy = await checkDatabaseHealth();
       if (healthy) {
-        console.log("Database connection established");
+        logger.info("Database connection established", "db");
         return true;
       }
     } catch (error) {
-      console.warn(
-        `Database connection attempt ${connectionAttempts}/${MAX_RECONNECT_ATTEMPTS} failed: ${(error as Error).message}`
-      );
+      logger.warn(`Database connection attempt ${connectionAttempts}/${MAX_RECONNECT_ATTEMPTS} failed: ${(error as Error).message}`, "db");
     }
 
     if (connectionAttempts < MAX_RECONNECT_ATTEMPTS) {
-      console.log(`Retrying in ${delay}ms...`);
+      logger.info(`Retrying in ${delay}ms...`, "db");
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }

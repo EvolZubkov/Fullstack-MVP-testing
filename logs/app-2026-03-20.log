@@ -1,0 +1,268 @@
+2026-03-20 05:05:19 [INFO ] [db] New database client connected
+2026-03-20 05:05:19 [INFO ] [db] New database client connected
+2026-03-20 05:05:20 [INFO ] [db] New database client connected
+2026-03-20 05:05:20 [INFO ] [db] New database client connected
+2026-03-20 05:05:20 [INFO ] [db] New database client connected
+2026-03-20 05:05:20 [INFO ] [db] New database client connected
+2026-03-20 05:05:20 [INFO ] [express] GET /api/export/filters 304 in 399ms
+2026-03-20 05:05:29 [WARN ] [app] [vite] WARNING: @vite/client still present in HTML
+2026-03-20 05:05:29 [INFO ] [express] GET /api/auth/me 304 in 6ms
+2026-03-20 05:05:30 [INFO ] [express] GET /api/analytics/summary 304 in 60ms
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [db] New database client connected
+2026-03-20 05:05:30 [INFO ] [express] GET /api/tests 304 in 311ms
+2026-03-20 05:05:30 [INFO ] [express] GET /api/analytics/combined-full 200 in 635ms
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:06:00 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:12:06 [INFO ] [db] Waiting for database connection...
+2026-03-20 05:12:06 [INFO ] [db] New database client connected
+2026-03-20 05:12:06 [INFO ] [db] Database connection established
+2026-03-20 05:12:19 [INFO ] [express] serving on port 5001
+2026-03-20 05:12:36 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:13:19 [INFO ] [db] Waiting for database connection...
+2026-03-20 05:13:19 [INFO ] [db] New database client connected
+2026-03-20 05:13:19 [INFO ] [db] Database connection established
+2026-03-20 05:13:20 [INFO ] [express] serving on port 5001
+2026-03-20 05:13:22 [WARN ] [app] [vite] WARNING: @vite/client still present in HTML
+2026-03-20 05:13:24 [WARN ] [app] [vite] WARNING: @vite/client still present in HTML
+2026-03-20 05:13:49 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:05 [INFO ] [express] GET /api/auth/me 401 in 5ms
+2026-03-20 05:14:07 [INFO ] [db] New database client connected
+2026-03-20 05:14:07 [INFO ] [auth] User logged in: admin@rt.ru (author) from 127.0.0.1
+2026-03-20 05:14:07 [INFO ] [express] POST /api/auth/login 200 in 275ms
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [express] GET /api/folders 304 in 228ms
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [db] New database client connected
+2026-03-20 05:14:08 [INFO ] [express] GET /api/topics 304 in 458ms
+2026-03-20 05:14:10 [INFO ] [express] GET /api/analytics/summary 304 in 94ms
+2026-03-20 05:14:10 [INFO ] [express] GET /api/tests 304 in 123ms
+2026-03-20 05:14:10 [INFO ] [express] GET /api/analytics/combined-full 200 in 406ms
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:40 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:14:49 [INFO ] [db] New database client connected
+2026-03-20 05:14:49 [INFO ] [db] New database client connected
+2026-03-20 05:14:49 [INFO ] [express] GET /api/analytics/summary 304 in 98ms
+2026-03-20 05:14:49 [INFO ] [db] New database client connected
+2026-03-20 05:14:49 [INFO ] [db] New database client connected
+2026-03-20 05:14:49 [INFO ] [db] New database client connected
+2026-03-20 05:14:49 [INFO ] [db] New database client connected
+2026-03-20 05:14:49 [INFO ] [db] New database client connected
+2026-03-20 05:14:50 [INFO ] [express] GET /api/analytics/combined-full 304 in 491ms
+2026-03-20 05:14:56 [INFO ] [auth] User logged out: J�o�����
+2026-03-20 05:14:56 [INFO ] [express] POST /api/auth/logout 200 in 6ms
+2026-03-20 05:14:58 [INFO ] [auth] User logged in: friend042791@gmail.com (learner) from 127.0.0.1
+2026-03-20 05:14:58 [INFO ] [express] POST /api/auth/login 200 in 81ms
+2026-03-20 05:14:58 [INFO ] [express] GET /api/learner/tests 200 in 29ms
+2026-03-20 05:15:00 [INFO ] [express] GET /api/learner/attempts 304 in 9ms
+2026-03-20 05:15:03 [INFO ] [express] GET /api/attempts/a5d3d641-2c9a-4388-a515-5ec1a1dac02d/result 200 in 8ms
+2026-03-20 05:15:12 [INFO ] [express] GET /api/learner/tests 304 in 16ms
+2026-03-20 05:15:13 [INFO ] [express] POST /api/tests/9172bfe6-0450-40c0-92a4-0afdcc33b29d/attempts/start-adaptive 201 in 48ms
+2026-03-20 05:15:14 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 11ms
+2026-03-20 05:15:15 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 8ms
+2026-03-20 05:15:16 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 9ms
+2026-03-20 05:15:18 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 7ms
+2026-03-20 05:15:19 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 10ms
+2026-03-20 05:15:19 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:15:19 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:15:19 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:15:20 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 6ms
+2026-03-20 05:15:21 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 8ms
+2026-03-20 05:15:23 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 8ms
+2026-03-20 05:15:24 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 12ms
+2026-03-20 05:15:25 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 11ms
+2026-03-20 05:15:27 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 8ms
+2026-03-20 05:15:27 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 12ms
+2026-03-20 05:15:28 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 12ms
+2026-03-20 05:15:30 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 12ms
+2026-03-20 05:15:32 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 11ms
+2026-03-20 05:15:33 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 11ms
+2026-03-20 05:15:34 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 11ms
+2026-03-20 05:15:34 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 9ms
+2026-03-20 05:15:35 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 12ms
+2026-03-20 05:15:36 [INFO ] [express] POST /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/answer-adaptive 200 in 9ms
+2026-03-20 05:15:42 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:15:42 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:15:42 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:15:47 [WARN ] [app] [vite] WARNING: @vite/client still present in HTML
+2026-03-20 05:15:47 [WARN ] [app] [vite] WARNING: @vite/client still present in HTML
+2026-03-20 05:15:47 [INFO ] [express] GET /api/auth/me 200 in 4ms
+2026-03-20 05:15:48 [INFO ] [express] GET /api/learner/attempts 200 in 7ms
+2026-03-20 05:15:51 [INFO ] [express] GET /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/result 200 in 5ms
+2026-03-20 05:16:00 [INFO ] [auth] User logged out: friend042791@gmail.com
+2026-03-20 05:16:00 [INFO ] [express] POST /api/auth/logout 200 in 5ms
+2026-03-20 05:16:04 [INFO ] [auth] User logged in: admin@rt.ru (author) from 127.0.0.1
+2026-03-20 05:16:04 [INFO ] [express] POST /api/auth/login 200 in 75ms
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [express] GET /api/folders 304 in 121ms
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [db] New database client connected
+2026-03-20 05:16:04 [INFO ] [express] GET /api/topics 304 in 310ms
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 05:16:34 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:39:40 [WARN ] [app] [vite] WARNING: @vite/client still present in HTML
+2026-03-20 08:40:14 [INFO ] [db] New database client connected
+2026-03-20 08:40:14 [INFO ] [express] GET /api/learner/tests 403 in 414ms
+2026-03-20 08:40:17 [INFO ] [auth] User logged out: J�o�����
+2026-03-20 08:40:17 [INFO ] [express] POST /api/auth/logout 200 in 16ms
+2026-03-20 08:40:18 [INFO ] [auth] User logged in: admin@rt.ru (author) from 127.0.0.1
+2026-03-20 08:40:18 [INFO ] [express] POST /api/auth/login 200 in 288ms
+2026-03-20 08:40:19 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [express] GET /api/folders 304 in 1593ms
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [db] New database client connected
+2026-03-20 08:40:20 [INFO ] [express] GET /api/topics 304 in 1696ms
+2026-03-20 08:40:23 [INFO ] [express] GET /api/analytics/summary 200 in 593ms
+2026-03-20 08:40:23 [INFO ] [express] GET /api/tests 304 in 664ms
+2026-03-20 08:40:24 [INFO ] [express] GET /api/analytics/combined-full 200 in 1887ms
+2026-03-20 08:40:38 [INFO ] [express] GET /api/export/filters 304 in 210ms
+2026-03-20 08:40:48 [INFO ] [express] POST /api/export/excel 200 in 428ms
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:40:53 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:41:08 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:41:08 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:41:08 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:41:08 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:41:18 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:41:18 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:43:02 [INFO ] [db] New database client connected
+2026-03-20 08:43:02 [INFO ] [auth] User logged out: J�o�����
+2026-03-20 08:43:02 [INFO ] [express] POST /api/auth/logout 200 in 127ms
+2026-03-20 08:43:05 [INFO ] [auth] User logged in: friend042791@gmail.com (learner) from 127.0.0.1
+2026-03-20 08:43:05 [INFO ] [express] POST /api/auth/login 200 in 245ms
+2026-03-20 08:43:06 [INFO ] [db] New database client connected
+2026-03-20 08:43:06 [INFO ] [db] New database client connected
+2026-03-20 08:43:06 [INFO ] [db] New database client connected
+2026-03-20 08:43:06 [INFO ] [express] GET /api/learner/tests 200 in 605ms
+2026-03-20 08:43:06 [INFO ] [express] GET /api/learner/attempts 304 in 24ms
+2026-03-20 08:43:08 [INFO ] [express] GET /api/attempts/3a06fcc8-f170-4726-b36d-cbb961de3a9f/result 200 in 34ms
+2026-03-20 08:43:35 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:43:36 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:43:36 [DEBUG] [db] Database client removed from pool
+2026-03-20 08:43:38 [DEBUG] [db] Database client removed from pool

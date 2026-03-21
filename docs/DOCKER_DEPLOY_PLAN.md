@@ -93,7 +93,7 @@ ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
-RUN mkdir -p uploads/media uploads/scorm && \
+RUN mkdir -p uploads/media uploads/scorm logs && \
     addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
     chown -R nodejs:nodejs /app

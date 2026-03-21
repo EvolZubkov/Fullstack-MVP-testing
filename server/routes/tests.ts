@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { storage } from "../storage";
 import { requireAuth, requireAuthor } from "../middleware/auth";
 import { generateScormPackage } from "../scorm-exporter";
+import { logger } from "../logger";
 
 const router = Router();
 
@@ -58,7 +59,7 @@ router.get("/", requireAuth, async (req, res) => {
 
     res.json(testsWithSections);
   } catch (error) {
-    console.error("Get tests error:", error);
+    logger.error("Get tests error: " + (error as Error).message, "tests")
     res.status(500).json({ error: "Failed to fetch tests" });
   }
 });
@@ -148,7 +149,7 @@ router.post("/", requireAuthor, async (req, res) => {
 
     res.status(201).json(test);
   } catch (error) {
-    console.error("Create test error:", error);
+    logger.error("Create test error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to create test" });
   }
 });
@@ -181,7 +182,7 @@ router.get("/:id/adaptive-settings", requireAuthor, async (req, res) => {
 
     res.json(adaptiveSettings);
   } catch (error) {
-    console.error("Get adaptive settings error:", error);
+    logger.error("Get adaptive settings error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to get adaptive settings" });
   }
 });
@@ -270,7 +271,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
 
     res.json(test);
   } catch (error) {
-    console.error("Update test error:", error);
+    logger.error("Update test error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to update test" });
   }
 });
@@ -289,7 +290,7 @@ router.delete("/:id", requireAuthor, async (req, res) => {
     }
     res.json({ success: true });
   } catch (error) {
-    console.error("Delete test error:", error);
+    logger.error("Delete test error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to delete test" });
   }
 });
@@ -366,7 +367,7 @@ router.get("/:id/export/scorm", requireAuthor, async (req, res) => {
         apiBaseUrl: apiBaseUrl,
       };
 
-      console.log(`[SCORM] Created telemetry package: ${packageId} for test: ${test.id}`);
+      logger.info(`SCORM telemetry package created: ${packageId} test="${test.title}" (${test.id}) by user=${req.session.userId}`, "scorm-export");
     }
 
     const buffer = await generateScormPackage({
@@ -380,9 +381,9 @@ router.get("/:id/export/scorm", requireAuthor, async (req, res) => {
     const safeTitle = test.title.replace(/[^a-zA-Zа-яА-ЯёЁ0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "") || "scorm_export";
     const safeAscii = safeTitle.replace(/[^a-zA-Z0-9_]/g, "_") || "scorm_export";
     res.setHeader("Content-Disposition", `attachment; filename="${safeAscii}.zip"; filename*=UTF-8''${encodeURIComponent(safeTitle)}.zip`);
-    res.send(buffer);
+    logger.info(`SCORM exported: test="${test.title}" (${test.id}) telemetry=${enableTelemetry} by user=${req.session.userId}`, "scorm-export");
   } catch (error) {
-    console.error("SCORM export error:", error);
+    logger.error("SCORM export error: " + (error as Error).message, "scorm-export");
     res.status(500).json({ error: "Failed to export SCORM package" });
   }
 });

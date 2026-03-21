@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { logger } from "../logger";
 import { storage } from "../storage";
 import { requireAuthor, requireLearner } from "../middleware/auth";
 
@@ -20,7 +21,7 @@ router.get("/", requireAuthor, async (req, res) => {
     );
     res.json(groupsWithUsers);
   } catch (error) {
-    console.error("Get groups error:", error);
+    logger.error("Get groups error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get groups" });
   }
 });
@@ -39,7 +40,7 @@ router.get("/:id", requireAuthor, async (req, res) => {
       users: users.map((u) => ({ id: u.id, email: u.email, name: u.name })),
     });
   } catch (error) {
-    console.error("Get group error:", error);
+    logger.error("Get group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get group" });
   }
 });
@@ -60,7 +61,7 @@ router.post("/", requireAuthor, async (req, res) => {
 
     res.status(201).json({ ...group, users: [], userCount: 0 });
   } catch (error) {
-    console.error("Create group error:", error);
+    logger.error("Create group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create group" });
   }
 });
@@ -75,7 +76,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
     }
     res.json(updated);
   } catch (error) {
-    console.error("Update group error:", error);
+    logger.error("Update group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to update group" });
   }
 });
@@ -89,7 +90,7 @@ router.delete("/:id", requireAuthor, async (req, res) => {
     }
     res.json({ success: true });
   } catch (error) {
-    console.error("Delete group error:", error);
+    logger.error("Delete group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to delete group" });
   }
 });
@@ -131,7 +132,7 @@ router.post("/:id/users", requireAuthor, async (req, res) => {
       userCount: updatedUsers.length,
     });
   } catch (error) {
-    console.error("Add users to group error:", error);
+    logger.error("Add users to group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to add users to group" });
   }
 });
@@ -148,7 +149,7 @@ router.delete("/:id/users/:userId", requireAuthor, async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error("Remove user from group error:", error);
+    logger.error("Remove user from group error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to remove user from group" });
   }
 });

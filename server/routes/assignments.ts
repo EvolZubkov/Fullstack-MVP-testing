@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { logger } from "../logger";
 import { storage } from "../storage";
 import { requireAuthor, requireLearner } from "../middleware/auth";
 
@@ -38,7 +39,7 @@ router.get("/tests/:id/assignments", requireAuthor, async (req, res) => {
 
     res.json(enrichedAssignments);
   } catch (error) {
-    console.error("Get test assignments error:", error);
+    logger.error("Get test assignments error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch assignments" });
   }
 });
@@ -81,7 +82,7 @@ router.post("/tests/:id/assignments", requireAuthor, async (req, res) => {
 
     res.status(201).json(assignment);
   } catch (error) {
-    console.error("Create assignment error:", error);
+    logger.error("Create assignment error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create assignment" });
   }
 });
@@ -132,7 +133,7 @@ router.post("/tests/:id/assignments/bulk", requireAuthor, async (req, res) => {
 
     res.status(201).json(assignments);
   } catch (error) {
-    console.error("Bulk create assignments error:", error);
+    logger.error("Bulk create assignments error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create assignments" });
   }
 });
@@ -146,7 +147,7 @@ router.delete("/assignments/:id", requireAuthor, async (req, res) => {
     }
     res.json({ success: true });
   } catch (error) {
-    console.error("Delete assignment error:", error);
+    logger.error("Delete assignment error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to delete assignment" });
   }
 });
@@ -157,7 +158,7 @@ router.get("/learner/assigned-tests", requireLearner, async (req, res) => {
     const assignedTests = await storage.getAssignedTestsForUser(req.session.userId!);
     res.json(assignedTests);
   } catch (error) {
-    console.error("Get assigned tests error:", error);
+    logger.error("Get assigned tests error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch assigned tests" });
   }
 });

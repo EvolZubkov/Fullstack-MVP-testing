@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { requireAuthor } from "../../middleware/auth";
 import { checkAnswer } from "../../utils/check-answer";
@@ -334,7 +335,7 @@ router.get("/:testId", requireAuthor, async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    console.error("Test analytics error:", error);
+    logger.error("Test analytics error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to fetch test analytics" });
   }
 });

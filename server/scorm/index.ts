@@ -1,4 +1,5 @@
 import { buildZip } from "./zip";
+import { logger } from "../logger";
 import { buildTestJson, type ExportData } from "./builders/test-json";
 import { buildManifest } from "./builders/manifest";
 import { buildMetadataXml } from "./builders/metadata";
@@ -48,19 +49,19 @@ function tryReadBinaryAsset(relativePath: string): Buffer | null {
     path.resolve(process.cwd(), "scorm", "template", relativePath),
   ];
   
-  console.log("[tryReadBinaryAsset] Looking for:", relativePath);
+  logger.info("[tryReadBinaryAsset] Looking for: " + relativePath);
   
   for (const p of possiblePaths) {
     try {
       if (fs.existsSync(p)) {
-        console.log("[tryReadBinaryAsset] Found at:", p);
+        logger.info("[tryReadBinaryAsset] Found at: " + p);
         return fs.readFileSync(p);
       }
     } catch {
       continue;
     }
   }
-  console.log("[tryReadBinaryAsset] Not found:", relativePath);
+  logger.info("[tryReadBinaryAsset] Not found: " + relativePath);
   return null;
 }
 
@@ -241,7 +242,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     if (pdfBg3) files["assets/media/pdf-bg-3.png"] = pdfBg3;
     if (logoLight) files["assets/media/logo-light.png"] = logoLight;
   } catch (e) {
-    console.log("PDF assets not found, skipping");
+    logger.info("PDF assets not found, skipping");
   }
   
   for (const [zipPath, buf] of Object.entries(assets)) {

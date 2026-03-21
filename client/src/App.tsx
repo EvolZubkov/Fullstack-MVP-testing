@@ -24,6 +24,7 @@ import TakeTestPage from "@/pages/learner/take-test";
 import ResultPage from "@/pages/learner/result";
 import HistoryPage from "@/pages/learner/history";
 import { LearnerLayout } from "@/pages/learner/layout";
+import LogsPage from "@/pages/author/logs";
 
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
@@ -131,6 +132,14 @@ function Router() {
         <ProtectedRoute allowedRoles={["author"]}>
           <AuthorLayout>
             <GroupsPage />
+          </AuthorLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/author/logs">
+        <ProtectedRoute allowedRoles={["author"]}>
+          <AuthorLayout>
+            <LogsPage />
           </AuthorLayout>
         </ProtectedRoute>
       </Route>
