@@ -52,11 +52,14 @@ export async function setupVite(_server: Server, app: Express) {
         `src="/src/main.tsx?v=${BUILD_ID}"`,
       );
       let page = await vite.transformIndexHtml(url, template);
-      // Remove Vite HMR client script that causes WebSocket errors behind proxy
+      // Убираем тег <script src="/@vite/client">
       page = page.replace(/<script[^>]*src="[^"]*@vite\/client[^"]*"[^>]*><\/script>/gi, '');
-      // Log if vite client is still present (for debugging)
+      // Убираем инлайн скрипты которые импортируют @vite/client (runtime-error-plugin и др.)
+      page = page.replace(/<script[^>]*>[\s\S]*?@vite\/client[\s\S]*?<\/script>/gi, '');
       if (page.includes('@vite/client')) {
-        logger.warn('[vite] WARNING: @vite/client still present in HTML');
+        const idx = page.indexOf('@vite/client');
+        const context = page.slice(Math.max(0, idx - 150), idx + 150);
+        logger.warn('[vite] WARNING: @vite/client still present in HTML, context: ' + context);
       }
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {

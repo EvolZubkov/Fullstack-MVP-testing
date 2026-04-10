@@ -1,0 +1,555 @@
+2026-04-10 10:53:21 [INFO ] [db] Waiting for database connection...
+2026-04-10 10:53:22 [INFO ] [db] New database client connected
+2026-04-10 10:53:22 [INFO ] [db] Database connection established
+2026-04-10 10:53:34 [INFO ] [express] serving on port 5001
+2026-04-10 10:53:52 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:53:55 [INFO ] [express] GET /api/auth/me 401 in 4ms
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [auth] User logged in: admin@rt.ru (author) from 127.0.0.1
+2026-04-10 10:53:57 [INFO ] [express] POST /api/auth/login 200 in 215ms
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [express] GET /api/folders 304 in 76ms
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [db] New database client connected
+2026-04-10 10:53:57 [INFO ] [express] GET /api/topics 304 in 340ms
+2026-04-10 10:53:59 [INFO ] [express] GET /api/tests 304 in 76ms
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 10:54:09 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 10:54:10 [INFO ] [scorm-export] SCORM exported: test="Простой тест 2.5" (b895cbc0-341a-4c90-82bf-eafb01fbc648) telemetry=false by user=fa8cdce6-c13f-4cc7-8bb4-42645a31c593
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:30 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:39 [DEBUG] [db] Database client removed from pool
+2026-04-10 10:54:39 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:32:47 [INFO ] [db] New database client connected
+2026-04-10 11:32:47 [INFO ] [express] GET /api/auth/me 200 in 112ms
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [db] New database client connected
+2026-04-10 11:32:48 [INFO ] [express] GET /api/tests 304 in 349ms
+2026-04-10 11:32:48 [INFO ] [express] GET /api/topics 304 in 353ms
+2026-04-10 11:33:03 [INFO ] [db] Waiting for database connection...
+2026-04-10 11:33:03 [INFO ] [db] New database client connected
+2026-04-10 11:33:03 [INFO ] [db] Database connection established
+2026-04-10 11:33:10 [INFO ] [express] serving on port 5001
+2026-04-10 11:33:17 [INFO ] [express] GET /api/auth/me 401 in 3ms
+2026-04-10 11:33:21 [INFO ] [auth] User logged in: admin@rt.ru (author) from 127.0.0.1
+2026-04-10 11:33:21 [INFO ] [express] POST /api/auth/login 200 in 135ms
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [express] GET /api/folders 304 in 233ms
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [db] New database client connected
+2026-04-10 11:33:21 [INFO ] [express] GET /api/topics 304 in 339ms
+2026-04-10 11:33:25 [INFO ] [express] GET /api/tests 304 in 101ms
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:33:43 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:33:44 [INFO ] [scorm-export] SCORM exported: test="Тест проверки телеметрии 3" (676cd9b9-99a0-41d3-b0e1-9e5f4fce74ad) telemetry=false by user=fa8cdce6-c13f-4cc7-8bb4-42645a31c593
+2026-04-10 11:33:55 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:33:56 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:34:06 [INFO ] [express] GET /api/auth/me 304 in 4ms
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [db] New database client connected
+2026-04-10 11:34:06 [INFO ] [express] GET /api/tests 304 in 365ms
+2026-04-10 11:34:06 [INFO ] [express] GET /api/topics 304 in 368ms
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:34:13 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:34:13 [INFO ] [scorm-export] SCORM exported: test="Тест проверки телеметрии 3" (676cd9b9-99a0-41d3-b0e1-9e5f4fce74ad) telemetry=false by user=fa8cdce6-c13f-4cc7-8bb4-42645a31c593
+2026-04-10 11:34:25 [INFO ] [db] Waiting for database connection...
+2026-04-10 11:34:25 [INFO ] [db] New database client connected
+2026-04-10 11:34:25 [INFO ] [db] Database connection established
+2026-04-10 11:34:26 [INFO ] [express] serving on port 5001
+2026-04-10 11:34:29 [INFO ] [express] GET /api/auth/me 401 in 4ms
+2026-04-10 11:34:38 [INFO ] [auth] User logged in: admin@rt.ru (author) from 127.0.0.1
+2026-04-10 11:34:38 [INFO ] [express] POST /api/auth/login 200 in 110ms
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [express] GET /api/folders 304 in 185ms
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [db] New database client connected
+2026-04-10 11:34:38 [INFO ] [express] GET /api/topics 304 in 308ms
+2026-04-10 11:34:41 [INFO ] [express] GET /api/tests 304 in 60ms
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:34:46 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:34:46 [INFO ] [scorm-export] SCORM exported: test="Тест проверки телеметрии 3" (676cd9b9-99a0-41d3-b0e1-9e5f4fce74ad) telemetry=false by user=fa8cdce6-c13f-4cc7-8bb4-42645a31c593
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:16 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:16 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:35:16 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:37:32 [INFO ] [db] New database client connected
+2026-04-10 11:37:32 [INFO ] [express] GET /api/auth/me 304 in 66ms
+2026-04-10 11:37:32 [INFO ] [db] New database client connected
+2026-04-10 11:37:32 [INFO ] [db] New database client connected
+2026-04-10 11:37:32 [INFO ] [db] New database client connected
+2026-04-10 11:37:32 [INFO ] [db] New database client connected
+2026-04-10 11:37:32 [INFO ] [db] New database client connected
+2026-04-10 11:37:32 [INFO ] [db] New database client connected
+2026-04-10 11:37:32 [INFO ] [db] New database client connected
+2026-04-10 11:37:32 [INFO ] [db] New database client connected
+2026-04-10 11:37:32 [INFO ] [db] New database client connected
+2026-04-10 11:37:33 [INFO ] [db] New database client connected
+2026-04-10 11:37:33 [INFO ] [db] New database client connected
+2026-04-10 11:37:33 [INFO ] [db] New database client connected
+2026-04-10 11:37:33 [INFO ] [db] New database client connected
+2026-04-10 11:37:33 [INFO ] [db] New database client connected
+2026-04-10 11:37:33 [INFO ] [db] New database client connected
+2026-04-10 11:37:33 [INFO ] [db] New database client connected
+2026-04-10 11:37:33 [INFO ] [db] New database client connected
+2026-04-10 11:37:33 [INFO ] [db] New database client connected
+2026-04-10 11:37:33 [INFO ] [db] New database client connected
+2026-04-10 11:37:33 [INFO ] [express] GET /api/tests 304 in 337ms
+2026-04-10 11:37:33 [INFO ] [express] GET /api/topics 304 in 340ms
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:37:41 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:37:41 [INFO ] [scorm-export] SCORM exported: test="121212" (866266a3-fb76-4e1e-ac73-4605021a77f3) telemetry=false by user=fa8cdce6-c13f-4cc7-8bb4-42645a31c593
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:03 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:38:11 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:45:20 [INFO ] [db] Waiting for database connection...
+2026-04-10 11:45:20 [INFO ] [db] New database client connected
+2026-04-10 11:45:20 [INFO ] [db] Database connection established
+2026-04-10 11:45:21 [INFO ] [express] serving on port 5001
+2026-04-10 11:45:45 [INFO ] [express] GET /api/auth/me 401 in 3ms
+2026-04-10 11:45:47 [INFO ] [auth] User logged in: admin@rt.ru (author) from 127.0.0.1
+2026-04-10 11:45:47 [INFO ] [express] POST /api/auth/login 200 in 105ms
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [express] GET /api/folders 304 in 265ms
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [db] New database client connected
+2026-04-10 11:45:47 [INFO ] [express] GET /api/topics 304 in 316ms
+2026-04-10 11:45:52 [INFO ] [express] GET /api/tests 304 in 68ms
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:45:59 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:45:59 [INFO ] [scorm-export] SCORM exported: test="Тест проверки телеметрии 3" (676cd9b9-99a0-41d3-b0e1-9e5f4fce74ad) telemetry=false by user=fa8cdce6-c13f-4cc7-8bb4-42645a31c593
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:22 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:29 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:29 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:46:29 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:49:53 [INFO ] [db] Waiting for database connection...
+2026-04-10 11:49:53 [INFO ] [db] New database client connected
+2026-04-10 11:49:53 [INFO ] [db] Database connection established
+2026-04-10 11:49:54 [INFO ] [express] serving on port 5001
+2026-04-10 11:49:59 [INFO ] [db] Waiting for database connection...
+2026-04-10 11:49:59 [INFO ] [db] New database client connected
+2026-04-10 11:49:59 [INFO ] [db] Database connection established
+2026-04-10 11:49:59 [INFO ] [express] serving on port 5001
+2026-04-10 11:50:02 [INFO ] [express] GET /api/auth/me 401 in 4ms
+2026-04-10 11:50:06 [INFO ] [auth] User logged in: admin@rt.ru (author) from 127.0.0.1
+2026-04-10 11:50:06 [INFO ] [express] POST /api/auth/login 200 in 166ms
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [express] GET /api/folders 304 in 196ms
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [db] New database client connected
+2026-04-10 11:50:07 [INFO ] [express] GET /api/topics 304 in 491ms
+2026-04-10 11:50:13 [INFO ] [express] GET /api/tests 304 in 74ms
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:50:19 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:50:19 [INFO ] [scorm-export] SCORM exported: test="Тест проверки телеметрии 3" (676cd9b9-99a0-41d3-b0e1-9e5f4fce74ad) telemetry=false by user=fa8cdce6-c13f-4cc7-8bb4-42645a31c593
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:43 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:49 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:49 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:50:49 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:55:57 [INFO ] [db] Waiting for database connection...
+2026-04-10 11:55:57 [INFO ] [db] New database client connected
+2026-04-10 11:55:57 [INFO ] [db] Database connection established
+2026-04-10 11:55:57 [INFO ] [express] serving on port 5001
+2026-04-10 11:56:27 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:56:36 [INFO ] [express] GET /api/auth/me 401 in 5ms
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [auth] User logged in: admin@rt.ru (author) from 127.0.0.1
+2026-04-10 11:56:38 [INFO ] [express] POST /api/auth/login 200 in 165ms
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [express] GET /api/folders 304 in 155ms
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [db] New database client connected
+2026-04-10 11:56:38 [INFO ] [express] GET /api/topics 304 in 313ms
+2026-04-10 11:56:43 [INFO ] [express] GET /api/tests 304 in 66ms
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:56:48 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:56:49 [INFO ] [scorm-export] SCORM exported: test="Тест проверки телеметрии 3" (676cd9b9-99a0-41d3-b0e1-9e5f4fce74ad) telemetry=false by user=fa8cdce6-c13f-4cc7-8bb4-42645a31c593
+2026-04-10 11:56:49 [INFO ] [express] GET /api/tests/676cd9b9-99a0-41d3-b0e1-9e5f4fce74ad/export/scorm 200 in 375ms
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:13 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:18 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:18 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:18 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:57:45 [INFO ] [db] New database client connected
+2026-04-10 11:57:45 [INFO ] [db] New database client connected
+2026-04-10 11:57:45 [INFO ] [db] New database client connected
+2026-04-10 11:57:45 [INFO ] [db] New database client connected
+2026-04-10 11:57:45 [INFO ] [db] New database client connected
+2026-04-10 11:57:45 [INFO ] [db] New database client connected
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-1.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-1.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-2.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-2.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/pdf-bg-3.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\pdf-bg-3.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Looking for: assets/media/logo-light.png
+2026-04-10 11:57:45 [INFO ] [app] [tryReadBinaryAsset] Found at: D:\cod\Fullstack-MVP-testing\server\scorm\assets\media\logo-light.png
+2026-04-10 11:57:45 [INFO ] [scorm-export] SCORM exported: test="адаптив екат" (45701ae1-ecdc-426c-8b5f-66810bda4bda) telemetry=false by user=fa8cdce6-c13f-4cc7-8bb4-42645a31c593
+2026-04-10 11:57:45 [INFO ] [express] GET /api/tests/45701ae1-ecdc-426c-8b5f-66810bda4bda/export/scorm 200 in 393ms
+2026-04-10 11:58:15 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:58:15 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:58:15 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:58:15 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:58:15 [DEBUG] [db] Database client removed from pool
+2026-04-10 11:58:15 [DEBUG] [db] Database client removed from pool
+2026-04-10 17:03:05 [INFO ] [db] New database client connected
+2026-04-10 17:03:05 [INFO ] [express] GET /api/folders 304 in 528ms
+2026-04-10 17:03:35 [DEBUG] [db] Database client removed from pool

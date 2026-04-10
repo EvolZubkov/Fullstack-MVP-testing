@@ -13,6 +13,15 @@ import {
 } from "./db";
 import { logger } from "./logger";
 
+process.on("uncaughtException", (err) => {
+  console.error("=== UNCAUGHT EXCEPTION ===");
+  console.error(err.stack || err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("=== UNHANDLED REJECTION ===");
+  console.error(reason);
+});
 
 const app = express();
 const httpServer = createServer(app);

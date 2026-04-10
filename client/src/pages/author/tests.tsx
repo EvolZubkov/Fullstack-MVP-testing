@@ -300,7 +300,13 @@ export default function TestsPage() {
       const response = await fetch(url, {
         credentials: "include",
       });
-      if (!response.ok) throw new Error("Export failed");
+      console.log("Export response status:", response.status);
+      console.log("Export response ok:", response.ok);
+      if (!response.ok) {
+        const text = await response.text();
+        console.log("Export error body:", text);
+        throw new Error("Export failed");
+      }
 
       const blob = await response.blob();
       const disposition = response.headers.get("Content-Disposition") || "";

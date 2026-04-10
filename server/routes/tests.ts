@@ -381,7 +381,9 @@ router.get("/:id/export/scorm", requireAuthor, async (req, res) => {
     const safeTitle = test.title.replace(/[^a-zA-Zа-яА-ЯёЁ0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "") || "scorm_export";
     const safeAscii = safeTitle.replace(/[^a-zA-Z0-9_]/g, "_") || "scorm_export";
     res.setHeader("Content-Disposition", `attachment; filename="${safeAscii}.zip"; filename*=UTF-8''${encodeURIComponent(safeTitle)}.zip`);
+    res.setHeader("Content-Length", buffer.length);
     logger.info(`SCORM exported: test="${test.title}" (${test.id}) telemetry=${enableTelemetry} by user=${req.session.userId}`, "scorm-export");
+    res.send(buffer);
   } catch (error) {
     logger.error("SCORM export error: " + (error as Error).message, "scorm-export");
     res.status(500).json({ error: "Failed to export SCORM package" });

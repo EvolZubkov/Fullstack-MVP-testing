@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { logger } from "../logger";
 import { storage } from "../storage";
 import { requireAuth, requireAuthor } from "../middleware/auth";
 

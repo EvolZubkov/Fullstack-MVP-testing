@@ -357,7 +357,7 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
       avgPercent: ts.totalAttempts > 0 ? ts.totalPercent / ts.totalAttempts : 0,
     }));
 
-    // TOPIC STATS
+   // TOPIC STATS
     const topicStatsMap = new Map<string, {
       topicId: string;
       topicName: string;
@@ -367,8 +367,15 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
       failureCount: number;
     }>();
 
-    for (const attempt of lmsAttempts) {
-      const answers = await storage.getScormAnswersByAttempt(attempt.id);
+    // Загружаем все ответы параллельно — один Promise.all вместо N запросов
+    const [lmsAnswersAll, webAttemptsFullAll] = await Promise.all([
+      Promise.all(lmsAttempts.map(a => storage.getScormAnswersByAttempt(a.id))),
+      Promise.all(webAttempts.map(a => storage.getAttempt(a.id))),
+    ]);
+
+    // LMS ответы
+    for (let i = 0; i < lmsAttempts.length; i++) {
+      const answers = lmsAnswersAll[i];
       for (const ans of answers) {
         if (!ans.topicId) continue;
         const existing = topicStatsMap.get(ans.topicId) || {
@@ -386,38 +393,49 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
       }
     }
 
-    // Адаптивные web-попытки — берём из resultJson.topicResults
-    for (const attempt of webAttempts.filter(a => a.isAdaptive)) {
-      const fullAttempt = await storage.getAttempt(attempt.id);
-      if (!fullAttempt?.resultJson) continue;
-      const result = fullAttempt.resultJson as any;
-      if (result?.mode !== "adaptive") continue;
+    // Web попытки — один проход по уже загруженным данным
+    const questionIdsAll = new Set<string>();
+    const webAnswersMaps: Record<string, any>[] = [];
 
-      for (const tr of result.topicResults || []) {
-        const existing = topicStatsMap.get(tr.topicId) || {
-          topicId: tr.topicId,
-          topicName: tr.topicName || topicMap.get(tr.topicId) || "Unknown",
-          totalAnswers: 0,
-          correctAnswers: 0,
-          totalPercent: 0,
-          failureCount: 0,
-        };
-        existing.totalAnswers += tr.totalQuestionsAnswered || 0;
-        existing.correctAnswers += tr.totalCorrect || 0;
-        existing.failureCount += (tr.totalQuestionsAnswered || 0) - (tr.totalCorrect || 0);
-        topicStatsMap.set(tr.topicId, existing);
+    for (let i = 0; i < webAttempts.length; i++) {
+      const fullAttempt = webAttemptsFullAll[i];
+      const answers = (fullAttempt?.answersJson || {}) as Record<string, any>;
+      webAnswersMaps.push(answers);
+      Object.keys(answers).forEach(qId => questionIdsAll.add(qId));
+
+      // Адаптивные — берём из resultJson
+      if (webAttempts[i].isAdaptive && fullAttempt?.resultJson) {
+        const result = fullAttempt.resultJson as any;
+        if (result?.mode === "adaptive") {
+          for (const tr of result.topicResults || []) {
+            const existing = topicStatsMap.get(tr.topicId) || {
+              topicId: tr.topicId,
+              topicName: tr.topicName || topicMap.get(tr.topicId) || "Unknown",
+              totalAnswers: 0,
+              correctAnswers: 0,
+              totalPercent: 0,
+              failureCount: 0,
+            };
+            existing.totalAnswers += tr.totalQuestionsAnswered || 0;
+            existing.correctAnswers += tr.totalCorrect || 0;
+            existing.failureCount += (tr.totalQuestionsAnswered || 0) - (tr.totalCorrect || 0);
+            topicStatsMap.set(tr.topicId, existing);
+          }
+        }
       }
     }
 
-    for (const attempt of webAttempts) {
-      const fullAttempt = await storage.getAttempt(attempt.id);
-      if (!fullAttempt?.answersJson) continue;
-      const answers = fullAttempt.answersJson as Record<string, any>;
+    // Загружаем все вопросы одним запросом
+    const allQuestions = await storage.getQuestionsByIds(Array.from(questionIdsAll));
+    const questionMap = new Map(allQuestions.map(q => [q.id, q]));
 
-      const questionIds = Object.keys(answers);
-      const questions = await storage.getQuestionsByIds(questionIds);
-
-      for (const q of questions) {
+    // Стандартные web попытки — считаем по ответам
+    for (let i = 0; i < webAttempts.length; i++) {
+      if (webAttempts[i].isAdaptive) continue;
+      const answers = webAnswersMaps[i];
+      for (const [qId, userAnswer] of Object.entries(answers)) {
+        const q = questionMap.get(qId);
+        if (!q) continue;
         const existing = topicStatsMap.get(q.topicId) || {
           topicId: q.topicId,
           topicName: topicMap.get(q.topicId) || "Unknown",
@@ -427,7 +445,7 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
           failureCount: 0,
         };
         existing.totalAnswers++;
-        const isCorrect = checkAnswer(q, answers[q.id]) === 1;
+        const isCorrect = checkAnswer(q, userAnswer) === 1;
         if (isCorrect) existing.correctAnswers++;
         else existing.failureCount++;
         topicStatsMap.set(q.topicId, existing);
