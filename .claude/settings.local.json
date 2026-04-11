@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vitest:*)",
+      "Bash(grep -rn \"dataJson\\\\|correctJson\\\\|correctIndex\\\\|correctIndices\\\\|correctOrder\" shared/ server/storage*)"
+    ]
+  }
+}

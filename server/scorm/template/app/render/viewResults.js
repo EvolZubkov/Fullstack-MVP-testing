@@ -116,18 +116,29 @@ function renderViewResults() {
 
   html +=   '</div>';
 
-  // Recommended Courses Section (только для непройденных тем)
-  var failedTopics = results.topicResults.filter(function(tr) {
-    return tr.passed === false && tr.recommendedCourses && tr.recommendedCourses.length > 0;
-  });
+  // Recommended Courses Section — читаем курсы из TEST_DATA.sections (надёжно),
+  // с fallback на сохранённые topicResults (для совместимости)
+  var failedTopics = results.topicResults
+    .map(function(tr) {
+      var section = TEST_DATA.sections.find(function(s) { return s.topicId === tr.topicId; });
+      var courses = (section && section.recommendedCourses && section.recommendedCourses.length > 0)
+        ? section.recommendedCourses
+        : (tr.recommendedCourses || []);
+      return { tr: tr, courses: courses };
+    })
+    .filter(function(item) {
+      return item.tr.passed === false && item.courses.length > 0;
+    });
 
   if (failedTopics.length > 0) {
     html += '<div class="results-section-title">Рекомендуемые курсы</div>';
     html += '<div style="margin-bottom:14px;color:hsl(var(--muted-foreground));font-size:14px;">';
     html += 'Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.';
     html += '</div>';
-    
-    failedTopics.forEach(function(tr) {
+
+    failedTopics.forEach(function(item) {
+      var tr = item.tr;
+      var courses = item.courses;
       html += '<div class="card" style="padding:18px;margin-bottom:12px;">';
       html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">';
       html += '<div class="topic-icon is-fail">';
@@ -137,8 +148,8 @@ function renderViewResults() {
       html += '</div>';
       html += '<div class="topic-name">' + escapeHtml(tr.topicName) + '</div>';
       html += '</div>';
-      
-      tr.recommendedCourses.forEach(function(course) {
+
+      courses.forEach(function(course) {
         html += '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:hsl(var(--muted)/.5);border-radius:8px;margin-top:8px;">';
         html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="hsl(var(--primary))" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
         html += '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>';
@@ -151,7 +162,7 @@ function renderViewResults() {
         html += '</svg>';
         html += '</div>';
       });
-      
+
       html += '</div>';
     });
   }

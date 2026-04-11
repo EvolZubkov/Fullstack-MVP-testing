@@ -1532,8 +1532,16 @@ interface QuestionInputProps {
   correctAnswer?: any;
 }
 
+const QUESTION_HINTS: Record<string, string> = {
+  single: "Выберите только один правильный ответ.",
+  multiple: "Выберите один или несколько правильных ответов.",
+  ranking: "Расставьте элементы в правильной последовательности. Для этого зажмите нужный элемент и передвиньте.",
+  matching: "Расставьте элементы в правильной последовательности. Для этого зажмите нужный элемент и передвиньте.",
+};
+
 function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = false, showCorrectAnswer = false, correctAnswer }: QuestionInputProps) {
   const data = question.dataJson as any;
+  const hint = QUESTION_HINTS[question.type];
 
   // Single choice
   if (question.type === "single") {
@@ -1542,7 +1550,9 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
     const correctIndex = correctAnswer?.correctIndex;
 
     return (
-      <RadioGroup
+      <>
+        {hint && <p className="text-sm text-muted-foreground -mt-1 mb-1">{hint}</p>}
+        <RadioGroup
         value={answer !== undefined && answer !== null ? String(answer) : ""}
         onValueChange={(val) => !disabled && onAnswer(Number(val))}
         className="space-y-3"
@@ -1590,6 +1600,7 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
           );
         })}
       </RadioGroup>
+      </>
     );
   }
 
@@ -1610,7 +1621,9 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
     };
 
     return (
-      <div className="space-y-3">
+      <>
+        {hint && <p className="text-sm text-muted-foreground -mt-1 mb-1">{hint}</p>}
+        <div className="space-y-3">
         {displayOrder.map((originalIndex: number, displayIndex: number) => {
           const isSelected = selected.includes(originalIndex);
           const isCorrect = showCorrectAnswer && correctIndices.includes(originalIndex);
@@ -1660,37 +1673,44 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
             </div>
           );
         })}
-      </div>
+        </div>
+      </>
     );
   }
 
   // Matching with DnD
   if (question.type === "matching") {
     return (
-      <MatchingQuestion
-        question={question}
-        answer={answer}
-        onAnswer={disabled ? () => { } : onAnswer}
-        shuffleMapping={shuffleMapping}
-        disabled={disabled}
-        showCorrectAnswer={showCorrectAnswer}
-        correctAnswer={correctAnswer}
-      />
+      <>
+        {hint && <p className="text-sm text-muted-foreground -mt-1 mb-1">{hint}</p>}
+        <MatchingQuestion
+          question={question}
+          answer={answer}
+          onAnswer={disabled ? () => { } : onAnswer}
+          shuffleMapping={shuffleMapping}
+          disabled={disabled}
+          showCorrectAnswer={showCorrectAnswer}
+          correctAnswer={correctAnswer}
+        />
+      </>
     );
   }
 
   // Ranking with DnD
   if (question.type === "ranking") {
     return (
-      <RankingQuestion
-        question={question}
-        answer={answer}
-        onAnswer={disabled ? () => { } : onAnswer}
-        shuffleMapping={shuffleMapping}
-        disabled={disabled}
-        showCorrectAnswer={showCorrectAnswer}
-        correctAnswer={correctAnswer}
-      />
+      <>
+        {hint && <p className="text-sm text-muted-foreground -mt-1 mb-1">{hint}</p>}
+        <RankingQuestion
+          question={question}
+          answer={answer}
+          onAnswer={disabled ? () => { } : onAnswer}
+          shuffleMapping={shuffleMapping}
+          disabled={disabled}
+          showCorrectAnswer={showCorrectAnswer}
+          correctAnswer={correctAnswer}
+        />
+      </>
     );
   }
 

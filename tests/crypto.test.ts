@@ -14,40 +14,40 @@ describe("encryptEmail / decryptEmail", () => {
   it("encrypts and decrypts back to original email", async () => {
     const { encryptEmail, decryptEmail } = await getCrypto();
     const email = "kate@example.com";
-    const encrypted = encryptEmail(email);
+    const encrypted = await encryptEmail(email);
     expect(encrypted).not.toBe(email);
-    expect(decryptEmail(encrypted)).toBe(email);
+    expect(await decryptEmail(encrypted)).toBe(email);
   });
 
   it("normalizes to lowercase before encrypting", async () => {
     const { encryptEmail, decryptEmail } = await getCrypto();
-    const encrypted = encryptEmail("Kate@Example.COM");
-    expect(decryptEmail(encrypted)).toBe("kate@example.com");
+    const encrypted = await encryptEmail("Kate@Example.COM");
+    expect(await decryptEmail(encrypted)).toBe("kate@example.com");
   });
 
   it("trims whitespace before encrypting", async () => {
     const { encryptEmail, decryptEmail } = await getCrypto();
-    const encrypted = encryptEmail("  kate@example.com  ");
-    expect(decryptEmail(encrypted)).toBe("kate@example.com");
+    const encrypted = await encryptEmail("  kate@example.com  ");
+    expect(await decryptEmail(encrypted)).toBe("kate@example.com");
   });
 
   it("produces same ciphertext for same email (deterministic)", async () => {
     const { encryptEmail } = await getCrypto();
-    const e1 = encryptEmail("same@email.com");
-    const e2 = encryptEmail("same@email.com");
+    const e1 = await encryptEmail("same@email.com");
+    const e2 = await encryptEmail("same@email.com");
     expect(e1).toBe(e2);
   });
 
   it("produces different ciphertext for different emails", async () => {
     const { encryptEmail } = await getCrypto();
-    const e1 = encryptEmail("alice@email.com");
-    const e2 = encryptEmail("bob@email.com");
+    const e1 = await encryptEmail("alice@email.com");
+    const e2 = await encryptEmail("bob@email.com");
     expect(e1).not.toBe(e2);
   });
 
   it("decryptEmail returns empty string for invalid input", async () => {
     const { decryptEmail } = await getCrypto();
-    expect(decryptEmail("not-valid-ciphertext")).toBe("");
+    expect(await decryptEmail("not-valid-ciphertext")).toBe("");
   });
 });
 

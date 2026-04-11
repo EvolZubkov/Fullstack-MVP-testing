@@ -164,17 +164,21 @@ describe("Topics routes", () => {
 
   it("GET /:topicId/difficulty-distribution — returns distribution", async () => {
     storageMock.getQuestionsByTopic.mockResolvedValue([
-      { difficulty: 20 }, // easy
-      { difficulty: 50 }, // medium
-      { difficulty: 80 }, // hard
+      { difficulty: 20 }, // easy (≤33)
+      { difficulty: 50 }, // medium (34–66)
+      { difficulty: 80 }, // hard (>66)
       { difficulty: null }, // defaults to 50 → medium
     ]);
     const res = await asAuthor(request(app).get("/api/topics/t1/difficulty-distribution"));
     expect(res.status).toBe(200);
-    expect(res.body.total).toBe(4);
-    expect(res.body.distribution.easy).toBe(1);
-    expect(res.body.distribution.medium).toBe(2);
-    expect(res.body.distribution.hard).toBe(1);
+    expect(res.body.totalQuestions).toBe(4);
+    expect(res.body.histogram).toHaveLength(10);
+    const easy = res.body.suggestedLevels.find((l: any) => l.levelName === "Лёгкий");
+    const medium = res.body.suggestedLevels.find((l: any) => l.levelName === "Средний");
+    const hard = res.body.suggestedLevels.find((l: any) => l.levelName === "Сложный");
+    expect(easy.questionCount).toBe(1);
+    expect(medium.questionCount).toBe(2);
+    expect(hard.questionCount).toBe(1);
   });
 });
 

@@ -104,7 +104,9 @@ router.get("/combined", requireAuthor, async (req: Request, res: Response) => {
     // Для адаптивных — отдельная метрика
     const adaptiveAttempts = combined.filter(a => a.isAdaptive);
     const adaptivePassed = adaptiveAttempts.filter(a => a.resultPassed).length;
-    
+
+    const uniqueWebUsers = new Set(webAttempts.map(a => a.userId)).size;
+    const uniqueLmsUsers = new Set(lmsAttempts.map(a => a.lmsUserId).filter(Boolean)).size;
 
     res.json({
       summary: {
