@@ -135,6 +135,121 @@ ${resetLink}
   }
 }
 
+export async function sendAssignmentEmail(opts: {
+  to: string;
+  userName?: string;
+  testTitle: string;
+  testDescription?: string | null;
+  dueDate?: Date | null;
+  magicLink: string;
+}): Promise<boolean> {
+  const transport = getTransporter();
+
+  const dueDateStr = opts.dueDate
+    ? opts.dueDate.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" })
+    : null;
+
+  if (!transport) {
+    logger.info("===========================================");
+    logger.info("ASSIGNMENT MAGIC LINK (SMTP not configured):");
+    logger.info(`Test: ${opts.testTitle}`);
+    logger.info(`To: ${opts.to}`);
+    logger.info(`Link: ${opts.magicLink}`);
+    logger.info("===========================================");
+    return false;
+  }
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+    .button { display: inline-block; background: #2563eb; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-size: 16px; font-weight: 600; }
+    .meta { background: #e5e7eb; border-radius: 6px; padding: 14px 18px; margin: 16px 0; font-size: 14px; }
+    .meta p { margin: 4px 0; }
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
+    .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>${APP_NAME}</h1>
+    </div>
+    <div class="content">
+      <h2>Вам назначен тест</h2>
+      <p>Здравствуйте${opts.userName ? `, ${opts.userName}` : ""}!</p>
+      <p>Вам назначено прохождение теста:</p>
+      <div class="meta">
+        <p><strong>📋 Тест:</strong> ${opts.testTitle}</p>
+        ${opts.testDescription ? `<p><strong>📝 Описание:</strong> ${opts.testDescription}</p>` : ""}
+        ${dueDateStr ? `<p><strong>📅 Срок сдачи:</strong> ${dueDateStr}</p>` : ""}
+      </div>
+      <p>Для прохождения теста нажмите на кнопку ниже — вход произойдёт автоматически, пароль не требуется:</p>
+      <p style="text-align: center;">
+        <a href="${opts.magicLink}" class="button">Пройти тест</a>
+      </p>
+      <p style="font-size:13px;color:#666;">Или скопируйте ссылку в браузер:</p>
+      <p style="word-break: break-all; background: #e5e7eb; padding: 10px; border-radius: 4px; font-size: 13px;">
+        ${opts.magicLink}
+      </p>
+      <div class="warning">
+        ⚠️ Ссылка персональная — не передавайте её другим людям.${dueDateStr ? ` Ссылка действительна до ${dueDateStr}.` : ""}
+      </div>
+    </div>
+    <div class="footer">
+      <p>Это автоматическое сообщение, не отвечайте на него.</p>
+      <p>© ${new Date().getFullYear()} ${APP_NAME}</p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  const text = `
+Вам назначен тест — ${APP_NAME}
+
+Здравствуйте${opts.userName ? `, ${opts.userName}` : ""}!
+
+Вам назначено прохождение теста: ${opts.testTitle}
+${opts.testDescription ? `Описание: ${opts.testDescription}\n` : ""}${dueDateStr ? `Срок сдачи: ${dueDateStr}\n` : ""}
+Для прохождения перейдите по ссылке (пароль не требуется):
+${opts.magicLink}
+
+Ссылка персональная — не передавайте её другим.
+
+---
+Это автоматическое сообщение, не отвечайте на него.
+© ${new Date().getFullYear()} ${APP_NAME}
+  `;
+
+  try {
+    await transport.sendMail({
+      from: `"${APP_NAME}" <${SMTP_FROM}>`,
+      to: opts.to,
+      subject: `Вам назначен тест: ${opts.testTitle}`,
+      text,
+      html,
+    });
+    logger.info(`Assignment email sent to ${opts.to} for test "${opts.testTitle}"`);
+    return true;
+  } catch (error) {
+    logger.error("Failed to send assignment email: " + (error as Error).message);
+    logger.info("===========================================");
+    logger.info("ASSIGNMENT MAGIC LINK (email send failed):");
+    logger.info(`Test: ${opts.testTitle}`);
+    logger.info(`To: ${opts.to}`);
+    logger.info(`Link: ${opts.magicLink}`);
+    logger.info("===========================================");
+    return false;
+  }
+}
+
 export async function verifySmtpConnection(): Promise<boolean> {
   const transport = getTransporter();
   if (!transport) return false;

@@ -187,10 +187,13 @@ export default function QuestionsPage() {
       if (!response.ok) throw new Error("Import failed");
       return response.json();
     },
-    onSuccess: (data: { imported: number; errors: string[] }) => {
+    onSuccess: (data: { imported: number; skipped?: number; errors: string[] }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      let description = `${t.questions.importedCount} ${data.imported}`;
+      let description = `Добавлено: ${data.imported}`;
+      if (data.skipped && data.skipped > 0) {
+        description += `. Пропущено дублей: ${data.skipped}`;
+      }
       if (data.errors.length > 0) {
         description += `. ${t.questions.importErrors} ${data.errors.length}`;
       }

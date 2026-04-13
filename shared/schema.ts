@@ -45,8 +45,21 @@ export const testAssignments = pgTable("test_assignments", {
   userId: varchar("user_id", { length: 36 }), // nullable - если назначено группе
   groupId: varchar("group_id", { length: 36 }), // nullable - если назначено пользователю
   dueDate: timestamp("due_date"), // срок выполнения
+  linkExpiresAt: timestamp("link_expires_at"), // срок жизни magic link (если null → dueDate или +30 дней)
   assignedAt: timestamp("assigned_at").notNull().defaultNow(),
   assignedBy: varchar("assigned_by", { length: 36 }).notNull(),
+});
+
+// Magic-link токены для доступа к тесту без пароля
+export const assignmentAccessTokens = pgTable("assignment_access_tokens", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  assignmentId: varchar("assignment_id", { length: 36 }).notNull(),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  testId: varchar("test_id", { length: 36 }).notNull(),
+  tokenHash: text("token_hash").notNull().unique(), // SHA-256 от случайного токена
+  expiresAt: timestamp("expires_at").notNull(),
+  revokedAt: timestamp("revoked_at"), // NULL = активен
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 // Токены сброса пароля
@@ -97,10 +110,19 @@ export const questions = pgTable("questions", {
   feedbackMode: text("feedback_mode", { enum: ["general", "conditional"] }).notNull().default("general"),
   feedbackCorrect: text("feedback_correct"),
   feedbackIncorrect: text("feedback_incorrect"),
+  contentHash: text("content_hash"),
+});
+
+export const testFolders = pgTable("test_folders", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  name: text("name").notNull(),
+  parentId: varchar("parent_id", { length: 36 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
 export const tests = pgTable("tests", {
   id: varchar("id", { length: 36 }).primaryKey(),
+  folderId: varchar("folder_id", { length: 36 }),
   title: text("title").notNull(),
   description: text("description"),
   mode: text("mode", { enum: ["standard", "adaptive"] }).notNull().default("standard"),
@@ -114,6 +136,8 @@ export const tests = pgTable("tests", {
   maxAttempts: integer("max_attempts"),
   showCorrectAnswers: boolean("show_correct_answers").notNull().default(false),
   startPageContent: text("start_page_content"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const testSections = pgTable("test_sections", {
@@ -164,6 +188,7 @@ export const attempts = pgTable("attempts", {
   finishedAt: timestamp("finished_at"),
 });
 
+export const insertTestFolderSchema = createInsertSchema(testFolders).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertFolderSchema = createInsertSchema(folders).omit({ id: true });
 export const insertTopicSchema = createInsertSchema(topics).omit({ id: true });
@@ -180,12 +205,16 @@ export const insertGroupSchema = createInsertSchema(groups).omit({ id: true });
 export const insertUserGroupSchema = createInsertSchema(userGroups).omit({ id: true });
 export const insertTestAssignmentSchema = createInsertSchema(testAssignments).omit({ id: true });
 export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({ id: true });
+export const insertAssignmentAccessTokenSchema = createInsertSchema(assignmentAccessTokens).omit({ id: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
 export type InsertFolder = z.infer<typeof insertFolderSchema>;
 export type Folder = typeof folders.$inferSelect;
+
+export type InsertTestFolder = z.infer<typeof insertTestFolderSchema>;
+export type TestFolder = typeof testFolders.$inferSelect;
 
 export type InsertTopic = z.infer<typeof insertTopicSchema>;
 export type Topic = typeof topics.$inferSelect;
@@ -225,6 +254,9 @@ export type TestAssignment = typeof testAssignments.$inferSelect;
 
 export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
+export type InsertAssignmentAccessToken = z.infer<typeof insertAssignmentAccessTokenSchema>;
+export type AssignmentAccessToken = typeof assignmentAccessTokens.$inferSelect;
 
 export const passRuleSchema = z.object({
   type: z.enum(["percent", "absolute"]),

@@ -51,20 +51,11 @@ export function log(message: string, source = "express") {
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api") && !path.startsWith("/api/logs")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      // Не логируем тело ответа — может быть огромным и вызвать петлю
-      log(logLine);
+      log(`${req.method} ${path} ${res.statusCode} in ${duration}ms`);
     }
   });
 
@@ -72,6 +63,14 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Warn about weak secrets in production
+  if (process.env.NODE_ENV === "production") {
+    const weakSecrets = ["scorm-test-constructor-secret", "your-secret-key-change-in-production", ""];
+    if (weakSecrets.includes(process.env.SESSION_SECRET ?? "")) {
+      logger.warn("SESSION_SECRET is not set or uses a default value — set a strong secret in production!", "security");
+    }
+  }
+
   // Wait for database to be available before starting
   await waitForDatabase();
   await seedDatabase();

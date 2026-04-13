@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(npx vitest:*)",
-      "Bash(grep -rn \"dataJson\\\\|correctJson\\\\|correctIndex\\\\|correctIndices\\\\|correctOrder\" shared/ server/storage*)"
+      "Bash(grep -rn \"dataJson\\\\|correctJson\\\\|correctIndex\\\\|correctIndices\\\\|correctOrder\" shared/ server/storage*)",
+      "Bash(npm install:*)",
+      "Bash(node -e ':*)",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

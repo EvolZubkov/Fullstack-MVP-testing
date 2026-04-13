@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
@@ -11,6 +11,9 @@ import {
   Users,
   Loader2,
   RotateCcw,
+  Upload,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -108,6 +111,21 @@ export default function UsersPage() {
   });
   const [newPassword, setNewPassword] = useState("");
 
+  // Bulk import state
+  type PreviewRow = {
+    idx: number; email: string; name: string | null; role: string;
+    groupName: string | null; groupId: string | null; groupFound: boolean;
+    status: "new" | "duplicate" | "error"; error?: string; existingId?: string;
+    duplicateAction?: "skip" | "update";
+  };
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [bulkStep, setBulkStep] = useState<"upload" | "preview" | "done">("upload");
+  const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
+  const [sendInvites, setSendInvites] = useState(true);
+  const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number; invitesSent: number; errors: string[] } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Fetch users
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["/api/users"],
@@ -150,6 +168,49 @@ export default function UsersPage() {
       });
     },
   });
+
+  // Bulk preview mutation
+  const bulkPreviewMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/users/bulk-preview", { method: "POST", credentials: "include", body: fd });
+      if (!res.ok) throw new Error((await res.json()).error || "Parse error");
+      return res.json() as Promise<PreviewRow[]>;
+    },
+    onSuccess: (rows) => {
+      setPreviewRows(rows.map(r => ({ ...r, duplicateAction: "skip" })));
+      setBulkStep("preview");
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка", description: e.message }),
+  });
+
+  const bulkImportMutation = useMutation({
+    mutationFn: async ({ rows, sendInvites }: { rows: PreviewRow[]; sendInvites: boolean }) => {
+      const res = await fetch("/api/users/bulk-import", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows, sendInvites }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error || "Import error");
+      return res.json();
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      setImportResult(result);
+      setBulkStep("done");
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: "Ошибка импорта", description: e.message }),
+  });
+
+  const handleBulkFile = (file: File) => bulkPreviewMutation.mutate(file);
+
+  const handleBulkClose = () => {
+    setIsBulkOpen(false);
+    setBulkStep("upload");
+    setPreviewRows([]);
+    setImportResult(null);
+  };
 
   // Update user mutation
   const updateUserMutation = useMutation({
@@ -380,10 +441,16 @@ export default function UsersPage() {
           <h1 className="text-3xl font-bold">{t.users.title}</h1>
           <p className="text-muted-foreground">{t.users.description}</p>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          {t.users.createUser}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setIsBulkOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Загрузить CSV
+          </Button>
+          <Button onClick={() => setIsCreateOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            {t.users.createUser}
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -823,6 +890,208 @@ export default function UsersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk Import Dialog */}
+      <Dialog open={isBulkOpen} onOpenChange={(o) => !o && handleBulkClose()}>
+        <DialogContent className="!max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {bulkStep === "upload" && "Массовая загрузка пользователей"}
+              {bulkStep === "preview" && `Предпросмотр: ${previewRows.length} строк`}
+              {bulkStep === "done" && "Импорт завершён"}
+            </DialogTitle>
+            <DialogDescription>
+              {bulkStep === "upload" && "Загрузите файл CSV или Excel. Обязательные колонки: email. Необязательные: name, role (learner/author)."}
+              {bulkStep === "preview" && "Проверьте данные перед импортом. Для дублей выберите действие."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Step: Upload */}
+          {bulkStep === "upload" && (
+            <div className="space-y-4">
+              <div
+                className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-colors ${isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/30 hover:border-primary/50"}`}
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  const file = e.dataTransfer.files[0];
+                  if (file) handleBulkFile(file);
+                }}
+              >
+                {bulkPreviewMutation.isPending ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Анализируем файл...</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
+                    <p className="font-medium">Перетащите файл или нажмите для выбора</p>
+                    <p className="text-sm text-muted-foreground">CSV, XLSX, XLS — до 500 строк</p>
+                  </div>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleBulkFile(f); }}
+                />
+              </div>
+              <div className="flex justify-between items-center pt-2">
+                <a
+                  href="/api/users/bulk-template"
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  Скачать шаблон Excel
+                </a>
+                <Button variant="outline" onClick={handleBulkClose}>Отмена</Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step: Preview */}
+          {bulkStep === "preview" && (
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className="flex gap-3 text-sm">
+                <span className="flex items-center gap-1.5 text-green-600">
+                  <span className="h-2 w-2 rounded-full bg-green-500 inline-block" />
+                  Новых: {previewRows.filter(r => r.status === "new").length}
+                </span>
+                <span className="flex items-center gap-1.5 text-yellow-600">
+                  <span className="h-2 w-2 rounded-full bg-yellow-500 inline-block" />
+                  Дублей: {previewRows.filter(r => r.status === "duplicate").length}
+                </span>
+                <span className="flex items-center gap-1.5 text-red-600">
+                  <span className="h-2 w-2 rounded-full bg-red-500 inline-block" />
+                  Ошибок: {previewRows.filter(r => r.status === "error").length}
+                </span>
+              </div>
+
+              {/* Table */}
+              <div className="border rounded-md overflow-hidden max-h-[45vh] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 sticky top-0">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium">Email</th>
+                      <th className="text-left px-3 py-2 font-medium">Имя</th>
+                      <th className="text-left px-3 py-2 font-medium">Роль</th>
+                      <th className="text-left px-3 py-2 font-medium">Группа</th>
+                      <th className="text-left px-3 py-2 font-medium">Статус</th>
+                      <th className="text-left px-3 py-2 font-medium">Действие</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewRows.map((row, i) => (
+                      <tr key={row.idx} className={i % 2 === 0 ? "bg-background" : "bg-muted/20"}>
+                        <td className="px-3 py-2 font-mono text-xs">{row.email}</td>
+                        <td className="px-3 py-2 text-muted-foreground">{row.name || "—"}</td>
+                        <td className="px-3 py-2">
+                          <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{row.role}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          {row.groupName ? (
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${row.groupFound ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"}`}
+                              title={row.groupFound ? undefined : "Группа не найдена — будет пропущена"}>
+                              {row.groupName}{!row.groupFound && " ⚠"}
+                            </span>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-3 py-2">
+                          {row.status === "new" && <span className="text-xs text-green-600 font-medium">Новый</span>}
+                          {row.status === "duplicate" && <span className="text-xs text-yellow-600 font-medium">Дубль</span>}
+                          {row.status === "error" && <span className="text-xs text-red-600 font-medium" title={row.error}>Ошибка</span>}
+                        </td>
+                        <td className="px-3 py-2">
+                          {row.status === "duplicate" && (
+                            <select
+                              className="text-xs border rounded px-1.5 py-1 bg-background"
+                              value={row.duplicateAction}
+                              onChange={(e) => setPreviewRows(prev => prev.map(r =>
+                                r.idx === row.idx ? { ...r, duplicateAction: e.target.value as any } : r
+                              ))}
+                            >
+                              <option value="skip">Пропустить</option>
+                              <option value="update">Обновить</option>
+                            </select>
+                          )}
+                          {row.status === "new" && <span className="text-xs text-muted-foreground">Создать</span>}
+                          {row.status === "error" && <span className="text-xs text-muted-foreground">Пропустить</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Send invites toggle */}
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="sendInvites"
+                  checked={sendInvites}
+                  onChange={(e) => setSendInvites(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <label htmlFor="sendInvites" className="text-sm">
+                  Отправить письма-приглашения с ссылкой для установки пароля
+                </label>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setBulkStep("upload")}>Назад</Button>
+                <Button
+                  onClick={() => bulkImportMutation.mutate({ rows: previewRows, sendInvites })}
+                  disabled={bulkImportMutation.isPending || previewRows.filter(r => r.status !== "error").length === 0}
+                >
+                  {bulkImportMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Импортировать ({previewRows.filter(r => r.status !== "error").length} строк)
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+
+          {/* Step: Done */}
+          {bulkStep === "done" && importResult && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-4 gap-3 text-center">
+                <div className="border rounded-lg p-4">
+                  <p className="text-2xl font-bold text-green-600">{importResult.created}</p>
+                  <p className="text-sm text-muted-foreground">Создано</p>
+                </div>
+                <div className="border rounded-lg p-4">
+                  <p className="text-2xl font-bold text-blue-600">{importResult.updated}</p>
+                  <p className="text-sm text-muted-foreground">Обновлено</p>
+                </div>
+                <div className="border rounded-lg p-4">
+                  <p className="text-2xl font-bold text-muted-foreground">{importResult.skipped}</p>
+                  <p className="text-sm text-muted-foreground">Пропущено</p>
+                </div>
+                <div className="border rounded-lg p-4">
+                  <p className="text-2xl font-bold text-purple-600">{importResult.invitesSent}</p>
+                  <p className="text-sm text-muted-foreground">Писем отправлено</p>
+                </div>
+              </div>
+              {importResult.errors.length > 0 && (
+                <div className="border border-destructive/30 rounded-md p-3 space-y-1">
+                  <p className="text-sm font-medium text-destructive">Ошибки:</p>
+                  {importResult.errors.map((e, i) => (
+                    <p key={i} className="text-xs text-muted-foreground">{e}</p>
+                  ))}
+                </div>
+              )}
+              <DialogFooter>
+                <Button onClick={handleBulkClose}>Закрыть</Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

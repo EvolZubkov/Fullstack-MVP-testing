@@ -6,6 +6,9 @@ import {
   Trash2,
   Loader2,
   Calendar,
+  Link,
+  RefreshCw,
+  Ban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,9 +61,12 @@ interface Assignment {
   userId: string | null;
   groupId: string | null;
   dueDate: string | null;
+  linkExpiresAt: string | null;
   assignedAt: string;
   user?: User | null;
   group?: Group | null;
+  tokenStatus?: "active" | "expired" | "revoked" | "none";
+  tokenId?: string | null;
 }
 
 interface AssignTestDialogProps {
@@ -83,6 +89,16 @@ export function AssignTestDialog({
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState<string>("");
+  const [linkExpiresAt, setLinkExpiresAt] = useState<string>("");
+
+  // Sync linkExpiresAt with dueDate unless manually overridden
+  const handleDueDateChange = (value: string) => {
+    setDueDate(value);
+    // Auto-fill link expiry from due date if not manually set yet
+    if (!linkExpiresAt || linkExpiresAt === dueDate) {
+      setLinkExpiresAt(value);
+    }
+  };
 
   // Fetch current assignments
   const { data: assignments = [], isLoading: assignmentsLoading } = useQuery<Assignment[]>({
@@ -104,7 +120,7 @@ export function AssignTestDialog({
 
   // Assign mutation
   const assignMutation = useMutation({
-    mutationFn: async (data: { userIds?: string[]; groupIds?: string[]; dueDate?: string }) => {
+    mutationFn: async (data: { userIds?: string[]; groupIds?: string[]; dueDate?: string; linkExpiresAt?: string }) => {
       const res = await fetch(`/api/tests/${testId}/assignments/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,6 +135,7 @@ export function AssignTestDialog({
       setSelectedUserIds([]);
       setSelectedGroupIds([]);
       setDueDate("");
+      setLinkExpiresAt("");
       setActiveTab("current");
       toast({ title: t.assignments.assigned, description: t.assignments.assignedDescription });
     },
@@ -146,11 +163,50 @@ export function AssignTestDialog({
     },
   });
 
+  // Revoke token mutation
+  const revokeTokenMutation = useMutation({
+    mutationFn: async (tokenId: string) => {
+      const res = await fetch(`/api/assignment-tokens/${tokenId}/revoke`, {
+        method: "PATCH",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to revoke");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
+      toast({ title: "Ссылка отозвана", description: "Токен доступа деактивирован." });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: t.common.error, description: "Не удалось отозвать ссылку." });
+    },
+  });
+
+  // Resend email mutation
+  const resendMutation = useMutation({
+    mutationFn: async (assignmentId: string) => {
+      const res = await fetch(`/api/assignments/${assignmentId}/resend`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to resend");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
+      toast({ title: "Письмо отправлено", description: "Новая ссылка отправлена пользователю." });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: t.common.error, description: "Не удалось отправить письмо." });
+    },
+  });
+
   const handleAssignUsers = () => {
     if (selectedUserIds.length === 0) return;
     assignMutation.mutate({
       userIds: selectedUserIds,
       dueDate: dueDate || undefined,
+      linkExpiresAt: linkExpiresAt || undefined,
     });
   };
 
@@ -159,6 +215,7 @@ export function AssignTestDialog({
     assignMutation.mutate({
       groupIds: selectedGroupIds,
       dueDate: dueDate || undefined,
+      linkExpiresAt: linkExpiresAt || undefined,
     });
   };
 
@@ -187,9 +244,48 @@ export function AssignTestDialog({
     });
   };
 
+  const tokenStatusBadge = (status?: string) => {
+    switch (status) {
+      case "active":
+        return <Badge variant="default" className="bg-green-600 text-white">Активна</Badge>;
+      case "expired":
+        return <Badge variant="secondary">Истекла</Badge>;
+      case "revoked":
+        return <Badge variant="destructive">Отозвана</Badge>;
+      default:
+        return <Badge variant="outline">Нет</Badge>;
+    }
+  };
+
+  const dateFields = (tabId: string) => (
+    <div className="flex items-end gap-4">
+      <div className="flex-1">
+        <Label htmlFor={`due-date-${tabId}`}>{t.assignments.dueDate}</Label>
+        <Input
+          id={`due-date-${tabId}`}
+          type="date"
+          value={dueDate}
+          onChange={(e) => handleDueDateChange(e.target.value)}
+          className="mt-1"
+        />
+      </div>
+      <div className="flex-1">
+        <Label htmlFor={`link-expires-${tabId}`}>Ссылка активна до</Label>
+        <Input
+          id={`link-expires-${tabId}`}
+          type="date"
+          value={linkExpiresAt}
+          onChange={(e) => setLinkExpiresAt(e.target.value)}
+          className="mt-1"
+          placeholder="По умолчанию: +30 дней"
+        />
+      </div>
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>{t.assignments.manageAssignments}</DialogTitle>
           <DialogDescription>{testTitle}</DialogDescription>
@@ -230,8 +326,9 @@ export function AssignTestDialog({
                       <TableHead>{t.assignments.assignedTo}</TableHead>
                       <TableHead>Тип</TableHead>
                       <TableHead>{t.assignments.dueDate}</TableHead>
-                      <TableHead>{t.assignments.assignedAt}</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
+                      <TableHead>Ссылка до</TableHead>
+                      <TableHead>Статус ссылки</TableHead>
+                      <TableHead className="w-[110px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -275,18 +372,56 @@ export function AssignTestDialog({
                             <span className="text-muted-foreground">{t.assignments.noDueDate}</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {formatDate(assignment.assignedAt)}
+                        <TableCell>
+                          {assignment.linkExpiresAt ? (
+                            <span className="flex items-center gap-1 text-sm">
+                              <Link className="h-3 w-3" />
+                              {formatDate(assignment.linkExpiresAt)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeMutation.mutate(assignment.id)}
-                            disabled={removeMutation.isPending}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
+                          {tokenStatusBadge(assignment.tokenStatus)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            {/* Resend — for user assignments only */}
+                            {assignment.userId && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Отправить письмо повторно"
+                                onClick={() => resendMutation.mutate(assignment.id)}
+                                disabled={resendMutation.isPending}
+                              >
+                                <RefreshCw className="h-4 w-4 text-blue-500" />
+                              </Button>
+                            )}
+                            {/* Revoke token */}
+                            {assignment.tokenId && assignment.tokenStatus === "active" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Отозвать ссылку"
+                                onClick={() => revokeTokenMutation.mutate(assignment.tokenId!)}
+                                disabled={revokeTokenMutation.isPending}
+                              >
+                                <Ban className="h-4 w-4 text-orange-500" />
+                              </Button>
+                            )}
+                            {/* Delete assignment */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Удалить назначение"
+                              onClick={() => removeMutation.mutate(assignment.id)}
+                              disabled={removeMutation.isPending}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -298,18 +433,9 @@ export function AssignTestDialog({
 
           {/* Assign to Users Tab */}
           <TabsContent value="users" className="flex-1 overflow-auto mt-4 space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <Label htmlFor="due-date-users">{t.assignments.dueDate}</Label>
-                <Input
-                  id="due-date-users"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div className="pt-6">
+            <div className="space-y-3">
+              {dateFields("users")}
+              <div className="flex justify-end">
                 <Button
                   onClick={handleAssignUsers}
                   disabled={selectedUserIds.length === 0 || assignMutation.isPending}
@@ -378,18 +504,9 @@ export function AssignTestDialog({
 
           {/* Assign to Groups Tab */}
           <TabsContent value="groups" className="flex-1 overflow-auto mt-4 space-y-4">
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <Label htmlFor="due-date-groups">{t.assignments.dueDate}</Label>
-                <Input
-                  id="due-date-groups"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div className="pt-6">
+            <div className="space-y-3">
+              {dateFields("groups")}
+              <div className="flex justify-end">
                 <Button
                   onClick={handleAssignGroups}
                   disabled={selectedGroupIds.length === 0 || assignMutation.isPending}

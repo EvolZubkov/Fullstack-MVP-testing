@@ -1,4 +1,5 @@
 import foldersRouter from "./folders";
+import testFoldersRouter from "./test-folders";
 import topicsRouter from "./topics";
 import authRouter from "./auth";
 import usersRouter from "./users";
@@ -10,9 +11,11 @@ import assignmentsRouter from "./assignments";
 import analyticsRouter from "./analytics/index";
 import scormTelemetryRouter from "./scorm-telemetry";
 import logsRouter from "./logs";
+import accessRouter from "./access";
 
 export {
   foldersRouter,
+  testFoldersRouter,
   topicsRouter,
   authRouter,
   usersRouter,
@@ -24,11 +27,14 @@ export {
   analyticsRouter,
   scormTelemetryRouter,
   logsRouter,
+  accessRouter,
 };
 
 // Конфигурация монтирования роутеров
 export const routerConfig = [
+  { path: "/access", router: accessRouter }, // magic link — до session guard
   { path: "/api/folders", router: foldersRouter },
+  { path: "/api/test-folders", router: testFoldersRouter },
   { path: "/api/topics", router: topicsRouter },
   { path: "/api/auth", router: authRouter },
   { path: "/api/users", router: usersRouter },

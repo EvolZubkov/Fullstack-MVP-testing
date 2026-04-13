@@ -1,6 +1,6 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Pencil, Trash2, ClipboardList, Download, Settings, ChevronRight, BarChart3, UserPlus } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, ClipboardList, Download, Settings, ChevronRight, ChevronDown, ChevronLeft, BarChart3, UserPlus, LayoutGrid, List, Folder, FolderOpen, FolderPlus, FolderInput } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +22,7 @@ import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { LoadingState, LoadingSpinner } from "@/components/loading-state";
 import { t, formatQuestions, formatTopics } from "@/lib/i18n";
-import type { Test, TestSection, Topic } from "@shared/schema";
+import type { Test, TestSection, Topic, TestFolder } from "@shared/schema";
 import { Link } from "wouter";
 import { AssignTestDialog } from "@/components/assign-test-dialog";
 
@@ -90,6 +91,84 @@ interface DifficultyDistribution {
   warnings: string[];
 }
 
+// ─── FolderMoveContent ────────────────────────────────────────────────────────
+function FolderMoveContent({
+  currentFolderId,
+  folders,
+  onMove,
+}: {
+  testId: string;
+  currentFolderId: string | null;
+  folders: TestFolder[];
+  onMove: (folderId: string | null) => void;
+}) {
+  const [search, setSearch] = React.useState("");
+  const filtered = folders.filter(
+    f => f.id !== currentFolderId && f.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Build depth map for indentation
+  const depthMap = React.useMemo(() => {
+    const map = new Map<string, number>();
+    const getDepth = (id: string): number => {
+      if (map.has(id)) return map.get(id)!;
+      const folder = folders.find(f => f.id === id);
+      const d = folder?.parentId ? getDepth(folder.parentId) + 1 : 0;
+      map.set(id, d);
+      return d;
+    };
+    folders.forEach(f => getDepth(f.id));
+    return map;
+  }, [folders]);
+
+  return (
+    <DropdownMenuContent align="end" className="w-52 p-0">
+      {/* Поиск */}
+      {folders.length > 6 && (
+        <div className="px-2 py-1.5 border-b">
+          <input
+            className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground"
+            placeholder="Поиск папки..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            onClick={e => e.stopPropagation()}
+            autoFocus
+          />
+        </div>
+      )}
+      {/* Без папки */}
+      {currentFolderId && (
+        <>
+          <DropdownMenuItem onClick={() => onMove(null)}>
+            <Folder className="h-4 w-4 mr-2 text-muted-foreground shrink-0" />
+            Без папки
+          </DropdownMenuItem>
+          <DropdownMenuSeparator className="my-0" />
+        </>
+      )}
+      {/* Список папок со скроллом */}
+      <div className="overflow-y-auto max-h-52">
+        {filtered.length === 0 && (
+          <p className="text-xs text-muted-foreground text-center py-3">Папки не найдены</p>
+        )}
+        {filtered.map(folder => {
+          const depth = depthMap.get(folder.id) ?? 0;
+          return (
+            <DropdownMenuItem
+              key={folder.id}
+              onClick={() => onMove(folder.id)}
+              style={{ paddingLeft: `${8 + depth * 12}px` }}
+            >
+              <FolderOpen className="h-4 w-4 mr-2 text-yellow-500 shrink-0" />
+              <span className="truncate">{folder.name}</span>
+            </DropdownMenuItem>
+          );
+        })}
+      </div>
+    </DropdownMenuContent>
+  );
+}
+
 export default function TestsPage() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -101,6 +180,7 @@ export default function TestsPage() {
   const [testMode, setTestMode] = useState<"standard" | "adaptive">("standard");
   const [showDifficultyLevel, setShowDifficultyLevel] = useState(true);
   const [adaptiveTopicConfigs, setAdaptiveTopicConfigs] = useState<AdaptiveTopicConfig[]>([]);
+  const [selectedAdaptiveTopicId, setSelectedAdaptiveTopicId] = useState<string | null>(null);
   const [distributionCache, setDistributionCache] = useState<Record<string, DifficultyDistribution>>({});
   const [loadingDistribution, setLoadingDistribution] = useState<string | null>(null);
 
@@ -114,6 +194,32 @@ export default function TestsPage() {
   const [assignTestId, setAssignTestId] = useState<string | null>(null);
   const [assignTestTitle, setAssignTestTitle] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [topicSearch, setTopicSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"created_desc" | "updated_desc" | "title_asc">(() => {
+    return (localStorage.getItem("tests_sort") as any) || "created_desc";
+  });
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    return (localStorage.getItem("tests_view") as any) || "grid";
+  });
+
+  // Folder sidebar state
+  const [activeFolderId, setActiveFolderId] = useState<string | null | "root">(null); // null = all, "root" = no folder
+  const [expandedFolderIds, setExpandedFolderIds] = useState<Set<string>>(new Set());
+  const [newFolderName, setNewFolderName] = useState("");
+  const [creatingFolderParentId, setCreatingFolderParentId] = useState<string | null | false>(false); // false = not creating, null = root, string = parentId
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  const handleSortChange = (value: "created_desc" | "updated_desc" | "title_asc") => {
+    setSortBy(value);
+    localStorage.setItem("tests_sort", value);
+  };
+
+  const handleViewChange = (mode: "grid" | "list") => {
+    setViewMode(mode);
+    localStorage.setItem("tests_view", mode);
+  };
 
   const { data: tests, isLoading: testsLoading } = useQuery<TestWithSections[]>({
     queryKey: ["/api/tests"],
@@ -123,10 +229,78 @@ export default function TestsPage() {
     queryKey: ["/api/topics"],
   });
 
-  const filteredTests = tests?.filter((test) =>
-    test.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (test.description || "").toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const { data: testFolders = [] } = useQuery<TestFolder[]>({
+    queryKey: ["/api/test-folders"],
+  });
+
+  const createFolderMutation = useMutation({
+    mutationFn: ({ name, parentId }: { name: string; parentId?: string | null }) =>
+      apiRequest("POST", "/api/test-folders", { name, parentId: parentId ?? null }),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/test-folders"] });
+      if (vars.parentId) {
+        setExpandedFolderIds(prev => new Set([...prev, vars.parentId!]));
+      }
+      setCreatingFolderParentId(false);
+      setNewFolderName("");
+    },
+  });
+
+  const renameFolderMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => apiRequest("PUT", `/api/test-folders/${id}`, { name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/test-folders"] });
+      setRenamingFolderId(null);
+      setRenameValue("");
+    },
+  });
+
+  const deleteFolderMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/test-folders/${id}`),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/test-folders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
+      if (activeFolderId === id) setActiveFolderId(null);
+      setExpandedFolderIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+    },
+  });
+
+  const moveTestMutation = useMutation({
+    mutationFn: ({ testId, folderId }: { testId: string; folderId: string | null }) =>
+      apiRequest("PATCH", `/api/test-folders/move/${testId}`, { folderId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
+    },
+  });
+
+  // Collect a folder and all its descendants
+  const getDescendantIds = (folderId: string): Set<string> => {
+    const result = new Set<string>();
+    const queue = [folderId];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      result.add(id);
+      testFolders.filter(f => f.parentId === id).forEach(f => queue.push(f.id));
+    }
+    return result;
+  };
+
+  const filteredTests = tests
+    ?.filter((test) => {
+      const matchesSearch = test.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (test.description || "").toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+      if (activeFolderId === null) return true; // все тесты
+      if (activeFolderId === "root") return !test.folderId; // без папки
+      const descIds = getDescendantIds(activeFolderId);
+      return test.folderId != null && descIds.has(test.folderId);
+    })
+    .sort((a, b) => {
+      if (sortBy === "title_asc") return a.title.localeCompare(b.title, "ru");
+      if (sortBy === "updated_desc") return new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() - new Date(a.updatedAt ?? a.createdAt ?? 0).getTime();
+      // created_desc (default)
+      return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
+    });
 
   const form = useForm<TestFormData>({
     resolver: zodResolver(testFormSchema),
@@ -276,6 +450,7 @@ export default function TestsPage() {
     setTestMode("standard");
     setShowDifficultyLevel(true);
     setAdaptiveTopicConfigs([]);
+    setTopicSearch("");
     form.reset();
   };
 
@@ -623,17 +798,238 @@ export default function TestsPage() {
         }
       />
 
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          placeholder="Поиск тестов..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-      </div>
+      <div className="flex gap-4">
+        {/* Sidebar: папки */}
+        <div className={`shrink-0 transition-all duration-200 ${isSidebarCollapsed ? "w-8" : "w-52"}`}>
+          {isSidebarCollapsed ? (
+            /* Collapsed: узкая полоска с кнопкой раскрытия */
+            <div className="border rounded-lg flex flex-col items-center py-2 gap-3 h-full min-h-[120px]">
+              <button
+                type="button"
+                title="Показать папки"
+                onClick={() => setIsSidebarCollapsed(false)}
+                className="p-1 rounded hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+              <Folder className="h-4 w-4 text-muted-foreground" />
+              {activeFolderId !== null && (
+                <span className="w-2 h-2 rounded-full bg-primary shrink-0" title="Папка выбрана" />
+              )}
+            </div>
+          ) : (
+          <div className="border rounded-lg overflow-hidden">
+            {/* Заголовок с кнопкой сворачивания */}
+            <div className="flex items-center px-3 py-2 border-b bg-muted/30">
+              <Folder className="h-3.5 w-3.5 text-muted-foreground shrink-0 mr-2" />
+              <span className="text-xs font-medium text-muted-foreground flex-1 uppercase tracking-wide">Папки</span>
+              <button
+                type="button"
+                title="Скрыть панель"
+                onClick={() => setIsSidebarCollapsed(true)}
+                className="p-0.5 rounded hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {/* Все тесты */}
+            <button
+              type="button"
+              onClick={() => setActiveFolderId(null)}
+              className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/60 transition-colors border-b ${activeFolderId === null ? "bg-muted font-medium" : ""}`}
+            >
+              <ClipboardList className="h-4 w-4 shrink-0" />
+              <span className="flex-1 truncate">Все тесты</span>
+              <span className="text-xs text-muted-foreground">{tests?.length ?? 0}</span>
+            </button>
+            {/* Без папки */}
+            <button
+              type="button"
+              onClick={() => setActiveFolderId("root")}
+              className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/60 transition-colors border-b ${activeFolderId === "root" ? "bg-muted font-medium" : ""}`}
+            >
+              <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="flex-1 truncate text-muted-foreground">Без папки</span>
+              <span className="text-xs text-muted-foreground">{tests?.filter(t => !t.folderId).length ?? 0}</span>
+            </button>
+            {/* Дерево папок (рекурсивно) — скроллируемая область */}
+            <div className="overflow-y-auto max-h-[calc(100vh-320px)]">
+            {(() => {
+              const renderFolderNode = (folder: TestFolder, depth: number): React.ReactNode => {
+                const children = testFolders.filter(f => f.parentId === folder.id);
+                const hasChildren = children.length > 0;
+                const isExpanded = expandedFolderIds.has(folder.id);
+                const isActive = activeFolderId === folder.id;
+                const isRenaming = renamingFolderId === folder.id;
+                const count = tests?.filter(t => t.folderId === folder.id).length ?? 0;
+                const indent = depth * 12;
 
-      {!filteredTests || filteredTests.length === 0 ? (
+                return (
+                  <div key={folder.id}>
+                    <div className={`border-b ${isActive ? "bg-muted" : ""}`}>
+                      {isRenaming ? (
+                        <div className="flex items-center gap-1 px-2 py-1" style={{ paddingLeft: `${8 + indent}px` }}>
+                          <Input
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            className="h-7 text-sm flex-1"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && renameValue.trim()) renameFolderMutation.mutate({ id: folder.id, name: renameValue.trim() });
+                              if (e.key === "Escape") { setRenamingFolderId(null); setRenameValue(""); }
+                            }}
+                          />
+                          <Button size="icon" variant="ghost" className="h-7 w-7"
+                            onClick={() => renameValue.trim() && renameFolderMutation.mutate({ id: folder.id, name: renameValue.trim() })}
+                          >✓</Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center group" style={{ paddingLeft: `${indent}px` }}>
+                          {/* Expand toggle */}
+                          <button
+                            type="button"
+                            className="p-1 shrink-0 text-muted-foreground hover:text-foreground"
+                            onClick={() => setExpandedFolderIds(prev => {
+                              const s = new Set(prev);
+                              s.has(folder.id) ? s.delete(folder.id) : s.add(folder.id);
+                              return s;
+                            })}
+                          >
+                            {hasChildren
+                              ? (isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />)
+                              : <span className="h-3 w-3 block" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveFolderId(folder.id)}
+                            className="flex-1 text-left py-2 pr-1 text-sm flex items-center gap-1.5 hover:bg-muted/60 transition-colors min-w-0"
+                          >
+                            <FolderOpen className="h-4 w-4 shrink-0 text-yellow-500" />
+                            <span className="flex-1 truncate">{folder.name}</span>
+                            <span className="text-xs text-muted-foreground shrink-0">{count}</span>
+                          </button>
+                          <div className="flex opacity-0 group-hover:opacity-100 pr-1 gap-0.5 shrink-0">
+                            <Button size="icon" variant="ghost" className="h-6 w-6" title="Подпапка"
+                              onClick={() => { setCreatingFolderParentId(folder.id); setExpandedFolderIds(prev => new Set([...prev, folder.id])); setNewFolderName(""); }}>
+                              <FolderPlus className="h-3 w-3" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-6 w-6" title="Переименовать"
+                              onClick={() => { setRenamingFolderId(folder.id); setRenameValue(folder.name); }}>
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive" title="Удалить"
+                              onClick={() => deleteFolderMutation.mutate(folder.id)}>
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* Children */}
+                    {isExpanded && children.map(child => renderFolderNode(child, depth + 1))}
+                    {/* Inline new subfolder input */}
+                    {isExpanded && creatingFolderParentId === folder.id && (
+                      <div className="flex items-center gap-1 border-b" style={{ paddingLeft: `${8 + (depth + 1) * 12}px`, paddingRight: "4px", paddingTop: "4px", paddingBottom: "4px" }}>
+                        <Input
+                          value={newFolderName}
+                          onChange={(e) => setNewFolderName(e.target.value)}
+                          className="h-7 text-sm flex-1"
+                          placeholder="Название..."
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && newFolderName.trim()) createFolderMutation.mutate({ name: newFolderName.trim(), parentId: folder.id });
+                            if (e.key === "Escape") { setCreatingFolderParentId(false); setNewFolderName(""); }
+                          }}
+                        />
+                        <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0"
+                          onClick={() => newFolderName.trim() && createFolderMutation.mutate({ name: newFolderName.trim(), parentId: folder.id })}
+                        >✓</Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+
+              return testFolders.filter(f => !f.parentId).map(f => renderFolderNode(f, 0));
+            })()}
+            </div>
+            {/* Создание корневой папки */}
+            {creatingFolderParentId === null ? (
+              <div className="flex items-center gap-1 px-2 py-1 border-t">
+                <Input
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  className="h-7 text-sm flex-1"
+                  placeholder="Название..."
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newFolderName.trim()) createFolderMutation.mutate({ name: newFolderName.trim(), parentId: null });
+                    if (e.key === "Escape") { setCreatingFolderParentId(false); setNewFolderName(""); }
+                  }}
+                />
+                <Button size="icon" variant="ghost" className="h-7 w-7"
+                  onClick={() => newFolderName.trim() && createFolderMutation.mutate({ name: newFolderName.trim(), parentId: null })}
+                >✓</Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setCreatingFolderParentId(null); setNewFolderName(""); }}
+                className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/60 transition-colors text-muted-foreground border-t"
+              >
+                <FolderPlus className="h-4 w-4 shrink-0" />
+                Новая папка
+              </button>
+            )}
+          </div>
+          )}
+        </div>
+
+        {/* Main content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Поиск тестов..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <Select value={sortBy} onValueChange={handleSortChange}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="created_desc">Новые сначала</SelectItem>
+                <SelectItem value="updated_desc">Изменённые</SelectItem>
+                <SelectItem value="title_asc">По названию</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="flex items-center border rounded-md">
+              <Button
+                variant={viewMode === "grid" ? "secondary" : "ghost"}
+                size="icon"
+                className="rounded-r-none h-9 w-9"
+                onClick={() => handleViewChange("grid")}
+                title="Карточки"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="icon"
+                className="rounded-l-none h-9 w-9"
+                onClick={() => handleViewChange("list")}
+                title="Список"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {!filteredTests || filteredTests.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
           title={t.tests.noTests}
@@ -641,12 +1037,11 @@ export default function TestsPage() {
           actionLabel={t.tests.createTest}
           onAction={handleOpenCreate}
         />
-      ) : (
+      ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredTests.map((test) => {
             const passRule = test.overallPassRuleJson as any;
             const totalQuestions = test.sections.reduce((sum, s) => sum + s.drawCount, 0);
-
             return (
               <Card key={test.id} data-testid={`card-test-${test.id}`}>
                 <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
@@ -659,43 +1054,35 @@ export default function TestsPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      title="Назначить"
-                      onClick={() => {
-                        setAssignTestId(test.id);
-                        setAssignTestTitle(test.title);
-                        setAssignDialogOpen(true);
-                      }}
-                      data-testid={`button-assign-test-${test.id}`}
-                    >
+                    <Button variant="ghost" size="icon" title="Назначить"
+                      onClick={() => { setAssignTestId(test.id); setAssignTestTitle(test.title); setAssignDialogOpen(true); }}
+                      data-testid={`button-assign-test-${test.id}`}>
                       <UserPlus className="h-4 w-4" />
                     </Button>
                     <Link href={`/author/tests/${test.id}/analytics`}>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Аналитика"
-                        data-testid={`button-analytics-test-${test.id}`}
-                      >
+                      <Button variant="ghost" size="icon" title="Аналитика" data-testid={`button-analytics-test-${test.id}`}>
                         <BarChart3 className="h-4 w-4" />
                       </Button>
                     </Link>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleOpenEdit(test)}
-                      data-testid={`button-edit-test-${test.id}`}
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(test)} data-testid={`button-edit-test-${test.id}`}>
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(test.id)}
-                      data-testid={`button-delete-test-${test.id}`}
-                    >
+                    {testFolders.length > 0 && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" title="Переместить в папку">
+                            <FolderInput className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <FolderMoveContent
+                          testId={test.id}
+                          currentFolderId={test.folderId ?? null}
+                          folders={testFolders}
+                          onMove={(folderId) => moveTestMutation.mutate({ testId: test.id, folderId })}
+                        />
+                      </DropdownMenu>
+                    )}
+                    <Button variant="ghost" size="icon" onClick={() => handleDelete(test.id)} data-testid={`button-delete-test-${test.id}`}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -705,22 +1092,15 @@ export default function TestsPage() {
                     {test.mode === "adaptive" ? (
                       <Badge variant="secondary">Адаптивный</Badge>
                     ) : (
-                      <Badge variant="secondary">
-                        {formatQuestions(totalQuestions)}
-                      </Badge>
+                      <Badge variant="secondary">{formatQuestions(totalQuestions)}</Badge>
                     )}
-                    <Badge variant="secondary">
-                      {formatTopics(test.sections.length)}
-                    </Badge>
-                    {/* Проходной балл - только для стандартного режима */}
+                    <Badge variant="secondary">{formatTopics(test.sections.length)}</Badge>
                     {test.mode !== "adaptive" && passRule && passRule.type !== "none" && (
                       <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                        {t.tests.pass} {passRule?.value}
-                        {passRule?.type === "percent" ? "%" : ` из ${totalQuestions}`}
+                        {t.tests.pass} {passRule?.value}{passRule?.type === "percent" ? "%" : ` из ${totalQuestions}`}
                       </Badge>
                     )}
                   </div>
-
                   <div className="text-sm text-muted-foreground">
                     <p className="font-medium mb-1">{t.common.topics}:</p>
                     <ul className="space-y-1">
@@ -735,11 +1115,7 @@ export default function TestsPage() {
                   </div>
                 </CardContent>
                 <CardFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => openExportDialog(test.id)}
-                    data-testid={`button-export-scorm-${test.id}`}
-                  >
+                  <Button variant="outline" onClick={() => openExportDialog(test.id)} data-testid={`button-export-scorm-${test.id}`}>
                     <Download className="h-4 w-4 mr-2" />
                     {t.tests.exportScorm}
                   </Button>
@@ -748,10 +1124,95 @@ export default function TestsPage() {
             );
           })}
         </div>
+      ) : (
+        /* Строчный вид */
+        <div className="border rounded-lg overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 border-b">
+              <tr>
+                <th className="text-left px-4 py-3 font-medium">Название</th>
+                <th className="text-left px-4 py-3 font-medium">Режим</th>
+                <th className="text-left px-4 py-3 font-medium">Темы / Вопросы</th>
+                <th className="text-left px-4 py-3 font-medium">Создан</th>
+                <th className="text-left px-4 py-3 font-medium">Изменён</th>
+                <th className="px-4 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTests.map((test, idx) => {
+                const passRule = test.overallPassRuleJson as any;
+                const totalQuestions = test.sections.reduce((sum, s) => sum + s.drawCount, 0);
+                const fmtDate = (d: any) => d ? new Date(d).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "—";
+                return (
+                  <tr key={test.id} className={idx % 2 === 0 ? "bg-background" : "bg-muted/20"} data-testid={`card-test-${test.id}`}>
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{test.title}</p>
+                      {test.description && <p className="text-muted-foreground text-xs line-clamp-1">{test.description}</p>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="secondary">{test.mode === "adaptive" ? "Адаптивный" : "Обычный"}</Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-muted-foreground">{formatTopics(test.sections.length)}</span>
+                      {test.mode !== "adaptive" && <span className="ml-2 text-muted-foreground">/ {formatQuestions(totalQuestions)}</span>}
+                      {test.mode !== "adaptive" && passRule && passRule.type !== "none" && (
+                        <Badge className="ml-2 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-xs">
+                          {t.tests.pass} {passRule?.value}{passRule?.type === "percent" ? "%" : ""}
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">{fmtDate((test as any).createdAt)}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{fmtDate((test as any).updatedAt)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1 justify-end">
+                        <Button variant="ghost" size="icon" title="Назначить"
+                          onClick={() => { setAssignTestId(test.id); setAssignTestTitle(test.title); setAssignDialogOpen(true); }}
+                          data-testid={`button-assign-test-${test.id}`}>
+                          <UserPlus className="h-4 w-4" />
+                        </Button>
+                        <Link href={`/author/tests/${test.id}/analytics`}>
+                          <Button variant="ghost" size="icon" title="Аналитика" data-testid={`button-analytics-test-${test.id}`}>
+                            <BarChart3 className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                        <Button variant="ghost" size="icon" title="Экспорт SCORM" onClick={() => openExportDialog(test.id)} data-testid={`button-export-scorm-${test.id}`}>
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(test)} data-testid={`button-edit-test-${test.id}`}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        {testFolders.length > 0 && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" title="Переместить в папку">
+                                <FolderInput className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <FolderMoveContent
+                              testId={test.id}
+                              currentFolderId={test.folderId ?? null}
+                              folders={testFolders}
+                              onMove={(folderId) => moveTestMutation.mutate({ testId: test.id, folderId })}
+                            />
+                          </DropdownMenu>
+                        )}
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(test.id)} data-testid={`button-delete-test-${test.id}`}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
+        </div>{/* /main content */}
+      </div>{/* /flex gap-6 */}
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="!max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingTest ? t.tests.editTest : t.tests.createTest} - {t.tests.step} {step} {t.tests.of} 3
@@ -842,7 +1303,12 @@ export default function TestsPage() {
 
               <Separator />
 
-              <h3 className="font-semibold">{t.tests.selectTopics}</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">{t.tests.selectTopics}</h3>
+                {selectedSections.length > 0 && (
+                  <Badge variant="secondary">Выбрано: {selectedSections.length}</Badge>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground">
                 {t.tests.selectTopicsDescription}
               </p>
@@ -852,36 +1318,52 @@ export default function TestsPage() {
                   {t.tests.noTopicsAvailable}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {topics
-                    .filter((topicItem) => topicItem.questionCount > 0)
-                    .map((topicItem) => {
-                      const isSelected = selectedSections.some((s) => s.topicId === topicItem.id);
-                      return (
-                        <div
-                          key={topicItem.id}
-                          onClick={() => toggleTopicSelection(topicItem)}
-                          className={`p-4 rounded-lg border cursor-pointer transition-colors ${isSelected
-                            ? "border-primary bg-primary/5"
-                            : "border-border hover:border-primary/50"
-                            }`}
-                          data-testid={`topic-select-${topicItem.id}`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">{topicItem.name}</span>
-                            <Badge variant="secondary">
-                              {topicItem.questionCount} в.
-                            </Badge>
+                <>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      className="pl-9"
+                      placeholder="Поиск тем..."
+                      value={topicSearch}
+                      onChange={(e) => setTopicSearch(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 max-h-[340px] overflow-y-auto pr-1">
+                    {topics
+                      .filter((topicItem) => topicItem.questionCount > 0)
+                      .filter((topicItem) =>
+                        !topicSearch ||
+                        topicItem.name.toLowerCase().includes(topicSearch.toLowerCase()) ||
+                        (topicItem.description || "").toLowerCase().includes(topicSearch.toLowerCase())
+                      )
+                      .map((topicItem) => {
+                        const isSelected = selectedSections.some((s) => s.topicId === topicItem.id);
+                        return (
+                          <div
+                            key={topicItem.id}
+                            onClick={() => toggleTopicSelection(topicItem)}
+                            className={`p-4 rounded-lg border cursor-pointer transition-colors ${isSelected
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/50"
+                              }`}
+                            data-testid={`topic-select-${topicItem.id}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{topicItem.name}</span>
+                              <Badge variant="secondary">
+                                {topicItem.questionCount} в.
+                              </Badge>
+                            </div>
+                            {topicItem.description && (
+                              <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+                                {topicItem.description}
+                              </p>
+                            )}
                           </div>
-                          {topicItem.description && (
-                            <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
-                              {topicItem.description}
-                            </p>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
+                        );
+                      })}
+                  </div>
+                </>
               )}
 
               <DialogFooter>
@@ -1026,24 +1508,46 @@ export default function TestsPage() {
                 </div>
               </div>
 
-              <div className="space-y-6">
+              <div className="flex gap-4 min-h-[400px]">
+                {/* Left panel: topic list */}
+                <div className="w-48 shrink-0 border rounded-md overflow-y-auto">
+                  {adaptiveTopicConfigs.map((topicConfig) => {
+                    const isConfigured = topicConfig.levels.length > 0 &&
+                      topicConfig.levels.every(l => l.questionsCount > 0 && l.maxDifficulty > l.minDifficulty);
+                    const isSelected = (selectedAdaptiveTopicId ?? adaptiveTopicConfigs[0]?.topicId) === topicConfig.topicId;
+                    return (
+                      <button
+                        key={topicConfig.topicId}
+                        type="button"
+                        onClick={() => setSelectedAdaptiveTopicId(topicConfig.topicId)}
+                        className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:bg-muted/60 transition-colors border-b last:border-b-0 ${isSelected ? "bg-muted font-medium" : ""}`}
+                      >
+                        <span className={`h-2 w-2 rounded-full shrink-0 ${isConfigured ? "bg-green-500" : "bg-gray-300"}`} />
+                        <span className="truncate">{topicConfig.topicName}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Right panel: selected topic settings */}
                 {adaptiveTopicConfigs.map((topicConfig) => {
+                  const isSelected = (selectedAdaptiveTopicId ?? adaptiveTopicConfigs[0]?.topicId) === topicConfig.topicId;
+                  if (!isSelected) return null;
+
                   const distribution = distributionCache[topicConfig.topicId];
                   const isLoading = loadingDistribution === topicConfig.topicId;
 
                   return (
-                    <Card key={topicConfig.topicId}>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-base flex items-center justify-between">
-                          <span>{topicConfig.topicName}</span>
-                          {distribution && (
-                            <Badge variant="outline">
-                              {distribution.totalQuestions} {t.tests.questionsTotal}
-                            </Badge>
-                          )}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
+                    <div key={topicConfig.topicId} className="flex-1 overflow-y-auto space-y-4 pr-1">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-sm">{topicConfig.topicName}</h4>
+                        {distribution && (
+                          <Badge variant="outline">
+                            {distribution.totalQuestions} {t.tests.questionsTotal}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="space-y-4">
                         {/* Distribution histogram */}
                         {isLoading ? (
                           <div className="flex items-center justify-center py-4">
@@ -1137,79 +1641,83 @@ export default function TestsPage() {
                                   )}
                                 </div>
 
-                                <div className="grid grid-cols-4 gap-3">
-                                  <div className="space-y-1">
-                                    <Label className="text-xs">{t.tests.minDifficulty}</Label>
-                                    <Input
-                                      type="number"
-                                      min={0}
-                                      max={100}
-                                      value={level.minDifficulty}
-                                      onChange={(e) =>
-                                        updateAdaptiveLevel(topicConfig.topicId, level.levelIndex, {
-                                          minDifficulty: Number(e.target.value),
-                                        })
-                                      }
-                                    />
-                                  </div>
-                                  <div className="space-y-1">
-                                    <Label className="text-xs">{t.tests.maxDifficulty}</Label>
-                                    <Input
-                                      type="number"
-                                      min={0}
-                                      max={100}
-                                      value={level.maxDifficulty}
-                                      onChange={(e) =>
-                                        updateAdaptiveLevel(topicConfig.topicId, level.levelIndex, {
-                                          maxDifficulty: Number(e.target.value),
-                                        })
-                                      }
-                                    />
-                                  </div>
-                                  <div className="space-y-1">
-                                    <Label className="text-xs">{t.tests.questionsCount}</Label>
-                                    <Input
-                                      type="number"
-                                      min={1}
-                                      value={level.questionsCount}
-                                      onChange={(e) =>
-                                        updateAdaptiveLevel(topicConfig.topicId, level.levelIndex, {
-                                          questionsCount: Number(e.target.value),
-                                        })
-                                      }
-                                    />
-                                  </div>
-                                  <div className="space-y-1">
-                                    <Label className="text-xs">{t.tests.passThreshold}</Label>
-                                    <div className="flex gap-1">
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="flex gap-2">
+                                    <div className="space-y-1 flex-1">
+                                      <Label className="text-xs">{t.tests.minDifficulty}</Label>
                                       <Input
                                         type="number"
                                         min={0}
-                                        max={level.passThresholdType === "percent" ? 100 : level.questionsCount}
-                                        value={level.passThreshold}
+                                        max={100}
+                                        value={level.minDifficulty}
                                         onChange={(e) =>
                                           updateAdaptiveLevel(topicConfig.topicId, level.levelIndex, {
-                                            passThreshold: Number(e.target.value),
+                                            minDifficulty: Number(e.target.value),
                                           })
                                         }
-                                        className="w-16"
                                       />
-                                      <Select
-                                        value={level.passThresholdType}
-                                        onValueChange={(val: "percent" | "absolute") =>
+                                    </div>
+                                    <div className="space-y-1 flex-1">
+                                      <Label className="text-xs">{t.tests.maxDifficulty}</Label>
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        value={level.maxDifficulty}
+                                        onChange={(e) =>
                                           updateAdaptiveLevel(topicConfig.topicId, level.levelIndex, {
-                                            passThresholdType: val,
+                                            maxDifficulty: Number(e.target.value),
                                           })
                                         }
-                                      >
-                                        <SelectTrigger className="w-20">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="percent">%</SelectItem>
-                                          <SelectItem value="absolute">шт</SelectItem>
-                                        </SelectContent>
-                                      </Select>
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <div className="space-y-1 flex-1">
+                                      <Label className="text-xs">{t.tests.questionsCount}</Label>
+                                      <Input
+                                        type="number"
+                                        min={1}
+                                        value={level.questionsCount}
+                                        onChange={(e) =>
+                                          updateAdaptiveLevel(topicConfig.topicId, level.levelIndex, {
+                                            questionsCount: Number(e.target.value),
+                                          })
+                                        }
+                                      />
+                                    </div>
+                                    <div className="space-y-1 flex-1">
+                                      <Label className="text-xs">{t.tests.passThreshold}</Label>
+                                      <div className="flex gap-1">
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          max={level.passThresholdType === "percent" ? 100 : level.questionsCount}
+                                          value={level.passThreshold}
+                                          onChange={(e) =>
+                                            updateAdaptiveLevel(topicConfig.topicId, level.levelIndex, {
+                                              passThreshold: Number(e.target.value),
+                                            })
+                                          }
+                                          className="w-16"
+                                        />
+                                        <Select
+                                          value={level.passThresholdType}
+                                          onValueChange={(val: "percent" | "absolute") =>
+                                            updateAdaptiveLevel(topicConfig.topicId, level.levelIndex, {
+                                              passThresholdType: val,
+                                            })
+                                          }
+                                        >
+                                          <SelectTrigger className="w-20">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="percent">%</SelectItem>
+                                            <SelectItem value="absolute">шт</SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
@@ -1296,8 +1804,8 @@ export default function TestsPage() {
                             rows={2}
                           />
                         </div>
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   );
                 })}
               </div>

@@ -20,7 +20,12 @@ const { storageMock } = vi.hoisted(() => ({
     getUserGroups: vi.fn(), setUserGroups: vi.fn(),
     getTestAssignments: vi.fn(), createTestAssignment: vi.fn(),
     deleteTestAssignment: vi.fn(), getAssignedTestsForUser: vi.fn(),
-    getGroup: vi.fn(),
+    getGroup: vi.fn(), getGroupUsers: vi.fn(),
+    createAssignmentAccessToken: vi.fn(),
+    getAssignmentAccessTokensByAssignment: vi.fn(),
+    revokeAssignmentAccessToken: vi.fn(),
+    revokeAssignmentAccessTokensByAssignment: vi.fn(),
+    revokeAssignmentAccessTokensByAssignmentAndUser: vi.fn(),
   }
 }));
 
@@ -435,6 +440,14 @@ describe("Assignments routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getGroupUsers.mockResolvedValue([]);
+    storageMock.getAssignmentAccessTokensByAssignment.mockResolvedValue([]);
+    storageMock.createAssignmentAccessToken.mockImplementation((data: any) =>
+      Promise.resolve({ id: "tok1", createdAt: new Date(), revokedAt: null, ...data })
+    );
+    storageMock.revokeAssignmentAccessTokensByAssignment.mockResolvedValue(undefined);
+    storageMock.revokeAssignmentAccessTokensByAssignmentAndUser.mockResolvedValue(undefined);
+    storageMock.revokeAssignmentAccessToken.mockResolvedValue(undefined);
     app = makeApp(assignmentsRouter, "/api");
   });
 

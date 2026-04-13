@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Pencil, Trash2, FolderOpen, ExternalLink, BookMarked, Copy, CheckSquare, Square, Folder, ChevronRight, ChevronDown, FolderPlus } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, FolderOpen, ExternalLink, BookMarked, Copy, CheckSquare, Square, Folder, ChevronRight, ChevronDown, FolderPlus, LayoutGrid, List } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -61,6 +61,14 @@ export default function TopicsPage() {
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    return (localStorage.getItem("topics_view") as any) || "grid";
+  });
+
+  const handleViewChange = (mode: "grid" | "list") => {
+    setViewMode(mode);
+    localStorage.setItem("topics_view", mode);
+  };
 
   const { data: topics, isLoading: topicsLoading } = useQuery<TopicWithDetails[]>({
     queryKey: ["/api/topics"],
@@ -458,6 +466,59 @@ export default function TopicsPage() {
     </Card>
   );
 
+  const renderTopicRow = (topic: TopicWithDetails) => (
+    <tr key={topic.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors" data-testid={`card-topic-${topic.id}`}>
+      <td className="px-4 py-3">
+        <Checkbox
+          checked={selectedTopics.has(topic.id)}
+          onCheckedChange={() => handleToggleSelect(topic.id)}
+          data-testid={`checkbox-topic-${topic.id}`}
+        />
+      </td>
+      <td className="px-4 py-3">
+        <p className="font-medium">{topic.name}</p>
+        {topic.description && <p className="text-xs text-muted-foreground line-clamp-1">{topic.description}</p>}
+      </td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">{formatQuestions(topic.questionCount)}</td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">{topic.courses.length} {t.common.courses}</td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1 justify-end">
+          <Button variant="ghost" size="icon" onClick={() => handleDuplicate(topic.id)} data-testid={`button-duplicate-topic-${topic.id}`}>
+            <Copy className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => handleOpenCourseDialog(topic.id)} data-testid={`button-add-course-${topic.id}`}>
+            <BookMarked className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(topic)} data-testid={`button-edit-topic-${topic.id}`}>
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => handleDelete(topic.id)} data-testid={`button-delete-topic-${topic.id}`}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+
+  const renderTopicsTable = (topicList: TopicWithDetails[]) => (
+    <div className="border rounded-lg overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/50 border-b">
+          <tr>
+            <th className="px-4 py-3 w-10" />
+            <th className="text-left px-4 py-3 font-medium">Тема</th>
+            <th className="text-left px-4 py-3 font-medium">Вопросы</th>
+            <th className="text-left px-4 py-3 font-medium">Курсы</th>
+            <th className="px-4 py-3 w-40" />
+          </tr>
+        </thead>
+        <tbody>
+          {topicList.map(renderTopicRow)}
+        </tbody>
+      </table>
+    </div>
+  );
+
   const renderFolder = (folder: FolderType, depth: number = 0) => {
     const isExpanded = expandedFolders.has(folder.id);
     const folderTopics = getTopicsInFolder(folder.id);
@@ -512,8 +573,11 @@ export default function TopicsPage() {
           <CollapsibleContent className="mt-2">
             {childFolders.map((childFolder) => renderFolder(childFolder, depth + 1))}
             {folderTopics.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2 pl-8">
-                {folderTopics.map(renderTopicCard)}
+              <div className="mt-2 pl-8">
+                {viewMode === "grid"
+                  ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{folderTopics.map(renderTopicCard)}</div>
+                  : renderTopicsTable(folderTopics)
+                }
               </div>
             )}
           </CollapsibleContent>
@@ -576,14 +640,36 @@ export default function TopicsPage() {
         }
       />
 
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          className="pl-9"
-          placeholder="Поиск тем..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+      <div className="flex items-center gap-3 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Поиск тем..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center border rounded-md">
+          <Button
+            variant={viewMode === "grid" ? "secondary" : "ghost"}
+            size="icon"
+            className="rounded-r-none h-9 w-9"
+            onClick={() => handleViewChange("grid")}
+            title="Карточки"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={viewMode === "list" ? "secondary" : "ghost"}
+            size="icon"
+            className="rounded-l-none h-9 w-9"
+            onClick={() => handleViewChange("list")}
+            title="Список"
+          >
+            <List className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {(!topics || topics.length === 0) && (!folders || folders.length === 0) ? (
@@ -597,12 +683,11 @@ export default function TopicsPage() {
       ) : (
         <div className="space-y-6">
           {searchedTopics ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {searchedTopics.length === 0
-                ? <p className="text-muted-foreground col-span-3">Ничего не найдено</p>
-                : searchedTopics.map(renderTopicCard)
-              }
-            </div>
+            searchedTopics.length === 0
+              ? <p className="text-muted-foreground">Ничего не найдено</p>
+              : viewMode === "grid"
+                ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{searchedTopics.map(renderTopicCard)}</div>
+                : renderTopicsTable(searchedTopics)
           ) : (
             <>
               {rootFolders.map((folder) => renderFolder(folder))}
@@ -614,9 +699,10 @@ export default function TopicsPage() {
                       <span className="text-sm font-medium">{t.folders.root}</span>
                     </div>
                   )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {rootTopics.map(renderTopicCard)}
-                  </div>
+                  {viewMode === "grid"
+                    ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{rootTopics.map(renderTopicCard)}</div>
+                    : renderTopicsTable(rootTopics)
+                  }
                 </div>
               )}
             </>

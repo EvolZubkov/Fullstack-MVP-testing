@@ -8,6 +8,23 @@ import { logger } from "../logger";
 
 const router = Router();
 
+// Simple in-memory rate limiter for login: max 10 attempts per IP per 15 min
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const LOGIN_LIMIT = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+
+function checkLoginRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return true;
+  }
+  if (entry.count >= LOGIN_LIMIT) return false;
+  entry.count++;
+  return true;
+}
+
 // POST /api/auth/login
 router.post("/login", async (req, res) => {
   try {
@@ -17,6 +34,11 @@ router.post("/login", async (req, res) => {
     }
 
     const ip = req.ip || req.socket.remoteAddress || "unknown";
+    if (!checkLoginRateLimit(ip)) {
+      logger.warn(`Login rate limit exceeded for IP: ${ip}`, "auth");
+      return res.status(429).json({ error: "Too many login attempts. Try again in 15 minutes." });
+    }
+
     const user = await storage.validatePassword(email, password);
     if (!user) {
       logger.warn(`Failed login attempt: ${email} from ${ip}`, "auth");
@@ -67,6 +89,9 @@ router.post("/change-password", requireAuth, async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ error: "Current password and new password required" });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
     }
 
     const user = await storage.getUser(req.session.userId!);

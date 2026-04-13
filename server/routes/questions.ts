@@ -1,9 +1,16 @@
 import { Router, Request, Response } from "express";
+import { createHash } from "crypto";
 import { logger } from "../logger";
 import * as XLSX from "xlsx";
 import { storage } from "../storage";
 import { requireAuth, requireAuthor } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
+
+// SHA-256 от type + prompt + нормализованные варианты ответов
+function computeQuestionHash(type: string, prompt: string, dataJson: unknown): string {
+  const normalized = JSON.stringify({ type, prompt: prompt.trim(), data: dataJson });
+  return createHash("sha256").update(normalized).digest("hex");
+}
 
 const router = Router();
 
@@ -406,7 +413,16 @@ router.post(
       const topics = await storage.getTopics();
       const topicByName = new Map(topics.map((t) => [t.name.toLowerCase().trim(), t]));
 
-      const results = { created: 0, updated: 0, errors: [] as string[] };
+      // Кэш хэшей по topicId — загружаем лениво при первом обращении к теме
+      const hashCache = new Map<string, Set<string>>();
+      const getTopicHashes = async (topicId: string): Promise<Set<string>> => {
+        if (!hashCache.has(topicId)) {
+          hashCache.set(topicId, await storage.getContentHashesByTopic(topicId));
+        }
+        return hashCache.get(topicId)!;
+      };
+
+      const results = { created: 0, skipped: 0, errors: [] as string[] };
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
@@ -521,6 +537,14 @@ router.post(
           const shuffleStr = String(row["Следование вариантов ответов"] || "Random").trim().toLowerCase();
           const shuffleAnswers = shuffleStr !== "fixed";
 
+          // Дедупликация: проверяем хэш контента
+          const contentHash = computeQuestionHash(type, prompt, dataJson);
+          const existingHashes = await getTopicHashes(topic.id);
+          if (existingHashes.has(contentHash)) {
+            results.skipped++;
+            continue;
+          }
+
           // Создаём вопрос
           await storage.createQuestion({
             topicId: topic.id,
@@ -532,8 +556,11 @@ router.post(
             difficulty: parseInt(String(row["Сложность"]), 10) || 50,
             shuffleAnswers,
             feedback: String(row["Обратная связь"] || "").trim() || null,
+            contentHash,
           });
 
+          // Добавляем в кэш чтобы не дублировать внутри одного файла
+          existingHashes.add(contentHash);
           results.created++;
         } catch (err) {
           results.errors.push(`Строка ${rowNum}: ${(err as Error).message}`);
@@ -543,6 +570,7 @@ router.post(
       res.json({
         imported: results.created,
         created: results.created,
+        skipped: results.skipped,
         errors: results.errors,
       });
     } catch (error) {
