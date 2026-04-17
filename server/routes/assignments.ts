@@ -109,8 +109,11 @@ router.get("/tests/:id/assignments", requireAuthor, async (req, res) => {
           }
         }
 
+        let groupMemberIds: string[] = [];
         if (assignment.groupId) {
           group = await storage.getGroup(assignment.groupId);
+          const members = await storage.getGroupUsers(assignment.groupId);
+          groupMemberIds = members.map(m => m.id);
         }
 
         // Статус токена (берём последний активный)
@@ -121,7 +124,7 @@ router.get("/tests/:id/assignments", requireAuthor, async (req, res) => {
           : tokens.some(t => t.revokedAt) ? "revoked"
           : "none";
 
-        return { ...assignment, user, group, tokenStatus, tokenId: activeToken?.id ?? null };
+        return { ...assignment, user, group, groupMemberIds, tokenStatus, tokenId: activeToken?.id ?? null };
       })
     );
 
@@ -352,6 +355,155 @@ router.post("/assignments/:id/resend", requireAuthor, async (req, res) => {
   } catch (error) {
     logger.error("Resend assignment error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to resend" });
+  }
+});
+
+// ─── GET /api/assignments/:id/group-users — участники группового назначения ───
+router.get("/assignments/:id/group-users", requireAuthor, async (req, res) => {
+  try {
+    const assignment = await storage.getAssignment(req.params.id);
+    if (!assignment) return res.status(404).json({ error: "Assignment not found" });
+    if (!assignment.groupId) return res.status(400).json({ error: "Not a group assignment" });
+
+    const groupUsers = await storage.getGroupUsers(assignment.groupId);
+    const tokens = await storage.getAssignmentAccessTokensByAssignment(req.params.id);
+
+    // Decrypt emails and attach token status per user
+    const { decryptEmail } = await import("../utils/crypto");
+    const users = await Promise.all(groupUsers.map(async (u) => {
+      let email = u.email;
+      try {
+        if (u.email && !u.email.includes("@")) {
+          email = await decryptEmail(u.email);
+        }
+      } catch {}
+      const token = tokens.find(t => t.userId === u.id && !t.revokedAt && t.expiresAt > new Date());
+      return {
+        id: u.id,
+        email,
+        name: u.name,
+        status: u.status,
+        tokenStatus: token ? "active" : tokens.find(t => t.userId === u.id) ? "revoked" : "none",
+      };
+    }));
+
+    res.json(users);
+  } catch (error) {
+    logger.error("Get group assignment users error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to get group users" });
+  }
+});
+
+// ─── POST /api/assignments/:id/resend-group — обновить ссылки для всей группы ─
+router.post("/assignments/:id/resend-group", requireAuthor, async (req, res) => {
+  try {
+    const assignment = await storage.getAssignment(req.params.id);
+    if (!assignment) return res.status(404).json({ error: "Assignment not found" });
+    if (!assignment.groupId) return res.status(400).json({ error: "Not a group assignment" });
+
+    const test = await storage.getTest(assignment.testId);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+
+    const groupUsers = await storage.getGroupUsers(assignment.groupId);
+
+    // Revoke all existing tokens for this assignment
+    await storage.revokeAssignmentAccessTokensByAssignment(req.params.id);
+
+    const { decryptEmail } = await import("../utils/crypto");
+    let sent = 0;
+
+    for (const u of groupUsers) {
+      const expiresAt = resolveTokenExpiry(
+        assignment.linkExpiresAt ? new Date(assignment.linkExpiresAt) : null,
+        assignment.dueDate ? new Date(assignment.dueDate) : null,
+      );
+      const rawToken = await generateTokenForUser({
+        assignmentId: assignment.id,
+        userId: u.id,
+        testId: assignment.testId,
+        expiresAt,
+      });
+
+      let email = u.email;
+      try {
+        if (u.email && !u.email.includes("@")) {
+          email = await decryptEmail(u.email);
+        }
+      } catch { continue; }
+
+      const magicLink = `${APP_URL}/access/${rawToken}`;
+      await sendAssignmentEmail({
+        to: email,
+        userName: u.name || undefined,
+        testTitle: test.title,
+        testDescription: test.description,
+        dueDate: assignment.dueDate ? new Date(assignment.dueDate) : null,
+        magicLink,
+      });
+      sent++;
+    }
+
+    res.json({ success: true, sent });
+  } catch (error) {
+    logger.error("Resend group assignment error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to resend group" });
+  }
+});
+
+// ─── POST /api/assignments/:id/resend-user/:userId — обновить ссылку одному пользователю в группе
+router.post("/assignments/:id/resend-user/:userId", requireAuthor, async (req, res) => {
+  try {
+    const { id: assignmentId, userId } = req.params;
+    const assignment = await storage.getAssignment(assignmentId);
+    if (!assignment) return res.status(404).json({ error: "Assignment not found" });
+
+    const test = await storage.getTest(assignment.testId);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+
+    const user = await storage.getUser(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // Отзываем старые токены этого пользователя для данного назначения
+    await storage.revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId, userId);
+
+    const expiresAt = resolveTokenExpiry(
+      assignment.linkExpiresAt ? new Date(assignment.linkExpiresAt) : null,
+      assignment.dueDate ? new Date(assignment.dueDate) : null,
+    );
+    const rawToken = await generateTokenForUser({ assignmentId, userId, testId: assignment.testId, expiresAt });
+
+    const { decryptEmail } = await import("../utils/crypto");
+    let email = user.email;
+    try {
+      if (user.email && !user.email.includes("@")) email = await decryptEmail(user.email);
+    } catch { return res.status(400).json({ error: "Cannot decrypt user email" }); }
+
+    const magicLink = `${APP_URL}/access/${rawToken}`;
+    await sendAssignmentEmail({
+      to: email,
+      userName: user.name || undefined,
+      testTitle: test.title,
+      testDescription: test.description,
+      dueDate: assignment.dueDate ? new Date(assignment.dueDate) : null,
+      magicLink,
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error("Resend user assignment error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to resend" });
+  }
+});
+
+// ─── PATCH /api/assignments/:id/revoke-user/:userId — отозвать ссылку пользователя в группе
+router.patch("/assignments/:id/revoke-user/:userId", requireAuthor, async (req, res) => {
+  try {
+    const { id: assignmentId, userId } = req.params;
+    await storage.revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId, userId);
+    res.json({ success: true });
+  } catch (error) {
+    logger.error("Revoke user token error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to revoke" });
   }
 });
 

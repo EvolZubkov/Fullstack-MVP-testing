@@ -4,7 +4,7 @@ import { eq, inArray, and, sql, desc } from "drizzle-orm";
 import { db } from "./db";
 import { encryptEmail, decryptEmail, hashEmail } from "./utils/crypto";
 import {
-  users, topics, topicCourses, questions, tests, testSections, attempts, folders, testFolders,
+  users, topics, topicCourses, topicEvents, questions, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
   groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
   type User, type InsertUser,
@@ -12,6 +12,7 @@ import {
   type TestFolder, type InsertTestFolder,
   type Topic, type InsertTopic,
   type TopicCourse, type InsertTopicCourse,
+  type TopicEvent, type InsertTopicEvent,
   type Question, type InsertQuestion,
   type Test, type InsertTest,
   type TestSection, type InsertTestSection,
@@ -56,6 +57,7 @@ export interface IStorage {
   setUserGroups(userId: string, groupIds: string[]): Promise<void>;
 
   // Test Assignments
+  getAssignment(id: string): Promise<TestAssignment | undefined>;
   getTestAssignments(testId: string): Promise<TestAssignment[]>;
   getUserAssignments(userId: string): Promise<TestAssignment[]>;
   getGroupAssignments(groupId: string): Promise<TestAssignment[]>;
@@ -64,7 +66,7 @@ export interface IStorage {
   getAssignedTestsForUser(userId: string): Promise<Test[]>;
 
   // Password Reset Tokens
-  createPasswordResetToken(userId: string, tokenHash: string, requestIp: string): Promise<PasswordResetToken>;
+  createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken>;
   getPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined>;
   markTokenAsUsed(id: string): Promise<void>;
   getRecentTokensCount(userId: string, hours: number): Promise<number>;
@@ -99,6 +101,10 @@ export interface IStorage {
   getTopicCourses(topicId: string): Promise<TopicCourse[]>;
   createTopicCourse(course: InsertTopicCourse): Promise<TopicCourse>;
   deleteTopicCourse(id: string): Promise<boolean>;
+
+  getTopicEvents(topicId: string): Promise<TopicEvent[]>;
+  createTopicEvent(event: InsertTopicEvent): Promise<TopicEvent>;
+  deleteTopicEvent(id: string): Promise<boolean>;
 
   getQuestions(): Promise<Question[]>;
   getQuestionsByTopic(topicId: string): Promise<Question[]>;
@@ -356,6 +362,11 @@ export class DatabaseStorage implements IStorage {
   // Test Assignments
   // ============================================
 
+  async getAssignment(id: string): Promise<TestAssignment | undefined> {
+    const [a] = await db.select().from(testAssignments).where(eq(testAssignments.id, id));
+    return a;
+  }
+
   async getTestAssignments(testId: string): Promise<TestAssignment[]> {
     return db.select().from(testAssignments).where(eq(testAssignments.testId, testId));
   }
@@ -425,9 +436,9 @@ export class DatabaseStorage implements IStorage {
   // Password Reset Tokens
   // ============================================
 
-  async createPasswordResetToken(userId: string, tokenHash: string, requestIp: string): Promise<PasswordResetToken> {
+  async createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken> {
     const id = randomUUID();
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 минут
+    const expiresAt = new Date(Date.now() + (ttlMs ?? 30 * 60 * 1000)); // 30 минут по умолчанию
     const [token] = await db.insert(passwordResetTokens).values({
       id,
       userId,
@@ -634,6 +645,21 @@ export class DatabaseStorage implements IStorage {
 
   async deleteTopicCourse(id: string): Promise<boolean> {
     const result = await db.delete(topicCourses).where(eq(topicCourses.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getTopicEvents(topicId: string): Promise<TopicEvent[]> {
+    return db.select().from(topicEvents).where(eq(topicEvents.topicId, topicId));
+  }
+
+  async createTopicEvent(event: InsertTopicEvent): Promise<TopicEvent> {
+    const id = randomUUID();
+    const [newEvent] = await db.insert(topicEvents).values({ id, ...event }).returning();
+    return newEvent;
+  }
+
+  async deleteTopicEvent(id: string): Promise<boolean> {
+    const result = await db.delete(topicEvents).where(eq(topicEvents.id, id)).returning();
     return result.length > 0;
   }
 

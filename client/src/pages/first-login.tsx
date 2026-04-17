@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { UserCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/password-input";
 import {
   Card,
@@ -21,9 +20,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  FormDescription,
 } from "@/components/ui/form";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
@@ -37,10 +34,6 @@ const passwordRegex = /^[A-Za-z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]+$/;
 
 const createSchema = (mustChangePassword: boolean) =>
   z.object({
-    name: z.string().optional(),
-    gdprConsent: z.boolean().refine((val) => val === true, {
-      message: t.auth.gdprRequired,
-    }),
     newPassword: mustChangePassword
       ? z.string()
           .min(8, t.users.passwordMinLength)
@@ -74,8 +67,6 @@ export default function FirstLoginPage({ mustChangePassword }: FirstLoginPagePro
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
-      name: "",
-      gdprConsent: false,
       newPassword: "",
       confirmPassword: "",
     },
@@ -89,9 +80,8 @@ export default function FirstLoginPage({ mustChangePassword }: FirstLoginPagePro
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          gdprConsent: data.gdprConsent,
+          gdprConsent: true,
           newPassword: mustChangePassword ? data.newPassword : undefined,
-          name: data.name || undefined,
         }),
       });
 
@@ -142,28 +132,9 @@ export default function FirstLoginPage({ mustChangePassword }: FirstLoginPagePro
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              {/* Имя */}
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t.auth.yourName}</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder={t.auth.yourNamePlaceholder}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
               {/* Смена пароля */}
               {mustChangePassword && (
                 <>
-                  <Separator />
                   <div className="space-y-4">
                     <div>
                       <h3 className="text-sm font-medium">{t.auth.changePassword}</h3>
@@ -208,30 +179,6 @@ export default function FirstLoginPage({ mustChangePassword }: FirstLoginPagePro
                   </div>
                 </>
               )}
-
-              <Separator />
-
-              {/* GDPR согласие */}
-              <FormField
-                control={form.control}
-                name="gdprConsent"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel className="text-sm font-normal">
-                        {t.auth.gdprConsentText}
-                      </FormLabel>
-                      <FormMessage />
-                    </div>
-                  </FormItem>
-                )}
-              />
 
               <Button type="submit" className="w-full" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

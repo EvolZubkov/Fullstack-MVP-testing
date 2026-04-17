@@ -7,9 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollText, RefreshCw, Play, Square } from "lucide-react";
 
-type LogLevel = "all" | "info" | "warn" | "error" | "debug";
+type LogLevel = "all" | "info" | "warn" | "error" | "fatal" | "debug";
 
 function getLevelBadge(line: string) {
+  if (line.includes("[FATAL]")) return <Badge className="text-xs px-1 py-0 bg-red-700 hover:bg-red-700 text-white">FATAL</Badge>;
   if (line.includes("[ERROR]")) return <Badge variant="destructive" className="text-xs px-1 py-0">ERROR</Badge>;
   if (line.includes("[WARN ]")) return <Badge variant="outline" className="text-xs px-1 py-0 border-yellow-500 text-yellow-600">WARN</Badge>;
   if (line.includes("[DEBUG]")) return <Badge variant="outline" className="text-xs px-1 py-0 text-muted-foreground">DEBUG</Badge>;
@@ -104,9 +105,10 @@ export default function LogsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Все</SelectItem>
-            <SelectItem value="info">INFO</SelectItem>
-            <SelectItem value="warn">WARN</SelectItem>
+            <SelectItem value="fatal">FATAL</SelectItem>
             <SelectItem value="error">ERROR</SelectItem>
+            <SelectItem value="warn">WARN</SelectItem>
+            <SelectItem value="info">INFO</SelectItem>
             <SelectItem value="debug">DEBUG</SelectItem>
           </SelectContent>
         </Select>

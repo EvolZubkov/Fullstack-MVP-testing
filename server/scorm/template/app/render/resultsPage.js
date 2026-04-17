@@ -254,7 +254,8 @@ function calculateResults() {
         total: 0,
         passRule: section.topicPassRule,
         topicFeedback: section.topicFeedback || null,
-        recommendedCourses: section.recommendedCourses || []
+        recommendedCourses: section.recommendedCourses || [],
+        recommendedEvents: section.recommendedEvents || []
       };
     }
     topicData[fq.topicId].total++;

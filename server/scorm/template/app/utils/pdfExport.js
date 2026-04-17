@@ -174,35 +174,64 @@ function generatePdfHtml(results, testName, bgDataUrl, logoDataUrl, learnerName,
     html += '</div>'; // section-card
   }
 
-  // Рекомендации по курсам (только для непройденных тем)
-  var recommendations = [];
+  // Рекомендации по курсам (только для непройденных тем, без дублей)
+  var seenPdfCourses = {};
+  var seenPdfEvents = {};
+  var pdfCourses = [];
+  var pdfEvents = [];
   if (results.topicResults) {
     results.topicResults.forEach(function (topic) {
-      if (!topic.passed && topic.recommendedCourses && topic.recommendedCourses.length > 0) {
-        topic.recommendedCourses.forEach(function (course) {
-          recommendations.push({
-            topicName: topic.topicName,
-            courseTitle: course.title,
-            courseUrl: course.url
-          });
+      if (!topic.passed) {
+        var section = TEST_DATA && TEST_DATA.sections
+          ? TEST_DATA.sections.find(function(s) { return s.topicId === topic.topicId; })
+          : null;
+        var courses = (section && section.recommendedCourses && section.recommendedCourses.length > 0)
+          ? section.recommendedCourses
+          : (topic.recommendedCourses || []);
+        var events = (section && section.recommendedEvents) ? section.recommendedEvents : [];
+
+        courses.forEach(function (course) {
+          if (!seenPdfCourses[course.title]) {
+            seenPdfCourses[course.title] = true;
+            pdfCourses.push({ courseTitle: course.title, courseUrl: course.url });
+          }
+        });
+        events.forEach(function (ev) {
+          if (!seenPdfEvents[ev.title]) {
+            seenPdfEvents[ev.title] = true;
+            pdfEvents.push({ eventTitle: ev.title });
+          }
         });
       }
     });
   }
 
-  if (recommendations.length > 0) {
+  if (pdfCourses.length > 0) {
     html += '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
     html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 8px;">Рекомендации по курсам</div>';
     html += '<div style="font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5;">Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.</div>';
-    
-    recommendations.forEach(function(rec, index) {
+
+    pdfCourses.forEach(function(rec, index) {
       html += '<div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">';
-      html += '<div style="font-size: 14px; font-weight: 700;">' + escapeHtml(rec.topicName) + '</div>';
       html += '<div class="pdf-link-btn" data-url="' + escapeHtml(rec.courseUrl) + '" data-index="' + index + '" style="background: #59209b; border-radius: 8px; padding: 10px 25px; font-size: 12px; font-weight: 300; color: #fafafa;">' + escapeHtml(rec.courseTitle) + '</div>';
       html += '</div>';
     });
-    
-    html += '</div>'; // recommendations
+
+    html += '</div>'; // courses recommendations
+  }
+
+  if (pdfEvents.length > 0) {
+    html += '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
+    html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 8px;">Рекомендуемые мероприятия</div>';
+    html += '<div style="font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5;">Посетите очные мероприятия для углублённого изучения материала.</div>';
+
+    pdfEvents.forEach(function(rec) {
+      html += '<div style="display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">';
+      html += '<div style="font-size: 14px; font-weight: 300; color: #fafafa;">' + escapeHtml(rec.eventTitle) + '</div>';
+      html += '</div>';
+    });
+
+    html += '</div>'; // events recommendations
   }
 
   html += '</div>'; // padding

@@ -136,6 +136,7 @@ const dbSection: any = {
   topic: dbTopic,
   questions: [dbQuestion],
   courses: [{ title: "JS Course", url: "https://example.com/js" }],
+  events: [{ id: "ev1", topicId: "t1", title: "Мастер-класс по JS" }],
   drawCount: 1,
   topicPassRuleJson: { type: "percent", value: 60 },
 };
@@ -177,7 +178,7 @@ describe("buildTestJson — standard mode", () => {
     expect(data.totalQuestions).toBe(1);
   });
 
-  it("includes sections with topic info, questions, courses", () => {
+  it("includes sections with topic info, questions, courses and events", () => {
     const data = JSON.parse(buildTestJson(exportData));
     expect(data.sections).toHaveLength(1);
     expect(data.sections[0].topicId).toBe("t1");
@@ -185,6 +186,24 @@ describe("buildTestJson — standard mode", () => {
     expect(data.sections[0].questions).toHaveLength(1);
     expect(data.sections[0].recommendedCourses).toHaveLength(1);
     expect(data.sections[0].recommendedCourses[0].url).toBe("https://example.com/js");
+    expect(data.sections[0].recommendedEvents).toHaveLength(1);
+    expect(data.sections[0].recommendedEvents[0].title).toBe("Мастер-класс по JS");
+  });
+
+  it("recommendedEvents has no url field", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    const ev = data.sections[0].recommendedEvents[0];
+    expect(ev.title).toBe("Мастер-класс по JS");
+    expect(ev.url).toBeUndefined();
+  });
+
+  it("recommendedEvents is empty array when no events", () => {
+    const noEventsData = {
+      ...exportData,
+      sections: [{ ...dbSection, events: [] }],
+    };
+    const data = JSON.parse(buildTestJson(noEventsData));
+    expect(data.sections[0].recommendedEvents).toEqual([]);
   });
 
   it("maps question fields correctly", () => {

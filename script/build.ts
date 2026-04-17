@@ -78,6 +78,10 @@ async function buildAll() {
   await mkdir("dist/scorm/assets", { recursive: true });
   await cp("server/scorm/assets", "dist/scorm/assets", { recursive: true });
 
+  console.log("copying scorm template...");
+  await mkdir("dist/scorm/template", { recursive: true });
+  await cp("server/scorm/template", "dist/scorm/template", { recursive: true });
+
 }
 
 

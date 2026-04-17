@@ -94,6 +94,13 @@ export const topicCourses = pgTable("topic_courses", {
   url: text("url").notNull(),
 });
 
+// Рекомендуемые мероприятия (офлайн: мастер-класс, лабораторная и т.д.)
+export const topicEvents = pgTable("topic_events", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  topicId: varchar("topic_id", { length: 36 }).notNull(),
+  title: text("title").notNull(),
+});
+
 export const questions = pgTable("questions", {
   id: varchar("id", { length: 36 }).primaryKey(),
   topicId: varchar("topic_id", { length: 36 }).notNull(),
@@ -193,6 +200,7 @@ export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertFolderSchema = createInsertSchema(folders).omit({ id: true });
 export const insertTopicSchema = createInsertSchema(topics).omit({ id: true });
 export const insertTopicCourseSchema = createInsertSchema(topicCourses).omit({ id: true });
+export const insertTopicEventSchema = createInsertSchema(topicEvents).omit({ id: true });
 export const insertQuestionSchema = createInsertSchema(questions).omit({ id: true });
 export const insertTestSchema = createInsertSchema(tests).omit({ id: true });
 export const insertTestSectionSchema = createInsertSchema(testSections).omit({ id: true });
@@ -221,6 +229,9 @@ export type Topic = typeof topics.$inferSelect;
 
 export type InsertTopicCourse = z.infer<typeof insertTopicCourseSchema>;
 export type TopicCourse = typeof topicCourses.$inferSelect;
+
+export type InsertTopicEvent = z.infer<typeof insertTopicEventSchema>;
+export type TopicEvent = typeof topicEvents.$inferSelect;
 
 export type InsertQuestion = z.infer<typeof insertQuestionSchema>;
 export type Question = typeof questions.$inferSelect;

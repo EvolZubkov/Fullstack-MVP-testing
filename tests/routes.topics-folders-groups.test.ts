@@ -13,6 +13,7 @@ const { storageMock } = vi.hoisted(() => ({
     getTopics: vi.fn(), getTopic: vi.fn(), createTopic: vi.fn(),
     updateTopic: vi.fn(), deleteTopic: vi.fn(), deleteTopicsBulk: vi.fn(),
     getTopicCourses: vi.fn(), createTopicCourse: vi.fn(), deleteTopicCourse: vi.fn(),
+    getTopicEvents: vi.fn(), createTopicEvent: vi.fn(), deleteTopicEvent: vi.fn(),
     getQuestionsByTopic: vi.fn(),
     // folders
     getFolders: vi.fn(), getFolder: vi.fn(), createFolder: vi.fn(),
@@ -64,22 +65,27 @@ describe("Topics routes", () => {
   let app: express.Express;
   const topic = { id: "t1", name: "JavaScript", description: "JS basics", folderId: null, createdAt: new Date() };
   const course = { id: "c1", topicId: "t1", title: "Course 1", url: "https://example.com", createdAt: new Date() };
+  const event = { id: "e1", topicId: "t1", title: "Мастер-класс по JS" };
   const question = { id: "q1", topicId: "t1", type: "single", difficulty: 50 };
 
   beforeEach(() => {
     vi.clearAllMocks();
     storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopicEvents.mockResolvedValue([]);
     app = makeApp(topicsRouter, "/api/topics");
   });
 
-  it("GET / — returns topics with courses and questionCount", async () => {
+  it("GET / — returns topics with courses, events and questionCount", async () => {
     storageMock.getTopics.mockResolvedValue([topic]);
     storageMock.getTopicCourses.mockResolvedValue([course]);
+    storageMock.getTopicEvents.mockResolvedValue([event]);
     storageMock.getQuestionsByTopic.mockResolvedValue([question, question]);
     const res = await asAuthor(request(app).get("/api/topics"));
     expect(res.status).toBe(200);
     expect(res.body[0].questionCount).toBe(2);
     expect(res.body[0].courses).toHaveLength(1);
+    expect(res.body[0].events).toHaveLength(1);
+    expect(res.body[0].events[0].title).toBe("Мастер-класс по JS");
   });
 
   it("GET / — returns 401 when not authenticated", async () => {
@@ -160,6 +166,50 @@ describe("Topics routes", () => {
     storageMock.deleteTopicCourse.mockResolvedValue(false);
     const res = await asAuthor(request(app).delete("/api/topics/courses/x"));
     expect(res.status).toBe(404);
+  });
+
+  // ── Events ──────────────────────────────────────────────────────────────────
+
+  it("POST /:topicId/events — creates event with title only", async () => {
+    storageMock.createTopicEvent.mockResolvedValue(event);
+    const res = await asAuthor(request(app).post("/api/topics/t1/events")
+      .send({ title: "Мастер-класс по JS" }));
+    expect(res.status).toBe(201);
+    expect(res.body.title).toBe("Мастер-класс по JS");
+    expect(storageMock.createTopicEvent).toHaveBeenCalledWith({
+      topicId: "t1",
+      title: "Мастер-класс по JS",
+    });
+  });
+
+  it("POST /:topicId/events — returns 400 when title missing", async () => {
+    const res = await asAuthor(request(app).post("/api/topics/t1/events").send({}));
+    expect(res.status).toBe(400);
+  });
+
+  it("POST /:topicId/events — returns 401 when not authenticated", async () => {
+    const res = await request(app).post("/api/topics/t1/events").send({ title: "Test" });
+    expect(res.status).toBe(401);
+  });
+
+  it("DELETE /events/:id — deletes event", async () => {
+    storageMock.deleteTopicEvent.mockResolvedValue(true);
+    const res = await asAuthor(request(app).delete("/api/topics/events/e1"));
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(storageMock.deleteTopicEvent).toHaveBeenCalledWith("e1");
+  });
+
+  it("DELETE /events/:id — returns 404 when event not found", async () => {
+    storageMock.deleteTopicEvent.mockResolvedValue(false);
+    const res = await asAuthor(request(app).delete("/api/topics/events/x"));
+    expect(res.status).toBe(404);
+  });
+
+  it("DELETE /events/:id — does NOT call deleteTopic", async () => {
+    storageMock.deleteTopicEvent.mockResolvedValue(true);
+    await asAuthor(request(app).delete("/api/topics/events/e1"));
+    expect(storageMock.deleteTopic).not.toHaveBeenCalled();
   });
 
   it("GET /:topicId/difficulty-distribution — returns distribution", async () => {

@@ -186,4 +186,19 @@ export async function waitForDatabase(): Promise<boolean> {
   );
 }
 
-export const db = drizzle(pool, { schema });
+const SLOW_QUERY_MS = 500;
+
+export const db = drizzle(pool, {
+  schema,
+  logger: {
+    logQuery(query: string, params: unknown[]) {
+      // Пишем только медленные запросы чтобы не засорять лог
+      const start = Date.now();
+      // Drizzle вызывает logQuery синхронно до выполнения запроса — используем как маркер
+      // Реальное время отслеживается через pool events, здесь просто дебаг-трейс в dev
+      if (process.env.LOG_SQL === "true") {
+        logger.debug(`SQL: ${query.slice(0, 200)} params=${JSON.stringify(params).slice(0, 100)}`, "db");
+      }
+    },
+  },
+});

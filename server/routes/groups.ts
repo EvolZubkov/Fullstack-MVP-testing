@@ -1,9 +1,67 @@
 import { Router } from "express";
+import { createHash, randomBytes } from "crypto";
 import { logger } from "../logger";
 import { storage } from "../storage";
 import { requireAuthor, requireLearner } from "../middleware/auth";
+import { sendAssignmentEmail } from "../email";
+
+const APP_URL = process.env.APP_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`;
 
 const router = Router();
+
+// Генерирует токен и шлёт письмо новому участнику группы по всем активным назначениям
+async function notifyNewGroupMember(userId: string, groupId: string) {
+  try {
+    const assignments = await storage.getGroupAssignments(groupId);
+    if (assignments.length === 0) return;
+
+    const user = await storage.getUser(userId);
+    if (!user) return;
+
+    const { decryptEmail } = await import("../utils/crypto");
+    let email = user.email;
+    try {
+      if (user.email && !user.email.includes("@")) {
+        email = await decryptEmail(user.email);
+      }
+    } catch { return; }
+
+    for (const assignment of assignments) {
+      const test = await storage.getTest(assignment.testId);
+      if (!test) continue;
+
+      const expiresAt = assignment.linkExpiresAt
+        ? new Date(assignment.linkExpiresAt)
+        : assignment.dueDate
+          ? new Date(assignment.dueDate)
+          : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      const raw = randomBytes(32).toString("hex");
+      const tokenHash = createHash("sha256").update(raw).digest("hex");
+      await storage.createAssignmentAccessToken({
+        assignmentId: assignment.id,
+        userId,
+        testId: assignment.testId,
+        tokenHash,
+        expiresAt,
+      });
+
+      const magicLink = `${APP_URL}/access/${raw}`;
+      await sendAssignmentEmail({
+        to: email,
+        userName: user.name || undefined,
+        testTitle: test.title,
+        testDescription: test.description,
+        dueDate: assignment.dueDate ? new Date(assignment.dueDate) : null,
+        magicLink,
+      });
+
+      logger.info(`Sent assignment email to new group member ${email} for test "${test.title}"`);
+    }
+  } catch (e) {
+    logger.error("notifyNewGroupMember error: " + (e as Error).message);
+  }
+}
 
 // GET /api/groups - Список групп
 router.get("/", requireAuthor, async (req, res) => {
@@ -122,6 +180,8 @@ router.post("/:id/users", requireAuthor, async (req, res) => {
     for (const uid of idsToAdd) {
       if (!currentUserIds.has(uid)) {
         await storage.addUserToGroup(uid, groupId);
+        // Асинхронно шлём письма — не блокируем ответ
+        notifyNewGroupMember(uid, groupId).catch(() => {});
       }
     }
 

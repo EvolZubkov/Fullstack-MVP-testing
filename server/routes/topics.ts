@@ -12,10 +12,12 @@ router.get("/", requireAuth, async (req, res) => {
     const topicsWithDetails = await Promise.all(
       topics.map(async (topic) => {
         const courses = await storage.getTopicCourses(topic.id);
+        const events = await storage.getTopicEvents(topic.id);
         const questions = await storage.getQuestionsByTopic(topic.id);
-        return { 
-          ...topic, 
+        return {
+          ...topic,
           courses,
+          events,
           questionCount: questions.length,
         };
       })
@@ -54,6 +56,34 @@ router.put("/:id", requireAuthor, async (req, res) => {
   } catch (error) {
     logger.error("Update topic error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to update topic" });
+  }
+});
+
+// DELETE /api/topics/events/:id - Удалить мероприятие (must be before /:id)
+router.delete("/events/:id", requireAuthor, async (req, res) => {
+  try {
+    const success = await storage.deleteTopicEvent(req.params.id);
+    if (!success) {
+      return res.status(404).json({ error: "Event not found" });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    logger.error("Delete event error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to delete event" });
+  }
+});
+
+// DELETE /api/topics/courses/:id - Удалить курс (must be before /:id)
+router.delete("/courses/:id", requireAuthor, async (req, res) => {
+  try {
+    const success = await storage.deleteTopicCourse(req.params.id);
+    if (!success) {
+      return res.status(404).json({ error: "Course not found" });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    logger.error("Delete course error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to delete course" });
   }
 });
 
@@ -119,19 +149,24 @@ router.post("/:topicId/courses", requireAuthor, async (req, res) => {
   }
 });
 
-// DELETE /api/courses/:id - Удалить курс
-router.delete("/courses/:id", requireAuthor, async (req, res) => {
+// POST /api/topics/:topicId/events - Добавить мероприятие к теме
+router.post("/:topicId/events", requireAuthor, async (req, res) => {
   try {
-    const success = await storage.deleteTopicCourse(req.params.id);
-    if (!success) {
-      return res.status(404).json({ error: "Course not found" });
+    const { title } = req.body;
+    if (!title) {
+      return res.status(400).json({ error: "Title required" });
     }
-    res.json({ success: true });
+    const event = await storage.createTopicEvent({
+      topicId: req.params.topicId,
+      title,
+    });
+    res.status(201).json(event);
   } catch (error) {
-    logger.error("Delete course error: " + (error as Error).message);
-    res.status(500).json({ error: "Failed to delete course" });
+    logger.error("Create event error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to create event" });
   }
 });
+
 
 // GET /api/topics/:topicId/difficulty-distribution - Распределение сложности
 router.get("/:topicId/difficulty-distribution", requireAuthor, async (req, res) => {

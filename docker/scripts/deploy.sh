@@ -57,17 +57,23 @@ envsubst < "$DEPLOY_DIR/config/docker-compose.yml" > "$APP_DIR/docker-compose.ym
 chown -R "${DIR_OWNER}:${DIR_GROUP}" "$APP_DIR"
 chown -R "${DIR_OWNER}:${DIR_GROUP}" "$DATA_DIR"
 
-# Build image from temp directory
-echo "Building Docker image..."
-cd "$DEPLOY_DIR/source"
-docker build -t "$IMAGE_NAME:latest" .
-
 # Stop old container (if exists)
 if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     echo "Stopping old container..."
     docker stop "$CONTAINER_NAME" || true
     docker rm "$CONTAINER_NAME" || true
 fi
+
+# Remove old image to force full rebuild (no stale cache)
+if docker image inspect "$IMAGE_NAME:latest" &>/dev/null; then
+    echo "Removing old image..."
+    docker rmi "$IMAGE_NAME:latest" || true
+fi
+
+# Build image from temp directory
+echo "Building Docker image..."
+cd "$DEPLOY_DIR/source"
+docker build --no-cache -t "$IMAGE_NAME:latest" .
 
 # Start new container
 echo "Starting container..."
@@ -77,24 +83,31 @@ docker compose up -d
 # Cleanup temp directory
 rm -rf "$DEPLOY_DIR"
 
+# Wait for container to be ready
+echo "Waiting for container to start..."
+for i in $(seq 1 15); do
+    if docker exec "$CONTAINER_NAME" echo "ok" &>/dev/null; then
+        break
+    fi
+    echo "  attempt $i/15..."
+    sleep 2
+done
+
+# Run DB migrations — always on deploy to apply schema changes
+echo ""
+echo "=== Applying DB migrations (db:push) ==="
+docker exec "$CONTAINER_NAME" npx drizzle-kit push --force
+echo "=== Migrations done ==="
+
 # Check status
 echo ""
 echo "=== Status ==="
 docker ps --filter "name=$CONTAINER_NAME"
 
 echo ""
-echo "=== Done ==="
-echo "Logs: docker logs -f $CONTAINER_NAME"
-echo "URL: http://localhost:${EXPOSE_PORT}"
+echo "=== Deploy complete ==="
+echo "Logs:  docker logs -f $CONTAINER_NAME"
+echo "URL:   http://$(hostname -I | awk '{print $1}'):${EXPOSE_PORT}"
 echo ""
-echo "Management commands:"
-echo "  cd $APP_DIR && docker compose stop"
-echo "  cd $APP_DIR && docker compose start"
-echo "  cd $APP_DIR && docker compose down"
-
-# Initialize DB (if first run)
-read -p "Initialize DB (npm run db:push)? [y/N] " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    docker exec "$CONTAINER_NAME" npm run db:push
-fi
+echo "Management:"
+echo "  cd $APP_DIR && docker compose stop|start|restart"

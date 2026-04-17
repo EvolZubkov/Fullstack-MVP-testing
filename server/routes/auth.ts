@@ -4,7 +4,7 @@ import { storage } from "../storage";
 import { requireAuth } from "../middleware/auth";
 import { sendPasswordResetEmail } from "../email";
 import { maskEmail } from "../utils/mask-email";
-import { logger } from "../logger";
+import { logger, audit, requestContext } from "../logger";
 
 const router = Router();
 
@@ -42,6 +42,7 @@ router.post("/login", async (req, res) => {
     const user = await storage.validatePassword(email, password);
     if (!user) {
       logger.warn(`Failed login attempt: ${email} from ${ip}`, "auth");
+      audit.login(email, false, ip);
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
@@ -52,8 +53,27 @@ router.post("/login", async (req, res) => {
 
     await storage.updateUserLastLogin(user.id);
     logger.info(`User logged in: ${email} (${user.role}) from ${ip}`, "auth");
+    audit.login(email, true, ip);
+
+    // Подтягиваем userId в контекст запроса сразу после логина
+    const ctx = requestContext.getStore();
+    if (ctx) ctx.userId = user.id;
 
     req.session.userId = user.id;
+
+    // Явно сохраняем сессию перед ответом — гарантирует что сессия в store
+    // до того как браузер отправит следующий запрос с cookie
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) {
+          logger.error("Session save error: " + err.message, "auth");
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+
     res.json({
       user: {
         id: user.id,
@@ -78,6 +98,7 @@ router.post("/logout", async (req, res) => {
     const user = await storage.getUser(userId).catch(() => null);
     logger.info(`User logged out: ${user?.email ?? userId}`, "auth");
   }
+  audit.logout();
   req.session.destroy(() => {
     res.json({ success: true });
   });
@@ -105,6 +126,7 @@ router.post("/change-password", requireAuth, async (req, res) => {
     }
 
     await storage.updateUserPassword(user.id, newPassword);
+    audit.passwordChange(user.id);
     res.json({ success: true });
   } catch (error) {
     logger.error("Change password error: " + (error as Error).message, "auth");

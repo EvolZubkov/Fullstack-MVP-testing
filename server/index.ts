@@ -11,20 +11,27 @@ import {
   checkDatabaseHealth,
   getDatabaseStatus,
 } from "./db";
-import { logger } from "./logger";
+import { logger, requestContext, SLOW_REQUEST_MS } from "./logger";
+import { randomUUID } from "crypto";
 
-process.on("uncaughtException", (err) => {
-  console.error("=== UNCAUGHT EXCEPTION ===");
-  console.error(err.stack || err);
+process.on("uncaughtException", async (err) => {
+  // Пишем в файл через logger, затем закрываем БД и выходим.
+  // process.exit() обязателен — после uncaughtException состояние процесса неизвестно.
+  logger.fatal(err, "uncaughtException");
+  try { await closeDatabaseConnection(); } catch {}
+  process.exit(1);
 });
 
 process.on("unhandledRejection", (reason) => {
-  console.error("=== UNHANDLED REJECTION ===");
-  console.error(reason);
+  // Не всегда фатально, но всегда должно быть видно в логах.
+  logger.fatal(reason instanceof Error ? reason : String(reason), "unhandledRejection");
 });
 
 const app = express();
 const httpServer = createServer(app);
+
+// Trust first proxy (nginx/traefik) — required for secure session cookies behind reverse proxy
+app.set("trust proxy", 1);
 
 declare module "http" {
   interface IncomingMessage {
@@ -48,18 +55,40 @@ export function log(message: string, source = "express") {
   logger.info(message, source);
 }
 
+// ─── Request ID + userId context + slow request warning ───────────────────────
 app.use((req, res, next) => {
+  const reqId = randomUUID().slice(0, 8); // короткий id, достаточно для корреляции
   const start = Date.now();
-  const path = req.path;
+  const reqPath = req.path;
 
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api") && !path.startsWith("/api/logs")) {
-      log(`${req.method} ${path} ${res.statusCode} in ${duration}ms`);
-    }
+  // Запускаем весь обработчик запроса внутри AsyncLocalStorage контекста.
+  // userId недоступен сразу (нужна сессия), поэтому дописывается позже.
+  requestContext.run({ reqId, method: req.method, path: reqPath }, () => {
+    // Как только сессия будет прочитана — подтягиваем userId в контекст
+    const originalNext = next;
+    const wrappedNext = (err?: any) => {
+      const ctx = requestContext.getStore();
+      if (ctx && (req.session as any)?.userId && !ctx.userId) {
+        ctx.userId = (req.session as any).userId;
+      }
+      originalNext(err);
+    };
+
+    res.on("finish", () => {
+      const duration = Date.now() - start;
+      if (reqPath.startsWith("/api") && !reqPath.startsWith("/api/logs")) {
+        const ctx = requestContext.getStore();
+        const userTag = ctx?.userId ? ` user:${ctx.userId}` : "";
+        log(`[req:${reqId}]${userTag} ${req.method} ${reqPath} ${res.statusCode} in ${duration}ms`);
+
+        if (duration > SLOW_REQUEST_MS) {
+          logger.warn(`SLOW REQUEST [req:${reqId}] ${req.method} ${reqPath} — ${duration}ms`, "express");
+        }
+      }
+    });
+
+    wrappedNext();
   });
-
-  next();
 });
 
 (async () => {
@@ -89,12 +118,19 @@ app.use((req, res, next) => {
 
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    // Логируем все необработанные ошибки Express — включая stack trace
+    logger.error(
+      `${req.method} ${req.path} → ${status}: ${err.stack || message}`,
+      "express"
+    );
+
+    if (!res.headersSent) {
+      res.status(status).json({ message });
+    }
   });
 
   // importantly only setup vite in development and after

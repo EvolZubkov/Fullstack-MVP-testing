@@ -309,11 +309,13 @@ router.get("/:id/export/scorm", requireAuthor, async (req, res) => {
         const topic = await storage.getTopic(s.topicId);
         const questions = await storage.getQuestionsByTopic(s.topicId);
         const courses = await storage.getTopicCourses(s.topicId);
+        const events = await storage.getTopicEvents(s.topicId);
         return {
           ...s,
           topic: topic!,
           questions,
           courses,
+          events,
         };
       })
     );

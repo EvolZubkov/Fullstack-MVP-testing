@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { logger } from "../logger";
+import { logger, audit } from "../logger";
 import { storage } from "../storage";
 import { requireAuthor } from "../middleware/auth";
-import { sendPasswordResetEmail } from "../email";
+import { sendInviteEmail } from "../email";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import { randomBytes, createHash } from "crypto";
@@ -29,7 +29,7 @@ router.get("/", requireAuthor, async (req, res) => {
 });
 
 // GET /api/users/bulk-template — download CSV template (must be before /:id)
-router.get("/bulk-template", requireAuthor, (req, res) => {
+router.get("/bulk-template", requireAuthor, (_req, res) => {
   const ws = XLSX.utils.aoa_to_sheet([
     ["email", "name", "role", "group"],
     ["user@example.com", "Иван Иванов", "learner", "Группа А"],
@@ -88,6 +88,7 @@ router.post("/", requireAuthor, async (req, res) => {
     }
 
     const groups = await storage.getUserGroups(user.id);
+    audit.userCreate(user.email, user.role);
     res.status(201).json({ ...user, groups });
   } catch (error) {
     logger.error("Create user error: " + (error as Error).message);
@@ -147,7 +148,7 @@ router.post("/:id/reset-password", requireAuthor, async (req, res) => {
 
     await storage.updateUserPassword(user.id, newPassword);
     await storage.updateUser(user.id, { mustChangePassword: true });
-
+    audit.passwordReset(user.id);
     res.json({ success: true });
   } catch (error) {
     logger.error("Reset password error: " + (error as Error).message);
@@ -168,6 +169,7 @@ router.post("/:id/deactivate", requireAuthor, async (req, res) => {
     }
 
     await storage.deactivateUser(user.id);
+    audit.userDeactivate(user.id);
     res.json({ success: true });
   } catch (error) {
     logger.error("Deactivate user error: " + (error as Error).message);
@@ -184,6 +186,7 @@ router.post("/:id/activate", requireAuthor, async (req, res) => {
     }
 
     await storage.activateUser(user.id);
+    audit.userActivate(user.id);
     res.json({ success: true });
   } catch (error) {
     logger.error("Activate user error: " + (error as Error).message);
@@ -211,6 +214,7 @@ router.post("/:id/reset-attempts", requireAuthor, async (req, res) => {
       }
     }
 
+    audit.attemptsReset(userId, testId ?? null);
     res.json({ success: true });
   } catch (error) {
     logger.error("Reset attempts error: " + (error as Error).message);
@@ -425,7 +429,9 @@ router.post("/bulk-import", requireAuthor, async (req, res) => {
           if (row.duplicateAction === "update" && row.existingId) {
             await storage.updateUser(row.existingId, { name: row.name || undefined, role: (row.role as any) || "learner" });
             const gid = await resolveGroupId(row.groupId, row.groupName);
-            if (gid) await storage.addUserToGroup(row.existingId, gid).catch(() => {});
+            if (gid) await storage.addUserToGroup(row.existingId, gid).catch((e: Error) => {
+              logger.warn(`bulk-import: addUserToGroup failed for ${row.email} → group ${gid}: ${e.message}`);
+            });
             updated++;
           }
           continue;
@@ -446,15 +452,17 @@ router.post("/bulk-import", requireAuthor, async (req, res) => {
 
         // Assign group (auto-create if not found)
         const gid = await resolveGroupId(row.groupId, row.groupName);
-        if (gid) await storage.addUserToGroup(user.id, gid).catch(() => {});
+        if (gid) await storage.addUserToGroup(user.id, gid).catch((e: Error) => {
+          logger.warn(`bulk-import: addUserToGroup failed for ${row.email} → group ${gid}: ${e.message}`);
+        });
 
         // Send invite (password-reset link)
         if (sendInvites) {
           const rawToken = randomBytes(32).toString("hex");
           const tokenHash = createHash("sha256").update(rawToken).digest("hex");
-          await storage.createPasswordResetToken(user.id, tokenHash, "bulk-import");
+          await storage.createPasswordResetToken(user.id, tokenHash, "bulk-import", 7 * 24 * 60 * 60 * 1000); // 7 дней для invite
           const inviteLink = `${baseUrl}/reset-password?token=${rawToken}`;
-          const sent = await sendPasswordResetEmail(user.email, inviteLink, user.name || undefined);
+          const sent = await sendInviteEmail({ to: user.email, userName: user.name || undefined, inviteLink });
           if (sent) invitesSent++;
         }
 
@@ -464,6 +472,7 @@ router.post("/bulk-import", requireAuthor, async (req, res) => {
       }
     }
 
+    audit.bulkImport(created, updated, skipped);
     res.json({ created, updated, skipped, invitesSent, errors });
   } catch (error) {
     logger.error("Bulk import error: " + (error as Error).message);

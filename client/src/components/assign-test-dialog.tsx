@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Users,
@@ -9,6 +9,8 @@ import {
   Link,
   RefreshCw,
   Ban,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,8 +67,192 @@ interface Assignment {
   assignedAt: string;
   user?: User | null;
   group?: Group | null;
+  groupMemberIds?: string[];
   tokenStatus?: "active" | "expired" | "revoked" | "none";
   tokenId?: string | null;
+}
+
+interface GroupUser {
+  id: string;
+  email: string;
+  name: string | null;
+  status: string;
+  tokenStatus: "active" | "revoked" | "none";
+}
+
+function GroupUserRow({ user, assignmentId, testId }: { user: GroupUser; assignmentId: string; testId: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const resendUser = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/assignments/${assignmentId}/resend-user/${user.id}`, { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/assignments/${assignmentId}/group-users`] });
+      toast({ title: "Ссылка обновлена", description: `Письмо отправлено ${user.email}` });
+    },
+    onError: () => toast({ variant: "destructive", title: "Ошибка", description: "Не удалось обновить ссылку" }),
+  });
+
+  const revokeUser = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/assignments/${assignmentId}/revoke-user/${user.id}`, { method: "PATCH", credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/assignments/${assignmentId}/group-users`] });
+      toast({ title: "Ссылка отозвана" });
+    },
+    onError: () => toast({ variant: "destructive", title: "Ошибка", description: "Не удалось отозвать ссылку" }),
+  });
+
+  return (
+    <div className="flex items-center justify-between py-1 text-sm border-b border-border/50 last:border-0">
+      <div className="flex items-center gap-3">
+        <Users className="h-3 w-3 text-muted-foreground" />
+        <span className="font-medium">{user.email}</span>
+        {user.name && <span className="text-muted-foreground">{user.name}</span>}
+      </div>
+      <div className="flex items-center gap-2">
+        <Badge variant={user.tokenStatus === "active" ? "default" : "secondary"} className={user.tokenStatus === "active" ? "bg-green-600 text-white text-xs" : "text-xs"}>
+          {user.tokenStatus === "active" ? "Активна" : user.tokenStatus === "revoked" ? "Отозвана" : "Нет ссылки"}
+        </Badge>
+        <Button variant="ghost" size="icon" className="h-6 w-6" title="Обновить ссылку и отправить письмо" onClick={() => resendUser.mutate()} disabled={resendUser.isPending}>
+          <RefreshCw className="h-3 w-3 text-blue-500" />
+        </Button>
+        {user.tokenStatus === "active" && (
+          <Button variant="ghost" size="icon" className="h-6 w-6" title="Отозвать ссылку" onClick={() => revokeUser.mutate()} disabled={revokeUser.isPending}>
+            <Ban className="h-3 w-3 text-orange-500" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AssignmentRow({
+  assignment, expanded, onToggleExpand, formatDate, tokenStatusBadge,
+  onResend, onResendGroup, onRevoke, onRemove,
+  resendPending, resendGroupPending, revokePending, removePending, testId,
+}: {
+  assignment: Assignment;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  formatDate: (d: string | null) => string;
+  tokenStatusBadge: (s?: string) => React.ReactNode;
+  onResend: () => void;
+  onResendGroup: () => void;
+  onRevoke: () => void;
+  onRemove: () => void;
+  resendPending: boolean;
+  resendGroupPending: boolean;
+  testId: string;
+  revokePending: boolean;
+  removePending: boolean;
+}) {
+  const isGroup = !!assignment.groupId;
+
+  const { data: groupUsers = [], isLoading: groupUsersLoading } = useQuery<GroupUser[]>({
+    queryKey: [`/api/assignments/${assignment.id}/group-users`],
+    enabled: isGroup && expanded,
+  });
+
+  return (
+    <>
+      <TableRow className={isGroup ? "cursor-pointer hover:bg-muted/50" : ""} onClick={isGroup ? onToggleExpand : undefined}>
+        <TableCell>
+          {assignment.user ? (
+            <div>
+              <p className="font-medium">{assignment.user.email}</p>
+              {assignment.user.name && <p className="text-sm text-muted-foreground">{assignment.user.name}</p>}
+            </div>
+          ) : assignment.group ? (
+            <div className="flex items-center gap-2">
+              {expanded ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+              <div>
+                <p className="font-medium">{assignment.group.name}</p>
+                <p className="text-sm text-muted-foreground">{assignment.group.userCount} чел.</p>
+              </div>
+            </div>
+          ) : "—"}
+        </TableCell>
+        <TableCell>
+          <Badge variant="outline">
+            {assignment.user ? <><Users className="h-3 w-3 mr-1" /> Пользователь</> : <><UsersRound className="h-3 w-3 mr-1" /> Группа</>}
+          </Badge>
+        </TableCell>
+        <TableCell>
+          {assignment.dueDate ? (
+            <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatDate(assignment.dueDate)}</span>
+          ) : (
+            <span className="text-muted-foreground">{t.assignments.noDueDate}</span>
+          )}
+        </TableCell>
+        <TableCell>
+          {assignment.linkExpiresAt ? (
+            <span className="flex items-center gap-1 text-sm"><Link className="h-3 w-3" />{formatDate(assignment.linkExpiresAt)}</span>
+          ) : (
+            <span className="text-muted-foreground text-sm">—</span>
+          )}
+        </TableCell>
+        <TableCell>
+          {isGroup ? <Badge variant="outline"><UsersRound className="h-3 w-3 mr-1" />{assignment.group?.userCount ?? 0} ссылок</Badge> : tokenStatusBadge(assignment.tokenStatus)}
+        </TableCell>
+        <TableCell onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1">
+            {assignment.userId && (
+              <Button variant="ghost" size="icon" title="Отправить письмо повторно" onClick={onResend} disabled={resendPending}>
+                <RefreshCw className="h-4 w-4 text-blue-500" />
+              </Button>
+            )}
+            {isGroup && (
+              <Button variant="ghost" size="icon" title="Обновить ссылки для всей группы" onClick={onResendGroup} disabled={resendGroupPending}>
+                <RefreshCw className="h-4 w-4 text-blue-500" />
+              </Button>
+            )}
+            {assignment.tokenId && assignment.tokenStatus === "active" && (
+              <Button variant="ghost" size="icon" title="Отозвать ссылку" onClick={onRevoke} disabled={revokePending}>
+                <Ban className="h-4 w-4 text-orange-500" />
+              </Button>
+            )}
+            <Button variant="ghost" size="icon" title="Удалить назначение" onClick={onRemove} disabled={removePending}>
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </div>
+        </TableCell>
+      </TableRow>
+
+      {/* Expanded group users */}
+      {isGroup && expanded && (
+        <TableRow>
+          <TableCell colSpan={6} className="p-0 bg-muted/30">
+            {groupUsersLoading ? (
+              <div className="flex items-center gap-2 px-8 py-3 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Загрузка участников...
+              </div>
+            ) : groupUsers.length === 0 ? (
+              <div className="px-8 py-3 text-sm text-muted-foreground">Группа пуста</div>
+            ) : (
+              <div className="px-8 py-2 space-y-1">
+                {groupUsers.map(u => (
+                  <GroupUserRow
+                    key={u.id}
+                    user={u}
+                    assignmentId={assignment.id}
+                    testId={testId}
+                  />
+                ))}
+              </div>
+            )}
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
 }
 
 interface AssignTestDialogProps {
@@ -90,6 +276,7 @@ export function AssignTestDialog({
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState<string>("");
   const [linkExpiresAt, setLinkExpiresAt] = useState<string>("");
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(new Set());
 
   // Sync linkExpiresAt with dueDate unless manually overridden
   const handleDueDateChange = (value: string) => {
@@ -182,6 +369,25 @@ export function AssignTestDialog({
     },
   });
 
+  // Resend group mutation
+  const resendGroupMutation = useMutation({
+    mutationFn: async (assignmentId: string) => {
+      const res = await fetch(`/api/assignments/${assignmentId}/resend-group`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to resend group");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/assignments`] });
+      toast({ title: "Ссылки обновлены", description: `Отправлено ${data.sent} писем.` });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: t.common.error, description: "Не удалось обновить ссылки." });
+    },
+  });
+
   // Resend email mutation
   const resendMutation = useMutation({
     mutationFn: async (assignmentId: string) => {
@@ -219,12 +425,11 @@ export function AssignTestDialog({
     });
   };
 
-  // Filter out already assigned users
-  const assignedUserIds = assignments
-    .filter((a) => a.userId)
-    .map((a) => a.userId!);
+  // Filter out already assigned users (directly or via group membership)
+  const assignedUserIds = new Set(assignments.filter((a) => a.userId).map((a) => a.userId!));
+  const groupMemberIds = new Set(assignments.flatMap((a) => a.groupMemberIds ?? []));
   const availableUsers = allUsers.filter(
-    (u) => !assignedUserIds.includes(u.id) && u.role === "learner"
+    (u) => !assignedUserIds.has(u.id) && !groupMemberIds.has(u.id) && u.role === "learner"
   );
 
   // Filter out already assigned groups
@@ -333,97 +538,27 @@ export function AssignTestDialog({
                   </TableHeader>
                   <TableBody>
                     {assignments.map((assignment) => (
-                      <TableRow key={assignment.id}>
-                        <TableCell>
-                          {assignment.user ? (
-                            <div>
-                              <p className="font-medium">{assignment.user.email}</p>
-                              {assignment.user.name && (
-                                <p className="text-sm text-muted-foreground">{assignment.user.name}</p>
-                              )}
-                            </div>
-                          ) : assignment.group ? (
-                            <div>
-                              <p className="font-medium">{assignment.group.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {assignment.group.userCount} чел.
-                              </p>
-                            </div>
-                          ) : (
-                            "—"
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {assignment.user ? (
-                              <><Users className="h-3 w-3 mr-1" /> Пользователь</>
-                            ) : (
-                              <><UsersRound className="h-3 w-3 mr-1" /> Группа</>
-                            )}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {assignment.dueDate ? (
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {formatDate(assignment.dueDate)}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">{t.assignments.noDueDate}</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {assignment.linkExpiresAt ? (
-                            <span className="flex items-center gap-1 text-sm">
-                              <Link className="h-3 w-3" />
-                              {formatDate(assignment.linkExpiresAt)}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {tokenStatusBadge(assignment.tokenStatus)}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            {/* Resend — for user assignments only */}
-                            {assignment.userId && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                title="Отправить письмо повторно"
-                                onClick={() => resendMutation.mutate(assignment.id)}
-                                disabled={resendMutation.isPending}
-                              >
-                                <RefreshCw className="h-4 w-4 text-blue-500" />
-                              </Button>
-                            )}
-                            {/* Revoke token */}
-                            {assignment.tokenId && assignment.tokenStatus === "active" && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                title="Отозвать ссылку"
-                                onClick={() => revokeTokenMutation.mutate(assignment.tokenId!)}
-                                disabled={revokeTokenMutation.isPending}
-                              >
-                                <Ban className="h-4 w-4 text-orange-500" />
-                              </Button>
-                            )}
-                            {/* Delete assignment */}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Удалить назначение"
-                              onClick={() => removeMutation.mutate(assignment.id)}
-                              disabled={removeMutation.isPending}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                      <AssignmentRow
+                        key={assignment.id}
+                        assignment={assignment}
+                        expanded={expandedGroupIds.has(assignment.id)}
+                        onToggleExpand={() => setExpandedGroupIds(prev => {
+                          const next = new Set(prev);
+                          next.has(assignment.id) ? next.delete(assignment.id) : next.add(assignment.id);
+                          return next;
+                        })}
+                        formatDate={formatDate}
+                        tokenStatusBadge={tokenStatusBadge}
+                        onResend={() => resendMutation.mutate(assignment.id)}
+                        onResendGroup={() => resendGroupMutation.mutate(assignment.id)}
+                        onRevoke={() => revokeTokenMutation.mutate(assignment.tokenId!)}
+                        onRemove={() => removeMutation.mutate(assignment.id)}
+                        resendPending={resendMutation.isPending}
+                        resendGroupPending={resendGroupMutation.isPending}
+                        revokePending={revokeTokenMutation.isPending}
+                        removePending={removeMutation.isPending}
+                        testId={testId}
+                      />
                     ))}
                   </TableBody>
                 </Table>
