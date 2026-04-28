@@ -10,20 +10,30 @@
     }
 
     window.addEventListener("beforeunload", function (e) {
-      // ✅ Если тест не был официально завершён — отправляем лучший результат
       if (typeof scormFinished === 'undefined' || !scormFinished) {
-        console.log('📤 beforeunload: отправляем данные в LMS...');
-        
+        // Тест завершён (submit), но "Завершить и закрыть" не нажали — сохраняем попытку
+        if (state.submitted) {
+          try {
+            var isAdaptive = TEST_DATA.mode === 'adaptive' && state.adaptiveState;
+            var _r = isAdaptive ? getAdaptiveResultForScorm() : calculateResults();
+            saveAttemptResult(_r);
+            clearCurrentSession();
+          } catch (e) {
+            console.log('⚠️ beforeunload: ошибка сохранения попытки:', e);
+          }
+        }
+
+        // Сохраняем текущую сессию если тест в процессе (только для тестов без таймера)
+        if (state.phase === 'question' && !state.submitted && state.flatQuestions && state.flatQuestions.length > 0) {
+          saveCurrentSession();
+        }
+
         // Отправляем лучший результат в LMS
         if (typeof getBestAttempt === 'function') {
           var bestAttempt = getBestAttempt();
           if (bestAttempt) {
-            console.log('📤 beforeunload: лучшая попытка', Math.round(bestAttempt.percent) + '%');
-            
             var percentScore = Math.round(bestAttempt.percent);
             var passed = !!bestAttempt.passed;
-            
-            // Устанавливаем значения напрямую (синхронно)
             try {
               SCORM.setValue('cmi.score.raw', percentScore);
               SCORM.setValue('cmi.score.min', 0);
@@ -38,7 +48,7 @@
           }
         }
       }
-      
+
       try { SCORM.commit(); } catch (e) { }
       try { SCORM.terminate(); } catch (e) { }
     });
@@ -47,16 +57,35 @@
     bindMatchingDnDOnce();
     bindRankingDnDOnce();
 
-    // Определяем режим теста и инициализируем
-    if (TEST_DATA.mode === 'adaptive' && TEST_DATA.adaptiveTopics) {
-      // Adaptive mode
-      initAdaptiveTest();
-    } else {
-      // Standard mode
-      generateVariant();
-    }
+    // ===== ВОССТАНОВЛЕНИЕ СЕССИИ =====
+    var recovery = determineRecovery();
+    console.log('🔄 Recovery decision:', recovery.action);
 
-    render();
+    if (recovery.action === 'restore') {
+      // Восстанавливаем незавершённую попытку
+      restoreSession(recovery.session);
+      render();
+    } else if (recovery.action === 'show_last_attempt') {
+      // Показываем результат последней попытки, сбрасываем незавершённую сессию
+      clearCurrentSession();
+      if (TEST_DATA.mode === 'adaptive' && TEST_DATA.adaptiveTopics) {
+        initAdaptiveTest();
+      } else {
+        generateVariant();
+      }
+      state.phase = 'viewResults';
+      state.viewedAttempt = recovery.attempt;
+      render();
+    } else {
+      // start_fresh — обычная инициализация
+      clearCurrentSession();
+      if (TEST_DATA.mode === 'adaptive' && TEST_DATA.adaptiveTopics) {
+        initAdaptiveTest();
+      } else {
+        generateVariant();
+      }
+      render();
+    }
 
     window.addEventListener("resize", function () {
       syncMatchingHeights();

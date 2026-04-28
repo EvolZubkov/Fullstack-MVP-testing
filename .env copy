@@ -13,10 +13,10 @@ ENCRYPTION_SALT=change-this-to-random-sa
 SESSION_SECRET=your-secret-key-change-in-production
 
 # SMTP
-SMTP_HOST=smtp.yandex.ru
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=skillum@yandex.com
-SMTP_PASS=obnxpadzwuiigjwm
-SMTP_FROM=skillum@yandex.com
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=456
+SMTP_SECURE=true
+SMTP_USER=evolzubkov@gmail.com
+SMTP_PASS=bjwy nqhh txzg cxxg  # не пароль от аккаунта, а App Password
+SMTP_FROM=evolzubkov@gmail.com
 APP_URL=http://localhost:5001

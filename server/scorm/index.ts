@@ -96,6 +96,10 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/utils/suspendAttempts.js",
   ]);
 
+  const sessionRecoveryJs = readOneOf([
+    "app/utils/scorm/sessionRecovery.js",
+  ]);
+
   const testDataJs = readOneOf([
     "app/bootstrap/testData.js",
     "app/scorm/testData.js", 
@@ -176,6 +180,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     telemetryJs, 
     shuffleJs,
     suspendAttemptsJs,
+    sessionRecoveryJs,
     testDataJs,
     stateJs,
     timerJs,

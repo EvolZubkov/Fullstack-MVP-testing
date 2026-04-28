@@ -32,6 +32,7 @@ function finishAndClose() {
   console.log('🎯 Завершение теста (' + (isAdaptive ? 'адаптивный' : 'стандартный') + '), процент:', Math.round(results.percent));
 
   saveAttemptResult(results);
+  clearCurrentSession(); // тест завершён — незавершённая сессия больше не нужна
 
   console.log('💾 Результат сохранен в suspend_data');
 

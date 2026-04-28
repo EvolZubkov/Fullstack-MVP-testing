@@ -160,7 +160,7 @@ SMTP_PASS=
 SMTP_FROM=
 
 # App
-APP_NAME=Конструктор SCORM-тестов
+APP_NAME=СкилУм
 ```
 
 ### 6. docker/scripts/prepare-deploy.bat

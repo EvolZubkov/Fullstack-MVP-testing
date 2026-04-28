@@ -5,7 +5,7 @@ import { storage } from "../storage";
 import { requireAuthor, requireLearner } from "../middleware/auth";
 import { sendAssignmentEmail } from "../email";
 
-const APP_URL = process.env.APP_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`;
+const APP_URL = (process.env.APP_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/$/, '');
 
 const router = Router();
 

@@ -7,7 +7,7 @@ import { sendAssignmentEmail } from "../email";
 
 const router = Router();
 
-const APP_URL = process.env.APP_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`;
+const APP_URL = (process.env.APP_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/$/, '');
 
 // ─── Вычислить срок жизни magic link ─────────────────────────────────────────
 function resolveTokenExpiry(linkExpiresAt?: Date | null, dueDate?: Date | null): Date {
@@ -77,6 +77,7 @@ async function notifyUser(opts: {
   });
 
   const magicLink = `${APP_URL}/access/${rawToken}`;
+  logger.info(`Assignment link generated for user ${opts.userId}, test "${opts.testTitle}", expires ${opts.expiresAt.toISOString()}`, "assignments");
 
   await sendAssignmentEmail({
     to: email,
@@ -86,6 +87,7 @@ async function notifyUser(opts: {
     dueDate: opts.dueDate,
     magicLink,
   });
+  logger.info(`Assignment email sent to ${email} for test "${opts.testTitle}"`, "assignments");
 }
 
 // ─── GET /api/tests/:id/assignments ──────────────────────────────────────────

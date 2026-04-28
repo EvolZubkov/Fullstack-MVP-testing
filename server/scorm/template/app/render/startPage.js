@@ -95,28 +95,50 @@ function renderStartPage() {
   var hasCompletedAttempts = !!getAllAttempts() && getAllAttempts().length > 0;
   var canStartNewAttempt = hasAttemptsLeft();
 
+  // Проверяем есть ли незавершённая сессия для продолжения
+  var suspendObj = readSuspendObj();
+  var pendingSession = suspendObj.currentSession;
+  var canResume = !!(
+    pendingSession &&
+    !TEST_DATA.timeLimitMinutes &&
+    TEST_DATA.mode !== 'adaptive' &&
+    pendingSession.flatQuestions &&
+    pendingSession.flatQuestions.length > 0 &&
+    !isSessionStale(pendingSession)
+  );
+  var resumeIndex = canResume ? (pendingSession.currentIndex || 0) : 0;
+  var resumeTotal = canResume ? pendingSession.flatQuestions.length : 0;
+
   html += '<div style="margin-top:24px;">';
 
   // Случай 1: Попытки закончились, есть результаты — только "Мой результат"
   if (noAttempts && hasCompletedAttempts) {
     html += '<div style="text-align:center;">';
-    html += '<button class="btn" onclick="viewSavedResults()" style="padding:14px 40px;font-size:16px;font-weight:600;">';
-    html += 'Мой результат';
-    html += '</button>';
+    html += '<button class="btn" onclick="viewSavedResults()" style="padding:14px 40px;font-size:16px;font-weight:600;">Мой результат</button>';
     html += '</div>';
   }
-  // Случай 2: Есть попытки И есть завершённые результаты — две кнопки
+  // Случай 2: Есть незавершённая сессия — предлагаем продолжить
+  else if (canResume) {
+    html += '<div style="background:hsl(var(--muted));border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid hsl(var(--border));text-align:center;">';
+    html += '<div style="font-size:13px;color:hsl(var(--muted-foreground));margin-bottom:4px;">Незавершённый тест</div>';
+    html += '<div style="font-size:14px;font-weight:600;color:hsl(var(--foreground));">Вопрос ' + (resumeIndex + 1) + ' из ' + resumeTotal + '</div>';
+    html += '</div>';
+    html += '<div style="display:flex;gap:12px;flex-direction:column;align-items:center;">';
+    html += '<button class="btn" onclick="continueSession()" style="padding:14px 40px;font-size:16px;font-weight:600;">Продолжить с места остановки</button>';
+    html += '<button class="btn" style="padding:14px 40px;font-size:16px;font-weight:600;background:hsl(var(--muted));color:hsl(var(--foreground));" onclick="startTest()">Начать заново</button>';
+    if (hasCompletedAttempts) {
+      html += '<button class="btn" style="padding:14px 40px;font-size:16px;font-weight:600;background:transparent;color:hsl(var(--muted-foreground));" onclick="viewSavedResults()">Мой результат</button>';
+    }
+    html += '</div>';
+  }
+  // Случай 3: Есть попытки И есть завершённые результаты — две кнопки
   else if (canStartNewAttempt && hasCompletedAttempts) {
     html += '<div style="display:flex;gap:12px;flex-direction:column;align-items:center;">';
-    html += '<button class="btn" onclick="startTest()" style="padding:14px 40px;font-size:16px;font-weight:600;">';
-    html += 'Начать тестирование заново';
-    html += '</button>';
-    html += '<button class="btn" style="padding:14px 40px;font-size:16px;font-weight:600;background:hsl(var(--muted));color:hsl(var(--foreground));" onclick="viewSavedResults()">';
-    html += 'Мой результат';
-    html += '</button>';
+    html += '<button class="btn" onclick="startTest()" style="padding:14px 40px;font-size:16px;font-weight:600;">Начать тестирование заново</button>';
+    html += '<button class="btn" style="padding:14px 40px;font-size:16px;font-weight:600;background:hsl(var(--muted));color:hsl(var(--foreground));" onclick="viewSavedResults()">Мой результат</button>';
     html += '</div>';
   }
-  // Случай 3: Первый вход или нет завершённых попыток
+  // Случай 4: Первый вход или нет завершённых попыток
   else {
     html += '<div style="text-align:center;">';
     html += '<button class="btn" '
@@ -312,3 +334,16 @@ function viewSavedResults() {
 }
 
 window.viewSavedResults = viewSavedResults;
+
+// ===== ПРОДОЛЖЕНИЕ НЕЗАВЕРШЁННОЙ СЕССИИ =====
+function continueSession() {
+  var recovery = determineRecovery();
+  if (recovery.action !== 'restore') {
+    showToast('Нет незавершённой сессии', 'warn');
+    return;
+  }
+  restoreSession(recovery.session);
+  render();
+}
+
+window.continueSession = continueSession;
