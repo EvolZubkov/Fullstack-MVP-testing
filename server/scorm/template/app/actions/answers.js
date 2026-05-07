@@ -210,20 +210,14 @@ function restart() {
     return;
   }
 
-  // ✅ НОВОЕ: Если есть текущие ответы - сохраняем их как завершенную попытку
-  var hasProgress = state.currentIndex > 0 || Object.keys(state.answers).length > 0;
-  console.log('🔍 hasProgress:', hasProgress, 'currentIndex:', state.currentIndex, 'answers:', Object.keys(state.answers).length);
-  
-  if (hasProgress) {
-    console.log('💾 Сохраняем текущую попытку перед перезапуском');
+  // Попытка считается использованной только если тест был явно завершён через submit().
+  // Прерванные (восстановленные) сессии не расходуют попытку.
+  if (state.submitted) {
+    console.log('💾 Сохраняем завершённую попытку перед перезапуском');
     var results = calculateResults();
     saveAttemptResult(results);
-    
-    // Сохраняем текущий номер попытки ДО увеличения
+
     var currentAttemptNum = Telemetry.getAttemptNumber();
-    console.log('📤 Отправляем finish для попытки:', currentAttemptNum, 'percent:', results.percent, 'passed:', results.passed);
-    
-    // Отправляем телеметрию finish с явным номером попытки
     Telemetry.finish({
       percent: results.percent,
       passed: results.passed,
@@ -259,25 +253,6 @@ function restart() {
   render();
 }
 
-// ===== НОВОЕ: Сохранение состояния сессии =====
-
 function saveSessionState() {
-  // Сохраняем текущий прогресс в suspend_data
-  try {
-    var sessionData = {
-      currentIndex: state.currentIndex,
-      answers: JSON.parse(JSON.stringify(state.answers)),
-      submitted: state.submitted,
-      timestamp: new Date().toISOString()
-    };
-    
-    var s = readSuspendObj();
-    s.currentSession = sessionData;
-    s.lastUpdated = new Date().toISOString();
-    
-    writeSuspendObj(s);
-    console.log('💾 Сохранено состояние сессии: вопрос ' + (state.currentIndex + 1) + '/' + state.flatQuestions.length);
-  } catch (e) {
-    console.log('⚠️ Ошибка сохранения сессии:', e);
-  }
+  saveCurrentSession();
 }

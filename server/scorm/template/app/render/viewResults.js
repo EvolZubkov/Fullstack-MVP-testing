@@ -116,42 +116,69 @@ function renderViewResults() {
 
   html +=   '</div>';
 
-  // Recommended Courses Section (только для непройденных тем)
-  var failedTopics = results.topicResults.filter(function(tr) {
-    return tr.passed === false && tr.recommendedCourses && tr.recommendedCourses.length > 0;
+  // Recommended Courses & Events Section — with deduplication across failed topics
+  var seenCourseTitles = {};
+  var seenEventTitles = {};
+  var allFailedCourses = [];
+  var allFailedEvents = [];
+
+  results.topicResults.forEach(function(tr) {
+    if (tr.passed !== false) return;
+    var section = TEST_DATA.sections.find(function(s) { return s.topicId === tr.topicId; });
+    var courses = (section && section.recommendedCourses && section.recommendedCourses.length > 0)
+      ? section.recommendedCourses
+      : (tr.recommendedCourses || []);
+    var events = (section && section.recommendedEvents) ? section.recommendedEvents : [];
+
+    courses.forEach(function(course) {
+      if (!seenCourseTitles[course.title]) {
+        seenCourseTitles[course.title] = true;
+        allFailedCourses.push(course);
+      }
+    });
+    events.forEach(function(ev) {
+      if (!seenEventTitles[ev.title]) {
+        seenEventTitles[ev.title] = true;
+        allFailedEvents.push(ev);
+      }
+    });
   });
 
-  if (failedTopics.length > 0) {
+  if (allFailedCourses.length > 0) {
     html += '<div class="results-section-title">Рекомендуемые курсы</div>';
     html += '<div style="margin-bottom:14px;color:hsl(var(--muted-foreground));font-size:14px;">';
     html += 'Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.';
     html += '</div>';
-    
-    failedTopics.forEach(function(tr) {
-      html += '<div class="card" style="padding:18px;margin-bottom:12px;">';
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">';
-      html += '<div class="topic-icon is-fail">';
-      html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">';
-      html += '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>';
+
+    allFailedCourses.forEach(function(course) {
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:hsl(var(--muted)/.5);border-radius:8px;margin-bottom:8px;">';
+      html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="hsl(var(--primary))" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
+      html += '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>';
+      html += '</svg>';
+      html += '<a href="' + escapeHtml(course.url) + '" target="_blank" rel="noopener noreferrer" style="flex:1;color:hsl(var(--primary));text-decoration:none;font-weight:500;font-size:14px;">';
+      html += escapeHtml(course.title);
+      html += '</a>';
+      html += '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="hsl(var(--muted-foreground))" stroke-width="2">';
+      html += '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/>';
       html += '</svg>';
       html += '</div>';
-      html += '<div class="topic-name">' + escapeHtml(tr.topicName) + '</div>';
-      html += '</div>';
-      
-      tr.recommendedCourses.forEach(function(course) {
-        html += '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:hsl(var(--muted)/.5);border-radius:8px;margin-top:8px;">';
-        html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="hsl(var(--primary))" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
-        html += '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>';
-        html += '</svg>';
-        html += '<a href="' + escapeHtml(course.url) + '" target="_blank" rel="noopener noreferrer" style="flex:1;color:hsl(var(--primary));text-decoration:none;font-weight:500;font-size:14px;">';
-        html += escapeHtml(course.title);
-        html += '</a>';
-        html += '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="hsl(var(--muted-foreground))" stroke-width="2">';
-        html += '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" x2="21" y1="14" y2="3"/>';
-        html += '</svg>';
-        html += '</div>';
-      });
-      
+    });
+  }
+
+  if (allFailedEvents.length > 0) {
+    html += '<div class="results-section-title" style="margin-top:20px;">Рекомендуемые мероприятия</div>';
+    html += '<div style="margin-bottom:14px;color:hsl(var(--muted-foreground));font-size:14px;">';
+    html += 'Посетите очные мероприятия для углублённого изучения материала.';
+    html += '</div>';
+
+    allFailedEvents.forEach(function(ev) {
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:hsl(var(--muted)/.5);border-radius:8px;margin-bottom:8px;">';
+      html += '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="hsl(var(--primary))" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
+      html += '<rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>';
+      html += '</svg>';
+      html += '<span style="flex:1;font-weight:500;font-size:14px;color:hsl(var(--foreground));">';
+      html += escapeHtml(ev.title);
+      html += '</span>';
       html += '</div>';
     });
   }

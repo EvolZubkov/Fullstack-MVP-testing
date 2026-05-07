@@ -5,11 +5,33 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./storage";
+import {
+  waitForDatabase,
+  closeDatabaseConnection,
+  checkDatabaseHealth,
+  getDatabaseStatus,
+} from "./db";
+import { logger, requestContext, SLOW_REQUEST_MS } from "./logger";
+import { randomUUID } from "crypto";
 
+process.on("uncaughtException", async (err) => {
+  // Пишем в файл через logger, затем закрываем БД и выходим.
+  // process.exit() обязателен — после uncaughtException состояние процесса неизвестно.
+  logger.fatal(err, "uncaughtException");
+  try { await closeDatabaseConnection(); } catch {}
+  process.exit(1);
+});
 
+process.on("unhandledRejection", (reason) => {
+  // Не всегда фатально, но всегда должно быть видно в логах.
+  logger.fatal(reason instanceof Error ? reason : String(reason), "unhandledRejection");
+});
 
 const app = express();
 const httpServer = createServer(app);
+
+// Trust first proxy (nginx/traefik) — required for secure session cookies behind reverse proxy
+app.set("trust proxy", 1);
 
 declare module "http" {
   interface IncomingMessage {
@@ -17,18 +39,6 @@ declare module "http" {
   }
 }
 
-app.use((req, _res, next) => {
-  console.log(
-    "REQ",
-    req.method,
-    req.originalUrl,
-    "ct=",
-    req.headers["content-type"],
-    "len=",
-    req.headers["content-length"],
-  );
-  next();
-});
 
 app.use(
   express.json({
@@ -42,52 +52,85 @@ app.use(
 app.use(express.urlencoded({ extended: false, limit: "50mb" }));
 
 export function log(message: string, source = "express") {
-  const formattedTime = new Date().toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-
-  console.log(`${formattedTime} [${source}] ${message}`);
+  logger.info(message, source);
 }
 
+// ─── Request ID + userId context + slow request warning ───────────────────────
 app.use((req, res, next) => {
+  const reqId = randomUUID().slice(0, 8); // короткий id, достаточно для корреляции
   const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+  const reqPath = req.path;
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+  // Запускаем весь обработчик запроса внутри AsyncLocalStorage контекста.
+  // userId недоступен сразу (нужна сессия), поэтому дописывается позже.
+  requestContext.run({ reqId, method: req.method, path: reqPath }, () => {
+    // Как только сессия будет прочитана — подтягиваем userId в контекст
+    const originalNext = next;
+    const wrappedNext = (err?: any) => {
+      const ctx = requestContext.getStore();
+      if (ctx && (req.session as any)?.userId && !ctx.userId) {
+        ctx.userId = (req.session as any).userId;
       }
+      originalNext(err);
+    };
 
-      log(logLine);
-    }
+    res.on("finish", () => {
+      const duration = Date.now() - start;
+      if (reqPath.startsWith("/api") && !reqPath.startsWith("/api/logs")) {
+        const ctx = requestContext.getStore();
+        const userTag = ctx?.userId ? ` user:${ctx.userId}` : "";
+        log(`[req:${reqId}]${userTag} ${req.method} ${reqPath} ${res.statusCode} in ${duration}ms`);
+
+        if (duration > SLOW_REQUEST_MS) {
+          logger.warn(`SLOW REQUEST [req:${reqId}] ${req.method} ${reqPath} — ${duration}ms`, "express");
+        }
+      }
+    });
+
+    wrappedNext();
   });
-
-  next();
 });
 
 (async () => {
+  // Warn about weak secrets in production
+  if (process.env.NODE_ENV === "production") {
+    const weakSecrets = ["scorm-test-constructor-secret", "your-secret-key-change-in-production", ""];
+    if (weakSecrets.includes(process.env.SESSION_SECRET ?? "")) {
+      logger.warn("SESSION_SECRET is not set or uses a default value — set a strong secret in production!", "security");
+    }
+  }
+
+  // Wait for database to be available before starting
+  await waitForDatabase();
   await seedDatabase();
+
+  // Health check endpoint
+  app.get("/api/health", async (_req, res) => {
+    const dbHealthy = await checkDatabaseHealth();
+    const status = getDatabaseStatus();
+
+    if (dbHealthy) {
+      res.json({ status: "healthy", database: status });
+    } else {
+      res.status(503).json({ status: "unhealthy", database: status });
+    }
+  });
+
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    // Логируем все необработанные ошибки Express — включая stack trace
+    logger.error(
+      `${req.method} ${req.path} → ${status}: ${err.stack || message}`,
+      "express"
+    );
+
+    if (!res.headersSent) {
+      res.status(status).json({ message });
+    }
   });
 
   // importantly only setup vite in development and after
@@ -115,8 +158,32 @@ app.use((req, res, next) => {
   //     log(`serving on port ${port}`);
   //   },
   // );
-    httpServer.listen(port, "127.0.0.1", () => {
+    httpServer.listen(port, "0.0.0.0", () => {
       log(`serving on port ${port}`);
     });
 
+    // Graceful shutdown handlers
+    const shutdown = async (signal: string) => {
+      log(`Received ${signal}, shutting down gracefully...`);
+
+      httpServer.close(async () => {
+        log("HTTP server closed");
+        try {
+          await closeDatabaseConnection();
+          process.exit(0);
+        } catch (error) {
+          log(`Error during shutdown: ${(error as Error).message}`);
+          process.exit(1);
+        }
+      });
+
+      // Force exit after 30 seconds
+      setTimeout(() => {
+        log("Forced shutdown after timeout");
+        process.exit(1);
+      }, 30000);
+    };
+
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
 })();

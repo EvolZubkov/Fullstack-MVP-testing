@@ -1,4 +1,4 @@
-import type { Test, TestSection, Topic, Question, TopicCourse, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink } from "@shared/schema";
+import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink } from "@shared/schema";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
   links: AdaptiveLevelLink[];
@@ -11,7 +11,7 @@ interface AdaptiveSettingsExport {
 
 interface ExportData {
   test: Test;
-  sections: (TestSection & { topic: Topic; questions: Question[]; courses: TopicCourse[] })[];
+  sections: (TestSection & { topic: Topic; questions: Question[]; courses: TopicCourse[]; events: TopicEvent[] })[];
   adaptiveSettings?: AdaptiveSettingsExport | null;
   // Telemetry config
   telemetry?: {
@@ -55,6 +55,7 @@ export function buildTestJson(data: ExportData): string {
       topicPassRule: (s.topicPassRuleJson as PassRule | null) ?? null,
       topicFeedback: s.topic.feedback || null,
       recommendedCourses: s.courses.map((c) => ({ title: c.title, url: c.url })),
+      recommendedEvents: s.events.map((e) => ({ title: e.title })),
       questions: s.questions.map((q) => ({
         id: q.id,
         type: q.type,

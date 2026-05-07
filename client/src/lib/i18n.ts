@@ -67,7 +67,7 @@ export const t = {
   },
 
   auth: {
-    appName: "Конструктор SCORM-тестов",
+    appName: "СкилУм",
     signIn: "Вход",
     signInDescription: "Введите ваши данные для входа в систему",
     email: "Email",
@@ -254,6 +254,7 @@ export const t = {
     users: "Пользователи",
     groups: "Группы",
     history: "История",
+    logs: "Логи",
     logout: "Выход",
     testCenter: "Центр тестирования",
   },

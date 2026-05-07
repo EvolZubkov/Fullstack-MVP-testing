@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { logger } from "./logger";
 
 // Конфигурация из переменных окружения
 const SMTP_HOST = process.env.SMTP_HOST || "";
@@ -7,14 +8,14 @@ const SMTP_SECURE = process.env.SMTP_SECURE === "true";
 const SMTP_USER = process.env.SMTP_USER || "";
 const SMTP_PASS = process.env.SMTP_PASS || "";
 const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
-const APP_NAME = process.env.APP_NAME || "Конструктор SCORM-тестов";
+const APP_NAME = process.env.APP_NAME || "СкилУм";
 
 // Создаём транспорт
 let transporter: nodemailer.Transporter | null = null;
 
 function getTransporter(): nodemailer.Transporter | null {
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    console.log("SMTP not configured. Email sending disabled.");
+    logger.info("SMTP not configured. Email sending disabled.");
     return null;
   }
 
@@ -41,11 +42,11 @@ export async function sendPasswordResetEmail(
   const transport = getTransporter();
   
   if (!transport) {
-    console.log("===========================================");
-    console.log("PASSWORD RESET LINK (SMTP not configured):");
-    console.log(resetLink);
-    console.log("For user:", to);
-    console.log("===========================================");
+    logger.info("===========================================");
+    logger.info("PASSWORD RESET LINK (SMTP not configured):");
+    logger.info(resetLink);
+    logger.info("For user: " + to);
+    logger.info("===========================================");
     return false;
   }
 
@@ -120,16 +121,247 @@ ${resetLink}
       text,
       html,
     });
-    console.log(`Password reset email sent to ${to}`);
+    logger.info(`Password reset email sent to ${to}`);
     return true;
   } catch (error) {
-    console.error("Failed to send password reset email:", error);
+    logger.error("Failed to send password reset email: " + (error as Error).message);
     // Выводим ссылку в консоль как fallback
-    console.log("===========================================");
-    console.log("PASSWORD RESET LINK (email send failed):");
-    console.log(resetLink);
-    console.log("For user:", to);
-    console.log("===========================================");
+    logger.info("===========================================");
+    logger.info("PASSWORD RESET LINK (email send failed):");
+    logger.info(resetLink);
+    logger.info("For user: " + to);
+    logger.info("===========================================");
+    return false;
+  }
+}
+
+export async function sendAssignmentEmail(opts: {
+  to: string;
+  userName?: string;
+  testTitle: string;
+  testDescription?: string | null;
+  dueDate?: Date | null;
+  magicLink: string;
+}): Promise<boolean> {
+  const transport = getTransporter();
+
+  const dueDateStr = opts.dueDate
+    ? opts.dueDate.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" })
+    : null;
+
+  if (!transport) {
+    logger.info("===========================================");
+    logger.info("ASSIGNMENT MAGIC LINK (SMTP not configured):");
+    logger.info(`Test: ${opts.testTitle}`);
+    logger.info(`To: ${opts.to}`);
+    logger.info(`Link: ${opts.magicLink}`);
+    logger.info("===========================================");
+    return false;
+  }
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+    .button { display: inline-block; background: #2563eb; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-size: 16px; font-weight: 600; }
+    .meta { background: #e5e7eb; border-radius: 6px; padding: 14px 18px; margin: 16px 0; font-size: 14px; }
+    .meta p { margin: 4px 0; }
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
+    .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>${APP_NAME}</h1>
+    </div>
+    <div class="content">
+      <h2>Вам назначен тест</h2>
+      <p>Здравствуйте${opts.userName ? `, ${opts.userName}` : ""}!</p>
+      <p>Вам назначено прохождение теста:</p>
+      <div class="meta">
+        <p><strong>📋 Тест:</strong> ${opts.testTitle}</p>
+        ${opts.testDescription ? `<p><strong>📝 Описание:</strong> ${opts.testDescription}</p>` : ""}
+        ${dueDateStr ? `<p><strong>📅 Срок сдачи:</strong> ${dueDateStr}</p>` : ""}
+      </div>
+      <p>Для прохождения теста нажмите на кнопку ниже — вход произойдёт автоматически, пароль не требуется:</p>
+      <p style="text-align: center;">
+        <a href="${opts.magicLink}" class="button">Пройти тест</a>
+      </p>
+      <p style="font-size:13px;color:#666;">Или скопируйте ссылку в браузер:</p>
+      <p style="word-break: break-all; background: #e5e7eb; padding: 10px; border-radius: 4px; font-size: 13px;">
+        ${opts.magicLink}
+      </p>
+      <div class="warning">
+        ⚠️ Ссылка персональная — не передавайте её другим людям.${dueDateStr ? ` Ссылка действительна до ${dueDateStr}.` : ""}
+      </div>
+    </div>
+    <div class="footer">
+      <p>Это автоматическое сообщение, не отвечайте на него.</p>
+      <p>© ${new Date().getFullYear()} ${APP_NAME}</p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  const text = `
+Вам назначен тест — ${APP_NAME}
+
+Здравствуйте${opts.userName ? `, ${opts.userName}` : ""}!
+
+Вам назначено прохождение теста: ${opts.testTitle}
+${opts.testDescription ? `Описание: ${opts.testDescription}\n` : ""}${dueDateStr ? `Срок сдачи: ${dueDateStr}\n` : ""}
+Для прохождения перейдите по ссылке (пароль не требуется):
+${opts.magicLink}
+
+Ссылка персональная — не передавайте её другим.
+
+---
+Это автоматическое сообщение, не отвечайте на него.
+© ${new Date().getFullYear()} ${APP_NAME}
+  `;
+
+  try {
+    await transport.sendMail({
+      from: `"${APP_NAME}" <${SMTP_FROM}>`,
+      to: opts.to,
+      subject: `Вам назначен тест: ${opts.testTitle}`,
+      text,
+      html,
+    });
+    logger.info(`Assignment email sent to ${opts.to} for test "${opts.testTitle}"`);
+    return true;
+  } catch (error) {
+    logger.error("Failed to send assignment email: " + (error as Error).message);
+    logger.info("===========================================");
+    logger.info("ASSIGNMENT MAGIC LINK (email send failed):");
+    logger.info(`Test: ${opts.testTitle}`);
+    logger.info(`To: ${opts.to}`);
+    logger.info(`Link: ${opts.magicLink}`);
+    logger.info("===========================================");
+    return false;
+  }
+}
+
+export async function sendInviteEmail(opts: {
+  to: string;
+  userName?: string;
+  inviteLink: string;
+  inviterName?: string;
+}): Promise<boolean> {
+  const transport = getTransporter();
+
+  if (!transport) {
+    logger.info("===========================================");
+    logger.info("INVITE LINK (SMTP not configured):");
+    logger.info(`To: ${opts.to}`);
+    logger.info(`Link: ${opts.inviteLink}`);
+    logger.info("===========================================");
+    return false;
+  }
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background: #2563eb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
+    .button { display: inline-block; background: #2563eb; color: white; padding: 14px 36px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-size: 16px; font-weight: 600; }
+    .steps { background: #eff6ff; border-radius: 6px; padding: 16px 20px; margin: 16px 0; }
+    .steps ol { margin: 8px 0; padding-left: 20px; }
+    .steps li { margin: 6px 0; }
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
+    .warning { background: #fef3c7; border: 1px solid #f59e0b; padding: 10px; border-radius: 4px; margin-top: 20px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>${APP_NAME}</h1>
+    </div>
+    <div class="content">
+      <h2>Добро пожаловать!</h2>
+      <p>Здравствуйте${opts.userName ? `, ${opts.userName}` : ""}!</p>
+      <p>${opts.inviterName ? `<strong>${opts.inviterName}</strong> создал` : "Для вас создан"} аккаунт в системе <strong>${APP_NAME}</strong>.</p>
+      <p>Для начала работы нажмите кнопку ниже — вы перейдёте на страницу создания пароля:</p>
+      <p style="text-align: center;">
+        <a href="${opts.inviteLink}" class="button">Активировать аккаунт</a>
+      </p>
+      <div class="steps">
+        <strong>Что нужно сделать:</strong>
+        <ol>
+          <li>Нажмите кнопку «Активировать аккаунт»</li>
+          <li>Придумайте и введите пароль</li>
+          <li>Начните работу с системой</li>
+        </ol>
+      </div>
+      <p style="font-size:13px;color:#666;">Или скопируйте ссылку в браузер:</p>
+      <p style="word-break: break-all; background: #e5e7eb; padding: 10px; border-radius: 4px; font-size: 13px;">
+        ${opts.inviteLink}
+      </p>
+      <div class="warning">
+        ⚠️ Ссылка действительна в течение 7 дней. Если вы получили это письмо по ошибке — просто проигнорируйте его.
+      </div>
+    </div>
+    <div class="footer">
+      <p>Это автоматическое сообщение, не отвечайте на него.</p>
+      <p>© ${new Date().getFullYear()} ${APP_NAME}</p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  const text = `
+Добро пожаловать в ${APP_NAME}!
+
+Здравствуйте${opts.userName ? `, ${opts.userName}` : ""}!
+
+${opts.inviterName ? `${opts.inviterName} создал` : "Для вас создан"} аккаунт в системе ${APP_NAME}.
+
+Для активации аккаунта перейдите по ссылке:
+${opts.inviteLink}
+
+Что нужно сделать:
+1. Перейдите по ссылке
+2. Придумайте и введите пароль
+3. Начните работу с системой
+
+Ссылка действительна в течение 7 дней.
+
+---
+Это автоматическое сообщение, не отвечайте на него.
+© ${new Date().getFullYear()} ${APP_NAME}
+  `;
+
+  try {
+    await transport.sendMail({
+      from: `"${APP_NAME}" <${SMTP_FROM}>`,
+      to: opts.to,
+      subject: `Приглашение в ${APP_NAME}`,
+      text,
+      html,
+    });
+    logger.info(`Invite email sent to ${opts.to}`);
+    return true;
+  } catch (error) {
+    logger.error("Failed to send invite email: " + (error as Error).message);
+    logger.info("===========================================");
+    logger.info("INVITE LINK (email send failed):");
+    logger.info(`To: ${opts.to}`);
+    logger.info(`Link: ${opts.inviteLink}`);
+    logger.info("===========================================");
     return false;
   }
 }
@@ -140,10 +372,10 @@ export async function verifySmtpConnection(): Promise<boolean> {
 
   try {
     await transport.verify();
-    console.log("SMTP connection verified successfully");
+    logger.info("SMTP connection verified successfully");
     return true;
   } catch (error) {
-    console.error("SMTP connection verification failed:", error);
+    logger.error("SMTP connection verification failed: " + (error as Error).message);
     return false;
   }
 }

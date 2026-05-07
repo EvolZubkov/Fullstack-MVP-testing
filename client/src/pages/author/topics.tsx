@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, FolderOpen, ExternalLink, BookMarked, Copy, CheckSquare, Square, Folder, ChevronRight, ChevronDown, FolderPlus } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, FolderOpen, ExternalLink, BookMarked, Copy, CheckSquare, Square, Folder, ChevronRight, ChevronDown, FolderPlus, LayoutGrid, List, CalendarDays } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -21,7 +21,7 @@ import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { LoadingState, LoadingSpinner } from "@/components/loading-state";
 import { t, formatQuestions } from "@/lib/i18n";
-import type { Topic, TopicCourse, Folder as FolderType } from "@shared/schema";
+import type { Topic, TopicCourse, TopicEvent, Folder as FolderType } from "@shared/schema";
 
 const topicFormSchema = z.object({
   name: z.string().min(1, t.topics.nameRequired),
@@ -40,12 +40,18 @@ const courseFormSchema = z.object({
   url: z.string().url(t.topics.validUrl),
 });
 
+const eventFormSchema = z.object({
+  title: z.string().min(1, "Название обязательно"),
+});
+
 type TopicFormData = z.infer<typeof topicFormSchema>;
 type FolderFormData = z.infer<typeof folderFormSchema>;
 type CourseFormData = z.infer<typeof courseFormSchema>;
+type EventFormData = z.infer<typeof eventFormSchema>;
 
 interface TopicWithDetails extends Topic {
   courses: TopicCourse[];
+  events: TopicEvent[];
   questionCount: number;
 }
 
@@ -55,11 +61,22 @@ export default function TopicsPage() {
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [courseDialogOpen, setCourseDialogOpen] = useState(false);
   const [selectedTopicForCourse, setSelectedTopicForCourse] = useState<string | null>(null);
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [selectedTopicForEvent, setSelectedTopicForEvent] = useState<string | null>(null);
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    return (localStorage.getItem("topics_view") as any) || "grid";
+  });
+
+  const handleViewChange = (mode: "grid" | "list") => {
+    setViewMode(mode);
+    localStorage.setItem("topics_view", mode);
+  };
 
   const { data: topics, isLoading: topicsLoading } = useQuery<TopicWithDetails[]>({
     queryKey: ["/api/topics"],
@@ -84,6 +101,11 @@ export default function TopicsPage() {
   const courseForm = useForm<CourseFormData>({
     resolver: zodResolver(courseFormSchema),
     defaultValues: { title: "", url: "" },
+  });
+
+  const eventForm = useForm<EventFormData>({
+    resolver: zodResolver(eventFormSchema),
+    defaultValues: { title: "" },
   });
 
   const createMutation = useMutation({
@@ -183,6 +205,30 @@ export default function TopicsPage() {
     },
   });
 
+  const addEventMutation = useMutation({
+    mutationFn: ({ topicId, data }: { topicId: string; data: EventFormData }) =>
+      apiRequest("POST", `/api/topics/${topicId}/events`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
+      toast({ title: "Мероприятие добавлено" });
+      handleCloseEventDialog();
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: t.common.error, description: "Не удалось добавить мероприятие" });
+    },
+  });
+
+  const deleteEventMutation = useMutation({
+    mutationFn: (eventId: string) => apiRequest("DELETE", `/api/topics/events/${eventId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
+      toast({ title: "Мероприятие удалено" });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: t.common.error, description: "Не удалось удалить мероприятие" });
+    },
+  });
+
   const duplicateMutation = useMutation({
     mutationFn: (id: string) => apiRequest("POST", `/api/topics/${id}/duplicate`),
     onSuccess: () => {
@@ -252,9 +298,9 @@ export default function TopicsPage() {
 
   const handleOpenEdit = (topic: Topic) => {
     setEditingTopic(topic);
-    form.reset({ 
-      name: topic.name, 
-      description: topic.description || "", 
+    form.reset({
+      name: topic.name,
+      description: topic.description || "",
       feedback: topic.feedback || "",
       folderId: topic.folderId || null
     });
@@ -303,6 +349,18 @@ export default function TopicsPage() {
     courseForm.reset();
   };
 
+  const handleOpenEventDialog = (topicId: string) => {
+    setSelectedTopicForEvent(topicId);
+    eventForm.reset({ title: "" });
+    setEventDialogOpen(true);
+  };
+
+  const handleCloseEventDialog = () => {
+    setEventDialogOpen(false);
+    setSelectedTopicForEvent(null);
+    eventForm.reset();
+  };
+
   const toggleFolder = (folderId: string) => {
     setExpandedFolders((prev) => {
       const next = new Set(prev);
@@ -337,6 +395,12 @@ export default function TopicsPage() {
     }
   };
 
+  const onSubmitEvent = (data: EventFormData) => {
+    if (selectedTopicForEvent) {
+      addEventMutation.mutate({ topicId: selectedTopicForEvent, data });
+    }
+  };
+
   const handleDelete = (id: string) => {
     if (confirm(t.topics.confirmDelete)) {
       deleteMutation.mutate(id);
@@ -345,8 +409,16 @@ export default function TopicsPage() {
 
   const rootFolders = folders?.filter((f) => !f.parentId) || [];
   const getChildFolders = (parentId: string) => folders?.filter((f) => f.parentId === parentId) || [];
-  const getTopicsInFolder = (folderId: string | null) => 
+  const getTopicsInFolder = (folderId: string | null) =>
     topics?.filter((topic) => topic.folderId === folderId) || [];
+
+  const searchedTopics = searchQuery
+    ? topics?.filter((topic) =>
+      topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (topic.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+    ) || []
+    : null;
+
   const rootTopics = getTopicsInFolder(null);
 
   const renderTopicCard = (topic: TopicWithDetails) => (
@@ -399,6 +471,7 @@ export default function TopicsPage() {
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
           <span>{formatQuestions(topic.questionCount)}</span>
           <span>{topic.courses.length} {t.common.courses}</span>
+          {topic.events?.length > 0 && <span>{topic.events.length} мероприятий</span>}
         </div>
 
         {topic.courses.length > 0 && (
@@ -434,8 +507,37 @@ export default function TopicsPage() {
             </div>
           </div>
         )}
+
+        {topic.events?.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Рекомендуемые мероприятия
+            </p>
+            <div className="space-y-1">
+              {topic.events.map((event) => (
+                <div
+                  key={event.id}
+                  className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted"
+                >
+                  <div className="flex items-center gap-2 text-sm truncate">
+                    <CalendarDays className="h-3 w-3 shrink-0 text-muted-foreground" />
+                    <span className="truncate">{event.title}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={() => deleteEventMutation.mutate(event.id)}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex gap-2">
         <Button
           variant="outline"
           size="sm"
@@ -445,8 +547,73 @@ export default function TopicsPage() {
           <BookMarked className="h-4 w-4 mr-2" />
           {t.topics.addCourse}
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleOpenEventDialog(topic.id)}
+          data-testid={`button-add-event-${topic.id}`}
+        >
+          <CalendarDays className="h-4 w-4 mr-2" />
+          Мероприятие
+        </Button>
       </CardFooter>
     </Card>
+  );
+
+  const renderTopicRow = (topic: TopicWithDetails) => (
+    <tr key={topic.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors" data-testid={`card-topic-${topic.id}`}>
+      <td className="px-4 py-3">
+        <Checkbox
+          checked={selectedTopics.has(topic.id)}
+          onCheckedChange={() => handleToggleSelect(topic.id)}
+          data-testid={`checkbox-topic-${topic.id}`}
+        />
+      </td>
+      <td className="px-4 py-3">
+        <p className="font-medium">{topic.name}</p>
+        {topic.description && <p className="text-xs text-muted-foreground line-clamp-1">{topic.description}</p>}
+      </td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">{formatQuestions(topic.questionCount)}</td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">{topic.courses.length} {t.common.courses}</td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1 justify-end">
+          <Button variant="ghost" size="icon" onClick={() => handleDuplicate(topic.id)} data-testid={`button-duplicate-topic-${topic.id}`}>
+            <Copy className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => handleOpenCourseDialog(topic.id)} data-testid={`button-add-course-${topic.id}`}>
+            <BookMarked className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => handleOpenEventDialog(topic.id)} data-testid={`button-add-event-${topic.id}`}>
+            <CalendarDays className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(topic)} data-testid={`button-edit-topic-${topic.id}`}>
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => handleDelete(topic.id)} data-testid={`button-delete-topic-${topic.id}`}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+
+  const renderTopicsTable = (topicList: TopicWithDetails[]) => (
+    <div className="border rounded-lg overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/50 border-b">
+          <tr>
+            <th className="px-4 py-3 w-10" />
+            <th className="text-left px-4 py-3 font-medium">Тема</th>
+            <th className="text-left px-4 py-3 font-medium">Вопросы</th>
+            <th className="text-left px-4 py-3 font-medium">Курсы</th>
+            <th className="px-4 py-3 w-40" />
+          </tr>
+        </thead>
+        <tbody>
+          {topicList.map(renderTopicRow)}
+        </tbody>
+      </table>
+    </div>
   );
 
   const renderFolder = (folder: FolderType, depth: number = 0) => {
@@ -503,8 +670,11 @@ export default function TopicsPage() {
           <CollapsibleContent className="mt-2">
             {childFolders.map((childFolder) => renderFolder(childFolder, depth + 1))}
             {folderTopics.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2 pl-8">
-                {folderTopics.map(renderTopicCard)}
+              <div className="mt-2 pl-8">
+                {viewMode === "grid"
+                  ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{folderTopics.map(renderTopicCard)}</div>
+                  : renderTopicsTable(folderTopics)
+                }
               </div>
             )}
           </CollapsibleContent>
@@ -567,6 +737,38 @@ export default function TopicsPage() {
         }
       />
 
+      <div className="flex items-center gap-3 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Поиск тем..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center border rounded-md">
+          <Button
+            variant={viewMode === "grid" ? "secondary" : "ghost"}
+            size="icon"
+            className="rounded-r-none h-9 w-9"
+            onClick={() => handleViewChange("grid")}
+            title="Карточки"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={viewMode === "list" ? "secondary" : "ghost"}
+            size="icon"
+            className="rounded-l-none h-9 w-9"
+            onClick={() => handleViewChange("list")}
+            title="Список"
+          >
+            <List className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
       {(!topics || topics.length === 0) && (!folders || folders.length === 0) ? (
         <EmptyState
           icon={FolderOpen}
@@ -577,20 +779,30 @@ export default function TopicsPage() {
         />
       ) : (
         <div className="space-y-6">
-          {rootFolders.map((folder) => renderFolder(folder))}
-          
-          {rootTopics.length > 0 && (
-            <div>
-              {rootFolders.length > 0 && (
-                <div className="flex items-center gap-2 mb-4 text-muted-foreground">
-                  <FolderOpen className="h-4 w-4" />
-                  <span className="text-sm font-medium">{t.folders.root}</span>
+          {searchedTopics ? (
+            searchedTopics.length === 0
+              ? <p className="text-muted-foreground">Ничего не найдено</p>
+              : viewMode === "grid"
+                ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{searchedTopics.map(renderTopicCard)}</div>
+                : renderTopicsTable(searchedTopics)
+          ) : (
+            <>
+              {rootFolders.map((folder) => renderFolder(folder))}
+              {rootTopics.length > 0 && (
+                <div>
+                  {rootFolders.length > 0 && (
+                    <div className="flex items-center gap-2 mb-4 text-muted-foreground">
+                      <FolderOpen className="h-4 w-4" />
+                      <span className="text-sm font-medium">{t.folders.root}</span>
+                    </div>
+                  )}
+                  {viewMode === "grid"
+                    ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{rootTopics.map(renderTopicCard)}</div>
+                    : renderTopicsTable(rootTopics)
+                  }
                 </div>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {rootTopics.map(renderTopicCard)}
-              </div>
-            </div>
+            </>
           )}
         </div>
       )}
@@ -812,6 +1024,40 @@ export default function TopicsPage() {
                 <Button type="submit" disabled={addCourseMutation.isPending} data-testid="button-submit-course">
                   {addCourseMutation.isPending && <LoadingSpinner className="mr-2" />}
                   {t.topics.addCourse}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={eventDialogOpen} onOpenChange={setEventDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Добавить рекомендуемое мероприятие</DialogTitle>
+          </DialogHeader>
+          <Form {...eventForm}>
+            <form onSubmit={eventForm.handleSubmit(onSubmitEvent)} className="space-y-4">
+              <FormField
+                control={eventForm.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Название мероприятия</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Например: Мастер-класс по теме, Лабораторная работа..." data-testid="input-event-title" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={handleCloseEventDialog}>
+                  {t.common.cancel}
+                </Button>
+                <Button type="submit" disabled={addEventMutation.isPending} data-testid="button-submit-event">
+                  {addEventMutation.isPending && <LoadingSpinner className="mr-2" />}
+                  Добавить
                 </Button>
               </DialogFooter>
             </form>

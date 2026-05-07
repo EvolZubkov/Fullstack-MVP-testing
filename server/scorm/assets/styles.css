@@ -282,6 +282,13 @@ h1 {
   line-height: 1.7;
 }
 
+.question-hint {
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  margin: -16px 0 16px;
+  line-height: 1.5;
+}
+
 .option {
   display: flex;
   align-items: center;

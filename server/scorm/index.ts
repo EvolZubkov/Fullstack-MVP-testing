@@ -1,4 +1,5 @@
 import { buildZip } from "./zip";
+import { logger } from "../logger";
 import { buildTestJson, type ExportData } from "./builders/test-json";
 import { buildManifest } from "./builders/manifest";
 import { buildMetadataXml } from "./builders/metadata";
@@ -48,19 +49,19 @@ function tryReadBinaryAsset(relativePath: string): Buffer | null {
     path.resolve(process.cwd(), "scorm", "template", relativePath),
   ];
   
-  console.log("[tryReadBinaryAsset] Looking for:", relativePath);
+  logger.info("[tryReadBinaryAsset] Looking for: " + relativePath);
   
   for (const p of possiblePaths) {
     try {
       if (fs.existsSync(p)) {
-        console.log("[tryReadBinaryAsset] Found at:", p);
+        logger.info("[tryReadBinaryAsset] Found at: " + p);
         return fs.readFileSync(p);
       }
     } catch {
       continue;
     }
   }
-  console.log("[tryReadBinaryAsset] Not found:", relativePath);
+  logger.info("[tryReadBinaryAsset] Not found: " + relativePath);
   return null;
 }
 
@@ -93,6 +94,10 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const suspendAttemptsJs = readOneOf([
     "app/utils/scorm/suspendAttempts.js",
     "app/utils/suspendAttempts.js",
+  ]);
+
+  const sessionRecoveryJs = readOneOf([
+    "app/utils/scorm/sessionRecovery.js",
   ]);
 
   const testDataJs = readOneOf([
@@ -164,16 +169,18 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const adaptiveRenderJs = tryReadAsset([
     "app/render/adaptiveRender.js",
   ]);
+  const telemetryEnabled = !!(data.telemetry && data.telemetry.enabled);
 
-  const telemetryJs = tryReadAsset([
-    "app/telemetry/telemetry.js",
-  ]);
+  const telemetryJs = telemetryEnabled
+    ? tryReadAsset(["app/telemetry/telemetry.js"])
+    : "";
 
-  const appJs = joinJsParts([
+  let appJs = joinJsParts([
     escapeHtmlJs,
     telemetryJs, 
     shuffleJs,
     suspendAttemptsJs,
+    sessionRecoveryJs,
     testDataJs,
     stateJs,
     timerJs,
@@ -197,6 +204,10 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     feedbackJs,
     bootstrapMainJs,
   ]).replace("__TEST_JSON_B64__", testJsonB64);
+  
+  if (!telemetryEnabled) {
+    appJs = stripTelemetryArtifacts(appJs);
+  }
 
   const mediaHrefs = Object.keys(assets);
 
@@ -236,7 +247,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     if (pdfBg3) files["assets/media/pdf-bg-3.png"] = pdfBg3;
     if (logoLight) files["assets/media/logo-light.png"] = logoLight;
   } catch (e) {
-    console.log("PDF assets not found, skipping");
+    logger.info("PDF assets not found, skipping");
   }
   
   for (const [zipPath, buf] of Object.entries(assets)) {
@@ -244,4 +255,22 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   }
 
   return buildZip(files);
+}
+
+function stripTelemetryArtifacts(src: string) {
+  // 1) убрать Telemetry.finish({ ... }, ...); и Telemetry.answer({ ... });
+  src = src.replace(/Telemetry\.(finish|answer)\(\s*\{[\s\S]*?\}\s*(?:,\s*[^)]*)?\);\s*/g, "");
+
+  // 2) убрать простые вызовы Telemetry.*
+  src = src.replace(/^\s*Telemetry\.(init|start|startNewAttempt)\([^)]*\);\s*$/gm, "");
+  src = src.replace(/^\s*Telemetry\.(start|startNewAttempt)\(\);\s*$/gm, "");
+
+  // 3) убрать присваивания attemptNumber из телеметрии (обычно используются только для логов/finish)
+  src = src.replace(/^\s*var\s+\w+\s*=\s*Telemetry\.getAttemptNumber\(\);\s*$/gm, "");
+
+  // 4) убрать комментарии и логи, где вообще упоминается телеметрия/Telemetry
+  src = src.replace(/^\s*\/\/.*(telemetr|Telemetry).*$/gim, "");
+  src = src.replace(/^\s*console\.log\(.*(telemetr|Telemetry).*?\);\s*$/gim, "");
+
+  return src;
 }

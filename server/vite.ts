@@ -1,17 +1,20 @@
 import { type Express } from "express";
+import { logger } from "./logger";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config";
 import fs from "fs";
 import path from "path";
-import { nanoid } from "nanoid";
-
 const viteLogger = createLogger();
 
-export async function setupVite(server: Server, app: Express) {
+// Single build ID per server start (not per request)
+const BUILD_ID = Date.now().toString(36);
+
+export async function setupVite(_server: Server, app: Express) {
   const serverOptions = {
     middlewareMode: true,
-    hmr: { server, path: "/vite-hmr" },
+    hmr: false,  // Disabled: WebSocket doesn't work behind reverse proxy
+    watch: null, // Disable file watching to prevent HMR client injection
     allowedHosts: true as const,
   };
 
@@ -46,9 +49,18 @@ export async function setupVite(server: Server, app: Express) {
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
-        `src="/src/main.tsx?v=${nanoid()}"`,
+        `src="/src/main.tsx?v=${BUILD_ID}"`,
       );
-      const page = await vite.transformIndexHtml(url, template);
+      let page = await vite.transformIndexHtml(url, template);
+      // Убираем тег <script src="/@vite/client">
+      page = page.replace(/<script[^>]*src="[^"]*@vite\/client[^"]*"[^>]*><\/script>/gi, '');
+      // Убираем инлайн скрипты которые импортируют @vite/client (runtime-error-plugin и др.)
+      page = page.replace(/<script[^>]*>[\s\S]*?@vite\/client[\s\S]*?<\/script>/gi, '');
+      if (page.includes('@vite/client')) {
+        const idx = page.indexOf('@vite/client');
+        const context = page.slice(Math.max(0, idx - 150), idx + 150);
+        logger.warn('[vite] WARNING: @vite/client still present in HTML, context: ' + context);
+      }
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
       vite.ssrFixStacktrace(e as Error);

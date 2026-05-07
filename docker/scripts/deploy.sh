@@ -1,0 +1,113 @@
+#!/bin/bash
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Find archive next to script
+ARCHIVE=$(ls -t "$SCRIPT_DIR"/test_builder_deploy_*.tar.gz 2>/dev/null | head -1)
+
+if [ -z "$ARCHIVE" ]; then
+    echo "Error: archive test_builder_deploy_*.tar.gz not found in $SCRIPT_DIR"
+    exit 1
+fi
+
+echo "=== Extracting $(basename "$ARCHIVE") ==="
+DEPLOY_DIR=$(mktemp -d)
+tar -xzf "$ARCHIVE" -C "$DEPLOY_DIR"
+
+find "$DEPLOY_DIR" -type f \( -name "*.sh" -o -name "*.env" -o -name "*.yml" -o -name "*.yaml" -o -name "Dockerfile" \) -exec sed -i 's/\r$//' {} +
+
+# Load configuration
+source "$DEPLOY_DIR/config/deploy.env"
+
+# Derived paths
+APP_DIR="${SRV_APP_BASE}/${PROJECT_NAME}"
+DATA_DIR="${SRV_DATA_BASE}/${PROJECT_NAME}"
+ENV_DIR="${APP_DIR}/env"
+UPLOADS_DIR="${DATA_DIR}/uploads"
+CONTAINER_NAME="${PROJECT_NAME}"
+IMAGE_NAME="${PROJECT_NAME}"
+
+echo "=== Deploy ${PROJECT_NAME} ==="
+echo "APP_DIR: $APP_DIR"
+echo "DATA_DIR: $DATA_DIR"
+
+# Create directory structure
+echo "Creating directories..."
+mkdir -p "$APP_DIR" "$ENV_DIR"
+mkdir -p "$UPLOADS_DIR/media" "$UPLOADS_DIR/scorm"
+
+# Check .env
+if [ ! -f "$ENV_DIR/.env" ]; then
+    echo "Copying .env template..."
+    cp "$DEPLOY_DIR/env/.env.example" "$ENV_DIR/.env"
+    echo ""
+    echo "!!! WARNING: Edit $ENV_DIR/.env before starting !!!"
+    echo "nano $ENV_DIR/.env"
+    echo ""
+    read -p "Press Enter after editing .env..."
+fi
+
+# Generate docker-compose.yml with variable substitution
+echo "Generating docker-compose.yml..."
+export IMAGE_NAME CONTAINER_NAME EXPOSE_PORT INTERNAL_PORT UPLOADS_DIR ENV_DIR
+envsubst < "$DEPLOY_DIR/config/docker-compose.yml" > "$APP_DIR/docker-compose.yml"
+
+# Set ownership
+chown -R "${DIR_OWNER}:${DIR_GROUP}" "$APP_DIR"
+chown -R "${DIR_OWNER}:${DIR_GROUP}" "$DATA_DIR"
+
+# Stop old container (if exists)
+if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    echo "Stopping old container..."
+    docker stop "$CONTAINER_NAME" || true
+    docker rm "$CONTAINER_NAME" || true
+fi
+
+# Remove old image to force full rebuild (no stale cache)
+if docker image inspect "$IMAGE_NAME:latest" &>/dev/null; then
+    echo "Removing old image..."
+    docker rmi "$IMAGE_NAME:latest" || true
+fi
+
+# Build image from temp directory
+echo "Building Docker image..."
+cd "$DEPLOY_DIR/source"
+docker build --no-cache -t "$IMAGE_NAME:latest" .
+
+# Start new container
+echo "Starting container..."
+cd "$APP_DIR"
+docker compose up -d
+
+# Cleanup temp directory
+rm -rf "$DEPLOY_DIR"
+
+# Wait for container to be ready
+echo "Waiting for container to start..."
+for i in $(seq 1 15); do
+    if docker exec "$CONTAINER_NAME" echo "ok" &>/dev/null; then
+        break
+    fi
+    echo "  attempt $i/15..."
+    sleep 2
+done
+
+# Run DB migrations — always on deploy to apply schema changes
+echo ""
+echo "=== Applying DB migrations (db:push) ==="
+docker exec "$CONTAINER_NAME" npx drizzle-kit push --force
+echo "=== Migrations done ==="
+
+# Check status
+echo ""
+echo "=== Status ==="
+docker ps --filter "name=$CONTAINER_NAME"
+
+echo ""
+echo "=== Deploy complete ==="
+echo "Logs:  docker logs -f $CONTAINER_NAME"
+echo "URL:   http://$(hostname -I | awk '{print $1}'):${EXPOSE_PORT}"
+echo ""
+echo "Management:"
+echo "  cd $APP_DIR && docker compose stop|start|restart"

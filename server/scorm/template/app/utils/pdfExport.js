@@ -55,7 +55,7 @@ async function loadPdfAssets() {
 }
 
 // Генерация HTML для PDF
-function generatePdfHtml(results, testName, bgDataUrl, logoDataUrl) {
+function generatePdfHtml(results, testName, bgDataUrl, logoDataUrl, learnerName, timestamp) {
   var percent = Math.round(results.percent);
   var passed = results.passed;
   var attempts = typeof getAllAttempts === 'function' ? getAllAttempts().length : 1;
@@ -89,7 +89,11 @@ function generatePdfHtml(results, testName, bgDataUrl, logoDataUrl) {
 
   // Главный заголовок
   html += '<div style="font-size: 42px; font-weight: 900; margin-bottom: 4px; line-height: 1; color: ' + (passed ? '#22c55e' : '#ffffff') + ';">' + escapeHtml(statusText) + '</div>';
-  html += '<div style="font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 15px;">Лучший результат за ' + attempts + ' ' + pluralize(attempts, 'попытку', 'попытки', 'попыток') + '</div>';
+  html += '<div style="font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 8px;">Лучший результат за ' + attempts + ' ' + pluralize(attempts, 'попытку', 'попытки', 'попыток') + '</div>';
+  if (learnerName) {
+    html += '<div style="font-size: 13px; color: #ffffff; margin-bottom: 4px;">Слушатель: ' + escapeHtml(learnerName) + '</div>';
+  }
+  html += '<div style="font-size: 12px; color: #aca9a9; margin-bottom: 15px;">Дата прохождения: ' + escapeHtml(formatTimestamp(timestamp)) + '</div>';
 
   // Карточка с результатами
   html += '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
@@ -170,41 +174,65 @@ function generatePdfHtml(results, testName, bgDataUrl, logoDataUrl) {
     html += '</div>'; // section-card
   }
 
-  // Рекомендации по курсам (только для непройденных тем)
-  var recommendations = [];
+  // Рекомендации по курсам (только для непройденных тем, без дублей)
+  var seenPdfCourses = {};
+  var seenPdfEvents = {};
+  var pdfCourses = [];
+  var pdfEvents = [];
   if (results.topicResults) {
     results.topicResults.forEach(function (topic) {
-      if (!topic.passed && topic.recommendedCourses && topic.recommendedCourses.length > 0) {
-        topic.recommendedCourses.forEach(function (course) {
-          recommendations.push({
-            topicName: topic.topicName,
-            courseTitle: course.title,
-            courseUrl: course.url
-          });
+      if (!topic.passed) {
+        var section = TEST_DATA && TEST_DATA.sections
+          ? TEST_DATA.sections.find(function(s) { return s.topicId === topic.topicId; })
+          : null;
+        var courses = (section && section.recommendedCourses && section.recommendedCourses.length > 0)
+          ? section.recommendedCourses
+          : (topic.recommendedCourses || []);
+        var events = (section && section.recommendedEvents) ? section.recommendedEvents : [];
+
+        courses.forEach(function (course) {
+          if (!seenPdfCourses[course.title]) {
+            seenPdfCourses[course.title] = true;
+            pdfCourses.push({ courseTitle: course.title, courseUrl: course.url });
+          }
+        });
+        events.forEach(function (ev) {
+          if (!seenPdfEvents[ev.title]) {
+            seenPdfEvents[ev.title] = true;
+            pdfEvents.push({ eventTitle: ev.title });
+          }
         });
       }
     });
   }
 
-  if (recommendations.length > 0) {
+  if (pdfCourses.length > 0) {
     html += '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
     html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 8px;">Рекомендации по курсам</div>';
     html += '<div style="font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5;">Изучите эти материалы для улучшения знаний по темам, которые требуют внимания.</div>';
-    
-    recommendations.forEach(function(rec, index) {
+
+    pdfCourses.forEach(function(rec, index) {
       html += '<div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">';
-      html += '<div style="font-size: 14px; font-weight: 700;">' + escapeHtml(rec.topicName) + '</div>';
       html += '<div class="pdf-link-btn" data-url="' + escapeHtml(rec.courseUrl) + '" data-index="' + index + '" style="background: #59209b; border-radius: 8px; padding: 10px 25px; font-size: 12px; font-weight: 300; color: #fafafa;">' + escapeHtml(rec.courseTitle) + '</div>';
       html += '</div>';
     });
-    
-    html += '</div>'; // recommendations
+
+    html += '</div>'; // courses recommendations
   }
 
-  // Футер
-  html += '<div style="text-align: center; padding-top: 15px; font-size: 9px; color: rgba(255, 255, 255, 0.3);">';
-  html += 'Документ сформирован: ' + new Date().toLocaleString('ru-RU');
-  html += '</div>';
+  if (pdfEvents.length > 0) {
+    html += '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
+    html += '<div style="font-size: 22px; font-weight: 400; margin-bottom: 8px;">Рекомендуемые мероприятия</div>';
+    html += '<div style="font-size: 11px; font-weight: 300; color: #aca9a9; margin-bottom: 15px; line-height: 1.5;">Посетите очные мероприятия для углублённого изучения материала.</div>';
+
+    pdfEvents.forEach(function(rec) {
+      html += '<div style="display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">';
+      html += '<div style="font-size: 14px; font-weight: 300; color: #fafafa;">' + escapeHtml(rec.eventTitle) + '</div>';
+      html += '</div>';
+    });
+
+    html += '</div>'; // events recommendations
+  }
 
   html += '</div>'; // padding
   html += '</div>'; // page
@@ -213,7 +241,7 @@ function generatePdfHtml(results, testName, bgDataUrl, logoDataUrl) {
 }
 
 // Генерация HTML для PDF адаптивного теста
-function generateAdaptivePdfHtml(results, testName, bgDataUrl, logoDataUrl) {
+function generateAdaptivePdfHtml(results, testName, bgDataUrl, logoDataUrl, learnerName, timestamp) {
   // Определяем количество колонок для тем (макс 3)
   var topicCount = results.topicResults ? results.topicResults.length : 0;
   var gridColumns = topicCount === 1 ? 1 : (topicCount === 2 ? 2 : 3);
@@ -236,7 +264,11 @@ function generateAdaptivePdfHtml(results, testName, bgDataUrl, logoDataUrl) {
 
   // Главный заголовок (нейтральный)
   html += '<div style="font-size: 42px; font-weight: 900; margin-bottom: 4px; line-height: 1; color: #ffffff;">Результаты теста</div>';
-  html += '<div style="font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 15px;">Адаптивное тестирование</div>';
+  html += '<div style="font-size: 14px; font-weight: 300; color: #aca9a9; margin-bottom: 8px;">Адаптивное тестирование</div>';
+  if (learnerName) {
+    html += '<div style="font-size: 13px; color: #ffffff; margin-bottom: 4px;">Слушатель: ' + escapeHtml(learnerName) + '</div>';
+  }
+  html += '<div style="font-size: 12px; color: #aca9a9; margin-bottom: 15px;">Дата прохождения: ' + escapeHtml(formatTimestamp(timestamp)) + '</div>';
 
   // Карточка с названием теста
   html += '<div style="background: rgba(31, 33, 41, 0.68); border-radius: 18px; padding: 18px 20px; margin-bottom: 15px;">';
@@ -315,11 +347,6 @@ function generateAdaptivePdfHtml(results, testName, bgDataUrl, logoDataUrl) {
     html += '</div>'; // recommendations
   }
 
-  // Футер
-  html += '<div style="text-align: center; padding-top: 15px; font-size: 9px; color: rgba(255, 255, 255, 0.3);">';
-  html += 'Документ сформирован: ' + new Date().toLocaleString('ru-RU');
-  html += '</div>';
-
   html += '</div>'; // padding
   html += '</div>'; // page
 
@@ -354,8 +381,18 @@ function formatDate(date) {
   return d + '_' + m + '_' + y;
 }
 
+function formatTimestamp(isoString) {
+  var d = isoString ? new Date(isoString) : new Date();
+  var day = d.getDate().toString().padStart(2, '0');
+  var month = (d.getMonth() + 1).toString().padStart(2, '0');
+  var year = d.getFullYear();
+  var hours = d.getHours().toString().padStart(2, '0');
+  var minutes = d.getMinutes().toString().padStart(2, '0');
+  return day + '.' + month + '.' + year + ' ' + hours + ':' + minutes;
+}
+
 // Главная функция экспорта
-async function exportResultsToPDF(results, testName) {
+async function exportResultsToPDF(results, testName, learnerName, timestamp) {
   // Создаём оверлей загрузки
   var overlay = document.createElement('div');
   overlay.id = 'pdf-loading-overlay';
@@ -398,9 +435,9 @@ async function exportResultsToPDF(results, testName) {
 
     // Генерируем HTML (выбираем функцию в зависимости от режима)
     var isAdaptive = TEST_DATA.mode === 'adaptive';
-    var htmlContent = isAdaptive 
-      ? generateAdaptivePdfHtml(results, testName, bgDataUrl, logoDataUrl)
-      : generatePdfHtml(results, testName, bgDataUrl, logoDataUrl);
+    var htmlContent = isAdaptive
+      ? generateAdaptivePdfHtml(results, testName, bgDataUrl, logoDataUrl, learnerName, timestamp)
+      : generatePdfHtml(results, testName, bgDataUrl, logoDataUrl, learnerName, timestamp);
     // Создаём временный контейнер
     var container = document.createElement('div');
     container.innerHTML = htmlContent;
@@ -472,7 +509,7 @@ async function exportResultsToPDF(results, testName) {
           link.y * scale,
           link.width * scale,
           link.height * scale,
-          { url: link.url }
+          { url: link.url, newWindow: true }
         );
       }
     });

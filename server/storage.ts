@@ -4,13 +4,15 @@ import { eq, inArray, and, sql, desc } from "drizzle-orm";
 import { db } from "./db";
 import { encryptEmail, decryptEmail, hashEmail } from "./utils/crypto";
 import {
-  users, topics, topicCourses, questions, tests, testSections, attempts, folders,
+  users, topics, topicCourses, topicEvents, questions, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
-  groups, userGroups, testAssignments, passwordResetTokens,
+  groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
   type User, type InsertUser,
   type Folder, type InsertFolder,
+  type TestFolder, type InsertTestFolder,
   type Topic, type InsertTopic,
   type TopicCourse, type InsertTopicCourse,
+  type TopicEvent, type InsertTopicEvent,
   type Question, type InsertQuestion,
   type Test, type InsertTest,
   type TestSection, type InsertTestSection,
@@ -25,6 +27,7 @@ import {
   type UserGroup, type InsertUserGroup,
   type TestAssignment, type InsertTestAssignment,
   type PasswordResetToken, type InsertPasswordResetToken,
+  type AssignmentAccessToken, type InsertAssignmentAccessToken,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -54,6 +57,7 @@ export interface IStorage {
   setUserGroups(userId: string, groupIds: string[]): Promise<void>;
 
   // Test Assignments
+  getAssignment(id: string): Promise<TestAssignment | undefined>;
   getTestAssignments(testId: string): Promise<TestAssignment[]>;
   getUserAssignments(userId: string): Promise<TestAssignment[]>;
   getGroupAssignments(groupId: string): Promise<TestAssignment[]>;
@@ -62,16 +66,30 @@ export interface IStorage {
   getAssignedTestsForUser(userId: string): Promise<Test[]>;
 
   // Password Reset Tokens
-  createPasswordResetToken(userId: string, tokenHash: string, requestIp: string): Promise<PasswordResetToken>;
+  createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken>;
   getPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined>;
   markTokenAsUsed(id: string): Promise<void>;
   getRecentTokensCount(userId: string, hours: number): Promise<number>;
+
+  // Assignment Access Tokens (magic links)
+  createAssignmentAccessToken(data: { assignmentId: string; userId: string; testId: string; tokenHash: string; expiresAt: Date }): Promise<AssignmentAccessToken>;
+  getAssignmentAccessToken(tokenHash: string): Promise<AssignmentAccessToken | undefined>;
+  getAssignmentAccessTokensByAssignment(assignmentId: string): Promise<AssignmentAccessToken[]>;
+  revokeAssignmentAccessToken(id: string): Promise<void>;
+  revokeAssignmentAccessTokensByAssignment(assignmentId: string): Promise<void>;
+  revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId: string, userId: string): Promise<void>;
 
   getFolders(): Promise<Folder[]>;
   getFolder(id: string): Promise<Folder | undefined>;
   createFolder(folder: InsertFolder): Promise<Folder>;
   updateFolder(id: string, folder: Partial<InsertFolder>): Promise<Folder | undefined>;
   deleteFolder(id: string): Promise<boolean>;
+
+  getTestFolders(): Promise<TestFolder[]>;
+  createTestFolder(folder: InsertTestFolder): Promise<TestFolder>;
+  updateTestFolder(id: string, updates: Partial<InsertTestFolder>): Promise<TestFolder | undefined>;
+  deleteTestFolder(id: string): Promise<boolean>;
+  moveTestToFolder(testId: string, folderId: string | null): Promise<boolean>;
 
   getTopics(): Promise<Topic[]>;
   getTopic(id: string): Promise<Topic | undefined>;
@@ -84,8 +102,13 @@ export interface IStorage {
   createTopicCourse(course: InsertTopicCourse): Promise<TopicCourse>;
   deleteTopicCourse(id: string): Promise<boolean>;
 
+  getTopicEvents(topicId: string): Promise<TopicEvent[]>;
+  createTopicEvent(event: InsertTopicEvent): Promise<TopicEvent>;
+  deleteTopicEvent(id: string): Promise<boolean>;
+
   getQuestions(): Promise<Question[]>;
   getQuestionsByTopic(topicId: string): Promise<Question[]>;
+  getContentHashesByTopic(topicId: string): Promise<Set<string>>;
   getQuestion(id: string): Promise<Question | undefined>;
   getQuestionsByIds(ids: string[]): Promise<Question[]>;
   createQuestion(question: InsertQuestion): Promise<Question>;
@@ -147,7 +170,7 @@ export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     if (user) {
-      return { ...user, email: decryptEmail(user.email) };
+      return { ...user, email: await decryptEmail(user.email) };
     }
     return undefined;
   }
@@ -156,8 +179,7 @@ export class DatabaseStorage implements IStorage {
     const emailHashValue = hashEmail(email);
     const [user] = await db.select().from(users).where(eq(users.emailHash, emailHashValue));
     if (user) {
-      // Дешифруем email для возврата
-      return { ...user, email: decryptEmail(user.email) };
+      return { ...user, email: await decryptEmail(user.email) };
     }
     return undefined;
   }
@@ -165,9 +187,9 @@ export class DatabaseStorage implements IStorage {
   async createUser(insertUser: InsertUser & { createdBy?: string }): Promise<User> {
     const id = randomUUID();
     const hashedPassword = await bcrypt.hash(insertUser.passwordHash, 10);
-    const emailEncrypted = encryptEmail(insertUser.email);
+    const emailEncrypted = await encryptEmail(insertUser.email);
     const emailHashValue = hashEmail(insertUser.email);
-    
+
     const [user] = await db.insert(users).values({
       id,
       email: emailEncrypted,
@@ -181,9 +203,8 @@ export class DatabaseStorage implements IStorage {
       createdAt: new Date(),
       createdBy: insertUser.createdBy || null,
     }).returning();
-    
-    // Возвращаем с расшифрованным email
-    return { ...user, email: decryptEmail(user.email) };
+
+    return { ...user, email: await decryptEmail(user.email) };
   }
 
   async validatePassword(email: string, password: string): Promise<User | null> {
@@ -199,25 +220,23 @@ export class DatabaseStorage implements IStorage {
 
   async getUsers(): Promise<User[]> {
     const allUsers = await db.select().from(users).orderBy(desc(users.createdAt));
-    // Дешифруем email для каждого пользователя
-    return allUsers.map(user => ({ ...user, email: decryptEmail(user.email) }));
+    return Promise.all(allUsers.map(async user => ({ ...user, email: await decryptEmail(user.email) })));
   }
 
   async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
-    // Если обновляется email — шифруем его
     const updateData: any = { ...data };
     if (data.email) {
-      updateData.email = encryptEmail(data.email);
+      updateData.email = await encryptEmail(data.email);
       updateData.emailHash = hashEmail(data.email);
     }
-    
+
     const [updated] = await db.update(users)
       .set(updateData)
       .where(eq(users.id, id))
       .returning();
-    
+
     if (updated) {
-      return { ...updated, email: decryptEmail(updated.email) };
+      return { ...updated, email: await decryptEmail(updated.email) };
     }
     return undefined;
   }
@@ -303,7 +322,7 @@ export class DatabaseStorage implements IStorage {
       .from(userGroups)
       .innerJoin(users, eq(userGroups.userId, users.id))
       .where(eq(userGroups.groupId, groupId));
-    return result.map(r => ({ ...r.user, email: decryptEmail(r.user.email) }));
+    return Promise.all(result.map(async r => ({ ...r.user, email: await decryptEmail(r.user.email) })));
   }
 
   async addUserToGroup(userId: string, groupId: string): Promise<UserGroup> {
@@ -342,6 +361,11 @@ export class DatabaseStorage implements IStorage {
   // ============================================
   // Test Assignments
   // ============================================
+
+  async getAssignment(id: string): Promise<TestAssignment | undefined> {
+    const [a] = await db.select().from(testAssignments).where(eq(testAssignments.id, id));
+    return a;
+  }
 
   async getTestAssignments(testId: string): Promise<TestAssignment[]> {
     return db.select().from(testAssignments).where(eq(testAssignments.testId, testId));
@@ -412,9 +436,9 @@ export class DatabaseStorage implements IStorage {
   // Password Reset Tokens
   // ============================================
 
-  async createPasswordResetToken(userId: string, tokenHash: string, requestIp: string): Promise<PasswordResetToken> {
+  async createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken> {
     const id = randomUUID();
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 минут
+    const expiresAt = new Date(Date.now() + (ttlMs ?? 30 * 60 * 1000)); // 30 минут по умолчанию
     const [token] = await db.insert(passwordResetTokens).values({
       id,
       userId,
@@ -450,6 +474,56 @@ export class DatabaseStorage implements IStorage {
     return Number(result[0]?.count || 0);
   }
 
+  // ── Assignment Access Tokens (magic links) ──────────────────────────────────
+
+  async createAssignmentAccessToken(data: { assignmentId: string; userId: string; testId: string; tokenHash: string; expiresAt: Date }): Promise<AssignmentAccessToken> {
+    const [token] = await db.insert(assignmentAccessTokens).values({
+      id: randomUUID(),
+      assignmentId: data.assignmentId,
+      userId: data.userId,
+      testId: data.testId,
+      tokenHash: data.tokenHash,
+      expiresAt: data.expiresAt,
+    }).returning();
+    return token;
+  }
+
+  async getAssignmentAccessToken(tokenHash: string): Promise<AssignmentAccessToken | undefined> {
+    const [token] = await db.select().from(assignmentAccessTokens)
+      .where(eq(assignmentAccessTokens.tokenHash, tokenHash));
+    return token;
+  }
+
+  async getAssignmentAccessTokensByAssignment(assignmentId: string): Promise<AssignmentAccessToken[]> {
+    return db.select().from(assignmentAccessTokens)
+      .where(eq(assignmentAccessTokens.assignmentId, assignmentId));
+  }
+
+  async revokeAssignmentAccessToken(id: string): Promise<void> {
+    await db.update(assignmentAccessTokens)
+      .set({ revokedAt: new Date() })
+      .where(eq(assignmentAccessTokens.id, id));
+  }
+
+  async revokeAssignmentAccessTokensByAssignment(assignmentId: string): Promise<void> {
+    await db.update(assignmentAccessTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(
+        eq(assignmentAccessTokens.assignmentId, assignmentId),
+        sql`${assignmentAccessTokens.revokedAt} IS NULL`,
+      ));
+  }
+
+  async revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId: string, userId: string): Promise<void> {
+    await db.update(assignmentAccessTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(
+        eq(assignmentAccessTokens.assignmentId, assignmentId),
+        eq(assignmentAccessTokens.userId, userId),
+        sql`${assignmentAccessTokens.revokedAt} IS NULL`,
+      ));
+  }
+
   async getFolders(): Promise<Folder[]> {
     return db.select().from(folders);
   }
@@ -480,6 +554,39 @@ export class DatabaseStorage implements IStorage {
     // Move child folders to root (parentId = null)
     await db.update(folders).set({ parentId: null }).where(eq(folders.parentId, id));
     const result = await db.delete(folders).where(eq(folders.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getTestFolders(): Promise<TestFolder[]> {
+    return db.select().from(testFolders).orderBy(testFolders.name);
+  }
+
+  async createTestFolder(folder: InsertTestFolder): Promise<TestFolder> {
+    const id = randomUUID();
+    const [newFolder] = await db.insert(testFolders).values({
+      id,
+      name: folder.name,
+      parentId: folder.parentId || null,
+    }).returning();
+    return newFolder;
+  }
+
+  async updateTestFolder(id: string, updates: Partial<InsertTestFolder>): Promise<TestFolder | undefined> {
+    const [updated] = await db.update(testFolders).set(updates).where(eq(testFolders.id, id)).returning();
+    return updated || undefined;
+  }
+
+  async deleteTestFolder(id: string): Promise<boolean> {
+    // Move tests in this folder to root
+    await db.update(tests).set({ folderId: null }).where(eq(tests.folderId, id));
+    // Move child folders to root
+    await db.update(testFolders).set({ parentId: null }).where(eq(testFolders.parentId, id));
+    const result = await db.delete(testFolders).where(eq(testFolders.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async moveTestToFolder(testId: string, folderId: string | null): Promise<boolean> {
+    const result = await db.update(tests).set({ folderId }).where(eq(tests.id, testId)).returning();
     return result.length > 0;
   }
 
@@ -541,12 +648,35 @@ export class DatabaseStorage implements IStorage {
     return result.length > 0;
   }
 
+  async getTopicEvents(topicId: string): Promise<TopicEvent[]> {
+    return db.select().from(topicEvents).where(eq(topicEvents.topicId, topicId));
+  }
+
+  async createTopicEvent(event: InsertTopicEvent): Promise<TopicEvent> {
+    const id = randomUUID();
+    const [newEvent] = await db.insert(topicEvents).values({ id, ...event }).returning();
+    return newEvent;
+  }
+
+  async deleteTopicEvent(id: string): Promise<boolean> {
+    const result = await db.delete(topicEvents).where(eq(topicEvents.id, id)).returning();
+    return result.length > 0;
+  }
+
   async getQuestions(): Promise<Question[]> {
     return db.select().from(questions);
   }
 
   async getQuestionsByTopic(topicId: string): Promise<Question[]> {
     return db.select().from(questions).where(eq(questions.topicId, topicId));
+  }
+
+  async getContentHashesByTopic(topicId: string): Promise<Set<string>> {
+    const rows = await db
+      .select({ contentHash: questions.contentHash })
+      .from(questions)
+      .where(and(eq(questions.topicId, topicId), sql`${questions.contentHash} IS NOT NULL`));
+    return new Set(rows.map((r) => r.contentHash!));
   }
 
   async getQuestion(id: string): Promise<Question | undefined> {
@@ -577,6 +707,7 @@ export class DatabaseStorage implements IStorage {
       feedbackMode: question.feedbackMode || "general",
       feedbackCorrect: question.feedbackCorrect || null,
       feedbackIncorrect: question.feedbackIncorrect || null,
+      contentHash: question.contentHash || null,
     }).returning();
     return newQuestion;
   }
@@ -719,7 +850,7 @@ export class DatabaseStorage implements IStorage {
   async updateTest(id: string, updates: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined> {
     // Increment version when test is updated
     const [updated] = await db.update(tests)
-      .set({ ...updates, version: sql`${tests.version} + 1` })
+      .set({ ...updates, version: sql`${tests.version} + 1`, updatedAt: new Date() })
       .where(eq(tests.id, id))
       .returning();
     if (!updated) return undefined;

@@ -32,6 +32,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    hmr: false,  // Disabled: WebSocket doesn't work behind reverse proxy
     fs: {
       strict: true,
       deny: ["**/.*"],

@@ -1,0 +1,17 @@
+services:
+  app:
+    image: ${IMAGE_NAME}:latest
+    container_name: ${CONTAINER_NAME}
+    restart: unless-stopped
+    ports:
+      - "${EXPOSE_PORT}:${INTERNAL_PORT}"
+    volumes:
+      - ${UPLOADS_DIR}:/app/uploads
+    env_file:
+      - ${ENV_DIR}/.env
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -q --spider http://127.0.0.1:${PORT}/api/me"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
