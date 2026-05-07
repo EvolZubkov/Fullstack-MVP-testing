@@ -349,6 +349,7 @@ router.get(
         }
 
         return {
+          "ID": q.id,
           "Тема": topicMap.get(q.topicId) || "",
           "Тип вопроса": typeToExcel[q.type] || q.type,
           "Текст вопроса": q.prompt,
@@ -363,7 +364,7 @@ router.get(
 
       const ws = XLSX.utils.json_to_sheet(rows);
       ws["!cols"] = [
-        { wch: 25 }, { wch: 18 }, { wch: 50 }, { wch: 8 },
+        { wch: 36 }, { wch: 25 }, { wch: 18 }, { wch: 50 }, { wch: 8 },
         { wch: 12 }, { wch: 60 }, { wch: 25 }, { wch: 15 }, { wch: 40 },
       ];
 
@@ -411,7 +412,9 @@ router.post(
       const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
 
       const topics = await storage.getTopics();
-      const topicByName = new Map(topics.map((t) => [t.name.toLowerCase().trim(), t]));
+      // Нормализуем ключ: убираем все виды пробелов (включая \u00a0, \r и т.д.)
+      const normalizeName = (s: string) => s.replace(/[\s\u00a0\u200b\ufeff]+/g, " ").trim().toLowerCase();
+      const topicByName = new Map(topics.map((t) => [normalizeName(t.name), t]));
 
       // Кэш хэшей по topicId — загружаем лениво при первом обращении к теме
       const hashCache = new Map<string, Set<string>>();
@@ -422,19 +425,25 @@ router.post(
         return hashCache.get(topicId)!;
       };
 
-      const results = { created: 0, skipped: 0, errors: [] as string[] };
+      const results = { created: 0, updated: 0, skipped: 0, errors: [] as string[] };
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         const rowNum = i + 2;
 
         try {
-          // Тема
-          const topicName = String(row["Тема"] || "").trim().toLowerCase();
-          const topic = topicByName.get(topicName);
-          if (!topic) {
-            results.errors.push(`Строка ${rowNum}: тема "${row["Тема"]}" не найдена`);
+          // Тема — создаём если не существует
+          const topicNameRaw = String(row["Тема"] || "").replace(/[\s\u00a0\u200b\ufeff]+/g, " ").trim();
+          const topicNameKey = normalizeName(topicNameRaw);
+          if (!topicNameKey) {
+            results.errors.push(`Строка ${rowNum}: не указана тема`);
             continue;
+          }
+          let topic = topicByName.get(topicNameKey);
+          if (!topic) {
+            logger.warn(`Import строка ${rowNum}: тема "${topicNameRaw}" не найдена, создаём новую`, "questions");
+            topic = await storage.createTopic({ name: topicNameRaw });
+            topicByName.set(topicNameKey, topic);
           }
 
           // Тип вопроса
@@ -537,8 +546,31 @@ router.post(
           const shuffleStr = String(row["Следование вариантов ответов"] || "Random").trim().toLowerCase();
           const shuffleAnswers = shuffleStr !== "fixed";
 
-          // Дедупликация: проверяем хэш контента
           const contentHash = computeQuestionHash(type, prompt, dataJson);
+
+          // Обновление по ID если указан
+          const rowId = String(row["ID"] || "").trim();
+          if (rowId) {
+            const existing = await storage.getQuestion(rowId);
+            if (existing) {
+              await storage.updateQuestion(rowId, {
+                topicId: topic.id,
+                type,
+                prompt,
+                dataJson: dataJson as any,
+                correctJson: correctJson as any,
+                points: parseInt(String(row["Балл"]), 10) || 1,
+                difficulty: parseInt(String(row["Сложность"]), 10) || 50,
+                shuffleAnswers,
+                feedback: String(row["Обратная связь"] || "").trim() || null,
+                contentHash,
+              });
+              results.updated++;
+              continue;
+            }
+          }
+
+          // Дедупликация: проверяем хэш контента
           const existingHashes = await getTopicHashes(topic.id);
           if (existingHashes.has(contentHash)) {
             results.skipped++;
@@ -568,8 +600,8 @@ router.post(
       }
 
       res.json({
-        imported: results.created,
         created: results.created,
+        updated: results.updated,
         skipped: results.skipped,
         errors: results.errors,
       });

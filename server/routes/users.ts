@@ -397,7 +397,7 @@ router.post("/bulk-import", requireAuthor, async (req, res) => {
       return res.status(400).json({ error: "No rows provided" });
     }
 
-    const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`;
+    const baseUrl = (process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/$/, '');
 
     // Cache auto-created groups within this import to avoid duplicates
     const groupNameToId = new Map<string, string>();

@@ -347,7 +347,7 @@ router.get("/:id/export/scorm", requireAuthor, async (req, res) => {
     if (enableTelemetry) {
       const packageId = crypto.randomUUID();
       const secretKey = crypto.randomBytes(32).toString("hex");
-      const apiBaseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`;
+      const apiBaseUrl = (process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/$/, '');
 
       // Create scorm_package record
       await storage.createScormPackage({
