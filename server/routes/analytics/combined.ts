@@ -544,7 +544,7 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
     for (const a of combined) {
       if (!a.finishedAt || !a.testId) continue;
       const dt = new Date(a.finishedAt);
-      const entry = alertMap.get(a.testId) || { testTitle: a.testTitle, recent: [], prev: [] };
+      const entry = alertMap.get(a.testId) || { testTitle: a.testTitle, recent: [] as number[], prev: [] as number[] };
       if (dt >= day7ago) entry.recent.push(a.resultPassed ? 1 : 0);
       else if (dt >= day14ago) entry.prev.push(a.resultPassed ? 1 : 0);
       alertMap.set(a.testId, entry);

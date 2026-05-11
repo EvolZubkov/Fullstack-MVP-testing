@@ -35,10 +35,10 @@ interface CreateQuestionBody {
   points?: number;
   difficulty?: number;
   mediaUrl?: string;
-  mediaType?: string;
+  mediaType?: "image" | "audio" | "video" | null;
   shuffleAnswers?: boolean;
   feedback?: string;
-  feedbackMode?: "general" | "per_answer";
+  feedbackMode?: "general" | "conditional";
   feedbackCorrect?: string;
   feedbackIncorrect?: string;
 }
@@ -139,7 +139,7 @@ router.post(
         feedbackMode: feedbackMode || "general",
         feedbackCorrect: feedbackCorrect || null,
         feedbackIncorrect: feedbackIncorrect || null,
-      });
+      } as any);
 
       res.status(201).json(question);
     } catch (error) {
@@ -155,7 +155,7 @@ router.post(
 router.put(
   "/:id",
   requireAuthor,
-  async (req: Request<IdParams, {}, UpdateQuestionBody>, res: Response) => {
+  async (req: Request, res: Response) => {
     try {
       const {
         topicId,
@@ -172,7 +172,7 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
-      } = req.body;
+      } = req.body as UpdateQuestionBody;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
 
@@ -191,7 +191,7 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
-      });
+      } as any);
 
       if (!updated) {
         return res.status(404).json({ error: "Question not found" });
@@ -211,7 +211,7 @@ router.put(
 router.delete(
   "/:id",
   requireAuthor,
-  async (req: Request<IdParams>, res: Response) => {
+  async (req: Request, res: Response) => {
     try {
       const success = await storage.deleteQuestion(req.params.id);
       if (!success) {
@@ -252,7 +252,7 @@ router.post(
 router.post(
   "/:id/duplicate",
   requireAuthor,
-  async (req: Request<IdParams>, res: Response) => {
+  async (req: Request, res: Response) => {
     try {
       const result = await (storage as any).duplicateQuestion(req.params.id);
       if (!result) {
@@ -564,7 +564,7 @@ router.post(
                 shuffleAnswers,
                 feedback: String(row["Обратная связь"] || "").trim() || null,
                 contentHash,
-              });
+              } as any);
               results.updated++;
               continue;
             }
@@ -589,7 +589,7 @@ router.post(
             shuffleAnswers,
             feedback: String(row["Обратная связь"] || "").trim() || null,
             contentHash,
-          });
+          } as any);
 
           // Добавляем в кэш чтобы не дублировать внутри одного файла
           existingHashes.add(contentHash);

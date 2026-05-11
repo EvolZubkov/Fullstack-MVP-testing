@@ -12,6 +12,8 @@ import analyticsRouter from "./analytics/index";
 import scormTelemetryRouter from "./scorm-telemetry";
 import logsRouter from "./logs";
 import accessRouter from "./access";
+import templatesRouter from "./templates";
+import contentPagesRouter from "./content-pages";
 
 export {
   foldersRouter,
@@ -28,11 +30,15 @@ export {
   scormTelemetryRouter,
   logsRouter,
   accessRouter,
+  templatesRouter,
+  contentPagesRouter,
 };
 
 // Конфигурация монтирования роутеров
 export const routerConfig = [
   { path: "/access", router: accessRouter }, // magic link — до session guard
+  { path: "/api/templates", router: templatesRouter },
+  { path: "/api/tests", router: contentPagesRouter },
   { path: "/api/folders", router: foldersRouter },
   { path: "/api/test-folders", router: testFoldersRouter },
   { path: "/api/topics", router: topicsRouter },
