@@ -1,0 +1,39 @@
+<div class="rtk-player" data-template="rtk-storyline">
+  <div class="rtk-stage">
+    <main id="app" class="rtk-main" data-slot="page" tabindex="-1"></main>
+  </div>
+
+  <nav class="rtk-course-nav" data-slot="topic-nav" aria-label="Навигация по разделам">
+    {{> topicNav }}
+  </nav>
+
+  <div class="rtk-course-progress" data-slot="progress">
+    {{> progress }}
+  </div>
+
+  <button class="rtk-side-arrow rtk-side-arrow--prev" type="button" data-nav="prev" aria-label="Предыдущий слайд">
+    <span aria-hidden="true">‹</span>
+  </button>
+  <button class="rtk-side-arrow rtk-side-arrow--next" type="button" data-nav="next" aria-label="Следующий слайд">
+    <span aria-hidden="true">›</span>
+  </button>
+
+  <div class="rtk-footer">
+    <button class="rtk-nav-button rtk-nav-button--secondary" type="button" data-nav="prev">
+      <span>Назад</span>
+    </button>
+    <div class="rtk-footer-spacer"></div>
+    <button class="rtk-nav-button rtk-nav-button--primary" type="button" data-action="answer-submit">
+      <span>{{ nav.submitAnswerLabel }}</span>
+      <span class="rtk-button-icon" aria-hidden="true">✓</span>
+    </button>
+    <button class="rtk-nav-button rtk-nav-button--primary" type="button" data-action="test-finish">
+      <span>{{ nav.finishLabel }}</span>
+      <span class="rtk-button-icon" aria-hidden="true">→</span>
+    </button>
+    <button class="rtk-nav-button rtk-nav-button--primary" type="button" data-nav="next">
+      <span>{{ nav.nextLabel }}</span>
+      <span class="rtk-button-icon" aria-hidden="true">→</span>
+    </button>
+  </div>
+</div>

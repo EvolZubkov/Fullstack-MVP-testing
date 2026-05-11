@@ -51,6 +51,10 @@ function generateVariant() {
     });
   });
   state.flatQuestions = shuffle(state.flatQuestions);
+  if (typeof rebuildPageSequence === 'function') {
+    rebuildPageSequence();
+    goToPageSequenceIndex(0);
+  }
 }
 
 function renderResults() {

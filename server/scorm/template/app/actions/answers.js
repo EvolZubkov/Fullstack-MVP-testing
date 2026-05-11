@@ -168,7 +168,21 @@ function setMatch(qId, leftIdx, rightVal) {
 
 
 function next() {
+  if (state.phase === 'content') {
+    if (typeof advancePageSequence === 'function') advancePageSequence();
+    return;
+  }
+
   if (!requireAnswerOrToast()) return;
+
+  if (state.pageSequence && state.pageSequence.length > 0 && typeof advancePageSequence === 'function') {
+    // ✅ НОВОЕ: Сохраняем текущее состояние перед переходом
+    saveSessionState();
+
+    state.feedbackShown = false;
+    advancePageSequence();
+    return;
+  }
 
   if (state.currentIndex < state.flatQuestions.length - 1) {
     // ✅ НОВОЕ: Сохраняем текущее состояние перед переходом
@@ -200,6 +214,7 @@ function submit(force) {
   }
 
   state.currentIndex = state.flatQuestions.length;
+  state.currentPageIndex = state.pageSequence ? state.pageSequence.length : state.currentPageIndex;
   render();
 }
 
@@ -231,9 +246,11 @@ function restart() {
 
   state.phase = 'start';
   state.currentIndex = 0;
+  state.currentPageIndex = 0;
   state.answers = {};
   state.variant = null;
   state.flatQuestions = [];
+  state.pageSequence = [];
   state.submitted = false;
   state.feedbackShown = false;
   state.timeExpired = false;

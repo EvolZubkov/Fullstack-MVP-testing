@@ -1,0 +1,14 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="720" fill="#e2e2e2"/>
+  <rect x="42" y="40" width="1196" height="548" rx="14" fill="#101828"/>
+  <rect x="118" y="90" width="590" height="50" rx="6" fill="#ffffff" fill-opacity="0.92"/>
+  <rect x="118" y="158" width="520" height="50" rx="6" fill="#ff4f12"/>
+  <rect x="118" y="226" width="470" height="50" rx="6" fill="#ffffff" fill-opacity="0.92"/>
+  <rect x="118" y="344" width="625" height="22" rx="4" fill="#ffffff" fill-opacity="0.8"/>
+  <rect x="118" y="376" width="575" height="22" rx="4" fill="#ffffff" fill-opacity="0.8"/>
+  <rect x="118" y="444" width="640" height="22" rx="4" fill="#ffffff" fill-opacity="0.8"/>
+  <rect x="118" y="476" width="600" height="22" rx="4" fill="#ffffff" fill-opacity="0.8"/>
+  <image href="assets/images/hero-mountain.svg" x="690" y="118" width="485" height="433" preserveAspectRatio="xMidYMid meet"/>
+  <rect x="1018" y="632" width="200" height="48" rx="24" fill="#f4f4f4" stroke="#101828"/>
+  <circle cx="1195" cy="656" r="20" fill="#ff4f12"/>
+</svg>

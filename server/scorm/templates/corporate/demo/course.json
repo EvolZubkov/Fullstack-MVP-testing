@@ -1,0 +1,152 @@
+{
+  "schemaVersion": "1.0",
+  "locale": "ru-RU",
+  "params": {
+    "primaryColor": "221 83% 53%",
+    "backgroundColor": "220 14% 10%",
+    "foregroundColor": "0 0% 96%",
+    "cardColor": "220 13% 16%",
+    "cardBorderColor": "220 13% 26%",
+    "borderColor": "220 13% 24%",
+    "mutedColor": "220 12% 22%",
+    "accentColor": "220 12% 24%",
+    "sidebarColor": "220 18% 8%",
+    "fontFamily": "Inter",
+    "logoUrl": null,
+    "companyName": "ТехноКорп",
+    "progress.mode": "questions",
+    "showProgressBar": true,
+    "showTopicNav": true
+  },
+  "course": {
+    "title": "Корпоративный стандарт безопасности",
+    "description": "Сертификационный тест по политике информационной безопасности компании",
+    "passPercent": 75,
+    "timeLimitMinutes": null,
+    "maxAttempts": null,
+    "questionCount": 4,
+    "topics": [
+      { "id": "topic-1", "title": "Основы защиты данных", "status": "available" },
+      { "id": "topic-2", "title": "Политика паролей", "status": "locked" },
+      { "id": "topic-3", "title": "Инциденты и реакция", "status": "locked" }
+    ],
+    "contentPages": [
+      {
+        "id": "demo-intro",
+        "type": "intro",
+        "route": "content.intro",
+        "templateKey": "intro.hero",
+        "topicId": "topic-1",
+        "values": {
+          "title": "Основы защиты данных",
+          "subtitle": "Раздел проверяет знание базовых принципов корпоративной безопасности",
+          "heroImage": null
+        }
+      },
+      {
+        "id": "demo-info",
+        "type": "info",
+        "route": "content.info",
+        "templateKey": "info.textWithImage",
+        "topicId": "topic-1",
+        "values": {
+          "title": "Перед началом",
+          "lead": "Внимательно читайте каждый вопрос перед тем, как выбирать ответ.",
+          "body": "<p>В тесте используются рабочие ситуации из корпоративной практики. Выбирайте действия, которые соответствуют политике безопасности компании.</p>",
+          "image": null
+        }
+      },
+      {
+        "id": "demo-summary",
+        "type": "summary",
+        "route": "content.summary",
+        "templateKey": "summary.progressRing",
+        "topicId": "topic-1",
+        "values": {
+          "title": "Итоги раздела",
+          "progressChart": {
+            "path": "result.scorePercent",
+            "renderer": "core.ringChart",
+            "rendererOptions": { "showValue": true, "decimals": 0, "size": 120 },
+            "label": "Результат"
+          }
+        }
+      }
+    ],
+    "questions": [
+      {
+        "id": "demo-single",
+        "topicId": "topic-1",
+        "type": "single",
+        "prompt": "Сотрудник получил письмо с просьбой срочно перейти по ссылке и ввести корпоративные данные. Что следует сделать?",
+        "options": [
+          { "id": "s1", "text": "Перейти по ссылке и ввести данные, если письмо выглядит официально" },
+          { "id": "s2", "text": "Сообщить в отдел ИБ и не переходить по ссылке", "correct": true },
+          { "id": "s3", "text": "Переслать письмо коллегам для проверки" },
+          { "id": "s4", "text": "Удалить письмо без уведомления ИБ" }
+        ]
+      },
+      {
+        "id": "demo-multiple",
+        "topicId": "topic-1",
+        "type": "multiple",
+        "prompt": "Какие из перечисленных требований входят в корпоративную политику паролей?",
+        "options": [
+          { "id": "m1", "text": "Минимальная длина пароля — 12 символов", "correct": true },
+          { "id": "m2", "text": "Использование одного пароля для всех сервисов" },
+          { "id": "m3", "text": "Смена пароля не реже одного раза в 90 дней", "correct": true },
+          { "id": "m4", "text": "Обязательное использование специальных символов", "correct": true }
+        ]
+      },
+      {
+        "id": "demo-matching",
+        "topicId": "topic-1",
+        "type": "matching",
+        "prompt": "Сопоставьте уровень доступа к данным с описанием.",
+        "pairs": [
+          { "id": "p1", "left": "Публичные данные", "right": "Доступны всем сотрудникам и внешним пользователям" },
+          { "id": "p2", "left": "Внутренние данные", "right": "Доступны только сотрудникам компании" },
+          { "id": "p3", "left": "Конфиденциальные данные", "right": "Доступны ограниченному кругу сотрудников" },
+          { "id": "p4", "left": "Секретные данные", "right": "Доступны только руководству и уполномоченным лицам" }
+        ]
+      },
+      {
+        "id": "demo-ranking",
+        "topicId": "topic-1",
+        "type": "ranking",
+        "prompt": "Расставьте действия при обнаружении утечки данных в правильном порядке.",
+        "options": [
+          { "id": "r1", "text": "Зафиксировать факт инцидента" },
+          { "id": "r2", "text": "Незамедлительно уведомить руководителя и отдел ИБ" },
+          { "id": "r3", "text": "Ограничить доступ к поражённым ресурсам" },
+          { "id": "r4", "text": "Участвовать в расследовании и устранении последствий" }
+        ],
+        "order": ["r1", "r2", "r3", "r4"]
+      }
+    ]
+  },
+  "runtime": {
+    "route": "start",
+    "progress": {
+      "active": { "current": 2, "total": 4, "percent": 50 },
+      "question": { "current": 2, "total": 4, "percent": 50 },
+      "page": { "current": 4, "total": 9, "percent": 44 }
+    },
+    "result": {
+      "score": 82,
+      "maxScore": 100,
+      "scorePercent": 82,
+      "status": "passed"
+    },
+    "sectionResult": {
+      "score": 3,
+      "maxScore": 4,
+      "scorePercent": 75,
+      "status": "passed"
+    },
+    "state": {
+      "currentTopicId": "topic-1",
+      "currentPageId": "demo-intro"
+    }
+  }
+}

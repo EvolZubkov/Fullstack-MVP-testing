@@ -1,0 +1,31 @@
+<section class="rtk-page rtk-page--start">
+  <div class="rtk-hero-card">
+    <div class="rtk-hero-copy">
+      <p class="rtk-kicker">{{ page.content.kicker }}</p>
+
+      <h1 class="rtk-hero-title">
+        {{#if page.content.titleLine1}}
+          <span>{{ page.content.titleLine1 }}</span>
+          <span>{{ page.content.titleLine2 }} <mark>{{ page.content.titleAccent }}</mark></span>
+          <span>{{ page.content.titleLine3 }}</span>
+        {{/if}}
+        {{#unless page.content.titleLine1}}
+          <span>{{ page.title }}</span>
+        {{/unless}}
+      </h1>
+
+      <div class="rtk-hero-description">
+        <p>{{ page.content.subtitle }}</p>
+        <div data-slot="content-body"></div>
+      </div>
+    </div>
+
+    <figure class="rtk-hero-art rtk-hero-art--back" aria-hidden="true">
+      <img src="{{ params.layout.heroImageBack }}" alt="" />
+    </figure>
+
+    <figure class="rtk-hero-art rtk-hero-art--front" aria-hidden="true">
+      <img src="{{ params.layout.heroImage }}" alt="" />
+    </figure>
+  </div>
+</section>

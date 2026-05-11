@@ -1,0 +1,73 @@
+<div class="results-page">
+  <div class="results-hero">
+    {{#if result.passed}}
+    <div class="results-hero-icon is-pass">
+      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10"/><path d="M17 4v5a5 5 0 0 1-10 0V4"/><path d="M5 6h2"/><path d="M17 6h2"/></svg>
+    </div>
+    <div class="results-hero-title">Поздравляем!</div>
+    <div class="results-hero-sub">Вы успешно прошли тест.</div>
+    {{/if}}
+    {{#unless result.passed}}
+    <div class="results-hero-icon is-fail">
+      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6"/><path d="M15 9l-6 6"/></svg>
+    </div>
+    <div class="results-hero-title">Тест не пройден</div>
+    <div class="results-hero-sub">Попробуйте ещё раз.</div>
+    {{/unless}}
+  </div>
+
+  <div class="card results-main-card">
+    <div class="results-main-title" data-path="course.title"></div>
+    <div class="results-main-sub">Результаты теста</div>
+
+    <div class="results-ring" data-ring-offset="{{ result.ringDashoffset }}">
+      <svg viewBox="0 0 140 140" width="140" height="140">
+        <circle cx="70" cy="70" r="63" class="ring-bg" stroke-width="14" fill="none"></circle>
+        <circle cx="70" cy="70" r="63" class="ring-fg {{ result.passClass }}" stroke-width="14" fill="none" stroke-linecap="round"></circle>
+      </svg>
+      <div class="results-ring-center">
+        <div class="results-ring-pct"><span data-path="result.scorePercent"></span>%</div>
+        <div class="results-ring-label">Баллы</div>
+      </div>
+    </div>
+
+    <div class="results-stats">
+      <div class="results-stat">
+        <div class="v" data-path="result.totalQuestions"></div>
+        <div class="l">Вопросов</div>
+      </div>
+      <div class="results-stat">
+        <div class="v"><span data-path="result.correct"></span>/<span data-path="result.totalQuestions"></span></div>
+        <div class="l">Верно</div>
+      </div>
+      <div class="results-stat">
+        <div class="v" data-path="result.earnedPoints"></div>
+        <div class="l">Баллов</div>
+      </div>
+      <div class="results-pill {{ result.passClass }}" data-path="result.statusLabel"></div>
+    </div>
+  </div>
+
+  {{#if result.topicResults}}
+  <div class="results-section-title">Результаты по темам</div>
+  <div class="results-topics-grid">
+    {{#each result.topicResults}}
+    <div class="card topic-card">
+      <div class="topic-head">
+        <div class="topic-name">{{topicName}}</div>
+        <div class="results-pill {{passClass}}">{{statusLabel}}</div>
+      </div>
+      <div class="topic-bar {{passClass}}" data-bar-width="{{percent}}"><div class="topic-bar-fill"></div></div>
+      <div class="topic-row">
+        <div class="k">Правильно</div>
+        <div class="val">{{correct}} / {{total}}</div>
+      </div>
+    </div>
+    {{/each}}
+  </div>
+  {{/if}}
+
+  <div class="results-actions">
+    <button type="button" class="btn" data-action="restart">Пройти снова</button>
+  </div>
+</div>

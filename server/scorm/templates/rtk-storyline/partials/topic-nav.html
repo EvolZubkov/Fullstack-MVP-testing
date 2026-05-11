@@ -1,0 +1,10 @@
+<ol class="rtk-topic-list">
+  {{#each sections}}
+    <li class="{{ className }}">
+      <button type="button" data-nav="topic" data-topic-id="{{ id }}" title="{{ title }}">
+        <span class="rtk-topic-number">{{ @number }}</span>
+        <span class="rtk-topic-title">{{ title }}</span>
+      </button>
+    </li>
+  {{/each}}
+</ol>

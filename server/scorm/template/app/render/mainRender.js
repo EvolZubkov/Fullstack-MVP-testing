@@ -16,6 +16,15 @@ function render() {
         return;
     }
 
+    if (state.phase === 'content') {
+        var item = typeof currentPageItem === 'function' ? currentPageItem() : null;
+        var manifest = state.templateManifest || {};
+        if (item && item.kind === 'content') {
+            renderContentPage(item.page, manifest.contentTemplates || []);
+            return;
+        }
+    }
+
     var app = document.getElementById('app');
     var total = state.flatQuestions.length;
     var current = state.currentIndex;
@@ -36,7 +45,13 @@ function render() {
         html += '<div id="timer-display" ' + timerClass + '>' + formatTime(state.remainingSeconds) + '</div>';
     }
     html += '</div>';
-    html += '<div class="progress-bar"><div class="progress-fill" style="width:' + progress + '%"></div></div>';
+    var progressMode = typeof getProgressMode === 'function' ? getProgressMode() : 'questions';
+    if (progressMode !== 'hidden') {
+        var progressValue = progressMode === 'pages' && typeof pageProgressPercent === 'function'
+            ? pageProgressPercent()
+            : progress;
+        html += '<div class="progress-bar"><div class="progress-fill" style="width:' + progressValue + '%"></div></div>';
+    }
     html += '<div class="card">';
     html += '<div style="color:#666;margin-bottom:8px;">Вопрос ' + (current + 1) + ' из ' + total + ' | ' + escapeHtml(qData.topicName) + '</div>';
     html += '<div class="question-text">' + escapeHtml(q.prompt) + '</div>';
@@ -73,11 +88,11 @@ function render() {
     html += '<div class="navigation" style="justify-content:flex-end">';
 
     if (TEST_DATA.showCorrectAnswers && !state.feedbackShown) {
-        html += '<button class="btn" onclick="confirmAnswer()">Принять</button>';
-    } else if (current < total - 1) {
-        html += '<button class="btn" onclick="next()">Далее</button>';
+        html += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()">Принять</button>';
+    } else if (current < total - 1 || (state.pageSequence && state.currentPageIndex < state.pageSequence.length - 1)) {
+        html += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
     } else {
-        html += '<button class="btn" onclick="submit()">Завершить тест</button>';
+        html += '<button class="btn" data-action="test-finish" onclick="submit()">Завершить тест</button>';
     }
     html += '</div>';
 

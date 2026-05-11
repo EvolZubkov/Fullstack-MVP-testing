@@ -1,0 +1,141 @@
+{
+  "schemaVersion": "1.0",
+  "locale": "ru-RU",
+  "params": {
+    "primaryColor": "221 83% 53%",
+    "backgroundColor": "0 0% 97%",
+    "foregroundColor": "0 0% 9%",
+    "cardColor": "0 0% 100%",
+    "cardBorderColor": "0 0% 88%",
+    "fontFamily": "Inter",
+    "progress.mode": "questions",
+    "showProgressBar": true
+  },
+  "course": {
+    "title": "Эффективные коммуникации",
+    "description": "Тест по основам деловой коммуникации и обратной связи",
+    "passPercent": 70,
+    "timeLimitMinutes": null,
+    "maxAttempts": null,
+    "questionCount": 4,
+    "topics": [
+      { "id": "topic-1", "title": "Деловое общение", "status": "available" },
+      { "id": "topic-2", "title": "Обратная связь", "status": "locked" }
+    ],
+    "contentPages": [
+      {
+        "id": "demo-intro",
+        "type": "intro",
+        "route": "content.intro",
+        "templateKey": "intro.simple",
+        "topicId": "topic-1",
+        "values": {
+          "title": "Введение в раздел",
+          "subtitle": "Ответьте на вопросы, опираясь на практику делового общения"
+        }
+      },
+      {
+        "id": "demo-info",
+        "type": "info",
+        "route": "content.info",
+        "templateKey": "info.text",
+        "topicId": "topic-1",
+        "values": {
+          "title": "Перед началом",
+          "body": "<p>Короткий учебный блок с <strong>важным акцентом</strong> и понятным следующим шагом.</p>"
+        }
+      },
+      {
+        "id": "demo-summary",
+        "type": "summary",
+        "route": "content.summary",
+        "templateKey": "summary.text",
+        "topicId": "topic-1",
+        "values": {
+          "title": "Итоги раздела",
+          "result": {
+            "path": "result.scorePercent",
+            "renderer": "core.textMetric",
+            "rendererOptions": { "suffix": "%", "decimals": 0 },
+            "label": "Результат"
+          }
+        }
+      }
+    ],
+    "questions": [
+      {
+        "id": "demo-single",
+        "topicId": "topic-1",
+        "type": "single",
+        "prompt": "Коллега выглядит расстроенным после совещания. Как лучше всего начать разговор с ним?",
+        "options": [
+          { "id": "s1", "text": "Игнорировать ситуацию — это его личное дело" },
+          { "id": "s2", "text": "Спросить напрямую: «Почему ты расстроен?»" },
+          { "id": "s3", "text": "Выразить внимание и предложить поговорить, если он захочет", "correct": true },
+          { "id": "s4", "text": "Рассказать всем в коллективе о его состоянии" }
+        ]
+      },
+      {
+        "id": "demo-multiple",
+        "topicId": "topic-1",
+        "type": "multiple",
+        "prompt": "Какие признаки говорят об эффективной обратной связи?",
+        "options": [
+          { "id": "m1", "text": "Конкретность: указывает на конкретное поведение, а не на личность", "correct": true },
+          { "id": "m2", "text": "Своевременность: даётся сразу после события", "correct": true },
+          { "id": "m3", "text": "Обобщённость: «ты всегда так делаешь»" },
+          { "id": "m4", "text": "Ориентированность на развитие, а не на обвинение", "correct": true }
+        ]
+      },
+      {
+        "id": "demo-matching",
+        "topicId": "topic-1",
+        "type": "matching",
+        "prompt": "Сопоставьте стиль коммуникации с описанием.",
+        "pairs": [
+          { "id": "p1", "left": "Активное слушание", "right": "Внимание без перебивания, уточняющие вопросы" },
+          { "id": "p2", "left": "Ассертивность", "right": "Уверенное выражение позиции без агрессии" },
+          { "id": "p3", "left": "Эмпатия", "right": "Понимание и принятие чувств собеседника" },
+          { "id": "p4", "left": "Открытые вопросы", "right": "Вопросы, требующие развёрнутого ответа" }
+        ]
+      },
+      {
+        "id": "demo-ranking",
+        "topicId": "topic-1",
+        "type": "ranking",
+        "prompt": "Расположите этапы конструктивного разговора о проблеме в правильном порядке.",
+        "options": [
+          { "id": "r1", "text": "Выбрать подходящее время и место для разговора" },
+          { "id": "r2", "text": "Описать ситуацию объективно, без обвинений" },
+          { "id": "r3", "text": "Выслушать точку зрения собеседника" },
+          { "id": "r4", "text": "Совместно договориться о следующих шагах" }
+        ],
+        "order": ["r1", "r2", "r3", "r4"]
+      }
+    ]
+  },
+  "runtime": {
+    "route": "start",
+    "progress": {
+      "active": { "current": 2, "total": 4, "percent": 50 },
+      "question": { "current": 2, "total": 4, "percent": 50 },
+      "page": { "current": 4, "total": 9, "percent": 44 }
+    },
+    "result": {
+      "score": 78,
+      "maxScore": 100,
+      "scorePercent": 78,
+      "status": "passed"
+    },
+    "sectionResult": {
+      "score": 3,
+      "maxScore": 4,
+      "scorePercent": 75,
+      "status": "passed"
+    },
+    "state": {
+      "currentTopicId": "topic-1",
+      "currentPageId": "demo-intro"
+    }
+  }
+}

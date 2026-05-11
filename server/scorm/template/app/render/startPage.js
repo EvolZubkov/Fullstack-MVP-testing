@@ -95,6 +95,14 @@ function renderStartPage() {
   var hasCompletedAttempts = !!getAllAttempts() && getAllAttempts().length > 0;
   var canStartNewAttempt = hasAttemptsLeft();
 
+  if (noAttempts && !hasCompletedAttempts) {
+    app.innerHTML = '<div class="card" data-layout="system.blocked" role="status" style="max-width:560px;margin:40px auto;text-align:center;">'
+      + '<h1>Доступ к тесту ограничен</h1>'
+      + '<p style="color:hsl(var(--muted-foreground));">Для этого теста больше нет доступных попыток.</p>'
+      + '</div>';
+    return;
+  }
+
   // Проверяем есть ли незавершённая сессия для продолжения
   var suspendObj = readSuspendObj();
   var pendingSession = suspendObj.currentSession;
@@ -220,7 +228,8 @@ function startTest() {
   // Send telemetry start
   Telemetry.start();
 
-  state.phase = 'question';
+  if (typeof goToPageSequenceIndex === 'function') goToPageSequenceIndex(0);
+  else state.phase = 'question';
   initTimer();
   render();
 }
@@ -311,7 +320,8 @@ function restart() {
   }
 
   // ===== ЗАПУСК ТЕСТА =====
-  state.phase = 'question';
+  if (typeof goToPageSequenceIndex === 'function') goToPageSequenceIndex(0);
+  else state.phase = 'question';
   initTimer();
   render();
 }

@@ -81,8 +81,8 @@ export function extractEmbeddedMediaIntoAssets(
   function visit(node: any) {
     if (!node || typeof node !== "object") return;
 
-    if (typeof node.mediaUrl === "string") {
-      const url = node.mediaUrl.trim();
+    function packStringValue(input: string): string | null {
+      const url = input.trim();
 
       // 1) base64 data url
       const parsed = parseDataUrl(url);
@@ -91,18 +91,26 @@ export function extractEmbeddedMediaIntoAssets(
         const fileName = `${nanoid(10)}.${ext}`;
         const zipPath = `assets/media/${fileName}`;
         assets[zipPath] = parsed.buffer;
-        node.mediaUrl = zipPath;
-      } else {
-        // 2) /uploads/... -> pack
-        const packedZipPath = tryEmbedUploadedFile(url);
-        if (packedZipPath) node.mediaUrl = packedZipPath;
+        return zipPath;
       }
+
+      // 2) /uploads/... -> pack
+      return tryEmbedUploadedFile(url);
+    }
+
+    if (typeof node.mediaUrl === "string") {
+      const packed = packStringValue(node.mediaUrl);
+      if (packed) node.mediaUrl = packed;
     }
 
     for (const k of Object.keys(node)) {
       const v = node[k];
       if (Array.isArray(v)) v.forEach(visit);
       else if (v && typeof v === "object") visit(v);
+      else if (typeof v === "string" && (v.startsWith("data:") || v.startsWith(uploadsUrlPrefix))) {
+        const packed = packStringValue(v);
+        if (packed) node[k] = packed;
+      }
     }
   }
 

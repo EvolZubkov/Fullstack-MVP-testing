@@ -53,42 +53,57 @@
       try { SCORM.terminate(); } catch (e) { }
     });
 
-    // биндинги DnD
-    bindMatchingDnDOnce();
-    bindRankingDnDOnce();
+    var templateReady = typeof loadDesignTemplate === "function"
+      ? loadDesignTemplate()
+      : Promise.resolve(null);
 
-    // ===== ВОССТАНОВЛЕНИЕ СЕССИИ =====
-    var recovery = determineRecovery();
-    console.log('🔄 Recovery decision:', recovery.action);
+    templateReady.then(function () {
+      // биндинги DnD
+      bindMatchingDnDOnce();
+      bindRankingDnDOnce();
 
-    if (recovery.action === 'restore') {
-      // Восстанавливаем незавершённую попытку
-      restoreSession(recovery.session);
-      render();
-    } else if (recovery.action === 'show_last_attempt') {
-      // Показываем результат последней попытки, сбрасываем незавершённую сессию
-      clearCurrentSession();
-      if (TEST_DATA.mode === 'adaptive' && TEST_DATA.adaptiveTopics) {
-        initAdaptiveTest();
+      // ===== ВОССТАНОВЛЕНИЕ СЕССИИ =====
+      var recovery = determineRecovery();
+      console.log('🔄 Recovery decision:', recovery.action);
+
+      if (recovery.action === 'restore') {
+        // Восстанавливаем незавершённую попытку
+        restoreSession(recovery.session);
+        if (typeof rebuildPageSequence === 'function') {
+          rebuildPageSequence();
+          var qIndex = state.currentIndex || 0;
+          var itemIndex = state.pageSequence.findIndex(function (item) {
+            return item.kind === 'question' && item.questionIndex === qIndex;
+          });
+          goToPageSequenceIndex(itemIndex >= 0 ? itemIndex : 0);
+        }
+        render();
+      } else if (recovery.action === 'show_last_attempt') {
+        // Показываем результат последней попытки, сбрасываем незавершённую сессию
+        clearCurrentSession();
+        if (TEST_DATA.mode === 'adaptive' && TEST_DATA.adaptiveTopics) {
+          initAdaptiveTest();
+        } else {
+          generateVariant();
+        }
+        state.phase = 'viewResults';
+        state.viewedAttempt = recovery.attempt;
+        render();
       } else {
-        generateVariant();
+        // start_fresh — обычная инициализация
+        clearCurrentSession();
+        if (TEST_DATA.mode === 'adaptive' && TEST_DATA.adaptiveTopics) {
+          initAdaptiveTest();
+        } else {
+          generateVariant();
+          state.phase = 'start';
+        }
+        render();
       }
-      state.phase = 'viewResults';
-      state.viewedAttempt = recovery.attempt;
-      render();
-    } else {
-      // start_fresh — обычная инициализация
-      clearCurrentSession();
-      if (TEST_DATA.mode === 'adaptive' && TEST_DATA.adaptiveTopics) {
-        initAdaptiveTest();
-      } else {
-        generateVariant();
-      }
-      render();
-    }
 
-    window.addEventListener("resize", function () {
-      syncMatchingHeights();
+      window.addEventListener("resize", function () {
+        syncMatchingHeights();
+      });
     });
   }
 

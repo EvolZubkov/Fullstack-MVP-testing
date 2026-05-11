@@ -6,6 +6,7 @@ import { buildMetadataXml } from "./builders/metadata";
 import { escapeXml } from "./utils/escape";
 import { readAsset } from "./assets/read-asset";
 import { extractEmbeddedMediaIntoAssets } from "./builders/media-assets";
+import { addTemplateFilesToZip, getTemplatesRootDir } from "./builders/template-copy";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -113,6 +114,26 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/state.js",
   ]);
 
+  const templateCoreJs = readOneOf([
+    "app/templateCore.js",
+  ]);
+
+  const templateLoaderJs = readOneOf([
+    "app/templateLoader.js",
+  ]);
+
+  const contentFlowJs = readOneOf([
+    "app/contentFlow.js",
+  ]);
+
+  const renderersJs = readOneOf([
+    "app/render/renderers.js",
+  ]);
+
+  const contentPageJs = readOneOf([
+    "app/render/contentPage.js",
+  ]);
+
   const startPageJs = readOneOf([
     "app/render/startPage.js",
   ]);
@@ -177,12 +198,16 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
 
   let appJs = joinJsParts([
     escapeHtmlJs,
-    telemetryJs, 
+    telemetryJs,
     shuffleJs,
     suspendAttemptsJs,
     sessionRecoveryJs,
     testDataJs,
     stateJs,
+    templateCoreJs,
+    templateLoaderJs,
+    contentFlowJs,
+    renderersJs,
     timerJs,
     qSingleJs,
     qMultipleJs,
@@ -199,6 +224,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     pdfExportJs,
     adaptiveJs,
     adaptiveRenderJs,
+    contentPageJs,
     mainRenderJs,
     appMain,
     feedbackJs,
@@ -226,13 +252,19 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     }
   });
 
+  const templateId = data.designSettings?.templateId ?? "default";
+  const templateFiles: Record<string, string | Buffer> = {};
+  addTemplateFilesToZip(templateId, getTemplatesRootDir(), templateFiles);
+  const manifestHrefs = mediaHrefs.concat(Object.keys(templateFiles));
+
   const files: Record<string, string | Buffer> = {
-    "imsmanifest.xml": buildManifest(data.test, data, mediaHrefs), 
+    "imsmanifest.xml": buildManifest(data.test, data, manifestHrefs),
     "metadata.xml": buildMetadataXml(data.test),
     "index.html": indexHtml,
     "styles.css": stylesCss,
     "runtime.js": runtimeJs,
     "app.js": appJs,
+    ...templateFiles,
   };
   
   // Добавляем подложки и логотипы для PDF (только в assets/media/)
