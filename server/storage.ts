@@ -1,12 +1,13 @@
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
-import { eq, inArray, and, sql, desc } from "drizzle-orm";
+import { eq, inArray, and, sql, desc, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { encryptEmail, decryptEmail, hashEmail } from "./utils/crypto";
 import {
   users, topics, topicCourses, topicEvents, questions, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
   groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
+  contentPages,
   type User, type InsertUser,
   type Folder, type InsertFolder,
   type TestFolder, type InsertTestFolder,
@@ -28,7 +29,20 @@ import {
   type TestAssignment, type InsertTestAssignment,
   type PasswordResetToken, type InsertPasswordResetToken,
   type AssignmentAccessToken, type InsertAssignmentAccessToken,
+  type ContentPage, type InsertContentPage,
 } from "@shared/schema";
+
+/**
+ * Normalizes a test row from the DB for backward compatibility (PRD-7 §1.11).
+ * - If `status` is falsy (pre-migration row), derives it from `published`.
+ * - Ensures `published` is always in sync with `status` when reading.
+ */
+function mapLegacyTest(row: Test): Test {
+  const status = row.status || (row.published ? "published" : "draft");
+  const published = status === "published";
+  if (status === row.status && published === row.published) return row;
+  return { ...row, status: status as Test["status"], published };
+}
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -118,8 +132,11 @@ export interface IStorage {
 
   getTests(): Promise<Test[]>;
   getTest(id: string): Promise<Test | undefined>;
+  getMigrationHealth(): Promise<{ legacyStartPageCount: number }>;
   createTest(test: InsertTest, sections: Omit<InsertTestSection, "testId">[]): Promise<Test>;
   updateTest(id: string, test: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined>;
+  /** Updates only the status field without bumping the version counter (PRD-7 §9). */
+  patchTestStatus(id: string, status: "draft" | "published" | "archived"): Promise<{ id: string; status: string; version: number } | undefined>;
   deleteTest(id: string): Promise<boolean>;
   getTestSections(testId: string): Promise<TestSection[]>;
 
@@ -165,6 +182,14 @@ export interface IStorage {
   
   createScormAnswer(answer: InsertScormAnswer & { id: string }): Promise<ScormAnswer>;
   getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]>;
+
+  // Content Pages (PRD-1)
+  getContentPages(testId: string): Promise<ContentPage[]>;
+  getContentPage(id: string): Promise<ContentPage | undefined>;
+  createContentPage(page: InsertContentPage): Promise<ContentPage>;
+  updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined>;
+  deleteContentPage(id: string): Promise<boolean>;
+  reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void>;
 }
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
@@ -808,68 +833,140 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTests(): Promise<Test[]> {
-    return db.select().from(tests);
+    const rows = await db.select().from(tests);
+    return rows.map(mapLegacyTest);
   }
 
   async getTest(id: string): Promise<Test | undefined> {
-    const [test] = await db.select().from(tests).where(eq(tests.id, id));
-    return test || undefined;
+    const [row] = await db.select().from(tests).where(eq(tests.id, id));
+    return row ? mapLegacyTest(row) : undefined;
+  }
+
+  /**
+   * Returns counts of legacy rows not yet covered by migration 003.
+   * `legacyStartPageCount` — tests with non-empty `start_page_content` that have
+   * no intro `content_pages` row (position='before', topic_id IS NULL).
+   */
+  async getMigrationHealth(): Promise<{ legacyStartPageCount: number }> {
+    const [{ count }] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(tests)
+      .where(
+        and(
+          sql`${tests.startPageContent} IS NOT NULL`,
+          sql`length(trim(coalesce(${tests.startPageContent}, ''))) > 0`,
+          sql`NOT EXISTS (
+            SELECT 1 FROM content_pages cp
+            WHERE cp.test_id = ${tests.id}
+              AND cp.type = 'intro'
+              AND cp.topic_id IS NULL
+          )`,
+        ),
+      );
+    return { legacyStartPageCount: count ?? 0 };
   }
 
   async createTest(test: InsertTest, sections: Omit<InsertTestSection, "testId">[]): Promise<Test> {
-    const id = randomUUID();
-    const [newTest] = await db.insert(tests).values({
-      id,
-      title: test.title,
-      description: test.description || null,
-      overallPassRuleJson: test.overallPassRuleJson,
-      webhookUrl: test.webhookUrl || null,
-      published: test.published || false,
-      showCorrectAnswers: test.showCorrectAnswers || false,
-      timeLimitMinutes: test.timeLimitMinutes || null,
-      maxAttempts: test.maxAttempts || null,
-      startPageContent: test.startPageContent || null,
-      feedback: test.feedback || null,
-      mode: test.mode || "standard",
-      showDifficultyLevel: test.showDifficultyLevel ?? true,
-    }).returning();
+    return db.transaction(async (tx) => {
+      const id = randomUUID();
+      // PRD-7 §4.1: status is the source of truth; sync published from it.
+      const status = test.status ?? (test.published ? "published" : "draft");
+      const [newTest] = await tx.insert(tests).values({
+        id,
+        title: test.title,
+        description: test.description || null,
+        overallPassRuleJson: test.overallPassRuleJson,
+        webhookUrl: test.webhookUrl || null,
+        status,
+        published: status === "published",
+        telemetryEnabled: test.telemetryEnabled ?? false,
+        feedbackJson: test.feedbackJson ?? null,
+        flowPolicyJson: test.flowPolicyJson ?? null,
+        showCorrectAnswers: test.showCorrectAnswers || false,
+        timeLimitMinutes: test.timeLimitMinutes || null,
+        maxAttempts: test.maxAttempts || null,
+        startPageContent: test.startPageContent || null,
+        feedback: test.feedback || null,
+        mode: test.mode || "standard",
+        showDifficultyLevel: test.showDifficultyLevel ?? true,
+      }).returning();
 
-    for (const section of sections) {
-      const sectionId = randomUUID();
-      await db.insert(testSections).values({
-        id: sectionId,
-        testId: id,
-        topicId: section.topicId,
-        drawCount: section.drawCount,
-        topicPassRuleJson: section.topicPassRuleJson || null,
-      });
-    }
-
-    return newTest;
-  }
-  async updateTest(id: string, updates: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined> {
-    // Increment version when test is updated
-    const [updated] = await db.update(tests)
-      .set({ ...updates, version: sql`${tests.version} + 1`, updatedAt: new Date() })
-      .where(eq(tests.id, id))
-      .returning();
-    if (!updated) return undefined;
-
-    if (sections) {
-      await db.delete(testSections).where(eq(testSections.testId, id));
       for (const section of sections) {
-        const sectionId = randomUUID();
-        await db.insert(testSections).values({
-          id: sectionId,
+        await tx.insert(testSections).values({
+          id: randomUUID(),
           testId: id,
           topicId: section.topicId,
           drawCount: section.drawCount,
-          topicPassRuleJson: section.topicPassRuleJson || null,
+          topicPassRuleJson: section.topicPassRuleJson ?? null,
+          required: section.required ?? true,
+          timeLimitMinutes: section.timeLimitMinutes ?? null,
+          feedbackJson: section.feedbackJson ?? null,
         });
       }
-    }
 
-    return updated;
+      // Safety net (§1.11): if legacy client passes startPageContent, create an
+      // intro content_page so new code can use it even without migration 003.
+      if (test.startPageContent?.trim()) {
+        await tx.insert(contentPages).values({
+          id: randomUUID(),
+          testId: id,
+          topicId: null,
+          position: "before",
+          mode: "html",
+          type: "intro",
+          templateKey: null,
+          sortOrder: 0,
+          valuesJson: { values: { html: test.startPageContent } },
+          autoAdvance: false,
+          autoAdvanceDelayMs: null,
+        });
+      }
+
+      return newTest;
+    });
+  }
+
+  async updateTest(id: string, updates: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined> {
+    return db.transaction(async (tx) => {
+      // PRD-7 §4.1: keep status and published in sync on every write.
+      const patch: Partial<InsertTest> = { ...updates };
+      if (patch.status !== undefined) {
+        patch.published = patch.status === "published";
+      } else if (patch.published !== undefined) {
+        patch.status = patch.published ? "published" : "draft";
+      }
+
+      const [updated] = await tx.update(tests)
+        .set({ ...patch, version: sql`${tests.version} + 1`, updatedAt: new Date() })
+        .where(eq(tests.id, id))
+        .returning();
+      if (!updated) return undefined;
+
+      if (sections) {
+        await tx.delete(testSections).where(eq(testSections.testId, id));
+        for (const section of sections) {
+          await tx.insert(testSections).values({
+            id: randomUUID(),
+            testId: id,
+            topicId: section.topicId,
+            drawCount: section.drawCount,
+            topicPassRuleJson: section.topicPassRuleJson ?? null,
+            required: section.required ?? true,
+            timeLimitMinutes: section.timeLimitMinutes ?? null,
+            feedbackJson: section.feedbackJson ?? null,
+          });
+        }
+      }
+
+      return updated;
+    });
+  }
+
+  async patchTestStatus(id: string, status: "draft" | "published" | "archived"): Promise<{ id: string; status: string; version: number } | undefined> {
+    const [row] = await db.update(tests)
+      .set({ status, published: status === "published", updatedAt: new Date() })
+      .where(eq(tests.id, id))
+      .returning({ id: tests.id, status: tests.status, version: tests.version });
+    return row ?? undefined;
   }
 
   async deleteTest(id: string): Promise<boolean> {
@@ -1113,6 +1210,49 @@ export class DatabaseStorage implements IStorage {
   async getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]> {
     return db.select().from(scormAnswers).where(eq(scormAnswers.attemptId, attemptId));
   }
+
+  // ============================================
+  // Content Pages (PRD-1)
+  // ============================================
+
+  async getContentPages(testId: string): Promise<ContentPage[]> {
+    return db.select().from(contentPages)
+      .where(eq(contentPages.testId, testId))
+      .orderBy(contentPages.topicId, contentPages.position, contentPages.sortOrder);
+  }
+
+  async getContentPage(id: string): Promise<ContentPage | undefined> {
+    const [page] = await db.select().from(contentPages).where(eq(contentPages.id, id));
+    return page;
+  }
+
+  async createContentPage(page: InsertContentPage): Promise<ContentPage> {
+    const [created] = await db.insert(contentPages).values(page).returning();
+    return created;
+  }
+
+  async updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined> {
+    const [updated] = await db.update(contentPages)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(contentPages.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteContentPage(id: string): Promise<boolean> {
+    const result = await db.delete(contentPages).where(eq(contentPages.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      for (const { id, sortOrder } of updates) {
+        await tx.update(contentPages)
+          .set({ sortOrder, updatedAt: new Date() })
+          .where(eq(contentPages.id, id));
+      }
+    });
+  }
 }
 
 export const storage = new DatabaseStorage();
@@ -1123,6 +1263,8 @@ export async function seedDatabase() {
 
   const adminPassword = await bcrypt.hash("admin123", 10);
   const learnerPassword = await bcrypt.hash("learner123", 10);
+  const adminEmail = "admin@test.com";
+  const learnerEmail = "learner@test.com";
 
   const adminId = randomUUID();
   const learnerId = randomUUID();
@@ -1130,7 +1272,8 @@ export async function seedDatabase() {
   await db.insert(users).values([
     { 
       id: adminId, 
-      email: "admin@test.com", 
+      email: await encryptEmail(adminEmail),
+      emailHash: hashEmail(adminEmail),
       passwordHash: adminPassword, 
       name: "Администратор",
       role: "author",
@@ -1142,7 +1285,8 @@ export async function seedDatabase() {
     },
     { 
       id: learnerId, 
-      email: "learner@test.com", 
+      email: await encryptEmail(learnerEmail),
+      emailHash: hashEmail(learnerEmail),
       passwordHash: learnerPassword, 
       name: "Тестовый ученик",
       role: "learner",

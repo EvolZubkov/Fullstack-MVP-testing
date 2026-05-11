@@ -38,8 +38,8 @@ async function getCryptoInstance() {
   if (!cryptoInstance) {
     const { default: Crypto } = await import("@vvlad1973/crypto");
     cryptoInstance = new Crypto({
-      password: ENCRYPTION_PASSWORD,
-      salt: ENCRYPTION_SALT,
+      password: PASSWORD,
+      salt: SALT,
       algorithm: "SHA512",
       iterations: 10000,
       keyLength: 32,
