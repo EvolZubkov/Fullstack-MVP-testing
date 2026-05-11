@@ -1,0 +1,486 @@
+/**
+ * @module tests/routes.content-pages
+ * @description Integration tests for content pages API:
+ * GET/POST/PUT/DELETE /api/tests/:id/content-pages and
+ * PUT /api/tests/:id/content-pages/reorder.
+ *
+ * Covers:
+ * - Authorization (401/403)
+ * - CRUD lifecycle
+ * - topicId membership validation (422)
+ * - templateKey validation against current design template (422)
+ * - HTML/richText sanitization
+ * - Reorder endpoint
+ * - templateKeyMissing flag in GET
+ * - Template change does not affect stored content pages
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import request from "supertest";
+import express from "express";
+import session from "express-session";
+
+// ─── Hoist mocks ──────────────────────────────────────────────────────────────
+
+const { storageMock, dbMock } = vi.hoisted(() => {
+  const storageMock = {
+    getTest: vi.fn(),
+    getTestSections: vi.fn(),
+    getUser: vi.fn(),
+    getContentPages: vi.fn(),
+    getContentPage: vi.fn(),
+    createContentPage: vi.fn(),
+    updateContentPage: vi.fn(),
+    deleteContentPage: vi.fn(),
+    reorderContentPages: vi.fn(),
+  };
+
+  const makeChain = (result: unknown) => {
+    const chain: any = {
+      select: vi.fn(),
+      from: vi.fn(),
+      where: vi.fn(),
+      then: (resolve: any) => resolve(result),
+    };
+    chain.select.mockReturnValue(chain);
+    chain.from.mockReturnValue(chain);
+    chain.where.mockReturnValue(chain);
+    return chain;
+  };
+
+  const dbMock = { _makeChain: makeChain, select: vi.fn() };
+  return { storageMock, dbMock };
+});
+
+vi.mock("../server/storage", () => ({ storage: storageMock }));
+vi.mock("../server/db", () => ({ db: dbMock }));
+vi.mock("../server/logger", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+import contentPagesRouter from "../server/routes/content-pages";
+
+// ─── App factory ──────────────────────────────────────────────────────────────
+
+function makeApp(role: "author" | "learner" | null = "author") {
+  const app = express();
+  app.use(express.json());
+  app.use(session({ secret: "test", resave: false, saveUninitialized: false }));
+  app.use((req: any, _res: any, next: any) => {
+    if (role) req.session.userId = "user-1";
+    next();
+  });
+  app.use("/api/tests", contentPagesRouter);
+  return app;
+}
+
+// ─── Fixtures ─────────────────────────────────────────────────────────────────
+
+const baseTest = {
+  id: "test-1",
+  title: "Test",
+  mode: "standard",
+  designSettingsJson: {},
+};
+
+const authorUser = { id: "user-1", role: "author", status: "active" };
+const learnerUser = { id: "user-1", role: "learner", status: "active" };
+
+const section1 = { id: "sec-1", testId: "test-1", topicId: "topic-1", questionsCount: 5 };
+
+const corporateTemplate = {
+  id: "corporate",
+  name: "Корпоративный",
+  version: "1.0.0",
+  templateApiVersion: "1.0",
+  isActive: true,
+  manifest: {
+    params: [],
+    contentTemplates: [
+      {
+        key: "intro.hero",
+        label: "Введение",
+        pageKind: "intro",
+        placeholders: [
+          { key: "title", type: "text", label: "Заголовок", required: true },
+          { key: "body", type: "richText", label: "Текст", required: false },
+        ],
+      },
+    ],
+  },
+};
+
+const basePage = {
+  id: "page-1",
+  testId: "test-1",
+  topicId: "topic-1",
+  position: "before_topic",
+  mode: "template",
+  type: "intro",
+  templateKey: "intro.hero",
+  sortOrder: 0,
+  valuesJson: { values: { title: "Hello" } },
+  autoAdvance: false,
+  autoAdvanceDelayMs: null,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+
+// ─── GET /api/tests/:id/content-pages ────────────────────────────────────────
+
+describe("GET /api/tests/:id/content-pages", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getTest.mockResolvedValue(baseTest);
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getContentPages.mockResolvedValue([basePage]);
+    dbMock.select.mockReturnValue(dbMock._makeChain([]));
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    const res = await request(makeApp(null)).get("/api/tests/test-1/content-pages");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 when test not found", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await request(makeApp()).get("/api/tests/missing/content-pages");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns list of pages", async () => {
+    const res = await request(makeApp()).get("/api/tests/test-1/content-pages");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].id).toBe("page-1");
+  });
+
+  it("adds templateKeyMissing=false when templateKey is valid in current template", async () => {
+    const testWithTemplate = { ...baseTest, designSettingsJson: { templateId: "corporate" } };
+    storageMock.getTest.mockResolvedValue(testWithTemplate);
+    dbMock.select.mockReturnValue(dbMock._makeChain([corporateTemplate]));
+
+    const res = await request(makeApp()).get("/api/tests/test-1/content-pages");
+    expect(res.status).toBe(200);
+    expect(res.body[0].templateKeyMissing).toBe(false);
+  });
+
+  it("adds templateKeyMissing=true when templateKey is absent from current template", async () => {
+    const testWithTemplate = { ...baseTest, designSettingsJson: { templateId: "corporate" } };
+    storageMock.getTest.mockResolvedValue(testWithTemplate);
+    const pageWithUnknownKey = { ...basePage, templateKey: "obsolete.key" };
+    storageMock.getContentPages.mockResolvedValue([pageWithUnknownKey]);
+    dbMock.select.mockReturnValue(dbMock._makeChain([corporateTemplate]));
+
+    const res = await request(makeApp()).get("/api/tests/test-1/content-pages");
+    expect(res.status).toBe(200);
+    expect(res.body[0].templateKeyMissing).toBe(true);
+  });
+
+  it("templateKeyMissing is false when design uses default template", async () => {
+    // designSettingsJson is empty → default template → no manifest lookup
+    const res = await request(makeApp()).get("/api/tests/test-1/content-pages");
+    expect(res.status).toBe(200);
+    expect(res.body[0].templateKeyMissing).toBe(false);
+  });
+});
+
+// ─── POST /api/tests/:id/content-pages ───────────────────────────────────────
+
+describe("POST /api/tests/:id/content-pages", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getTest.mockResolvedValue(baseTest);
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTestSections.mockResolvedValue([section1]);
+    storageMock.createContentPage.mockResolvedValue(basePage);
+    dbMock.select.mockReturnValue(dbMock._makeChain([]));
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    const res = await request(makeApp(null)).post("/api/tests/test-1/content-pages").send({});
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 403 when user is learner", async () => {
+    storageMock.getUser.mockResolvedValue(learnerUser);
+    const res = await request(makeApp("learner"))
+      .post("/api/tests/test-1/content-pages")
+      .send({ topicId: "topic-1", position: "before_topic", type: "intro" });
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 404 when test not found", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await request(makeApp())
+      .post("/api/tests/missing/content-pages")
+      .send({ topicId: "topic-1", position: "before_topic", type: "intro" });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 422 when topicId is missing", async () => {
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({ position: "before_topic", type: "intro" });
+    expect(res.status).toBe(422);
+    expect(res.body.field).toBe("topicId");
+  });
+
+  it("returns 422 when position is invalid", async () => {
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({ topicId: "topic-1", position: "middle", type: "intro" });
+    expect(res.status).toBe(422);
+    expect(res.body.field).toBe("position");
+  });
+
+  it("returns 422 when type is invalid", async () => {
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({ topicId: "topic-1", position: "before_topic", type: "quiz" });
+    expect(res.status).toBe(422);
+    expect(res.body.field).toBe("type");
+  });
+
+  it("returns 422 when topicId does not belong to test", async () => {
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({ topicId: "topic-999", position: "before_topic", type: "intro" });
+    expect(res.status).toBe(422);
+    expect(res.body.field).toBe("topicId");
+  });
+
+  it("returns 422 when templateKey not found in current design template", async () => {
+    const testWithTemplate = { ...baseTest, designSettingsJson: { templateId: "corporate" } };
+    storageMock.getTest.mockResolvedValue(testWithTemplate);
+    dbMock.select.mockReturnValue(dbMock._makeChain([corporateTemplate]));
+
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({ topicId: "topic-1", position: "before_topic", type: "intro", mode: "template", templateKey: "unknown.key" });
+    expect(res.status).toBe(422);
+    expect(res.body.field).toBe("templateKey");
+  });
+
+  it("creates a page successfully", async () => {
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({ topicId: "topic-1", position: "before_topic", type: "intro" });
+    expect(res.status).toBe(201);
+    expect(storageMock.createContentPage).toHaveBeenCalledOnce();
+  });
+
+  it("sanitizes script tags in richText values", async () => {
+    const testWithTemplate = { ...baseTest, designSettingsJson: { templateId: "corporate" } };
+    storageMock.getTest.mockResolvedValue(testWithTemplate);
+    dbMock.select.mockReturnValue(dbMock._makeChain([corporateTemplate]));
+
+    await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({
+        topicId: "topic-1",
+        position: "before_topic",
+        type: "intro",
+        mode: "template",
+        templateKey: "intro.hero",
+        valuesJson: {
+          values: {
+            title: "Hello",
+            body: '<p>Text</p><script>alert("xss")</script>',
+          },
+        },
+      });
+
+    const callArgs = storageMock.createContentPage.mock.calls[0][0];
+    expect(callArgs.valuesJson.values.body).not.toContain("<script>");
+    expect(callArgs.valuesJson.values.body).toContain("<p>Text</p>");
+  });
+
+  it("sanitizes on* event handlers in richText values", async () => {
+    const testWithTemplate = { ...baseTest, designSettingsJson: { templateId: "corporate" } };
+    storageMock.getTest.mockResolvedValue(testWithTemplate);
+    dbMock.select.mockReturnValue(dbMock._makeChain([corporateTemplate]));
+
+    await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({
+        topicId: "topic-1",
+        position: "before_topic",
+        type: "intro",
+        mode: "template",
+        templateKey: "intro.hero",
+        valuesJson: { values: { title: "t", body: '<img src="x" onerror="alert(1)">' } },
+      });
+
+    const callArgs = storageMock.createContentPage.mock.calls[0][0];
+    expect(callArgs.valuesJson.values.body).not.toContain("onerror");
+  });
+});
+
+// ─── PUT /api/tests/:id/content-pages/reorder ────────────────────────────────
+
+describe("PUT /api/tests/:id/content-pages/reorder", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getTest.mockResolvedValue(baseTest);
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.reorderContentPages.mockResolvedValue(undefined);
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    const res = await request(makeApp(null)).put("/api/tests/test-1/content-pages/reorder").send([]);
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 403 when user is learner", async () => {
+    storageMock.getUser.mockResolvedValue(learnerUser);
+    const res = await request(makeApp("learner"))
+      .put("/api/tests/test-1/content-pages/reorder")
+      .send([{ id: "page-1", sortOrder: 0 }]);
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 404 when test not found", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await request(makeApp())
+      .put("/api/tests/missing/content-pages/reorder")
+      .send([{ id: "page-1", sortOrder: 0 }]);
+    expect(res.status).toBe(404);
+  });
+
+  it("reorders successfully", async () => {
+    const updates = [{ id: "page-1", sortOrder: 2 }, { id: "page-2", sortOrder: 0 }];
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/content-pages/reorder")
+      .send(updates);
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(storageMock.reorderContentPages).toHaveBeenCalledWith(updates);
+  });
+});
+
+// ─── PUT /api/tests/:id/content-pages/:pageId ────────────────────────────────
+
+describe("PUT /api/tests/:id/content-pages/:pageId", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getTest.mockResolvedValue(baseTest);
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getContentPage.mockResolvedValue(basePage);
+    storageMock.getTestSections.mockResolvedValue([section1]);
+    storageMock.updateContentPage.mockResolvedValue({ ...basePage, sortOrder: 1 });
+    dbMock.select.mockReturnValue(dbMock._makeChain([]));
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    const res = await request(makeApp(null)).put("/api/tests/test-1/content-pages/page-1").send({});
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 404 when test not found", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await request(makeApp()).put("/api/tests/missing/content-pages/page-1").send({});
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when page not found", async () => {
+    storageMock.getContentPage.mockResolvedValue(undefined);
+    const res = await request(makeApp()).put("/api/tests/test-1/content-pages/missing").send({});
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when page belongs to another test", async () => {
+    storageMock.getContentPage.mockResolvedValue({ ...basePage, testId: "other-test" });
+    const res = await request(makeApp()).put("/api/tests/test-1/content-pages/page-1").send({});
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 422 when topicId does not belong to test", async () => {
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/content-pages/page-1")
+      .send({ topicId: "topic-999" });
+    expect(res.status).toBe(422);
+    expect(res.body.field).toBe("topicId");
+  });
+
+  it("updates successfully", async () => {
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/content-pages/page-1")
+      .send({ sortOrder: 1 });
+    expect(res.status).toBe(200);
+    expect(storageMock.updateContentPage).toHaveBeenCalledOnce();
+  });
+});
+
+// ─── DELETE /api/tests/:id/content-pages/:pageId ─────────────────────────────
+
+describe("DELETE /api/tests/:id/content-pages/:pageId", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getTest.mockResolvedValue(baseTest);
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getContentPage.mockResolvedValue(basePage);
+    storageMock.deleteContentPage.mockResolvedValue(true);
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    const res = await request(makeApp(null)).delete("/api/tests/test-1/content-pages/page-1");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 403 when user is learner", async () => {
+    storageMock.getUser.mockResolvedValue(learnerUser);
+    const res = await request(makeApp("learner")).delete("/api/tests/test-1/content-pages/page-1");
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 404 when test not found", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await request(makeApp()).delete("/api/tests/missing/content-pages/page-1");
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when page not found", async () => {
+    storageMock.getContentPage.mockResolvedValue(undefined);
+    const res = await request(makeApp()).delete("/api/tests/test-1/content-pages/missing");
+    expect(res.status).toBe(404);
+  });
+
+  it("deletes successfully", async () => {
+    const res = await request(makeApp()).delete("/api/tests/test-1/content-pages/page-1");
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(storageMock.deleteContentPage).toHaveBeenCalledWith("page-1");
+  });
+});
+
+// ─── Template change does not affect content pages ───────────────────────────
+
+describe("template change does not affect stored content pages", () => {
+  it("GET returns pages unchanged after design template changes, with templateKeyMissing flag", async () => {
+    vi.clearAllMocks();
+
+    // Test switched from corporate to minimal; page still has intro.hero key
+    const testWithMinimal = { ...baseTest, designSettingsJson: { templateId: "minimal" } };
+    storageMock.getTest.mockResolvedValue(testWithMinimal);
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getContentPages.mockResolvedValue([{ ...basePage, templateKey: "intro.hero" }]);
+
+    // minimal template has no intro.hero in its contentTemplates
+    const minimalTemplate = {
+      ...corporateTemplate,
+      id: "minimal",
+      manifest: {
+        params: [],
+        contentTemplates: [{ key: "intro.simple", label: "Просто", pageKind: "intro", placeholders: [] }],
+      },
+    };
+    dbMock.select.mockReturnValue(dbMock._makeChain([minimalTemplate]));
+
+    const res = await request(makeApp()).get("/api/tests/test-1/content-pages");
+    expect(res.status).toBe(200);
+    // Page still returned, just flagged
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].templateKey).toBe("intro.hero");
+    expect(res.body[0].templateKeyMissing).toBe(true);
+  });
+});

@@ -11,6 +11,7 @@ const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(), getTests: vi.fn(), createTest: vi.fn(),
     updateTest: vi.fn(), deleteTest: vi.fn(), getTestSections: vi.fn(),
+    patchTestStatus: vi.fn(),
     getAttempt: vi.fn(), createAttempt: vi.fn(), updateAttempt: vi.fn(),
     getAttemptsByUser: vi.fn(), getAttemptsByUserAndTest: vi.fn(),
     getUser: vi.fn(), getTopics: vi.fn(), getQuestionsByTopic: vi.fn(),
@@ -392,16 +393,26 @@ describe("Tests routes", () => {
     expect(res.status).toBe(404);
   });
 
-  it("DELETE /:id — deletes test", async () => {
+  it("DELETE /:id — deletes test with confirmTitle", async () => {
+    storageMock.getTest.mockResolvedValue(dbTestFull);
+    storageMock.deleteAdaptiveLevelLinksByTest.mockResolvedValue(undefined);
+    storageMock.deleteAdaptiveLevelsByTest.mockResolvedValue(undefined);
+    storageMock.deleteAdaptiveTopicSettingsByTest.mockResolvedValue(undefined);
     storageMock.deleteTest.mockResolvedValue(true);
-    const res = await asAuthor(request(app).delete("/api/tests/test1"));
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
+    const res = await asAuthor(request(app).delete("/api/tests/test1").send({ confirmTitle: "Test 1" }));
+    expect(res.status).toBe(204);
   });
 
-  it("DELETE /:id — returns 404 when not found", async () => {
-    storageMock.deleteTest.mockResolvedValue(false);
-    const res = await asAuthor(request(app).delete("/api/tests/x"));
+  it("DELETE /:id — returns 400 when confirmTitle mismatches", async () => {
+    storageMock.getTest.mockResolvedValue(dbTestFull);
+    const res = await asAuthor(request(app).delete("/api/tests/test1").send({ confirmTitle: "Wrong Title" }));
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("title_mismatch");
+  });
+
+  it("DELETE /:id — returns 404 when test not found", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await asAuthor(request(app).delete("/api/tests/x").send({ confirmTitle: "anything" }));
     expect(res.status).toBe(404);
   });
 
