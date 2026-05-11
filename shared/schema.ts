@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex } from "drizzle-orm/pg-core"
+import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, uuid } from "drizzle-orm/pg-core"
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -136,15 +136,22 @@ export const tests = pgTable("tests", {
   showDifficultyLevel: boolean("show_difficulty_level").notNull().default(true),
   overallPassRuleJson: jsonb("overall_pass_rule_json").notNull(),
   webhookUrl: text("webhook_url"),
+  /** @deprecated PRD-7: superseded by `status`. Kept for transitional backward compatibility; remove in a later release. */
   published: boolean("published").default(false),
+  status: text("status", { enum: ["draft", "published", "archived"] }).notNull().default("draft"),
   version: integer("version").notNull().default(1),
   feedback: text("feedback"),
+  feedbackJson: jsonb("feedback_json"),
+  flowPolicyJson: jsonb("flow_policy_json"),
+  telemetryEnabled: boolean("telemetry_enabled").notNull().default(false),
   timeLimitMinutes: integer("time_limit_minutes"),
   maxAttempts: integer("max_attempts"),
   showCorrectAnswers: boolean("show_correct_answers").notNull().default(false),
+  /** @deprecated PRD-7: replaced by `content_pages` row of type='intro' without topic_id. Kept for backward compatibility. */
   startPageContent: text("start_page_content"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  designSettingsJson: jsonb("design_settings_json").notNull().default({}),
 });
 
 export const testSections = pgTable("test_sections", {
@@ -153,6 +160,9 @@ export const testSections = pgTable("test_sections", {
   topicId: varchar("topic_id", { length: 36 }).notNull(),
   drawCount: integer("draw_count").notNull(),
   topicPassRuleJson: jsonb("topic_pass_rule_json"),
+  required: boolean("required").notNull().default(true),
+  timeLimitMinutes: integer("time_limit_minutes"),
+  feedbackJson: jsonb("feedback_json"),
 });
 
 export const adaptiveTopicSettings = pgTable("adaptive_topic_settings", {
@@ -275,6 +285,44 @@ export const passRuleSchema = z.object({
 });
 
 export type PassRule = z.infer<typeof passRuleSchema>;
+
+/**
+ * Feedback structures (PRD-7 §3.4 / decisions.md §3.4, §3.5).
+ *
+ * The single jsonb column `tests.feedback_json` (and `test_sections.feedback_json`)
+ * stores `format`, `text`, nested `links` and nested `assets`. Per decisions.md §3.4
+ * there are NO separate `feedback_links_json` / `feedback_assets_json` columns — links
+ * and assets are inlined.
+ *
+ * Default for legacy `feedback: string` (§4.3): `{ format: "plain", text, links: [], assets: [] }`.
+ */
+export const feedbackFormatSchema = z.enum(["plain", "richText", "html"]);
+
+export const feedbackLinkSchema = z.object({
+  title: z.string().min(1),
+  url: z.string().url(),
+});
+
+export const feedbackAssetSchema = z.object({
+  id: z.string().optional(),
+  title: z.string().min(1),
+  fileName: z.string().min(1),
+  mimeType: z.literal("application/pdf"),
+  /** Filled by backend when the asset is persisted to SCORM (decisions.md §6.5). */
+  scormHref: z.string().optional(),
+});
+
+export const feedbackContentSchema = z.object({
+  format: feedbackFormatSchema,
+  text: z.string(),
+  links: z.array(feedbackLinkSchema).default([]),
+  assets: z.array(feedbackAssetSchema).default([]),
+});
+
+export type FeedbackFormat = z.infer<typeof feedbackFormatSchema>;
+export type FeedbackLink = z.infer<typeof feedbackLinkSchema>;
+export type FeedbackAsset = z.infer<typeof feedbackAssetSchema>;
+export type FeedbackContent = z.infer<typeof feedbackContentSchema>;
 
 export const singleChoiceDataSchema = z.object({
   options: z.array(z.string()),
@@ -745,6 +793,41 @@ export const scormAnswers = pgTable("scorm_answers", {
   answeredAt: timestamp("answered_at").notNull(),
 });
 
+// ============================================
+// Templates & Content Pages (PRD-1)
+// ============================================
+
+export const templates = pgTable("templates", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  version: text("version").notNull(),
+  templateApiVersion: text("template_api_version").notNull().default("1.0"),
+  isBuiltin: boolean("is_builtin").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  manifest: jsonb("manifest").notNull(),
+  previewPath: text("preview_path"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const contentPages = pgTable("content_pages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
+  // PRD-7 §4.2: nullable topicId allows test-scope start pages (position='before')
+  topicId: varchar("topic_id", { length: 36 }).references(() => topics.id),
+  position: text("position", { enum: ["before", "before_topic", "after_topic"] }).notNull(),
+  mode: text("mode", { enum: ["template", "standard", "html"] }).notNull().default("template"),
+  type: text("type", { enum: ["intro", "info", "summary", "html"] }).notNull(),
+  templateKey: text("template_key"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  valuesJson: jsonb("values_json").notNull().default({}),
+  autoAdvance: boolean("auto_advance").notNull().default(false),
+  autoAdvanceDelayMs: integer("auto_advance_delay_ms"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Insert schemas
 export const insertScormPackageSchema = createInsertSchema(scormPackages).omit({ id: true });
 export const insertScormAttemptSchema = createInsertSchema(scormAttempts).omit({ id: true });
@@ -759,3 +842,29 @@ export type ScormAttempt = typeof scormAttempts.$inferSelect;
 
 export type InsertScormAnswer = z.infer<typeof insertScormAnswerSchema>;
 export type ScormAnswer = typeof scormAnswers.$inferSelect;
+
+// Templates & Content Pages types (PRD-1)
+export const designSettingsSchema = z.object({
+  templateId: z.string(),
+  templateVersion: z.string(),
+  templateApiVersion: z.string(),
+  params: z.record(z.unknown()),
+});
+
+export type DesignSettings = z.infer<typeof designSettingsSchema>;
+
+export const contentPageValuesSchema = z.object({
+  values: z.record(z.unknown()).default({}),
+  placeholderStyles: z.record(z.object({ fontSize: z.number() })).optional(),
+});
+
+export type ContentPageValues = z.infer<typeof contentPageValuesSchema>;
+
+export const insertTemplateSchema = createInsertSchema(templates).omit({ createdAt: true, updatedAt: true });
+export const insertContentPageSchema = createInsertSchema(contentPages).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
+export type Template = typeof templates.$inferSelect;
+
+export type InsertContentPage = z.infer<typeof insertContentPageSchema>;
+export type ContentPage = typeof contentPages.$inferSelect;
