@@ -9,6 +9,7 @@
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:push": "drizzle-kit push",
+    "create-admin": "tsx script/create-admin.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -113,6 +114,7 @@
     "@types/supertest": "^7.2.0",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.7.0",
+    "@vitejs/plugin-react-swc": "^4.3.0",
     "@vitest/coverage-v8": "^4.0.18",
     "autoprefixer": "^10.4.24",
     "cross-env": "^10.1.0",
@@ -123,7 +125,7 @@
     "tailwindcss": "^3.4.17",
     "ts-node-dev": "^2.0.0",
     "typescript": "5.6.3",
-    "vite": "^5.4.20",
+    "vite": "^6.4.2",
     "vitest": "^4.1.0"
   },
   "optionalDependencies": {
