@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Pencil, Trash2, ClipboardList, Download, Settings, ChevronRight, ChevronDown, ChevronLeft, BarChart3, UserPlus, LayoutGrid, List, Folder, FolderOpen, FolderPlus, FolderInput } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, ClipboardList, Download, Settings, ChevronRight, ChevronDown, ChevronLeft, BarChart3, UserPlus, LayoutGrid, List, Folder, FolderOpen, FolderPlus, FolderInput, Palette, FileStack } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -25,6 +25,8 @@ import { t, formatQuestions, formatTopics } from "@/lib/i18n";
 import type { Test, TestSection, Topic, TestFolder } from "@shared/schema";
 import { Link } from "wouter";
 import { AssignTestDialog } from "@/components/assign-test-dialog";
+import { DesignSettingsDialog } from "@/components/design-settings-dialog";
+import { ContentPagesDialog } from "@/components/content-pages-dialog";
 
 interface TopicWithQuestionCount extends Topic {
   questionCount: number;
@@ -193,6 +195,14 @@ export default function TestsPage() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignTestId, setAssignTestId] = useState<string | null>(null);
   const [assignTestTitle, setAssignTestTitle] = useState<string>("");
+
+  // Design settings dialog state
+  const [designDialogOpen, setDesignDialogOpen] = useState(false);
+  const [designTestId, setDesignTestId] = useState<string | null>(null);
+
+  // Content pages dialog state
+  const [contentPagesDialogOpen, setContentPagesDialogOpen] = useState(false);
+  const [contentPagesTestId, setContentPagesTestId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [topicSearch, setTopicSearch] = useState("");
   const [sortBy, setSortBy] = useState<"created_desc" | "updated_desc" | "title_asc">(() => {
@@ -1114,7 +1124,23 @@ export default function TestsPage() {
                     </ul>
                   </div>
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => { setDesignTestId(test.id); setDesignDialogOpen(true); }}
+                    data-testid={`button-design-${test.id}`}
+                  >
+                    <Palette className="h-4 w-4 mr-2" />
+                    Оформление
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => { setContentPagesTestId(test.id); setContentPagesDialogOpen(true); }}
+                    data-testid={`button-content-pages-${test.id}`}
+                  >
+                    <FileStack className="h-4 w-4 mr-2" />
+                    Страницы
+                  </Button>
                   <Button variant="outline" onClick={() => openExportDialog(test.id)} data-testid={`button-export-scorm-${test.id}`}>
                     <Download className="h-4 w-4 mr-2" />
                     {t.tests.exportScorm}
@@ -1175,6 +1201,24 @@ export default function TestsPage() {
                             <BarChart3 className="h-4 w-4" />
                           </Button>
                         </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Оформление"
+                          onClick={() => { setDesignTestId(test.id); setDesignDialogOpen(true); }}
+                          data-testid={`button-design-${test.id}`}
+                        >
+                          <Palette className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Страницы"
+                          onClick={() => { setContentPagesTestId(test.id); setContentPagesDialogOpen(true); }}
+                          data-testid={`button-content-pages-${test.id}`}
+                        >
+                          <FileStack className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="icon" title="Экспорт SCORM" onClick={() => openExportDialog(test.id)} data-testid={`button-export-scorm-${test.id}`}>
                           <Download className="h-4 w-4" />
                         </Button>
@@ -2122,6 +2166,28 @@ export default function TestsPage() {
           testTitle={assignTestTitle}
         />
       )}
+
+      {/* Design Settings Dialog */}
+      {designTestId && (
+        <DesignSettingsDialog
+          open={designDialogOpen}
+          onOpenChange={setDesignDialogOpen}
+          testId={designTestId}
+        />
+      )}
+
+      {/* Content Pages Dialog */}
+      {contentPagesTestId && (() => {
+        const ct = tests?.find((t) => t.id === contentPagesTestId);
+        return (
+          <ContentPagesDialog
+            open={contentPagesDialogOpen}
+            onOpenChange={setContentPagesDialogOpen}
+            testId={contentPagesTestId}
+            sections={ct?.sections ?? []}
+          />
+        );
+      })()}
     </div>
   );
 }
