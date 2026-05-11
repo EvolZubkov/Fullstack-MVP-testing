@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Structure - router_by_topics</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    /* Drawer layout */
+    .drawer-col {
+      display: flex; flex-direction: column;
+      height: 100%; background: var(--bg); overflow: hidden;
+    }
+    .drawer-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .drawer-title { font-size: 15px; font-weight: 700; flex: 1; }
+    .tab-bar {
+      display: flex; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; padding: 0 20px;
+    }
+    .tab-item {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 14px; font-size: 13px; color: var(--muted-fg);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      background: transparent; border-top: none; border-left: none; border-right: none;
+      cursor: pointer; font-family: inherit;
+    }
+    .tab-item.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+    .structure-content { flex: 1; overflow-y: auto; padding: 20px; }
+    .drawer-footer {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    .footer-hint { font-size: 12px; color: var(--muted-fg); flex: 1; }
+
+    /* Flow mode banner (read-only) */
+    .flow-mode-bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; background: var(--info-bg); border: 1px solid var(--info-border);
+      border-radius: var(--radius); margin-bottom: 16px; font-size: 13px; color: var(--info-fg);
+    }
+    .flow-mode-label { font-weight: 600; flex: 1; }
+    .flow-mode-link {
+      font-size: 12px; color: var(--primary); background: none; border: none;
+      cursor: pointer; padding: 0; font-family: inherit; text-decoration: underline;
+    }
+
+    /* Zone block (Перед тестом / После теста) */
+    .zone-block {
+      border: 1px dashed var(--border); border-radius: var(--radius);
+      padding: 10px 14px; margin-bottom: 12px;
+    }
+    .zone-header {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; color: var(--muted-fg);
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px;
+    }
+    .page-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; padding: 3px 9px; border-radius: var(--radius-sm);
+      border: 1px solid var(--card-border); background: var(--bg); color: var(--fg);
+      margin-right: 6px; margin-bottom: 4px;
+    }
+    .page-chip-type { color: var(--muted-fg); font-size: 10px; }
+    .add-page-btn {
+      font-size: 11px; color: var(--primary); background: none; border: 1px dashed var(--primary);
+      border-radius: var(--radius-sm); cursor: pointer; padding: 3px 9px; font-family: inherit;
+    }
+    .add-page-btn:hover { background: var(--info-bg); }
+
+    /* Router page block */
+    .router-block {
+      border: 2px solid var(--primary); border-radius: var(--radius);
+      background: var(--info-bg); overflow: hidden; margin-bottom: 0;
+    }
+    .router-block-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px; border-bottom: 1px solid hsl(217 91% 80%);
+      background: hsl(217 91% 95%);
+    }
+    .router-block-title { font-size: 14px; font-weight: 700; color: var(--primary); flex: 1; }
+    .router-block-body { padding: 14px 16px; }
+
+    /* Read-only indicator chip */
+    .ro-indicator {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; padding: 3px 10px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--readonly-bg); color: var(--muted-fg);
+      margin-right: 6px; margin-bottom: 6px;
+    }
+    .ro-indicator-label { color: var(--muted-fg); }
+    .ro-indicator-value { color: var(--fg); font-weight: 500; }
+
+    /* Connector from router to section cards */
+    .sections-connector {
+      display: flex; align-items: center; justify-content: center;
+      padding: 8px 0; color: var(--muted-fg); font-size: 12px; gap: 8px;
+    }
+    .connector-line {
+      flex: 1; height: 1px; background: var(--primary); max-width: 80px;
+    }
+
+    /* Section cards row */
+    .section-cards {
+      display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+    }
+    .section-card-unit {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); overflow: hidden; flex: 1; min-width: 200px; max-width: 280px;
+    }
+    .section-card-unit.selected {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px hsl(217 91% 42% / .15);
+    }
+    .section-card-header {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 12px; border-bottom: 1px solid var(--card-border);
+      background: var(--accent);
+    }
+    .section-card-title { font-size: 13px; font-weight: 600; flex: 1; }
+    .section-card-body { padding: 10px 12px; }
+    .section-field { margin-bottom: 8px; }
+    .section-field-label {
+      font-size: 11px; font-weight: 600; color: var(--muted-fg);
+      text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px;
+    }
+    .section-field-value { font-size: 12px; color: var(--fg); }
+    .section-card-footer {
+      padding: 6px 12px; border-top: 1px solid var(--card-border);
+      background: var(--accent); display: flex; align-items: center; gap: 6px;
+    }
+
+    /* Preview state badges */
+    .state-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; padding: 2px 7px; border-radius: var(--radius-sm); font-weight: 500;
+    }
+    .state-badge.not-started { border: 1px solid var(--border); background: var(--bg); color: var(--muted-fg); }
+    .state-badge.in-progress { border: 1px solid hsl(38 92% 60%); background: hsl(38 92% 97%); color: hsl(38 92% 25%); }
+    .state-badge.done-pass { border: 1px solid hsl(142 71% 45%); background: hsl(142 71% 97%); color: hsl(142 71% 25%); }
+    .state-badge.done-fail { border: 1px solid var(--destructive); background: var(--error-bg); color: var(--destructive); }
+    .state-badge.locked { border: 1px solid var(--border); background: var(--accent); color: var(--muted-fg); }
+
+    /* Final result block */
+    .final-result-block {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); padding: 12px 16px; margin-top: 12px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .final-result-block.locked { opacity: .55; }
+
+    /* Empty state */
+    .empty-center {
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center; padding: 40px 20px; gap: 10px; color: var(--muted-fg);
+    }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Structure / router_by_topics:</span>
+  <button class="wf-btn active" type="button" onclick="show('s-default')">Router view</button>
+  <button class="wf-btn"        type="button" onclick="show('s-section')">Карточка (детали)</button>
+  <button class="wf-btn"        type="button" onclick="show('s-empty')">Без разделов</button>
+  <a class="wf-link" href="prd7-structure-mixed.html">&larr; mixed</a>
+</nav>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-route" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/>
+    <circle cx="18" cy="5" r="3"/>
+  </symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+  </symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+    <polyline points="20 6 9 17 4 12"/>
+  </symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="16" x2="12" y2="12"/>
+    <line x1="12" y1="8" x2="12.01" y2="8"/>
+  </symbol>
+</svg>
+
+<!-- ═══ STATE: Router view (router-page-centric) ══════════════════════════ -->
+<div id="s-default" class="shell active">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div class="drawer-col">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Настройки</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true">Структура</button>
+      </div>
+
+      <div class="structure-content">
+
+        <!-- Read-only flow mode banner -->
+        <div class="flow-mode-bar" role="note" aria-label="Текущий режим прохождения">
+          <svg width="14" height="14"><use href="#i-route"/></svg>
+          <span class="flow-mode-label">Режим: Через страницу-маршрутизатор (router_by_topics)</span>
+          <button class="flow-mode-link" type="button"
+                  aria-label="Изменить режим прохождения в Настройках — Режим и сценарий">
+            Изменить в Настройках &rarr; Режим и сценарий
+          </button>
+        </div>
+
+        <!-- Zone: Перед тестом -->
+        <div class="zone-block" aria-label="Зона: Перед тестом — страницы до маршрутизатора">
+          <div class="zone-header">
+            <svg width="12" height="12"><use href="#i-file-text"/></svg>
+            Перед тестом
+          </div>
+          <div>
+            <span class="page-chip">
+              <span class="page-card-type page-chip-type">intro</span>
+              Добро пожаловать в тест
+            </span>
+            <button class="add-page-btn" type="button" aria-label="Добавить страницу в зону Перед тестом">+ Добавить страницу</button>
+          </div>
+        </div>
+
+        <!-- Router page block -->
+        <div class="router-block" role="region" aria-label="Страница-маршрутизатор">
+          <div class="router-block-header">
+            <svg width="16" height="16" aria-hidden="true"><use href="#i-route"/></svg>
+            <div class="router-block-title">Страница-маршрутизатор</div>
+            <span class="badge badge-outline" style="font-size:11px;color:var(--primary);">router_by_topics</span>
+          </div>
+          <div class="router-block-body">
+
+            <!-- Read-only logic indicators -->
+            <div style="margin-bottom:12px;">
+              <div style="font-size:11px;font-weight:600;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">
+                Логика роутера (read-only) —
+                <button class="flow-mode-link" type="button" style="font-size:11px;"
+                        aria-label="Изменить логику роутера в Настройках — Режим и сценарий">
+                  Изменить в Настройках &rarr; Режим и сценарий
+                </button>
+              </div>
+              <div>
+                <span class="ro-indicator" title="completionPolicy: условие перехода к итоговому результату">
+                  <span class="ro-indicator-label">completionPolicy:</span>
+                  <span class="ro-indicator-value">overall_and_required_topics</span>
+                </span>
+                <span class="ro-indicator" title="sectionUnlockRules: условие доступности разделов">
+                  <span class="ro-indicator-label">sectionUnlockRules:</span>
+                  <span class="ro-indicator-value">always_available</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- Sections note -->
+            <div style="font-size:12px;color:var(--muted-fg);margin-bottom:12px;" role="note">
+              Список разделов формируется во вкладке <strong>Состав</strong>. Здесь отображается структура
+              каждого раздела: страницы до/после блока вопросов и то, что увидит слушатель после завершения.
+            </div>
+
+            <!-- Section cards (one per topic-section) -->
+            <div class="section-cards" role="list" aria-label="Разделы маршрутизатора">
+
+              <!-- Card 1: Основы ИБ (state: Завершён/Пройден) -->
+              <div class="section-card-unit" role="listitem">
+                <div class="section-card-header">
+                  <div class="section-card-title">Основы ИБ</div>
+                  <span class="badge badge-primary" style="font-size:11px;">Обязательный</span>
+                </div>
+                <div class="section-card-body">
+                  <!-- Pages before -->
+                  <div class="section-field">
+                    <div class="section-field-label">Перед разделом</div>
+                    <div>
+                      <span class="page-chip"><span class="page-chip-type">info</span> Инструкция</span>
+                    </div>
+                    <button class="add-page-btn" type="button" aria-label="Добавить страницу перед разделом Основы ИБ">+</button>
+                  </div>
+                  <!-- Questions block (read-only) -->
+                  <div class="section-field">
+                    <div class="section-field-label">Блок вопросов</div>
+                    <div class="section-field-value">
+                      <span class="ro-indicator">15 вопросов <span class="ro-indicator-label">(из Состава)</span></span>
+                      <span class="ro-indicator">порог: <span class="ro-indicator-value">70%</span></span>
+                    </div>
+                  </div>
+                  <!-- Pages after -->
+                  <div class="section-field">
+                    <div class="section-field-label">После раздела</div>
+                    <div style="font-size:12px;color:var(--muted-fg);font-style:italic;">Нет страниц</div>
+                    <button class="add-page-btn" type="button" aria-label="Добавить страницу после раздела Основы ИБ">+</button>
+                  </div>
+                  <!-- What learner sees after completion -->
+                  <div class="section-field">
+                    <div class="section-field-label">Результат на маршрутизаторе</div>
+                    <div class="section-field-value">Статус + % результат</div>
+                  </div>
+                </div>
+                <div class="section-card-footer">
+                  <span style="font-size:11px;color:var(--muted-fg);">Предпросмотр состояния:</span>
+                  <span class="state-badge done-pass">Пройден (85%)</span>
+                </div>
+              </div>
+
+              <!-- Card 2: Классификация угроз (state: В процессе) -->
+              <div class="section-card-unit" role="listitem">
+                <div class="section-card-header">
+                  <div class="section-card-title">Классификация угроз</div>
+                  <span class="badge badge-outline" style="font-size:11px;">Опциональный</span>
+                </div>
+                <div class="section-card-body">
+                  <div class="section-field">
+                    <div class="section-field-label">Перед разделом</div>
+                    <div style="font-size:12px;color:var(--muted-fg);font-style:italic;">Нет страниц</div>
+                    <button class="add-page-btn" type="button" aria-label="Добавить страницу перед разделом Классификация угроз">+</button>
+                  </div>
+                  <div class="section-field">
+                    <div class="section-field-label">Блок вопросов</div>
+                    <div class="section-field-value">
+                      <span class="ro-indicator">10 вопросов <span class="ro-indicator-label">(из Состава)</span></span>
+                      <span class="ro-indicator">порог: <span class="ro-indicator-value">нет</span></span>
+                    </div>
+                  </div>
+                  <div class="section-field">
+                    <div class="section-field-label">После раздела</div>
+                    <div style="font-size:12px;color:var(--muted-fg);font-style:italic;">Нет страниц</div>
+                    <button class="add-page-btn" type="button" aria-label="Добавить страницу после раздела">+</button>
+                  </div>
+                  <div class="section-field">
+                    <div class="section-field-label">Результат на маршрутизаторе</div>
+                    <div class="section-field-value">Статус + % результат</div>
+                  </div>
+                </div>
+                <div class="section-card-footer">
+                  <span style="font-size:11px;color:var(--muted-fg);">Предпросмотр состояния:</span>
+                  <span class="state-badge in-progress">В процессе</span>
+                </div>
+              </div>
+
+              <!-- Card 3: СЗИ (state: Не начат) -->
+              <div class="section-card-unit" role="listitem">
+                <div class="section-card-header">
+                  <div class="section-card-title">СЗИ</div>
+                  <span class="badge badge-outline" style="font-size:11px;">Опциональный</span>
+                </div>
+                <div class="section-card-body">
+                  <div class="section-field">
+                    <div class="section-field-label">Перед разделом</div>
+                    <div style="font-size:12px;color:var(--muted-fg);font-style:italic;">Нет страниц</div>
+                    <button class="add-page-btn" type="button" aria-label="Добавить страницу перед разделом СЗИ">+</button>
+                  </div>
+                  <div class="section-field">
+                    <div class="section-field-label">Блок вопросов</div>
+                    <div class="section-field-value">
+                      <span class="ro-indicator">5 вопросов <span class="ro-indicator-label">(из Состава)</span></span>
+                      <span class="ro-indicator">порог: <span class="ro-indicator-value">нет</span></span>
+                    </div>
+                  </div>
+                  <div class="section-field">
+                    <div class="section-field-label">После раздела</div>
+                    <div style="font-size:12px;color:var(--muted-fg);font-style:italic;">Нет страниц</div>
+                    <button class="add-page-btn" type="button" aria-label="Добавить страницу после раздела СЗИ">+</button>
+                  </div>
+                  <div class="section-field">
+                    <div class="section-field-label">Результат на маршрутизаторе</div>
+                    <div class="section-field-value">Статус + % результат</div>
+                  </div>
+                </div>
+                <div class="section-card-footer">
+                  <span style="font-size:11px;color:var(--muted-fg);">Предпросмотр состояния:</span>
+                  <span class="state-badge not-started">Не начат</span>
+                </div>
+              </div>
+
+            </div><!-- /section-cards -->
+          </div><!-- /router-block-body -->
+        </div><!-- /router-block -->
+
+        <!-- Final result block (locked until completionPolicy met) -->
+        <div class="sections-connector" aria-hidden="true">
+          <div class="connector-line"></div>
+          <svg width="14" height="14"><use href="#i-lock"/></svg>
+          <span>доступно при выполнении completionPolicy</span>
+          <div class="connector-line"></div>
+        </div>
+        <div class="final-result-block locked" role="note" aria-label="Итоговый результат — заблокирован до выполнения completionPolicy">
+          <svg width="16" height="16"><use href="#i-lock"/></svg>
+          <div>
+            <div style="font-size:13px;font-weight:600;">Итоговый результат</div>
+            <div style="font-size:12px;color:var(--muted-fg);">Доступен после выполнения completionPolicy = overall_and_required_topics</div>
+          </div>
+        </div>
+
+      </div><!-- /structure-content -->
+
+      <div class="drawer-footer">
+        <div class="footer-hint">Структура: router_by_topics — 3 раздела. Разделы управляются в Составе.</div>
+        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+        <button class="btn btn-primary" type="button">Сохранить</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Карточка раздела (детали выбранной карточки) ══════════════ -->
+<div id="s-section" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div class="drawer-col">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Настройки</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true">Структура</button>
+      </div>
+
+      <div class="structure-content">
+        <div class="flow-mode-bar" role="note">
+          <svg width="14" height="14"><use href="#i-route"/></svg>
+          <span class="flow-mode-label">Режим: Через страницу-маршрутизатор (router_by_topics)</span>
+          <button class="flow-mode-link" type="button">Изменить в Настройках &rarr; Режим и сценарий</button>
+        </div>
+
+        <!-- Compact router overview + selected card highlighted -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:flex-start;">
+
+          <div class="router-block" style="flex:1;min-width:220px;max-width:300px;">
+            <div class="router-block-header" style="padding:8px 12px;">
+              <svg width="14" height="14" aria-hidden="true"><use href="#i-route"/></svg>
+              <div class="router-block-title" style="font-size:13px;">Страница-маршрутизатор</div>
+            </div>
+            <div style="padding:8px 12px;font-size:12px;color:var(--muted-fg);">
+              <div class="ro-indicator" style="font-size:11px;margin-bottom:4px;">completionPolicy: <span style="color:var(--fg);">overall_and_required_topics</span></div>
+              <div class="ro-indicator" style="font-size:11px;">sectionUnlockRules: <span style="color:var(--fg);">always_available</span></div>
+            </div>
+          </div>
+
+          <!-- Cards row (selected: Основы ИБ) -->
+          <div style="display:flex;gap:8px;flex:2;flex-wrap:wrap;align-items:flex-start;">
+            <div class="section-card-unit selected" style="max-width:220px;" aria-label="Выбранный раздел: Основы ИБ">
+              <div class="section-card-header">
+                <div class="section-card-title">Основы ИБ</div>
+                <span class="badge badge-primary" style="font-size:10px;">Обяз.</span>
+              </div>
+              <div class="section-card-body" style="padding:6px 10px;font-size:12px;color:var(--primary);font-weight:500;">
+                Редактируется &darr;
+              </div>
+            </div>
+            <div class="section-card-unit" style="max-width:180px;opacity:.55;" aria-hidden="true">
+              <div class="section-card-header">
+                <div class="section-card-title" style="font-size:12px;">Классификация угроз</div>
+              </div>
+            </div>
+            <div class="section-card-unit" style="max-width:120px;opacity:.55;" aria-hidden="true">
+              <div class="section-card-header">
+                <div class="section-card-title" style="font-size:12px;">СЗИ</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detail panel: Основы ИБ (read-only indicators + content_page slots) -->
+        <div style="border:1px solid var(--primary);border-radius:var(--radius);overflow:hidden;"
+             aria-label="Детали раздела: Основы ИБ">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:hsl(217 91% 97%);border-bottom:1px solid hsl(217 91% 80%);">
+            <div style="font-size:13px;font-weight:600;color:var(--primary);flex:1;">Раздел: Основы ИБ</div>
+            <span class="badge badge-primary" style="font-size:11px;">Обязательный</span>
+            <button class="btn btn-ghost btn-sm" type="button" style="font-size:11px;" aria-label="Закрыть детали раздела">&#215; Закрыть</button>
+          </div>
+          <div style="padding:14px;">
+
+            <!-- Read-only data from Состав -->
+            <div style="margin-bottom:14px;">
+              <div style="font-size:11px;font-weight:600;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">
+                Параметры из вкладки Состав (read-only)
+                <button class="flow-mode-link" type="button" style="font-size:11px;margin-left:8px;">Перейти к Составу</button>
+              </div>
+              <span class="ro-indicator">15 вопросов (draw_count)</span>
+              <span class="ro-indicator">порог: 70% (из Настройки → Правила прохождения)</span>
+              <span class="ro-indicator">Обязательный: <span style="color:var(--fg);">да</span></span>
+            </div>
+
+            <!-- Pages before -->
+            <div style="margin-bottom:14px;">
+              <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Страницы перед разделом</div>
+              <div>
+                <span class="page-chip" style="cursor:pointer;" tabindex="0" role="button" aria-label="Редактировать страницу Инструкция">
+                  <svg width="10" height="10"><use href="#i-file-text"/></svg>
+                  <span class="page-chip-type">info</span>
+                  Инструкция
+                </span>
+                <button class="add-page-btn" type="button" aria-label="Добавить страницу перед разделом">+ Добавить</button>
+              </div>
+            </div>
+
+            <!-- Questions block (read-only) -->
+            <div style="margin-bottom:14px;padding:10px 12px;background:var(--accent);border-radius:var(--radius-sm);border:1px solid var(--border);">
+              <div style="font-size:12px;font-weight:600;margin-bottom:4px;">Блок вопросов (из Состава)</div>
+              <div style="font-size:12px;color:var(--muted-fg);">15 вопросов из темы "Основы ИБ" · Случайный порядок</div>
+            </div>
+
+            <!-- Pages after -->
+            <div style="margin-bottom:14px;">
+              <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Страницы после раздела</div>
+              <div style="font-size:12px;color:var(--muted-fg);font-style:italic;margin-bottom:4px;">Нет страниц</div>
+              <button class="add-page-btn" type="button" aria-label="Добавить страницу после раздела">+ Добавить</button>
+            </div>
+
+            <!-- What learner sees on router after completion (read-only) -->
+            <div style="margin-bottom:0;">
+              <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Результат раздела на маршрутизаторе</div>
+              <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                <div style="font-size:12px;color:var(--muted-fg);">После завершения слушатель увидит:</div>
+                <span class="state-badge done-pass">Пройден (85%)</span>
+                <span class="state-badge done-fail">Не пройден (52%)</span>
+                <span class="state-badge not-started">Не начат</span>
+                <span class="state-badge locked">Заблокирован</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      <div class="drawer-footer">
+        <div class="footer-hint">Структура: раздел "Основы ИБ" — параметры разделов задаются в Составе</div>
+        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+        <button class="btn btn-primary" type="button">Сохранить</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Без разделов (empty) ══════════════════════════════════════ -->
+<div id="s-empty" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div class="drawer-col">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Новый тест</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Настройки</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true">Структура</button>
+      </div>
+
+      <div class="structure-content">
+        <div class="flow-mode-bar" role="note">
+          <svg width="14" height="14"><use href="#i-route"/></svg>
+          <span class="flow-mode-label">Режим: Через страницу-маршрутизатор (router_by_topics)</span>
+          <button class="flow-mode-link" type="button">Изменить в Настройках &rarr; Режим и сценарий</button>
+        </div>
+
+        <div class="router-block" style="margin-bottom:12px;">
+          <div class="router-block-header">
+            <svg width="16" height="16" aria-hidden="true"><use href="#i-route"/></svg>
+            <div class="router-block-title">Страница-маршрутизатор</div>
+          </div>
+          <div class="router-block-body">
+            <div class="empty-center" role="note">
+              <div style="font-size:14px;font-weight:600;margin-bottom:6px;">Разделы не добавлены</div>
+              <div style="font-size:13px;color:var(--muted-fg);max-width:360px;line-height:1.6;margin-bottom:14px;">
+                Маршрутизатор направляет слушателей в разделы (темы). Добавьте темы в вкладке
+                <strong>Состав</strong>, чтобы они появились здесь.
+              </div>
+              <button class="btn btn-primary" type="button" aria-label="Перейти к вкладке Состав">
+                Перейти к Составу
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="drawer-footer">
+        <div class="footer-hint" style="color:var(--warn-fg);">Добавьте темы в Составе, чтобы разделы появились в маршрутизаторе</div>
+        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance -- PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>§5.1</td><td>Вкладка Структура в режиме router_by_topics использует router-page-centric макет: блок "Страница-маршрутизатор" с карточками разделов, прикреплёнными к нему. НЕ используется линейный flow-chart Старт → Роутер → Секции → Итог.</td></tr>
+      <tr><td>§5.1 / §3.3</td><td>Логика роутера (<code>completionPolicy</code>, <code>sectionUnlockRules</code>) отображается только как read-only индикаторы со ссылкой "Изменить в Настройках → Режим и сценарий". Не редактируется в Структуре.</td></tr>
+      <tr><td>§5</td><td>Кнопка "Добавить секцию" отсутствует. Список разделов формируется в Составе. Показывается информационная заметка об этом.</td></tr>
+      <tr><td>§5</td><td><code>draw_count</code> и порог прохождения в карточке раздела — read-only chips со ссылкой "Перейти к Составу" / ссылкой на Настройки. Не редактируется в Структуре.</td></tr>
+      <tr><td>§5</td><td>Каждая карточка раздела показывает: название темы, обязательный/опциональный badge, количество вопросов (read-only), порог (read-only), слоты для страниц до/после блока вопросов (content_page + "Добавить страницу"), то что увидит слушатель на маршрутизаторе после завершения (preview states: Не начат / В процессе / Пройден / Не пройден / Заблокирован).</td></tr>
+      <tr><td>§5.1</td><td>Блок "Итоговый результат" показывается в заблокированном состоянии до выполнения <code>completionPolicy</code>.</td></tr>
+      <tr><td class="no-code">—</td><td>Empty state: Маршрутизатор пустой с CTA "Перейти к Составу". Кнопка "Сохранить" disabled.</td></tr>
+      <tr><td>NFR-21</td><td>Блок роутера: <code>role="region"</code> + <code>aria-label</code>; карточки: <code>role="listitem"</code>; read-only режим: чипы без интерактивных элементов управления.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function show(id) {
+  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
+    el.classList.toggle('active', el.id === id);
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

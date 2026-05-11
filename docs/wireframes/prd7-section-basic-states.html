@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Basic Section States</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    .content-area { flex: 1; overflow-y: auto; padding: 24px; }
+    .section-card {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); overflow: hidden; margin-bottom: 16px;
+    }
+    .section-card-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px; border-bottom: 1px solid var(--card-border);
+      background: var(--accent);
+    }
+    .section-card-title { font-size: 13px; font-weight: 600; flex: 1; }
+    .section-card-body { padding: 20px; }
+
+    /* Skeleton loader */
+    .skel {
+      border-radius: var(--radius-sm); background: var(--muted);
+      animation: shimmer 1.4s ease-in-out infinite;
+    }
+    @keyframes shimmer {
+      0%   { opacity: 1; }
+      50%  { opacity: .45; }
+      100% { opacity: 1; }
+    }
+    .skel-line { height: 14px; margin-bottom: 10px; }
+    .skel-input { height: 34px; margin-bottom: 16px; border-radius: var(--radius-sm); }
+    .skel-label { height: 11px; width: 80px; margin-bottom: 6px; }
+    .skel-badge { height: 20px; width: 60px; border-radius: 10px; display: inline-block; }
+
+    /* Error state */
+    .error-banner {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 14px 20px; background: var(--error-bg);
+      border: 1px solid var(--error-border); border-radius: var(--radius);
+      margin-bottom: 16px;
+    }
+    .error-banner-icon { flex-shrink: 0; color: var(--destructive); margin-top: 1px; }
+    .error-banner-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+    .error-banner-desc { font-size: 12px; color: var(--muted-fg); }
+    .retry-btn { margin-top: 8px; font-size: 12px; color: var(--primary); background: none;
+      border: none; cursor: pointer; padding: 0; font-family: inherit;
+      display: inline-flex; align-items: center; gap: 4px; }
+    .retry-btn:hover { text-decoration: underline; }
+
+    /* Empty state */
+    .empty-pane {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; padding: 48px 24px; text-align: center;
+    }
+    .empty-icon-box {
+      width: 48px; height: 48px; border-radius: var(--radius);
+      border: 1px solid var(--card-border); background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 14px; color: var(--muted-fg);
+    }
+    .empty-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+    .empty-desc { font-size: 13px; color: var(--muted-fg); max-width: 300px; line-height: 1.6; }
+
+    /* Content placeholders for loaded state */
+    .field-group { margin-bottom: 16px; }
+    .field-label { font-size: 13px; font-weight: 500; margin-bottom: 5px; }
+    .field-hint { font-size: 12px; color: var(--muted-fg); margin-top: 4px; }
+    .skeleton-drawer { display: flex; flex-direction: column; height: 100vh; }
+    .skeleton-header {
+      display: flex; align-items: center; gap: 10px; padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .skeleton-tabs {
+      display: flex; gap: 0; border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+    }
+    .skeleton-tab { padding: 10px 14px; }
+    .skeleton-footer {
+      display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+      padding: 12px 20px; border-top: 1px solid var(--border); margin-top: auto;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Basic section states:</span>
+  <button class="wf-btn active" type="button" onclick="show('s-loading')">Загрузка</button>
+  <button class="wf-btn"        type="button" onclick="show('s-error')">Ошибка загрузки</button>
+  <button class="wf-btn"        type="button" onclick="show('s-partial')">Частичная ошибка</button>
+  <button class="wf-btn"        type="button" onclick="show('s-empty')">Новый тест</button>
+  <a class="wf-link" href="prd7-section-basic.html">Состав (loaded) &rarr;</a>
+</nav>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+  </symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+    <path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+    <path d="M8 16H3v5"/>
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="8" height="4" x="8" y="2" rx="1"/>
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+  </symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </symbol>
+</svg>
+
+<!-- ═══ STATE: Loading ════════════════════════════════════════════════════ -->
+<div id="s-loading" class="shell active">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active">Тесты</div>
+    </nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+
+  <div class="main" style="flex-direction:column;">
+    <!-- Drawer skeleton -->
+    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg);">
+      <!-- Header skeleton -->
+      <div class="skeleton-header">
+        <div class="skel skel-line" style="width:200px;height:16px;margin:0;"></div>
+        <div class="skel skel-badge" style="margin:0;"></div>
+        <div style="flex:1;"></div>
+        <div class="skel" style="width:28px;height:28px;border-radius:var(--radius-sm);"></div>
+      </div>
+
+      <!-- Tabs skeleton -->
+      <div class="skeleton-tabs">
+        <div class="skeleton-tab"><div class="skel skel-line" style="width:52px;height:13px;margin:0;"></div></div>
+        <div class="skeleton-tab"><div class="skel skel-line" style="width:72px;height:13px;margin:0;"></div></div>
+        <div class="skeleton-tab"><div class="skel skel-line" style="width:68px;height:13px;margin:0;"></div></div>
+        <div class="skeleton-tab"><div class="skel skel-line" style="width:62px;height:13px;margin:0;"></div></div>
+      </div>
+
+      <!-- Content skeleton -->
+      <div style="flex:1;overflow:auto;padding:24px;">
+        <!-- Section 1 skeleton -->
+        <div class="section-card" style="margin-bottom:16px;">
+          <div class="section-card-header">
+            <div class="skel skel-line" style="width:140px;height:13px;margin:0;"></div>
+          </div>
+          <div class="section-card-body">
+            <div class="skel skel-label"></div>
+            <div class="skel skel-input"></div>
+            <div class="skel skel-label"></div>
+            <div class="skel skel-input" style="height:64px;"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div>
+                <div class="skel skel-label"></div>
+                <div class="skel skel-input"></div>
+              </div>
+              <div>
+                <div class="skel skel-label"></div>
+                <div class="skel skel-input"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2 skeleton -->
+        <div class="section-card">
+          <div class="section-card-header">
+            <div class="skel skel-line" style="width:110px;height:13px;margin:0;"></div>
+          </div>
+          <div class="section-card-body">
+            <div class="skel skel-label"></div>
+            <div class="skel skel-input"></div>
+            <div class="skel skel-label"></div>
+            <div class="skel skel-input"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer skeleton -->
+      <div class="skeleton-footer">
+        <div class="skel" style="width:120px;height:34px;border-radius:var(--radius-sm);"></div>
+        <div class="skel" style="width:80px;height:34px;border-radius:var(--radius-sm);"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Ошибка загрузки ═══════════════════════════════════════════ -->
+<div id="s-error" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active">Тесты</div>
+    </nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+
+  <div class="main" style="flex-direction:column;">
+    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg);">
+      <div class="skeleton-header">
+        <div style="font-size:15px;font-weight:600;">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;">&#215;</button>
+      </div>
+
+      <div class="skeleton-tabs">
+        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--primary);border-bottom:2px solid var(--primary);cursor:pointer;font-family:inherit;">Состав</button>
+        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;">Настройки</button>
+        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;">Оформление</button>
+        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;">Структура</button>
+      </div>
+
+      <div style="flex:1;overflow:auto;padding:24px;">
+        <div class="error-banner" role="alert" aria-live="assertive">
+          <div class="error-banner-icon">
+            <svg width="18" height="18"><use href="#i-x-circle"/></svg>
+          </div>
+          <div>
+            <div class="error-banner-title">Не удалось загрузить данные теста</div>
+            <div class="error-banner-desc">Ошибка соединения с сервером. Проверьте подключение и попробуйте ещё раз.</div>
+            <button class="retry-btn" type="button" aria-label="Повторить загрузку">
+              <svg width="12" height="12"><use href="#i-refresh"/></svg>
+              Повторить
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="skeleton-footer">
+        <button class="btn btn-ghost btn-sm" type="button">Закрыть</button>
+        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Частичная ошибка (один раздел) ════════════════════════════ -->
+<div id="s-partial" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active">Тесты</div>
+    </nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+
+  <div class="main" style="flex-direction:column;">
+    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg);">
+      <div class="skeleton-header">
+        <div style="font-size:15px;font-weight:600;">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;">&#215;</button>
+      </div>
+
+      <div class="skeleton-tabs">
+        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--primary);border-bottom:2px solid var(--primary);cursor:pointer;font-family:inherit;">Состав</button>
+        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;">Настройки</button>
+        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;">Оформление</button>
+        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;">Структура</button>
+      </div>
+
+      <div style="flex:1;overflow:auto;padding:24px;">
+        <!-- Normal section loaded OK -->
+        <div class="section-card" style="margin-bottom:16px;">
+          <div class="section-card-header">
+            <div class="section-card-title">Основные настройки</div>
+            <span class="badge badge-outline">Сохранено</span>
+          </div>
+          <div class="section-card-body">
+            <div class="field-group">
+              <div class="field-label">Название</div>
+              <input type="text" value="Основы информационной безопасности" style="max-width:480px;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Section with load error -->
+        <div class="section-card" style="border-color:var(--error-border);">
+          <div class="section-card-header" style="background:var(--error-bg);border-bottom-color:var(--error-border);">
+            <div class="section-card-title">Темы и обратная связь</div>
+            <span class="status-icon error" aria-hidden="true">
+              <svg width="14" height="14"><use href="#i-x-circle"/></svg>
+            </span>
+            <span class="badge badge-error" aria-label="Статус: ошибка загрузки">Ошибка загрузки</span>
+          </div>
+          <div class="section-card-body">
+            <div style="display:flex;align-items:center;gap:10px;color:var(--muted-fg);font-size:13px;">
+              <svg width="14" height="14"><use href="#i-x-circle"/></svg>
+              Не удалось загрузить список тем.
+              <button class="retry-btn" type="button">
+                <svg width="12" height="12"><use href="#i-refresh"/></svg>
+                Повторить
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="skeleton-footer">
+        <button class="btn btn-ghost btn-sm" type="button">Закрыть</button>
+        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Новый тест (empty) ════════════════════════════════════════ -->
+<div id="s-empty" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active">Тесты</div>
+    </nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+
+  <div class="main" style="flex-direction:column;">
+    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg);">
+      <div class="skeleton-header">
+        <div style="font-size:15px;font-weight:600;color:var(--muted-fg);font-style:italic;">Новый тест</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;">&#215;</button>
+      </div>
+
+      <div class="skeleton-tabs">
+        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--primary);border-bottom:2px solid var(--primary);cursor:pointer;font-family:inherit;">Состав</button>
+        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;" disabled>Настройки</button>
+        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;" disabled>Оформление</button>
+        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;" disabled>Структура</button>
+      </div>
+
+      <div style="flex:1;overflow:auto;padding:24px;">
+        <!-- Basic info (empty) -->
+        <div class="section-card" style="margin-bottom:16px;">
+          <div class="section-card-header" style="border-color:hsl(217 91% 80%);background:hsl(217 91% 98%);">
+            <div class="section-card-title">Основные настройки</div>
+            <span class="status-dot dirty" aria-hidden="true" style="margin-right:4px;"></span>
+            <span class="badge badge-outline" style="color:var(--primary);">Требует заполнения</span>
+          </div>
+          <div class="section-card-body">
+            <div class="field-group">
+              <div class="field-label">Название <span style="color:var(--destructive);">*</span></div>
+              <input type="text" placeholder="Введите название теста..."
+                     style="max-width:480px;border-color:var(--destructive);"
+                     aria-invalid="true" aria-describedby="err-title-empty">
+              <div style="font-size:12px;color:var(--destructive);margin-top:4px;display:flex;align-items:center;gap:4px;"
+                   id="err-title-empty" role="alert">
+                <svg width="12" height="12"><use href="#i-x-circle"/></svg>
+                Поле обязательно для заполнения
+              </div>
+            </div>
+            <div class="field-group">
+              <div class="field-label">Описание</div>
+              <textarea placeholder="Краткое описание теста..." style="max-width:480px;height:64px;resize:vertical;"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Topics — empty -->
+        <div class="section-card">
+          <div class="section-card-header">
+            <div class="section-card-title">Темы</div>
+          </div>
+          <div class="empty-pane">
+            <div class="empty-icon-box" aria-hidden="true">
+              <svg width="22" height="22"><use href="#i-clipboard"/></svg>
+            </div>
+            <div class="empty-title">Темы не добавлены</div>
+            <div class="empty-desc">Добавьте хотя бы одну тему, чтобы продолжить настройку теста.</div>
+            <button class="btn btn-primary" type="button" style="margin-top:16px;">Добавить тему</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="skeleton-footer">
+        <button class="btn btn-ghost btn-sm" type="button">Закрыть</button>
+        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance -- PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td class="no-code">—</td><td>Состояние загрузки: skeleton-placeholder со shimmer-анимацией для header, вкладок, секций и footer. Кнопка "Сохранить" disabled во время загрузки.</td></tr>
+      <tr><td class="no-code">—</td><td>Состояние полной ошибки: error-banner с <code>role="alert"</code>, кнопка "Повторить" для повторного запроса. Кнопка "Сохранить" disabled.</td></tr>
+      <tr><td class="no-code">—</td><td>Состояние частичной ошибки: нормальные секции отображаются, секция с ошибкой показывает error-заголовок + кнопку "Повторить" внутри секции.</td></tr>
+      <tr><td class="no-code">—</td><td>Состояние нового теста: поле "Название" пустое с inline-ошибкой; раздел "Темы" показывает empty-state с призывом добавить тему; вкладки кроме "Состав" disabled до сохранения основных данных.</td></tr>
+      <tr><td>NFR-21</td><td>Error-banner имеет <code>role="alert"</code> и <code>aria-live="assertive"</code>; поле с ошибкой имеет <code>aria-invalid</code> и <code>aria-describedby</code>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function show(id) {
+  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
+    el.classList.toggle('active', el.id === id);
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

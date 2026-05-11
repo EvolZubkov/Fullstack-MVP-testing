@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Structure - linear_by_topics</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    .drawer-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .drawer-title { font-size: 15px; font-weight: 700; flex: 1; }
+    .tab-bar {
+      display: flex; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; padding: 0 20px;
+    }
+    .tab-item {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 14px; font-size: 13px; color: var(--muted-fg);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      background: transparent; border-top: none; border-left: none; border-right: none;
+      cursor: pointer; font-family: inherit;
+    }
+    .tab-item.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+    .drawer-footer {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    .footer-hint { font-size: 12px; color: var(--muted-fg); flex: 1; }
+    .structure-content { flex: 1; overflow-y: auto; padding: 20px; }
+
+    /* Flow mode banner */
+    .flow-mode-bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; background: var(--info-bg); border: 1px solid var(--info-border);
+      border-radius: var(--radius); margin-bottom: 16px; font-size: 13px; color: var(--info-fg);
+    }
+    .flow-mode-label { font-weight: 600; }
+    .change-mode-link { font-size: 12px; color: var(--primary); background: none; border: none;
+      cursor: pointer; padding: 0; font-family: inherit; text-decoration: underline; }
+
+    /* Topic blocks (ordered) */
+    .topic-block {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); overflow: hidden; margin-bottom: 10px;
+    }
+    .topic-block-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-bottom: 1px solid var(--card-border);
+      background: var(--accent);
+    }
+    .drag-handle {
+      display: inline-flex; flex-direction: column; gap: 2px;
+      cursor: grab; padding: 4px; color: var(--muted-fg); flex-shrink: 0;
+    }
+    .drag-handle span {
+      display: block; width: 14px; height: 2px; background: currentColor; border-radius: 1px;
+    }
+    .topic-order-num {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--primary); color: var(--primary-fg);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; flex-shrink: 0;
+    }
+    .topic-block-title { font-size: 13px; font-weight: 600; flex: 1; }
+    .topic-block-body {
+      display: flex; align-items: center; gap: 16px;
+      padding: 10px 14px; flex-wrap: wrap;
+    }
+    .draw-group { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+    .draw-label { color: var(--muted-fg); font-size: 12px; min-width: 110px; }
+    .draw-input {
+      width: 56px; text-align: center; font-size: 13px; padding: 4px 6px;
+      border-radius: var(--radius-sm); border: 1px solid var(--input-b);
+    }
+    .draw-total { font-size: 12px; color: var(--muted-fg); }
+    .shuffle-toggle {
+      display: flex; align-items: center; gap: 8px; font-size: 13px;
+    }
+    .toggle-switch {
+      position: relative; width: 32px; height: 18px; border-radius: 9px;
+      background: var(--primary); cursor: pointer; flex-shrink: 0;
+    }
+    .toggle-switch.off { background: var(--muted-fg); }
+    .toggle-knob {
+      position: absolute; top: 2px; right: 2px; width: 14px; height: 14px;
+      background: white; border-radius: 50%;
+    }
+    .toggle-switch.off .toggle-knob { right: auto; left: 2px; }
+
+    /* Sequence preview */
+    .sequence-preview {
+      margin-top: 20px;
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); overflow: hidden;
+    }
+    .sequence-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; border-bottom: 1px solid var(--card-border);
+      background: var(--accent); font-size: 13px; font-weight: 600;
+    }
+    .sequence-body { padding: 14px; }
+    .seq-step {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: var(--radius-sm);
+      background: var(--bg); border: 1px solid var(--card-border);
+      margin-bottom: 6px; font-size: 13px;
+    }
+    .seq-arrow {
+      display: flex; align-items: center; justify-content: center;
+      height: 16px; color: var(--muted-fg); font-size: 16px; margin-bottom: 6px;
+      margin-left: 30px;
+    }
+    .seq-num {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: var(--muted); display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: var(--muted-fg); flex-shrink: 0;
+    }
+    .seq-num.topic { background: var(--primary); color: var(--primary-fg); }
+    .seq-label { flex: 1; }
+    .seq-badge { font-size: 11px; color: var(--muted-fg); background: var(--muted);
+      padding: 2px 6px; border-radius: var(--radius-sm); }
+
+    /* Reorder buttons */
+    .reorder-btns { display: flex; flex-direction: column; gap: 2px; }
+    .reorder-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 18px; border: 1px solid var(--border);
+      border-radius: var(--radius-sm); background: var(--bg);
+      cursor: pointer; color: var(--muted-fg); font-size: 10px;
+    }
+    .reorder-btn:hover { background: var(--accent); }
+    .reorder-btn:disabled { opacity: .4; cursor: default; }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Structure / linear_by_topics:</span>
+  <button class="wf-btn active" type="button" onclick="show('s-default')">Стандарт</button>
+  <button class="wf-btn"        type="button" onclick="show('s-reorder')">Перетаскивание (drag)</button>
+  <a class="wf-link" href="prd7-structure-linear-flat.html">&larr; linear_flat</a>
+  <a class="wf-link" href="prd7-structure-mixed.html">mixed &rarr;</a>
+</nav>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+    <line x1="8" y1="18" x2="21" y2="18"/>
+    <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/>
+    <line x1="3" y1="18" x2="3.01" y2="18"/>
+  </symbol>
+  <symbol id="i-shuffle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M16 3h5v5"/><path d="M4 20 21 3"/>
+    <path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/>
+  </symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/>
+    <circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/>
+    <circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/>
+  </symbol>
+</svg>
+
+<!-- ═══ STATE: Default ════════════════════════════════════════════════════ -->
+<div id="s-default" class="shell active">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg);">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab">Состав</button>
+        <button class="tab-item" type="button" role="tab">Настройки</button>
+        <button class="tab-item" type="button" role="tab">Оформление</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true">Структура</button>
+      </div>
+
+      <div class="structure-content">
+        <div class="flow-mode-bar" role="note">
+          <svg width="14" height="14"><use href="#i-list"/></svg>
+          <span class="flow-mode-label">Режим: Последовательность по темам</span>
+          &mdash;
+          Темы проходятся по очереди. Вопросы внутри темы можно перемешать.
+          <button class="change-mode-link" type="button" aria-label="Изменить режим потока">Изменить</button>
+        </div>
+
+        <div style="font-size:12px;color:var(--muted-fg);margin-bottom:10px;">
+          Перетащите темы, чтобы изменить порядок. Все изменения применятся после сохранения.
+        </div>
+
+        <!-- Topic block 1 -->
+        <div class="topic-block" aria-label="Тема 1: Основы ИБ">
+          <div class="topic-block-header">
+            <div class="drag-handle" aria-label="Перетащить тему" role="button" tabindex="0">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="topic-order-num" aria-label="Порядок: 1">1</div>
+            <div class="topic-block-title">Основы ИБ</div>
+            <div class="reorder-btns" aria-label="Изменить порядок темы">
+              <button class="reorder-btn" type="button" aria-label="Переместить вверх" disabled>&#9650;</button>
+              <button class="reorder-btn" type="button" aria-label="Переместить вниз">&#9660;</button>
+            </div>
+          </div>
+          <div class="topic-block-body">
+            <div class="draw-group">
+              <span class="draw-label">Показывать вопросов:</span>
+              <input class="draw-input" type="number" value="15" min="1" max="42"
+                     aria-label="Количество вопросов из темы Основы ИБ">
+              <span class="draw-total">из 42</span>
+            </div>
+            <div class="shuffle-toggle">
+              <div class="toggle-switch" role="switch" aria-checked="true" aria-label="Перемешивать вопросы в теме" tabindex="0">
+                <div class="toggle-knob"></div>
+              </div>
+              <span>Перемешивать вопросы</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Topic block 2 -->
+        <div class="topic-block" aria-label="Тема 2: Классификация угроз">
+          <div class="topic-block-header">
+            <div class="drag-handle" aria-label="Перетащить тему" role="button" tabindex="0">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="topic-order-num" aria-label="Порядок: 2">2</div>
+            <div class="topic-block-title">Классификация угроз</div>
+            <div class="reorder-btns" aria-label="Изменить порядок темы">
+              <button class="reorder-btn" type="button" aria-label="Переместить вверх">&#9650;</button>
+              <button class="reorder-btn" type="button" aria-label="Переместить вниз">&#9660;</button>
+            </div>
+          </div>
+          <div class="topic-block-body">
+            <div class="draw-group">
+              <span class="draw-label">Показывать вопросов:</span>
+              <input class="draw-input" type="number" value="10" min="1" max="28"
+                     aria-label="Количество вопросов из темы Классификация угроз">
+              <span class="draw-total">из 28</span>
+            </div>
+            <div class="shuffle-toggle">
+              <div class="toggle-switch off" role="switch" aria-checked="false" aria-label="Перемешивать вопросы в теме" tabindex="0">
+                <div class="toggle-knob"></div>
+              </div>
+              <span>Перемешивать вопросы</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Topic block 3 -->
+        <div class="topic-block" aria-label="Тема 3: Средства защиты информации">
+          <div class="topic-block-header">
+            <div class="drag-handle" aria-label="Перетащить тему" role="button" tabindex="0">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="topic-order-num" aria-label="Порядок: 3">3</div>
+            <div class="topic-block-title">Средства защиты информации</div>
+            <div class="reorder-btns" aria-label="Изменить порядок темы">
+              <button class="reorder-btn" type="button" aria-label="Переместить вверх">&#9650;</button>
+              <button class="reorder-btn" type="button" aria-label="Переместить вниз" disabled>&#9660;</button>
+            </div>
+          </div>
+          <div class="topic-block-body">
+            <div class="draw-group">
+              <span class="draw-label">Показывать вопросов:</span>
+              <input class="draw-input" type="number" value="5" min="1" max="18"
+                     aria-label="Количество вопросов из темы СЗИ">
+              <span class="draw-total">из 18</span>
+            </div>
+            <div class="shuffle-toggle">
+              <div class="toggle-switch" role="switch" aria-checked="true" aria-label="Перемешивать вопросы в теме" tabindex="0">
+                <div class="toggle-knob"></div>
+              </div>
+              <span>Перемешивать вопросы</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sequence preview -->
+        <div class="sequence-preview">
+          <div class="sequence-header">
+            <svg width="13" height="13"><use href="#i-list"/></svg>
+            Схема воспроизведения (для слушателя)
+          </div>
+          <div class="sequence-body">
+            <div class="seq-step">
+              <div class="seq-num">&#9654;</div>
+              <div class="seq-label" style="color:var(--muted-fg);font-style:italic;">Стартовая страница (если добавлена)</div>
+              <span class="seq-badge">опционально</span>
+            </div>
+            <div class="seq-arrow" aria-hidden="true">&#8595;</div>
+            <div class="seq-step">
+              <div class="seq-num topic">1</div>
+              <div class="seq-label"><strong>Основы ИБ</strong> &mdash; 15 вопросов (перемешаны)</div>
+              <span class="seq-badge">блок темы</span>
+            </div>
+            <div class="seq-arrow" aria-hidden="true">&#8595;</div>
+            <div class="seq-step">
+              <div class="seq-num topic">2</div>
+              <div class="seq-label"><strong>Классификация угроз</strong> &mdash; 10 вопросов (в порядке банка)</div>
+              <span class="seq-badge">блок темы</span>
+            </div>
+            <div class="seq-arrow" aria-hidden="true">&#8595;</div>
+            <div class="seq-step">
+              <div class="seq-num topic">3</div>
+              <div class="seq-label"><strong>Средства защиты информации</strong> &mdash; 5 вопросов (перемешаны)</div>
+              <span class="seq-badge">блок темы</span>
+            </div>
+            <div class="seq-arrow" aria-hidden="true">&#8595;</div>
+            <div class="seq-step">
+              <div class="seq-num">&#9632;</div>
+              <div class="seq-label" style="color:var(--muted-fg);font-style:italic;">Результат и обратная связь</div>
+              <span class="seq-badge">всегда</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="drawer-footer">
+        <div class="footer-hint">Структура: linear_by_topics &mdash; итого 30 вопросов в 3 темах</div>
+        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+        <button class="btn btn-primary" type="button">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Drag (перетаскивание) ════════════════════════════════════ -->
+<div id="s-reorder" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg);">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab">Состав</button>
+        <button class="tab-item" type="button" role="tab">Настройки</button>
+        <button class="tab-item" type="button" role="tab">Оформление</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true"
+                aria-label="Структура, есть несохранённые изменения">
+          Структура
+          <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <div class="structure-content">
+        <div class="flow-mode-bar" role="note">
+          <svg width="14" height="14"><use href="#i-list"/></svg>
+          <span class="flow-mode-label">Режим: Последовательность по темам</span>
+        </div>
+
+        <div style="font-size:12px;color:var(--muted-fg);margin-bottom:10px;">
+          Перетаскивание активно. Отпустите, чтобы применить новый порядок.
+        </div>
+
+        <!-- Dragging block (elevated) -->
+        <div class="topic-block" style="opacity:.5;border:2px dashed var(--input-b);">
+          <div class="topic-block-header" style="background:var(--bg);">
+            <div class="drag-handle" style="cursor:grabbing;"><span></span><span></span><span></span></div>
+            <div class="topic-order-num">2</div>
+            <div class="topic-block-title">Классификация угроз</div>
+          </div>
+        </div>
+
+        <!-- Drop zone -->
+        <div style="height:48px;border:2px dashed var(--primary);border-radius:var(--radius);
+             background:var(--info-bg);display:flex;align-items:center;justify-content:center;
+             font-size:12px;color:var(--primary);margin-bottom:10px;" role="note" aria-label="Место для вставки">
+          Отпустите здесь
+        </div>
+
+        <!-- Topic block 1 (moved down) -->
+        <div class="topic-block">
+          <div class="topic-block-header">
+            <div class="drag-handle"><span></span><span></span><span></span></div>
+            <div class="topic-order-num">1</div>
+            <div class="topic-block-title">Основы ИБ</div>
+          </div>
+          <div class="topic-block-body">
+            <div class="draw-group">
+              <span class="draw-label">Показывать вопросов:</span>
+              <input class="draw-input" type="number" value="15" min="1" max="42">
+              <span class="draw-total">из 42</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="drawer-footer">
+        <div class="footer-hint" style="color:var(--primary);">Порядок тем изменён</div>
+        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+        <button class="btn btn-primary" type="button">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance -- PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td class="no-code">—</td><td>Структура <code>linear_by_topics</code>: темы проходятся по очереди. Каждая тема -- отдельный блок с drag-handle, кнопками Up/Down, draw-input и переключателем "Перемешивать вопросы".</td></tr>
+      <tr><td class="no-code">—</td><td>Порядок тем можно изменить через drag-and-drop или кнопки Up/Down (первая тема: Up disabled, последняя: Down disabled).</td></tr>
+      <tr><td class="no-code">—</td><td>Переключатель "Перемешивать вопросы" управляет порядком вопросов внутри темы (независимо для каждой).</td></tr>
+      <tr><td class="no-code">—</td><td>Схема воспроизведения показывает последовательность блоков тем + стартовую страницу и финальный экран.</td></tr>
+      <tr><td class="no-code">—</td><td>При перетаскивании: исходный блок становится полупрозрачным с dashed-border; drop-zone выделяется синим. Вкладка получает dirty-dot.</td></tr>
+      <tr><td>NFR-21</td><td>drag-handle имеет <code>role="button"</code> и <code>aria-label</code>; кнопки Up/Down -- <code>aria-label</code> и <code>disabled</code> на границах; toggle -- <code>role="switch"</code> и <code>aria-checked</code>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function show(id) {
+  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
+    el.classList.toggle('active', el.id === id);
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

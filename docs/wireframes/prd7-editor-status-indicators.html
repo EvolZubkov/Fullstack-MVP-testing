@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Status Indicators</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    .indicator-showcase {
+      padding: 24px; max-width: 900px; margin: 0 auto;
+    }
+    .showcase-title {
+      font-size: 16px; font-weight: 700; margin-bottom: 4px;
+    }
+    .showcase-sub { font-size: 13px; color: var(--muted-fg); margin-bottom: 24px; }
+    .showcase-section { margin-bottom: 32px; }
+    .showcase-section-title {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted-fg); margin-bottom: 12px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    }
+    /* Tab strip example */
+    .tab-strip-demo {
+      display: flex; gap: 0; border-bottom: 1px solid var(--border);
+      background: var(--bg); border-radius: var(--radius) var(--radius) 0 0;
+      border: 1px solid var(--border); border-bottom: none;
+      overflow: hidden;
+    }
+    .tab-demo {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 16px; font-size: 13px; color: var(--muted-fg);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      background: transparent;
+    }
+    .tab-demo.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+    /* Section card with section-level status */
+    .section-card {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); overflow: hidden; margin-bottom: 12px;
+    }
+    .section-card-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px; border-bottom: 1px solid var(--card-border);
+      background: var(--accent);
+    }
+    .section-card-title { font-size: 13px; font-weight: 600; flex: 1; }
+    .section-card-body { padding: 14px 16px; }
+    .section-card.warn { border-color: var(--warn-border); }
+    .section-card.warn .section-card-header { background: var(--warn-bg); border-bottom-color: var(--warn-border); }
+    .section-card.error { border-color: var(--error-border); }
+    .section-card.error .section-card-header { background: var(--error-bg); border-bottom-color: var(--error-border); }
+    .section-card.dirty { border-color: hsl(217 91% 80%); }
+    .section-card.dirty .section-card-header { background: hsl(217 91% 98%); border-bottom-color: hsl(217 91% 80%); }
+    .inline-error { font-size: 12px; color: var(--destructive); margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+    .inline-warn { font-size: 12px; color: var(--warn-fg); margin-top: 4px; display: flex; align-items: center; gap: 4px; background: var(--warn-bg); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid var(--warn-border); }
+    .field-demo { margin-bottom: 14px; }
+    .field-label { font-size: 13px; font-weight: 500; margin-bottom: 5px; }
+    .legend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .legend-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border: 1px solid var(--card-border);
+      border-radius: var(--radius-md); background: var(--card);
+    }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+    .legend-text { font-size: 13px; }
+    .legend-desc { font-size: 11px; color: var(--muted-fg); margin-top: 2px; }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Status indicators:</span>
+  <button class="wf-btn active" type="button" onclick="show('s-showcase')">Showcase</button>
+  <a class="wf-link" href="prd7-editor-drawer.html">Reference (Drawer) &rarr;</a>
+</nav>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+  </symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="10"/>
+  </symbol>
+</svg>
+
+<div id="s-showcase" class="shell active" style="flex-direction:column;min-height:100vh;background:hsl(0 0% 92%);">
+<div class="indicator-showcase">
+  <div class="showcase-title">Индикаторы состояния</div>
+  <div class="showcase-sub">Все индикаторы состояния сочетают цвет + текст/иконку + aria-label для доступности.</div>
+
+  <!-- 1. Tab-level indicators -->
+  <div class="showcase-section">
+    <div class="showcase-section-title">1. Индикаторы на вкладках Drawer</div>
+    <div style="background:var(--bg);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;margin-bottom:8px;">
+      <div style="display:flex;gap:0;padding:0 0;border-bottom:1px solid var(--border);">
+        <!-- Clean tab -->
+        <button class="tab-demo active" type="button" style="border-bottom:2px solid var(--primary);color:var(--primary);">Состав</button>
+        <!-- Dirty tab -->
+        <button class="tab-demo" type="button"
+                aria-label="Настройки, есть несохранённые изменения">
+          Настройки
+          <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <!-- Warning tab -->
+        <button class="tab-demo" type="button"
+                aria-label="Оформление, есть предупреждения">
+          Оформление
+          <span class="status-dot warn" aria-hidden="true"></span>
+        </button>
+        <!-- Error tab -->
+        <button class="tab-demo" type="button"
+                aria-label="Структура, есть блокирующие ошибки">
+          Структура
+          <span class="status-dot error" aria-hidden="true"></span>
+        </button>
+      </div>
+      <div style="padding:12px 16px;font-size:12px;color:var(--muted-fg);">
+        Контент вкладки (placeholder)
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--muted-fg);">
+      Точки: синяя = dirty (изменено), жёлтая = warning (не блокирует сохранение), красная = error (блокирует).
+      Каждая вкладка имеет <code>aria-label</code> с описанием статуса.
+    </div>
+  </div>
+
+  <!-- 2. Section-level indicators -->
+  <div class="showcase-section">
+    <div class="showcase-section-title">2. Индикаторы на секциях внутри вкладки</div>
+
+    <!-- Clean section -->
+    <div class="section-card">
+      <div class="section-card-header">
+        <div class="section-card-title">Основные настройки</div>
+        <span class="badge badge-outline" aria-label="Статус: сохранено">Сохранено</span>
+      </div>
+      <div class="section-card-body">
+        <div class="field-demo">
+          <div class="field-label">Название</div>
+          <input type="text" value="Основы информационной безопасности" style="max-width:400px;">
+        </div>
+      </div>
+    </div>
+
+    <!-- Dirty section -->
+    <div class="section-card dirty">
+      <div class="section-card-header"
+           aria-label="Секция 'Правила прохождения': есть несохранённые изменения">
+        <div class="section-card-title">Правила прохождения</div>
+        <span class="status-dot dirty" aria-hidden="true" style="margin-right:4px;"></span>
+        <span class="badge badge-outline" aria-label="Статус: изменено" style="color:var(--primary);">Изменено</span>
+      </div>
+      <div class="section-card-body">
+        <div class="field-demo">
+          <div class="field-label">Порог прохождения (%)</div>
+          <input type="number" value="75" style="max-width:120px;">
+        </div>
+      </div>
+    </div>
+
+    <!-- Warning section -->
+    <div class="section-card warn">
+      <div class="section-card-header"
+           aria-label="Секция 'Адаптивные настройки': есть предупреждение">
+        <div class="section-card-title">Адаптивные настройки</div>
+        <span class="status-icon warn" aria-hidden="true">
+          <svg width="14" height="14"><use href="#i-warn"/></svg>
+        </span>
+        <span class="badge badge-warn" aria-label="Статус: предупреждение">Предупреждение</span>
+      </div>
+      <div class="section-card-body">
+        <div class="inline-warn" role="status" aria-live="polite">
+          <svg width="13" height="13"><use href="#i-warn"/></svg>
+          Переключение в режим "standard" скрывает adaptive-настройки. Данные сохранены, но не будут применены.
+        </div>
+      </div>
+    </div>
+
+    <!-- Error section -->
+    <div class="section-card error">
+      <div class="section-card-header"
+           aria-label="Секция 'Основные настройки': есть блокирующая ошибка">
+        <div class="section-card-title">Основные настройки</div>
+        <span class="status-icon error" aria-hidden="true">
+          <svg width="14" height="14"><use href="#i-x-circle"/></svg>
+        </span>
+        <span class="badge badge-error" aria-label="Статус: ошибка">Ошибка</span>
+      </div>
+      <div class="section-card-body">
+        <div class="field-demo">
+          <div class="field-label">Название <span style="color:var(--destructive);">*</span></div>
+          <input type="text" value="" placeholder="Введите название..."
+                 style="border-color:var(--destructive);"
+                 aria-invalid="true" aria-describedby="err-title">
+          <div class="inline-error" id="err-title" role="alert">
+            <svg width="12" height="12"><use href="#i-x-circle"/></svg>
+            Поле обязательно для заполнения
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Legend -->
+  <div class="showcase-section">
+    <div class="showcase-section-title">3. Легенда состояний</div>
+    <div class="legend-grid">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--muted-fg);"></div>
+        <div>
+          <div class="legend-text">Чисто</div>
+          <div class="legend-desc">Нет изменений, нет проблем</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot dirty" style="background:var(--primary);"></div>
+        <div>
+          <div class="legend-text">Изменено (dirty)</div>
+          <div class="legend-desc">Есть несохранённые изменения</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot warn" style="background:hsl(38 92% 50%);"></div>
+        <div>
+          <div class="legend-text">Предупреждение</div>
+          <div class="legend-desc">Не блокирует сохранение</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot error" style="background:var(--destructive);"></div>
+        <div>
+          <div class="legend-text">Ошибка</div>
+          <div class="legend-desc">Блокирует кнопку "Сохранить"</div>
+        </div>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:hsl(160 60% 40%);"></div>
+        <div>
+          <div class="legend-text">Сохранено</div>
+          <div class="legend-desc">Успешно записано</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance — PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>FR-25b</td><td>Агрегированные индикаторы dirty/warning/error на табах Drawer; локальные индикаторы на секциях внутри вкладок. Каждый уровень независим: таб может быть dirty, а отдельная секция — error.</td></tr>
+      <tr><td>NFR-21</td><td>Все индикаторы статуса передают состояние не только цветом: каждый таб/секция имеет <code>aria-label</code> с текстовым описанием; иконки <code>aria-hidden="true"</code>; поля с ошибками имеют <code>aria-invalid</code> и <code>aria-describedby</code>.</td></tr>
+      <tr><td class="no-code">—</td><td>Inline-валидация под полем: красный текст + иконка (error); warning-блок с жёлтым фоном (предупреждение).</td></tr>
+      <tr><td class="no-code">—</td><td>Состояния секций: clean, dirty (синяя рамка), warning (жёлтая рамка), error (красная рамка) — отличаются border-color и background header.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function show(id) {
+  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
+    el.classList.toggle('active', el.id === id);
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

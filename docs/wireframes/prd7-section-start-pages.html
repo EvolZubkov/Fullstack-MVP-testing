@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Start Page (Структура tab)</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    /* Drawer layout */
+    .drawer-col {
+      display: flex; flex-direction: column;
+      height: 100%; background: var(--bg); overflow: hidden;
+    }
+    .drawer-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .drawer-title { font-size: 15px; font-weight: 700; flex: 1; }
+    .tab-bar {
+      display: flex; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; padding: 0 20px;
+    }
+    .tab-item {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 14px; font-size: 13px; color: var(--muted-fg);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      background: transparent; border-top: none; border-left: none; border-right: none;
+      cursor: pointer; font-family: inherit;
+    }
+    .tab-item.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+    .content-area { flex: 1; overflow-y: auto; padding: 20px; }
+    .drawer-footer {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    .footer-hint { font-size: 12px; color: var(--muted-fg); flex: 1; }
+
+    /* Section cards */
+    .section-card {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); overflow: hidden; margin-bottom: 14px;
+    }
+    .section-card-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px; border-bottom: 1px solid var(--card-border);
+      background: var(--accent);
+    }
+    .section-card-title { font-size: 13px; font-weight: 600; flex: 1; }
+    .section-card-body { padding: 16px; }
+
+    /* Field groups */
+    .field-group { margin-bottom: 14px; }
+    .field-label { font-size: 13px; font-weight: 500; margin-bottom: 5px; }
+    .field-hint { font-size: 12px; color: var(--muted-fg); margin-top: 4px; }
+
+    /* Flow position indicator */
+    .seq-position {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      font-size: 12px; color: var(--muted-fg); margin-bottom: 16px;
+    }
+    .seq-step {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: var(--radius-sm);
+      border: 1px solid var(--card-border); background: var(--bg);
+      font-size: 12px; white-space: nowrap;
+    }
+    .seq-step.current { border-color: var(--primary); color: var(--primary); background: var(--info-bg); font-weight: 500; }
+    .seq-step.dashed { border-style: dashed; color: var(--muted-fg); }
+    .seq-arrow { color: var(--muted-fg); font-size: 14px; }
+
+    /* Page card */
+    .page-card {
+      border: 1px solid var(--info-border); border-radius: var(--radius);
+      background: var(--bg); overflow: hidden;
+    }
+    .page-card-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; border-bottom: 1px solid var(--info-border);
+      background: var(--info-bg);
+    }
+    .page-card-type {
+      font-size: 11px; padding: 2px 7px; border-radius: var(--radius-sm);
+      background: var(--secondary); color: var(--fg); font-weight: 500; flex-shrink: 0;
+    }
+    .page-card-title { font-size: 13px; font-weight: 600; flex: 1; color: var(--primary); }
+    .page-card-body { padding: 14px; }
+    .page-card-footer {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; border-top: 1px solid var(--card-border);
+    }
+
+    /* Content page field summary row */
+    .cp-fields {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;
+    }
+    .cp-field {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; padding: 2px 7px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--bg); color: var(--muted-fg);
+    }
+    .cp-field strong { color: var(--fg); }
+
+    /* Preview text in page card */
+    .page-preview-text {
+      font-size: 13px; color: var(--fg); line-height: 1.7;
+      max-height: 80px; overflow: hidden; position: relative;
+    }
+    .page-preview-text::after {
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 24px;
+      background: linear-gradient(transparent, var(--bg));
+    }
+
+    /* Empty state */
+    .empty-pane {
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center; padding: 32px 20px;
+    }
+    .empty-icon {
+      width: 48px; height: 48px; border-radius: var(--radius);
+      border: 1px dashed var(--input-b); background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted-fg); margin-bottom: 12px;
+    }
+
+    /* Toggle */
+    .toggle-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .toggle-switch {
+      position: relative; width: 36px; height: 20px; border-radius: 10px;
+      background: var(--primary); cursor: pointer; flex-shrink: 0;
+      border: none;
+    }
+    .toggle-switch.off { background: var(--input-b); }
+    .toggle-knob {
+      position: absolute; top: 2px; right: 2px; width: 16px; height: 16px;
+      background: white; border-radius: 50%;
+    }
+    .toggle-switch.off .toggle-knob { right: auto; left: 2px; }
+    .toggle-label { font-size: 13px; font-weight: 500; }
+    .toggle-sub { font-size: 12px; color: var(--muted-fg); }
+
+    /* Editor-style toolbar placeholder */
+    .mini-toolbar {
+      display: flex; gap: 4px; padding: 6px 8px;
+      border: 1px solid var(--input-b); border-bottom: none;
+      border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+      background: var(--accent);
+    }
+    .mini-toolbar button {
+      width: 26px; height: 26px; border: none; background: none;
+      cursor: pointer; border-radius: 3px; font-family: inherit; font-size: 13px;
+    }
+    .mini-toolbar button:hover { background: var(--secondary); }
+    .editor-area {
+      padding: 10px 12px; min-height: 90px; font-size: 13px; line-height: 1.7;
+      border: 1px solid var(--input-b); border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    }
+    .editor-area p { margin-bottom: 6px; }
+
+    /* Read-only chip */
+    .ro-chip {
+      display: inline-flex; align-items: center;
+      font-size: 12px; padding: 3px 9px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--readonly-bg);
+      color: var(--muted-fg); gap: 4px;
+    }
+    .ro-chip strong { color: var(--fg); }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Start page (Структура):</span>
+  <button class="wf-btn active" type="button" onclick="show('s-with-page')">Со стартовой страницей</button>
+  <button class="wf-btn"        type="button" onclick="show('s-without')">Без стартовой страницы</button>
+  <button class="wf-btn"        type="button" onclick="show('s-edit')">Редактирование</button>
+  <a class="wf-link" href="prd7-structure-linear-by-topics.html">Структура &rarr;</a>
+</nav>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+    <polyline points="10 9 9 9 8 9"/>
+  </symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+  </symbol>
+</svg>
+
+<!-- ═══ STATE: Со стартовой страницей ════════════════════════════════════ -->
+<div id="s-with-page" class="shell active">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div class="drawer-col">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Настройки</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true">Структура</button>
+      </div>
+
+      <div class="content-area">
+
+        <!-- Flow position indicator (flowMode = linear_by_topics) -->
+        <div class="seq-position" role="note" aria-label="Стартовая страница находится в зоне Перед тестом">
+          <div class="seq-step current">
+            <svg width="12" height="12"><use href="#i-file-text"/></svg>
+            Перед тестом
+          </div>
+          <span class="seq-arrow">&#8594;</span>
+          <div class="seq-step">Блок вопросов по темам</div>
+          <span class="seq-arrow">&#8594;</span>
+          <div class="seq-step">После теста</div>
+          <span class="seq-arrow">&#8594;</span>
+          <div class="seq-step">Итоговый результат</div>
+        </div>
+
+        <!-- Intro page card -->
+        <div class="section-card">
+          <div class="section-card-header">
+            <svg width="14" height="14" aria-hidden="true"><use href="#i-file-text"/></svg>
+            <div class="section-card-title">Стартовая страница</div>
+            <span class="badge badge-outline" style="font-size:11px;">content_page</span>
+          </div>
+          <div class="section-card-body" style="padding:0;">
+            <div style="padding:14px;">
+              <!-- content_page field summary -->
+              <div class="cp-fields" aria-label="Параметры контентной страницы">
+                <div class="cp-field">type: <strong>intro</strong></div>
+                <div class="cp-field">topic_id: <strong>— нет</strong></div>
+                <div class="cp-field">mode: <strong>standard</strong></div>
+                <div class="cp-field">sort_order: <strong>1</strong></div>
+                <div class="cp-field">auto_advance: <strong>Выкл</strong></div>
+              </div>
+
+              <div class="page-card">
+                <div class="page-card-header">
+                  <span class="page-card-type">intro</span>
+                  <div class="page-card-title">Добро пожаловать в тест</div>
+                  <button class="btn btn-ghost btn-sm" type="button" aria-label="Предпросмотр стартовой страницы">
+                    <svg width="13" height="13"><use href="#i-eye"/></svg>
+                  </button>
+                  <button class="btn btn-ghost btn-sm" type="button" aria-label="Редактировать стартовую страницу">
+                    <svg width="13" height="13"><use href="#i-edit"/></svg>
+                    Редактировать
+                  </button>
+                </div>
+                <div class="page-card-body">
+                  <div class="page-preview-text">
+                    Этот тест проверяет ваши знания в области информационной безопасности.
+                    Продолжительность: около 20 минут. Для прохождения необходимо набрать 75%
+                    правильных ответов.
+                  </div>
+                </div>
+                <div class="page-card-footer">
+                  <span style="font-size:12px;color:var(--muted-fg);">values_json.values.content — standard-режим</span>
+                  <div style="flex:1;"></div>
+                  <button class="btn btn-ghost btn-sm" type="button" style="color:var(--destructive);" aria-label="Удалить стартовую страницу">
+                    <svg width="13" height="13"><use href="#i-trash"/></svg>
+                    Удалить
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="drawer-footer">
+        <div class="footer-hint">Структура: стартовая страница — content_page type=intro без topic_id (flowMode: linear_by_topics)</div>
+        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+        <button class="btn btn-primary" type="button">Сохранить</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Без стартовой страницы ════════════════════════════════════ -->
+<div id="s-without" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div class="drawer-col">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Настройки</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true">Структура</button>
+      </div>
+
+      <div class="content-area">
+
+        <!-- Flow position indicator: no intro page -->
+        <div class="seq-position" role="note" aria-label="Зона Перед тестом пуста — тест начинается с блока вопросов">
+          <div class="seq-step dashed">
+            <svg width="12" height="12"><use href="#i-file-text"/></svg>
+            Перед тестом
+          </div>
+          <span class="seq-arrow">&#8594;</span>
+          <div class="seq-step current">Блок вопросов по темам</div>
+          <span class="seq-arrow">&#8594;</span>
+          <div class="seq-step">После теста</div>
+          <span class="seq-arrow">&#8594;</span>
+          <div class="seq-step">Итоговый результат</div>
+        </div>
+
+        <div class="section-card">
+          <div class="section-card-header">
+            <svg width="14" height="14" aria-hidden="true"><use href="#i-file-text"/></svg>
+            <div class="section-card-title">Стартовая страница</div>
+            <span class="badge badge-outline" style="color:var(--muted-fg);">Не добавлена</span>
+          </div>
+          <div class="section-card-body">
+            <div class="empty-pane" aria-label="Стартовая страница не добавлена">
+              <div class="empty-icon" aria-hidden="true">
+                <svg width="22" height="22"><use href="#i-file-text"/></svg>
+              </div>
+              <div style="font-size:14px;font-weight:600;margin-bottom:6px;">Стартовая страница не добавлена</div>
+              <div style="font-size:13px;color:var(--muted-fg);max-width:360px;line-height:1.6;margin-bottom:8px;">
+                Тест начнётся сразу с первого вопроса. Добавьте стартовую страницу, чтобы показать слушателю
+                инструкцию и условия прохождения.
+              </div>
+              <div style="font-size:12px;color:var(--muted-fg);margin-bottom:16px;">
+                Стартовая страница — это <code>content_page</code> с типом <code>intro</code> без <code>topic_id</code> (§5 спецификации).
+              </div>
+              <button class="btn btn-primary" type="button" aria-label="Создать стартовую страницу">
+                <svg width="12" height="12"><use href="#i-plus"/></svg>
+                Создать стартовую страницу
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="drawer-footer">
+        <div class="footer-hint">Тест начнётся с первого вопроса (зона Перед тестом пуста)</div>
+        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Редактирование стартовой страницы ═════════════════════════ -->
+<div id="s-edit" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div class="drawer-col">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Настройки</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true"
+                aria-label="Структура, есть несохранённые изменения">
+          Структура
+          <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <div class="content-area">
+
+        <!-- Editor context note -->
+        <div style="font-size:12px;color:var(--muted-fg);margin-bottom:12px;" role="note">
+          Редактирование content_page: type=intro, topic_id=null — зона "Перед тестом" (Структура)
+        </div>
+
+        <!-- content_page editor card -->
+        <div class="section-card" style="border-color:hsl(217 91% 80%);">
+          <div class="section-card-header" style="background:hsl(217 91% 98%);border-bottom-color:hsl(217 91% 80%);">
+            <span style="font-size:11px;padding:2px 7px;border-radius:var(--radius-sm);background:var(--secondary);font-weight:500;">intro</span>
+            <div class="section-card-title" style="color:var(--primary);">Стартовая страница</div>
+            <span class="status-dot dirty" aria-hidden="true"></span>
+            <span class="badge badge-outline" style="color:var(--primary);">Изменено</span>
+          </div>
+          <div class="section-card-body">
+
+            <!-- Read-only metadata -->
+            <div class="field-group">
+              <div class="field-label">Метаданные страницы</div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+                <div class="ro-chip">type: <strong>intro</strong></div>
+                <div class="ro-chip">topic_id: <strong>— нет</strong></div>
+                <div class="ro-chip">sort_order: <strong>1</strong></div>
+              </div>
+              <div class="field-hint">Тип и привязка к теме не редактируются после создания.</div>
+            </div>
+
+            <!-- mode select -->
+            <div class="field-group">
+              <div class="field-label">Режим страницы (content_pages.mode)</div>
+              <select aria-label="Режим страницы"
+                      style="font-size:13px;padding:6px 8px;border-radius:var(--radius-sm);border:1px solid var(--input-b);font-family:inherit;">
+                <option>template — шаблонная страница</option>
+                <option selected>standard — стандартная страница</option>
+                <option>html — HTML-разметка</option>
+              </select>
+              <div class="field-hint">Определяет, как задаётся содержимое страницы.</div>
+            </div>
+
+            <!-- template_key: only for mode=template; shown greyed out here since mode=standard -->
+            <div class="field-group" style="opacity:.45;" aria-hidden="true">
+              <div class="field-label">Шаблон (content_pages.template_key)</div>
+              <input type="text" value="" placeholder="Ключ шаблона из активного SCORM-шаблона" disabled
+                     style="max-width:320px;" aria-label="Ключ шаблона страницы (недоступно в режиме standard)">
+              <div class="field-hint">Доступно только при режиме "template".</div>
+            </div>
+
+            <!-- values_json: standard mode content fields -->
+            <div class="field-group">
+              <div class="field-label">Содержимое (values_json.values) — режим: standard</div>
+              <div class="field-hint" style="margin-bottom:8px;">Поля содержимого определяются режимом страницы.</div>
+
+              <!-- Заголовок placeholder -->
+              <div style="margin-bottom:10px;">
+                <div style="font-size:12px;color:var(--muted-fg);margin-bottom:4px;">Заголовок (text)</div>
+                <input type="text" value="Добро пожаловать в тест"
+                       aria-label="Заголовок стартовой страницы"
+                       style="max-width:480px;font-size:13px;">
+              </div>
+
+              <!-- Текст placeholder (richText) -->
+              <div style="margin-bottom:10px;">
+                <div style="font-size:12px;color:var(--muted-fg);margin-bottom:4px;">Текст (richText)</div>
+                <div class="mini-toolbar" role="toolbar" aria-label="Форматирование">
+                  <button type="button" title="Жирный" aria-pressed="false" style="font-weight:700;">B</button>
+                  <button type="button" title="Курсив" aria-pressed="false" style="font-style:italic;">I</button>
+                  <button type="button" title="Ссылка" style="font-size:12px;padding:0 4px;">Ссылка</button>
+                  <button type="button" title="Список" style="font-size:12px;padding:0 4px;">Список</button>
+                </div>
+                <div class="editor-area" contenteditable="true" role="textbox" aria-multiline="true"
+                     aria-label="Текст стартовой страницы">
+                  <p>Этот тест проверяет ваши знания в области информационной безопасности.</p>
+                  <p><strong>Продолжительность:</strong> около 20 минут.</p>
+                  <p>Для прохождения необходимо набрать <strong>75%</strong> правильных ответов.</p>
+                </div>
+              </div>
+
+              <!-- Изображение placeholder (asset) -->
+              <div>
+                <div style="font-size:12px;color:var(--muted-fg);margin-bottom:4px;">Изображение (asset, опционально)</div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <div style="width:80px;height:56px;border:1px dashed var(--input-b);border-radius:var(--radius-sm);
+                       display:flex;align-items:center;justify-content:center;color:var(--muted-fg);font-size:11px;">
+                    Нет
+                  </div>
+                  <button class="btn btn-ghost btn-sm" type="button" aria-label="Загрузить изображение для стартовой страницы">Загрузить</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- auto_advance toggle -->
+            <div class="field-group">
+              <div class="field-label">Автопереход (content_pages.auto_advance)</div>
+              <div class="toggle-row">
+                <button class="toggle-switch off" type="button" role="switch" aria-checked="false"
+                        aria-label="Автоматически перейти к следующей странице">
+                  <div class="toggle-knob"></div>
+                </button>
+                <div>
+                  <div class="toggle-label">Автоматически переходить дальше</div>
+                  <div class="toggle-sub">Без ручного действия со стороны слушателя</div>
+                </div>
+              </div>
+
+              <!-- auto_advance_delay_ms — shown disabled when auto_advance=off -->
+              <div style="display:flex;align-items:center;gap:10px;margin-top:6px;opacity:.45;" aria-hidden="true">
+                <div style="font-size:13px;font-weight:500;min-width:140px;">Задержка перехода (сек)</div>
+                <input type="number" value="5" min="1" max="120" disabled
+                       aria-label="Задержка автоперехода в секундах (недоступно)"
+                       style="width:64px;font-size:13px;text-align:center;padding:5px;">
+                <div class="field-hint" style="margin:0;">хранится в мс (auto_advance_delay_ms)</div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      <div class="drawer-footer">
+        <div class="footer-hint">Редактируется content_page type=intro без topic_id (зона Перед тестом)</div>
+        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+        <button class="btn btn-primary" type="button">Сохранить</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance -- PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>§5</td><td>Стартовая страница реализована как <code>content_page</code> с полями: <code>type=intro</code>, <code>topic_id=null</code>, <code>mode</code> (template/standard/html), <code>template_key</code>, <code>sort_order</code> (read-only), <code>values_json.values</code> (поля содержимого зависят от mode), <code>auto_advance</code>, <code>auto_advance_delay_ms</code> (показывается в секундах, хранится в мс).</td></tr>
+      <tr><td>§5</td><td>Стартовая страница находится во вкладке <strong>Структура</strong>, в зоне "Перед тестом". Не является частью вкладки Состав и не является разделом Настроек.</td></tr>
+      <tr><td>§5</td><td>Поток в зависимости от flowMode: Перед тестом &#8594; Блок вопросов по темам &#8594; После теста &#8594; Итоговый результат (показан для flowMode=linear_by_topics). Зона "Перед тестом" выделена как текущая при наличии стартовой страницы; при отсутствии — dashed-border, активен "Блок вопросов по темам".</td></tr>
+      <tr><td>§5</td><td>Поля "Текст кнопки перехода к тесту" и "Требовать подтверждения перед началом" не присутствуют — они отсутствуют в спецификации §5 и являлись изобретёнными controls.</td></tr>
+      <tr><td>§5</td><td>В режиме standard: поля values_json.values включают заголовок (text), текст (richText), изображение (asset). В режиме template: дополнительно показывается поле template_key; в режиме html: textarea для HTML-разметки.</td></tr>
+      <tr><td class="no-code">—</td><td>Пустое состояние: empty-pane с описанием (content_page type=intro без topic_id) и кнопкой "Создать стартовую страницу".</td></tr>
+      <tr><td>NFR-21</td><td>Поток имеет <code>role="note"</code> и <code>aria-label</code>; переключатель: <code>role="switch"</code> и <code>aria-checked</code>; редактируемая область: <code>role="textbox"</code>, <code>aria-label</code>, <code>aria-multiline</code>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function show(id) {
+  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
+    el.classList.toggle('active', el.id === id);
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

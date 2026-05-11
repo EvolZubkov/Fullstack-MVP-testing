@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Archive</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    /* ── Back button: reset browser defaults for <button> ─────────── */
+    .back-btn {
+      border: none; background: none; padding: 0; font-family: inherit;
+    }
+
+    /* ── Page layout ─────────────────────────────────────────────── */
+    .page-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .page-title { font-size: 18px; font-weight: 700; flex: 1; }
+
+    .archive-banner {
+      display: flex; align-items: center; gap: 10px; padding: 10px 24px;
+      background: var(--readonly-bg); border-bottom: 1px solid var(--border);
+      font-size: 13px; color: var(--muted-fg); flex-shrink: 0;
+    }
+
+    /* ── Content split (tree + preview) ──────────────────────────── */
+    .content-split {
+      display: flex; flex: 1; overflow: hidden;
+    }
+    .tree-section {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;
+    }
+
+    /* ── Table: 9 columns ─────────────────────────────────────────
+       Название | Статус | Режим | Сценарий | Тем | Вопросов | Архивирован | Назначений | Actions
+    ────────────────────────────────────────────────────────────── */
+    .tests-table-header {
+      display: grid;
+      grid-template-columns: 1fr 110px 90px 130px 65px 95px 120px 110px 84px;
+      padding: 7px 0; border-bottom: 1px solid var(--border);
+      font-size: 11px; font-weight: 600; color: var(--muted-fg);
+      text-transform: uppercase; letter-spacing: .05em;
+      position: sticky; top: 0; background: var(--bg); z-index: 1; flex-shrink: 0;
+    }
+    .tests-table-header > :first-child { padding-left: 24px; }
+
+    .test-row {
+      display: grid;
+      grid-template-columns: 1fr 110px 90px 130px 65px 95px 120px 110px 84px;
+      align-items: center;
+      padding: 0; border-bottom: 1px solid var(--border);
+      opacity: .78; cursor: pointer;
+    }
+    .test-row:hover { background: var(--accent); opacity: 1; }
+    .test-row.selected { background: hsl(217 91% 97%); opacity: 1; }
+
+    .test-name-cell { padding: 10px 0 10px 24px; }
+    .test-name { font-size: 13px; font-weight: 500; }
+    .test-sub { font-size: 11px; color: var(--muted-fg); margin-top: 2px; }
+
+    /* Center columns 2–9 */
+    .tests-table-header > :nth-child(n+2),
+    .test-row > :nth-child(n+2) {
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* ── Row action buttons wrapper ───────────────────────────────── */
+    .row-actions {
+      display: flex; align-items: center; gap: 4px;
+    }
+
+    /* ── Delete button (icon-only, danger hover) ──────────────────── */
+    .delete-btn {
+      width: 28px; height: 28px; border-radius: var(--radius-sm);
+      border: 1px solid transparent; background: transparent;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--muted-fg); flex-shrink: 0;
+      position: relative;
+    }
+    .delete-btn:hover {
+      background: var(--error-bg); color: var(--destructive); border-color: hsl(0 84% 85%);
+    }
+    .delete-btn[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; top: calc(100% + 6px); bottom: auto; right: 0; left: auto; transform: none;
+      background: hsl(222 47% 11%); color: hsl(0 0% 98%);
+      font-size: 11px; white-space: nowrap; padding: 3px 7px;
+      border-radius: 4px; pointer-events: none; z-index: 30;
+    }
+    .delete-btn[data-tooltip]:hover::before {
+      content: ''; position: absolute; top: calc(100% + 2px); bottom: auto;
+      right: 7px; left: auto; transform: none;
+      border: 4px solid transparent; border-bottom-color: hsl(222 47% 11%);
+      pointer-events: none; z-index: 30;
+    }
+
+
+    .tree-num { font-size: 13px; }
+    .date-cell { font-size: 12px; color: var(--muted-fg); }
+
+    /* ── Mode badge ───────────────────────────────────────────────── */
+    .mode-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 500; padding: 2px 8px;
+      border-radius: 10px; white-space: nowrap;
+    }
+    .mode-badge.standard {
+      background: hsl(0 0% 96%); color: hsl(0 0% 38%); border: 1px solid hsl(0 0% 86%);
+    }
+    .mode-badge.adaptive {
+      background: hsl(262 70% 96%); color: hsl(262 55% 42%); border: 1px solid hsl(262 55% 82%);
+    }
+
+    /* ── Flow chip ────────────────────────────────────────────────── */
+    .flow-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 500; color: var(--fg);
+      padding: 2px 8px; border-radius: var(--radius-sm);
+      background: var(--accent); border: 1px solid var(--card-border);
+      white-space: nowrap; cursor: default;
+    }
+    .flow-chip svg { flex-shrink: 0; color: var(--muted-fg); }
+
+    /* ── Restore button (icon-only) ───────────────────────────────── */
+    .restore-btn {
+      width: 28px; height: 28px; border-radius: var(--radius-sm);
+      border: 1px solid transparent; background: transparent;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--muted-fg); flex-shrink: 0;
+      position: relative;
+    }
+    .restore-btn:hover {
+      background: var(--primary); color: white; border-color: var(--primary);
+    }
+    /* Tooltip — right-anchored so it doesn't overflow the viewport */
+    .restore-btn[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; top: calc(100% + 6px); bottom: auto; right: 0; left: auto; transform: none;
+      background: hsl(222 47% 11%); color: hsl(0 0% 98%);
+      font-size: 11px; white-space: nowrap; padding: 3px 7px;
+      border-radius: 4px; pointer-events: none; z-index: 30;
+    }
+    .restore-btn[data-tooltip]:hover::before {
+      content: ''; position: absolute; top: calc(100% + 2px); bottom: auto;
+      right: 7px; left: auto; transform: none;
+      border: 4px solid transparent; border-bottom-color: hsl(222 47% 11%);
+      pointer-events: none; z-index: 30;
+    }
+
+    /* ── Preview toggle button ─────────────────────────────────────── */
+    .preview-toggle-btn {
+      width: 22px; height: 22px; padding: 0; flex-shrink: 0;
+      border-radius: var(--radius-sm); border: 1px solid transparent;
+      background: transparent; cursor: pointer; color: var(--muted-fg);
+      display: inline-flex; align-items: center; justify-content: center;
+      position: relative;
+      justify-self: end;
+      margin-right: 11px;
+    }
+    .preview-toggle-btn.active {
+      color: var(--primary); border-color: hsl(217 91% 80%); background: var(--accent);
+    }
+    .preview-toggle-btn:hover:not(.active) {
+      background: var(--accent); color: var(--fg); border-color: var(--border);
+    }
+    .preview-toggle-btn[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; top: calc(100% + 6px); bottom: auto; right: 0; left: auto; transform: none;
+      background: hsl(222 47% 11%); color: hsl(0 0% 98%);
+      font-size: 11px; white-space: nowrap; padding: 3px 7px;
+      border-radius: 4px; pointer-events: none; z-index: 30;
+    }
+    .preview-toggle-btn[data-tooltip]:hover::before {
+      content: ''; position: absolute; top: calc(100% + 2px); bottom: auto;
+      right: 7px; left: auto; transform: none;
+      border: 4px solid transparent; border-bottom-color: hsl(222 47% 11%);
+      pointer-events: none; z-index: 30;
+    }
+
+    /* ── Preview panel ────────────────────────────────────────────── */
+    .preview-panel {
+      width: 300px; flex-shrink: 0;
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow-y: auto; background: var(--bg);
+    }
+    .preview-header {
+      padding: 14px 16px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .preview-name {
+      font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 8px;
+    }
+    .preview-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+    .preview-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 18px; }
+    .preview-section-title {
+      font-size: 10px; font-weight: 700; color: var(--muted-fg);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px;
+    }
+    .preview-topic-row {
+      display: flex; align-items: baseline; gap: 6px;
+      font-size: 12px; padding: 3px 0;
+    }
+    .preview-topic-name {
+      flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .preview-topic-dots {
+      flex: none; color: var(--card-border); overflow: hidden; white-space: nowrap; font-size: 10px;
+    }
+    .preview-topic-count { flex-shrink: 0; font-size: 12px; color: var(--muted-fg); }
+    .preview-topic-total {
+      font-size: 11px; color: var(--muted-fg); margin-top: 6px;
+      padding-top: 6px; border-top: 1px solid var(--border);
+    }
+    .preview-kv-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 12px; padding: 3px 0;
+    }
+    .preview-kv-key { color: var(--muted-fg); }
+    .preview-kv-val { font-weight: 500; text-align: right; }
+
+    /* ── Restore confirm dialog ────────────────────────────────────── */
+    .restore-confirm {
+      position: absolute; inset: 0; background: rgba(0,0,0,.55);
+      display: flex; align-items: center; justify-content: center; z-index: 50;
+    }
+    .restore-dialog {
+      background: var(--bg); border-radius: var(--radius);
+      box-shadow: 0 20px 60px rgba(0,0,0,.30); width: 440px; max-width: 96%; overflow: hidden;
+    }
+    .restore-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .restore-title { font-size: 15px; font-weight: 600; }
+    .restore-body { padding: 16px 20px; font-size: 13px; line-height: 1.6; }
+    .restore-footer {
+      padding: 14px 20px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 8px;
+    }
+
+    /* ── Restore: orphan warning (folder deleted) ───────────────── */
+    .restore-warn {
+      display: flex; align-items: flex-start; gap: 8px;
+      background: var(--warn-bg); border: 1px solid var(--warn-border);
+      color: var(--warn-fg); border-radius: var(--radius-md);
+      font-size: 12px; line-height: 1.5; padding: 10px 12px; margin-top: 12px;
+    }
+    .restore-warn svg { flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Delete confirm dialog specifics ─────────────────────────── */
+    .delete-note { margin-top: 10px; color: var(--muted-fg); font-size: 12px; }
+    .btn-danger { background: var(--destructive); color: #fff; border-color: transparent; }
+    .btn-danger:hover { opacity: .9; }
+
+    /* ── Empty state ──────────────────────────────────────────────── */
+    .empty-archive {
+      padding: 48px 24px; text-align: center; color: var(--muted-fg);
+    }
+    .empty-archive-title {
+      font-size: 14px; font-weight: 500; color: var(--fg); margin-bottom: 6px;
+    }
+    .empty-archive-desc { font-size: 13px; }
+
+    /* ── Utility ──────────────────────────────────────────────────── */
+    .svg-sprite { display: none; }
+    .scroll-area { flex: 1; overflow-y: auto; }
+    .flow-chip-sm { font-size: 11px; }
+    .shell-relative { position: relative; }
+    .main-dimmed { opacity: .4; }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Archive:</span>
+  <button class="wf-btn active" type="button" onclick="show('s-list')">Список архива</button>
+  <button class="wf-btn"        type="button" onclick="show('s-preview')">Предпросмотр</button>
+  <button class="wf-btn"        type="button" onclick="show('s-restore')">Подтверждение восстановления</button>
+  <button class="wf-btn"        type="button" onclick="show('s-restore-orphan')">Восстановление: папка удалена</button>
+  <button class="wf-btn"        type="button" onclick="show('s-delete')">Подтверждение удаления</button>
+  <button class="wf-btn"        type="button" onclick="show('s-empty')">Архив пуст</button>
+  <a class="wf-link" href="prd7-tests-list.html">Список тестов &rarr;</a>
+</nav>
+
+<svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+  </symbol>
+  <symbol id="i-question" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/>
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="8" height="4" x="8" y="2" rx="1"/>
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+  </symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </symbol>
+  <symbol id="i-archive-restore" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="20" height="5" x="2" y="3" rx="1"/>
+    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/>
+    <path d="m9 13 3-3 3 3"/><path d="M12 10v8"/>
+  </symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+  </symbol>
+  <symbol id="i-panel-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/>
+  </symbol>
+  <symbol id="i-flow-linear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="5" y1="12" x2="19" y2="12"/><polyline points="15 8 19 12 15 16"/>
+  </symbol>
+  <symbol id="i-flow-topics" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="4" y1="7" x2="10" y2="7"/><line x1="4" y1="12" x2="10" y2="12"/><line x1="4" y1="17" x2="10" y2="17"/>
+    <polyline points="14 9 18 12 14 15"/>
+  </symbol>
+  <symbol id="i-flow-router" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+    <path d="M18 9a9 9 0 0 1-9 9"/>
+  </symbol>
+</svg>
+
+<!-- ═══ STATE: Список архива ════════════════════════════════════════════ -->
+<div id="s-list" class="shell active">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-folder"/></svg>Темы</div>
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div>
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-row"><div class="avatar">АИ</div><div><div class="user-name">Алексей Иванов</div><div class="user-role">Автор</div></div></div>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="page-header">
+      <button class="back-btn" type="button">
+        <svg width="14" height="14" aria-hidden="true"><use href="#i-arrow-left"/></svg>
+        Тесты
+      </button>
+      <div class="page-title">Архив тестов</div>
+    </div>
+    <div class="archive-banner" role="note">
+      Архивированные тесты недоступны для назначения и не отображаются в общем списке. Их можно восстановить.
+    </div>
+    <div class="content-split">
+      <div class="tree-section">
+        <div class="tests-table-header" aria-hidden="true">
+          <div>Название</div>
+          <div>Статус</div>
+          <div>Режим</div>
+          <div>Сценарий</div>
+          <div>Тем</div>
+          <div>Вопросов</div>
+          <div>Архивирован</div>
+          <div>Назначений</div>
+          <button class="preview-toggle-btn" type="button" aria-pressed="false" data-tooltip="Предпросмотр" aria-label="Предпросмотр"><svg width="14" height="14" aria-hidden="true"><use href="#i-panel-right"/></svg></button>
+        </div>
+        <div class="scroll-area">
+          <div class="test-row">
+            <div class="test-name-cell">
+              <div class="test-name">Аудит логов SCORM</div>
+            </div>
+            <div><span class="badge badge-outline" aria-label="Статус: в архиве">В архиве</span></div>
+            <div><span class="mode-badge standard">Стандарт</span></div>
+            <div><span class="flow-chip"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-router"/></svg>Роутер</span></div>
+            <div class="tree-num">1</div>
+            <div class="tree-num">20</div>
+            <div class="date-cell">3 мая 2025</div>
+            <div class="tree-num">3</div>
+            <div class="row-actions">
+              <button class="restore-btn" type="button" data-tooltip="Восстановить"
+                      aria-label="Восстановить тест 'Аудит логов SCORM'">
+                <svg width="14" height="14" aria-hidden="true"><use href="#i-archive-restore"/></svg>
+              </button>
+              <button class="delete-btn" type="button" data-tooltip="Удалить навсегда"
+                      aria-label="Удалить тест 'Аудит логов SCORM' навсегда">
+                <svg width="14" height="14" aria-hidden="true"><use href="#i-trash"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="test-row">
+            <div class="test-name-cell">
+              <div class="test-name">Введение в DevOps</div>
+            </div>
+            <div><span class="badge badge-outline" aria-label="Статус: в архиве">В архиве</span></div>
+            <div><span class="mode-badge adaptive">Адаптив</span></div>
+            <div><span class="flow-chip"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-topics"/></svg>По темам</span></div>
+            <div class="tree-num">2</div>
+            <div class="tree-num">24</div>
+            <div class="date-cell">15 апр 2025</div>
+            <div class="tree-num">7</div>
+            <div class="row-actions">
+              <button class="restore-btn" type="button" data-tooltip="Восстановить"
+                      aria-label="Восстановить тест 'Введение в DevOps'">
+                <svg width="14" height="14" aria-hidden="true"><use href="#i-archive-restore"/></svg>
+              </button>
+              <button class="delete-btn" type="button" data-tooltip="Удалить навсегда"
+                      aria-label="Удалить тест 'Введение в DevOps' навсегда">
+                <svg width="14" height="14" aria-hidden="true"><use href="#i-trash"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Предпросмотр ══════════════════════════════════════════════ -->
+<div id="s-preview" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-row"><div class="avatar">АИ</div><div><div class="user-name">Алексей Иванов</div><div class="user-role">Автор</div></div></div>
+    </div>
+  </aside>
+  <div class="main">
+    <div class="page-header">
+      <button class="back-btn" type="button">
+        <svg width="14" height="14" aria-hidden="true"><use href="#i-arrow-left"/></svg>
+        Тесты
+      </button>
+      <div class="page-title">Архив тестов</div>
+    </div>
+    <div class="archive-banner" role="note">
+      Архивированные тесты недоступны для назначения и не отображаются в общем списке. Их можно восстановить.
+    </div>
+    <div class="content-split">
+      <!-- ── Tree section ──────────────────────────────────────── -->
+      <div class="tree-section">
+        <div class="tests-table-header" aria-hidden="true">
+          <div>Название</div>
+          <div>Статус</div>
+          <div>Режим</div>
+          <div>Сценарий</div>
+          <div>Тем</div>
+          <div>Вопросов</div>
+          <div>Архивирован</div>
+          <div>Назначений</div>
+          <button class="preview-toggle-btn active" type="button" aria-pressed="true" data-tooltip="Скрыть предпросмотр" aria-label="Скрыть предпросмотр"><svg width="14" height="14" aria-hidden="true"><use href="#i-panel-right"/></svg></button>
+        </div>
+        <div class="scroll-area">
+          <div class="test-row selected">
+            <div class="test-name-cell">
+              <div class="test-name">Аудит логов SCORM</div>
+            </div>
+            <div><span class="badge badge-outline">В архиве</span></div>
+            <div><span class="mode-badge standard">Стандарт</span></div>
+            <div><span class="flow-chip"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-router"/></svg>Роутер</span></div>
+            <div class="tree-num">1</div>
+            <div class="tree-num">20</div>
+            <div class="date-cell">3 мая 2025</div>
+            <div class="tree-num">3</div>
+            <div class="row-actions">
+              <button class="restore-btn" type="button" data-tooltip="Восстановить"
+                      aria-label="Восстановить тест 'Аудит логов SCORM'">
+                <svg width="14" height="14" aria-hidden="true"><use href="#i-archive-restore"/></svg>
+              </button>
+              <button class="delete-btn" type="button" data-tooltip="Удалить навсегда"
+                      aria-label="Удалить тест 'Аудит логов SCORM' навсегда">
+                <svg width="14" height="14" aria-hidden="true"><use href="#i-trash"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="test-row">
+            <div class="test-name-cell">
+              <div class="test-name">Введение в DevOps</div>
+            </div>
+            <div><span class="badge badge-outline">В архиве</span></div>
+            <div><span class="mode-badge adaptive">Адаптив</span></div>
+            <div><span class="flow-chip"><svg width="12" height="12" aria-hidden="true"><use href="#i-flow-topics"/></svg>По темам</span></div>
+            <div class="tree-num">2</div>
+            <div class="tree-num">24</div>
+            <div class="date-cell">15 апр 2025</div>
+            <div class="tree-num">7</div>
+            <div class="row-actions">
+              <button class="restore-btn" type="button" data-tooltip="Восстановить"
+                      aria-label="Восстановить тест 'Введение в DevOps'">
+                <svg width="14" height="14" aria-hidden="true"><use href="#i-archive-restore"/></svg>
+              </button>
+              <button class="delete-btn" type="button" data-tooltip="Удалить навсегда"
+                      aria-label="Удалить тест 'Введение в DevOps' навсегда">
+                <svg width="14" height="14" aria-hidden="true"><use href="#i-trash"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Preview panel ─────────────────────────────────────── -->
+      <aside class="preview-panel" aria-label="Предпросмотр теста">
+        <div class="preview-header">
+          <div class="preview-name">Аудит логов SCORM</div>
+          <div class="preview-badges">
+            <span class="badge badge-outline">В архиве</span>
+            <span class="mode-badge standard">Стандарт</span>
+            <span class="flow-chip flow-chip-sm">
+              <svg width="11" height="11" aria-hidden="true"><use href="#i-flow-router"/></svg>Роутер
+            </span>
+          </div>
+        </div>
+        <div class="preview-body">
+          <div>
+            <div class="preview-section-title">Темы</div>
+            <div class="preview-topic-row">
+              <span class="preview-topic-name">Основы SCORM 2004</span>
+              <span class="preview-topic-dots">···············</span>
+              <span class="preview-topic-count">20 вопр.</span>
+            </div>
+            <div class="preview-topic-total">В пуле: 20 вопр. &nbsp;&middot;&nbsp; Задаётся: 20</div>
+          </div>
+          <div>
+            <div class="preview-section-title">Прохождение</div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Сценарий</span>
+              <span class="preview-kv-val">Роутер по темам</span>
+            </div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Порог успеха</span>
+              <span class="preview-kv-val">75 %</span>
+            </div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Лимит времени</span>
+              <span class="preview-kv-val">Нет</span>
+            </div>
+          </div>
+          <div>
+            <div class="preview-section-title">Архивирование</div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Дата</span>
+              <span class="preview-kv-val">3 мая 2025</span>
+            </div>
+            <div class="preview-kv-row">
+              <span class="preview-kv-key">Назначений</span>
+              <span class="preview-kv-val">3</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Подтверждение восстановления ═════════════════════════════ -->
+<div id="s-restore" class="shell shell-relative">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div>
+    </nav>
+    <div class="sidebar-footer"><div class="user-row"><div class="avatar">АИ</div></div></div>
+  </aside>
+  <div class="main main-dimmed">
+    <div class="page-header">
+      <button class="back-btn" type="button" tabindex="-1">
+        <svg width="14" height="14" aria-hidden="true"><use href="#i-arrow-left"/></svg>
+        Тесты
+      </button>
+      <div class="page-title">Архив тестов</div>
+    </div>
+    <div class="tests-table-header" aria-hidden="true">
+      <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div>
+      <div>Тем</div><div>Вопросов</div><div>Архивирован</div><div>Назначений</div><div></div>
+    </div>
+    <div class="test-row" role="row" aria-hidden="true">
+      <div class="test-name-cell"><div class="test-name">Аудит логов SCORM</div></div>
+    </div>
+  </div>
+  <div class="restore-confirm" aria-hidden="true">
+    <div class="restore-dialog" role="dialog" aria-modal="true" aria-labelledby="restore-title">
+      <div class="restore-header">
+        <div id="restore-title" class="restore-title">Восстановить тест?</div>
+      </div>
+      <div class="restore-body">
+        Тест <strong>"Аудит логов SCORM"</strong> будет переведён в статус
+        <span class="badge badge-secondary">Черновик</span> и снова появится в общем списке тестов.
+        Исторические данные попыток сохранятся.
+      </div>
+      <div class="restore-footer">
+        <button class="btn btn-ghost btn-sm" type="button">Отмена</button>
+        <button class="btn btn-primary" type="button">Восстановить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Восстановление — папка удалена ══════════════════════════ -->
+<div id="s-restore-orphan" class="shell shell-relative">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div>
+    </nav>
+    <div class="sidebar-footer"><div class="user-row"><div class="avatar">АИ</div></div></div>
+  </aside>
+  <div class="main main-dimmed">
+    <div class="page-header">
+      <button class="back-btn" type="button" tabindex="-1">
+        <svg width="14" height="14" aria-hidden="true"><use href="#i-arrow-left"/></svg>
+        Тесты
+      </button>
+      <div class="page-title">Архив тестов</div>
+    </div>
+    <div class="tests-table-header" aria-hidden="true">
+      <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div>
+      <div>Тем</div><div>Вопросов</div><div>Архивирован</div><div>Назначений</div><div></div>
+    </div>
+    <div class="test-row" role="row" aria-hidden="true">
+      <div class="test-name-cell"><div class="test-name">Аудит логов SCORM</div></div>
+    </div>
+  </div>
+  <div class="restore-confirm" aria-hidden="true">
+    <div class="restore-dialog" role="dialog" aria-modal="true" aria-labelledby="restore-orphan-title">
+      <div class="restore-header">
+        <div id="restore-orphan-title" class="restore-title">Восстановить тест?</div>
+      </div>
+      <div class="restore-body">
+        Тест <strong>«Аудит логов SCORM»</strong> будет переведён в статус
+        <span class="badge badge-secondary">Черновик</span> и снова появится в общем списке тестов.
+        Исторические данные попыток сохранятся.
+        <div class="restore-warn" role="alert">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span>Папка <strong>«Информационная безопасность»</strong> была удалена. Тест будет восстановлен в корень списка тестов.</span>
+        </div>
+      </div>
+      <div class="restore-footer">
+        <button class="btn btn-ghost btn-sm" type="button">Отмена</button>
+        <button class="btn btn-primary" type="button">Восстановить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Подтверждение удаления ══════════════════════════════════ -->
+<div id="s-delete" class="shell shell-relative">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div>
+    </nav>
+    <div class="sidebar-footer"><div class="user-row"><div class="avatar">АИ</div></div></div>
+  </aside>
+  <div class="main main-dimmed">
+    <div class="page-header">
+      <button class="back-btn" type="button" tabindex="-1">
+        <svg width="14" height="14" aria-hidden="true"><use href="#i-arrow-left"/></svg>
+        Тесты
+      </button>
+      <div class="page-title">Архив тестов</div>
+    </div>
+    <div class="tests-table-header" aria-hidden="true">
+      <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div>
+      <div>Тем</div><div>Вопросов</div><div>Архивирован</div><div>Назначений</div><div></div>
+    </div>
+    <div class="test-row" aria-hidden="true">
+      <div class="test-name-cell"><div class="test-name">Аудит логов SCORM</div></div>
+    </div>
+  </div>
+  <div class="restore-confirm" aria-hidden="true">
+    <div class="restore-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+      <div class="restore-header">
+        <div id="delete-title" class="restore-title">Удалить тест навсегда?</div>
+      </div>
+      <div class="restore-body">
+        <p>Тест <strong>"Аудит логов SCORM"</strong> будет удалён без возможности восстановления.</p>
+        <p class="delete-note">Исторические данные попыток также будут удалены.</p>
+      </div>
+      <div class="restore-footer">
+        <button class="btn btn-ghost btn-sm" type="button">Отмена</button>
+        <button class="btn btn-sm btn-danger" type="button">Удалить навсегда</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Архив пуст ═══════════════════════════════════════════════ -->
+<div id="s-empty" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div>
+    </nav>
+    <div class="sidebar-footer"><div class="user-row"><div class="avatar">АИ</div></div></div>
+  </aside>
+  <div class="main">
+    <div class="page-header">
+      <button class="back-btn" type="button">
+        <svg width="14" height="14" aria-hidden="true"><use href="#i-arrow-left"/></svg>
+        Тесты
+      </button>
+      <div class="page-title">Архив тестов</div>
+    </div>
+    <div class="archive-banner" role="note">
+      Архивированные тесты недоступны для назначения и не отображаются в общем списке.
+    </div>
+    <div class="empty-archive">
+      <div class="empty-archive-title">Архив пуст</div>
+      <div class="empty-archive-desc">Архивированные тесты будут отображаться здесь.</div>
+    </div>
+  </div>
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance — PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>FR-31</td><td>Архивированные тесты не отображаются в основном списке (<code>prd7-tests-list.html</code>). Архив доступен через отдельный раздел ("Архив тестов" в header страницы тестов).</td></tr>
+      <tr><td>FR-31</td><td>Восстановление через icon-кнопку с хинтом и confirmation dialog; тест переводится в статус "Черновик".</td></tr>
+      <tr><td>FR-31 edge case</td><td>Если папка, из которой тест был архивирован, удалена: в диалоге подтверждения показывается предупреждение; тест восстанавливается в корень списка тестов.</td></tr>
+      <tr><td class="no-code">—</td><td>Архивированные тесты недоступны для назначения (кнопки назначения отсутствуют).</td></tr>
+      <tr><td class="no-code">—</td><td>Таблица содержит колонки: Статус, Режим, Сценарий, Тем, Вопросов, Архивирован, Назначений.</td></tr>
+      <tr><td class="no-code">—</td><td>Панель предпросмотра по аналогии с <code>prd7-tests-list.html</code> — toggle-кнопка в последней колонке заголовка.</td></tr>
+      <tr><td class="no-code">—</td><td>Состояние "Архив пуст" с empty state.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function show(id) {
+  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
+    el.classList.toggle('active', el.id === id);
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

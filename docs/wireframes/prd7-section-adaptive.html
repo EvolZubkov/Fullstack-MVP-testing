@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Adaptivity Settings Section</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    /* Drawer column layout */
+    .drawer-col {
+      display: flex; flex-direction: column;
+      height: 100%; background: var(--bg); overflow: hidden;
+    }
+    .drawer-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .drawer-title { font-size: 15px; font-weight: 700; flex: 1; }
+
+    /* Tab bar */
+    .tab-bar {
+      display: flex; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; padding: 0 20px;
+    }
+    .tab-item {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 14px; font-size: 13px; color: var(--muted-fg);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      background: transparent; border-top: none; border-left: none; border-right: none;
+      cursor: pointer; font-family: inherit;
+    }
+    .tab-item.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+
+    /* Settings pane: side-nav + content */
+    .settings-pane { display: flex; flex: 1; overflow: hidden; }
+    .settings-side-nav {
+      width: 240px; flex-shrink: 0; border-right: 1px solid var(--border);
+      overflow-y: auto; padding: 8px 0;
+    }
+    .nav-section-item {
+      display: flex; align-items: center;
+      padding: 9px 16px; font-size: 13px; cursor: pointer; width: 100%;
+      border: none; border-left: 3px solid transparent;
+      background: transparent; color: var(--fg); text-align: left; font-family: inherit;
+    }
+    .nav-section-item.active {
+      border-left-color: var(--primary); color: var(--primary);
+      background: var(--accent); font-weight: 500;
+    }
+    .nav-section-item:hover:not(.active) { background: var(--accent); }
+    .settings-content { flex: 1; overflow-y: auto; padding: 20px; }
+
+    /* Footer */
+    .drawer-footer {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    .footer-hint { font-size: 12px; color: var(--muted-fg); flex: 1; }
+
+    /* Section cards */
+    .section-card {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); overflow: hidden; margin-bottom: 14px;
+    }
+    .section-card-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px; border-bottom: 1px solid var(--card-border);
+      background: var(--accent);
+    }
+    .section-card-title { font-size: 13px; font-weight: 600; flex: 1; }
+    .section-card-body { padding: 16px; }
+
+    /* Mode chip */
+    .mode-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 12px; background: var(--secondary); border-radius: var(--radius);
+      font-size: 13px; margin-bottom: 16px;
+    }
+    .mode-chip-label { color: var(--muted-fg); }
+    .mode-chip-value { font-weight: 600; color: var(--primary); }
+    .mode-chip a { font-size: 12px; color: var(--primary); text-decoration: underline; margin-left: 8px; }
+
+    /* Toggle */
+    .toggle-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .toggle-switch {
+      position: relative; width: 36px; height: 20px; border-radius: 10px;
+      background: var(--primary); cursor: pointer; flex-shrink: 0; border: none;
+    }
+    .toggle-switch.off { background: var(--muted-fg); }
+    .toggle-knob {
+      position: absolute; top: 2px; right: 2px; width: 16px; height: 16px;
+      background: white; border-radius: 50%;
+    }
+    .toggle-switch.off .toggle-knob { right: auto; left: 2px; }
+    .toggle-label { font-size: 13px; font-weight: 500; }
+    .toggle-sub { font-size: 12px; color: var(--muted-fg); }
+
+    /* Field helpers */
+    .field-group { margin-bottom: 14px; }
+    .field-label { font-size: 13px; font-weight: 500; margin-bottom: 5px; }
+    .field-hint { font-size: 12px; color: var(--muted-fg); margin-top: 4px; }
+
+    /* Topics table */
+    .topics-table { width: 100%; border-collapse: collapse; }
+    .topics-table thead th {
+      text-align: left; font-size: 11px; font-weight: 600; color: var(--muted-fg);
+      text-transform: uppercase; letter-spacing: .05em;
+      padding: 6px 10px; border-bottom: 1px solid var(--border);
+    }
+    .topics-table tbody tr { border-bottom: 1px solid var(--card-border); }
+    .topics-table tbody tr:hover { background: var(--accent); }
+    .topics-table tbody td { padding: 9px 10px; font-size: 13px; vertical-align: middle; }
+    .topic-name-cell { font-weight: 500; }
+    .topic-sub-cell { font-size: 12px; color: var(--muted-fg); margin-top: 1px; }
+
+    /* Failure feedback textarea in table */
+    .failure-input {
+      width: 100%; font-size: 12px; font-family: inherit; resize: none;
+      border: 1px solid var(--input-b); border-radius: var(--radius-sm);
+      padding: 5px 7px; background: var(--bg); color: var(--fg); min-height: 48px;
+    }
+
+    /* Levels detail panel */
+    .levels-panel {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      overflow: hidden; margin-bottom: 14px; background: var(--bg);
+    }
+    .levels-panel-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; background: var(--accent); border-bottom: 1px solid var(--card-border);
+    }
+    .levels-panel-title { font-size: 13px; font-weight: 600; flex: 1; }
+    .levels-table-wrap { overflow-x: auto; }
+    .levels-table { border-collapse: collapse; font-size: 12px; min-width: 860px; width: 100%; }
+    .levels-table thead th {
+      text-align: left; font-weight: 600; color: var(--muted-fg);
+      font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+      padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap;
+    }
+    .levels-table tbody tr { border-bottom: 1px solid var(--card-border); }
+    .levels-table tbody tr:hover { background: var(--accent); }
+    .levels-table tbody td { padding: 7px 8px; vertical-align: middle; }
+    .num-input-sm {
+      width: 52px; text-align: center; font-size: 12px; padding: 4px 5px;
+      border-radius: var(--radius-sm); border: 1px solid var(--input-b); font-family: inherit;
+    }
+    .num-input-sm.error { border-color: var(--destructive); }
+    .type-select {
+      font-size: 12px; padding: 4px 6px; border-radius: var(--radius-sm);
+      border: 1px solid var(--input-b); font-family: inherit; background: var(--bg);
+    }
+    .btn-link-sm {
+      font-size: 12px; color: var(--primary); background: none; border: none;
+      cursor: pointer; padding: 0; font-family: inherit; text-decoration: underline;
+    }
+    .action-row { display: flex; gap: 4px; align-items: center; }
+    .icon-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--bg); cursor: pointer;
+      color: var(--muted-fg); font-size: 12px;
+    }
+    .icon-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .icon-btn.danger:hover { border-color: var(--destructive); color: var(--destructive); }
+    .levels-panel-footer { padding: 10px 14px; border-top: 1px solid var(--card-border); }
+
+    /* Difficulty chart */
+    .difficulty-chart {
+      height: 80px; border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm); background: var(--bg);
+      display: flex; align-items: flex-end; gap: 4px; padding: 8px 10px;
+      position: relative; overflow: hidden;
+    }
+    .diff-bar { flex: 1; border-radius: 3px 3px 0 0; background: var(--primary); opacity: .45; }
+    .diff-bar.selected { opacity: 1; }
+    .diff-chart-label {
+      position: absolute; bottom: 4px; left: 0; right: 0;
+      display: flex; justify-content: space-around;
+      font-size: 10px; color: var(--muted-fg); padding: 0 10px;
+    }
+
+    /* Info / error banners */
+    .info-banner {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px 14px; background: var(--info-bg); border: 1px solid var(--info-border);
+      border-radius: var(--radius); margin-bottom: 14px; font-size: 13px; color: var(--info-fg);
+    }
+    .info-banner svg { flex-shrink: 0; margin-top: 1px; }
+    .error-banner {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 14px; background: var(--error-bg); border: 1px solid var(--error-border);
+      border-radius: var(--radius); margin-bottom: 14px; font-size: 13px; color: var(--destructive);
+    }
+    .error-banner svg { flex-shrink: 0; margin-top: 1px; }
+
+    /* No-mode placeholder */
+    .no-mode-placeholder {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 60px 40px; color: var(--muted-fg); gap: 12px;
+    }
+    .no-mode-placeholder p { font-size: 14px; line-height: 1.6; max-width: 420px; margin: 0; }
+    .no-mode-placeholder a { color: var(--primary); text-decoration: underline; }
+
+    /* JSON textarea */
+    .json-textarea {
+      width: 100%; min-height: 80px; resize: vertical; font-size: 12px;
+      font-family: 'Consolas', 'Courier New', monospace; line-height: 1.6;
+      border: 1px solid var(--input-b); border-radius: var(--radius-sm);
+      padding: 8px 10px; background: var(--bg); color: var(--fg);
+    }
+    .note-text {
+      font-size: 12px; color: var(--muted-fg); font-style: italic; margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Адаптивность:</span>
+  <button class="wf-btn active" type="button" onclick="show('s-default')">s-default (адаптивный режим)</button>
+  <button class="wf-btn"        type="button" onclick="show('s-no-mode')">s-no-mode (стандартный режим)</button>
+  <button class="wf-btn"        type="button" onclick="show('s-error')">s-error (ошибка порога)</button>
+  <a class="wf-link" href="prd7-editor-settings-tab.html">Настройки &rarr;</a>
+</nav>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/>
+    <line x1="12" y1="8" x2="12.01" y2="8"/>
+  </symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </symbol>
+  <symbol id="i-chevron-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="18 15 12 9 6 15"/>
+  </symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="6 9 12 15 18 9"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  </symbol>
+</svg>
+
+<!-- ═══ STATE: s-default — adaptive mode active ════════════════════════════ -->
+<div id="s-default" class="shell active">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div class="drawer-col">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true">Настройки</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Структура</button>
+      </div>
+
+      <div class="settings-pane">
+        <!-- Side nav -->
+        <nav class="settings-side-nav" aria-label="Разделы настроек">
+          <button class="nav-section-item" type="button">Основное</button>
+          <button class="nav-section-item" type="button">Режим и сценарий</button>
+          <button class="nav-section-item" type="button">Правила прохождения</button>
+          <button class="nav-section-item" type="button">Ограничения</button>
+          <button class="nav-section-item" type="button">Обратная связь</button>
+          <button class="nav-section-item" type="button">Интеграция</button>
+          <button class="nav-section-item active" type="button" aria-current="page">Адаптивность</button>
+        </nav>
+
+        <!-- Content area -->
+        <div class="settings-content">
+
+          <!-- 1. Read-only mode chip -->
+          <div class="mode-chip" role="note" aria-label="Текущий режим теста: Адаптивный">
+            <span class="mode-chip-label">Режим теста:</span>
+            <span class="mode-chip-value">Адаптивный</span>
+            <a href="#" aria-label="Перейти к разделу Режим и сценарий">Изменить в Режим и сценарий</a>
+          </div>
+
+          <!-- 2. show_difficulty_level toggle -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <div class="section-card-title">Отображение сложности</div>
+            </div>
+            <div class="section-card-body">
+              <div class="toggle-row">
+                <button class="toggle-switch" type="button" role="switch" aria-checked="true"
+                        aria-label="Показывать уровень сложности обучающемуся">
+                  <div class="toggle-knob"></div>
+                </button>
+                <div>
+                  <div class="toggle-label">Показывать уровень сложности обучающемуся</div>
+                  <div class="toggle-sub">tests.show_difficulty_level — управляет видимостью индикатора сложности в SCORM-плеере</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. adaptive_settings_json -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <div class="section-card-title">Общие параметры адаптации</div>
+              <span class="badge badge-outline" style="font-size:11px;">JSON / advanced</span>
+            </div>
+            <div class="section-card-body">
+              <div class="field-group">
+                <div class="field-label">tests.adaptive_settings_json</div>
+                <textarea class="json-textarea" aria-label="Общие параметры адаптации (JSON)">{}
+</textarea>
+                <p class="note-text">Уточняется в следующей итерации. Сохраняется как свободный JSON.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. Per-topic table -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <div class="section-card-title">Адаптация по темам</div>
+              <span class="badge badge-outline" style="font-size:11px;">2 темы</span>
+            </div>
+            <div class="section-card-body" style="padding:0;">
+              <table class="topics-table" aria-label="Адаптивные настройки по темам">
+                <thead>
+                  <tr>
+                    <th>Тема</th>
+                    <th style="width:80px;">Включено</th>
+                    <th style="width:240px;">Обратная связь при провале темы</th>
+                    <th style="width:100px;">Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <div class="topic-name-cell">Основы ИБ</div>
+                      <div class="topic-sub-cell">adaptive_topic_settings</div>
+                    </td>
+                    <td>
+                      <button class="toggle-switch" type="button" role="switch" aria-checked="true"
+                              aria-label="Включить адаптацию для темы Основы ИБ">
+                        <div class="toggle-knob"></div>
+                      </button>
+                    </td>
+                    <td>
+                      <textarea class="failure-input" aria-label="Обратная связь при провале, тема Основы ИБ">Рекомендуем повторить базовые понятия перед следующей попыткой.</textarea>
+                    </td>
+                    <td>
+                      <button class="btn btn-ghost btn-sm" type="button" aria-label="Настроить уровни темы Основы ИБ">Уровни &rarr;</button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>
+                      <div class="topic-name-cell">Классификация угроз</div>
+                      <div class="topic-sub-cell">adaptive_topic_settings</div>
+                    </td>
+                    <td>
+                      <button class="toggle-switch off" type="button" role="switch" aria-checked="false"
+                              aria-label="Включить адаптацию для темы Классификация угроз">
+                        <div class="toggle-knob"></div>
+                      </button>
+                    </td>
+                    <td>
+                      <textarea class="failure-input" aria-label="Обратная связь при провале, тема Классификация угроз" placeholder="Введите текст для отображения при провале темы..."></textarea>
+                    </td>
+                    <td>
+                      <button class="btn btn-ghost btn-sm" type="button" aria-label="Настроить уровни темы Классификация угроз">Уровни &rarr;</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 5. Per-topic detail panel (Основы ИБ, expanded) -->
+          <div class="levels-panel">
+            <div class="levels-panel-header">
+              <div class="levels-panel-title">Уровни темы: Основы ИБ</div>
+              <span class="badge badge-outline" style="font-size:11px;">adaptive_levels</span>
+              <button class="btn btn-ghost btn-sm" type="button" aria-label="Свернуть панель уровней">&#8963;</button>
+            </div>
+            <div class="levels-table-wrap">
+              <table class="levels-table" aria-label="Уровни адаптации темы Основы ИБ">
+                <thead>
+                  <tr>
+                    <th style="width:48px;">Порядок</th>
+                    <th style="width:110px;">Название</th>
+                    <th style="width:70px;">Мин. сл.</th>
+                    <th style="width:70px;">Макс. сл.</th>
+                    <th style="width:64px;">Кол-во</th>
+                    <th style="width:60px;">Порог</th>
+                    <th style="width:110px;">Тип порога</th>
+                    <th style="width:90px;">Обр. связь</th>
+                    <th style="width:64px;">Ссылки</th>
+                    <th style="width:64px;">PDF</th>
+                    <th style="width:80px;">Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style="text-align:center;">
+                      <input class="num-input-sm" type="number" value="1" min="1"
+                             aria-label="Порядок уровня 1">
+                    </td>
+                    <td>
+                      <input type="text" value="Начальный" style="font-size:12px;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--input-b);width:100%;"
+                             aria-label="Название уровня 1">
+                    </td>
+                    <td style="text-align:center;">
+                      <input class="num-input-sm" type="number" value="1" min="1" max="10"
+                             aria-label="Мин. сложность уровня 1">
+                    </td>
+                    <td style="text-align:center;">
+                      <input class="num-input-sm" type="number" value="3" min="1" max="10"
+                             aria-label="Макс. сложность уровня 1">
+                    </td>
+                    <td style="text-align:center;">
+                      <input class="num-input-sm" type="number" value="5" min="1"
+                             aria-label="Количество вопросов уровня 1">
+                    </td>
+                    <td style="text-align:center;">
+                      <input class="num-input-sm" type="number" value="70" min="0" max="100"
+                             aria-label="Порог прохождения уровня 1">
+                    </td>
+                    <td>
+                      <select class="type-select" aria-label="Тип порога уровня 1">
+                        <option selected>процент</option>
+                        <option>абсолютное</option>
+                      </select>
+                    </td>
+                    <td>
+                      <button class="btn-link-sm" type="button" aria-label="Открыть редактор обратной связи уровня 1">Открыть...</button>
+                    </td>
+                    <td style="text-align:center;">
+                      <button class="btn-link-sm" type="button" aria-label="Ссылки уровня 1, 1 ссылка">1</button>
+                    </td>
+                    <td style="text-align:center;">
+                      <button class="btn-link-sm" type="button" aria-label="PDF-документы уровня 1, нет">0</button>
+                    </td>
+                    <td>
+                      <div class="action-row">
+                        <button class="icon-btn" type="button" aria-label="Переместить уровень выше">
+                          <svg width="12" height="12"><use href="#i-chevron-up"/></svg>
+                        </button>
+                        <button class="icon-btn" type="button" aria-label="Переместить уровень ниже">
+                          <svg width="12" height="12"><use href="#i-chevron-down"/></svg>
+                        </button>
+                        <button class="icon-btn danger" type="button" aria-label="Удалить уровень">
+                          <svg width="12" height="12"><use href="#i-trash"/></svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="text-align:center;">
+                      <input class="num-input-sm" type="number" value="2" min="1"
+                             aria-label="Порядок уровня 2">
+                    </td>
+                    <td>
+                      <input type="text" value="Продвинутый" style="font-size:12px;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--input-b);width:100%;"
+                             aria-label="Название уровня 2">
+                    </td>
+                    <td style="text-align:center;">
+                      <input class="num-input-sm" type="number" value="4" min="1" max="10"
+                             aria-label="Мин. сложность уровня 2">
+                    </td>
+                    <td style="text-align:center;">
+                      <input class="num-input-sm" type="number" value="5" min="1" max="10"
+                             aria-label="Макс. сложность уровня 2">
+                    </td>
+                    <td style="text-align:center;">
+                      <input class="num-input-sm" type="number" value="8" min="1"
+                             aria-label="Количество вопросов уровня 2">
+                    </td>
+                    <td style="text-align:center;">
+                      <input class="num-input-sm" type="number" value="75" min="0" max="100"
+                             aria-label="Порог прохождения уровня 2">
+                    </td>
+                    <td>
+                      <select class="type-select" aria-label="Тип порога уровня 2">
+                        <option selected>процент</option>
+                        <option>абсолютное</option>
+                      </select>
+                    </td>
+                    <td>
+                      <button class="btn-link-sm" type="button" aria-label="Открыть редактор обратной связи уровня 2">Открыть...</button>
+                    </td>
+                    <td style="text-align:center;">
+                      <button class="btn-link-sm" type="button" aria-label="Ссылки уровня 2, 2 ссылки">2</button>
+                    </td>
+                    <td style="text-align:center;">
+                      <button class="btn-link-sm" type="button" aria-label="PDF-документы уровня 2, 1 документ">1</button>
+                    </td>
+                    <td>
+                      <div class="action-row">
+                        <button class="icon-btn" type="button" aria-label="Переместить уровень выше">
+                          <svg width="12" height="12"><use href="#i-chevron-up"/></svg>
+                        </button>
+                        <button class="icon-btn" type="button" aria-label="Переместить уровень ниже">
+                          <svg width="12" height="12"><use href="#i-chevron-down"/></svg>
+                        </button>
+                        <button class="icon-btn danger" type="button" aria-label="Удалить уровень">
+                          <svg width="12" height="12"><use href="#i-trash"/></svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="levels-panel-footer">
+              <button class="btn btn-outline btn-sm" type="button">
+                <svg width="12" height="12" style="margin-right:4px;"><use href="#i-plus"/></svg>
+                Добавить уровень
+              </button>
+            </div>
+          </div>
+
+          <!-- 6. Difficulty distribution reference card -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <div class="section-card-title">Распределение сложности в банке</div>
+              <span class="badge badge-outline" style="font-size:11px;">Справочно</span>
+            </div>
+            <div class="section-card-body">
+              <div class="difficulty-chart" role="img"
+                   aria-label="Диаграмма: Уровень 1 (лёгкий) — 42 вопроса, Уровень 2 — 28 вопросов, Уровень 3 — 18 вопросов, Уровень 4 — 9 вопросов, Уровень 5 (сложный) — 5 вопросов">
+                <div class="diff-bar" style="height:85%;" aria-hidden="true"></div>
+                <div class="diff-bar selected" style="height:58%;" aria-hidden="true"></div>
+                <div class="diff-bar" style="height:37%;" aria-hidden="true"></div>
+                <div class="diff-bar" style="height:19%;" aria-hidden="true"></div>
+                <div class="diff-bar" style="height:11%;" aria-hidden="true"></div>
+                <div class="diff-chart-label" aria-hidden="true">
+                  <span>1 (42)</span>
+                  <span>2 (28)</span>
+                  <span>3 (18)</span>
+                  <span>4 (9)</span>
+                  <span>5 (5)</span>
+                </div>
+              </div>
+              <p class="field-hint" style="margin-top:8px;">Данные из банка вопросов. Рекомендуется не менее 5 вопросов на каждый уровень сложности для корректной адаптации.</p>
+            </div>
+          </div>
+
+        </div><!-- /settings-content -->
+      </div><!-- /settings-pane -->
+
+      <div class="drawer-footer">
+        <div class="footer-hint">Адаптивный режим. Изменения сохраняются для всего теста атомарно.</div>
+        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+        <button class="btn btn-primary" type="button">Сохранить</button>
+      </div>
+
+    </div><!-- /drawer-col -->
+  </div><!-- /main -->
+</div><!-- /s-default -->
+
+<!-- ═══ STATE: s-no-mode — standard mode (Адаптивность hidden) ════════════ -->
+<div id="s-no-mode" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div class="drawer-col">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true">Настройки</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Структура</button>
+      </div>
+
+      <div class="settings-pane">
+        <!-- Side nav: Адаптивность item is absent when mode=standard -->
+        <nav class="settings-side-nav" aria-label="Разделы настроек">
+          <button class="nav-section-item" type="button">Основное</button>
+          <button class="nav-section-item" type="button">Режим и сценарий</button>
+          <button class="nav-section-item" type="button">Правила прохождения</button>
+          <button class="nav-section-item" type="button">Ограничения</button>
+          <button class="nav-section-item" type="button">Обратная связь</button>
+          <button class="nav-section-item" type="button">Интеграция</button>
+          <!-- Адаптивность is NOT shown when tests.mode = standard -->
+        </nav>
+
+        <div class="settings-content">
+          <div class="no-mode-placeholder" role="note">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--muted-fg)" stroke-width="1.5">
+              <path d="m9 18 6-6-6-6"/>
+            </svg>
+            <p>Раздел <strong>Адаптивность</strong> доступен после переключения режима теста в <strong>Адаптивный</strong>.</p>
+            <p>Перейдите в <a href="#" aria-label="Перейти в раздел Режим и сценарий">Настройки &rarr; Режим и сценарий</a> и выберите режим <strong>Адаптивный</strong>.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="drawer-footer">
+        <div class="footer-hint">Режим: стандартный тест.</div>
+        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: s-error — adaptive mode, invalid threshold value ════════════ -->
+<div id="s-error" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div class="drawer-col">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true"
+                aria-label="Настройки, есть ошибки">
+          Настройки
+          <span class="status-dot error" aria-hidden="true"></span>
+        </button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
+        <button class="tab-item" type="button" role="tab" aria-selected="false">Структура</button>
+      </div>
+
+      <div class="settings-pane">
+        <nav class="settings-side-nav" aria-label="Разделы настроек">
+          <button class="nav-section-item" type="button">Основное</button>
+          <button class="nav-section-item" type="button">Режим и сценарий</button>
+          <button class="nav-section-item" type="button">Правила прохождения</button>
+          <button class="nav-section-item" type="button">Ограничения</button>
+          <button class="nav-section-item" type="button">Обратная связь</button>
+          <button class="nav-section-item" type="button">Интеграция</button>
+          <button class="nav-section-item active" type="button" aria-current="page">
+            Адаптивность
+            <span class="status-dot error" aria-hidden="true" style="margin-left:auto;"></span>
+          </button>
+        </nav>
+
+        <div class="settings-content">
+
+          <!-- Error summary banner -->
+          <div class="error-banner" role="alert" aria-live="assertive">
+            <svg width="16" height="16"><use href="#i-warn"/></svg>
+            <div>
+              <strong>Ошибка конфигурации уровней:</strong> Порог прохождения не может превышать 100 для типа "процент".
+              Исправьте уровень "Продвинутый" темы "Основы ИБ".
+            </div>
+          </div>
+
+          <!-- Mode chip -->
+          <div class="mode-chip" role="note" aria-label="Текущий режим теста: Адаптивный">
+            <span class="mode-chip-label">Режим теста:</span>
+            <span class="mode-chip-value">Адаптивный</span>
+            <a href="#" aria-label="Перейти к разделу Режим и сценарий">Изменить в Режим и сценарий</a>
+          </div>
+
+          <!-- show_difficulty_level toggle -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <div class="section-card-title">Отображение сложности</div>
+            </div>
+            <div class="section-card-body">
+              <div class="toggle-row">
+                <button class="toggle-switch" type="button" role="switch" aria-checked="true"
+                        aria-label="Показывать уровень сложности обучающемуся">
+                  <div class="toggle-knob"></div>
+                </button>
+                <div>
+                  <div class="toggle-label">Показывать уровень сложности обучающемуся</div>
+                  <div class="toggle-sub">tests.show_difficulty_level</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- adaptive_settings_json -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <div class="section-card-title">Общие параметры адаптации</div>
+              <span class="badge badge-outline" style="font-size:11px;">JSON / advanced</span>
+            </div>
+            <div class="section-card-body">
+              <textarea class="json-textarea" aria-label="Общие параметры адаптации (JSON)">{}
+</textarea>
+              <p class="note-text">Уточняется в следующей итерации.</p>
+            </div>
+          </div>
+
+          <!-- Per-topic table -->
+          <div class="section-card">
+            <div class="section-card-header">
+              <div class="section-card-title">Адаптация по темам</div>
+            </div>
+            <div class="section-card-body" style="padding:0;">
+              <table class="topics-table" aria-label="Адаптивные настройки по темам">
+                <thead>
+                  <tr>
+                    <th>Тема</th>
+                    <th style="width:80px;">Включено</th>
+                    <th style="width:240px;">Обратная связь при провале темы</th>
+                    <th style="width:100px;">Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>
+                      <div class="topic-name-cell">Основы ИБ</div>
+                      <div class="topic-sub-cell" style="color:var(--destructive);">1 ошибка в уровнях</div>
+                    </td>
+                    <td>
+                      <button class="toggle-switch" type="button" role="switch" aria-checked="true"
+                              aria-label="Включить адаптацию для темы Основы ИБ">
+                        <div class="toggle-knob"></div>
+                      </button>
+                    </td>
+                    <td>
+                      <textarea class="failure-input" aria-label="Обратная связь при провале, тема Основы ИБ">Рекомендуем повторить базовые понятия перед следующей попыткой.</textarea>
+                    </td>
+                    <td>
+                      <button class="btn btn-ghost btn-sm" type="button" style="color:var(--destructive);border-color:var(--destructive);"
+                              aria-label="Настроить уровни темы Основы ИБ (есть ошибки)">Уровни &rarr;</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Levels panel with error -->
+          <div class="levels-panel" style="border-color:var(--destructive);">
+            <div class="levels-panel-header" style="background:var(--error-bg);border-bottom-color:var(--error-border);">
+              <div class="levels-panel-title" style="color:var(--destructive);">Уровни темы: Основы ИБ</div>
+              <span class="badge badge-outline" style="font-size:11px;color:var(--destructive);">1 ошибка</span>
+            </div>
+            <div class="levels-table-wrap">
+              <table class="levels-table" aria-label="Уровни адаптации темы Основы ИБ">
+                <thead>
+                  <tr>
+                    <th style="width:48px;">Порядок</th>
+                    <th style="width:110px;">Название</th>
+                    <th style="width:70px;">Мин. сл.</th>
+                    <th style="width:70px;">Макс. сл.</th>
+                    <th style="width:64px;">Кол-во</th>
+                    <th style="width:60px;">Порог</th>
+                    <th style="width:110px;">Тип порога</th>
+                    <th style="width:90px;">Обр. связь</th>
+                    <th style="width:64px;">Ссылки</th>
+                    <th style="width:64px;">PDF</th>
+                    <th style="width:80px;">Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style="text-align:center;">
+                      <input class="num-input-sm" type="number" value="1" min="1" aria-label="Порядок уровня 1">
+                    </td>
+                    <td><input type="text" value="Начальный" style="font-size:12px;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--input-b);width:100%;" aria-label="Название уровня 1"></td>
+                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="1" aria-label="Мин. сложность уровня 1"></td>
+                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="3" aria-label="Макс. сложность уровня 1"></td>
+                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="5" aria-label="Количество вопросов уровня 1"></td>
+                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="70" aria-label="Порог прохождения уровня 1"></td>
+                    <td><select class="type-select" aria-label="Тип порога уровня 1"><option selected>процент</option><option>абсолютное</option></select></td>
+                    <td><button class="btn-link-sm" type="button">Открыть...</button></td>
+                    <td style="text-align:center;">1</td>
+                    <td style="text-align:center;">0</td>
+                    <td><div class="action-row">
+                      <button class="icon-btn" type="button" aria-label="Вверх"><svg width="12" height="12"><use href="#i-chevron-up"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="Вниз"><svg width="12" height="12"><use href="#i-chevron-down"/></svg></button>
+                      <button class="icon-btn danger" type="button" aria-label="Удалить"><svg width="12" height="12"><use href="#i-trash"/></svg></button>
+                    </div></td>
+                  </tr>
+                  <!-- Row with error: pass_threshold = 120, which exceeds 100 for type "percent" -->
+                  <tr style="background:var(--error-bg);">
+                    <td style="text-align:center;">
+                      <input class="num-input-sm" type="number" value="2" min="1" aria-label="Порядок уровня 2">
+                    </td>
+                    <td><input type="text" value="Продвинутый" style="font-size:12px;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--input-b);width:100%;" aria-label="Название уровня 2"></td>
+                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="4" aria-label="Мин. сложность уровня 2"></td>
+                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="5" aria-label="Макс. сложность уровня 2"></td>
+                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="8" aria-label="Количество вопросов уровня 2"></td>
+                    <td style="text-align:center;">
+                      <!-- Invalid value: 120 > 100 for type "percent" -->
+                      <input class="num-input-sm error" type="number" value="120" aria-label="Порог прохождения уровня 2"
+                             aria-invalid="true" aria-describedby="err-threshold-2">
+                    </td>
+                    <td><select class="type-select" aria-label="Тип порога уровня 2"><option selected>процент</option><option>абсолютное</option></select></td>
+                    <td><button class="btn-link-sm" type="button">Открыть...</button></td>
+                    <td style="text-align:center;">2</td>
+                    <td style="text-align:center;">1</td>
+                    <td><div class="action-row">
+                      <button class="icon-btn" type="button" aria-label="Вверх"><svg width="12" height="12"><use href="#i-chevron-up"/></svg></button>
+                      <button class="icon-btn" type="button" aria-label="Вниз"><svg width="12" height="12"><use href="#i-chevron-down"/></svg></button>
+                      <button class="icon-btn danger" type="button" aria-label="Удалить"><svg width="12" height="12"><use href="#i-trash"/></svg></button>
+                    </div></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div style="padding:8px 14px;background:var(--error-bg);border-top:1px solid var(--error-border);">
+              <span id="err-threshold-2" style="font-size:12px;color:var(--destructive);">
+                Уровень "Продвинутый": порог 120% превышает допустимое значение для типа "процент" (0–100).
+              </span>
+            </div>
+            <div class="levels-panel-footer">
+              <button class="btn btn-outline btn-sm" type="button">
+                <svg width="12" height="12" style="margin-right:4px;"><use href="#i-plus"/></svg>
+                Добавить уровень
+              </button>
+            </div>
+          </div>
+
+        </div><!-- /settings-content -->
+      </div><!-- /settings-pane -->
+
+      <div class="drawer-footer">
+        <div class="footer-hint" style="color:var(--destructive);">Исправьте ошибки перед сохранением</div>
+        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance -- PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>§3.8</td><td>Раздел Адаптивность отображается в side-nav только при <code>tests.mode = adaptive</code>. В стандартном режиме (s-no-mode) пункт "Адаптивность" отсутствует в side-nav, показывается placeholder с ссылкой на Настройки &rarr; Режим и сценарий.</td></tr>
+      <tr><td>§3.8</td><td>Переключатель "Включить адаптивное тестирование" (<code>tests.mode</code>) отсутствует в этом разделе. Он располагается в Настройки &rarr; Режим и сценарий.</td></tr>
+      <tr><td>§3.8</td><td>Read-only чип "Режим теста: Адаптивный" со ссылкой на Режим и сценарий подтверждает текущий контекст без дублирования управления.</td></tr>
+      <tr><td>§3.8 / tests.show_difficulty_level</td><td>Переключатель "Показывать уровень сложности обучающемуся".</td></tr>
+      <tr><td>§3.8 / tests.adaptive_settings_json</td><td>Карточка "Общие параметры адаптации" с textarea и примечанием "Уточняется в следующей итерации". Без изобретённых полей IRT, SE, критерия завершения.</td></tr>
+      <tr><td>§3.8 / adaptive_topic_settings</td><td>Таблица "Адаптация по темам": столбцы Тема / Включено (<code>enabled</code>) / Обратная связь при провале (<code>failure_feedback</code>) / Действия (кнопка "Уровни &rarr;").</td></tr>
+      <tr><td>§3.8 / adaptive_levels</td><td>Панель уровней темы: столбцы <code>level_index</code>, <code>level_name</code>, <code>min_difficulty</code>, <code>max_difficulty</code>, <code>questions_count</code>, <code>pass_threshold</code>, <code>pass_threshold_type</code> (select: процент/абсолютное), <code>feedback</code> (открыть редактор), <code>adaptive_level_links</code> (счётчик), <code>feedback_assets scope=adaptive_level</code> (счётчик PDF), Действия (Вверх/Вниз/Удалить). Кнопка "Добавить уровень".</td></tr>
+      <tr><td class="no-code">—</td><td>Справочная диаграмма распределения вопросов по сложности в банке (<code>role="img"</code> с <code>aria-label</code>).</td></tr>
+      <tr><td class="no-code">—</td><td>s-error: невалидный <code>pass_threshold=120</code> при типе "процент" — поле с <code>aria-invalid="true"</code> и <code>aria-describedby</code>, <code>role="alert"</code> banner вверху секции, кнопка "Сохранить" <code>disabled</code>, таб Настройки и пункт Адаптивность показывают индикатор ошибки.</td></tr>
+      <tr><td>NFR-21</td><td>Переключатели: <code>role="switch"</code> и <code>aria-checked</code>; таблицы: <code>aria-label</code>; диаграмма: <code>role="img"</code>; поля с ошибками: <code>aria-invalid</code> и <code>aria-describedby</code>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function show(id) {
+  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
+    el.classList.toggle('active', el.id === id);
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

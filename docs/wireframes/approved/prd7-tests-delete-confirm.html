@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Delete Test Confirm</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    .bg-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
+      display: flex; align-items: center; justify-content: center; z-index: 50;
+    }
+    .delete-dialog {
+      background: var(--bg); border-radius: var(--radius);
+      box-shadow: 0 20px 60px rgba(0,0,0,.30); width: 480px; max-width: 96%;
+      overflow: hidden;
+    }
+    .delete-header {
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .delete-icon {
+      width: 36px; height: 36px; border-radius: var(--radius-md);
+      background: var(--error-bg); border: 1px solid var(--error-border);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .delete-title { font-size: 15px; font-weight: 600; }
+    .delete-body { padding: 20px; }
+    .delete-desc { font-size: 13px; color: var(--fg); line-height: 1.6; margin-bottom: 16px; }
+    .delete-test-name {
+      font-weight: 600; background: var(--accent);
+      padding: 2px 6px; border-radius: var(--radius-sm);
+      font-size: 13px; word-break: break-all;
+    }
+    .name-input-row { margin-top: 16px; }
+    .name-input-label { font-size: 13px; font-weight: 500; display: block; margin-bottom: 6px; }
+    .name-input-hint { font-size: 11px; color: var(--muted-fg); margin-top: 4px; }
+    .name-input-error { font-size: 12px; color: var(--destructive); margin-top: 4px; }
+    .delete-footer {
+      padding: 14px 20px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 8px;
+    }
+    input.input-error { border-color: var(--destructive); }
+    input.input-error:focus { box-shadow: 0 0 0 2px hsl(0 84% 38% / .15); }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Delete confirm:</span>
+  <button class="wf-btn active" type="button" onclick="show('s-empty')">Поле пустое</button>
+  <button class="wf-btn"        type="button" onclick="show('s-mismatch')">Название не совпадает</button>
+  <button class="wf-btn"        type="button" onclick="show('s-match')">Название совпало</button>
+  <a class="wf-link" href="prd7-tests-list.html">Список тестов &rarr;</a>
+</nav>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M3 6h18"/>
+    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+  </symbol>
+</svg>
+
+<div style="height:100vh;background:hsl(0 0% 90%);display:flex;align-items:stretch;">
+  <div style="width:224px;background:hsl(0 0% 96%);border-right:1px solid hsl(0 0% 92%);"></div>
+  <div style="flex:1;background:var(--bg);opacity:0.5;"></div>
+
+  <!-- ═══ STATE: Поле пустое ══════════════════════════════════════════════ -->
+  <div id="s-empty" class="bg-overlay">
+    <div class="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="del-title-empty">
+      <div class="delete-header">
+        <div class="delete-icon">
+          <svg width="18" height="18"><use href="#i-trash"/></svg>
+        </div>
+        <div id="del-title-empty" class="delete-title">Удаление теста</div>
+      </div>
+      <div class="delete-body">
+        <div class="delete-desc">
+          Это действие необратимо. Тест, все его назначения и результаты попыток будут
+          удалены безвозвратно.
+        </div>
+        <div class="name-input-row">
+          <label class="name-input-label" for="del-input-empty">
+            Введите точное название теста для подтверждения:
+          </label>
+          <div style="background:var(--accent);padding:8px 12px;border-radius:var(--radius-md);font-size:13px;margin-bottom:8px;">
+            <span class="delete-test-name">Основы информационной безопасности</span>
+          </div>
+          <input type="text" id="del-input-empty" placeholder="Введите название..." autocomplete="off">
+          <div class="name-input-hint">Регистр символов учитывается.</div>
+        </div>
+      </div>
+      <div class="delete-footer">
+        <button class="btn btn-ghost btn-sm" type="button">Отмена</button>
+        <button class="btn btn-danger" type="button" disabled aria-disabled="true">Удалить навсегда</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ STATE: Название не совпадает ════════════════════════════════════ -->
+  <div id="s-mismatch" class="bg-overlay" style="display:none;">
+    <div class="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="del-title-mm">
+      <div class="delete-header">
+        <div class="delete-icon">
+          <svg width="18" height="18"><use href="#i-trash"/></svg>
+        </div>
+        <div id="del-title-mm" class="delete-title">Удаление теста</div>
+      </div>
+      <div class="delete-body">
+        <div class="delete-desc">
+          Это действие необратимо. Тест, все его назначения и результаты попыток будут
+          удалены безвозвратно.
+        </div>
+        <div class="name-input-row">
+          <label class="name-input-label" for="del-input-mm">
+            Введите точное название теста для подтверждения:
+          </label>
+          <div style="background:var(--accent);padding:8px 12px;border-radius:var(--radius-md);font-size:13px;margin-bottom:8px;">
+            <span class="delete-test-name">Основы информационной безопасности</span>
+          </div>
+          <input type="text" id="del-input-mm" value="основы информационной безопасности" class="input-error" autocomplete="off">
+          <div class="name-input-error" role="alert">Название не совпадает. Учитывается регистр символов.</div>
+        </div>
+      </div>
+      <div class="delete-footer">
+        <button class="btn btn-ghost btn-sm" type="button">Отмена</button>
+        <button class="btn btn-danger" type="button" disabled aria-disabled="true">Удалить навсегда</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ STATE: Название совпало ════════════════════════════════════════ -->
+  <div id="s-match" class="bg-overlay" style="display:none;">
+    <div class="delete-dialog" role="dialog" aria-modal="true" aria-labelledby="del-title-match">
+      <div class="delete-header">
+        <div class="delete-icon">
+          <svg width="18" height="18"><use href="#i-trash"/></svg>
+        </div>
+        <div id="del-title-match" class="delete-title">Удаление теста</div>
+      </div>
+      <div class="delete-body">
+        <div class="delete-desc">
+          Это действие необратимо. Тест, все его назначения и результаты попыток будут
+          удалены безвозвратно.
+        </div>
+        <div class="name-input-row">
+          <label class="name-input-label" for="del-input-match">
+            Введите точное название теста для подтверждения:
+          </label>
+          <div style="background:var(--accent);padding:8px 12px;border-radius:var(--radius-md);font-size:13px;margin-bottom:8px;">
+            <span class="delete-test-name">Основы информационной безопасности</span>
+          </div>
+          <input type="text" id="del-input-match" value="Основы информационной безопасности"
+                 style="border-color:hsl(160 60% 40%);" autocomplete="off">
+        </div>
+      </div>
+      <div class="delete-footer">
+        <button class="btn btn-ghost btn-sm" type="button">Отмена</button>
+        <button class="btn btn-danger" type="button">Удалить навсегда</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance — PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>FR-30</td><td>Удаление только через confirmation dialog. Кнопка "Удалить навсегда" disabled до тех пор, пока введённое название не совпадёт с реальным (case-sensitive сравнение).</td></tr>
+      <tr><td class="no-code">—</td><td>Три состояния: поле пустое (disabled), название не совпадает (поле с ошибкой, disabled), название совпало (enabled).</td></tr>
+      <tr><td class="no-code">—</td><td>Точное название теста показано над полем в выделенном блоке для удобства копирования.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.bg-overlay').forEach(function(el) {
+    el.style.display = el.id === id ? 'flex' : 'none';
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

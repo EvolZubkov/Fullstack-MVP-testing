@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Mobile / Narrow Viewport</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    /* Mobile frame container */
+    .mobile-gallery {
+      display: flex; flex-wrap: wrap; gap: 24px;
+      padding: 24px; background: hsl(0 0% 87%);
+      min-height: calc(100vh - 40px);
+    }
+    .mobile-frame-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .mobile-frame-label {
+      font-size: 12px; font-weight: 600; color: hsl(0 0% 35%); letter-spacing: .03em;
+    }
+    .mobile-frame {
+      width: 375px; height: 720px; background: var(--bg);
+      border-radius: 20px; overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,.20), 0 0 0 1px rgba(0,0,0,.08);
+      display: flex; flex-direction: column;
+      position: relative;
+    }
+    /* Narrow frame (tablet-ish 640px breakpoint) */
+    .narrow-frame {
+      width: 640px; height: 720px; background: var(--bg);
+      border-radius: 12px; overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.07);
+      display: flex; flex-direction: column;
+    }
+
+    /* ── Drawer chrome (mobile) ───────────────────────────────────── */
+    .mob-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      background: var(--bg);
+    }
+    .mob-title { font-size: 14px; font-weight: 700; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Mobile: tabs become full-width horizontal scroll */
+    .mob-tabs {
+      display: flex; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; overflow-x: auto; -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .mob-tabs::-webkit-scrollbar { display: none; }
+    .mob-tab {
+      display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+      padding: 9px 14px; font-size: 13px; color: var(--muted-fg);
+      border-bottom: 2px solid transparent; flex-shrink: 0;
+      background: transparent; border-top: none; border-left: none; border-right: none;
+      cursor: pointer; font-family: inherit;
+    }
+    .mob-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+
+    .mob-content { flex: 1; overflow-y: auto; padding: 14px; }
+    .mob-footer {
+      display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+      border-top: 1px solid var(--border); flex-shrink: 0; background: var(--bg);
+    }
+    .mob-footer-hint { font-size: 11px; color: var(--muted-fg); flex: 1; }
+
+    /* ── Settings 2-pane → selector on mobile ───────────────────── */
+    .mob-settings-selector {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); overflow: hidden; margin-bottom: 12px;
+    }
+    .mob-settings-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; border-bottom: 1px solid var(--card-border);
+      background: var(--accent); font-size: 13px; font-weight: 600;
+    }
+    .mob-settings-select {
+      width: 100%; font-size: 13px; padding: 10px 14px;
+      border: none; background: var(--bg); color: var(--fg);
+      font-family: inherit; appearance: auto;
+    }
+
+    /* ── Section card (compact mobile) ──────────────────────────── */
+    .mob-section-card {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); overflow: hidden; margin-bottom: 10px;
+    }
+    .mob-section-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 12px; border-bottom: 1px solid var(--card-border);
+      background: var(--accent); font-size: 12px; font-weight: 600;
+    }
+    .mob-section-body { padding: 12px; }
+    .mob-field { margin-bottom: 10px; }
+    .mob-label { font-size: 12px; font-weight: 500; margin-bottom: 4px; }
+    .mob-input { font-size: 13px; padding: 7px 9px; border-radius: var(--radius-sm);
+      border: 1px solid var(--input-b); width: 100%; font-family: inherit; }
+
+    /* ── Topic row compact ───────────────────────────────────────── */
+    .mob-topic-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 12px; border-bottom: 1px solid var(--card-border); font-size: 12px;
+    }
+    .mob-topic-row:last-child { border-bottom: none; }
+    .mob-topic-name { flex: 1; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mob-topic-avail { color: var(--muted-fg); white-space: nowrap; font-size: 11px; }
+    .mob-drag-handle { color: var(--muted-fg); cursor: grab; }
+
+    /* ── Mode toggle (segmented control) ────────────────────────── */
+    .mob-mode-toggle {
+      display: flex; background: var(--muted); border-radius: var(--radius-md);
+      padding: 2px; margin-bottom: 12px;
+    }
+    .mob-mode-btn {
+      flex: 1; padding: 6px; font-size: 12px; border: none; border-radius: 5px;
+      background: transparent; color: var(--muted-fg); cursor: pointer; font-family: inherit;
+    }
+    .mob-mode-btn.active { background: var(--bg); font-weight: 600; color: var(--fg); }
+
+    /* Stepper: [−] N [+] */
+    .mob-stepper {
+      display: inline-flex; align-items: center; gap: 0;
+      border: 1px solid var(--input-b); border-radius: var(--radius-sm); overflow: hidden; flex-shrink: 0;
+    }
+    .mob-stepper-btn {
+      width: 24px; height: 26px; border: none; background: var(--accent);
+      color: var(--fg); font-size: 14px; line-height: 1; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      font-family: inherit;
+    }
+    .mob-stepper-btn:active { background: var(--muted); }
+    .mob-stepper-val {
+      width: 30px; text-align: center; font-size: 12px; font-weight: 600;
+      border: none; border-left: 1px solid var(--input-b); border-right: 1px solid var(--input-b);
+      background: var(--bg); padding: 0; height: 26px; line-height: 26px;
+      font-family: inherit;
+    }
+
+    /* ── Close confirm (bottom sheet on mobile) ──────────────────── */
+    .mob-bottom-sheet {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: var(--bg); border-top: 1px solid var(--border);
+      border-radius: 12px 12px 0 0;
+      box-shadow: 0 -4px 24px rgba(0,0,0,.12); padding: 0;
+      z-index: 10;
+    }
+    .mob-sheet-handle {
+      width: 36px; height: 4px; background: hsl(0 0% 80%); border-radius: 2px;
+      margin: 10px auto 14px;
+    }
+    .mob-sheet-title { font-size: 15px; font-weight: 700; padding: 0 20px 12px; }
+    .mob-sheet-body { padding: 0 20px 10px; font-size: 13px; line-height: 1.6; color: var(--muted-fg); }
+    .mob-sheet-actions { display: flex; flex-direction: column; gap: 8px; padding: 10px 20px 24px; }
+
+    /* ── Adaptive topic row ─────────────────────────────────────── */
+    .mob-topic-row-adaptive {
+      display: flex; align-items: center; gap: 8px;
+      padding: 9px 12px; border-bottom: 1px solid var(--card-border); font-size: 12px;
+    }
+    .mob-topic-row-adaptive:last-child { border-bottom: none; }
+    .mob-adaptive-toggle {
+      position: relative; width: 32px; height: 18px; flex-shrink: 0;
+    }
+    .mob-adaptive-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .mob-adaptive-track {
+      position: absolute; inset: 0; border-radius: 9px; background: var(--primary);
+      cursor: pointer; transition: background .2s;
+    }
+    .mob-adaptive-track::after {
+      content: ''; position: absolute; top: 2px; left: 16px;
+      width: 14px; height: 14px; border-radius: 50%; background: #fff;
+    }
+    .mob-adaptive-toggle input:not(:checked) + .mob-adaptive-track { background: var(--muted); }
+    .mob-adaptive-toggle input:not(:checked) + .mob-adaptive-track::after { left: 2px; }
+    .mob-minmax {
+      display: flex; align-items: center; gap: 4px; color: var(--muted-fg); font-size: 11px; white-space: nowrap;
+    }
+    .mob-minmax input {
+      width: 28px; text-align: center; font-size: 11px; padding: 2px 3px;
+      border: 1px solid var(--input-b); border-radius: var(--radius-sm); background: var(--bg);
+    }
+
+    /* ── Utility ─────────────────────────────────────────────────── */
+    .hidden { display: none; }
+    .mob-add-topic-row { padding: 8px 12px; }
+    .mob-full-btn { width: 100%; font-size: 12px; }
+    .mob-feedback-hint { font-size: 12px; color: var(--muted-fg); margin-bottom: 6px; }
+    .mob-minmax-disabled { opacity: .4; }
+    .mob-section-body-flush { padding: 0; }
+    .mob-save-btn { font-size: 12px; padding: 6px 14px; }
+    .badge-xs { font-size: 10px; padding: 1px 5px; }
+
+    /* ── Feedback preview card (mobile) ─────────────────────────── */
+    .mob-feedback-preview {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 8px 10px; margin-bottom: 8px; background: var(--bg);
+    }
+    .mob-feedback-snippet {
+      font-size: 12px; color: var(--fg); margin: 0 0 4px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .mob-feedback-meta { font-size: 11px; color: var(--muted-fg); display: flex; gap: 6px; align-items: center; }
+    .mob-feedback-sep  { color: var(--border); }
+
+    /* ── Overlay dimming ─────────────────────────────────────────── */
+    .mob-overlay {
+      position: absolute; inset: 0; background: rgba(0,0,0,.45); z-index: 9;
+    }
+  </style>
+</head>
+<body style="background:hsl(0 0% 87%);padding:0;">
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Mobile / Narrow:</span>
+  <button class="wf-btn active" type="button" onclick="show('s-gallery')">Галерея экранов</button>
+  <a class="wf-link" href="prd7-editor-drawer.html">Drawer (desktop) &rarr;</a>
+</nav>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/>
+    <circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/>
+    <circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/>
+  </symbol>
+</svg>
+
+<!-- ═══ Gallery ═══════════════════════════════════════════════════════════ -->
+<div id="s-gallery" class="mobile-gallery">
+
+  <!-- Frame 1: Editor Drawer — Compose tab (mobile 375px) -->
+  <div class="mobile-frame-wrap">
+    <div class="mobile-frame-label">375px — Вкладка "Состав"</div>
+    <div class="mobile-frame" role="region" aria-label="Мобильный вид: Состав теста">
+      <div class="mob-header">
+        <div style="flex:1;min-width:0;">
+          <div class="mob-title">Основы ИБ</div>
+          <div style="font-size:11px;color:var(--muted-fg);">Черновик</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;font-size:16px;flex-shrink:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="mob-tabs" role="tablist">
+        <button class="mob-tab active" role="tab" aria-selected="true">Состав</button>
+        <button class="mob-tab" role="tab">Настройки</button>
+        <button class="mob-tab" role="tab">Оформление</button>
+        <button class="mob-tab" role="tab">Структура</button>
+      </div>
+
+      <div class="mob-content">
+        <!-- Темы -->
+        <div class="mob-section-card">
+          <div class="mob-section-header">Темы (3)</div>
+          <div class="mob-section-body mob-section-body-flush">
+            <div class="mob-topic-row">
+              <div class="mob-topic-name">Основы ИБ</div>
+              <div class="mob-topic-avail">из 42</div>
+              <div class="mob-stepper" role="group" aria-label="Вопросов из темы Основы ИБ">
+                <button class="mob-stepper-btn" type="button" aria-label="Уменьшить">&#8722;</button>
+                <output class="mob-stepper-val">15</output>
+                <button class="mob-stepper-btn" type="button" aria-label="Увеличить">&#43;</button>
+              </div>
+            </div>
+            <div class="mob-topic-row">
+              <div class="mob-topic-name">Классификация угроз <span class="badge badge-secondary badge-xs">Обяз.</span></div>
+              <div class="mob-topic-avail">из 28</div>
+              <div class="mob-stepper" role="group" aria-label="Вопросов из темы Классификация угроз">
+                <button class="mob-stepper-btn" type="button" aria-label="Уменьшить">&#8722;</button>
+                <output class="mob-stepper-val">10</output>
+                <button class="mob-stepper-btn" type="button" aria-label="Увеличить">&#43;</button>
+              </div>
+            </div>
+            <div class="mob-topic-row">
+              <div class="mob-topic-name">СЗИ</div>
+              <div class="mob-topic-avail">из 18</div>
+              <div class="mob-stepper" role="group" aria-label="Вопросов из темы СЗИ">
+                <button class="mob-stepper-btn" type="button" aria-label="Уменьшить">&#8722;</button>
+                <output class="mob-stepper-val">5</output>
+                <button class="mob-stepper-btn" type="button" aria-label="Увеличить">&#43;</button>
+              </div>
+            </div>
+            <div class="mob-add-topic-row">
+              <button class="btn btn-ghost btn-sm mob-full-btn" type="button" aria-label="Добавить тему">+ Добавить тему</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Обратная связь по тесту -->
+        <div class="mob-section-card">
+          <div class="mob-section-header">Обратная связь по тесту</div>
+          <div class="mob-section-body">
+            <div class="mob-feedback-preview">
+              <p class="mob-feedback-snippet">Спасибо за прохождение! Результаты отправлены руководителю.</p>
+              <div class="mob-feedback-meta">
+                <span>1 ссылка</span>
+                <span class="mob-feedback-sep">·</span>
+                <span>2 файла</span>
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-sm mob-full-btn" type="button" aria-label="Редактировать обратную связь по тесту">Редактировать...</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mob-footer">
+        <span class="mob-footer-hint">30 вопросов, 3 темы</span>
+        <button class="btn btn-primary" type="button" style="font-size:12px;padding:6px 14px;" disabled aria-disabled="true">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Frame 2: Settings tab (mobile, selector view) -->
+  <div class="mobile-frame-wrap">
+    <div class="mobile-frame-label">375px — Вкладка "Настройки" (селектор)</div>
+    <div class="mobile-frame" role="region" aria-label="Мобильный вид: Настройки теста">
+      <div class="mob-header">
+        <div class="mob-title">Основы ИБ</div>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;font-size:16px;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="mob-tabs" role="tablist">
+        <button class="mob-tab" role="tab">Состав</button>
+        <button class="mob-tab active" role="tab" aria-selected="true">Настройки</button>
+        <button class="mob-tab" role="tab">Оформление</button>
+        <button class="mob-tab" role="tab">Структура</button>
+      </div>
+
+      <div class="mob-content">
+        <!-- Settings selector (replaces 2-pane nav at < 960px) -->
+        <div class="mob-settings-selector" aria-label="Раздел настроек">
+          <div class="mob-settings-header">Раздел настроек</div>
+          <select class="mob-settings-select" aria-label="Выберите раздел настроек">
+            <option selected>Основные настройки</option>
+            <option>Правила прохождения</option>
+            <option>Ограничения</option>
+            <option>Адаптивные настройки</option>
+          </select>
+        </div>
+
+        <!-- Settings content for selected section -->
+        <div class="mob-section-card">
+          <div class="mob-section-header">Основные настройки</div>
+          <div class="mob-section-body">
+            <div class="mob-field">
+              <div class="mob-label">Название</div>
+              <input class="mob-input" type="text" value="Основы информационной безопасности" aria-label="Название теста">
+            </div>
+            <div class="mob-field">
+              <div class="mob-label">Статус</div>
+              <select class="mob-input" aria-label="Статус теста">
+                <option selected>Черновик</option>
+                <option>Опубликован</option>
+                <option>В архиве</option>
+              </select>
+            </div>
+            <div class="mob-field">
+              <div class="mob-label">Описание</div>
+              <textarea class="mob-input" rows="3" aria-label="Описание теста">Базовый курс по информационной безопасности</textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mob-footer">
+        <span class="mob-footer-hint" style="color:var(--primary);">Изменено</span>
+        <button class="btn btn-primary" type="button" style="font-size:12px;padding:6px 14px;">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Frame 3: Close confirmation (bottom sheet) -->
+  <div class="mobile-frame-wrap">
+    <div class="mobile-frame-label">375px — Диалог закрытия (bottom sheet)</div>
+    <div class="mobile-frame" role="region" aria-label="Мобильный вид: Подтверждение закрытия">
+      <div class="mob-header">
+        <div class="mob-title">Основы ИБ</div>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;font-size:16px;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="mob-tabs">
+        <button class="mob-tab active">Состав</button>
+        <button class="mob-tab">Настройки</button>
+        <button class="mob-tab">Оформление</button>
+        <button class="mob-tab">Структура</button>
+      </div>
+
+      <div class="mob-content" style="opacity:.4;" aria-hidden="true">
+        <div class="mob-section-card">
+          <div class="mob-section-header">Темы</div>
+          <div class="mob-section-body">
+            <div style="height:80px;background:var(--muted);border-radius:var(--radius-sm);"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Overlay -->
+      <div class="mob-overlay" aria-hidden="true"></div>
+
+      <!-- Bottom sheet (close confirm) -->
+      <div class="mob-bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="mob-sheet-title">
+        <div class="mob-sheet-handle" aria-hidden="true"></div>
+        <div id="mob-sheet-title" class="mob-sheet-title">Выйти без сохранения?</div>
+        <div class="mob-sheet-body">
+          Есть несохранённые изменения в разделах: Состав, Настройки.
+        </div>
+        <div class="mob-sheet-actions">
+          <button class="btn btn-primary" type="button" style="width:100%;">Сохранить и выйти</button>
+          <button class="btn btn-ghost btn-sm" type="button" style="width:100%;border:1px solid var(--border);">Выйти без сохранения</button>
+          <button class="btn btn-ghost btn-sm" type="button" style="width:100%;">Отмена</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Frame 4: Narrow (640px) — Settings 2-pane breakpoint -->
+  <div class="mobile-frame-wrap">
+    <div class="mobile-frame-label">640px — Настройки (граница: 960px breakpoint)</div>
+    <div class="narrow-frame" role="region" aria-label="Узкий вид: Настройки теста">
+      <div class="mob-header" style="padding:12px 20px;">
+        <div class="mob-title" style="font-size:15px;">Основы информационной безопасности</div>
+        <span class="badge badge-secondary" style="flex-shrink:0;">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="mob-tabs" style="padding:0 20px;">
+        <button class="mob-tab" role="tab">Состав</button>
+        <button class="mob-tab active" role="tab" aria-selected="true">Настройки</button>
+        <button class="mob-tab" role="tab">Оформление</button>
+        <button class="mob-tab" role="tab">Структура</button>
+      </div>
+
+      <!-- At 640px: selector replaces 2-pane (breakpoint < 960px) -->
+      <div class="mob-content" style="padding:16px 20px;">
+        <div class="mob-settings-selector">
+          <div class="mob-settings-header">Раздел настроек</div>
+          <select class="mob-settings-select" aria-label="Выберите раздел настроек">
+            <option selected>Правила прохождения</option>
+            <option>Основные настройки</option>
+            <option>Ограничения</option>
+          </select>
+        </div>
+
+        <div class="mob-section-card">
+          <div class="mob-section-header">Правила прохождения</div>
+          <div class="mob-section-body">
+            <div class="mob-field">
+              <div class="mob-label">Порог прохождения (%)</div>
+              <input class="mob-input" type="number" value="75" min="0" max="100" style="max-width:100px;" aria-label="Порог прохождения">
+            </div>
+            <div class="mob-field">
+              <div class="mob-label">Политика зачёта</div>
+              <select class="mob-input" aria-label="Политика зачёта">
+                <option selected>По общему баллу</option>
+                <option>По каждой теме</option>
+                <option>По обязательным темам</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mob-footer" style="padding:10px 20px;">
+        <span class="mob-footer-hint"></span>
+        <button class="btn btn-ghost btn-sm" type="button" style="font-size:12px;">Показать изменения</button>
+        <button class="btn btn-primary" type="button" style="font-size:12px;">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance -- PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>NFR-19</td><td>Drawer открывается на всю ширину экрана на мобильном (375px). Все элементы управления доступны без горизонтального скролла.</td></tr>
+      <tr><td>NFR-20</td><td>Вкладка "Настройки" при ширине &lt; 960px: двухпанельный side-nav заменяется на &lt;select&gt;-навигацию по разделам. На 640px (граница) показан select-вариант.</td></tr>
+      <tr><td class="no-code">—</td><td>Вкладки Drawer на мобильном: горизонтально прокручиваемый tab-bar (<code>overflow-x: auto</code>). Все 4 вкладки доступны через скролл.</td></tr>
+      <tr><td class="no-code">—</td><td>Диалог закрытия на мобильном: реализован как bottom sheet (выдвигается снизу) с drag-handle. Три кнопки: "Сохранить и выйти", "Выйти без сохранения", "Отмена" -- полная ширина.</td></tr>
+      <tr><td class="no-code">—</td><td>Список тем в "Состав": компактные строки с drag-handle слева и draw-input справа. Кнопка "Добавить тему" полной ширины внизу списка.</td></tr>
+      <tr><td>NFR-21</td><td>Bottom sheet имеет <code>role="dialog"</code>, <code>aria-modal="true"</code>, <code>aria-labelledby</code>; все inputs имеют <code>aria-label</code>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function setMode(mode) {
+  var isAdaptive = mode === 'adaptive';
+  document.getElementById('mob-content-standard').classList.toggle('hidden', isAdaptive);
+  document.getElementById('mob-content-adaptive').classList.toggle('hidden', !isAdaptive);
+  document.getElementById('mob-btn-standard').classList.toggle('active', !isAdaptive);
+  document.getElementById('mob-btn-standard').setAttribute('aria-pressed', String(!isAdaptive));
+  document.getElementById('mob-btn-adaptive').classList.toggle('active', isAdaptive);
+  document.getElementById('mob-btn-adaptive').setAttribute('aria-pressed', String(isAdaptive));
+}
+
+function show(id) {
+  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
+    el.style.display = el.id === id ? '' : 'none';
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

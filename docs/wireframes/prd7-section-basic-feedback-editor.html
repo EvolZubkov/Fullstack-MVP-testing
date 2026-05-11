@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Feedback Editor</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    /* Layout helpers */
+    .svg-sprite { display: none; }
+    .state-bg   { background: hsl(0 0% 90%); padding: 24px; }
+    .state-wrap { max-width: 720px; margin: 0 auto; }
+    .state-ctx  { font-size: 12px; color: var(--muted-fg); margin-bottom: 12px; }
+
+    /* Drawer shell (narrow — just content pane context) */
+    .content-area  { flex: 1; overflow-y: auto; padding: 24px; max-width: 800px; }
+    .section-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .section-sub   { font-size: 13px; color: var(--muted-fg); margin-bottom: 20px; }
+
+    /* Feedback editor panel */
+    .feedback-panel {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); overflow: hidden;
+    }
+    .feedback-panel-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-bottom: 1px solid var(--card-border);
+      background: var(--accent);
+    }
+    .feedback-panel-title { font-size: 13px; font-weight: 600; flex: 1; }
+    .badge-sm { font-size: 11px; }
+    .format-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px; border-bottom: 1px solid var(--card-border);
+      flex-wrap: wrap;
+    }
+    .format-label  { font-size: 12px; font-weight: 500; color: var(--muted-fg); min-width: 60px; }
+    .format-select {
+      font-size: 12px; padding: 4px 8px; border-radius: var(--radius-sm);
+      border: 1px solid var(--input-b); background: var(--bg); color: var(--fg);
+      font-family: inherit; cursor: pointer;
+    }
+    .format-hint { font-size: 12px; color: var(--muted-fg); }
+
+    /* Toolbar */
+    .editor-toolbar {
+      display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+      padding: 6px 10px; border-bottom: 1px solid var(--card-border);
+      background: var(--bg);
+    }
+    .toolbar-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: var(--radius-sm);
+      border: none; background: transparent; color: var(--fg);
+      font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+    }
+    .toolbar-btn:hover { background: var(--accent); }
+    .toolbar-btn.active { background: var(--secondary); color: var(--primary); }
+    .toolbar-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+
+    /* Editor area */
+    .editor-body {
+      min-height: 120px; padding: 12px 14px;
+      font-size: 13px; line-height: 1.7; color: var(--fg);
+      background: var(--bg); border-bottom: 1px solid var(--card-border);
+      outline: none; cursor: text;
+    }
+    .editor-body.placeholder { color: var(--muted-fg); font-style: italic; }
+    .editor-body p      { margin-bottom: 6px; }
+    .editor-body strong { font-weight: 700; }
+    .editor-body em     { font-style: italic; }
+    .editor-body ul     { padding-left: 20px; list-style: disc; margin-bottom: 6px; }
+    .editor-body ol     { padding-left: 20px; list-style: decimal; margin-bottom: 6px; }
+    .editor-body a      { color: var(--primary); text-decoration: underline; }
+
+    /* Plain-text variant */
+    .editor-plain { padding: 12px 14px; border-bottom: 1px solid var(--card-border); background: var(--bg); }
+    .editor-plain textarea {
+      width: 100%; min-height: 100px; resize: vertical;
+      border: none; outline: none; font-family: inherit;
+      font-size: 13px; line-height: 1.7; color: var(--fg); background: transparent;
+    }
+
+    /* Links section */
+    .links-section { padding: 12px 14px; border-bottom: 1px solid var(--card-border); }
+    .links-header {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; color: var(--muted-fg);
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px;
+    }
+    .link-row {
+      display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px;
+      margin-bottom: 8px; align-items: center;
+    }
+    .link-row input { font-size: 12px; padding: 5px 8px; }
+    .link-delete {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--bg);
+      cursor: pointer; color: var(--muted-fg);
+    }
+    .link-delete:hover { border-color: var(--destructive); color: var(--destructive); }
+    .add-link-btn {
+      font-size: 12px; color: var(--primary); background: none;
+      border: none; cursor: pointer; padding: 0; font-family: inherit;
+      display: inline-flex; align-items: center; gap: 4px;
+    }
+    .add-link-btn:hover { text-decoration: underline; }
+    .section-empty { font-size: 12px; color: var(--muted-fg); margin-bottom: 8px; }
+
+    /* Files section */
+    .files-section { padding: 12px 14px; border-bottom: 1px solid var(--card-border); }
+    .files-header {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; font-weight: 600; color: var(--muted-fg);
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px;
+    }
+    .file-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; border: 1px solid var(--border);
+      border-radius: var(--radius-sm); margin-bottom: 6px; background: var(--bg);
+    }
+    .file-icon { color: var(--muted-fg); flex-shrink: 0; }
+    .file-name { flex: 1; font-size: 12px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-size { font-size: 11px; color: var(--muted-fg); flex-shrink: 0; white-space: nowrap; }
+    .file-delete {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: transparent;
+      cursor: pointer; color: var(--muted-fg); flex-shrink: 0;
+    }
+    .file-delete:hover { border-color: var(--destructive); color: var(--destructive); }
+    .file-hint { font-size: 11px; color: var(--muted-fg); margin-top: 8px; }
+    .upload-btn {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; margin-top: 8px; padding: 7px 12px;
+      font-size: 12px; font-family: inherit; color: var(--primary);
+      background: transparent; border: 1px dashed var(--border);
+      border-radius: var(--radius-sm); cursor: pointer;
+    }
+    .upload-btn:hover { border-color: var(--primary); background: var(--accent); }
+
+    /* Preview */
+    .preview-section { padding: 12px 14px; background: var(--readonly-bg); }
+    .preview-label {
+      font-size: 11px; font-weight: 600; color: var(--muted-fg);
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px;
+    }
+    .preview-box {
+      background: var(--bg); border: 1px solid var(--card-border);
+      border-radius: var(--radius-md); padding: 12px 14px;
+      font-size: 13px; line-height: 1.7;
+    }
+    .preview-box p      { margin-bottom: 6px; }
+    .preview-box ul     { padding-left: 18px; list-style: disc; margin-bottom: 6px; }
+    .preview-box a      { color: var(--primary); text-decoration: underline; }
+    .preview-links      { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+    .preview-files {
+      display: flex; flex-direction: column; gap: 6px;
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+    }
+    .preview-files-label {
+      font-size: 11px; font-weight: 600; color: var(--muted-fg);
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px;
+    }
+    .preview-file-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--primary); font-size: 13px; text-decoration: none;
+    }
+    .preview-file-link:hover { text-decoration: underline; }
+    .preview-file-size { color: var(--muted-fg); font-size: 11px; }
+
+    /* HTML raw editor */
+    .html-editor textarea {
+      width: 100%; min-height: 140px; resize: vertical;
+      font-family: 'Consolas', 'Courier New', monospace; font-size: 12px;
+      line-height: 1.6; border: none; outline: none;
+      background: transparent; color: var(--fg);
+      padding: 12px 14px; display: block;
+    }
+    .html-warn {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; background: var(--warn-bg); border-bottom: 1px solid var(--warn-border);
+      font-size: 12px; color: var(--warn-fg);
+    }
+    .char-count {
+      font-size: 11px; color: var(--muted-fg); padding: 6px 14px;
+      border-top: 1px solid var(--card-border); text-align: right;
+    }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Feedback editor:</span>
+  <button class="wf-btn active" type="button" onclick="show('s-richtext')">richText — тест</button>
+  <button class="wf-btn"        type="button" onclick="show('s-plain')">plain — тест</button>
+  <button class="wf-btn"        type="button" onclick="show('s-html')">html — тест</button>
+  <button class="wf-btn"        type="button" onclick="show('s-empty')">Пустой — тест</button>
+  <button class="wf-btn"        type="button" onclick="show('s-topic')">Уровень темы</button>
+  <a class="wf-link" href="prd7-section-basic.html">Состав &rarr;</a>
+</nav>
+
+<svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-bold" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+    <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/>
+  </symbol>
+  <symbol id="i-italic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/>
+    <line x1="15" y1="4" x2="9" y2="20"/>
+  </symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+  </symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+    <line x1="8" y1="18" x2="21" y2="18"/>
+    <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/>
+    <line x1="3" y1="18" x2="3.01" y2="18"/>
+  </symbol>
+  <symbol id="i-list-ordered" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/>
+    <line x1="10" y1="18" x2="21" y2="18"/>
+    <path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+  </symbol>
+  <symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+  </symbol>
+</svg>
+
+<!-- ═══ STATE: richText ═══════════════════════════════════════════════════ -->
+<div id="s-richtext" class="shell active state-bg">
+  <div class="state-wrap">
+    <p class="state-ctx">Контекст: внутри Drawer, вкладка Настройки &rarr; Обратная связь, карточка Общая обратная связь теста</p>
+
+    <div class="feedback-panel">
+      <div class="feedback-panel-header">
+        <div class="feedback-panel-title">Общая обратная связь теста</div>
+        <span class="badge badge-outline badge-sm">richText</span>
+      </div>
+
+      <!-- Format selector -->
+      <div class="format-row">
+        <span class="format-label">Формат:</span>
+        <select class="format-select" aria-label="Формат обратной связи">
+          <option>plain — простой текст</option>
+          <option selected>richText — форматированный текст</option>
+          <option>html — HTML-разметка</option>
+        </select>
+        <span class="format-hint">Формат можно изменить — содержимое сохранится.</span>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="editor-toolbar" role="toolbar" aria-label="Панель форматирования">
+        <button class="toolbar-btn active" type="button" title="Жирный (Ctrl+B)" aria-pressed="true">
+          <svg width="14" height="14"><use href="#i-bold"/></svg>
+        </button>
+        <button class="toolbar-btn" type="button" title="Курсив (Ctrl+I)" aria-pressed="false">
+          <svg width="14" height="14"><use href="#i-italic"/></svg>
+        </button>
+        <div class="toolbar-sep" aria-hidden="true"></div>
+        <button class="toolbar-btn" type="button" title="Вставить ссылку (Ctrl+K)">
+          <svg width="14" height="14"><use href="#i-link"/></svg>
+        </button>
+        <div class="toolbar-sep" aria-hidden="true"></div>
+        <button class="toolbar-btn" type="button" title="Маркированный список">
+          <svg width="14" height="14"><use href="#i-list"/></svg>
+        </button>
+        <button class="toolbar-btn" type="button" title="Нумерованный список">
+          <svg width="14" height="14"><use href="#i-list-ordered"/></svg>
+        </button>
+      </div>
+
+      <!-- Rich text body -->
+      <div class="editor-body" contenteditable="true" role="textbox" aria-multiline="true"
+           aria-label="Текст обратной связи">
+        <p>Поздравляем с прохождением теста! <strong>Ваш результат</strong> зависит от правильности ответов.</p>
+        <p>Если вы не набрали нужный порог, обратитесь к следующим материалам:</p>
+        <ul>
+          <li>Модуль 1 — Основы информационной безопасности</li>
+          <li>Модуль 3 — <em>Классификация угроз</em></li>
+        </ul>
+        <p>Вы также можете <a href="#">связаться с куратором</a> для уточнения деталей.</p>
+      </div>
+
+      <div class="char-count" aria-live="polite">224 / 2000 символов</div>
+
+      <!-- External links -->
+      <div class="links-section">
+        <div class="links-header">
+          <svg width="12" height="12"><use href="#i-link"/></svg>
+          Ссылки
+        </div>
+        <div class="link-row">
+          <input type="text" value="Материалы курса" placeholder="Подпись ссылки" aria-label="Подпись ссылки 1">
+          <input type="url" value="https://example.com/course" placeholder="https://..." aria-label="URL ссылки 1">
+          <button class="link-delete" type="button" aria-label="Удалить ссылку">
+            <svg width="13" height="13"><use href="#i-trash"/></svg>
+          </button>
+        </div>
+        <div class="link-row">
+          <input type="text" value="" placeholder="Подпись ссылки" aria-label="Подпись ссылки 2">
+          <input type="url" value="" placeholder="https://..." aria-label="URL ссылки 2">
+          <button class="link-delete" type="button" aria-label="Удалить ссылку">
+            <svg width="13" height="13"><use href="#i-trash"/></svg>
+          </button>
+        </div>
+        <button class="add-link-btn" type="button" aria-label="Добавить ссылку">
+          <svg width="12" height="12"><use href="#i-plus"/></svg>
+          Добавить ссылку
+        </button>
+      </div>
+
+      <!-- Downloadable files (feedback_assets) -->
+      <div class="files-section">
+        <div class="files-header">
+          <svg width="12" height="12"><use href="#i-paperclip"/></svg>
+          Файлы для скачивания
+        </div>
+        <div class="file-row">
+          <svg class="file-icon" width="14" height="14"><use href="#i-file"/></svg>
+          <span class="file-name">module1-basics.pdf</span>
+          <span class="file-size">1.2 МБ</span>
+          <button class="file-delete" type="button" aria-label="Удалить файл">
+            <svg width="13" height="13"><use href="#i-trash"/></svg>
+          </button>
+        </div>
+        <div class="file-row">
+          <svg class="file-icon" width="14" height="14"><use href="#i-file"/></svg>
+          <span class="file-name">threat-classification-guide.pdf</span>
+          <span class="file-size">840 КБ</span>
+          <button class="file-delete" type="button" aria-label="Удалить файл">
+            <svg width="13" height="13"><use href="#i-trash"/></svg>
+          </button>
+        </div>
+        <button class="upload-btn" type="button">
+          <svg width="12" height="12"><use href="#i-plus"/></svg>
+          Прикрепить файл
+        </button>
+        <p class="file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
+      </div>
+
+      <!-- Preview -->
+      <div class="preview-section">
+        <div class="preview-label">Предпросмотр (как увидит слушатель)</div>
+        <div class="preview-box" aria-label="Предпросмотр обратной связи">
+          <p>Поздравляем с прохождением теста! <strong>Ваш результат</strong> зависит от правильности ответов.</p>
+          <p>Если вы не набрали нужный порог, обратитесь к следующим материалам:</p>
+          <ul>
+            <li>Модуль 1 — Основы информационной безопасности</li>
+            <li>Модуль 3 — <em>Классификация угроз</em></li>
+          </ul>
+          <p>Вы также можете <a href="#">связаться с куратором</a> для уточнения деталей.</p>
+          <div class="preview-links">
+            <a href="#">Материалы курса</a>
+          </div>
+          <div class="preview-files">
+            <div class="preview-files-label">Файлы для скачивания</div>
+            <a href="#" class="preview-file-link">
+              <svg width="13" height="13"><use href="#i-paperclip"/></svg>
+              module1-basics.pdf <span class="preview-file-size">(1.2 МБ)</span>
+            </a>
+            <a href="#" class="preview-file-link">
+              <svg width="13" height="13"><use href="#i-paperclip"/></svg>
+              threat-classification-guide.pdf <span class="preview-file-size">(840 КБ)</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: plain ══════════════════════════════════════════════════════ -->
+<div id="s-plain" class="shell state-bg">
+  <div class="state-wrap">
+    <p class="state-ctx">Контекст: внутри Drawer, вкладка Настройки &rarr; Обратная связь, карточка Общая обратная связь теста (формат plain)</p>
+
+    <div class="feedback-panel">
+      <div class="feedback-panel-header">
+        <div class="feedback-panel-title">Общая обратная связь теста</div>
+        <span class="badge badge-outline badge-sm">plain</span>
+      </div>
+
+      <div class="format-row">
+        <span class="format-label">Формат:</span>
+        <select class="format-select" aria-label="Формат обратной связи">
+          <option selected>plain — простой текст</option>
+          <option>richText — форматированный текст</option>
+          <option>html — HTML-разметка</option>
+        </select>
+      </div>
+
+      <div class="editor-plain">
+        <textarea aria-label="Текст обратной связи (plain)" placeholder="Введите текст обратной связи...">Поздравляем с прохождением теста! Ваш результат зависит от правильности ответов. Если вы не набрали нужный порог, обратитесь к материалам курса.</textarea>
+      </div>
+
+      <div class="char-count" aria-live="polite">167 / 2000 символов</div>
+
+      <div class="links-section">
+        <div class="links-header">
+          <svg width="12" height="12"><use href="#i-link"/></svg>
+          Ссылки
+        </div>
+        <p class="section-empty">Ссылки будут добавлены под текстом.</p>
+        <button class="add-link-btn" type="button">
+          <svg width="12" height="12"><use href="#i-plus"/></svg>
+          Добавить ссылку
+        </button>
+      </div>
+
+      <!-- Downloadable files (feedback_assets) -->
+      <div class="files-section">
+        <div class="files-header">
+          <svg width="12" height="12"><use href="#i-paperclip"/></svg>
+          Файлы для скачивания
+        </div>
+        <p class="section-empty">Файлы не прикреплены.</p>
+        <button class="upload-btn" type="button">
+          <svg width="12" height="12"><use href="#i-plus"/></svg>
+          Прикрепить файл
+        </button>
+        <p class="file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: html raw ═══════════════════════════════════════════════════ -->
+<div id="s-html" class="shell state-bg">
+  <div class="state-wrap">
+    <p class="state-ctx">Контекст: внутри Drawer, вкладка Настройки &rarr; Обратная связь, карточка Общая обратная связь теста (формат html)</p>
+
+    <div class="feedback-panel">
+      <div class="feedback-panel-header">
+        <div class="feedback-panel-title">Общая обратная связь теста</div>
+        <span class="badge badge-outline badge-sm">html</span>
+      </div>
+
+      <div class="format-row">
+        <span class="format-label">Формат:</span>
+        <select class="format-select" aria-label="Формат обратной связи">
+          <option>plain — простой текст</option>
+          <option>richText — форматированный текст</option>
+          <option selected>html — HTML-разметка</option>
+        </select>
+      </div>
+
+      <div class="html-warn" role="note">
+        <svg width="13" height="13"><use href="#i-warn"/></svg>
+        HTML-режим: разметка отображается как есть. Убедитесь в безопасности содержимого.
+      </div>
+
+      <div class="html-editor">
+        <textarea aria-label="HTML-код обратной связи" spellcheck="false">&lt;p&gt;Поздравляем с прохождением теста!&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Модуль 1 — Основы информационной безопасности&lt;/li&gt;
+  &lt;li&gt;Модуль 3 — Классификация угроз&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;a href="https://example.com"&gt;Материалы курса&lt;/a&gt;&lt;/p&gt;</textarea>
+      </div>
+
+      <div class="char-count" aria-live="polite">198 / 5000 символов</div>
+
+      <!-- Downloadable files (feedback_assets) -->
+      <div class="files-section">
+        <div class="files-header">
+          <svg width="12" height="12"><use href="#i-paperclip"/></svg>
+          Файлы для скачивания
+        </div>
+        <div class="file-row">
+          <svg class="file-icon" width="14" height="14"><use href="#i-file"/></svg>
+          <span class="file-name">quick-reference-card.pdf</span>
+          <span class="file-size">320 КБ</span>
+          <button class="file-delete" type="button" aria-label="Удалить файл">
+            <svg width="13" height="13"><use href="#i-trash"/></svg>
+          </button>
+        </div>
+        <button class="upload-btn" type="button">
+          <svg width="12" height="12"><use href="#i-plus"/></svg>
+          Прикрепить файл
+        </button>
+        <p class="file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
+      </div>
+
+      <div class="preview-section">
+        <div class="preview-label">HTML-предпросмотр</div>
+        <div class="preview-box">
+          <p>Поздравляем с прохождением теста!</p>
+          <ul>
+            <li>Модуль 1 — Основы информационной безопасности</li>
+            <li>Модуль 3 — Классификация угроз</li>
+          </ul>
+          <p><a href="#">Материалы курса</a></p>
+          <div class="preview-files">
+            <div class="preview-files-label">Файлы для скачивания</div>
+            <a href="#" class="preview-file-link">
+              <svg width="13" height="13"><use href="#i-paperclip"/></svg>
+              quick-reference-card.pdf <span class="preview-file-size">(320 КБ)</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Empty ══════════════════════════════════════════════════════ -->
+<div id="s-empty" class="shell state-bg">
+  <div class="state-wrap">
+    <p class="state-ctx">Контекст: внутри Drawer, вкладка Настройки &rarr; Обратная связь, карточка Общая обратная связь теста (пустое состояние)</p>
+
+    <div class="feedback-panel">
+      <div class="feedback-panel-header">
+        <div class="feedback-panel-title">Общая обратная связь теста</div>
+        <span class="badge badge-outline badge-sm">richText</span>
+      </div>
+
+      <div class="format-row">
+        <span class="format-label">Формат:</span>
+        <select class="format-select" aria-label="Формат обратной связи">
+          <option>plain — простой текст</option>
+          <option selected>richText — форматированный текст</option>
+          <option>html — HTML-разметка</option>
+        </select>
+      </div>
+
+      <div class="editor-toolbar" role="toolbar" aria-label="Панель форматирования">
+        <button class="toolbar-btn" type="button" title="Жирный" aria-pressed="false">
+          <svg width="14" height="14"><use href="#i-bold"/></svg>
+        </button>
+        <button class="toolbar-btn" type="button" title="Курсив" aria-pressed="false">
+          <svg width="14" height="14"><use href="#i-italic"/></svg>
+        </button>
+        <div class="toolbar-sep" aria-hidden="true"></div>
+        <button class="toolbar-btn" type="button" title="Вставить ссылку">
+          <svg width="14" height="14"><use href="#i-link"/></svg>
+        </button>
+        <div class="toolbar-sep" aria-hidden="true"></div>
+        <button class="toolbar-btn" type="button" title="Маркированный список">
+          <svg width="14" height="14"><use href="#i-list"/></svg>
+        </button>
+        <button class="toolbar-btn" type="button" title="Нумерованный список">
+          <svg width="14" height="14"><use href="#i-list-ordered"/></svg>
+        </button>
+      </div>
+
+      <div class="editor-body placeholder" contenteditable="true" role="textbox" aria-multiline="true"
+           aria-label="Текст обратной связи"
+           aria-placeholder="Введите текст, который увидит слушатель после завершения теста...">
+        Введите текст, который увидит слушатель после завершения теста...
+      </div>
+
+      <div class="char-count" aria-live="polite">0 / 2000 символов</div>
+
+      <div class="links-section">
+        <div class="links-header">
+          <svg width="12" height="12"><use href="#i-link"/></svg>
+          Ссылки
+        </div>
+        <p class="section-empty">Ссылки не добавлены.</p>
+        <button class="add-link-btn" type="button">
+          <svg width="12" height="12"><use href="#i-plus"/></svg>
+          Добавить ссылку
+        </button>
+      </div>
+
+      <!-- Downloadable files (feedback_assets) -->
+      <div class="files-section">
+        <div class="files-header">
+          <svg width="12" height="12"><use href="#i-paperclip"/></svg>
+          Файлы для скачивания
+        </div>
+        <p class="section-empty">Файлы не прикреплены.</p>
+        <button class="upload-btn" type="button">
+          <svg width="12" height="12"><use href="#i-plus"/></svg>
+          Прикрепить файл
+        </button>
+        <p class="file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: topic-level feedback ══════════════════════════════════════ -->
+<div id="s-topic" class="shell state-bg">
+  <div class="state-wrap">
+    <p class="state-ctx">Контекст: внутри Drawer, вкладка Состав, карточка темы &laquo;Основы ИБ&raquo;, поле Обратная связь по теме</p>
+
+    <div class="feedback-panel">
+      <div class="feedback-panel-header">
+        <div class="feedback-panel-title">Обратная связь по теме: Основы ИБ</div>
+        <span class="badge badge-outline badge-sm">richText</span>
+      </div>
+
+      <!-- Format selector -->
+      <div class="format-row">
+        <span class="format-label">Формат:</span>
+        <select class="format-select" aria-label="Формат обратной связи по теме">
+          <option>plain — простой текст</option>
+          <option selected>richText — форматированный текст</option>
+          <option>html — HTML-разметка</option>
+        </select>
+        <span class="format-hint">Формат можно изменить — содержимое сохранится.</span>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="editor-toolbar" role="toolbar" aria-label="Панель форматирования">
+        <button class="toolbar-btn active" type="button" title="Жирный (Ctrl+B)" aria-pressed="true">
+          <svg width="14" height="14"><use href="#i-bold"/></svg>
+        </button>
+        <button class="toolbar-btn" type="button" title="Курсив (Ctrl+I)" aria-pressed="false">
+          <svg width="14" height="14"><use href="#i-italic"/></svg>
+        </button>
+        <div class="toolbar-sep" aria-hidden="true"></div>
+        <button class="toolbar-btn" type="button" title="Вставить ссылку (Ctrl+K)">
+          <svg width="14" height="14"><use href="#i-link"/></svg>
+        </button>
+        <div class="toolbar-sep" aria-hidden="true"></div>
+        <button class="toolbar-btn" type="button" title="Маркированный список">
+          <svg width="14" height="14"><use href="#i-list"/></svg>
+        </button>
+        <button class="toolbar-btn" type="button" title="Нумерованный список">
+          <svg width="14" height="14"><use href="#i-list-ordered"/></svg>
+        </button>
+      </div>
+
+      <!-- Rich text body -->
+      <div class="editor-body" contenteditable="true" role="textbox" aria-multiline="true"
+           aria-label="Текст обратной связи по теме">
+        <p>Тема &laquo;Основы ИБ&raquo; завершена. <strong>Изучите дополнительные материалы</strong>, чтобы закрепить знания.</p>
+        <p>Рекомендуем повторить:</p>
+        <ul>
+          <li>Принципы конфиденциальности, целостности и доступности</li>
+          <li>Основные типы атак и методы защиты</li>
+        </ul>
+      </div>
+
+      <div class="char-count" aria-live="polite">196 / 2000 символов</div>
+
+      <!-- External links -->
+      <div class="links-section">
+        <div class="links-header">
+          <svg width="12" height="12"><use href="#i-link"/></svg>
+          Ссылки
+        </div>
+        <div class="link-row">
+          <input type="text" value="Глоссарий по ИБ" placeholder="Подпись ссылки" aria-label="Подпись ссылки 1">
+          <input type="url" value="https://example.com/glossary" placeholder="https://..." aria-label="URL ссылки 1">
+          <button class="link-delete" type="button" aria-label="Удалить ссылку">
+            <svg width="13" height="13"><use href="#i-trash"/></svg>
+          </button>
+        </div>
+        <button class="add-link-btn" type="button" aria-label="Добавить ссылку">
+          <svg width="12" height="12"><use href="#i-plus"/></svg>
+          Добавить ссылку
+        </button>
+      </div>
+
+      <!-- Downloadable files (feedback_assets scope=topic) -->
+      <div class="files-section">
+        <div class="files-header">
+          <svg width="12" height="12"><use href="#i-paperclip"/></svg>
+          Файлы для скачивания
+        </div>
+        <p class="section-empty">Файлы не прикреплены.</p>
+        <button class="upload-btn" type="button">
+          <svg width="12" height="12"><use href="#i-plus"/></svg>
+          Прикрепить файл
+        </button>
+        <p class="file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
+      </div>
+
+      <!-- Preview -->
+      <div class="preview-section">
+        <div class="preview-label">Предпросмотр (как увидит слушатель)</div>
+        <div class="preview-box" aria-label="Предпросмотр обратной связи по теме">
+          <p>Тема &laquo;Основы ИБ&raquo; завершена. <strong>Изучите дополнительные материалы</strong>, чтобы закрепить знания.</p>
+          <p>Рекомендуем повторить:</p>
+          <ul>
+            <li>Принципы конфиденциальности, целостности и доступности</li>
+            <li>Основные типы атак и методы защиты</li>
+          </ul>
+          <div class="preview-links">
+            <a href="#">Глоссарий по ИБ</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance -- PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>FR-36</td><td>Feedback-редактор поддерживает три формата: <code>plain</code> (textarea), <code>richText</code> (toolbar: bold, italic, link, list, ordered-list), <code>html</code> (raw textarea + предпросмотр). Переключение формата сохраняет содержимое.</td></tr>
+      <tr><td>FR-36</td><td>Секция "Ссылки" (<code>test_feedback_links</code> / <code>links[]</code>) доступна во всех форматах: список строк "подпись / URL" с кнопкой удаления и "Добавить ссылку".</td></tr>
+      <tr><td>FR-36</td><td>Секция "Файлы для скачивания" (<code>feedback_assets</code>) доступна во всех форматах: список файлов с именем, размером и кнопкой удаления; кнопка "Прикрепить файл" с подсказкой о допустимых форматах и ограничении размера. Файлы отображаются в предпросмотре как ссылки для скачивания с иконкой и размером.</td></tr>
+      <tr><td>FR-36</td><td>Предпросмотр показывается для форматов <code>richText</code> и <code>html</code>; plain-формат не нуждается в отдельном предпросмотре.</td></tr>
+      <tr><td>FR-36</td><td>HTML-режим показывает предупреждение о безопасности содержимого.</td></tr>
+      <tr><td class="no-code">—</td><td>Пустое состояние: placeholder-текст в области ввода; счётчик символов 0/max; секции ссылок и файлов показывают empty-state текст.</td></tr>
+      <tr><td class="no-code">—</td><td><strong>Контекст теста</strong> (s-richtext, s-plain, s-html, s-empty): редактор открывается из вкладки Настройки &rarr; Обратная связь, карточка "Общая обратная связь теста"; поле <code>tests.feedback</code>, ресурсы <code>feedback_assets</code> с <code>scope=test</code>.</td></tr>
+      <tr><td class="no-code">—</td><td><strong>Контекст темы</strong> (s-topic): редактор открывается из вкладки Состав, карточки темы, поле <code>tests.topics[].feedback</code>; ресурсы <code>feedback_assets</code> с <code>scope=topic</code>. Разметка редактора идентична тестовому контексту, отличаются только заголовок и контекстная строка.</td></tr>
+      <tr><td>NFR-21</td><td>Toolbar-кнопки имеют <code>title</code> и <code>aria-pressed</code>; область ввода имеет <code>aria-label</code> и <code>aria-multiline</code>; счётчик символов -- <code>aria-live="polite"</code>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function show(id) {
+  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
+    el.classList.toggle('active', el.id === id);
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

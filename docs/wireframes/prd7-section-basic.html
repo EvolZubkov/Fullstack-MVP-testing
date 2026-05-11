@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Section Basic (Состав)</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    .svg-sprite { display: none; }
+    .main-dimmed { opacity: .35; }
+
+    .topic-row {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); margin-bottom: 10px; overflow: hidden;
+    }
+    .topic-row-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; background: var(--accent);
+      border-bottom: 1px solid var(--card-border);
+    }
+    .topic-name  { font-size: 13px; font-weight: 600; flex: 1; }
+    .topic-count { font-size: 12px; color: var(--muted-fg); }
+    .topic-row-body { padding: 12px 14px; }
+
+    .draw-count-row   { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .draw-count-label { font-size: 13px; color: var(--fg); width: 160px; flex-shrink: 0; }
+    .draw-count-input { width: 80px; }
+    .draw-count-max   { font-size: 12px; color: var(--muted-fg); }
+
+    .feedback-label { font-size: 12px; color: var(--muted-fg); margin-bottom: 4px; }
+    .feedback-preview {
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      padding: 10px 12px; font-size: 13px; color: var(--fg);
+      background: var(--bg); margin-top: 8px; cursor: pointer;
+    }
+    .feedback-preview:hover { border-color: var(--primary); }
+    .feedback-preview-empty { color: var(--muted-fg); font-style: italic; }
+    .feedback-text  { display: flex; align-items: baseline; gap: 8px; }
+    .feedback-snippet { flex: 1; }
+    .feedback-meta {
+      display: flex; gap: 8px; margin-top: 6px;
+      font-size: 11px; color: var(--muted-fg);
+    }
+    .feedback-meta-sep { color: var(--border); }
+    .btn-inline { margin-left: 8px; flex-shrink: 0; }
+    .btn-full   { width: 100%; }
+    .badge-xs   { font-size: 11px; }
+    .adaptive-notice { margin-top: 16px; }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Section basic:</span>
+  <button class="wf-btn active" type="button" onclick="show('s-standard')">Standard (Состав)</button>
+  <button class="wf-btn"        type="button" onclick="show('s-adaptive')">Adaptive (адаптивный вид Состава)</button>
+  <a class="wf-link" href="prd7-editor-drawer.html">Reference (Drawer) &rarr;</a>
+</nav>
+
+<svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+  </symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+  </symbol>
+  <symbol id="i-question" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/>
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="8" height="4" x="8" y="2" rx="1"/>
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+  </symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+  </symbol>
+  <symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+  </symbol>
+</svg>
+
+<!-- ═══ STATE: Standard (Состав) ════════════════════════════════════════ -->
+<div id="s-standard" class="shell active">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-folder"/></svg>Темы</div>
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div>
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+    <div class="sidebar-footer"><div class="user-row"><div class="avatar">АИ</div></div></div>
+  </aside>
+  <div class="main main-dimmed" aria-hidden="true"></div>
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="sb-title">
+      <header class="drawer-header">
+        <h1 id="sb-title" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary" aria-label="Черновик с изменениями">Изменено</span>
+        <span class="badge badge-outline">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+      <nav class="drawer-tabs" role="tablist">
+        <button class="drawer-tab active" role="tab" aria-selected="true" type="button"
+                aria-label="Состав, есть несохранённые изменения">
+          Состав <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+      <div class="drawer-body" tabindex="0">
+
+        <div class="section-label">Темы и выборка вопросов</div>
+
+        <!-- Topic 1 -->
+        <div class="topic-row">
+          <div class="topic-row-header">
+            <div class="topic-name">Основы ИБ</div>
+            <span class="badge badge-outline badge-xs"
+                  aria-label="Тема обязательная (редактируется во вкладке Настройки)">
+              Обязательная
+            </span>
+            <div class="topic-count">45 вопросов</div>
+          </div>
+          <div class="topic-row-body">
+            <div class="draw-count-row">
+              <div class="draw-count-label">Вопросов в тест</div>
+              <input type="number" class="draw-count-input" value="15" min="1" max="45"
+                     aria-label="Количество вопросов из темы 'Основы ИБ'">
+              <div class="draw-count-max">из 45</div>
+            </div>
+            <div class="feedback-label">Обратная связь по теме</div>
+            <div class="feedback-preview" role="button" tabindex="0"
+                 aria-label="Редактировать обратную связь по теме 'Основы ИБ'">
+              <div class="feedback-text">
+                <span class="feedback-snippet">Поздравляем с прохождением базового модуля!</span>
+                <button class="btn btn-ghost btn-sm btn-inline" type="button" aria-label="Редактировать">
+                  <svg width="12" height="12"><use href="#i-pencil"/></svg>
+                </button>
+              </div>
+              <div class="feedback-meta">
+                <svg width="10" height="10"><use href="#i-link"/></svg> 1 ссылка
+                <span class="feedback-meta-sep">·</span>
+                <svg width="10" height="10"><use href="#i-paperclip"/></svg> 1 файл
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Topic 2 -->
+        <div class="topic-row">
+          <div class="topic-row-header">
+            <div class="topic-name">Сетевая безопасность</div>
+            <div class="topic-count">30 вопросов</div>
+          </div>
+          <div class="topic-row-body">
+            <div class="draw-count-row">
+              <div class="draw-count-label">Вопросов в тест</div>
+              <input type="number" class="draw-count-input" value="20" min="1" max="30"
+                     aria-label="Количество вопросов из темы 'Сетевая безопасность'">
+              <div class="draw-count-max">из 30</div>
+            </div>
+            <div class="feedback-label">Обратная связь по теме</div>
+            <div class="feedback-preview feedback-preview-empty" role="button" tabindex="0"
+                 aria-label="Добавить обратную связь по теме 'Сетевая безопасность'">
+              Не задано — нажмите для редактирования
+            </div>
+          </div>
+        </div>
+
+        <!-- Topic 3 -->
+        <div class="topic-row">
+          <div class="topic-row-header">
+            <div class="topic-name">Практика</div>
+            <div class="topic-count">20 вопросов</div>
+          </div>
+          <div class="topic-row-body">
+            <div class="draw-count-row">
+              <div class="draw-count-label">Вопросов в тест</div>
+              <input type="number" class="draw-count-input" value="10" min="1" max="20"
+                     aria-label="Количество вопросов из темы 'Практика'">
+              <div class="draw-count-max">из 20</div>
+            </div>
+            <div class="feedback-label">Обратная связь по теме</div>
+            <div class="feedback-preview feedback-preview-empty" role="button" tabindex="0"
+                 aria-label="Добавить обратную связь по теме 'Практика'">
+              Не задано — нажмите для редактирования
+            </div>
+          </div>
+        </div>
+
+        <!-- Add topic button -->
+        <button class="btn btn-outline btn-sm btn-full" type="button">
+          <svg width="14" height="14"><use href="#i-plus"/></svg>
+          Добавить тему
+        </button>
+
+        <p class="form-hint" style="margin-top:8px;">
+          Общая обратная связь теста редактируется во вкладке Настройки &rarr; Обратная связь.
+        </p>
+      </div>
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены: <span class="badge badge-outline badge-xs">Состав</span>
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+          <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ═══ STATE: Adaptive mode (Состав доступен, draw_count заменён) ════════ -->
+<div id="s-adaptive" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-folder"/></svg>Темы</div>
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div>
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+    <div class="sidebar-footer"><div class="user-row"><div class="avatar">АИ</div></div></div>
+  </aside>
+  <div class="main main-dimmed" aria-hidden="true"></div>
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="sb2-title">
+      <header class="drawer-header">
+        <h1 id="sb2-title" class="drawer-title">GDPR для разработчиков</h1>
+        <span class="badge badge-secondary">Черновик</span>
+        <span class="badge badge-outline">v3</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+      <nav class="drawer-tabs" role="tablist">
+        <button class="drawer-tab active" role="tab" aria-selected="true"  type="button"
+                aria-label="Состав, есть несохранённые изменения">
+          Состав <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+      <div class="drawer-body" tabindex="0">
+
+        <!-- Info banner for adaptive mode -->
+        <div class="banner info" role="note">
+          <svg width="14" height="14"><use href="#i-warn"/></svg>
+          В адаптивном режиме количество вопросов подбирается алгоритмом.
+          Темы и обратная связь по темам редактируются здесь.
+        </div>
+
+        <div class="section-label" style="margin-top:12px;">Темы и выборка вопросов</div>
+
+        <!-- Topic 1 (adaptive) -->
+        <div class="topic-row">
+          <div class="topic-row-header">
+            <div class="topic-name">Основы GDPR</div>
+            <span class="badge badge-outline badge-xs"
+                  aria-label="Тема обязательная (редактируется во вкладке Настройки)">
+              Обязательная
+            </span>
+            <div class="topic-count">38 вопросов</div>
+          </div>
+          <div class="topic-row-body">
+            <!-- draw_count replaced with read-only chip in adaptive mode -->
+            <div class="draw-count-row">
+              <div class="draw-count-label">Вопросов в тест</div>
+              <span class="badge badge-outline" style="font-size:12px;padding:4px 9px;"
+                    aria-label="Подбор вопросов: адаптивный">
+                Подбор вопросов: адаптивный
+              </span>
+              <a href="#" style="font-size:12px;color:var(--primary);margin-left:6px;">
+                Настроить уровни &rarr;
+              </a>
+            </div>
+            <div class="feedback-label">Обратная связь по теме</div>
+            <div class="feedback-preview" role="button" tabindex="0"
+                 aria-label="Редактировать обратную связь по теме 'Основы GDPR'">
+              <div class="feedback-text">
+                <span class="feedback-snippet">Изучите официальную документацию GDPR и примеры кейсов.</span>
+                <button class="btn btn-ghost btn-sm btn-inline" type="button" aria-label="Редактировать">
+                  <svg width="12" height="12"><use href="#i-pencil"/></svg>
+                </button>
+              </div>
+              <div class="feedback-meta">
+                <svg width="10" height="10"><use href="#i-link"/></svg> 2 ссылки
+                <span class="feedback-meta-sep">·</span>
+                <svg width="10" height="10"><use href="#i-paperclip"/></svg> 1 файл
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Topic 2 (adaptive) -->
+        <div class="topic-row">
+          <div class="topic-row-header">
+            <div class="topic-name">Обработка персональных данных</div>
+            <div class="topic-count">25 вопросов</div>
+          </div>
+          <div class="topic-row-body">
+            <div class="draw-count-row">
+              <div class="draw-count-label">Вопросов в тест</div>
+              <span class="badge badge-outline" style="font-size:12px;padding:4px 9px;"
+                    aria-label="Подбор вопросов: адаптивный">
+                Подбор вопросов: адаптивный
+              </span>
+              <a href="#" style="font-size:12px;color:var(--primary);margin-left:6px;">
+                Настроить уровни &rarr;
+              </a>
+            </div>
+            <div class="feedback-label">Обратная связь по теме</div>
+            <div class="feedback-preview feedback-preview-empty" role="button" tabindex="0"
+                 aria-label="Добавить обратную связь по теме 'Обработка персональных данных'">
+              Не задано — нажмите для редактирования
+            </div>
+          </div>
+        </div>
+
+        <!-- Add topic button -->
+        <button class="btn btn-outline btn-sm btn-full" type="button">
+          <svg width="14" height="14"><use href="#i-plus"/></svg>
+          Добавить тему
+        </button>
+
+        <p class="form-hint" style="margin-top:8px;">
+          Общая обратная связь теста редактируется во вкладке Настройки &rarr; Обратная связь.
+        </p>
+      </div>
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены: <span class="badge badge-outline badge-xs">Состав</span>
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+          <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance -- PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>FR-36</td><td>Вкладка Состав доступна и редактируема в обоих режимах:
+        стандартном и адаптивном. Состав никогда не скрывается полностью.</td></tr>
+      <tr><td>FR-36</td><td>В стандартном режиме: draw_count редактируется для каждой
+        темы. Обратная связь по теме (текст, ссылки, файлы) редактируется здесь.
+        Preview-блок показывает сниппет и счётчики links/files; пустой -- placeholder.</td></tr>
+      <tr><td>FR-36</td><td>В адаптивном режиме: draw_count заменяется read-only чипом
+        "Подбор вопросов: адаптивный" со ссылкой "Настроить уровни &rarr;" в
+        Настройки &rarr; Адаптивность. Выше списка тем -- info-баннер, объясняющий
+        режим. Обратная связь по теме редактируется здесь же.</td></tr>
+      <tr><td>FR-36</td><td>Бейдж "Обязательная" в заголовке темы read-only (aria-label
+        указывает, что редактируется во вкладке Настройки). Признак required хранится
+        в test_sections.required; редактируется в Настройки &rarr; Правила прохождения.</td></tr>
+      <tr><td>§3.6</td><td>Общая обратная связь теста (tests.feedback) НЕ редактируется
+        в Составе. Под списком тем показывается одна строка-подсказка с ссылкой на
+        Настройки &rarr; Обратная связь.</td></tr>
+      <tr><td class="no-code">—</td><td>Порядок тем меняется перетаскиванием во вкладке Структура, не в Составе.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function show(id) {
+  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
+    el.classList.toggle('active', el.id === id);
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

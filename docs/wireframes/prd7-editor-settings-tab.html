@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Settings Tab</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    /* Pass rules table */
+    .pass-mode-card {
+      border: 1px solid var(--card-border); border-radius: var(--radius-md);
+      padding: 10px 14px; margin-bottom: 8px; cursor: pointer;
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+    .pass-mode-card:hover { border-color: hsl(217 91% 70%); background: hsl(217 91% 99%); }
+    .pass-mode-card.selected { border-color: var(--primary); background: hsl(217 91% 97%); }
+    .radio-circle {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 2px solid var(--input-b); flex-shrink: 0; margin-top: 2px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .radio-circle.checked { border-color: var(--primary); }
+    .radio-circle.checked::after { content:''; width:8px; height:8px; border-radius:50%; background:var(--primary); }
+    .pass-mode-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+    .pass-mode-desc { font-size: 12px; color: var(--muted-fg); line-height: 1.4; }
+    .threshold-row { display: flex; align-items: center; gap: 10px; }
+    .threshold-type { width: auto; height: 36px; padding: 0 28px 0 10px; }
+    .threshold-value { width: 90px; }
+    .topic-pass-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    .topic-pass-table th {
+      padding: 7px 10px; background: var(--accent); text-align: left;
+      font-size: 11px; font-weight: 600; color: var(--muted-fg);
+      border-bottom: 1px solid var(--border);
+    }
+    .topic-pass-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .topic-pass-table tr:last-child td { border-bottom: none; }
+    .time-row { display: flex; align-items: center; gap: 10px; }
+    /* Segmented control */
+    .seg-ctrl {
+      display: inline-flex; border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .seg-btn {
+      padding: 7px 18px; font-size: 13px; font-weight: 500;
+      background: var(--bg); border: none; cursor: pointer;
+      color: var(--fg); transition: background .15s;
+    }
+    .seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+    .seg-btn.active { background: var(--primary); color: #fff; }
+    /* Inline warning */
+    .inline-warn {
+      background: hsl(38 92% 96%); border: 1px solid hsl(38 92% 75%);
+      border-radius: var(--radius); padding: 10px 14px; font-size: 12px;
+      color: hsl(38 80% 30%); line-height: 1.5; margin-top: 10px;
+    }
+    /* Feedback card */
+    .feedback-card {
+      border: 1px solid var(--card-border); border-radius: var(--radius-md);
+      padding: 14px 16px; margin-bottom: 12px;
+    }
+    .feedback-card-title { font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--fg); }
+    .link-list-item {
+      display: flex; align-items: center; gap: 8px; padding: 6px 0;
+      border-bottom: 1px dashed var(--border); font-size: 13px;
+    }
+    .link-list-item:last-child { border-bottom: none; }
+    .pdf-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: hsl(0 80% 97%); border: 1px solid hsl(0 60% 85%);
+      border-radius: var(--radius-sm); padding: 3px 8px; font-size: 12px; color: hsl(0 60% 40%);
+    }
+    /* Adaptive table */
+    .adaptive-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    .adaptive-table th {
+      padding: 7px 10px; background: var(--accent); text-align: left;
+      font-size: 11px; font-weight: 600; color: var(--muted-fg);
+      border-bottom: 1px solid var(--border);
+    }
+    .adaptive-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .adaptive-table tr:last-child td { border-bottom: none; }
+    /* Detail panel */
+    .detail-panel {
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      margin-top: 16px; overflow: hidden;
+    }
+    .detail-panel-header {
+      background: var(--accent); padding: 10px 14px;
+      font-size: 13px; font-weight: 600; color: var(--fg);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    /* Difficulty bar chart */
+    .diff-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 12px; }
+    .diff-bar { height: 12px; border-radius: 3px; background: var(--primary); opacity: .7; }
+    /* read-only chip */
+    .ro-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: var(--accent); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 3px 9px; font-size: 12px; color: var(--fg);
+    }
+    /* timer preview */
+    .timer-preview {
+      background: hsl(210 20% 97%); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 8px 14px; font-size: 12px;
+      font-family: ui-monospace, monospace; color: var(--fg); margin-top: 8px;
+      display: flex; gap: 24px;
+    }
+    .timer-item { display: flex; flex-direction: column; gap: 2px; }
+    .timer-label { font-size: 10px; color: var(--muted-fg); text-transform: uppercase; letter-spacing: .04em; }
+    .timer-val { font-size: 14px; font-weight: 600; }
+    /* Policy default note */
+    .policy-note {
+      background: hsl(217 91% 97%); border: 1px solid hsl(217 91% 80%);
+      border-radius: var(--radius); padding: 8px 12px; font-size: 12px;
+      color: hsl(217 60% 35%); line-height: 1.5; margin-top: 8px;
+    }
+    /* Compact select in tables */
+    .tbl-select { width: auto; height: 30px; padding: 0 24px 0 8px; font-size: 12px; }
+    .tbl-toggle { width: 32px; height: 18px; }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Settings tab:</span>
+  <button class="wf-btn active" type="button" onclick="show('s-basic')">Основное</button>
+  <button class="wf-btn"        type="button" onclick="show('s-mode')">Режим и сценарий</button>
+  <button class="wf-btn"        type="button" onclick="show('s-pass-rules')">Правила прохождения</button>
+  <button class="wf-btn"        type="button" onclick="show('s-limits')">Ограничения</button>
+  <button class="wf-btn"        type="button" onclick="show('s-feedback')">Обратная связь</button>
+  <button class="wf-btn"        type="button" onclick="show('s-integration')">Интеграция</button>
+  <button class="wf-btn"        type="button" onclick="show('s-adaptive')">Адаптивность</button>
+  <a class="wf-link" href="prd7-editor-drawer.html">Reference (Drawer) &rarr;</a>
+</nav>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+  </symbol>
+  <symbol id="i-question" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/>
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="8" height="4" x="8" y="2" rx="1"/>
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+  </symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+  </symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+    <polyline points="14 2 14 8 20 8"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </symbol>
+</svg>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     Shared sidebar helper (rendered inside each state shell)
+     ══════════════════════════════════════════════════════════════════════════ -->
+<template id="tpl-sidebar">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-box">TB</div>
+      <div class="sidebar-title">Test Builder</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-folder"/></svg>Темы</div>
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div>
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="nav-item"><svg class="nav-icon"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+    <div class="sidebar-footer"><div class="user-row"><div class="avatar">АИ</div></div></div>
+  </aside>
+</template>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     Shared drawer header + tabs (Settings tab active)
+     ══════════════════════════════════════════════════════════════════════════ -->
+<template id="tpl-drawer-header">
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true">
+      <header class="drawer-header">
+        <h1 class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary" aria-label="Черновик с изменениями">Изменено</span>
+        <span class="badge badge-outline">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="drawer-tab active" role="tab" aria-selected="true"  type="button"
+                aria-label="Настройки, есть несохранённые изменения">
+          Настройки <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+    </section>
+  </div>
+</template>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     Shared footer
+     ══════════════════════════════════════════════════════════════════════════ -->
+<template id="tpl-footer">
+  <footer class="drawer-footer">
+    <div class="drawer-footer-meta">
+      Изменены: <span class="badge badge-outline" style="font-size:11px;">Настройки</span>
+    </div>
+    <div class="drawer-footer-actions">
+      <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+      <button class="btn btn-primary" type="button">Сохранить</button>
+    </div>
+  </footer>
+</template>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     Macro: seven-item side nav. The active item is set per-state by class.
+     Usage: include once per state, add .active to the correct item.
+     ════════════════════════════════════════════════════════════════════════ -->
+
+<!-- ═══ STATE: Основное (3.1) ════════════════════════════════════════════ -->
+<div id="s-basic" class="shell active">
+  <div data-template="tpl-sidebar"></div>
+  <div class="main" style="opacity:.35;" aria-hidden="true"></div>
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="dt-basic-title">
+      <header class="drawer-header">
+        <h1 id="dt-basic-title" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary" aria-label="Черновик с изменениями">Изменено</span>
+        <span class="badge badge-outline">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="drawer-tab active" role="tab" aria-selected="true"  type="button"
+                aria-label="Настройки, есть несохранённые изменения">
+          Настройки <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+      <div class="drawer-body" tabindex="0">
+        <!-- Narrow-viewport selector -->
+        <div class="settings-selector form-group" style="margin-bottom:16px;">
+          <label class="form-label" for="sel-basic" style="font-size:12px;color:var(--muted-fg);">Подраздел</label>
+          <select id="sel-basic">
+            <option selected>Основное</option>
+            <option>Режим и сценарий</option>
+            <option>Правила прохождения</option>
+            <option>Ограничения</option>
+            <option>Обратная связь</option>
+            <option>Интеграция</option>
+            <option>Адаптивность</option>
+          </select>
+        </div>
+        <!-- Two-pane layout -->
+        <div class="settings-pane">
+          <nav class="settings-side-nav" aria-label="Подразделы настроек">
+            <div class="settings-nav-item active" aria-current="page">Основное</div>
+            <div class="settings-nav-item">Режим и сценарий</div>
+            <div class="settings-nav-item">Правила прохождения</div>
+            <div class="settings-nav-item">Ограничения</div>
+            <div class="settings-nav-item">Обратная связь</div>
+            <div class="settings-nav-item">Интеграция</div>
+            <div class="settings-nav-item">Адаптивность</div>
+          </nav>
+          <div>
+            <div class="section-label">Основное</div>
+            <div class="form-group">
+              <label class="form-label" for="f-title">
+                Название <span style="color:var(--destructive);">*</span>
+              </label>
+              <input type="text" id="f-title" value="Основы информационной безопасности">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="f-desc">Описание</label>
+              <textarea id="f-desc">Базовый курс по информационной безопасности для сотрудников компании.</textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="f-status">Статус</label>
+              <select id="f-status">
+                <option>Черновик</option>
+                <option selected>Опубликован</option>
+                <option>В архиве</option>
+              </select>
+              <div class="form-hint">
+                Смена статуса (Опубликовать, В архив, Восстановить) выполняется через
+                действия на карточке теста, а не здесь.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены: <span class="badge badge-outline" style="font-size:11px;">Настройки</span>
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+          <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ═══ STATE: Режим и сценарий (3.2–3.3) ════════════════════════════════ -->
+<div id="s-mode" class="shell">
+  <div data-template="tpl-sidebar"></div>
+  <div class="main" style="opacity:.35;" aria-hidden="true"></div>
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="dt-mode-title">
+      <header class="drawer-header">
+        <h1 id="dt-mode-title" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary">Изменено</span>
+        <span class="badge badge-outline">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="drawer-tab active" role="tab" aria-selected="true"  type="button"
+                aria-label="Настройки, есть несохранённые изменения">
+          Настройки <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+      <div class="drawer-body" tabindex="0">
+        <div class="settings-selector form-group" style="margin-bottom:16px;">
+          <label class="form-label" for="sel-mode" style="font-size:12px;color:var(--muted-fg);">Подраздел</label>
+          <select id="sel-mode">
+            <option>Основное</option>
+            <option selected>Режим и сценарий</option>
+            <option>Правила прохождения</option>
+            <option>Ограничения</option>
+            <option>Обратная связь</option>
+            <option>Интеграция</option>
+            <option>Адаптивность</option>
+          </select>
+        </div>
+        <div class="settings-pane">
+          <nav class="settings-side-nav" aria-label="Подразделы настроек">
+            <div class="settings-nav-item">Основное</div>
+            <div class="settings-nav-item active" aria-current="page">Режим и сценарий</div>
+            <div class="settings-nav-item">Правила прохождения</div>
+            <div class="settings-nav-item">Ограничения</div>
+            <div class="settings-nav-item">Обратная связь</div>
+            <div class="settings-nav-item">Интеграция</div>
+            <div class="settings-nav-item">Адаптивность</div>
+          </nav>
+          <div>
+            <div class="section-label">Режим теста</div>
+            <div class="form-group">
+              <label class="form-label">Режим (tests.mode)</label>
+              <div class="seg-ctrl" role="group" aria-label="Режим теста">
+                <button class="seg-btn active" type="button" aria-pressed="true">Стандартный</button>
+                <button class="seg-btn"        type="button" aria-pressed="false">Адаптивный</button>
+              </div>
+              <div class="form-hint">
+                Переключение сохраняется в черновик немедленно. Несовместимые настройки
+                другого режима сохраняются скрытыми и восстанавливаются при возврате.
+              </div>
+              <!-- Inline warning — informational only, no Apply/Cancel -->
+              <div class="inline-warn" role="status">
+                <svg width="14" height="14" style="vertical-align:-2px;margin-right:4px;">
+                  <use href="#i-warn"/>
+                </svg>
+                Несовместимые настройки сохраняются и появятся снова при возврате к
+                совместимому режиму.
+              </div>
+            </div>
+            <div class="sep"></div>
+            <div class="section-label">Сценарий прохождения</div>
+            <div class="form-group">
+              <label class="form-label" for="f-flow-mode">Сценарий (flowMode)</label>
+              <select id="f-flow-mode">
+                <option selected>Линейный без тем (linear_flat)</option>
+                <option>Линейный по темам (linear_by_topics)</option>
+                <option>Смешанный (mixed)</option>
+                <option>Через страницу-маршрутизатор (router_by_topics)</option>
+              </select>
+              <div class="form-hint">
+                Сценарий определяет структуру предъявления. Изменение отражается во
+                вкладке Структура (режим read-only там).
+              </div>
+            </div>
+            <!-- Router-specific fields (visible when router_by_topics selected) -->
+            <div class="form-group" style="border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-top:4px;">
+              <div style="font-size:12px;font-weight:600;color:var(--muted-fg);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em;">
+                Настройки Router-flow (только для router_by_topics)
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="f-completion">Политика завершения (completionPolicy)</label>
+                <select id="f-completion">
+                  <option selected>Все обязательные разделы завершены</option>
+                  <option>Все разделы пройдены</option>
+                  <option>Любой раздел завершён</option>
+                </select>
+                <div class="form-hint">Условие, при котором доступен переход к итоговому результату.</div>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">Условия разблокировки разделов (sectionUnlockRules)</label>
+                <div style="font-size:12px;color:var(--muted-fg);margin-bottom:6px;">
+                  Правило по умолчанию для разделов:
+                </div>
+                <select aria-label="Условие разблокировки разделов по умолчанию">
+                  <option selected>Всегда доступен (always_available)</option>
+                  <option>После завершения выбранных разделов (after_sections_completed)</option>
+                  <option>После успешного прохождения выбранных разделов (after_sections_passed)</option>
+                </select>
+                <div class="form-hint">
+                  MVP: правило AND по списку prerequisite-разделов. Индивидуальные условия
+                  задаются в Структуре как read-only индикаторы.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены: <span class="badge badge-outline" style="font-size:11px;">Настройки</span>
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+          <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ═══ STATE: Правила прохождения (3.4) ═════════════════════════════════ -->
+<div id="s-pass-rules" class="shell">
+  <div data-template="tpl-sidebar"></div>
+  <div class="main" style="opacity:.35;" aria-hidden="true"></div>
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="dt-pass-title">
+      <header class="drawer-header">
+        <h1 id="dt-pass-title" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary">Изменено</span>
+        <span class="badge badge-outline">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="drawer-tab active" role="tab" aria-selected="true"  type="button"
+                aria-label="Настройки, есть несохранённые изменения">
+          Настройки <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+      <div class="drawer-body" tabindex="0">
+        <div class="settings-selector form-group" style="margin-bottom:16px;">
+          <label class="form-label" for="sel-pass" style="font-size:12px;color:var(--muted-fg);">Подраздел</label>
+          <select id="sel-pass">
+            <option>Основное</option>
+            <option>Режим и сценарий</option>
+            <option selected>Правила прохождения</option>
+            <option>Ограничения</option>
+            <option>Обратная связь</option>
+            <option>Интеграция</option>
+            <option>Адаптивность</option>
+          </select>
+        </div>
+        <div class="settings-pane">
+          <nav class="settings-side-nav" aria-label="Подразделы настроек">
+            <div class="settings-nav-item">Основное</div>
+            <div class="settings-nav-item">Режим и сценарий</div>
+            <div class="settings-nav-item active" aria-current="page">Правила прохождения</div>
+            <div class="settings-nav-item">Ограничения</div>
+            <div class="settings-nav-item">Обратная связь</div>
+            <div class="settings-nav-item">Интеграция</div>
+            <div class="settings-nav-item">Адаптивность</div>
+          </nav>
+          <div>
+            <div class="section-label">Общий порог прохождения</div>
+            <div class="form-group">
+              <label class="form-label" for="f-pass-type">Тип правила</label>
+              <select id="f-pass-type" class="threshold-type">
+                <option selected>Процент правильных ответов (percent)</option>
+                <option>Абсолютное число (absolute)</option>
+                <option>Не проверять (none)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="f-pass-val">Порог</label>
+              <div class="threshold-row">
+                <input type="number" id="f-pass-val" value="70" class="threshold-value">
+                <span style="font-size:13px;color:var(--muted-fg);">% правильных ответов</span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="f-pass-policy">Политика итогового решения (passDecisionPolicy)</label>
+              <select id="f-pass-policy">
+                <option selected>Только общий результат (overall_only)</option>
+                <option>Общий результат и обязательные темы (overall_and_required_topics)</option>
+                <option>Только обязательные темы (required_topics_only)</option>
+                <option>Все темы должны быть пройдены (all_topics_passed)</option>
+              </select>
+              <div class="policy-note">
+                По умолчанию: если правила по темам не включены — <code>overall_only</code>;
+                если включено хотя бы одно правило по теме — <code>overall_and_required_topics</code>.
+                <code>required_topics_only</code> и <code>all_topics_passed</code> — явные
+                advanced-варианты.
+              </div>
+            </div>
+            <div class="sep"></div>
+            <div class="section-label">Правила по темам</div>
+            <table class="topic-pass-table" aria-label="Правила прохождения по темам">
+              <thead>
+                <tr>
+                  <th>Тема</th>
+                  <th>Источник правила (topicPassRule.source)</th>
+                  <th>Обязательная</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Основы ИБ</td>
+                  <td>
+                    <select class="tbl-select" aria-label="Источник правила для темы Основы ИБ">
+                      <option selected>Как в тесте (inherit_overall)</option>
+                      <option>Индивидуальное правило (custom)</option>
+                      <option>Не проверять тему отдельно (none)</option>
+                    </select>
+                  </td>
+                  <td>
+                    <div class="toggle on tbl-toggle" role="switch" aria-checked="true"
+                         aria-label="Тема обязательная"></div>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Сетевая безопасность</td>
+                  <td>
+                    <!-- custom selected: threshold inputs shown inline -->
+                    <div style="display:flex;flex-direction:column;gap:4px;">
+                      <select class="tbl-select" aria-label="Источник правила для темы Сетевая безопасность">
+                        <option>Как в тесте (inherit_overall)</option>
+                        <option selected>Индивидуальное правило (custom)</option>
+                        <option>Не проверять тему отдельно (none)</option>
+                      </select>
+                      <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+                        <select class="tbl-select" style="width:100px;"
+                                aria-label="Тип правила для темы Сетевая безопасность">
+                          <option selected>Процент</option>
+                          <option>Абсолютное</option>
+                        </select>
+                        <input type="number" value="80" style="width:60px;height:30px;font-size:12px;padding:0 6px;">
+                        <span style="font-size:12px;color:var(--muted-fg);">%</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="toggle on tbl-toggle" role="switch" aria-checked="true"
+                         aria-label="Тема обязательная"></div>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Практика</td>
+                  <td>
+                    <select class="tbl-select" aria-label="Источник правила для темы Практика">
+                      <option>Как в тесте (inherit_overall)</option>
+                      <option>Индивидуальное правило (custom)</option>
+                      <option selected>Не проверять тему отдельно (none)</option>
+                    </select>
+                  </td>
+                  <td>
+                    <div class="toggle off tbl-toggle" role="switch" aria-checked="false"
+                         aria-label="Тема необязательная"></div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены: <span class="badge badge-outline" style="font-size:11px;">Настройки</span>
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+          <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ═══ STATE: Ограничения (3.5) ═════════════════════════════════════════ -->
+<div id="s-limits" class="shell">
+  <div data-template="tpl-sidebar"></div>
+  <div class="main" style="opacity:.35;" aria-hidden="true"></div>
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="dt-lim-title">
+      <header class="drawer-header">
+        <h1 id="dt-lim-title" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary">Изменено</span>
+        <span class="badge badge-outline">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="drawer-tab active" role="tab" aria-selected="true"  type="button"
+                aria-label="Настройки, есть несохранённые изменения">
+          Настройки <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+      <div class="drawer-body" tabindex="0">
+        <div class="settings-selector form-group" style="margin-bottom:16px;">
+          <label class="form-label" for="sel-lim" style="font-size:12px;color:var(--muted-fg);">Подраздел</label>
+          <select id="sel-lim">
+            <option>Основное</option>
+            <option>Режим и сценарий</option>
+            <option>Правила прохождения</option>
+            <option selected>Ограничения</option>
+            <option>Обратная связь</option>
+            <option>Интеграция</option>
+            <option>Адаптивность</option>
+          </select>
+        </div>
+        <div class="settings-pane">
+          <nav class="settings-side-nav" aria-label="Подразделы настроек">
+            <div class="settings-nav-item">Основное</div>
+            <div class="settings-nav-item">Режим и сценарий</div>
+            <div class="settings-nav-item">Правила прохождения</div>
+            <div class="settings-nav-item active" aria-current="page">Ограничения</div>
+            <div class="settings-nav-item">Обратная связь</div>
+            <div class="settings-nav-item">Интеграция</div>
+            <div class="settings-nav-item">Адаптивность</div>
+          </nav>
+          <div>
+            <div class="section-label">Лимит времени теста</div>
+            <div class="form-group">
+              <label class="form-label" for="f-time">Лимит времени (tests.time_limit_minutes)</label>
+              <div class="time-row">
+                <input type="number" id="f-time" value="45" style="width:140px;">
+                <span style="font-size:13px;color:var(--muted-fg);">минут</span>
+              </div>
+              <div class="form-hint">Оставьте пустым, чтобы не ограничивать.</div>
+            </div>
+            <div class="sep"></div>
+            <div class="section-label">Лимит времени темы</div>
+            <div class="form-group">
+              <label class="form-label" for="f-topic-time-src">Источник лимита (topicTimeLimit.source)</label>
+              <select id="f-topic-time-src">
+                <option>Как в тесте (inherit_test)</option>
+                <option selected>Индивидуальный лимит (custom)</option>
+                <option>Без отдельного лимита (none)</option>
+              </select>
+              <div class="form-hint">
+                При выборе "Как в тесте" тема делит общий таймер теста. При "Индивидуальном лимите"
+                действуют оба таймера одновременно.
+              </div>
+            </div>
+            <!-- Per-topic time limit table (shown when source = custom) -->
+            <table class="topic-pass-table" aria-label="Индивидуальные лимиты времени по темам"
+                   style="margin-bottom:12px;">
+              <thead>
+                <tr>
+                  <th>Тема</th>
+                  <th>Лимит (мин)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Основы ИБ</td>
+                  <td>
+                    <input type="number" value="15" style="width:80px;height:30px;font-size:12px;padding:0 6px;">
+                  </td>
+                </tr>
+                <tr>
+                  <td>Сетевая безопасность</td>
+                  <td>
+                    <input type="number" value="20" style="width:80px;height:30px;font-size:12px;padding:0 6px;">
+                  </td>
+                </tr>
+                <tr>
+                  <td>Практика</td>
+                  <td>
+                    <input type="number" value="10" style="width:80px;height:30px;font-size:12px;padding:0 6px;">
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <!-- Dual-timer preview -->
+            <div class="form-hint" style="margin-bottom:4px;">
+              Предпросмотр таймеров в runtime (оба таймера работают одновременно):
+            </div>
+            <div class="timer-preview" role="img" aria-label="Пример отображения таймеров">
+              <div class="timer-item">
+                <span class="timer-label">Осталось в теме</span>
+                <span class="timer-val">08:25</span>
+              </div>
+              <div class="timer-item">
+                <span class="timer-label">Всего в тесте</span>
+                <span class="timer-val">42:10</span>
+              </div>
+            </div>
+            <div class="sep"></div>
+            <div class="section-label">Попытки и результаты</div>
+            <div class="form-group">
+              <label class="form-label" for="f-attempts">Максимум попыток (tests.max_attempts)</label>
+              <input type="number" id="f-attempts" value="" placeholder="Без ограничения" style="width:140px;">
+              <div class="form-hint">Оставьте пустым для неограниченного числа попыток.</div>
+            </div>
+            <div class="form-group">
+              <div class="toggle-row">
+                <div class="toggle off" role="switch" aria-checked="false"
+                     aria-label="Показывать правильные ответы выключено"></div>
+                <span>Показывать правильные ответы после прохождения (show_correct_answers)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены: <span class="badge badge-outline" style="font-size:11px;">Настройки</span>
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+          <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ═══ STATE: Обратная связь (3.6) ══════════════════════════════════════ -->
+<div id="s-feedback" class="shell">
+  <div data-template="tpl-sidebar"></div>
+  <div class="main" style="opacity:.35;" aria-hidden="true"></div>
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="dt-fb-title">
+      <header class="drawer-header">
+        <h1 id="dt-fb-title" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary">Изменено</span>
+        <span class="badge badge-outline">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="drawer-tab active" role="tab" aria-selected="true"  type="button"
+                aria-label="Настройки, есть несохранённые изменения">
+          Настройки <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+      <div class="drawer-body" tabindex="0">
+        <div class="settings-selector form-group" style="margin-bottom:16px;">
+          <label class="form-label" for="sel-fb" style="font-size:12px;color:var(--muted-fg);">Подраздел</label>
+          <select id="sel-fb">
+            <option>Основное</option>
+            <option>Режим и сценарий</option>
+            <option>Правила прохождения</option>
+            <option>Ограничения</option>
+            <option selected>Обратная связь</option>
+            <option>Интеграция</option>
+            <option>Адаптивность</option>
+          </select>
+        </div>
+        <div class="settings-pane">
+          <nav class="settings-side-nav" aria-label="Подразделы настроек">
+            <div class="settings-nav-item">Основное</div>
+            <div class="settings-nav-item">Режим и сценарий</div>
+            <div class="settings-nav-item">Правила прохождения</div>
+            <div class="settings-nav-item">Ограничения</div>
+            <div class="settings-nav-item active" aria-current="page">Обратная связь</div>
+            <div class="settings-nav-item">Интеграция</div>
+            <div class="settings-nav-item">Адаптивность</div>
+          </nav>
+          <div>
+            <!-- Card 1: test-level feedback -->
+            <div class="feedback-card">
+              <div class="feedback-card-title">Общая обратная связь теста</div>
+              <div class="form-group">
+                <label class="form-label" for="f-feedback-body">Текст обратной связи (tests.feedback)</label>
+                <textarea id="f-feedback-body" rows="4" placeholder="Текст, который увидит обучающийся после прохождения теста...">Поздравляем с прохождением теста! Рекомендуем повторить темы, в которых допущены ошибки.</textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Ссылки (test_feedback_links)</label>
+                <div class="link-list-item">
+                  <svg width="14" height="14" style="flex-shrink:0;color:var(--muted-fg);">
+                    <use href="#i-link"/>
+                  </svg>
+                  <span style="flex:1;font-size:12px;">Руководство по информационной безопасности</span>
+                  <span style="font-size:11px;color:var(--muted-fg);">https://example.com/guide</span>
+                  <button class="btn btn-xs btn-ghost" type="button" aria-label="Удалить ссылку">✕</button>
+                </div>
+                <div class="link-list-item">
+                  <svg width="14" height="14" style="flex-shrink:0;color:var(--muted-fg);">
+                    <use href="#i-link"/>
+                  </svg>
+                  <span style="flex:1;font-size:12px;">OWASP Top 10</span>
+                  <span style="font-size:11px;color:var(--muted-fg);">https://owasp.org/top10</span>
+                  <button class="btn btn-xs btn-ghost" type="button" aria-label="Удалить ссылку">✕</button>
+                </div>
+                <button class="btn btn-xs btn-outline" type="button" style="margin-top:6px;">
+                  <svg width="12" height="12"><use href="#i-plus"/></svg>
+                  Добавить ссылку
+                </button>
+              </div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label">PDF-документы (feedback_assets, scope=test)</label>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                  <span class="pdf-chip">
+                    <svg width="12" height="12"><use href="#i-file"/></svg>
+                    Материалы_ИБ.pdf
+                    <button class="btn btn-xs btn-ghost" type="button" style="padding:0 2px;"
+                            aria-label="Удалить файл">✕</button>
+                  </span>
+                  <span class="pdf-chip">
+                    <svg width="12" height="12"><use href="#i-file"/></svg>
+                    Чеклист_безопасности.pdf
+                    <button class="btn btn-xs btn-ghost" type="button" style="padding:0 2px;"
+                            aria-label="Удалить файл">✕</button>
+                  </span>
+                </div>
+                <button class="btn btn-xs btn-outline" type="button">
+                  <svg width="12" height="12"><use href="#i-plus"/></svg>
+                  Загрузить PDF
+                </button>
+                <div class="form-hint">PDF-файлы упаковываются в SCORM и доступны для скачивания.</div>
+              </div>
+            </div>
+
+            <!-- Card 2: topic-level feedback hint -->
+            <div class="feedback-card" style="background:hsl(0 0% 99%);">
+              <div class="feedback-card-title">Обратная связь по темам</div>
+              <p style="font-size:13px;color:var(--muted-fg);margin:0 0 10px;">
+                Текст обратной связи, ссылки и PDF-документы для каждой темы
+                редактируются в карточке темы на вкладке Состав.
+              </p>
+              <a href="#" class="btn btn-sm btn-outline" type="button">
+                Перейти к Составу
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены: <span class="badge badge-outline" style="font-size:11px;">Настройки</span>
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+          <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ═══ STATE: Интеграция (3.7) ══════════════════════════════════════════ -->
+<div id="s-integration" class="shell">
+  <div data-template="tpl-sidebar"></div>
+  <div class="main" style="opacity:.35;" aria-hidden="true"></div>
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="dt-int-title">
+      <header class="drawer-header">
+        <h1 id="dt-int-title" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary">Изменено</span>
+        <span class="badge badge-outline">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="drawer-tab active" role="tab" aria-selected="true"  type="button"
+                aria-label="Настройки, есть несохранённые изменения">
+          Настройки <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+      <div class="drawer-body" tabindex="0">
+        <div class="settings-selector form-group" style="margin-bottom:16px;">
+          <label class="form-label" for="sel-int" style="font-size:12px;color:var(--muted-fg);">Подраздел</label>
+          <select id="sel-int">
+            <option>Основное</option>
+            <option>Режим и сценарий</option>
+            <option>Правила прохождения</option>
+            <option>Ограничения</option>
+            <option>Обратная связь</option>
+            <option selected>Интеграция</option>
+            <option>Адаптивность</option>
+          </select>
+        </div>
+        <div class="settings-pane">
+          <nav class="settings-side-nav" aria-label="Подразделы настроек">
+            <div class="settings-nav-item">Основное</div>
+            <div class="settings-nav-item">Режим и сценарий</div>
+            <div class="settings-nav-item">Правила прохождения</div>
+            <div class="settings-nav-item">Ограничения</div>
+            <div class="settings-nav-item">Обратная связь</div>
+            <div class="settings-nav-item active" aria-current="page">Интеграция</div>
+            <div class="settings-nav-item">Адаптивность</div>
+          </nav>
+          <div>
+            <div class="section-label">Webhook</div>
+            <div class="form-group">
+              <label class="form-label" for="f-webhook">Webhook URL (tests.webhook_url)</label>
+              <input type="text" id="f-webhook" value="" placeholder="https://example.com/webhook">
+              <div class="form-hint">
+                POST-запрос отправляется после завершения попытки. Оставьте пустым, если
+                webhook не нужен.
+              </div>
+            </div>
+            <div class="sep"></div>
+            <div class="section-label">Telemetry</div>
+            <div class="form-group">
+              <div class="toggle-row">
+                <div class="toggle on" role="switch" aria-checked="true"
+                     aria-label="Telemetry включена"></div>
+                <span>Отправлять telemetry (tests.telemetry_enabled)</span>
+              </div>
+              <div class="form-hint">
+                Расширенные данные о взаимодействии отправляются независимо от наличия
+                Webhook URL. Включение/выключение не требует задания адреса webhook.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены: <span class="badge badge-outline" style="font-size:11px;">Настройки</span>
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+          <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ═══ STATE: Адаптивность (3.8) ════════════════════════════════════════ -->
+<div id="s-adaptive" class="shell">
+  <div data-template="tpl-sidebar"></div>
+  <div class="main" style="opacity:.35;" aria-hidden="true"></div>
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="dt-adp-title">
+      <header class="drawer-header">
+        <h1 id="dt-adp-title" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary">Изменено</span>
+        <span class="badge badge-outline">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="drawer-tab active" role="tab" aria-selected="true"  type="button"
+                aria-label="Настройки, есть несохранённые изменения">
+          Настройки <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+      <div class="drawer-body" tabindex="0">
+        <div class="settings-selector form-group" style="margin-bottom:16px;">
+          <label class="form-label" for="sel-adp" style="font-size:12px;color:var(--muted-fg);">Подраздел</label>
+          <select id="sel-adp">
+            <option>Основное</option>
+            <option>Режим и сценарий</option>
+            <option>Правила прохождения</option>
+            <option>Ограничения</option>
+            <option>Обратная связь</option>
+            <option>Интеграция</option>
+            <option selected>Адаптивность</option>
+          </select>
+        </div>
+        <div class="settings-pane">
+          <nav class="settings-side-nav" aria-label="Подразделы настроек">
+            <div class="settings-nav-item">Основное</div>
+            <div class="settings-nav-item">Режим и сценарий</div>
+            <div class="settings-nav-item">Правила прохождения</div>
+            <div class="settings-nav-item">Ограничения</div>
+            <div class="settings-nav-item">Обратная связь</div>
+            <div class="settings-nav-item">Интеграция</div>
+            <div class="settings-nav-item active" aria-current="page">Адаптивность</div>
+          </nav>
+          <div>
+            <!-- Mode indicator -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+              <span class="ro-chip" aria-label="Текущий режим теста: Адаптивный">
+                Режим теста: Адаптивный
+              </span>
+              <a href="#" style="font-size:12px;color:var(--primary);">
+                Изменить в Настройки &rarr; Режим и сценарий
+              </a>
+            </div>
+            <div class="form-hint" style="margin-bottom:16px;">
+              Раздел доступен только при <code>tests.mode = adaptive</code>.
+            </div>
+
+            <!-- 1. Show difficulty level toggle -->
+            <div class="section-label">Видимость сложности</div>
+            <div class="form-group">
+              <div class="toggle-row">
+                <div class="toggle on" role="switch" aria-checked="true"
+                     aria-label="Показывать уровень сложности обучающемуся включено"></div>
+                <span>Показывать уровень сложности обучающемуся (tests.show_difficulty_level)</span>
+              </div>
+            </div>
+
+            <div class="sep"></div>
+
+            <!-- 2. General adaptive settings JSON -->
+            <div class="section-label">Общие параметры адаптации</div>
+            <div class="feedback-card">
+              <div class="feedback-card-title">Общие параметры адаптации (tests.adaptive_settings_json)</div>
+              <div class="form-group" style="margin-bottom:0;">
+                <label class="form-label" for="f-adp-json">JSON / advanced settings</label>
+                <textarea id="f-adp-json" rows="4"
+                          placeholder='{"strategy":"default","defaults":{}}'
+                          style="font-family:ui-monospace,monospace;font-size:12px;"></textarea>
+                <div class="form-hint">Уточняется в следующей итерации.</div>
+              </div>
+            </div>
+
+            <div class="sep"></div>
+
+            <!-- 3. Per-topic adaptive table -->
+            <div class="section-label">Адаптация по темам</div>
+            <table class="adaptive-table" aria-label="Адаптивные настройки по темам">
+              <thead>
+                <tr>
+                  <th>Тема</th>
+                  <th>Включено</th>
+                  <th>Обратная связь при провале темы</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Основы ИБ</td>
+                  <td>
+                    <div class="toggle on tbl-toggle" role="switch" aria-checked="true"
+                         aria-label="Адаптивность включена для темы Основы ИБ"></div>
+                  </td>
+                  <td>
+                    <textarea rows="2" style="width:100%;font-size:12px;"
+                              placeholder="Текст при провале темы...">Рекомендуем повторить основные понятия информационной безопасности.</textarea>
+                  </td>
+                  <td>
+                    <button class="btn btn-xs btn-outline" type="button">Уровни &rarr;</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Сетевая безопасность</td>
+                  <td>
+                    <div class="toggle on tbl-toggle" role="switch" aria-checked="true"
+                         aria-label="Адаптивность включена для темы Сетевая безопасность"></div>
+                  </td>
+                  <td>
+                    <textarea rows="2" style="width:100%;font-size:12px;"
+                              placeholder="Текст при провале темы..."></textarea>
+                  </td>
+                  <td>
+                    <button class="btn btn-xs btn-outline" type="button">Уровни &rarr;</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- 4. Per-topic level detail panel (example: Основы ИБ) -->
+            <div class="detail-panel" aria-label="Уровни темы: Основы ИБ">
+              <div class="detail-panel-header">
+                <span>Уровни темы: Основы ИБ</span>
+                <button class="btn btn-xs btn-ghost" type="button" aria-label="Свернуть">&#8963;</button>
+              </div>
+              <div style="padding:12px 14px;overflow-x:auto;">
+                <table class="adaptive-table" style="min-width:700px;"
+                       aria-label="Уровни адаптации темы Основы ИБ">
+                  <thead>
+                    <tr>
+                      <th>Порядок</th>
+                      <th>Название</th>
+                      <th>Мин. сложность</th>
+                      <th>Макс. сложность</th>
+                      <th>Кол-во вопросов</th>
+                      <th>Порог</th>
+                      <th>Тип порога</th>
+                      <th>Обратная связь</th>
+                      <th>Ссылки</th>
+                      <th>PDF</th>
+                      <th>Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>1</td>
+                      <td><input type="text" value="Базовый" style="width:90px;height:28px;font-size:12px;padding:0 6px;"></td>
+                      <td><input type="number" value="1" style="width:55px;height:28px;font-size:12px;padding:0 6px;"></td>
+                      <td><input type="number" value="3" style="width:55px;height:28px;font-size:12px;padding:0 6px;"></td>
+                      <td><input type="number" value="5" style="width:55px;height:28px;font-size:12px;padding:0 6px;"></td>
+                      <td><input type="number" value="70" style="width:55px;height:28px;font-size:12px;padding:0 6px;"></td>
+                      <td>
+                        <select class="tbl-select" aria-label="Тип порога уровня 1">
+                          <option selected>процент</option>
+                          <option>абсолютное</option>
+                        </select>
+                      </td>
+                      <td>
+                        <button class="btn btn-xs btn-outline" type="button">Открыть</button>
+                      </td>
+                      <td><span class="ro-chip">2</span></td>
+                      <td><span class="ro-chip">1</span></td>
+                      <td style="white-space:nowrap;">
+                        <button class="btn btn-xs btn-ghost" type="button" aria-label="Вверх">&#8593;</button>
+                        <button class="btn btn-xs btn-ghost" type="button" aria-label="Вниз">&#8595;</button>
+                        <button class="btn btn-xs btn-ghost" type="button" aria-label="Удалить"
+                                style="color:var(--destructive);">✕</button>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>2</td>
+                      <td><input type="text" value="Продвинутый" style="width:90px;height:28px;font-size:12px;padding:0 6px;"></td>
+                      <td><input type="number" value="4" style="width:55px;height:28px;font-size:12px;padding:0 6px;"></td>
+                      <td><input type="number" value="7" style="width:55px;height:28px;font-size:12px;padding:0 6px;"></td>
+                      <td><input type="number" value="8" style="width:55px;height:28px;font-size:12px;padding:0 6px;"></td>
+                      <td><input type="number" value="80" style="width:55px;height:28px;font-size:12px;padding:0 6px;"></td>
+                      <td>
+                        <select class="tbl-select" aria-label="Тип порога уровня 2">
+                          <option selected>процент</option>
+                          <option>абсолютное</option>
+                        </select>
+                      </td>
+                      <td>
+                        <button class="btn btn-xs btn-outline" type="button">Открыть</button>
+                      </td>
+                      <td><span class="ro-chip">0</span></td>
+                      <td><span class="ro-chip">0</span></td>
+                      <td style="white-space:nowrap;">
+                        <button class="btn btn-xs btn-ghost" type="button" aria-label="Вверх">&#8593;</button>
+                        <button class="btn btn-xs btn-ghost" type="button" aria-label="Вниз">&#8595;</button>
+                        <button class="btn btn-xs btn-ghost" type="button" aria-label="Удалить"
+                                style="color:var(--destructive);">✕</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <button class="btn btn-sm btn-outline" type="button" style="margin-top:10px;">
+                  <svg width="13" height="13"><use href="#i-plus"/></svg>
+                  Добавить уровень
+                </button>
+              </div>
+            </div>
+
+            <div class="sep"></div>
+
+            <!-- 5. Reference: difficulty distribution -->
+            <div class="section-label">Справка: Распределение сложности в банке</div>
+            <div class="feedback-card" role="img" aria-label="Гистограмма распределения сложности вопросов в банке">
+              <div class="feedback-card-title" style="font-size:12px;color:var(--muted-fg);font-weight:400;margin-bottom:10px;">
+                Справочные данные — не сохраняются как параметр теста.
+              </div>
+              <div class="diff-bar-row">
+                <span style="width:80px;font-size:12px;color:var(--muted-fg);">Уровень 1</span>
+                <div class="diff-bar" style="width:120px;" aria-hidden="true"></div>
+                <span style="font-size:12px;color:var(--muted-fg);">48 вопросов</span>
+              </div>
+              <div class="diff-bar-row">
+                <span style="width:80px;font-size:12px;color:var(--muted-fg);">Уровень 2</span>
+                <div class="diff-bar" style="width:180px;" aria-hidden="true"></div>
+                <span style="font-size:12px;color:var(--muted-fg);">72 вопроса</span>
+              </div>
+              <div class="diff-bar-row">
+                <span style="width:80px;font-size:12px;color:var(--muted-fg);">Уровень 3</span>
+                <div class="diff-bar" style="width:90px;" aria-hidden="true"></div>
+                <span style="font-size:12px;color:var(--muted-fg);">36 вопросов</span>
+              </div>
+              <div class="diff-bar-row">
+                <span style="width:80px;font-size:12px;color:var(--muted-fg);">Уровень 4</span>
+                <div class="diff-bar" style="width:45px;" aria-hidden="true"></div>
+                <span style="font-size:12px;color:var(--muted-fg);">18 вопросов</span>
+              </div>
+              <div class="diff-bar-row">
+                <span style="width:80px;font-size:12px;color:var(--muted-fg);">Уровень 5</span>
+                <div class="diff-bar" style="width:20px;" aria-hidden="true"></div>
+                <span style="font-size:12px;color:var(--muted-fg);">8 вопросов</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены: <span class="badge badge-outline" style="font-size:11px;">Настройки</span>
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+          <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     Acceptance
+     ══════════════════════════════════════════════════════════════════════════ -->
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance -- PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>FR-43</td><td>Вкладка "Настройки" имеет двухуровневую навигацию: side nav (220-260px)
+      на &gt;=960px и <code>&lt;select&gt;</code> на &lt;960px. Семь секций в порядке:
+      Основное, Режим и сценарий, Правила прохождения, Ограничения, Обратная связь,
+      Интеграция, Адаптивность.</td></tr>
+      <tr><td>FR-43 / §3.1</td><td>Основное: Название (обязательное), Описание, Статус
+      (Черновик / Опубликован / В архиве) с подсказкой о том, что смена статуса
+      происходит вне редактора.</td></tr>
+      <tr><td>FR-43 / §3.2-3.3</td><td>Режим и сценарий: segmented control для tests.mode
+      (Стандартный / Адаптивный), select для flowMode с четырьмя значениями,
+      router-specific поля (completionPolicy, sectionUnlockRules) для router_by_topics.
+      Inline warning без кнопок Применить/Отмена.</td></tr>
+      <tr><td>FR-43 / §3.4</td><td>Правила прохождения: overall pass rule, passDecisionPolicy
+      с четырьмя вариантами и заметкой о рекомендуемых умолчаниях, таблица тем с
+      topicPassRule.source (inherit_overall / custom / none), toggle required.</td></tr>
+      <tr><td>FR-43 / §3.5</td><td>Ограничения: лимит времени теста, раздел "Лимит времени темы"
+      с topicTimeLimit.source, таблица индивидуальных лимитов, двойной таймер-preview,
+      max_attempts, show_correct_answers.</td></tr>
+      <tr><td>FR-35 / §3.6</td><td>Обратная связь: карточка "Общая обратная связь теста"
+      (tests.feedback, test_feedback_links, feedback_assets scope=test), карточка-подсказка
+      для перехода к теме обратной связи в Составе.</td></tr>
+      <tr><td>FR-35 / §3.7</td><td>Интеграция: Webhook URL (tests.webhook_url) и toggle
+      telemetry_enabled, независимые друг от друга.</td></tr>
+      <tr><td>FR-36 / §3.8</td><td>Адаптивность: доступна только при tests.mode = adaptive.
+      Показывает: read-only chip режима, toggle show_difficulty_level,
+      карточку adaptive_settings_json, таблицу тем (enabled, failure_feedback, кнопка
+      Уровни), раскрытую панель уровней с полями level_index, level_name, min_difficulty,
+      max_difficulty, questions_count, pass_threshold, pass_threshold_type, feedback,
+      ссылки, документы PDF. Справочный график распределения сложности.
+      Без IRT / SE / "критерия завершения".</td></tr>
+      <tr><td>NFR-19</td><td>Фокус при открытии Drawer на первый интерактивный элемент;
+      drawer-body имеет <code>tabindex="0"</code>.</td></tr>
+      <tr><td>NFR-20</td><td>Drawer использует <code>role="dialog" aria-modal="true"</code>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+  // Inject sidebar template into each state.
+  (function injectSidebar() {
+    var tpl = document.getElementById('tpl-sidebar');
+    if (!tpl) return;
+    document.querySelectorAll('[data-template="tpl-sidebar"]').forEach(function (slot) {
+      slot.appendChild(tpl.content.cloneNode(true));
+    });
+  })();
+
+  function show(id) {
+    document.querySelectorAll('[id^="s-"]').forEach(function (el) {
+      el.classList.toggle('active', el.id === id);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+    });
+  }
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

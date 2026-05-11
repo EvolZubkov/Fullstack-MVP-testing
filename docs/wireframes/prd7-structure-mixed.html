@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Structure - mixed</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    .drawer-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .drawer-title { font-size: 15px; font-weight: 700; flex: 1; }
+    .tab-bar {
+      display: flex; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; padding: 0 20px;
+    }
+    .tab-item {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 14px; font-size: 13px; color: var(--muted-fg);
+      border-bottom: 2px solid transparent; margin-bottom: -1px;
+      background: transparent; border-top: none; border-left: none; border-right: none;
+      cursor: pointer; font-family: inherit;
+    }
+    .tab-item.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+    .drawer-footer {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    .footer-hint { font-size: 12px; color: var(--muted-fg); flex: 1; }
+    .structure-content { flex: 1; overflow-y: auto; padding: 20px; }
+
+    /* Flow mode banner */
+    .flow-mode-bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; background: var(--info-bg); border: 1px solid var(--info-border);
+      border-radius: var(--radius); margin-bottom: 16px; font-size: 13px; color: var(--info-fg);
+    }
+    .flow-mode-label { font-weight: 600; }
+    .change-mode-link { font-size: 12px; color: var(--primary); background: none; border: none;
+      cursor: pointer; padding: 0; font-family: inherit; text-decoration: underline; }
+
+    /* Zone containers */
+    .zone {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); overflow: hidden; margin-bottom: 12px;
+    }
+    .zone-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px; border-bottom: 1px solid var(--card-border);
+    }
+    .zone-icon {
+      width: 28px; height: 28px; border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .zone-icon.before { background: hsl(160 60% 90%); color: hsl(160 60% 30%); }
+    .zone-icon.block  { background: var(--info-bg); color: var(--info-fg); }
+    .zone-icon.after  { background: hsl(38 92% 95%); color: hsl(38 92% 30%); }
+    .zone-title { font-size: 13px; font-weight: 600; flex: 1; }
+    .zone-desc { font-size: 12px; color: var(--muted-fg); }
+    .zone-body { padding: 12px 16px; }
+
+    /* Question pool rows */
+    .pool-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 0; border-bottom: 1px solid var(--card-border);
+    }
+    .pool-row:last-child { border-bottom: none; }
+    .pool-topic { font-size: 13px; flex: 1; }
+    .pool-topic-sub { font-size: 12px; color: var(--muted-fg); }
+    .draw-cell { display: flex; align-items: center; gap: 6px; }
+    .draw-input {
+      width: 52px; text-align: center; font-size: 13px; padding: 4px 6px;
+      border-radius: var(--radius-sm); border: 1px solid var(--input-b);
+    }
+    .draw-total { font-size: 12px; color: var(--muted-fg); white-space: nowrap; }
+
+    /* Drag handle */
+    .drag-handle {
+      display: flex; flex-direction: column; gap: 2px;
+      cursor: grab; padding: 4px 2px; color: var(--muted-fg); flex-shrink: 0;
+    }
+    .drag-handle span { display: block; width: 12px; height: 2px; background: currentColor; border-radius: 1px; }
+
+    /* Add question block placeholder */
+    .add-zone-btn {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; padding: 8px; border: 1px dashed var(--input-b);
+      border-radius: var(--radius-sm); background: transparent;
+      font-size: 12px; color: var(--primary); cursor: pointer; font-family: inherit;
+      margin-top: 8px;
+    }
+    .add-zone-btn:hover { background: var(--info-bg); border-color: var(--primary); }
+
+    /* Block zone topic blocks */
+    .block-topic {
+      border: 1px solid var(--card-border); border-radius: var(--radius-sm);
+      background: var(--bg); margin-bottom: 8px; overflow: hidden;
+    }
+    .block-topic-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 7px 10px; background: var(--accent); border-bottom: 1px solid var(--card-border);
+    }
+    .block-topic-order {
+      width: 20px; height: 20px; border-radius: 50%; background: var(--primary);
+      color: var(--primary-fg); font-size: 10px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .block-topic-title { font-size: 12px; font-weight: 600; flex: 1; }
+    .block-topic-body { padding: 8px 10px; display: flex; align-items: center; gap: 10px; }
+
+    /* Shuffle toggle small */
+    .toggle-sm {
+      position: relative; width: 28px; height: 16px; border-radius: 8px;
+      background: var(--primary); cursor: pointer; flex-shrink: 0;
+    }
+    .toggle-sm.off { background: var(--muted-fg); }
+    .toggle-knob-sm {
+      position: absolute; top: 2px; right: 2px; width: 12px; height: 12px;
+      background: white; border-radius: 50%;
+    }
+    .toggle-sm.off .toggle-knob-sm { right: auto; left: 2px; }
+    .toggle-label { font-size: 12px; color: var(--muted-fg); }
+
+    /* Sequence preview */
+    .seq-flow {
+      display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+      padding: 14px; background: var(--bg);
+    }
+    .seq-node {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 4px; min-width: 80px; text-align: center;
+    }
+    .seq-node-box {
+      width: 56px; height: 36px; border-radius: var(--radius-sm);
+      border: 1px solid var(--card-border); background: var(--card);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600;
+    }
+    .seq-node-box.before { border-color: hsl(160 60% 50%); background: hsl(160 60% 95%); color: hsl(160 60% 25%); }
+    .seq-node-box.block  { border-color: var(--info-border); background: var(--info-bg); color: var(--info-fg); }
+    .seq-node-box.after  { border-color: hsl(38 92% 60%); background: hsl(38 92% 95%); color: hsl(38 92% 25%); }
+    .seq-node-box.result { border-color: var(--card-border); background: var(--accent); color: var(--muted-fg); }
+    .seq-node-label { font-size: 10px; color: var(--muted-fg); }
+    .seq-arrow { font-size: 16px; color: var(--muted-fg); margin: 0 4px; align-self: center; margin-bottom: 14px; }
+  </style>
+</head>
+<body>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Structure / mixed:</span>
+  <button class="wf-btn active" type="button" onclick="show('s-default')">Стандарт</button>
+  <button class="wf-btn"        type="button" onclick="show('s-empty-zones')">Пустые зоны</button>
+  <a class="wf-link" href="prd7-structure-linear-by-topics.html">&larr; linear_by_topics</a>
+  <a class="wf-link" href="prd7-structure-router.html">router &rarr;</a>
+</nav>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M12 2 2 7l10 5 10-5z"/>
+    <path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+  </symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <polygon points="5 3 19 12 5 21 5 3"/>
+  </symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="3" y="3" width="18" height="18" rx="2"/>
+  </symbol>
+</svg>
+
+<!-- ═══ STATE: Default (3 zones filled) ══════════════════════════════════ -->
+<div id="s-default" class="shell active">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg);">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Основы информационной безопасности</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab">Состав</button>
+        <button class="tab-item" type="button" role="tab">Настройки</button>
+        <button class="tab-item" type="button" role="tab">Оформление</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true">Структура</button>
+      </div>
+
+      <div class="structure-content">
+        <div class="flow-mode-bar" role="note">
+          <svg width="14" height="14"><use href="#i-layers"/></svg>
+          <span class="flow-mode-label">Режим: Смешанный (Before / Block / After)</span>
+          &mdash;
+          Вводные вопросы, тематические блоки и итоговые вопросы идут в фиксированном порядке.
+          <button class="change-mode-link" type="button">Изменить</button>
+        </div>
+
+        <!-- ZONE: Before -->
+        <div class="zone" aria-labelledby="zone-before-title">
+          <div class="zone-header" style="background:hsl(160 60% 97%);border-bottom-color:hsl(160 60% 85%);">
+            <div class="zone-icon before" aria-hidden="true">
+              <svg width="14" height="14"><use href="#i-play"/></svg>
+            </div>
+            <div>
+              <div id="zone-before-title" class="zone-title">Вводный блок (Before)</div>
+              <div class="zone-desc">Показывается до тематических блоков. Не учитывается в зачёте по темам.</div>
+            </div>
+            <span class="badge badge-outline" style="color:hsl(160 60% 30%);">3 вопроса</span>
+          </div>
+          <div class="zone-body">
+            <div class="pool-row">
+              <div class="drag-handle" aria-label="Перетащить"><span></span><span></span><span></span></div>
+              <div class="pool-topic">
+                <div>Общие знания об ИБ</div>
+                <div class="pool-topic-sub">Вводный опрос</div>
+              </div>
+              <div class="draw-cell">
+                <input class="draw-input" type="number" value="3" min="1" max="10"
+                       aria-label="Вопросов из вводного блока">
+                <span class="draw-total">из 10</span>
+              </div>
+            </div>
+            <button class="add-zone-btn" type="button" aria-label="Добавить вопросы в вводный блок">
+              <svg width="12" height="12"><use href="#i-plus"/></svg>
+              Добавить вопросы
+            </button>
+          </div>
+        </div>
+
+        <!-- ZONE: Block (topic blocks, ordered) -->
+        <div class="zone" aria-labelledby="zone-block-title">
+          <div class="zone-header" style="background:var(--info-bg);border-bottom-color:var(--info-border);">
+            <div class="zone-icon block" aria-hidden="true">
+              <svg width="14" height="14"><use href="#i-layers"/></svg>
+            </div>
+            <div>
+              <div id="zone-block-title" class="zone-title">Тематический блок (Block)</div>
+              <div class="zone-desc">Темы проходятся последовательно. Результаты учитываются по каждой теме.</div>
+            </div>
+            <span class="badge badge-outline" style="color:var(--info-fg);">25 вопросов, 2 темы</span>
+          </div>
+          <div class="zone-body">
+            <div class="block-topic" aria-label="Блок темы 1: Основы ИБ">
+              <div class="block-topic-header">
+                <div class="drag-handle"><span></span><span></span><span></span></div>
+                <div class="block-topic-order">1</div>
+                <div class="block-topic-title">Основы ИБ</div>
+                <span class="badge badge-outline" style="font-size:11px;">15 из 42</span>
+              </div>
+              <div class="block-topic-body">
+                <div class="draw-cell">
+                  <span style="font-size:12px;color:var(--muted-fg);">Вопросов:</span>
+                  <input class="draw-input" type="number" value="15" min="1" max="42"
+                         aria-label="Вопросов из темы Основы ИБ">
+                  <span class="draw-total">из 42</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <div class="toggle-sm" role="switch" aria-checked="true" aria-label="Перемешивать" tabindex="0">
+                    <div class="toggle-knob-sm"></div>
+                  </div>
+                  <span class="toggle-label">Перемешать</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="block-topic" aria-label="Блок темы 2: Классификация угроз">
+              <div class="block-topic-header">
+                <div class="drag-handle"><span></span><span></span><span></span></div>
+                <div class="block-topic-order">2</div>
+                <div class="block-topic-title">Классификация угроз</div>
+                <span class="badge badge-outline" style="font-size:11px;">10 из 28</span>
+              </div>
+              <div class="block-topic-body">
+                <div class="draw-cell">
+                  <span style="font-size:12px;color:var(--muted-fg);">Вопросов:</span>
+                  <input class="draw-input" type="number" value="10" min="1" max="28"
+                         aria-label="Вопросов из темы Классификация угроз">
+                  <span class="draw-total">из 28</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <div class="toggle-sm off" role="switch" aria-checked="false" aria-label="Перемешивать" tabindex="0">
+                    <div class="toggle-knob-sm"></div>
+                  </div>
+                  <span class="toggle-label">Перемешать</span>
+                </div>
+              </div>
+            </div>
+
+            <button class="add-zone-btn" type="button" aria-label="Добавить тему в тематический блок">
+              <svg width="12" height="12"><use href="#i-plus"/></svg>
+              Добавить тему
+            </button>
+          </div>
+        </div>
+
+        <!-- ZONE: After -->
+        <div class="zone" aria-labelledby="zone-after-title">
+          <div class="zone-header" style="background:hsl(38 92% 97%);border-bottom-color:hsl(38 92% 80%);">
+            <div class="zone-icon after" aria-hidden="true">
+              <svg width="14" height="14"><use href="#i-stop"/></svg>
+            </div>
+            <div>
+              <div id="zone-after-title" class="zone-title">Итоговый блок (After)</div>
+              <div class="zone-desc">Показывается после тематических блоков. Не учитывается в зачёте по темам.</div>
+            </div>
+            <span class="badge badge-outline" style="color:hsl(38 92% 30%);">2 вопроса</span>
+          </div>
+          <div class="zone-body">
+            <div class="pool-row">
+              <div class="drag-handle"><span></span><span></span><span></span></div>
+              <div class="pool-topic">
+                <div>Итоговый опрос</div>
+                <div class="pool-topic-sub">Общая оценка курса</div>
+              </div>
+              <div class="draw-cell">
+                <input class="draw-input" type="number" value="2" min="1" max="5"
+                       aria-label="Вопросов из итогового блока">
+                <span class="draw-total">из 5</span>
+              </div>
+            </div>
+            <button class="add-zone-btn" type="button" aria-label="Добавить вопросы в итоговый блок">
+              <svg width="12" height="12"><use href="#i-plus"/></svg>
+              Добавить вопросы
+            </button>
+          </div>
+        </div>
+
+        <!-- Sequence preview -->
+        <div style="border:1px solid var(--card-border);border-radius:var(--radius);overflow:hidden;margin-top:4px;">
+          <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--card-border);background:var(--accent);font-size:13px;font-weight:600;">
+            Схема воспроизведения
+          </div>
+          <div class="seq-flow" role="img" aria-label="Схема: Старт -> Before (3 вопр.) -> Основы ИБ (15 вопр.) -> Классификация угроз (10 вопр.) -> After (2 вопр.) -> Результат">
+            <div class="seq-node">
+              <div class="seq-node-box" style="font-size:10px;color:var(--muted-fg);">Старт</div>
+              <div class="seq-node-label">опц.</div>
+            </div>
+            <div class="seq-arrow">&#8594;</div>
+            <div class="seq-node">
+              <div class="seq-node-box before">Before</div>
+              <div class="seq-node-label">3 вопр.</div>
+            </div>
+            <div class="seq-arrow">&#8594;</div>
+            <div class="seq-node">
+              <div class="seq-node-box block">Тема 1</div>
+              <div class="seq-node-label">15 вопр.</div>
+            </div>
+            <div class="seq-arrow">&#8594;</div>
+            <div class="seq-node">
+              <div class="seq-node-box block">Тема 2</div>
+              <div class="seq-node-label">10 вопр.</div>
+            </div>
+            <div class="seq-arrow">&#8594;</div>
+            <div class="seq-node">
+              <div class="seq-node-box after">After</div>
+              <div class="seq-node-label">2 вопр.</div>
+            </div>
+            <div class="seq-arrow">&#8594;</div>
+            <div class="seq-node">
+              <div class="seq-node-box result">Итог</div>
+              <div class="seq-node-label">всегда</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="drawer-footer">
+        <div class="footer-hint">Структура: mixed &mdash; итого 30 вопросов (3 + 25 + 2)</div>
+        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+        <button class="btn btn-primary" type="button">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STATE: Пустые зоны ═══════════════════════════════════════════════ -->
+<div id="s-empty-zones" class="shell">
+  <aside class="sidebar">
+    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
+    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
+    <div class="sidebar-footer"></div>
+  </aside>
+  <div class="main" style="flex-direction:column;">
+    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg);">
+
+      <div class="drawer-header">
+        <div class="drawer-title">Новый тест</div>
+        <span class="badge badge-secondary">Черновик</span>
+        <div style="flex:1;"></div>
+        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+      </div>
+
+      <div class="tab-bar" role="tablist">
+        <button class="tab-item" type="button" role="tab">Состав</button>
+        <button class="tab-item" type="button" role="tab">Настройки</button>
+        <button class="tab-item" type="button" role="tab">Оформление</button>
+        <button class="tab-item active" type="button" role="tab" aria-selected="true">Структура</button>
+      </div>
+
+      <div class="structure-content">
+        <div class="flow-mode-bar" role="note">
+          <svg width="14" height="14"><use href="#i-layers"/></svg>
+          <span class="flow-mode-label">Режим: Смешанный (Before / Block / After)</span>
+        </div>
+
+        <!-- ZONE: Before (empty) -->
+        <div class="zone">
+          <div class="zone-header" style="background:hsl(160 60% 97%);border-bottom-color:hsl(160 60% 85%);">
+            <div class="zone-icon before"><svg width="14" height="14"><use href="#i-play"/></svg></div>
+            <div>
+              <div class="zone-title">Вводный блок (Before)</div>
+              <div class="zone-desc">Опционально. Добавьте вводные вопросы.</div>
+            </div>
+            <span class="badge badge-outline" style="color:var(--muted-fg);">Пусто</span>
+          </div>
+          <div class="zone-body">
+            <div style="text-align:center;padding:12px 0;font-size:13px;color:var(--muted-fg);">Вводные вопросы не добавлены</div>
+            <button class="add-zone-btn" type="button">
+              <svg width="12" height="12"><use href="#i-plus"/></svg>
+              Добавить вопросы
+            </button>
+          </div>
+        </div>
+
+        <!-- ZONE: Block (required, has warning) -->
+        <div class="zone" style="border-color:var(--warn-border);">
+          <div class="zone-header" style="background:var(--warn-bg);border-bottom-color:var(--warn-border);">
+            <div class="zone-icon block"><svg width="14" height="14"><use href="#i-layers"/></svg></div>
+            <div>
+              <div class="zone-title">Тематический блок (Block)</div>
+              <div class="zone-desc">Добавьте хотя бы одну тему для тематического блока.</div>
+            </div>
+            <span class="status-icon warn" aria-hidden="true">
+              <svg width="14" height="14"><use href="#i-layers"/></svg>
+            </span>
+            <span class="badge badge-warn" aria-label="Предупреждение: блок пуст">Обязательно</span>
+          </div>
+          <div class="zone-body">
+            <div style="text-align:center;padding:12px 0;font-size:13px;color:var(--muted-fg);">Темы не добавлены</div>
+            <button class="add-zone-btn" type="button" style="border-color:var(--warn-border);">
+              <svg width="12" height="12"><use href="#i-plus"/></svg>
+              Добавить тему
+            </button>
+          </div>
+        </div>
+
+        <!-- ZONE: After (empty) -->
+        <div class="zone">
+          <div class="zone-header" style="background:hsl(38 92% 97%);border-bottom-color:hsl(38 92% 80%);">
+            <div class="zone-icon after"><svg width="14" height="14"><use href="#i-stop"/></svg></div>
+            <div>
+              <div class="zone-title">Итоговый блок (After)</div>
+              <div class="zone-desc">Опционально. Добавьте итоговые вопросы.</div>
+            </div>
+            <span class="badge badge-outline" style="color:var(--muted-fg);">Пусто</span>
+          </div>
+          <div class="zone-body">
+            <div style="text-align:center;padding:12px 0;font-size:13px;color:var(--muted-fg);">Итоговые вопросы не добавлены</div>
+            <button class="add-zone-btn" type="button">
+              <svg width="12" height="12"><use href="#i-plus"/></svg>
+              Добавить вопросы
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="drawer-footer">
+        <div class="footer-hint" style="color:var(--warn-fg);">Добавьте хотя бы одну тему в тематический блок</div>
+        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance -- PRD-7 покрытие</h2>
+    <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td class="no-code">—</td><td>Структура <code>mixed</code>: три зоны -- Before (вводный, опционально), Block (тематический, обязателен), After (итоговый, опционально). Каждая зона визуально отличается цветом заголовка.</td></tr>
+      <tr><td class="no-code">—</td><td>Зона Block содержит упорядоченные блоки тем с drag-handle, draw-input и переключателем перемешивания.</td></tr>
+      <tr><td class="no-code">—</td><td>Зоны Before и After содержат пулы вопросов (без тематического деления).</td></tr>
+      <tr><td class="no-code">—</td><td>Схема воспроизведения: горизонтальная диаграмма Before &#8594; Тема1 &#8594; Тема2... &#8594; After &#8594; Итог.</td></tr>
+      <tr><td class="no-code">—</td><td>Пустые зоны: Before/After показывают empty-state без предупреждения; Block показывает warn-badge и кнопка "Сохранить" disabled пока блок пуст.</td></tr>
+      <tr><td>NFR-21</td><td>Схема воспроизведения имеет <code>role="img"</code> и <code>aria-label</code> с текстовым описанием последовательности; зоны имеют <code>aria-labelledby</code>.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+function show(id) {
+  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
+    el.classList.toggle('active', el.id === id);
+  });
+  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  });
+}
+</script>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>

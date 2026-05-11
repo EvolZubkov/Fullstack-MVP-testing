@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Test Editor Drawer (reference)</title>
+  <link rel="stylesheet" href="prd7-shared.css">
+  <style>
+    /* Wireframe-only helpers (do not migrate to prd7-shared.css). */
+    .wf-section-title {
+      padding: 12px 24px 8px; font-size: 11px; font-weight: 600;
+      color: var(--muted-fg); text-transform: uppercase; letter-spacing: 0.06em;
+      background: hsl(0 0% 92%);
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .wf-back-btn {
+      font-size: 12px; font-weight: 500; text-transform: none;
+      letter-spacing: 0; color: var(--primary); background: transparent;
+      border: 1px solid hsl(217 91% 80%); border-radius: var(--radius-sm);
+      padding: 4px 10px; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+    .wf-back-btn:hover { background: var(--accent); }
+    /* When a wide-canvas shell is active, hide the mobile demo so its
+       contents do not bleed through the semi-transparent drawer overlay. */
+    body.has-active-shell .mobile-section { display: none; }
+
+    /* ── Changes popover (anchored above "Показать изменения" button) ─── */
+    .changes-anchor { position: relative; }
+    .changes-anchor > .btn.btn-ghost {
+      background: var(--accent); color: var(--fg); border-color: var(--border);
+    }
+    .changes-popover {
+      position: absolute; bottom: calc(100% + 10px); right: 0;
+      width: 420px; max-height: 440px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+      display: flex; flex-direction: column;
+      z-index: 30;
+    }
+    .changes-popover::after {
+      content: ''; position: absolute; bottom: -7px; right: 60px;
+      width: 12px; height: 12px; background: var(--bg);
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      transform: rotate(45deg);
+    }
+    .changes-popover-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .changes-popover-title { font-size: 13px; font-weight: 600; color: var(--fg); }
+    .changes-popover-count { font-size: 12px; color: var(--muted-fg); margin-left: 4px; }
+    .changes-popover-close {
+      background: transparent; border: none; cursor: pointer;
+      width: 24px; height: 24px; border-radius: var(--radius-sm);
+      color: var(--muted-fg); display: inline-flex;
+      align-items: center; justify-content: center;
+    }
+    .changes-popover-close:hover { background: var(--accent); color: var(--fg); }
+    .changes-popover-body { flex: 1; overflow-y: auto; padding: 4px 0; }
+
+    .changes-group { padding: 6px 14px 8px; }
+    .changes-group + .changes-group { border-top: 1px solid var(--border); }
+    .changes-group-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--muted-fg);
+      padding: 6px 0;
+    }
+    .change-item {
+      display: flex; flex-wrap: wrap; align-items: baseline;
+      gap: 6px; padding: 6px 0; font-size: 12px; line-height: 1.4;
+      border-top: 1px dashed var(--border);
+    }
+    .change-item:first-of-type { border-top: none; }
+    .change-label { font-weight: 500; color: var(--fg); flex-basis: 100%; }
+    .change-old, .change-new {
+      padding: 1px 6px; border-radius: var(--radius-sm);
+      font-size: 11px; font-family: ui-monospace, monospace;
+    }
+    .change-old {
+      color: var(--destructive); background: var(--error-bg);
+      text-decoration: line-through; text-decoration-thickness: 1px;
+    }
+    .change-new {
+      color: hsl(142 65% 30%); background: hsl(142 60% 94%);
+      font-weight: 500;
+    }
+    .change-arrow { color: var(--muted-fg); }
+    .change-context { color: var(--muted-fg); font-size: 11px; flex-basis: 100%; }
+    .wf-tests-list {
+      filter: blur(0.5px); opacity: 0.7; pointer-events: none;
+    }
+    .test-card-stub {
+      border: 1px solid var(--card-border); border-radius: var(--radius);
+      background: var(--card); padding: 14px 16px; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .test-card-stub .test-card-title { font-size: 14px; font-weight: 600; flex: 1; }
+    .placeholder-block {
+      border: 1px dashed var(--border); border-radius: var(--radius);
+      padding: 48px 24px; text-align: center; color: var(--muted-fg);
+      background: hsl(0 0% 99%);
+    }
+    .placeholder-block .placeholder-title {
+      font-size: 14px; font-weight: 500; color: var(--fg); margin-bottom: 6px;
+    }
+    .placeholder-block .placeholder-desc { font-size: 13px; }
+    .changed-areas {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+    .changed-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 7px; border-radius: var(--radius-sm);
+      background: var(--accent); font-size: 11px; color: var(--fg);
+    }
+    /* Mobile sample uses a separate canvas to mimic narrow viewport. */
+    .mobile-canvas {
+      width: 380px; max-width: 100%; height: 720px;
+      margin: 24px auto; border: 1px solid var(--border);
+      border-radius: 18px; overflow: hidden; background: var(--bg);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18); position: relative;
+    }
+    .mobile-canvas .drawer {
+      width: 100%; height: 100%; box-shadow: none;
+    }
+    .mobile-canvas .drawer-tabs { overflow-x: auto; padding: 0 12px; }
+    .mobile-canvas .drawer-tab { padding: 10px 10px; white-space: nowrap; }
+    .mobile-canvas .drawer-body { padding: 16px; }
+    .mobile-canvas .drawer-footer {
+      flex-direction: column; align-items: stretch; gap: 8px;
+    }
+    .mobile-canvas .drawer-footer-actions { justify-content: flex-end; }
+    .mobile-canvas .settings-pane { display: none; }
+    .mobile-canvas .settings-accordion { display: flex; }
+    .mobile-frame-label {
+      text-align: center; font-size: 12px; color: var(--muted-fg);
+      margin-top: 8px;
+    }
+    .mobile-row {
+      display: flex; gap: 32px; flex-wrap: wrap;
+      justify-content: center; align-items: flex-start;
+    }
+    .mobile-sample { display: flex; flex-direction: column; }
+    .mobile-sample-title {
+      text-align: center; font-size: 12px; font-weight: 600;
+      color: var(--fg); margin-bottom: 6px;
+    }
+    .mobile-canvas .drawer-title { font-size: 14px; }
+  </style>
+</head>
+<body>
+
+<!-- ─── State switcher ─────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">Drawer (reference):</span>
+  <button class="wf-btn active" type="button" onclick="show('s-default')">Default (Состав)</button>
+  <button class="wf-btn"        type="button" onclick="show('s-dirty')">Dirty (есть изменения)</button>
+  <button class="wf-btn"        type="button" onclick="show('s-error')">Ошибки валидации</button>
+  <button class="wf-btn"        type="button" onclick="show('s-saving')">Сохранение</button>
+  <button class="wf-btn"        type="button" onclick="show('s-changes')">Показать изменения</button>
+  <button class="wf-btn"        type="button" onclick="show('s-settings')">Вкладка "Настройки"</button>
+  <button class="wf-btn"        type="button" onclick="showMobile()">Mobile / narrow viewport &darr;</button>
+</nav>
+
+<!-- ─── Reusable SVG sprite ────────────────────────────────────────────── -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
+  </symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+  </symbol>
+  <symbol id="i-question" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/>
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="8" height="4" x="8" y="2" rx="1"/>
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="20" x2="18" y2="10"/>
+    <line x1="12" y1="20" x2="12" y2="4"/>
+    <line x1="6"  y1="20" x2="6"  y2="14"/>
+  </symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </symbol>
+  <symbol id="i-loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+  </symbol>
+</svg>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     Reusable background page (page behind the drawer overlay).
+     ═══════════════════════════════════════════════════════════════════════ -->
+<template id="tpl-bg-page">
+  <div class="shell active wf-tests-list" aria-hidden="true">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-box">TB</div>
+        <div class="sidebar-title">Test Builder</div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-group-label">Автор-панель</div>
+        <div class="nav-item"><svg class="nav-icon"><use href="#i-folder"/></svg>Темы</div>
+        <div class="nav-item"><svg class="nav-icon"><use href="#i-question"/></svg>Вопросы</div>
+        <div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div>
+        <div class="nav-item"><svg class="nav-icon"><use href="#i-chart"/></svg>Аналитика</div>
+        <div class="nav-item"><svg class="nav-icon"><use href="#i-users"/></svg>Пользователи</div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-row">
+          <div class="avatar">АИ</div>
+          <div>
+            <div class="user-name">Алексей Иванов</div>
+            <div class="user-role">Автор</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <span class="test-title">Тесты</span>
+        <button class="btn btn-primary btn-sm" type="button">Новый тест</button>
+      </div>
+      <div class="content">
+        <div class="test-card-stub">
+          <div class="test-card-title">Основы информационной безопасности</div>
+          <span class="badge badge-success">Опубликован</span>
+        </div>
+        <div class="test-card-stub">
+          <div class="test-card-title">GDPR для разработчиков</div>
+          <span class="badge badge-secondary">Черновик</span>
+        </div>
+        <div class="test-card-stub">
+          <div class="test-card-title">Аудит логов SCORM</div>
+          <span class="badge badge-outline">Архив</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Default (вкладка "Состав", чисто — без dirty)
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-default" class="shell active" data-state="default">
+  <!-- Background page with tests list (dimmed). -->
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+
+  <!-- Drawer overlay -->
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="drawer-title-default">
+      <header class="drawer-header">
+        <h1 id="drawer-title-default" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-success" aria-label="Статус: опубликован">Опубликован</span>
+        <span class="badge badge-outline" aria-label="Версия 7">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab active" role="tab" aria-selected="true"  type="button">Состав</button>
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+
+      <div class="drawer-body" tabindex="0">
+        <div class="placeholder-block">
+          <div class="placeholder-title">Coming soon</div>
+        </div>
+      </div>
+
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменений нет.
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-primary" type="button" aria-disabled="true" disabled>Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Dirty (есть несохранённые изменения, нет ошибок)
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-dirty" class="shell" data-state="dirty">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-dirty">
+      <header class="drawer-header">
+        <h1 id="drawer-title-dirty" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary" aria-label="Статус: черновик с несохранёнными изменениями">Изменено</span>
+        <span class="badge badge-outline" aria-label="Версия 7">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab active" role="tab" aria-selected="true" type="button"
+                aria-label="Состав, есть несохранённые изменения">
+          Состав
+          <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button"
+                aria-label="Настройки, есть несохранённые изменения">
+          Настройки
+          <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">
+          Оформление
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">
+          Структура
+        </button>
+      </nav>
+
+      <div class="drawer-body" tabindex="0">
+        <div class="placeholder-block">
+          <div class="placeholder-title">Coming soon</div>
+        </div>
+      </div>
+
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены:
+          <span class="changed-areas" aria-label="Изменены вкладки: Состав, Настройки">
+            <span class="changed-chip">Состав</span>
+            <span class="changed-chip">Настройки</span>
+          </span>
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-ghost btn-sm" type="button" aria-label="Показать список изменений">
+            Показать изменения
+          </button>
+          <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Ошибки валидации (FR-04, FR-25b, FR-05a)
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-error" class="shell" data-state="error">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-error">
+      <header class="drawer-header">
+        <h1 id="drawer-title-error" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-error" aria-label="Статус: есть блокирующие ошибки">Есть ошибки</span>
+        <span class="badge badge-outline" aria-label="Версия 7">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab active" role="tab" aria-selected="true" type="button"
+                aria-label="Состав, есть несохранённые изменения и предупреждения">
+          Состав
+          <span class="status-dot warn" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button"
+                aria-label="Настройки, есть блокирующие ошибки">
+          Настройки
+          <span class="status-dot error" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">
+          Оформление
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button"
+                aria-label="Структура, есть несохранённые изменения">
+          Структура
+          <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+      </nav>
+
+      <div class="banner error" role="alert">
+        <svg class="banner-icon"><use href="#i-warn"/></svg>
+        <span>Сохранение заблокировано: 2 поля во вкладке "Настройки" содержат ошибки.</span>
+        <a href="#" class="btn btn-xs btn-outline" style="margin-left:auto;">Перейти к ошибкам</a>
+      </div>
+
+      <div class="drawer-body" tabindex="0">
+        <div class="placeholder-block">
+          <div class="placeholder-title">Coming soon</div>
+        </div>
+      </div>
+
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены:
+          <span class="changed-areas" aria-label="Изменены вкладки: Состав, Настройки, Структура">
+            <span class="changed-chip">Состав</span>
+            <span class="changed-chip">Настройки</span>
+            <span class="changed-chip">Структура</span>
+          </span>
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-ghost btn-sm" type="button" aria-label="Показать список изменений">
+            Показать изменения
+          </button>
+          <button class="btn btn-primary"
+                  type="button"
+                  aria-disabled="true"
+                  disabled
+                  aria-describedby="save-blocked-hint">
+            Сохранить
+          </button>
+        </div>
+      </footer>
+      <span id="save-blocked-hint" class="sr-only">
+        Сохранение недоступно: есть блокирующие ошибки во вкладке "Настройки"
+      </span>
+    </section>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Saving (запрос в процессе, кнопка Сохранить busy)
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-saving" class="shell" data-state="saving">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-saving">
+      <header class="drawer-header">
+        <h1 id="drawer-title-saving" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary" aria-label="Статус: сохраняется">Сохраняется...</span>
+        <span class="badge badge-outline" aria-label="Версия 7">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор" disabled aria-disabled="true">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab active" role="tab" aria-selected="true"  type="button">Состав</button>
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+
+      <div class="drawer-body" tabindex="0">
+        <div class="placeholder-block">
+          <div class="placeholder-title">Сохраняем изменения</div>
+          <div class="placeholder-desc">Не закрывайте окно до завершения операции.</div>
+        </div>
+      </div>
+
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">Сохранение...</div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-primary" type="button" aria-disabled="true" disabled>
+            <svg width="14" height="14" style="animation:spin 1s linear infinite;">
+              <use href="#i-loader"/>
+            </svg>
+            Сохранение...
+          </button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Показать изменения (FR-25c, FR-25c1, FR-25c2)
+     Popover, прикреплённый к кнопке "Показать изменения" в footer.
+     Содержит группы изменений по вкладкам с diff-визуализацией.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-changes" class="shell" data-state="changes">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-changes">
+      <header class="drawer-header">
+        <h1 id="drawer-title-changes" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary" aria-label="Статус: черновик с несохранёнными изменениями">Изменено</span>
+        <span class="badge badge-outline" aria-label="Версия 7">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab active" role="tab" aria-selected="true" type="button"
+                aria-label="Состав, есть несохранённые изменения">
+          Состав <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button"
+                aria-label="Настройки, есть несохранённые изменения">
+          Настройки <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+
+      <div class="drawer-body" tabindex="0">
+        <div class="placeholder-block">
+          <div class="placeholder-title">Coming soon</div>
+        </div>
+      </div>
+
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены:
+          <span class="changed-areas" aria-label="Изменены вкладки: Состав, Настройки">
+            <span class="changed-chip">Состав</span>
+            <span class="changed-chip">Настройки</span>
+          </span>
+        </div>
+        <div class="drawer-footer-actions">
+          <div class="changes-anchor">
+            <button class="btn btn-ghost btn-sm" type="button"
+                    aria-expanded="true" aria-controls="changes-popover-panel"
+                    aria-label="Скрыть список изменений">
+              Показать изменения
+            </button>
+
+            <!-- Popover (открыт) -->
+            <div class="changes-popover" id="changes-popover-panel"
+                 role="dialog" aria-modal="false"
+                 aria-labelledby="changes-popover-title">
+              <div class="changes-popover-header">
+                <span>
+                  <span class="changes-popover-title" id="changes-popover-title">
+                    Изменения в черновике
+                  </span>
+                  <span class="changes-popover-count">&nbsp;(5)</span>
+                </span>
+                <button class="changes-popover-close" type="button" aria-label="Закрыть список">
+                  <svg width="14" height="14"><use href="#i-x"/></svg>
+                </button>
+              </div>
+
+              <div class="changes-popover-body">
+                <!-- Group: Состав -->
+                <div class="changes-group" aria-label="Изменения во вкладке Состав">
+                  <div class="changes-group-title">Состав &middot; 2 изменения</div>
+
+                  <div class="change-item">
+                    <span class="change-label">Добавлена тема</span>
+                    <span class="change-new">Криптография</span>
+                    <span class="change-context">3 вопроса, минимум 3</span>
+                  </div>
+
+                  <div class="change-item">
+                    <span class="change-label">Минимум темы "Сетевая безопасность"</span>
+                    <span class="change-old">5</span>
+                    <span class="change-arrow">&rarr;</span>
+                    <span class="change-new">8</span>
+                  </div>
+                </div>
+
+                <!-- Group: Настройки -->
+                <div class="changes-group" aria-label="Изменения во вкладке Настройки">
+                  <div class="changes-group-title">Настройки &middot; 3 изменения</div>
+
+                  <div class="change-item">
+                    <span class="change-label">Порог успеха</span>
+                    <span class="change-old">60 %</span>
+                    <span class="change-arrow">&rarr;</span>
+                    <span class="change-new">75 %</span>
+                  </div>
+
+                  <div class="change-item">
+                    <span class="change-label">Перемешать вопросы</span>
+                    <span class="change-old">Нет</span>
+                    <span class="change-arrow">&rarr;</span>
+                    <span class="change-new">Да</span>
+                  </div>
+
+                  <div class="change-item">
+                    <span class="change-label">Лимит времени</span>
+                    <span class="change-old">не задан</span>
+                    <span class="change-arrow">&rarr;</span>
+                    <span class="change-new">30 мин</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Settings (вкладка "Настройки", side nav на >=960px)
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-settings" class="shell" data-state="settings">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+
+  <div class="drawer-overlay" role="presentation">
+    <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-settings">
+      <header class="drawer-header">
+        <h1 id="drawer-title-settings" class="drawer-title">Основы информационной безопасности</h1>
+        <span class="badge badge-secondary" aria-label="Статус: черновик с несохранёнными изменениями">Изменено</span>
+        <span class="badge badge-outline" aria-label="Версия 7">v7</span>
+        <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+          <svg width="16" height="16"><use href="#i-x"/></svg>
+        </button>
+      </header>
+
+      <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="drawer-tab active" role="tab" aria-selected="true"  type="button"
+                aria-label="Настройки, есть несохранённые изменения">
+          Настройки
+          <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="drawer-tab"        role="tab" aria-selected="false" type="button">Структура</button>
+      </nav>
+
+      <div class="drawer-body" tabindex="0">
+        <!-- Two-pane layout for >= 960px. -->
+        <div class="settings-pane">
+          <nav class="settings-side-nav" aria-label="Подразделы настроек">
+            <div class="settings-nav-item active" aria-current="page">Основное</div>
+            <div class="settings-nav-item" aria-label="Режим и сценарий">Режим и сценарий</div>
+            <div class="settings-nav-item" aria-label="Правила прохождения">Правила прохождения</div>
+            <div class="settings-nav-item" aria-label="Ограничения">Ограничения</div>
+            <div class="settings-nav-item" aria-label="Обратная связь">Обратная связь</div>
+            <div class="settings-nav-item" aria-label="Интеграция">Интеграция</div>
+            <div class="settings-nav-item" aria-label="Адаптивность">Адаптивность</div>
+          </nav>
+          <div>
+            <div class="placeholder-block">
+              <div class="placeholder-title">Coming soon</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accordion for < 960px (mobile/narrow viewport). -->
+        <div class="settings-accordion" role="group" aria-label="Подразделы настроек">
+          <details class="settings-accordion-item" open>
+            <summary>Основное</summary>
+            <div class="settings-accordion-body">
+              <div class="placeholder-block">
+                <div class="placeholder-title">Coming soon</div>
+              </div>
+            </div>
+          </details>
+          <details class="settings-accordion-item">
+            <summary>Режим и сценарий</summary>
+            <div class="settings-accordion-body">
+            </div>
+          </details>
+          <details class="settings-accordion-item">
+            <summary>Правила прохождения</summary>
+            <div class="settings-accordion-body">
+            </div>
+          </details>
+          <details class="settings-accordion-item">
+            <summary>Ограничения</summary>
+            <div class="settings-accordion-body">
+            </div>
+          </details>
+          <details class="settings-accordion-item">
+            <summary>Обратная связь</summary>
+            <div class="settings-accordion-body">
+            </div>
+          </details>
+          <details class="settings-accordion-item">
+            <summary>Интеграция</summary>
+            <div class="settings-accordion-body">
+            </div>
+          </details>
+          <details class="settings-accordion-item">
+            <summary>Адаптивность</summary>
+            <div class="settings-accordion-body">
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <footer class="drawer-footer">
+        <div class="drawer-footer-meta">
+          Изменены:
+          <span class="changed-areas" aria-label="Изменены вкладки: Настройки">
+            <span class="changed-chip">Настройки</span>
+          </span>
+        </div>
+        <div class="drawer-footer-actions">
+          <button class="btn btn-ghost btn-sm" type="button" aria-label="Показать список изменений">
+            Показать изменения
+          </button>
+          <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     Mobile / narrow viewport (<960px). Shows the same drawer in a 380px
+     canvas to make the responsive collapse visible without resizing the
+     browser.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<section class="mobile-section">
+<a id="mobile" aria-hidden="true"></a>
+<section class="wf-section-title">
+  <span>Mobile / narrow viewport (&lt; 960px)</span>
+  <button class="wf-back-btn" type="button" onclick="show('s-default')" aria-label="Вернуться к Default (Состав)">
+    &larr; К обычному виду
+  </button>
+</section>
+
+<div class="mobile-row">
+  <!-- Sample 1: Состав tab on narrow viewport -->
+  <div class="mobile-sample">
+    <div class="mobile-sample-title">Вкладка "Состав"</div>
+    <div class="mobile-canvas">
+      <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-mobile">
+        <header class="drawer-header">
+          <h1 id="drawer-title-mobile" class="drawer-title">Основы ИБ</h1>
+          <span class="badge badge-secondary" aria-label="Статус: черновик с несохранёнными изменениями">Изменено</span>
+          <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+            <svg width="16" height="16"><use href="#i-x"/></svg>
+          </button>
+        </header>
+
+        <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+          <button class="drawer-tab active" role="tab" aria-selected="true"  type="button"
+                  aria-label="Состав, есть несохранённые изменения">
+            Состав <span class="status-dot dirty" aria-hidden="true"></span>
+          </button>
+          <button class="drawer-tab" role="tab" aria-selected="false" type="button">Настройки</button>
+          <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+          <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+        </nav>
+
+        <div class="drawer-body" tabindex="0">
+          <div class="placeholder-block">
+            <div class="placeholder-title">Coming soon</div>
+            <div class="placeholder-desc">Mobile-вид вкладки "Состав".</div>
+          </div>
+        </div>
+
+        <footer class="drawer-footer">
+          <div class="drawer-footer-meta">
+            Изменены:
+            <span class="changed-areas" aria-label="Изменены вкладки: Состав">
+              <span class="changed-chip">Состав</span>
+            </span>
+          </div>
+          <div class="drawer-footer-actions">
+            <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+            <button class="btn btn-primary"      type="button">Сохранить</button>
+          </div>
+        </footer>
+      </section>
+    </div>
+  </div>
+
+  <!-- Sample 2: Настройки tab → accordion on narrow viewport -->
+  <div class="mobile-sample">
+    <div class="mobile-sample-title">Вкладка "Настройки" &mdash; аккордеон</div>
+    <div class="mobile-canvas">
+      <section class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title-mobile-2">
+        <header class="drawer-header">
+          <h1 id="drawer-title-mobile-2" class="drawer-title">Основы ИБ</h1>
+          <span class="badge badge-secondary" aria-label="Статус: черновик">Изменено</span>
+          <button class="drawer-close" type="button" aria-label="Закрыть редактор">
+            <svg width="16" height="16"><use href="#i-x"/></svg>
+          </button>
+        </header>
+
+        <nav class="drawer-tabs" role="tablist" aria-label="Разделы редактора">
+          <button class="drawer-tab" role="tab" aria-selected="false" type="button">Состав</button>
+          <button class="drawer-tab active" role="tab" aria-selected="true" type="button"
+                  aria-label="Настройки, есть несохранённые изменения">
+            Настройки <span class="status-dot dirty" aria-hidden="true"></span>
+          </button>
+          <button class="drawer-tab" role="tab" aria-selected="false" type="button">Оформление</button>
+          <button class="drawer-tab" role="tab" aria-selected="false" type="button">Структура</button>
+        </nav>
+
+        <div class="drawer-body" tabindex="0">
+          <!-- pane hidden by .mobile-canvas override; only accordion is visible -->
+          <div class="settings-pane" aria-hidden="true"></div>
+
+          <div class="settings-accordion" role="group" aria-label="Подразделы настроек">
+            <details class="settings-accordion-item dirty" open>
+              <summary>Основное</summary>
+              <div class="settings-accordion-body">
+              </div>
+            </details>
+            <details class="settings-accordion-item">
+              <summary>Режим и сценарий</summary>
+              <div class="settings-accordion-body">
+                </div>
+            </details>
+            <details class="settings-accordion-item">
+              <summary>Правила прохождения</summary>
+              <div class="settings-accordion-body">
+                </div>
+            </details>
+            <details class="settings-accordion-item">
+              <summary>Ограничения</summary>
+              <div class="settings-accordion-body">
+                </div>
+            </details>
+            <details class="settings-accordion-item">
+              <summary>Обратная связь</summary>
+              <div class="settings-accordion-body">
+                </div>
+            </details>
+            <details class="settings-accordion-item">
+              <summary>Интеграция</summary>
+              <div class="settings-accordion-body">
+                </div>
+            </details>
+            <details class="settings-accordion-item">
+              <summary>Адаптивность</summary>
+              <div class="settings-accordion-body">
+                </div>
+            </details>
+          </div>
+        </div>
+
+        <footer class="drawer-footer">
+          <div class="drawer-footer-meta">
+            Изменены:
+            <span class="changed-areas" aria-label="Изменены вкладки: Настройки">
+              <span class="changed-chip">Настройки</span>
+            </span>
+          </div>
+          <div class="drawer-footer-actions">
+            <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
+            <button class="btn btn-primary"      type="button">Сохранить</button>
+          </div>
+        </footer>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="mobile-frame-label">
+  Drawer на &lt; 960px: ширина 100vw, табы со скроллом, footer вертикальный,
+  side-nav вкладки "Настройки" заменяется аккордеоном (&lt;details&gt;/&lt;summary&gt;).
+</div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     Acceptance: список FR/NFR PRD-7, которые покрывает этот wireframe.
+     ═══════════════════════════════════════════════════════════════════════ -->
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance — PRD-7 покрытие</h2>
+  <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>FR-04</td><td>Статус валидности секций виден на табах (<code>dirty</code> / <code>warning</code> / <code>error</code>); кнопка "Сохранить" блокируется при критичных ошибках.</td></tr>
+      <tr><td>FR-05</td><td>Закрытие редактора через крестик; confirmation dialog при dirty оформляется в отдельном wireframe (<a href="prd7-editor-close-confirm.html">prd7-editor-close-confirm.html</a>).</td></tr>
+      <tr><td>FR-05a</td><td>В state "Ошибки" кнопка "Сохранить" disabled, баннер с переходом к первой ошибочной секции.</td></tr>
+      <tr><td>FR-05b</td><td>В footer нет кнопки "Сбросить всё".</td></tr>
+      <tr><td>FR-25a</td><td>Единственный primary action "Сохранить" для всей draft-модели.</td></tr>
+      <tr><td>FR-25b</td><td>Агрегированные индикаторы dirty/warning/error на табах и локальные индикаторы в секциях; всё с <code>aria-label</code>.</td></tr>
+      <tr><td>FR-25c, FR-25c1, FR-25c2</td><td>Кнопка "Показать изменения" видна только при dirty. Клик открывает popover с группировкой изменений по вкладкам и diff-визуализацией старое&nbsp;&rarr;&nbsp;новое.</td></tr>
+      <tr><td>FR-43</td><td>Wide Drawer <code>min(1120px, calc(100vw - 48px))</code>; вкладка "Настройки" с двухпанельным side nav на &gt;=960px и аккордеоном на &lt;960px.</td></tr>
+      <tr><td>NFR-19</td><td>Фокус при открытии переходит в drawer body (<code>tabindex="0"</code>); крестик закрытия имеет <code>aria-label</code>.</td></tr>
+      <tr><td>NFR-20</td><td>Drawer использует семантику <code>role="dialog" aria-modal="true"</code>; tab trap описан в коде Drawer-обёртки.</td></tr>
+      <tr><td>NFR-21</td><td>Индикаторы состояния (<code>.status-dot.dirty/.warn/.error</code>) дублируют цвет через <code>aria-label</code> на родительском tab/badge.</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:16px;color:var(--muted-fg);">
+    Не покрыто здесь (отдельные wireframes):
+    <code>prd7-editor-close-confirm.html</code>,
+    <code>prd7-editor-conflict.html</code>,
+    <code>prd7-editor-status-indicators.html</code>,
+    <code>prd7-tests-list.html</code>,
+    <code>prd7-editor-settings-tab.html</code>.
+  </p>
+</section>
+
+<!-- ─── Wireframe state-switcher logic + bg-page injection ─────────────── -->
+<style>
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  }
+</style>
+<script>
+  // Inject the background page template into every state container.
+  (function injectBgPage() {
+    var tpl = document.getElementById('tpl-bg-page');
+    if (!tpl) return;
+    var slots = document.querySelectorAll('[data-template="tpl-bg-page"]');
+    slots.forEach(function (slot) {
+      slot.appendChild(tpl.content.cloneNode(true));
+    });
+  })();
+
+  // Toggle visible state. Adding body class hides the mobile demo section
+  // so it does not bleed through the semi-transparent drawer overlay.
+  function show(id) {
+    document.querySelectorAll('[id^="s-"]').forEach(function (el) {
+      el.classList.toggle('active', el.id === id);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+    });
+    document.body.classList.add('has-active-shell');
+  }
+
+  // Mobile section is rendered in normal page flow, but wide-canvas shells
+  // use a position:fixed drawer overlay that would block it. Clear the
+  // active shell before scrolling to the mobile anchor.
+  function showMobile() {
+    document.querySelectorAll('[id^="s-"]').forEach(function (el) {
+      el.classList.remove('active');
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('onclick') === 'showMobile()');
+    });
+    document.body.classList.remove('has-active-shell');
+    var target = document.getElementById('mobile');
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // Initial state: a shell is active by default (s-default), so mark body.
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+
+  // If page is loaded with #mobile hash, behave like a Mobile-button click
+  // so the drawer overlay does not cover the mobile samples.
+  if (window.location.hash === '#mobile') {
+    window.addEventListener('DOMContentLoaded', showMobile);
+  }
+</script>
+
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+</body>
+</html>
