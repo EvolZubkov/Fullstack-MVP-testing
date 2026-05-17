@@ -10,58 +10,6 @@
 
 @import url('./ds/university-rt.css');
 
-/* ── Alias layer — map prd7-shared names to --ou-* tokens ─────────────── */
-/* Scoped to .ou so aliases activate together with semantic tokens.        */
-.ou {
-  /* Surfaces */
-  --bg:          var(--ou-bg-elevated);
-  --fg:          var(--ou-fg-default);
-  --border:      var(--ou-border-default);
-  --card:        var(--ou-bg-surface-2);
-  --card-border: var(--ou-border-soft);
-  --sidebar:     var(--ou-bg-surface-2);
-  --sidebar-b:   var(--ou-border-soft);
-  --muted:       var(--ou-bg-surface-3);
-  --muted-fg:    var(--ou-fg-muted);
-  --accent:      var(--ou-bg-hover);
-  --readonly-bg: var(--ou-bg-disabled);
-
-  /* Primary action (accent) */
-  --primary:        var(--ou-accent-default);
-  --primary-fg:     var(--ou-fg-on-accent);
-  --primary-border: var(--ou-accent-hover);
-
-  /* Secondary */
-  --secondary:   var(--ou-bg-hover);
-  --secondary-b: var(--ou-border-soft);
-
-  /* Destructive */
-  --destructive:    var(--ou-error-default);
-  --destructive-fg: var(--ou-fg-on-accent);
-  --destructive-b:  var(--ou-error-hover);
-
-  /* Input */
-  --input-b: var(--ou-border-default);
-
-  /* Status */
-  --warn-bg:     var(--ou-warning-soft);
-  --warn-border: var(--ou-warning-default);
-  --warn-fg:     var(--ou-warning-on-soft);
-  --info-bg:     var(--ou-info-soft);
-  --info-border: var(--ou-info-default);
-  --info-fg:     var(--ou-info-on-soft);
-  --error-bg:    var(--ou-error-soft);
-  --error-border: var(--ou-error-default);
-
-  /* Radius */
-  --radius:    var(--ou-radius-m);
-  --radius-md: var(--ou-radius-s);
-  --radius-sm: var(--ou-radius-xs);
-
-  /* Font */
-  --font-sans: var(--ou-font-family-base);
-}
-
 /* ── Reset ────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -102,7 +50,7 @@ body {
 .wf-link:hover { text-decoration: underline; }
 
 /* ── Shell layout (state container) ───────────────────────────────────── */
-.shell { display: none; background: var(--bg); min-height: 100vh; }
+.shell { display: none; background: var(--ou-bg-elevated); min-height: 100vh; }
 .shell.active { display: flex; }
 .shell--column { flex-direction: column; align-items: center; }
 
@@ -135,8 +83,8 @@ body {
 input[type=text], input[type=number], input[type=email],
 input[type=password], select, textarea {
   width: 100%; height: 36px; padding: 0 var(--ou-space-3);
-  border: 1px solid var(--input-b); border-radius: var(--ou-radius-s);
-  background: var(--bg); font: var(--ou-text-body-s); color: var(--fg);
+  border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-elevated); font: var(--ou-text-body-s); color: var(--ou-fg-default);
   outline: none; font-family: inherit;
 }
 input:focus, select:focus, textarea:focus {
@@ -185,13 +133,13 @@ select {
 .settings-accordion { display: none; flex-direction: column; gap: var(--ou-space-2); }
 .settings-accordion-item {
   border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-xs);
-  background: var(--bg); overflow: hidden;
+  background: var(--ou-bg-elevated); overflow: hidden;
 }
 .settings-accordion-item > summary {
   display: flex; align-items: center; gap: var(--ou-space-2);
   padding: var(--ou-space-3); font: var(--ou-text-body-s); font-weight: 500;
   cursor: pointer; list-style: none; -webkit-user-select: none; user-select: none;
-  color: var(--fg);
+  color: var(--ou-fg-default);
 }
 .settings-accordion-item > summary::-webkit-details-marker { display: none; }
 .settings-accordion-item > summary::before {

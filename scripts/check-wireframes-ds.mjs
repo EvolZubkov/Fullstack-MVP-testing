@@ -80,8 +80,10 @@ const legacyClassTokens = [
   // Toggle / radio
   'toggle', 'toggle-row', 'toggle-on', 'toggle-off',
   'radio-row', 'radio-opt',
-  // Labels
-  'subsection-label', 'section-label',
+  // Note: 'section-label' / 'subsection-label' are NOT listed here.
+  // DS does not provide an uppercase-caption label primitive; the wireframe
+  // markup keeps these classes as a documented gap (see
+  // docs/wireframes-ds-audit.md). Re-add them once DS exposes an equivalent.
 ];
 
 const rawValuePatterns = [
