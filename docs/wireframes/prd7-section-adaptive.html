@@ -1,232 +1,508 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wireframe PRD-7: Adaptivity Settings Section</title>
-  <link rel="stylesheet" href="prd7-shared.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Wireframe: prd7 — Adaptivity Settings Section
+    Этап 3 — Wireframes
+    Файл: docs/wireframes/prd7-section-adaptive.html
+    Состояния: s-default, s-no-mode, s-error
+    Покрывает: §3.8, NFR-21
+  -->
+  <title>prd7 — Adaptivity Settings</title>
+  <link rel="stylesheet" href="ds/university-rt.css" />
+  <link rel="stylesheet" href="ds/wf-utils.css" />
   <style>
-    /* Drawer column layout */
-    .drawer-col {
+    /* Wireframe-specific helpers — not part of product UI */
+    .wf-sprite { display: none; }
+
+    /* ── Full-viewport shell ──────────────────────────────────────────────── */
+    .wf-state { padding-top: var(--wf-nav-offset, 52px); }
+    .wf-shell {
+      display: flex;
+      height: calc(100vh - 52px);
+      overflow: hidden;
+      background: var(--ou-bg-page);
+    }
+
+    /* ── Sidebar (minimal stub) ───────────────────────────────────────────── */
+    .wf-sidebar {
+      width: 224px; flex-shrink: 0;
+      background: var(--ou-bg-elevated);
+      border-right: 1px solid var(--ou-border-soft);
       display: flex; flex-direction: column;
-      height: 100%; background: var(--bg); overflow: hidden;
     }
-    .drawer-header {
-      display: flex; align-items: center; gap: 10px;
-      padding: 14px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    .wf-sidebar-header {
+      display: flex; align-items: center; gap: var(--ou-space-3);
+      padding: var(--ou-space-4);
+      border-bottom: 1px solid var(--ou-border-soft);
     }
-    .drawer-title { font-size: 15px; font-weight: 700; flex: 1; }
+    .wf-logo-box {
+      width: 30px; height: 30px; flex-shrink: 0;
+      background: var(--ou-accent-default); border-radius: var(--ou-radius-m);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--ou-fg-on-accent); font: var(--ou-text-body-s); font-weight: 700;
+    }
+    .wf-sidebar-title { font: var(--ou-text-body-m); font-weight: 600; }
+    .wf-sidebar-nav { flex: 1; padding: var(--ou-space-3); }
+    .wf-sidebar-nav-item {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-3);
+      border-radius: var(--ou-radius-s);
+      font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+    }
+    .wf-sidebar-nav-item--active {
+      background: var(--ou-bg-muted);
+      color: var(--ou-fg-default); font-weight: 600;
+    }
+    .wf-sidebar-footer { padding: var(--ou-space-3) var(--ou-space-4); border-top: 1px solid var(--ou-border-soft); }
 
-    /* Tab bar */
-    .tab-bar {
-      display: flex; border-bottom: 1px solid var(--border);
-      flex-shrink: 0; padding: 0 20px;
+    /* ── Main column (full-width drawer) ──────────────────────────────────── */
+    .wf-main-col {
+      flex: 1;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      background: var(--ou-bg-elevated);
     }
-    .tab-item {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 10px 14px; font-size: 13px; color: var(--muted-fg);
-      border-bottom: 2px solid transparent; margin-bottom: -1px;
-      background: transparent; border-top: none; border-left: none; border-right: none;
-      cursor: pointer; font-family: inherit;
-    }
-    .tab-item.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
 
-    /* Settings pane: side-nav + content */
-    .settings-pane { display: flex; flex: 1; overflow: hidden; }
-    .settings-side-nav {
-      width: 240px; flex-shrink: 0; border-right: 1px solid var(--border);
-      overflow-y: auto; padding: 8px 0;
+    /* ── Drawer header ────────────────────────────────────────────────────── */
+    .wf-drawer-header {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-3) var(--ou-space-5);
+      border-bottom: 1px solid var(--ou-border-soft);
+      flex-shrink: 0;
     }
-    .nav-section-item {
+    .wf-drawer-title {
+      font: var(--ou-text-body-l); font-weight: 700;
+      flex: 1; margin: 0;
+    }
+    .wf-flex-spacer { flex: 1; }
+    .wf-drawer-close {
+      width: 28px; height: 28px; flex-shrink: 0;
+      border: none; background: transparent; color: var(--ou-fg-muted);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      border-radius: var(--ou-radius-s);
+    }
+    .wf-drawer-close:hover { background: var(--ou-bg-muted); }
+    .wf-drawer-close svg { width: var(--ou-space-4); height: var(--ou-space-4); }
+
+    /* ── Tab bar ──────────────────────────────────────────────────────────── */
+    .wf-drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--ou-border-soft);
+      flex-shrink: 0;
+      padding: 0 var(--ou-space-5);
+    }
+    .wf-drawer-tab {
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+      border: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+      background: transparent; cursor: pointer;
+    }
+    .wf-drawer-tab--active {
+      color: var(--ou-accent-default);
+      border-bottom-color: var(--ou-accent-default);
+      font-weight: 500;
+    }
+
+    /* ── Settings 2-panel layout ──────────────────────────────────────────── */
+    .wf-settings-pane {
+      display: flex; flex: 1; overflow: hidden;
+    }
+    .wf-settings-side-nav {
+      width: 240px; flex-shrink: 0;
+      border-right: 1px solid var(--ou-border-soft);
+      overflow-y: auto;
+      padding: var(--ou-space-2) 0;
+    }
+    .wf-nav-section-item {
       display: flex; align-items: center;
-      padding: 9px 16px; font-size: 13px; cursor: pointer; width: 100%;
+      padding: var(--ou-space-2) var(--ou-space-4);
+      font: var(--ou-text-body-s); cursor: pointer; width: 100%;
       border: none; border-left: 3px solid transparent;
-      background: transparent; color: var(--fg); text-align: left; font-family: inherit;
+      background: transparent; color: var(--ou-fg-default); text-align: left;
     }
-    .nav-section-item.active {
-      border-left-color: var(--primary); color: var(--primary);
-      background: var(--accent); font-weight: 500;
+    .wf-nav-section-item--active {
+      border-left-color: var(--ou-accent-default);
+      color: var(--ou-accent-default);
+      background: var(--ou-bg-canvas);
+      font-weight: 500;
     }
-    .nav-section-item:hover:not(.active) { background: var(--accent); }
-    .settings-content { flex: 1; overflow-y: auto; padding: 20px; }
-
-    /* Footer */
-    .drawer-footer {
-      display: flex; align-items: center; gap: 10px;
-      padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
+    .wf-nav-section-item:hover:not(.wf-nav-section-item--active) {
+      background: var(--ou-bg-canvas);
     }
-    .footer-hint { font-size: 12px; color: var(--muted-fg); flex: 1; }
-
-    /* Section cards */
-    .section-card {
-      border: 1px solid var(--card-border); border-radius: var(--radius);
-      background: var(--card); overflow: hidden; margin-bottom: 14px;
-    }
-    .section-card-header {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 16px; border-bottom: 1px solid var(--card-border);
-      background: var(--accent);
-    }
-    .section-card-title { font-size: 13px; font-weight: 600; flex: 1; }
-    .section-card-body { padding: 16px; }
-
-    /* Mode chip */
-    .mode-chip {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 6px 12px; background: var(--secondary); border-radius: var(--radius);
-      font-size: 13px; margin-bottom: 16px;
-    }
-    .mode-chip-label { color: var(--muted-fg); }
-    .mode-chip-value { font-weight: 600; color: var(--primary); }
-    .mode-chip a { font-size: 12px; color: var(--primary); text-decoration: underline; margin-left: 8px; }
-
-    /* Toggle */
-    .toggle-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-    .toggle-switch {
-      position: relative; width: 36px; height: 20px; border-radius: 10px;
-      background: var(--primary); cursor: pointer; flex-shrink: 0; border: none;
-    }
-    .toggle-switch.off { background: var(--muted-fg); }
-    .toggle-knob {
-      position: absolute; top: 2px; right: 2px; width: 16px; height: 16px;
-      background: white; border-radius: 50%;
-    }
-    .toggle-switch.off .toggle-knob { right: auto; left: 2px; }
-    .toggle-label { font-size: 13px; font-weight: 500; }
-    .toggle-sub { font-size: 12px; color: var(--muted-fg); }
-
-    /* Field helpers */
-    .field-group { margin-bottom: 14px; }
-    .field-label { font-size: 13px; font-weight: 500; margin-bottom: 5px; }
-    .field-hint { font-size: 12px; color: var(--muted-fg); margin-top: 4px; }
-
-    /* Topics table */
-    .topics-table { width: 100%; border-collapse: collapse; }
-    .topics-table thead th {
-      text-align: left; font-size: 11px; font-weight: 600; color: var(--muted-fg);
-      text-transform: uppercase; letter-spacing: .05em;
-      padding: 6px 10px; border-bottom: 1px solid var(--border);
-    }
-    .topics-table tbody tr { border-bottom: 1px solid var(--card-border); }
-    .topics-table tbody tr:hover { background: var(--accent); }
-    .topics-table tbody td { padding: 9px 10px; font-size: 13px; vertical-align: middle; }
-    .topic-name-cell { font-weight: 500; }
-    .topic-sub-cell { font-size: 12px; color: var(--muted-fg); margin-top: 1px; }
-
-    /* Failure feedback textarea in table */
-    .failure-input {
-      width: 100%; font-size: 12px; font-family: inherit; resize: none;
-      border: 1px solid var(--input-b); border-radius: var(--radius-sm);
-      padding: 5px 7px; background: var(--bg); color: var(--fg); min-height: 48px;
+    .wf-settings-content {
+      flex: 1; overflow-y: auto;
+      padding: var(--ou-space-5);
     }
 
-    /* Levels detail panel */
-    .levels-panel {
-      border: 1px solid var(--card-border); border-radius: var(--radius);
-      overflow: hidden; margin-bottom: 14px; background: var(--bg);
+    /* ── Drawer footer ────────────────────────────────────────────────────── */
+    .wf-drawer-footer {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-3) var(--ou-space-5);
+      border-top: 1px solid var(--ou-border-soft);
+      flex-shrink: 0; background: var(--ou-bg-elevated);
     }
-    .levels-panel-header {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 14px; background: var(--accent); border-bottom: 1px solid var(--card-border);
+    .wf-footer-hint {
+      font: var(--ou-text-caption); color: var(--ou-fg-muted); flex: 1;
     }
-    .levels-panel-title { font-size: 13px; font-weight: 600; flex: 1; }
-    .levels-table-wrap { overflow-x: auto; }
-    .levels-table { border-collapse: collapse; font-size: 12px; min-width: 860px; width: 100%; }
-    .levels-table thead th {
-      text-align: left; font-weight: 600; color: var(--muted-fg);
-      font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
-      padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap;
+    .wf-footer-hint--error { color: var(--ou-error-fg); }
+
+    /* ── Mode chip (read-only context indicator) ──────────────────────────── */
+    .wf-mode-chip {
+      display: inline-flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-1) var(--ou-space-3);
+      background: var(--ou-bg-canvas);
+      border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m);
+      font: var(--ou-text-body-s);
+      margin-bottom: var(--ou-space-4);
     }
-    .levels-table tbody tr { border-bottom: 1px solid var(--card-border); }
-    .levels-table tbody tr:hover { background: var(--accent); }
-    .levels-table tbody td { padding: 7px 8px; vertical-align: middle; }
-    .num-input-sm {
-      width: 52px; text-align: center; font-size: 12px; padding: 4px 5px;
-      border-radius: var(--radius-sm); border: 1px solid var(--input-b); font-family: inherit;
+    .wf-mode-chip-label { color: var(--ou-fg-muted); }
+    .wf-mode-chip-value { font-weight: 600; color: var(--ou-accent-default); }
+    .wf-mode-chip-link {
+      font: var(--ou-text-caption); color: var(--ou-accent-default);
+      text-decoration: underline; margin-left: var(--ou-space-2);
     }
-    .num-input-sm.error { border-color: var(--destructive); }
-    .type-select {
-      font-size: 12px; padding: 4px 6px; border-radius: var(--radius-sm);
-      border: 1px solid var(--input-b); font-family: inherit; background: var(--bg);
+
+    /* ── Section cards ────────────────────────────────────────────────────── */
+    .wf-section-card {
+      border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m);
+      background: var(--ou-bg-elevated);
+      overflow: hidden; margin-bottom: var(--ou-space-4);
     }
-    .btn-link-sm {
-      font-size: 12px; color: var(--primary); background: none; border: none;
-      cursor: pointer; padding: 0; font-family: inherit; text-decoration: underline;
+    .wf-section-card-header {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      border-bottom: 1px solid var(--ou-border-soft);
+      background: var(--ou-bg-canvas);
     }
-    .action-row { display: flex; gap: 4px; align-items: center; }
-    .icon-btn {
+    .wf-section-card-title {
+      font: var(--ou-text-body-s); font-weight: 600; flex: 1;
+    }
+    .wf-section-card-body { padding: var(--ou-space-4); }
+    .wf-section-card-body--flush { padding: 0; }
+
+    /* ── Toggle switch ────────────────────────────────────────────────────── */
+    .wf-toggle-row { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-3); }
+    .wf-toggle {
+      position: relative; width: 36px; height: var(--ou-space-5);
+      border-radius: 10px; background: var(--ou-accent-default);
+      cursor: pointer; flex-shrink: 0; border: none;
+    }
+    .wf-toggle--off { background: var(--ou-fg-muted); }
+    .wf-toggle-knob {
+      position: absolute; top: 2px; right: 2px;
+      width: var(--ou-space-4); height: var(--ou-space-4);
+      background: var(--ou-bg-elevated); border-radius: 50%;
+    }
+    .wf-toggle--off .wf-toggle-knob { right: auto; left: 2px; }
+    .wf-toggle-text {}
+    .wf-toggle-label { font: var(--ou-text-body-s); font-weight: 500; }
+    .wf-toggle-sub { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
+
+    /* ── Field group ──────────────────────────────────────────────────────── */
+    .wf-field-group { margin-bottom: var(--ou-space-3); }
+    .wf-field-label { font: var(--ou-text-body-s); font-weight: 500; margin-bottom: var(--ou-space-1); }
+    .wf-field-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-2); }
+    .wf-note-text { font: var(--ou-text-caption); color: var(--ou-fg-muted); font-style: italic; margin-top: var(--ou-space-1); }
+
+    /* ── JSON textarea ────────────────────────────────────────────────────── */
+    .wf-json-textarea {
+      width: 100%; min-height: var(--ou-space-11); resize: vertical;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font: var(--ou-text-caption); line-height: 1.6;
+      border: 1px solid var(--ou-border-input);
+      border-radius: var(--ou-radius-s);
+      padding: var(--ou-space-2);
+      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+      box-sizing: border-box;
+    }
+
+    /* ── Topics table ─────────────────────────────────────────────────────── */
+    .wf-topics-table { width: 100%; border-collapse: collapse; }
+    .wf-topics-table thead th {
+      text-align: left; font: var(--ou-text-caption); font-weight: 600;
+      color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .05em;
+      padding: var(--ou-space-1) var(--ou-space-2);
+      border-bottom: 1px solid var(--ou-border-soft);
+    }
+    .wf-topics-table tbody tr { border-bottom: 1px solid var(--ou-border-soft); }
+    .wf-topics-table tbody tr:hover { background: var(--ou-bg-canvas); }
+    .wf-topics-table tbody td { padding: var(--ou-space-2); font: var(--ou-text-body-s); vertical-align: middle; }
+    .wf-col-enabled    { width: var(--ou-space-11); }
+    .wf-col-failure-fb { width: 240px; }
+    .wf-col-t-actions  { width: 100px; }
+    .wf-topic-name-cell { font-weight: 500; }
+    .wf-topic-sub-cell { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: 1px; }
+    .wf-topic-sub-cell--error { color: var(--ou-error-fg); }
+
+    .wf-failure-input {
+      width: 100%; font: var(--ou-text-caption); font-family: inherit;
+      resize: none; border: 1px solid var(--ou-border-input);
+      border-radius: var(--ou-radius-s);
+      padding: var(--ou-space-1) var(--ou-space-2);
+      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+      min-height: var(--ou-space-9); box-sizing: border-box;
+    }
+
+    /* ── Levels panel ─────────────────────────────────────────────────────── */
+    .wf-levels-panel {
+      border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m); overflow: hidden;
+      margin-bottom: var(--ou-space-4); background: var(--ou-bg-elevated);
+    }
+    .wf-levels-panel--error { border-color: var(--ou-error-fg); }
+    .wf-levels-panel-header {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-3);
+      background: var(--ou-bg-canvas);
+      border-bottom: 1px solid var(--ou-border-soft);
+    }
+    .wf-levels-panel-header--error {
+      background: var(--ou-error-bg);
+      border-bottom-color: var(--ou-error-border);
+    }
+    .wf-levels-panel-title { font: var(--ou-text-body-s); font-weight: 600; flex: 1; }
+    .wf-levels-panel-title--error { color: var(--ou-error-fg); }
+    .wf-levels-table-wrap { overflow-x: auto; }
+    .wf-levels-table {
+      border-collapse: collapse;
+      font: var(--ou-text-caption);
+      min-width: 860px; width: 100%;
+    }
+    .wf-levels-table thead th {
+      text-align: left; font-weight: 600; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: .04em;
+      padding: var(--ou-space-1) var(--ou-space-2);
+      border-bottom: 1px solid var(--ou-border-soft);
+      white-space: nowrap;
+    }
+    .wf-levels-table tbody tr { border-bottom: 1px solid var(--ou-border-soft); }
+    .wf-levels-table tbody tr:hover { background: var(--ou-bg-canvas); }
+    .wf-levels-table tbody td { padding: var(--ou-space-1) var(--ou-space-2); vertical-align: middle; }
+    .wf-tr--error { background: var(--ou-error-bg); }
+    .wf-cell-center { text-align: center; }
+    .wf-levels-panel-footer {
+      padding: var(--ou-space-2) var(--ou-space-3);
+      border-top: 1px solid var(--ou-border-soft);
+    }
+    .wf-levels-panel-error-msg {
+      padding: var(--ou-space-2) var(--ou-space-3);
+      background: var(--ou-error-bg);
+      border-top: 1px solid var(--ou-error-border);
+    }
+    .wf-error-msg-text { font: var(--ou-text-caption); color: var(--ou-error-fg); }
+
+    /* Levels table column widths */
+    .wf-col-order     { width: var(--ou-space-9); }
+    .wf-col-lvl-name  { width: 110px; }
+    .wf-col-difficulty { width: 70px; }
+    .wf-col-q-count   { width: var(--ou-space-10); }
+    .wf-col-threshold { width: 60px; }
+    .wf-col-th-type   { width: 110px; }
+    .wf-col-feedback  { width: 90px; }
+    .wf-col-links-pdf { width: var(--ou-space-10); }
+    .wf-col-l-actions { width: var(--ou-space-11); }
+
+    /* ── Compact inputs for levels table ──────────────────────────────────── */
+    .wf-num-input {
+      width: 52px; text-align: center;
+      font: var(--ou-text-caption); font-family: inherit;
+      padding: var(--ou-space-1);
+      border-radius: var(--ou-radius-s);
+      border: 1px solid var(--ou-border-input);
+      background: var(--ou-bg-elevated);
+      color: var(--ou-fg-default);
+    }
+    .wf-num-input--error { border-color: var(--ou-error-fg); }
+    .wf-level-name-input {
+      font: var(--ou-text-caption); font-family: inherit;
+      padding: var(--ou-space-1);
+      border-radius: var(--ou-radius-s);
+      border: 1px solid var(--ou-border-input);
+      width: 100%;
+      background: var(--ou-bg-elevated);
+      color: var(--ou-fg-default);
+    }
+    .wf-type-select {
+      font: var(--ou-text-caption); font-family: inherit;
+      padding: var(--ou-space-1);
+      border-radius: var(--ou-radius-s);
+      border: 1px solid var(--ou-border-input);
+      background: var(--ou-bg-elevated);
+      color: var(--ou-fg-default);
+    }
+
+    /* ── Inline link button ───────────────────────────────────────────────── */
+    .wf-btn-link {
+      font: var(--ou-text-caption); color: var(--ou-accent-default);
+      background: none; border: none; cursor: pointer;
+      padding: 0; font-family: inherit; text-decoration: underline;
+    }
+
+    /* ── Icon button (actions) ────────────────────────────────────────────── */
+    .wf-icon-btn {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px; border-radius: var(--radius-sm);
-      border: 1px solid var(--border); background: var(--bg); cursor: pointer;
-      color: var(--muted-fg); font-size: 12px;
+      width: 26px; height: 26px;
+      border-radius: var(--ou-radius-s);
+      border: 1px solid var(--ou-border-soft);
+      background: var(--ou-bg-elevated);
+      cursor: pointer; color: var(--ou-fg-muted);
     }
-    .icon-btn:hover { border-color: var(--primary); color: var(--primary); }
-    .icon-btn.danger:hover { border-color: var(--destructive); color: var(--destructive); }
-    .levels-panel-footer { padding: 10px 14px; border-top: 1px solid var(--card-border); }
+    .wf-icon-btn:hover { border-color: var(--ou-accent-default); color: var(--ou-accent-default); }
+    .wf-icon-btn--danger:hover { border-color: var(--ou-error-fg); color: var(--ou-error-fg); }
+    .wf-icon-btn svg { width: var(--ou-space-3); height: var(--ou-space-3); }
+    .wf-action-row { display: flex; gap: var(--ou-space-1); align-items: center; }
 
-    /* Difficulty chart */
-    .difficulty-chart {
-      height: 80px; border: 1px solid var(--card-border);
-      border-radius: var(--radius-sm); background: var(--bg);
-      display: flex; align-items: flex-end; gap: 4px; padding: 8px 10px;
+    /* ── Difficulty distribution chart ───────────────────────────────────── */
+    .wf-diff-chart {
+      height: var(--ou-space-11);
+      border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-s);
+      background: var(--ou-bg-elevated);
+      display: flex; align-items: flex-end; gap: var(--ou-space-1);
+      padding: var(--ou-space-2);
       position: relative; overflow: hidden;
     }
-    .diff-bar { flex: 1; border-radius: 3px 3px 0 0; background: var(--primary); opacity: .45; }
-    .diff-bar.selected { opacity: 1; }
-    .diff-chart-label {
-      position: absolute; bottom: 4px; left: 0; right: 0;
+    .wf-diff-bar {
+      flex: 1;
+      border-radius: var(--ou-radius-s) var(--ou-radius-s) 0 0;
+      background: var(--ou-accent-default);
+      opacity: .45;
+    }
+    .wf-diff-bar--selected { opacity: 1; }
+    .wf-diff-bar--h85 { height: 85%; }
+    .wf-diff-bar--h58 { height: 58%; }
+    .wf-diff-bar--h37 { height: 37%; }
+    .wf-diff-bar--h19 { height: 19%; }
+    .wf-diff-bar--h11 { height: 11%; }
+    .wf-diff-chart-labels {
+      position: absolute; bottom: var(--ou-space-1); left: 0; right: 0;
       display: flex; justify-content: space-around;
-      font-size: 10px; color: var(--muted-fg); padding: 0 10px;
+      font: var(--ou-text-caption); color: var(--ou-fg-muted);
+      padding: 0 var(--ou-space-2);
     }
 
-    /* Info / error banners */
-    .info-banner {
-      display: flex; align-items: flex-start; gap: 10px;
-      padding: 12px 14px; background: var(--info-bg); border: 1px solid var(--info-border);
-      border-radius: var(--radius); margin-bottom: 14px; font-size: 13px; color: var(--info-fg);
+    /* ── No-mode placeholder ──────────────────────────────────────────────── */
+    .wf-no-mode-placeholder {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center;
+      padding: var(--ou-space-15) var(--ou-space-10);
+      color: var(--ou-fg-muted);
+      gap: var(--ou-space-3);
     }
-    .info-banner svg { flex-shrink: 0; margin-top: 1px; }
-    .error-banner {
-      display: flex; align-items: flex-start; gap: 10px;
-      padding: 10px 14px; background: var(--error-bg); border: 1px solid var(--error-border);
-      border-radius: var(--radius); margin-bottom: 14px; font-size: 13px; color: var(--destructive);
+    .wf-no-mode-icon { width: var(--ou-space-9); height: var(--ou-space-9); color: var(--ou-fg-muted); }
+    .wf-no-mode-placeholder p {
+      font: var(--ou-text-body-m); line-height: 1.6;
+      max-width: 420px; margin: 0;
     }
-    .error-banner svg { flex-shrink: 0; margin-top: 1px; }
+    .wf-no-mode-link { color: var(--ou-accent-default); text-decoration: underline; }
 
-    /* No-mode placeholder */
-    .no-mode-placeholder {
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      text-align: center; padding: 60px 40px; color: var(--muted-fg); gap: 12px;
+    /* ── Status dot ───────────────────────────────────────────────────────── */
+    .wf-status-dot {
+      display: inline-block; width: 7px; height: 7px;
+      border-radius: 50%; flex-shrink: 0;
     }
-    .no-mode-placeholder p { font-size: 14px; line-height: 1.6; max-width: 420px; margin: 0; }
-    .no-mode-placeholder a { color: var(--primary); text-decoration: underline; }
+    .wf-status-dot--error { background: var(--ou-error-fg); }
+    .wf-ml-auto { margin-left: auto; }
 
-    /* JSON textarea */
-    .json-textarea {
-      width: 100%; min-height: 80px; resize: vertical; font-size: 12px;
-      font-family: 'Consolas', 'Courier New', monospace; line-height: 1.6;
-      border: 1px solid var(--input-b); border-radius: var(--radius-sm);
-      padding: 8px 10px; background: var(--bg); color: var(--fg);
+    /* ── Local button and banner extensions ───────────────────────────────── */
+    .ou-button--ghost {
+      background: transparent; color: var(--ou-fg-default);
+      border: 1px solid var(--ou-border-soft);
     }
-    .note-text {
-      font-size: 12px; color: var(--muted-fg); font-style: italic; margin-top: 6px;
+    .ou-button--ghost:hover { background: var(--ou-bg-muted); }
+    .ou-button--sm { font: var(--ou-text-caption); padding: var(--ou-space-1) var(--ou-space-3); }
+    .ou-button--outline-error { color: var(--ou-error-fg); border-color: var(--ou-error-fg); }
+    .wf-btn-icon { width: var(--ou-space-3); height: var(--ou-space-3); flex-shrink: 0; }
+
+    .ou-banner--error {
+      display: flex; align-items: flex-start; gap: var(--ou-space-2);
+      background: var(--ou-error-bg); border: 1px solid var(--ou-error-border);
+      color: var(--ou-error-fg); border-radius: var(--ou-radius-m);
+      padding: var(--ou-space-3) var(--ou-space-4);
+      margin-bottom: var(--ou-space-4); font: var(--ou-text-body-s);
+    }
+    .ou-banner--error svg { flex-shrink: 0; margin-top: 1px; }
+  </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: 1px solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: 1px solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: 1px;
+      height: var(--ou-space-5);
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, 52px);
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, 52px));
+      max-height: calc(100vh - var(--wf-nav-offset, 52px));
     }
   </style>
 </head>
-<body>
+<body class="ou ou--light ou--normal">
 
-<nav class="wf-nav" aria-label="Wireframe state switcher">
-  <span class="wf-label">Адаптивность:</span>
-  <button class="wf-btn active" type="button" onclick="show('s-default')">s-default (адаптивный режим)</button>
-  <button class="wf-btn"        type="button" onclick="show('s-no-mode')">s-no-mode (стандартный режим)</button>
-  <button class="wf-btn"        type="button" onclick="show('s-error')">s-error (ошибка порога)</button>
-  <a class="wf-link" href="prd7-editor-settings-tab.html">Настройки &rarr;</a>
-</nav>
-
-<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
-  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/>
-    <line x1="12" y1="8" x2="12.01" y2="8"/>
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
   </symbol>
   <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
@@ -245,144 +521,168 @@
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
   </symbol>
-  <symbol id="i-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <polyline points="9 18 15 12 9 6"/>
   </symbol>
 </svg>
 
-<!-- ═══ STATE: s-default — adaptive mode active ════════════════════════════ -->
-<div id="s-default" class="shell active">
-  <aside class="sidebar">
-    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
-    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
-    <div class="sidebar-footer"></div>
-  </aside>
-  <div class="main" style="flex-direction:column;">
-    <div class="drawer-col">
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">prd7 — Адаптивность:</span>
+  <button type="button" class="ou-button ou-button--primary" onclick="showState(this, 's-default')">s-default</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-no-mode')">s-no-mode</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-error')">s-error</button>
+  <span class="wf-nav-sep"></span>
+  <button type="button" class="ou-button ou-button--secondary" onclick="toggleTheme()">Dark</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="toggleDensity()">Compact</button>
+</nav>
 
-      <div class="drawer-header">
-        <div class="drawer-title">Основы информационной безопасности</div>
-        <span class="badge badge-secondary">Черновик</span>
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+<!-- ═══ STATE: s-default — adaptive mode active ══════════════════════════════ -->
+<section id="wf-s-default" class="wf-state active" aria-label="Адаптивность — режим active">
+  <div class="wf-shell">
+    <aside class="wf-sidebar" aria-label="Боковая навигация">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box" aria-hidden="true">TB</div>
+        <span class="wf-sidebar-title">Test Builder</span>
       </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-sidebar-nav-item wf-sidebar-nav-item--active" aria-current="page">Тесты</div>
+      </nav>
+      <div class="wf-sidebar-footer"></div>
+    </aside>
 
-      <div class="tab-bar" role="tablist">
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
-        <button class="tab-item active" type="button" role="tab" aria-selected="true">Настройки</button>
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Структура</button>
-      </div>
+    <div class="wf-main-col">
+      <header class="wf-drawer-header">
+        <h1 class="wf-drawer-title">Основы информационной безопасности</h1>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <div class="wf-flex-spacer"></div>
+        <button type="button" class="wf-drawer-close" aria-label="Закрыть редактор">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x"/></svg>
+        </button>
+      </header>
 
-      <div class="settings-pane">
-        <!-- Side nav -->
-        <nav class="settings-side-nav" aria-label="Разделы настроек">
-          <button class="nav-section-item" type="button">Основное</button>
-          <button class="nav-section-item" type="button">Режим и сценарий</button>
-          <button class="nav-section-item" type="button">Правила прохождения</button>
-          <button class="nav-section-item" type="button">Ограничения</button>
-          <button class="nav-section-item" type="button">Обратная связь</button>
-          <button class="nav-section-item" type="button">Интеграция</button>
-          <button class="nav-section-item active" type="button" aria-current="page">Адаптивность</button>
+      <nav class="wf-drawer-tabs" role="tablist">
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Состав</button>
+        <button type="button" class="wf-drawer-tab wf-drawer-tab--active" role="tab" aria-selected="true">Настройки</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Оформление</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Структура</button>
+      </nav>
+
+      <div class="wf-settings-pane">
+        <nav class="wf-settings-side-nav" aria-label="Разделы настроек">
+          <button type="button" class="wf-nav-section-item">Основное</button>
+          <button type="button" class="wf-nav-section-item">Режим и сценарий</button>
+          <button type="button" class="wf-nav-section-item">Правила прохождения</button>
+          <button type="button" class="wf-nav-section-item">Ограничения</button>
+          <button type="button" class="wf-nav-section-item">Обратная связь</button>
+          <button type="button" class="wf-nav-section-item">Интеграция</button>
+          <button type="button" class="wf-nav-section-item wf-nav-section-item--active" aria-current="page">Адаптивность</button>
         </nav>
 
-        <!-- Content area -->
-        <div class="settings-content">
+        <div class="wf-settings-content">
 
-          <!-- 1. Read-only mode chip -->
-          <div class="mode-chip" role="note" aria-label="Текущий режим теста: Адаптивный">
-            <span class="mode-chip-label">Режим теста:</span>
-            <span class="mode-chip-value">Адаптивный</span>
-            <a href="#" aria-label="Перейти к разделу Режим и сценарий">Изменить в Режим и сценарий</a>
+          <!-- Read-only mode chip (§3.8) -->
+          <div class="wf-mode-chip" role="note" aria-label="Текущий режим теста: Адаптивный">
+            <span class="wf-mode-chip-label">Режим теста:</span>
+            <span class="wf-mode-chip-value">Адаптивный</span>
+            <a href="#" class="wf-mode-chip-link" aria-label="Перейти к разделу Режим и сценарий">Изменить в Режим и сценарий</a>
           </div>
 
-          <!-- 2. show_difficulty_level toggle -->
-          <div class="section-card">
-            <div class="section-card-header">
-              <div class="section-card-title">Отображение сложности</div>
+          <!-- show_difficulty_level toggle -->
+          <div class="wf-section-card">
+            <div class="wf-section-card-header">
+              <span class="wf-section-card-title">Отображение сложности</span>
             </div>
-            <div class="section-card-body">
-              <div class="toggle-row">
-                <button class="toggle-switch" type="button" role="switch" aria-checked="true"
+            <div class="wf-section-card-body">
+              <div class="wf-toggle-row">
+                <button type="button" class="wf-toggle" role="switch" aria-checked="true"
                         aria-label="Показывать уровень сложности обучающемуся">
-                  <div class="toggle-knob"></div>
+                  <div class="wf-toggle-knob"></div>
                 </button>
-                <div>
-                  <div class="toggle-label">Показывать уровень сложности обучающемуся</div>
-                  <div class="toggle-sub">tests.show_difficulty_level — управляет видимостью индикатора сложности в SCORM-плеере</div>
+                <div class="wf-toggle-text">
+                  <div class="wf-toggle-label">Показывать уровень сложности обучающемуся</div>
+                  <div class="wf-toggle-sub">tests.show_difficulty_level — управляет видимостью индикатора в SCORM-плеере</div>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- 3. adaptive_settings_json -->
-          <div class="section-card">
-            <div class="section-card-header">
-              <div class="section-card-title">Общие параметры адаптации</div>
-              <span class="badge badge-outline" style="font-size:11px;">JSON / advanced</span>
+          <!-- adaptive_settings_json -->
+          <div class="wf-section-card">
+            <div class="wf-section-card-header">
+              <span class="wf-section-card-title">Общие параметры адаптации</span>
+              <span class="ou-tag ou-tag--neutral">JSON / advanced</span>
             </div>
-            <div class="section-card-body">
-              <div class="field-group">
-                <div class="field-label">tests.adaptive_settings_json</div>
-                <textarea class="json-textarea" aria-label="Общие параметры адаптации (JSON)">{}
-</textarea>
-                <p class="note-text">Уточняется в следующей итерации. Сохраняется как свободный JSON.</p>
+            <div class="wf-section-card-body">
+              <div class="wf-field-group">
+                <div class="wf-field-label">tests.adaptive_settings_json</div>
+                <textarea class="wf-json-textarea" aria-label="Общие параметры адаптации (JSON)">{}</textarea>
+                <p class="wf-note-text">Уточняется в следующей итерации. Сохраняется как свободный JSON.</p>
               </div>
             </div>
           </div>
 
-          <!-- 4. Per-topic table -->
-          <div class="section-card">
-            <div class="section-card-header">
-              <div class="section-card-title">Адаптация по темам</div>
-              <span class="badge badge-outline" style="font-size:11px;">2 темы</span>
+          <!-- Per-topic table -->
+          <div class="wf-section-card">
+            <div class="wf-section-card-header">
+              <span class="wf-section-card-title">Адаптация по темам</span>
+              <span class="ou-tag ou-tag--neutral">2 темы</span>
             </div>
-            <div class="section-card-body" style="padding:0;">
-              <table class="topics-table" aria-label="Адаптивные настройки по темам">
+            <div class="wf-section-card-body wf-section-card-body--flush">
+              <table class="wf-topics-table" aria-label="Адаптивные настройки по темам">
+                <colgroup>
+                  <col>
+                  <col class="wf-col-enabled">
+                  <col class="wf-col-failure-fb">
+                  <col class="wf-col-t-actions">
+                </colgroup>
                 <thead>
                   <tr>
                     <th>Тема</th>
-                    <th style="width:80px;">Включено</th>
-                    <th style="width:240px;">Обратная связь при провале темы</th>
-                    <th style="width:100px;">Действия</th>
+                    <th>Включено</th>
+                    <th>Обратная связь при провале темы</th>
+                    <th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
                     <td>
-                      <div class="topic-name-cell">Основы ИБ</div>
-                      <div class="topic-sub-cell">adaptive_topic_settings</div>
+                      <div class="wf-topic-name-cell">Основы ИБ</div>
+                      <div class="wf-topic-sub-cell">adaptive_topic_settings</div>
                     </td>
                     <td>
-                      <button class="toggle-switch" type="button" role="switch" aria-checked="true"
+                      <button type="button" class="wf-toggle" role="switch" aria-checked="true"
                               aria-label="Включить адаптацию для темы Основы ИБ">
-                        <div class="toggle-knob"></div>
+                        <div class="wf-toggle-knob"></div>
                       </button>
                     </td>
                     <td>
-                      <textarea class="failure-input" aria-label="Обратная связь при провале, тема Основы ИБ">Рекомендуем повторить базовые понятия перед следующей попыткой.</textarea>
+                      <textarea class="wf-failure-input"
+                                aria-label="Обратная связь при провале, тема Основы ИБ">Рекомендуем повторить базовые понятия перед следующей попыткой.</textarea>
                     </td>
                     <td>
-                      <button class="btn btn-ghost btn-sm" type="button" aria-label="Настроить уровни темы Основы ИБ">Уровни &rarr;</button>
+                      <button type="button" class="ou-button ou-button--ghost ou-button--sm"
+                              aria-label="Настроить уровни темы Основы ИБ">Уровни &rarr;</button>
                     </td>
                   </tr>
                   <tr>
                     <td>
-                      <div class="topic-name-cell">Классификация угроз</div>
-                      <div class="topic-sub-cell">adaptive_topic_settings</div>
+                      <div class="wf-topic-name-cell">Классификация угроз</div>
+                      <div class="wf-topic-sub-cell">adaptive_topic_settings</div>
                     </td>
                     <td>
-                      <button class="toggle-switch off" type="button" role="switch" aria-checked="false"
+                      <button type="button" class="wf-toggle wf-toggle--off" role="switch" aria-checked="false"
                               aria-label="Включить адаптацию для темы Классификация угроз">
-                        <div class="toggle-knob"></div>
+                        <div class="wf-toggle-knob"></div>
                       </button>
                     </td>
                     <td>
-                      <textarea class="failure-input" aria-label="Обратная связь при провале, тема Классификация угроз" placeholder="Введите текст для отображения при провале темы..."></textarea>
+                      <textarea class="wf-failure-input"
+                                aria-label="Обратная связь при провале, тема Классификация угроз"
+                                placeholder="Введите текст для отображения при провале темы..."></textarea>
                     </td>
                     <td>
-                      <button class="btn btn-ghost btn-sm" type="button" aria-label="Настроить уровни темы Классификация угроз">Уровни &rarr;</button>
+                      <button type="button" class="ou-button ou-button--ghost ou-button--sm"
+                              aria-label="Настроить уровни темы Классификация угроз">Уровни &rarr;</button>
                     </td>
                   </tr>
                 </tbody>
@@ -390,135 +690,90 @@
             </div>
           </div>
 
-          <!-- 5. Per-topic detail panel (Основы ИБ, expanded) -->
-          <div class="levels-panel">
-            <div class="levels-panel-header">
-              <div class="levels-panel-title">Уровни темы: Основы ИБ</div>
-              <span class="badge badge-outline" style="font-size:11px;">adaptive_levels</span>
-              <button class="btn btn-ghost btn-sm" type="button" aria-label="Свернуть панель уровней">&#8963;</button>
+          <!-- Per-topic levels panel (Основы ИБ expanded) -->
+          <div class="wf-levels-panel">
+            <div class="wf-levels-panel-header">
+              <span class="wf-levels-panel-title">Уровни темы: Основы ИБ</span>
+              <span class="ou-tag ou-tag--neutral">adaptive_levels</span>
+              <button type="button" class="ou-button ou-button--ghost ou-button--sm" aria-label="Свернуть панель уровней">&#8963;</button>
             </div>
-            <div class="levels-table-wrap">
-              <table class="levels-table" aria-label="Уровни адаптации темы Основы ИБ">
+            <div class="wf-levels-table-wrap">
+              <table class="wf-levels-table" aria-label="Уровни адаптации темы Основы ИБ">
+                <colgroup>
+                  <col class="wf-col-order">
+                  <col class="wf-col-lvl-name">
+                  <col class="wf-col-difficulty">
+                  <col class="wf-col-difficulty">
+                  <col class="wf-col-q-count">
+                  <col class="wf-col-threshold">
+                  <col class="wf-col-th-type">
+                  <col class="wf-col-feedback">
+                  <col class="wf-col-links-pdf">
+                  <col class="wf-col-links-pdf">
+                  <col class="wf-col-l-actions">
+                </colgroup>
                 <thead>
                   <tr>
-                    <th style="width:48px;">Порядок</th>
-                    <th style="width:110px;">Название</th>
-                    <th style="width:70px;">Мин. сл.</th>
-                    <th style="width:70px;">Макс. сл.</th>
-                    <th style="width:64px;">Кол-во</th>
-                    <th style="width:60px;">Порог</th>
-                    <th style="width:110px;">Тип порога</th>
-                    <th style="width:90px;">Обр. связь</th>
-                    <th style="width:64px;">Ссылки</th>
-                    <th style="width:64px;">PDF</th>
-                    <th style="width:80px;">Действия</th>
+                    <th>Порядок</th>
+                    <th>Название</th>
+                    <th>Мин. сл.</th>
+                    <th>Макс. сл.</th>
+                    <th>Кол-во</th>
+                    <th>Порог</th>
+                    <th>Тип порога</th>
+                    <th>Обр. связь</th>
+                    <th>Ссылки</th>
+                    <th>PDF</th>
+                    <th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td style="text-align:center;">
-                      <input class="num-input-sm" type="number" value="1" min="1"
-                             aria-label="Порядок уровня 1">
-                    </td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="1" min="1" aria-label="Порядок уровня 1"></td>
+                    <td><input class="wf-level-name-input" type="text" value="Начальный" aria-label="Название уровня 1"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="1" min="1" max="10" aria-label="Мин. сложность уровня 1"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="3" min="1" max="10" aria-label="Макс. сложность уровня 1"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="5" min="1" aria-label="Количество вопросов уровня 1"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="70" min="0" max="100" aria-label="Порог прохождения уровня 1"></td>
+                    <td><select class="wf-type-select" aria-label="Тип порога уровня 1"><option selected>процент</option><option>абсолютное</option></select></td>
+                    <td><button type="button" class="wf-btn-link" aria-label="Редактор обратной связи уровня 1">Открыть...</button></td>
+                    <td class="wf-cell-center"><button type="button" class="wf-btn-link" aria-label="Ссылки уровня 1: 1">1</button></td>
+                    <td class="wf-cell-center"><button type="button" class="wf-btn-link" aria-label="PDF уровня 1: 0">0</button></td>
                     <td>
-                      <input type="text" value="Начальный" style="font-size:12px;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--input-b);width:100%;"
-                             aria-label="Название уровня 1">
-                    </td>
-                    <td style="text-align:center;">
-                      <input class="num-input-sm" type="number" value="1" min="1" max="10"
-                             aria-label="Мин. сложность уровня 1">
-                    </td>
-                    <td style="text-align:center;">
-                      <input class="num-input-sm" type="number" value="3" min="1" max="10"
-                             aria-label="Макс. сложность уровня 1">
-                    </td>
-                    <td style="text-align:center;">
-                      <input class="num-input-sm" type="number" value="5" min="1"
-                             aria-label="Количество вопросов уровня 1">
-                    </td>
-                    <td style="text-align:center;">
-                      <input class="num-input-sm" type="number" value="70" min="0" max="100"
-                             aria-label="Порог прохождения уровня 1">
-                    </td>
-                    <td>
-                      <select class="type-select" aria-label="Тип порога уровня 1">
-                        <option selected>процент</option>
-                        <option>абсолютное</option>
-                      </select>
-                    </td>
-                    <td>
-                      <button class="btn-link-sm" type="button" aria-label="Открыть редактор обратной связи уровня 1">Открыть...</button>
-                    </td>
-                    <td style="text-align:center;">
-                      <button class="btn-link-sm" type="button" aria-label="Ссылки уровня 1, 1 ссылка">1</button>
-                    </td>
-                    <td style="text-align:center;">
-                      <button class="btn-link-sm" type="button" aria-label="PDF-документы уровня 1, нет">0</button>
-                    </td>
-                    <td>
-                      <div class="action-row">
-                        <button class="icon-btn" type="button" aria-label="Переместить уровень выше">
-                          <svg width="12" height="12"><use href="#i-chevron-up"/></svg>
+                      <div class="wf-action-row">
+                        <button type="button" class="wf-icon-btn" aria-label="Переместить уровень выше">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-chevron-up"/></svg>
                         </button>
-                        <button class="icon-btn" type="button" aria-label="Переместить уровень ниже">
-                          <svg width="12" height="12"><use href="#i-chevron-down"/></svg>
+                        <button type="button" class="wf-icon-btn" aria-label="Переместить уровень ниже">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-chevron-down"/></svg>
                         </button>
-                        <button class="icon-btn danger" type="button" aria-label="Удалить уровень">
-                          <svg width="12" height="12"><use href="#i-trash"/></svg>
+                        <button type="button" class="wf-icon-btn wf-icon-btn--danger" aria-label="Удалить уровень">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-trash"/></svg>
                         </button>
                       </div>
                     </td>
                   </tr>
                   <tr>
-                    <td style="text-align:center;">
-                      <input class="num-input-sm" type="number" value="2" min="1"
-                             aria-label="Порядок уровня 2">
-                    </td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="2" min="1" aria-label="Порядок уровня 2"></td>
+                    <td><input class="wf-level-name-input" type="text" value="Продвинутый" aria-label="Название уровня 2"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="4" min="1" max="10" aria-label="Мин. сложность уровня 2"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="5" min="1" max="10" aria-label="Макс. сложность уровня 2"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="8" min="1" aria-label="Количество вопросов уровня 2"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="75" min="0" max="100" aria-label="Порог прохождения уровня 2"></td>
+                    <td><select class="wf-type-select" aria-label="Тип порога уровня 2"><option selected>процент</option><option>абсолютное</option></select></td>
+                    <td><button type="button" class="wf-btn-link" aria-label="Редактор обратной связи уровня 2">Открыть...</button></td>
+                    <td class="wf-cell-center"><button type="button" class="wf-btn-link" aria-label="Ссылки уровня 2: 2">2</button></td>
+                    <td class="wf-cell-center"><button type="button" class="wf-btn-link" aria-label="PDF уровня 2: 1">1</button></td>
                     <td>
-                      <input type="text" value="Продвинутый" style="font-size:12px;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--input-b);width:100%;"
-                             aria-label="Название уровня 2">
-                    </td>
-                    <td style="text-align:center;">
-                      <input class="num-input-sm" type="number" value="4" min="1" max="10"
-                             aria-label="Мин. сложность уровня 2">
-                    </td>
-                    <td style="text-align:center;">
-                      <input class="num-input-sm" type="number" value="5" min="1" max="10"
-                             aria-label="Макс. сложность уровня 2">
-                    </td>
-                    <td style="text-align:center;">
-                      <input class="num-input-sm" type="number" value="8" min="1"
-                             aria-label="Количество вопросов уровня 2">
-                    </td>
-                    <td style="text-align:center;">
-                      <input class="num-input-sm" type="number" value="75" min="0" max="100"
-                             aria-label="Порог прохождения уровня 2">
-                    </td>
-                    <td>
-                      <select class="type-select" aria-label="Тип порога уровня 2">
-                        <option selected>процент</option>
-                        <option>абсолютное</option>
-                      </select>
-                    </td>
-                    <td>
-                      <button class="btn-link-sm" type="button" aria-label="Открыть редактор обратной связи уровня 2">Открыть...</button>
-                    </td>
-                    <td style="text-align:center;">
-                      <button class="btn-link-sm" type="button" aria-label="Ссылки уровня 2, 2 ссылки">2</button>
-                    </td>
-                    <td style="text-align:center;">
-                      <button class="btn-link-sm" type="button" aria-label="PDF-документы уровня 2, 1 документ">1</button>
-                    </td>
-                    <td>
-                      <div class="action-row">
-                        <button class="icon-btn" type="button" aria-label="Переместить уровень выше">
-                          <svg width="12" height="12"><use href="#i-chevron-up"/></svg>
+                      <div class="wf-action-row">
+                        <button type="button" class="wf-icon-btn" aria-label="Переместить уровень выше">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-chevron-up"/></svg>
                         </button>
-                        <button class="icon-btn" type="button" aria-label="Переместить уровень ниже">
-                          <svg width="12" height="12"><use href="#i-chevron-down"/></svg>
+                        <button type="button" class="wf-icon-btn" aria-label="Переместить уровень ниже">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-chevron-down"/></svg>
                         </button>
-                        <button class="icon-btn danger" type="button" aria-label="Удалить уровень">
-                          <svg width="12" height="12"><use href="#i-trash"/></svg>
+                        <button type="button" class="wf-icon-btn wf-icon-btn--danger" aria-label="Удалить уровень">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-trash"/></svg>
                         </button>
                       </div>
                     </td>
@@ -526,156 +781,164 @@
                 </tbody>
               </table>
             </div>
-            <div class="levels-panel-footer">
-              <button class="btn btn-outline btn-sm" type="button">
-                <svg width="12" height="12" style="margin-right:4px;"><use href="#i-plus"/></svg>
+            <div class="wf-levels-panel-footer">
+              <button type="button" class="ou-button ou-button--secondary ou-button--sm">
+                <svg class="wf-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-plus"/></svg>
                 Добавить уровень
               </button>
             </div>
           </div>
 
-          <!-- 6. Difficulty distribution reference card -->
-          <div class="section-card">
-            <div class="section-card-header">
-              <div class="section-card-title">Распределение сложности в банке</div>
-              <span class="badge badge-outline" style="font-size:11px;">Справочно</span>
+          <!-- Difficulty distribution reference -->
+          <div class="wf-section-card">
+            <div class="wf-section-card-header">
+              <span class="wf-section-card-title">Распределение сложности в банке</span>
+              <span class="ou-tag ou-tag--neutral">Справочно</span>
             </div>
-            <div class="section-card-body">
-              <div class="difficulty-chart" role="img"
-                   aria-label="Диаграмма: Уровень 1 (лёгкий) — 42 вопроса, Уровень 2 — 28 вопросов, Уровень 3 — 18 вопросов, Уровень 4 — 9 вопросов, Уровень 5 (сложный) — 5 вопросов">
-                <div class="diff-bar" style="height:85%;" aria-hidden="true"></div>
-                <div class="diff-bar selected" style="height:58%;" aria-hidden="true"></div>
-                <div class="diff-bar" style="height:37%;" aria-hidden="true"></div>
-                <div class="diff-bar" style="height:19%;" aria-hidden="true"></div>
-                <div class="diff-bar" style="height:11%;" aria-hidden="true"></div>
-                <div class="diff-chart-label" aria-hidden="true">
-                  <span>1 (42)</span>
-                  <span>2 (28)</span>
-                  <span>3 (18)</span>
-                  <span>4 (9)</span>
-                  <span>5 (5)</span>
+            <div class="wf-section-card-body">
+              <div class="wf-diff-chart" role="img"
+                   aria-label="Диаграмма: Уровень 1 (лёгкий) — 42 вопроса, Уровень 2 — 28, Уровень 3 — 18, Уровень 4 — 9, Уровень 5 (сложный) — 5">
+                <div class="wf-diff-bar wf-diff-bar--h85" aria-hidden="true"></div>
+                <div class="wf-diff-bar wf-diff-bar--h58 wf-diff-bar--selected" aria-hidden="true"></div>
+                <div class="wf-diff-bar wf-diff-bar--h37" aria-hidden="true"></div>
+                <div class="wf-diff-bar wf-diff-bar--h19" aria-hidden="true"></div>
+                <div class="wf-diff-bar wf-diff-bar--h11" aria-hidden="true"></div>
+                <div class="wf-diff-chart-labels" aria-hidden="true">
+                  <span>1 (42)</span><span>2 (28)</span><span>3 (18)</span><span>4 (9)</span><span>5 (5)</span>
                 </div>
               </div>
-              <p class="field-hint" style="margin-top:8px;">Данные из банка вопросов. Рекомендуется не менее 5 вопросов на каждый уровень сложности для корректной адаптации.</p>
+              <p class="wf-field-hint">Данные из банка вопросов. Рекомендуется не менее 5 вопросов на каждый уровень сложности для корректной адаптации.</p>
             </div>
           </div>
 
-        </div><!-- /settings-content -->
-      </div><!-- /settings-pane -->
-
-      <div class="drawer-footer">
-        <div class="footer-hint">Адаптивный режим. Изменения сохраняются для всего теста атомарно.</div>
-        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
-        <button class="btn btn-primary" type="button">Сохранить</button>
+        </div>
       </div>
 
-    </div><!-- /drawer-col -->
-  </div><!-- /main -->
-</div><!-- /s-default -->
+      <footer class="wf-drawer-footer">
+        <span class="wf-footer-hint">Адаптивный режим. Изменения сохраняются для всего теста атомарно.</span>
+        <button type="button" class="ou-button ou-button--ghost ou-button--sm">Показать изменения</button>
+        <button type="button" class="ou-button ou-button--primary">Сохранить</button>
+      </footer>
+    </div>
+  </div>
+</section>
 
-<!-- ═══ STATE: s-no-mode — standard mode (Адаптивность hidden) ════════════ -->
-<div id="s-no-mode" class="shell">
-  <aside class="sidebar">
-    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
-    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
-    <div class="sidebar-footer"></div>
-  </aside>
-  <div class="main" style="flex-direction:column;">
-    <div class="drawer-col">
-
-      <div class="drawer-header">
-        <div class="drawer-title">Основы информационной безопасности</div>
-        <span class="badge badge-secondary">Черновик</span>
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+<!-- ═══ STATE: s-no-mode — standard mode, Адаптивность hidden (§3.8) ═════════ -->
+<section id="wf-s-no-mode" class="wf-state" aria-label="Адаптивность — стандартный режим">
+  <div class="wf-shell">
+    <aside class="wf-sidebar" aria-label="Боковая навигация">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box" aria-hidden="true">TB</div>
+        <span class="wf-sidebar-title">Test Builder</span>
       </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-sidebar-nav-item wf-sidebar-nav-item--active" aria-current="page">Тесты</div>
+      </nav>
+      <div class="wf-sidebar-footer"></div>
+    </aside>
 
-      <div class="tab-bar" role="tablist">
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
-        <button class="tab-item active" type="button" role="tab" aria-selected="true">Настройки</button>
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Структура</button>
-      </div>
+    <div class="wf-main-col">
+      <header class="wf-drawer-header">
+        <h1 class="wf-drawer-title">Основы информационной безопасности</h1>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <div class="wf-flex-spacer"></div>
+        <button type="button" class="wf-drawer-close" aria-label="Закрыть редактор">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x"/></svg>
+        </button>
+      </header>
 
-      <div class="settings-pane">
-        <!-- Side nav: Адаптивность item is absent when mode=standard -->
-        <nav class="settings-side-nav" aria-label="Разделы настроек">
-          <button class="nav-section-item" type="button">Основное</button>
-          <button class="nav-section-item" type="button">Режим и сценарий</button>
-          <button class="nav-section-item" type="button">Правила прохождения</button>
-          <button class="nav-section-item" type="button">Ограничения</button>
-          <button class="nav-section-item" type="button">Обратная связь</button>
-          <button class="nav-section-item" type="button">Интеграция</button>
-          <!-- Адаптивность is NOT shown when tests.mode = standard -->
+      <nav class="wf-drawer-tabs" role="tablist">
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Состав</button>
+        <button type="button" class="wf-drawer-tab wf-drawer-tab--active" role="tab" aria-selected="true">Настройки</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Оформление</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Структура</button>
+      </nav>
+
+      <div class="wf-settings-pane">
+        <!-- Side nav: Адаптивность absent when mode=standard (§3.8) -->
+        <nav class="wf-settings-side-nav" aria-label="Разделы настроек">
+          <button type="button" class="wf-nav-section-item">Основное</button>
+          <button type="button" class="wf-nav-section-item">Режим и сценарий</button>
+          <button type="button" class="wf-nav-section-item">Правила прохождения</button>
+          <button type="button" class="wf-nav-section-item">Ограничения</button>
+          <button type="button" class="wf-nav-section-item">Обратная связь</button>
+          <button type="button" class="wf-nav-section-item">Интеграция</button>
+          <!-- "Адаптивность" is NOT shown when tests.mode = standard -->
         </nav>
 
-        <div class="settings-content">
-          <div class="no-mode-placeholder" role="note">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--muted-fg)" stroke-width="1.5">
+        <div class="wf-settings-content">
+          <div class="wf-no-mode-placeholder" role="note">
+            <svg class="wf-no-mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
               <path d="m9 18 6-6-6-6"/>
             </svg>
             <p>Раздел <strong>Адаптивность</strong> доступен после переключения режима теста в <strong>Адаптивный</strong>.</p>
-            <p>Перейдите в <a href="#" aria-label="Перейти в раздел Режим и сценарий">Настройки &rarr; Режим и сценарий</a> и выберите режим <strong>Адаптивный</strong>.</p>
+            <p>Перейдите в <a href="#" class="wf-no-mode-link" aria-label="Перейти в раздел Режим и сценарий">Настройки &rarr; Режим и сценарий</a> и выберите режим <strong>Адаптивный</strong>.</p>
           </div>
         </div>
       </div>
 
-      <div class="drawer-footer">
-        <div class="footer-hint">Режим: стандартный тест.</div>
-        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
-      </div>
-
+      <footer class="wf-drawer-footer">
+        <span class="wf-footer-hint">Режим: стандартный тест.</span>
+        <button type="button" class="ou-button ou-button--primary" disabled aria-disabled="true">Сохранить</button>
+      </footer>
     </div>
   </div>
-</div>
+</section>
 
-<!-- ═══ STATE: s-error — adaptive mode, invalid threshold value ════════════ -->
-<div id="s-error" class="shell">
-  <aside class="sidebar">
-    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
-    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
-    <div class="sidebar-footer"></div>
-  </aside>
-  <div class="main" style="flex-direction:column;">
-    <div class="drawer-col">
-
-      <div class="drawer-header">
-        <div class="drawer-title">Основы информационной безопасности</div>
-        <span class="badge badge-secondary">Черновик</span>
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+<!-- ═══ STATE: s-error — adaptive mode, invalid threshold value ═══════════════ -->
+<section id="wf-s-error" class="wf-state" aria-label="Адаптивность — ошибка порога">
+  <div class="wf-shell">
+    <aside class="wf-sidebar" aria-label="Боковая навигация">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box" aria-hidden="true">TB</div>
+        <span class="wf-sidebar-title">Test Builder</span>
       </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-sidebar-nav-item wf-sidebar-nav-item--active" aria-current="page">Тесты</div>
+      </nav>
+      <div class="wf-sidebar-footer"></div>
+    </aside>
 
-      <div class="tab-bar" role="tablist">
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
-        <button class="tab-item active" type="button" role="tab" aria-selected="true"
+    <div class="wf-main-col">
+      <header class="wf-drawer-header">
+        <h1 class="wf-drawer-title">Основы информационной безопасности</h1>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <div class="wf-flex-spacer"></div>
+        <button type="button" class="wf-drawer-close" aria-label="Закрыть редактор">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x"/></svg>
+        </button>
+      </header>
+
+      <nav class="wf-drawer-tabs" role="tablist">
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Состав</button>
+        <button type="button" class="wf-drawer-tab wf-drawer-tab--active" role="tab" aria-selected="true"
                 aria-label="Настройки, есть ошибки">
           Настройки
-          <span class="status-dot error" aria-hidden="true"></span>
+          <span class="wf-status-dot wf-status-dot--error" aria-hidden="true"></span>
         </button>
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Структура</button>
-      </div>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Оформление</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Структура</button>
+      </nav>
 
-      <div class="settings-pane">
-        <nav class="settings-side-nav" aria-label="Разделы настроек">
-          <button class="nav-section-item" type="button">Основное</button>
-          <button class="nav-section-item" type="button">Режим и сценарий</button>
-          <button class="nav-section-item" type="button">Правила прохождения</button>
-          <button class="nav-section-item" type="button">Ограничения</button>
-          <button class="nav-section-item" type="button">Обратная связь</button>
-          <button class="nav-section-item" type="button">Интеграция</button>
-          <button class="nav-section-item active" type="button" aria-current="page">
+      <div class="wf-settings-pane">
+        <nav class="wf-settings-side-nav" aria-label="Разделы настроек">
+          <button type="button" class="wf-nav-section-item">Основное</button>
+          <button type="button" class="wf-nav-section-item">Режим и сценарий</button>
+          <button type="button" class="wf-nav-section-item">Правила прохождения</button>
+          <button type="button" class="wf-nav-section-item">Ограничения</button>
+          <button type="button" class="wf-nav-section-item">Обратная связь</button>
+          <button type="button" class="wf-nav-section-item">Интеграция</button>
+          <button type="button" class="wf-nav-section-item wf-nav-section-item--active" aria-current="page">
             Адаптивность
-            <span class="status-dot error" aria-hidden="true" style="margin-left:auto;"></span>
+            <span class="wf-status-dot wf-status-dot--error wf-ml-auto" aria-hidden="true"></span>
           </button>
         </nav>
 
-        <div class="settings-content">
+        <div class="wf-settings-content">
 
-          <!-- Error summary banner -->
-          <div class="error-banner" role="alert" aria-live="assertive">
-            <svg width="16" height="16"><use href="#i-warn"/></svg>
+          <!-- Error summary banner (NFR-21: role=alert) -->
+          <div class="ou-banner--error" role="alert" aria-live="assertive">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-warn"/></svg>
             <div>
               <strong>Ошибка конфигурации уровней:</strong> Порог прохождения не может превышать 100 для типа "процент".
               Исправьте уровень "Продвинутый" темы "Основы ИБ".
@@ -683,76 +946,82 @@
           </div>
 
           <!-- Mode chip -->
-          <div class="mode-chip" role="note" aria-label="Текущий режим теста: Адаптивный">
-            <span class="mode-chip-label">Режим теста:</span>
-            <span class="mode-chip-value">Адаптивный</span>
-            <a href="#" aria-label="Перейти к разделу Режим и сценарий">Изменить в Режим и сценарий</a>
+          <div class="wf-mode-chip" role="note" aria-label="Текущий режим теста: Адаптивный">
+            <span class="wf-mode-chip-label">Режим теста:</span>
+            <span class="wf-mode-chip-value">Адаптивный</span>
+            <a href="#" class="wf-mode-chip-link" aria-label="Перейти к разделу Режим и сценарий">Изменить в Режим и сценарий</a>
           </div>
 
           <!-- show_difficulty_level toggle -->
-          <div class="section-card">
-            <div class="section-card-header">
-              <div class="section-card-title">Отображение сложности</div>
+          <div class="wf-section-card">
+            <div class="wf-section-card-header">
+              <span class="wf-section-card-title">Отображение сложности</span>
             </div>
-            <div class="section-card-body">
-              <div class="toggle-row">
-                <button class="toggle-switch" type="button" role="switch" aria-checked="true"
+            <div class="wf-section-card-body">
+              <div class="wf-toggle-row">
+                <button type="button" class="wf-toggle" role="switch" aria-checked="true"
                         aria-label="Показывать уровень сложности обучающемуся">
-                  <div class="toggle-knob"></div>
+                  <div class="wf-toggle-knob"></div>
                 </button>
-                <div>
-                  <div class="toggle-label">Показывать уровень сложности обучающемуся</div>
-                  <div class="toggle-sub">tests.show_difficulty_level</div>
+                <div class="wf-toggle-text">
+                  <div class="wf-toggle-label">Показывать уровень сложности обучающемуся</div>
+                  <div class="wf-toggle-sub">tests.show_difficulty_level</div>
                 </div>
               </div>
             </div>
           </div>
 
           <!-- adaptive_settings_json -->
-          <div class="section-card">
-            <div class="section-card-header">
-              <div class="section-card-title">Общие параметры адаптации</div>
-              <span class="badge badge-outline" style="font-size:11px;">JSON / advanced</span>
+          <div class="wf-section-card">
+            <div class="wf-section-card-header">
+              <span class="wf-section-card-title">Общие параметры адаптации</span>
+              <span class="ou-tag ou-tag--neutral">JSON / advanced</span>
             </div>
-            <div class="section-card-body">
-              <textarea class="json-textarea" aria-label="Общие параметры адаптации (JSON)">{}
-</textarea>
-              <p class="note-text">Уточняется в следующей итерации.</p>
+            <div class="wf-section-card-body">
+              <textarea class="wf-json-textarea" aria-label="Общие параметры адаптации (JSON)">{}</textarea>
+              <p class="wf-note-text">Уточняется в следующей итерации.</p>
             </div>
           </div>
 
-          <!-- Per-topic table -->
-          <div class="section-card">
-            <div class="section-card-header">
-              <div class="section-card-title">Адаптация по темам</div>
+          <!-- Per-topic table with error -->
+          <div class="wf-section-card">
+            <div class="wf-section-card-header">
+              <span class="wf-section-card-title">Адаптация по темам</span>
             </div>
-            <div class="section-card-body" style="padding:0;">
-              <table class="topics-table" aria-label="Адаптивные настройки по темам">
+            <div class="wf-section-card-body wf-section-card-body--flush">
+              <table class="wf-topics-table" aria-label="Адаптивные настройки по темам">
+                <colgroup>
+                  <col>
+                  <col class="wf-col-enabled">
+                  <col class="wf-col-failure-fb">
+                  <col class="wf-col-t-actions">
+                </colgroup>
                 <thead>
                   <tr>
                     <th>Тема</th>
-                    <th style="width:80px;">Включено</th>
-                    <th style="width:240px;">Обратная связь при провале темы</th>
-                    <th style="width:100px;">Действия</th>
+                    <th>Включено</th>
+                    <th>Обратная связь при провале темы</th>
+                    <th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
                     <td>
-                      <div class="topic-name-cell">Основы ИБ</div>
-                      <div class="topic-sub-cell" style="color:var(--destructive);">1 ошибка в уровнях</div>
+                      <div class="wf-topic-name-cell">Основы ИБ</div>
+                      <div class="wf-topic-sub-cell wf-topic-sub-cell--error">1 ошибка в уровнях</div>
                     </td>
                     <td>
-                      <button class="toggle-switch" type="button" role="switch" aria-checked="true"
+                      <button type="button" class="wf-toggle" role="switch" aria-checked="true"
                               aria-label="Включить адаптацию для темы Основы ИБ">
-                        <div class="toggle-knob"></div>
+                        <div class="wf-toggle-knob"></div>
                       </button>
                     </td>
                     <td>
-                      <textarea class="failure-input" aria-label="Обратная связь при провале, тема Основы ИБ">Рекомендуем повторить базовые понятия перед следующей попыткой.</textarea>
+                      <textarea class="wf-failure-input"
+                                aria-label="Обратная связь при провале, тема Основы ИБ">Рекомендуем повторить базовые понятия перед следующей попыткой.</textarea>
                     </td>
                     <td>
-                      <button class="btn btn-ghost btn-sm" type="button" style="color:var(--destructive);border-color:var(--destructive);"
+                      <button type="button" class="ou-button ou-button--ghost ou-button--sm ou-button--outline-error"
                               aria-label="Настроить уровни темы Основы ИБ (есть ошибки)">Уровни &rarr;</button>
                     </td>
                   </tr>
@@ -761,137 +1030,425 @@
             </div>
           </div>
 
-          <!-- Levels panel with error -->
-          <div class="levels-panel" style="border-color:var(--destructive);">
-            <div class="levels-panel-header" style="background:var(--error-bg);border-bottom-color:var(--error-border);">
-              <div class="levels-panel-title" style="color:var(--destructive);">Уровни темы: Основы ИБ</div>
-              <span class="badge badge-outline" style="font-size:11px;color:var(--destructive);">1 ошибка</span>
+          <!-- Levels panel with error state -->
+          <div class="wf-levels-panel wf-levels-panel--error">
+            <div class="wf-levels-panel-header wf-levels-panel-header--error">
+              <span class="wf-levels-panel-title wf-levels-panel-title--error">Уровни темы: Основы ИБ</span>
+              <span class="ou-tag ou-tag--error">1 ошибка</span>
             </div>
-            <div class="levels-table-wrap">
-              <table class="levels-table" aria-label="Уровни адаптации темы Основы ИБ">
+            <div class="wf-levels-table-wrap">
+              <table class="wf-levels-table" aria-label="Уровни адаптации темы Основы ИБ">
+                <colgroup>
+                  <col class="wf-col-order">
+                  <col class="wf-col-lvl-name">
+                  <col class="wf-col-difficulty">
+                  <col class="wf-col-difficulty">
+                  <col class="wf-col-q-count">
+                  <col class="wf-col-threshold">
+                  <col class="wf-col-th-type">
+                  <col class="wf-col-feedback">
+                  <col class="wf-col-links-pdf">
+                  <col class="wf-col-links-pdf">
+                  <col class="wf-col-l-actions">
+                </colgroup>
                 <thead>
                   <tr>
-                    <th style="width:48px;">Порядок</th>
-                    <th style="width:110px;">Название</th>
-                    <th style="width:70px;">Мин. сл.</th>
-                    <th style="width:70px;">Макс. сл.</th>
-                    <th style="width:64px;">Кол-во</th>
-                    <th style="width:60px;">Порог</th>
-                    <th style="width:110px;">Тип порога</th>
-                    <th style="width:90px;">Обр. связь</th>
-                    <th style="width:64px;">Ссылки</th>
-                    <th style="width:64px;">PDF</th>
-                    <th style="width:80px;">Действия</th>
+                    <th>Порядок</th><th>Название</th><th>Мин. сл.</th><th>Макс. сл.</th>
+                    <th>Кол-во</th><th>Порог</th><th>Тип порога</th><th>Обр. связь</th>
+                    <th>Ссылки</th><th>PDF</th><th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td style="text-align:center;">
-                      <input class="num-input-sm" type="number" value="1" min="1" aria-label="Порядок уровня 1">
-                    </td>
-                    <td><input type="text" value="Начальный" style="font-size:12px;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--input-b);width:100%;" aria-label="Название уровня 1"></td>
-                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="1" aria-label="Мин. сложность уровня 1"></td>
-                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="3" aria-label="Макс. сложность уровня 1"></td>
-                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="5" aria-label="Количество вопросов уровня 1"></td>
-                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="70" aria-label="Порог прохождения уровня 1"></td>
-                    <td><select class="type-select" aria-label="Тип порога уровня 1"><option selected>процент</option><option>абсолютное</option></select></td>
-                    <td><button class="btn-link-sm" type="button">Открыть...</button></td>
-                    <td style="text-align:center;">1</td>
-                    <td style="text-align:center;">0</td>
-                    <td><div class="action-row">
-                      <button class="icon-btn" type="button" aria-label="Вверх"><svg width="12" height="12"><use href="#i-chevron-up"/></svg></button>
-                      <button class="icon-btn" type="button" aria-label="Вниз"><svg width="12" height="12"><use href="#i-chevron-down"/></svg></button>
-                      <button class="icon-btn danger" type="button" aria-label="Удалить"><svg width="12" height="12"><use href="#i-trash"/></svg></button>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="1" min="1" aria-label="Порядок уровня 1"></td>
+                    <td><input class="wf-level-name-input" type="text" value="Начальный" aria-label="Название уровня 1"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="1" aria-label="Мин. сложность уровня 1"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="3" aria-label="Макс. сложность уровня 1"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="5" aria-label="Количество вопросов уровня 1"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="70" aria-label="Порог уровня 1"></td>
+                    <td><select class="wf-type-select" aria-label="Тип порога уровня 1"><option selected>процент</option><option>абсолютное</option></select></td>
+                    <td><button type="button" class="wf-btn-link">Открыть...</button></td>
+                    <td class="wf-cell-center">1</td>
+                    <td class="wf-cell-center">0</td>
+                    <td><div class="wf-action-row">
+                      <button type="button" class="wf-icon-btn" aria-label="Вверх"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-chevron-up"/></svg></button>
+                      <button type="button" class="wf-icon-btn" aria-label="Вниз"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-chevron-down"/></svg></button>
+                      <button type="button" class="wf-icon-btn wf-icon-btn--danger" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-trash"/></svg></button>
                     </div></td>
                   </tr>
-                  <!-- Row with error: pass_threshold = 120, which exceeds 100 for type "percent" -->
-                  <tr style="background:var(--error-bg);">
-                    <td style="text-align:center;">
-                      <input class="num-input-sm" type="number" value="2" min="1" aria-label="Порядок уровня 2">
+                  <!-- Row with error: pass_threshold=120 exceeds 100 for type "percent" -->
+                  <tr class="wf-tr--error">
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="2" min="1" aria-label="Порядок уровня 2"></td>
+                    <td><input class="wf-level-name-input" type="text" value="Продвинутый" aria-label="Название уровня 2"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="4" aria-label="Мин. сложность уровня 2"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="5" aria-label="Макс. сложность уровня 2"></td>
+                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="8" aria-label="Количество вопросов уровня 2"></td>
+                    <td class="wf-cell-center">
+                      <input class="wf-num-input wf-num-input--error" type="number" value="120"
+                             aria-label="Порог прохождения уровня 2"
+                             aria-invalid="true" aria-describedby="wf-err-threshold-2">
                     </td>
-                    <td><input type="text" value="Продвинутый" style="font-size:12px;padding:4px 6px;border-radius:var(--radius-sm);border:1px solid var(--input-b);width:100%;" aria-label="Название уровня 2"></td>
-                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="4" aria-label="Мин. сложность уровня 2"></td>
-                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="5" aria-label="Макс. сложность уровня 2"></td>
-                    <td style="text-align:center;"><input class="num-input-sm" type="number" value="8" aria-label="Количество вопросов уровня 2"></td>
-                    <td style="text-align:center;">
-                      <!-- Invalid value: 120 > 100 for type "percent" -->
-                      <input class="num-input-sm error" type="number" value="120" aria-label="Порог прохождения уровня 2"
-                             aria-invalid="true" aria-describedby="err-threshold-2">
-                    </td>
-                    <td><select class="type-select" aria-label="Тип порога уровня 2"><option selected>процент</option><option>абсолютное</option></select></td>
-                    <td><button class="btn-link-sm" type="button">Открыть...</button></td>
-                    <td style="text-align:center;">2</td>
-                    <td style="text-align:center;">1</td>
-                    <td><div class="action-row">
-                      <button class="icon-btn" type="button" aria-label="Вверх"><svg width="12" height="12"><use href="#i-chevron-up"/></svg></button>
-                      <button class="icon-btn" type="button" aria-label="Вниз"><svg width="12" height="12"><use href="#i-chevron-down"/></svg></button>
-                      <button class="icon-btn danger" type="button" aria-label="Удалить"><svg width="12" height="12"><use href="#i-trash"/></svg></button>
+                    <td><select class="wf-type-select" aria-label="Тип порога уровня 2"><option selected>процент</option><option>абсолютное</option></select></td>
+                    <td><button type="button" class="wf-btn-link">Открыть...</button></td>
+                    <td class="wf-cell-center">2</td>
+                    <td class="wf-cell-center">1</td>
+                    <td><div class="wf-action-row">
+                      <button type="button" class="wf-icon-btn" aria-label="Вверх"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-chevron-up"/></svg></button>
+                      <button type="button" class="wf-icon-btn" aria-label="Вниз"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-chevron-down"/></svg></button>
+                      <button type="button" class="wf-icon-btn wf-icon-btn--danger" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-trash"/></svg></button>
                     </div></td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <div style="padding:8px 14px;background:var(--error-bg);border-top:1px solid var(--error-border);">
-              <span id="err-threshold-2" style="font-size:12px;color:var(--destructive);">
+            <div class="wf-levels-panel-error-msg">
+              <span id="wf-err-threshold-2" class="wf-error-msg-text">
                 Уровень "Продвинутый": порог 120% превышает допустимое значение для типа "процент" (0–100).
               </span>
             </div>
-            <div class="levels-panel-footer">
-              <button class="btn btn-outline btn-sm" type="button">
-                <svg width="12" height="12" style="margin-right:4px;"><use href="#i-plus"/></svg>
+            <div class="wf-levels-panel-footer">
+              <button type="button" class="ou-button ou-button--secondary ou-button--sm">
+                <svg class="wf-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-plus"/></svg>
                 Добавить уровень
               </button>
             </div>
           </div>
 
-        </div><!-- /settings-content -->
-      </div><!-- /settings-pane -->
-
-      <div class="drawer-footer">
-        <div class="footer-hint" style="color:var(--destructive);">Исправьте ошибки перед сохранением</div>
-        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
-        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
+        </div>
       </div>
 
+      <footer class="wf-drawer-footer">
+        <span class="wf-footer-hint wf-footer-hint--error">Исправьте ошибки перед сохранением</span>
+        <button type="button" class="ou-button ou-button--ghost ou-button--sm">Показать изменения</button>
+        <button type="button" class="ou-button ou-button--primary" disabled aria-disabled="true">Сохранить</button>
+      </footer>
     </div>
   </div>
-</div>
+</section>
 
-<section class="acceptance" aria-label="Acceptance">
-  <h2>Acceptance -- PRD-7 покрытие</h2>
-    <table class="acceptance-table">
-    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+<!-- ═══ DS Mapping ════════════════════════════════════════════════════════════ -->
+<section class="wf-mapping" aria-label="DS Component Mapping">
+  <h2>DS Component Mapping</h2>
+  <table>
+    <thead>
+      <tr><th>Wireframe element</th><th>DS component</th><th>Variant / notes</th></tr>
+    </thead>
     <tbody>
-      <tr><td>§3.8</td><td>Раздел Адаптивность отображается в side-nav только при <code>tests.mode = adaptive</code>. В стандартном режиме (s-no-mode) пункт "Адаптивность" отсутствует в side-nav, показывается placeholder с ссылкой на Настройки &rarr; Режим и сценарий.</td></tr>
-      <tr><td>§3.8</td><td>Переключатель "Включить адаптивное тестирование" (<code>tests.mode</code>) отсутствует в этом разделе. Он располагается в Настройки &rarr; Режим и сценарий.</td></tr>
-      <tr><td>§3.8</td><td>Read-only чип "Режим теста: Адаптивный" со ссылкой на Режим и сценарий подтверждает текущий контекст без дублирования управления.</td></tr>
-      <tr><td>§3.8 / tests.show_difficulty_level</td><td>Переключатель "Показывать уровень сложности обучающемуся".</td></tr>
-      <tr><td>§3.8 / tests.adaptive_settings_json</td><td>Карточка "Общие параметры адаптации" с textarea и примечанием "Уточняется в следующей итерации". Без изобретённых полей IRT, SE, критерия завершения.</td></tr>
-      <tr><td>§3.8 / adaptive_topic_settings</td><td>Таблица "Адаптация по темам": столбцы Тема / Включено (<code>enabled</code>) / Обратная связь при провале (<code>failure_feedback</code>) / Действия (кнопка "Уровни &rarr;").</td></tr>
-      <tr><td>§3.8 / adaptive_levels</td><td>Панель уровней темы: столбцы <code>level_index</code>, <code>level_name</code>, <code>min_difficulty</code>, <code>max_difficulty</code>, <code>questions_count</code>, <code>pass_threshold</code>, <code>pass_threshold_type</code> (select: процент/абсолютное), <code>feedback</code> (открыть редактор), <code>adaptive_level_links</code> (счётчик), <code>feedback_assets scope=adaptive_level</code> (счётчик PDF), Действия (Вверх/Вниз/Удалить). Кнопка "Добавить уровень".</td></tr>
-      <tr><td class="no-code">—</td><td>Справочная диаграмма распределения вопросов по сложности в банке (<code>role="img"</code> с <code>aria-label</code>).</td></tr>
-      <tr><td class="no-code">—</td><td>s-error: невалидный <code>pass_threshold=120</code> при типе "процент" — поле с <code>aria-invalid="true"</code> и <code>aria-describedby</code>, <code>role="alert"</code> banner вверху секции, кнопка "Сохранить" <code>disabled</code>, таб Настройки и пункт Адаптивность показывают индикатор ошибки.</td></tr>
-      <tr><td>NFR-21</td><td>Переключатели: <code>role="switch"</code> и <code>aria-checked</code>; таблицы: <code>aria-label</code>; диаграмма: <code>role="img"</code>; поля с ошибками: <code>aria-invalid</code> и <code>aria-describedby</code>.</td></tr>
+      <tr><td>.wf-settings-pane (2-panel)</td><td>SplitPane</td><td>Side-nav 240px + flex content area; Адаптивность absent when mode=standard (§3.8)</td></tr>
+      <tr><td>.wf-mode-chip</td><td>Chip / Badge (read-only)</td><td>role="note"; accent-colored value + link to Режим и сценарий</td></tr>
+      <tr><td>.wf-toggle (role="switch")</td><td>Switch / Toggle</td><td>role="switch" aria-checked; --off modifier for unchecked</td></tr>
+      <tr><td>.wf-topics-table</td><td>Table</td><td>toggle + textarea + ghost button per row; aria-label on table</td></tr>
+      <tr><td>.wf-levels-panel</td><td>ExpandableCard / Panel</td><td>Scrollable horizontally; --error variant: error-fg border + error-bg header</td></tr>
+      <tr><td>.wf-num-input (threshold)</td><td>Input (number)</td><td>52px compact; --error: error-fg border + aria-invalid + aria-describedby</td></tr>
+      <tr><td>.wf-type-select</td><td>Select</td><td>Caption-size, compact</td></tr>
+      <tr><td>.wf-diff-chart</td><td>BarChart (decorative)</td><td>role="img" with full aria-label; bar heights via modifier classes --h85 etc.</td></tr>
+      <tr><td>.wf-no-mode-placeholder</td><td>EmptyState</td><td>role="note"; link to Режим и сценарий section</td></tr>
+      <tr><td>ou-banner--error (s-error)</td><td>ou-banner</td><td>role="alert" aria-live="assertive"; NFR-21</td></tr>
+      <tr><td>ou-tag--error (1 ошибка)</td><td>ou-tag</td><td>ou-tag--error in levels panel header</td></tr>
+      <tr><td>.wf-status-dot--error (tab + side-nav)</td><td>StatusDot</td><td>7px error-fg circle; aria-hidden; aria-label on parent button</td></tr>
     </tbody>
   </table>
 </section>
 
+
+<!-- ═══════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент</th>
+        <th>Поле API / условие</th>
+        <th>Примечание</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Состояния wireframe</td>
+        <td><code>showState(btn, stateId)</code></td>
+        <td>Метанавигация переключает только визуальные состояния и не является частью продуктового UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
 <script>
-function show(id) {
-  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
-    el.classList.toggle('active', el.id === id);
+function showState(btn, id) {
+  document.querySelectorAll('.wf-state').forEach(function(el) {
+    el.classList.remove('active');
   });
-  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
-    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  var target = document.getElementById('wf-' + id);
+  if (target) { target.classList.add('active'); }
+  document.querySelectorAll('.wf-nav button[onclick^="showState"]').forEach(function(b) {
+    b.classList.remove('ou-button--primary');
+    b.classList.add('ou-button--secondary');
   });
+  if (btn) {
+    btn.classList.remove('ou-button--secondary');
+    btn.classList.add('ou-button--primary');
+  }
+}
+function toggleTheme() {
+  document.body.classList.toggle('ou--dark');
+  document.body.classList.toggle('ou--light');
+}
+function toggleDensity() {
+  document.body.classList.toggle('ou--compact');
+  document.body.classList.toggle('ou--normal');
 }
 </script>
+
 <script>
-(function(){
-  var s = document.createElement('script');
-  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
-  document.head.appendChild(s);
-})();
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
 </script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.drawer-footer')) addMappingRow(rows, 'drawer-footer', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
 </body>
 </html>

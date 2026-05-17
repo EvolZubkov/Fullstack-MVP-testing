@@ -1,521 +1,1040 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wireframe PRD-7: Mobile / Narrow Viewport</title>
-  <link rel="stylesheet" href="prd7-shared.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Wireframe: prd7 — Mobile / Narrow Viewport
+    Этап 3 — Wireframes
+    Файл: docs/wireframes/prd7-editor-mobile.html
+    Состояния: s-gallery
+    Покрывает: NFR-19, NFR-20, NFR-21
+  -->
+  <title>prd7 — Mobile / Narrow Viewport</title>
+  <link rel="stylesheet" href="ds/university-rt.css" />
+  <link rel="stylesheet" href="ds/wf-utils.css" />
   <style>
-    /* Mobile frame container */
-    .mobile-gallery {
-      display: flex; flex-wrap: wrap; gap: 24px;
-      padding: 24px; background: hsl(0 0% 87%);
-      min-height: calc(100vh - 40px);
+    /* Wireframe-specific helpers — not part of product UI */
+    .wf-sprite { display: none; }
+
+    /* ── Gallery layout ──────────────────────────────────────────────────── */
+    .wf-gallery {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--ou-space-6);
+      padding: var(--ou-space-6);
+      background: var(--ou-bg-muted);
     }
-    .mobile-frame-wrap {
-      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    .wf-frame-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--ou-space-2);
     }
-    .mobile-frame-label {
-      font-size: 12px; font-weight: 600; color: hsl(0 0% 35%); letter-spacing: .03em;
+    .wf-frame-label {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      letter-spacing: 0.03em;
     }
-    .mobile-frame {
-      width: 375px; height: 720px; background: var(--bg);
-      border-radius: 20px; overflow: hidden;
-      box-shadow: 0 8px 32px rgba(0,0,0,.20), 0 0 0 1px rgba(0,0,0,.08);
-      display: flex; flex-direction: column;
+
+    /* Phone frame — 375px wide (NFR-19) */
+    .wf-frame {
+      width: 375px;
+      height: 720px;
+      background: var(--ou-bg-elevated);
+      border-radius: var(--ou-radius-xl);
+      overflow: hidden;
+      box-shadow: var(--ou-shadow-l), 0 0 0 1px var(--ou-border-soft);
+      display: flex;
+      flex-direction: column;
       position: relative;
     }
-    /* Narrow frame (tablet-ish 640px breakpoint) */
-    .narrow-frame {
-      width: 640px; height: 720px; background: var(--bg);
-      border-radius: 12px; overflow: hidden;
-      box-shadow: 0 8px 32px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.07);
-      display: flex; flex-direction: column;
+    /* Narrow frame — 640px wide (tablet / < 960px breakpoint) */
+    .wf-narrow-frame {
+      width: 640px;
+      height: 720px;
+      background: var(--ou-bg-elevated);
+      border-radius: var(--ou-radius-l);
+      overflow: hidden;
+      box-shadow: var(--ou-shadow-l), 0 0 0 1px var(--ou-border-soft);
+      display: flex;
+      flex-direction: column;
+      position: relative;
     }
 
-    /* ── Drawer chrome (mobile) ───────────────────────────────────── */
-    .mob-header {
-      display: flex; align-items: center; gap: 8px;
-      padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
-      background: var(--bg);
+    /* ── Drawer chrome ────────────────────────────────────────────────────── */
+    .wf-mob-header {
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-3) var(--ou-space-4);
+      border-bottom: 1px solid var(--ou-border-soft);
+      flex-shrink: 0;
+      background: var(--ou-bg-elevated);
     }
-    .mob-title { font-size: 14px; font-weight: 700; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .wf-mob-header--wide { padding: var(--ou-space-3) var(--ou-space-5); }
+    .wf-mob-title-block { flex: 1; min-width: 0; }
+    .wf-mob-title {
+      font: var(--ou-text-body-m);
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .wf-mob-subtitle {
+      font: var(--ou-text-caption);
+      color: var(--ou-fg-muted);
+    }
+    .wf-mob-close {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      border: none;
+      background: transparent;
+      color: var(--ou-fg-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--ou-radius-s);
+    }
+    .wf-mob-close:hover { background: var(--ou-bg-muted); }
+    .wf-mob-close svg { width: var(--ou-space-4); height: var(--ou-space-4); }
+    .wf-mob-spacer { flex: 1; }
 
-    /* Mobile: tabs become full-width horizontal scroll */
-    .mob-tabs {
-      display: flex; border-bottom: 1px solid var(--border);
-      flex-shrink: 0; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    /* ── Tab bar (horizontal scroll on mobile — NFR-19) ──────────────────── */
+    .wf-mob-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--ou-border-soft);
+      flex-shrink: 0;
+      overflow-x: auto;
       scrollbar-width: none;
     }
-    .mob-tabs::-webkit-scrollbar { display: none; }
-    .mob-tab {
-      display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
-      padding: 9px 14px; font-size: 13px; color: var(--muted-fg);
-      border-bottom: 2px solid transparent; flex-shrink: 0;
-      background: transparent; border-top: none; border-left: none; border-right: none;
-      cursor: pointer; font-family: inherit;
+    .wf-mob-tabs::-webkit-scrollbar { display: none; }
+    .wf-mob-tabs--wide { padding: 0 var(--ou-space-5); }
+    .wf-mob-tab {
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+      padding: var(--ou-space-2) var(--ou-space-3);
+      font: var(--ou-text-body-s);
+      color: var(--ou-fg-muted);
+      border: none;
+      border-bottom: 2px solid transparent;
+      flex-shrink: 0;
+      background: transparent;
+      cursor: pointer;
     }
-    .mob-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
-
-    .mob-content { flex: 1; overflow-y: auto; padding: 14px; }
-    .mob-footer {
-      display: flex; align-items: center; gap: 8px; padding: 10px 14px;
-      border-top: 1px solid var(--border); flex-shrink: 0; background: var(--bg);
-    }
-    .mob-footer-hint { font-size: 11px; color: var(--muted-fg); flex: 1; }
-
-    /* ── Settings 2-pane → selector on mobile ───────────────────── */
-    .mob-settings-selector {
-      border: 1px solid var(--card-border); border-radius: var(--radius);
-      background: var(--card); overflow: hidden; margin-bottom: 12px;
-    }
-    .mob-settings-header {
-      display: flex; align-items: center; gap: 8px;
-      padding: 10px 14px; border-bottom: 1px solid var(--card-border);
-      background: var(--accent); font-size: 13px; font-weight: 600;
-    }
-    .mob-settings-select {
-      width: 100%; font-size: 13px; padding: 10px 14px;
-      border: none; background: var(--bg); color: var(--fg);
-      font-family: inherit; appearance: auto;
+    .wf-mob-tab--active {
+      color: var(--ou-accent-default);
+      border-bottom-color: var(--ou-accent-default);
+      font-weight: 500;
     }
 
-    /* ── Section card (compact mobile) ──────────────────────────── */
-    .mob-section-card {
-      border: 1px solid var(--card-border); border-radius: var(--radius);
-      background: var(--card); overflow: hidden; margin-bottom: 10px;
+    /* ── Content area and footer ──────────────────────────────────────────── */
+    .wf-mob-content { flex: 1; overflow-y: auto; padding: var(--ou-space-3); }
+    .wf-mob-content--wide { padding: var(--ou-space-4) var(--ou-space-5); }
+    .wf-mob-content--dimmed { opacity: .4; pointer-events: none; }
+    .wf-mob-footer {
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-3);
+      border-top: 1px solid var(--ou-border-soft);
+      flex-shrink: 0;
+      background: var(--ou-bg-elevated);
     }
-    .mob-section-header {
-      display: flex; align-items: center; gap: 8px;
-      padding: 9px 12px; border-bottom: 1px solid var(--card-border);
-      background: var(--accent); font-size: 12px; font-weight: 600;
+    .wf-mob-footer--wide { padding: var(--ou-space-2) var(--ou-space-5); }
+    .wf-mob-footer-hint {
+      font: var(--ou-text-caption);
+      color: var(--ou-fg-muted);
+      flex: 1;
     }
-    .mob-section-body { padding: 12px; }
-    .mob-field { margin-bottom: 10px; }
-    .mob-label { font-size: 12px; font-weight: 500; margin-bottom: 4px; }
-    .mob-input { font-size: 13px; padding: 7px 9px; border-radius: var(--radius-sm);
-      border: 1px solid var(--input-b); width: 100%; font-family: inherit; }
+    .wf-mob-footer-hint--accent { color: var(--ou-accent-default); }
 
-    /* ── Topic row compact ───────────────────────────────────────── */
-    .mob-topic-row {
-      display: flex; align-items: center; gap: 8px;
-      padding: 9px 12px; border-bottom: 1px solid var(--card-border); font-size: 12px;
+    /* ── Section cards ────────────────────────────────────────────────────── */
+    .wf-mob-section-card {
+      border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m);
+      background: var(--ou-bg-elevated);
+      overflow: hidden;
+      margin-bottom: var(--ou-space-2);
     }
-    .mob-topic-row:last-child { border-bottom: none; }
-    .mob-topic-name { flex: 1; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .mob-topic-avail { color: var(--muted-fg); white-space: nowrap; font-size: 11px; }
-    .mob-drag-handle { color: var(--muted-fg); cursor: grab; }
+    .wf-mob-section-header {
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-3);
+      border-bottom: 1px solid var(--ou-border-soft);
+      background: var(--ou-bg-canvas);
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+    }
+    .wf-mob-section-body { padding: var(--ou-space-3); }
+    .wf-mob-section-body--flush { padding: 0; }
 
-    /* ── Mode toggle (segmented control) ────────────────────────── */
-    .mob-mode-toggle {
-      display: flex; background: var(--muted); border-radius: var(--radius-md);
-      padding: 2px; margin-bottom: 12px;
+    /* ── Form fields ──────────────────────────────────────────────────────── */
+    .wf-mob-field { margin-bottom: var(--ou-space-2); }
+    .wf-mob-label {
+      font: var(--ou-text-caption);
+      font-weight: 500;
+      margin-bottom: var(--ou-space-1);
+      color: var(--ou-fg-default);
     }
-    .mob-mode-btn {
-      flex: 1; padding: 6px; font-size: 12px; border: none; border-radius: 5px;
-      background: transparent; color: var(--muted-fg); cursor: pointer; font-family: inherit;
-    }
-    .mob-mode-btn.active { background: var(--bg); font-weight: 600; color: var(--fg); }
-
-    /* Stepper: [−] N [+] */
-    .mob-stepper {
-      display: inline-flex; align-items: center; gap: 0;
-      border: 1px solid var(--input-b); border-radius: var(--radius-sm); overflow: hidden; flex-shrink: 0;
-    }
-    .mob-stepper-btn {
-      width: 24px; height: 26px; border: none; background: var(--accent);
-      color: var(--fg); font-size: 14px; line-height: 1; cursor: pointer;
-      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    .wf-mob-input {
+      font: var(--ou-text-body-s);
+      padding: var(--ou-space-1) var(--ou-space-2);
+      border-radius: var(--ou-radius-s);
+      border: 1px solid var(--ou-border-input);
+      width: 100%;
       font-family: inherit;
+      background: var(--ou-bg-elevated);
+      color: var(--ou-fg-default);
+      box-sizing: border-box;
     }
-    .mob-stepper-btn:active { background: var(--muted); }
-    .mob-stepper-val {
-      width: 30px; text-align: center; font-size: 12px; font-weight: 600;
-      border: none; border-left: 1px solid var(--input-b); border-right: 1px solid var(--input-b);
-      background: var(--bg); padding: 0; height: 26px; line-height: 26px;
-      font-family: inherit;
+    .wf-mob-input--narrow { max-width: 100px; }
+
+    /* ── Topic rows ───────────────────────────────────────────────────────── */
+    .wf-mob-topic-row {
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-3);
+      border-bottom: 1px solid var(--ou-border-soft);
+      font: var(--ou-text-body-s);
+    }
+    .wf-mob-topic-row:last-of-type { border-bottom: none; }
+    .wf-mob-topic-name {
+      flex: 1;
+      font-weight: 500;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .wf-mob-topic-avail {
+      color: var(--ou-fg-muted);
+      white-space: nowrap;
+      font: var(--ou-text-caption);
+    }
+    .wf-mob-add-row { padding: var(--ou-space-2) var(--ou-space-3); }
+
+    /* ── Stepper control [−] N [+] ────────────────────────────────────────── */
+    .wf-mob-stepper {
+      display: inline-flex;
+      align-items: stretch;
+      border: 1px solid var(--ou-border-input);
+      border-radius: var(--ou-radius-s);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .wf-mob-stepper-btn {
+      width: var(--ou-space-6);
+      border: none;
+      background: var(--ou-bg-canvas);
+      color: var(--ou-fg-default);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font: var(--ou-text-body-m);
+    }
+    .wf-mob-stepper-val {
+      width: 30px;
+      text-align: center;
+      font: var(--ou-text-caption);
+      font-weight: 600;
+      border-left: 1px solid var(--ou-border-input);
+      border-right: 1px solid var(--ou-border-input);
+      background: var(--ou-bg-elevated);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
-    /* ── Close confirm (bottom sheet on mobile) ──────────────────── */
-    .mob-bottom-sheet {
-      position: absolute; bottom: 0; left: 0; right: 0;
-      background: var(--bg); border-top: 1px solid var(--border);
-      border-radius: 12px 12px 0 0;
-      box-shadow: 0 -4px 24px rgba(0,0,0,.12); padding: 0;
+    /* ── Feedback preview card ────────────────────────────────────────────── */
+    .wf-mob-feedback-preview {
+      border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-s);
+      padding: var(--ou-space-2);
+      margin-bottom: var(--ou-space-2);
+      background: var(--ou-bg-elevated);
+    }
+    .wf-mob-feedback-snippet {
+      font: var(--ou-text-body-s);
+      color: var(--ou-fg-default);
+      margin: 0 0 var(--ou-space-1);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .wf-mob-feedback-meta {
+      font: var(--ou-text-caption);
+      color: var(--ou-fg-muted);
+      display: flex;
+      gap: var(--ou-space-1);
+      align-items: center;
+    }
+    .wf-mob-feedback-sep { color: var(--ou-border-soft); }
+
+    /* ── Settings selector (replaces 2-pane nav at < 960px — NFR-20) ────── */
+    .wf-mob-settings-selector {
+      border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m);
+      background: var(--ou-bg-elevated);
+      overflow: hidden;
+      margin-bottom: var(--ou-space-3);
+    }
+    .wf-mob-settings-header {
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-3);
+      border-bottom: 1px solid var(--ou-border-soft);
+      background: var(--ou-bg-canvas);
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+    }
+    .wf-mob-settings-select {
+      width: 100%;
+      font: var(--ou-text-body-s);
+      padding: var(--ou-space-2) var(--ou-space-3);
+      border: none;
+      background: var(--ou-bg-elevated);
+      color: var(--ou-fg-default);
+      font-family: inherit;
+      appearance: auto;
+    }
+
+    /* ── Dimmed content placeholder ───────────────────────────────────────── */
+    .wf-mob-placeholder {
+      height: var(--ou-space-11);
+      background: var(--ou-bg-muted);
+      border-radius: var(--ou-radius-s);
+    }
+
+    /* ── Overlay and bottom sheet (NFR-21) ───────────────────────────────── */
+    .wf-mob-overlay {
+      position: absolute;
+      inset: 0;
+      background: color-mix(in srgb, black 45%, transparent);
+      z-index: 9;
+    }
+    .wf-mob-bottom-sheet {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: var(--ou-bg-elevated);
+      border-top: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-l) var(--ou-radius-l) 0 0;
+      box-shadow: var(--ou-shadow-l);
       z-index: 10;
     }
-    .mob-sheet-handle {
-      width: 36px; height: 4px; background: hsl(0 0% 80%); border-radius: 2px;
-      margin: 10px auto 14px;
+    .wf-mob-sheet-handle {
+      width: 36px;
+      height: var(--ou-space-1);
+      background: var(--ou-border-soft);
+      border-radius: var(--ou-radius-s);
+      margin: var(--ou-space-2) auto var(--ou-space-3);
     }
-    .mob-sheet-title { font-size: 15px; font-weight: 700; padding: 0 20px 12px; }
-    .mob-sheet-body { padding: 0 20px 10px; font-size: 13px; line-height: 1.6; color: var(--muted-fg); }
-    .mob-sheet-actions { display: flex; flex-direction: column; gap: 8px; padding: 10px 20px 24px; }
-
-    /* ── Adaptive topic row ─────────────────────────────────────── */
-    .mob-topic-row-adaptive {
-      display: flex; align-items: center; gap: 8px;
-      padding: 9px 12px; border-bottom: 1px solid var(--card-border); font-size: 12px;
+    .wf-mob-sheet-title {
+      font: var(--ou-text-body-m);
+      font-weight: 700;
+      padding: 0 var(--ou-space-5) var(--ou-space-3);
     }
-    .mob-topic-row-adaptive:last-child { border-bottom: none; }
-    .mob-adaptive-toggle {
-      position: relative; width: 32px; height: 18px; flex-shrink: 0;
+    .wf-mob-sheet-body {
+      padding: 0 var(--ou-space-5) var(--ou-space-2);
+      font: var(--ou-text-body-s);
+      line-height: 1.6;
+      color: var(--ou-fg-muted);
     }
-    .mob-adaptive-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
-    .mob-adaptive-track {
-      position: absolute; inset: 0; border-radius: 9px; background: var(--primary);
-      cursor: pointer; transition: background .2s;
-    }
-    .mob-adaptive-track::after {
-      content: ''; position: absolute; top: 2px; left: 16px;
-      width: 14px; height: 14px; border-radius: 50%; background: #fff;
-    }
-    .mob-adaptive-toggle input:not(:checked) + .mob-adaptive-track { background: var(--muted); }
-    .mob-adaptive-toggle input:not(:checked) + .mob-adaptive-track::after { left: 2px; }
-    .mob-minmax {
-      display: flex; align-items: center; gap: 4px; color: var(--muted-fg); font-size: 11px; white-space: nowrap;
-    }
-    .mob-minmax input {
-      width: 28px; text-align: center; font-size: 11px; padding: 2px 3px;
-      border: 1px solid var(--input-b); border-radius: var(--radius-sm); background: var(--bg);
+    .wf-mob-sheet-actions {
+      display: flex;
+      flex-direction: column;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-5) var(--ou-space-6);
     }
 
-    /* ── Utility ─────────────────────────────────────────────────── */
-    .hidden { display: none; }
-    .mob-add-topic-row { padding: 8px 12px; }
-    .mob-full-btn { width: 100%; font-size: 12px; }
-    .mob-feedback-hint { font-size: 12px; color: var(--muted-fg); margin-bottom: 6px; }
-    .mob-minmax-disabled { opacity: .4; }
-    .mob-section-body-flush { padding: 0; }
-    .mob-save-btn { font-size: 12px; padding: 6px 14px; }
-    .badge-xs { font-size: 10px; padding: 1px 5px; }
-
-    /* ── Feedback preview card (mobile) ─────────────────────────── */
-    .mob-feedback-preview {
-      border: 1px solid var(--border); border-radius: var(--radius-sm);
-      padding: 8px 10px; margin-bottom: 8px; background: var(--bg);
+    /* ── Local button extensions ──────────────────────────────────────────── */
+    .ou-button--ghost {
+      background: transparent;
+      color: var(--ou-fg-default);
+      border: 1px solid var(--ou-border-soft);
     }
-    .mob-feedback-snippet {
-      font-size: 12px; color: var(--fg); margin: 0 0 4px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    .ou-button--ghost:hover { background: var(--ou-bg-muted); }
+    .ou-button--sm {
+      font: var(--ou-text-caption);
+      padding: var(--ou-space-1) var(--ou-space-3);
     }
-    .mob-feedback-meta { font-size: 11px; color: var(--muted-fg); display: flex; gap: 6px; align-items: center; }
-    .mob-feedback-sep  { color: var(--border); }
+    .ou-button--full { width: 100%; justify-content: center; }
+  </style>
 
-    /* ── Overlay dimming ─────────────────────────────────────────── */
-    .mob-overlay {
-      position: absolute; inset: 0; background: rgba(0,0,0,.45); z-index: 9;
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: 1px solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: 1px solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: 1px;
+      height: var(--ou-space-5);
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, 52px);
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, 52px));
+      max-height: calc(100vh - var(--wf-nav-offset, 52px));
     }
   </style>
 </head>
-<body style="background:hsl(0 0% 87%);padding:0;">
+<body class="ou ou--light ou--normal">
 
-<nav class="wf-nav" aria-label="Wireframe state switcher">
-  <span class="wf-label">Mobile / Narrow:</span>
-  <button class="wf-btn active" type="button" onclick="show('s-gallery')">Галерея экранов</button>
-  <a class="wf-link" href="prd7-editor-drawer.html">Drawer (desktop) &rarr;</a>
-</nav>
-
-<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
-  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-  </symbol>
-  <symbol id="i-grip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/>
-    <circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/>
-    <circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/>
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="6" x2="6" y2="18"/>
+    <line x1="6" y1="6" x2="18" y2="18"/>
   </symbol>
 </svg>
 
-<!-- ═══ Gallery ═══════════════════════════════════════════════════════════ -->
-<div id="s-gallery" class="mobile-gallery">
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">prd7 — Mobile / Narrow:</span>
+  <button type="button" class="ou-button ou-button--primary" onclick="showState(this, 's-gallery')">Галерея экранов</button>
+  <span class="wf-nav-sep"></span>
+  <button type="button" class="ou-button ou-button--secondary" onclick="toggleTheme()">Dark</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="toggleDensity()">Compact</button>
+</nav>
 
-  <!-- Frame 1: Editor Drawer — Compose tab (mobile 375px) -->
-  <div class="mobile-frame-wrap">
-    <div class="mobile-frame-label">375px — Вкладка "Состав"</div>
-    <div class="mobile-frame" role="region" aria-label="Мобильный вид: Состав теста">
-      <div class="mob-header">
-        <div style="flex:1;min-width:0;">
-          <div class="mob-title">Основы ИБ</div>
-          <div style="font-size:11px;color:var(--muted-fg);">Черновик</div>
+<!-- ═══ Gallery ══════════════════════════════════════════════════════════════ -->
+<section id="wf-s-gallery" class="wf-state active" aria-label="Галерея мобильных экранов">
+  <div class="wf-gallery">
+
+    <!-- Frame 1: 375px — Вкладка "Состав" -->
+    <div class="wf-frame-wrap">
+      <span class="wf-frame-label">375px — Вкладка &ldquo;Состав&rdquo;</span>
+      <div class="wf-frame" role="region" aria-label="Мобильный вид: Состав теста">
+
+        <div class="wf-mob-header">
+          <div class="wf-mob-title-block">
+            <div class="wf-mob-title">Основы ИБ</div>
+            <div class="wf-mob-subtitle">Черновик</div>
+          </div>
+          <button type="button" class="wf-mob-close" aria-label="Закрыть">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x"/></svg>
+          </button>
         </div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;font-size:16px;flex-shrink:0;" aria-label="Закрыть">&#215;</button>
-      </div>
 
-      <div class="mob-tabs" role="tablist">
-        <button class="mob-tab active" role="tab" aria-selected="true">Состав</button>
-        <button class="mob-tab" role="tab">Настройки</button>
-        <button class="mob-tab" role="tab">Оформление</button>
-        <button class="mob-tab" role="tab">Структура</button>
-      </div>
+        <div class="wf-mob-tabs" role="tablist">
+          <button type="button" class="wf-mob-tab wf-mob-tab--active" role="tab" aria-selected="true">Состав</button>
+          <button type="button" class="wf-mob-tab" role="tab">Настройки</button>
+          <button type="button" class="wf-mob-tab" role="tab">Оформление</button>
+          <button type="button" class="wf-mob-tab" role="tab">Структура</button>
+        </div>
 
-      <div class="mob-content">
-        <!-- Темы -->
-        <div class="mob-section-card">
-          <div class="mob-section-header">Темы (3)</div>
-          <div class="mob-section-body mob-section-body-flush">
-            <div class="mob-topic-row">
-              <div class="mob-topic-name">Основы ИБ</div>
-              <div class="mob-topic-avail">из 42</div>
-              <div class="mob-stepper" role="group" aria-label="Вопросов из темы Основы ИБ">
-                <button class="mob-stepper-btn" type="button" aria-label="Уменьшить">&#8722;</button>
-                <output class="mob-stepper-val">15</output>
-                <button class="mob-stepper-btn" type="button" aria-label="Увеличить">&#43;</button>
+        <div class="wf-mob-content">
+
+          <div class="wf-mob-section-card">
+            <div class="wf-mob-section-header">Темы (3)</div>
+            <div class="wf-mob-section-body wf-mob-section-body--flush">
+              <div class="wf-mob-topic-row">
+                <span class="wf-mob-topic-name">Основы ИБ</span>
+                <span class="wf-mob-topic-avail">из 42</span>
+                <div class="wf-mob-stepper" role="group" aria-label="Вопросов из темы Основы ИБ">
+                  <button type="button" class="wf-mob-stepper-btn" aria-label="Уменьшить">&#8722;</button>
+                  <output class="wf-mob-stepper-val">15</output>
+                  <button type="button" class="wf-mob-stepper-btn" aria-label="Увеличить">&#43;</button>
+                </div>
+              </div>
+              <div class="wf-mob-topic-row">
+                <span class="wf-mob-topic-name">Классификация угроз <span class="ou-tag ou-tag--neutral">Обяз.</span></span>
+                <span class="wf-mob-topic-avail">из 28</span>
+                <div class="wf-mob-stepper" role="group" aria-label="Вопросов из темы Классификация угроз">
+                  <button type="button" class="wf-mob-stepper-btn" aria-label="Уменьшить">&#8722;</button>
+                  <output class="wf-mob-stepper-val">10</output>
+                  <button type="button" class="wf-mob-stepper-btn" aria-label="Увеличить">&#43;</button>
+                </div>
+              </div>
+              <div class="wf-mob-topic-row">
+                <span class="wf-mob-topic-name">СЗИ</span>
+                <span class="wf-mob-topic-avail">из 18</span>
+                <div class="wf-mob-stepper" role="group" aria-label="Вопросов из темы СЗИ">
+                  <button type="button" class="wf-mob-stepper-btn" aria-label="Уменьшить">&#8722;</button>
+                  <output class="wf-mob-stepper-val">5</output>
+                  <button type="button" class="wf-mob-stepper-btn" aria-label="Увеличить">&#43;</button>
+                </div>
+              </div>
+              <div class="wf-mob-add-row">
+                <button type="button" class="ou-button ou-button--ghost ou-button--sm ou-button--full">+ Добавить тему</button>
               </div>
             </div>
-            <div class="mob-topic-row">
-              <div class="mob-topic-name">Классификация угроз <span class="badge badge-secondary badge-xs">Обяз.</span></div>
-              <div class="mob-topic-avail">из 28</div>
-              <div class="mob-stepper" role="group" aria-label="Вопросов из темы Классификация угроз">
-                <button class="mob-stepper-btn" type="button" aria-label="Уменьшить">&#8722;</button>
-                <output class="mob-stepper-val">10</output>
-                <button class="mob-stepper-btn" type="button" aria-label="Увеличить">&#43;</button>
+          </div>
+
+          <div class="wf-mob-section-card">
+            <div class="wf-mob-section-header">Обратная связь по тесту</div>
+            <div class="wf-mob-section-body">
+              <div class="wf-mob-feedback-preview">
+                <p class="wf-mob-feedback-snippet">Спасибо за прохождение! Результаты отправлены руководителю.</p>
+                <div class="wf-mob-feedback-meta">
+                  <span>1 ссылка</span>
+                  <span class="wf-mob-feedback-sep">·</span>
+                  <span>2 файла</span>
+                </div>
+              </div>
+              <button type="button" class="ou-button ou-button--ghost ou-button--sm ou-button--full">Редактировать...</button>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="wf-mob-footer">
+          <span class="wf-mob-footer-hint">30 вопросов, 3 темы</span>
+          <button type="button" class="ou-button ou-button--primary ou-button--sm" disabled aria-disabled="true">Сохранить</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Frame 2: 375px — Настройки (selector, < 960px — NFR-20) -->
+    <div class="wf-frame-wrap">
+      <span class="wf-frame-label">375px — Вкладка &ldquo;Настройки&rdquo; (селектор)</span>
+      <div class="wf-frame" role="region" aria-label="Мобильный вид: Настройки теста">
+
+        <div class="wf-mob-header">
+          <div class="wf-mob-title">Основы ИБ</div>
+          <div class="wf-mob-spacer"></div>
+          <button type="button" class="wf-mob-close" aria-label="Закрыть">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x"/></svg>
+          </button>
+        </div>
+
+        <div class="wf-mob-tabs" role="tablist">
+          <button type="button" class="wf-mob-tab" role="tab">Состав</button>
+          <button type="button" class="wf-mob-tab wf-mob-tab--active" role="tab" aria-selected="true">Настройки</button>
+          <button type="button" class="wf-mob-tab" role="tab">Оформление</button>
+          <button type="button" class="wf-mob-tab" role="tab">Структура</button>
+        </div>
+
+        <div class="wf-mob-content">
+          <div class="wf-mob-settings-selector" aria-label="Раздел настроек">
+            <div class="wf-mob-settings-header">Раздел настроек</div>
+            <select class="wf-mob-settings-select" aria-label="Выберите раздел настроек">
+              <option selected>Основные настройки</option>
+              <option>Правила прохождения</option>
+              <option>Ограничения</option>
+              <option>Адаптивные настройки</option>
+            </select>
+          </div>
+
+          <div class="wf-mob-section-card">
+            <div class="wf-mob-section-header">Основные настройки</div>
+            <div class="wf-mob-section-body">
+              <div class="wf-mob-field">
+                <div class="wf-mob-label">Название</div>
+                <input class="wf-mob-input" type="text" value="Основы информационной безопасности" aria-label="Название теста">
+              </div>
+              <div class="wf-mob-field">
+                <div class="wf-mob-label">Статус</div>
+                <select class="wf-mob-input" aria-label="Статус теста">
+                  <option selected>Черновик</option>
+                  <option>Опубликован</option>
+                  <option>В архиве</option>
+                </select>
+              </div>
+              <div class="wf-mob-field">
+                <div class="wf-mob-label">Описание</div>
+                <textarea class="wf-mob-input" rows="3" aria-label="Описание теста">Базовый курс по информационной безопасности</textarea>
               </div>
             </div>
-            <div class="mob-topic-row">
-              <div class="mob-topic-name">СЗИ</div>
-              <div class="mob-topic-avail">из 18</div>
-              <div class="mob-stepper" role="group" aria-label="Вопросов из темы СЗИ">
-                <button class="mob-stepper-btn" type="button" aria-label="Уменьшить">&#8722;</button>
-                <output class="mob-stepper-val">5</output>
-                <button class="mob-stepper-btn" type="button" aria-label="Увеличить">&#43;</button>
+          </div>
+        </div>
+
+        <div class="wf-mob-footer">
+          <span class="wf-mob-footer-hint wf-mob-footer-hint--accent">Изменено</span>
+          <button type="button" class="ou-button ou-button--primary ou-button--sm">Сохранить</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Frame 3: 375px — Диалог закрытия (bottom sheet, NFR-21) -->
+    <div class="wf-frame-wrap">
+      <span class="wf-frame-label">375px — Диалог закрытия (bottom sheet)</span>
+      <div class="wf-frame" role="region" aria-label="Мобильный вид: Подтверждение закрытия">
+
+        <div class="wf-mob-header">
+          <div class="wf-mob-title">Основы ИБ</div>
+          <div class="wf-mob-spacer"></div>
+          <button type="button" class="wf-mob-close" aria-label="Закрыть">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x"/></svg>
+          </button>
+        </div>
+
+        <div class="wf-mob-tabs">
+          <button type="button" class="wf-mob-tab wf-mob-tab--active">Состав</button>
+          <button type="button" class="wf-mob-tab">Настройки</button>
+          <button type="button" class="wf-mob-tab">Оформление</button>
+          <button type="button" class="wf-mob-tab">Структура</button>
+        </div>
+
+        <div class="wf-mob-content wf-mob-content--dimmed" aria-hidden="true">
+          <div class="wf-mob-section-card">
+            <div class="wf-mob-section-header">Темы</div>
+            <div class="wf-mob-section-body">
+              <div class="wf-mob-placeholder"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="wf-mob-overlay" aria-hidden="true"></div>
+
+        <div class="wf-mob-bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="wf-sheet-title">
+          <div class="wf-mob-sheet-handle" aria-hidden="true"></div>
+          <div id="wf-sheet-title" class="wf-mob-sheet-title">Выйти без сохранения?</div>
+          <div class="wf-mob-sheet-body">
+            Есть несохранённые изменения в разделах: Состав, Настройки.
+          </div>
+          <div class="wf-mob-sheet-actions">
+            <button type="button" class="ou-button ou-button--primary ou-button--full">Сохранить и выйти</button>
+            <button type="button" class="ou-button ou-button--secondary ou-button--full">Выйти без сохранения</button>
+            <button type="button" class="ou-button ou-button--ghost ou-button--full">Отмена</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Frame 4: 640px — Narrow, Settings at breakpoint (NFR-20) -->
+    <div class="wf-frame-wrap">
+      <span class="wf-frame-label">640px — Настройки (граница: 960px breakpoint)</span>
+      <div class="wf-narrow-frame" role="region" aria-label="Узкий вид: Настройки теста">
+
+        <div class="wf-mob-header wf-mob-header--wide">
+          <div class="wf-mob-title">Основы информационной безопасности</div>
+          <span class="ou-tag ou-tag--neutral">Черновик</span>
+          <div class="wf-mob-spacer"></div>
+          <button type="button" class="wf-mob-close" aria-label="Закрыть">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x"/></svg>
+          </button>
+        </div>
+
+        <div class="wf-mob-tabs wf-mob-tabs--wide" role="tablist">
+          <button type="button" class="wf-mob-tab" role="tab">Состав</button>
+          <button type="button" class="wf-mob-tab wf-mob-tab--active" role="tab" aria-selected="true">Настройки</button>
+          <button type="button" class="wf-mob-tab" role="tab">Оформление</button>
+          <button type="button" class="wf-mob-tab" role="tab">Структура</button>
+        </div>
+
+        <div class="wf-mob-content wf-mob-content--wide">
+          <div class="wf-mob-settings-selector">
+            <div class="wf-mob-settings-header">Раздел настроек</div>
+            <select class="wf-mob-settings-select" aria-label="Выберите раздел настроек">
+              <option selected>Правила прохождения</option>
+              <option>Основные настройки</option>
+              <option>Ограничения</option>
+            </select>
+          </div>
+
+          <div class="wf-mob-section-card">
+            <div class="wf-mob-section-header">Правила прохождения</div>
+            <div class="wf-mob-section-body">
+              <div class="wf-mob-field">
+                <div class="wf-mob-label">Порог прохождения (%)</div>
+                <input class="wf-mob-input wf-mob-input--narrow" type="number" value="75" min="0" max="100" aria-label="Порог прохождения">
+              </div>
+              <div class="wf-mob-field">
+                <div class="wf-mob-label">Политика зачёта</div>
+                <select class="wf-mob-input" aria-label="Политика зачёта">
+                  <option selected>По общему баллу</option>
+                  <option>По каждой теме</option>
+                  <option>По обязательным темам</option>
+                </select>
               </div>
             </div>
-            <div class="mob-add-topic-row">
-              <button class="btn btn-ghost btn-sm mob-full-btn" type="button" aria-label="Добавить тему">+ Добавить тему</button>
-            </div>
           </div>
         </div>
 
-        <!-- Обратная связь по тесту -->
-        <div class="mob-section-card">
-          <div class="mob-section-header">Обратная связь по тесту</div>
-          <div class="mob-section-body">
-            <div class="mob-feedback-preview">
-              <p class="mob-feedback-snippet">Спасибо за прохождение! Результаты отправлены руководителю.</p>
-              <div class="mob-feedback-meta">
-                <span>1 ссылка</span>
-                <span class="mob-feedback-sep">·</span>
-                <span>2 файла</span>
-              </div>
-            </div>
-            <button class="btn btn-ghost btn-sm mob-full-btn" type="button" aria-label="Редактировать обратную связь по тесту">Редактировать...</button>
-          </div>
+        <div class="wf-mob-footer wf-mob-footer--wide">
+          <span class="wf-mob-footer-hint"></span>
+          <button type="button" class="ou-button ou-button--secondary ou-button--sm">Показать изменения</button>
+          <button type="button" class="ou-button ou-button--primary ou-button--sm">Сохранить</button>
         </div>
-      </div>
 
-      <div class="mob-footer">
-        <span class="mob-footer-hint">30 вопросов, 3 темы</span>
-        <button class="btn btn-primary" type="button" style="font-size:12px;padding:6px 14px;" disabled aria-disabled="true">Сохранить</button>
       </div>
     </div>
+
   </div>
+</section>
 
-  <!-- Frame 2: Settings tab (mobile, selector view) -->
-  <div class="mobile-frame-wrap">
-    <div class="mobile-frame-label">375px — Вкладка "Настройки" (селектор)</div>
-    <div class="mobile-frame" role="region" aria-label="Мобильный вид: Настройки теста">
-      <div class="mob-header">
-        <div class="mob-title">Основы ИБ</div>
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;font-size:16px;" aria-label="Закрыть">&#215;</button>
-      </div>
-
-      <div class="mob-tabs" role="tablist">
-        <button class="mob-tab" role="tab">Состав</button>
-        <button class="mob-tab active" role="tab" aria-selected="true">Настройки</button>
-        <button class="mob-tab" role="tab">Оформление</button>
-        <button class="mob-tab" role="tab">Структура</button>
-      </div>
-
-      <div class="mob-content">
-        <!-- Settings selector (replaces 2-pane nav at < 960px) -->
-        <div class="mob-settings-selector" aria-label="Раздел настроек">
-          <div class="mob-settings-header">Раздел настроек</div>
-          <select class="mob-settings-select" aria-label="Выберите раздел настроек">
-            <option selected>Основные настройки</option>
-            <option>Правила прохождения</option>
-            <option>Ограничения</option>
-            <option>Адаптивные настройки</option>
-          </select>
-        </div>
-
-        <!-- Settings content for selected section -->
-        <div class="mob-section-card">
-          <div class="mob-section-header">Основные настройки</div>
-          <div class="mob-section-body">
-            <div class="mob-field">
-              <div class="mob-label">Название</div>
-              <input class="mob-input" type="text" value="Основы информационной безопасности" aria-label="Название теста">
-            </div>
-            <div class="mob-field">
-              <div class="mob-label">Статус</div>
-              <select class="mob-input" aria-label="Статус теста">
-                <option selected>Черновик</option>
-                <option>Опубликован</option>
-                <option>В архиве</option>
-              </select>
-            </div>
-            <div class="mob-field">
-              <div class="mob-label">Описание</div>
-              <textarea class="mob-input" rows="3" aria-label="Описание теста">Базовый курс по информационной безопасности</textarea>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="mob-footer">
-        <span class="mob-footer-hint" style="color:var(--primary);">Изменено</span>
-        <button class="btn btn-primary" type="button" style="font-size:12px;padding:6px 14px;">Сохранить</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Frame 3: Close confirmation (bottom sheet) -->
-  <div class="mobile-frame-wrap">
-    <div class="mobile-frame-label">375px — Диалог закрытия (bottom sheet)</div>
-    <div class="mobile-frame" role="region" aria-label="Мобильный вид: Подтверждение закрытия">
-      <div class="mob-header">
-        <div class="mob-title">Основы ИБ</div>
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;font-size:16px;" aria-label="Закрыть">&#215;</button>
-      </div>
-
-      <div class="mob-tabs">
-        <button class="mob-tab active">Состав</button>
-        <button class="mob-tab">Настройки</button>
-        <button class="mob-tab">Оформление</button>
-        <button class="mob-tab">Структура</button>
-      </div>
-
-      <div class="mob-content" style="opacity:.4;" aria-hidden="true">
-        <div class="mob-section-card">
-          <div class="mob-section-header">Темы</div>
-          <div class="mob-section-body">
-            <div style="height:80px;background:var(--muted);border-radius:var(--radius-sm);"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Overlay -->
-      <div class="mob-overlay" aria-hidden="true"></div>
-
-      <!-- Bottom sheet (close confirm) -->
-      <div class="mob-bottom-sheet" role="dialog" aria-modal="true" aria-labelledby="mob-sheet-title">
-        <div class="mob-sheet-handle" aria-hidden="true"></div>
-        <div id="mob-sheet-title" class="mob-sheet-title">Выйти без сохранения?</div>
-        <div class="mob-sheet-body">
-          Есть несохранённые изменения в разделах: Состав, Настройки.
-        </div>
-        <div class="mob-sheet-actions">
-          <button class="btn btn-primary" type="button" style="width:100%;">Сохранить и выйти</button>
-          <button class="btn btn-ghost btn-sm" type="button" style="width:100%;border:1px solid var(--border);">Выйти без сохранения</button>
-          <button class="btn btn-ghost btn-sm" type="button" style="width:100%;">Отмена</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Frame 4: Narrow (640px) — Settings 2-pane breakpoint -->
-  <div class="mobile-frame-wrap">
-    <div class="mobile-frame-label">640px — Настройки (граница: 960px breakpoint)</div>
-    <div class="narrow-frame" role="region" aria-label="Узкий вид: Настройки теста">
-      <div class="mob-header" style="padding:12px 20px;">
-        <div class="mob-title" style="font-size:15px;">Основы информационной безопасности</div>
-        <span class="badge badge-secondary" style="flex-shrink:0;">Черновик</span>
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
-      </div>
-
-      <div class="mob-tabs" style="padding:0 20px;">
-        <button class="mob-tab" role="tab">Состав</button>
-        <button class="mob-tab active" role="tab" aria-selected="true">Настройки</button>
-        <button class="mob-tab" role="tab">Оформление</button>
-        <button class="mob-tab" role="tab">Структура</button>
-      </div>
-
-      <!-- At 640px: selector replaces 2-pane (breakpoint < 960px) -->
-      <div class="mob-content" style="padding:16px 20px;">
-        <div class="mob-settings-selector">
-          <div class="mob-settings-header">Раздел настроек</div>
-          <select class="mob-settings-select" aria-label="Выберите раздел настроек">
-            <option selected>Правила прохождения</option>
-            <option>Основные настройки</option>
-            <option>Ограничения</option>
-          </select>
-        </div>
-
-        <div class="mob-section-card">
-          <div class="mob-section-header">Правила прохождения</div>
-          <div class="mob-section-body">
-            <div class="mob-field">
-              <div class="mob-label">Порог прохождения (%)</div>
-              <input class="mob-input" type="number" value="75" min="0" max="100" style="max-width:100px;" aria-label="Порог прохождения">
-            </div>
-            <div class="mob-field">
-              <div class="mob-label">Политика зачёта</div>
-              <select class="mob-input" aria-label="Политика зачёта">
-                <option selected>По общему баллу</option>
-                <option>По каждой теме</option>
-                <option>По обязательным темам</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="mob-footer" style="padding:10px 20px;">
-        <span class="mob-footer-hint"></span>
-        <button class="btn btn-ghost btn-sm" type="button" style="font-size:12px;">Показать изменения</button>
-        <button class="btn btn-primary" type="button" style="font-size:12px;">Сохранить</button>
-      </div>
-    </div>
-  </div>
-
-</div>
-
-<section class="acceptance" aria-label="Acceptance">
-  <h2>Acceptance -- PRD-7 покрытие</h2>
-    <table class="acceptance-table">
-    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+<!-- ═══ DS Mapping ════════════════════════════════════════════════════════════ -->
+<section class="wf-mapping" aria-label="DS Component Mapping">
+  <h2>DS Component Mapping</h2>
+  <table>
+    <thead>
+      <tr><th>Wireframe element</th><th>DS component</th><th>Variant / notes</th></tr>
+    </thead>
     <tbody>
-      <tr><td>NFR-19</td><td>Drawer открывается на всю ширину экрана на мобильном (375px). Все элементы управления доступны без горизонтального скролла.</td></tr>
-      <tr><td>NFR-20</td><td>Вкладка "Настройки" при ширине &lt; 960px: двухпанельный side-nav заменяется на &lt;select&gt;-навигацию по разделам. На 640px (граница) показан select-вариант.</td></tr>
-      <tr><td class="no-code">—</td><td>Вкладки Drawer на мобильном: горизонтально прокручиваемый tab-bar (<code>overflow-x: auto</code>). Все 4 вкладки доступны через скролл.</td></tr>
-      <tr><td class="no-code">—</td><td>Диалог закрытия на мобильном: реализован как bottom sheet (выдвигается снизу) с drag-handle. Три кнопки: "Сохранить и выйти", "Выйти без сохранения", "Отмена" -- полная ширина.</td></tr>
-      <tr><td class="no-code">—</td><td>Список тем в "Состав": компактные строки с drag-handle слева и draw-input справа. Кнопка "Добавить тему" полной ширины внизу списка.</td></tr>
-      <tr><td>NFR-21</td><td>Bottom sheet имеет <code>role="dialog"</code>, <code>aria-modal="true"</code>, <code>aria-labelledby</code>; все inputs имеют <code>aria-label</code>.</td></tr>
+      <tr><td>.wf-mob-tabs (tab bar)</td><td>Tabs</td><td>overflow-x: auto on mobile — NFR-19</td></tr>
+      <tr><td>.wf-mob-stepper</td><td>Stepper (custom)</td><td>Compact inline [&minus;] N [+] control</td></tr>
+      <tr><td>.wf-mob-settings-selector</td><td>Select + SectionHeader</td><td>Replaces 2-pane side-nav at &lt;960px — NFR-20</td></tr>
+      <tr><td>.wf-mob-bottom-sheet</td><td>Modal / Sheet</td><td>role="dialog" aria-modal="true" aria-labelledby — NFR-21</td></tr>
+      <tr><td>.wf-mob-overlay</td><td>Overlay</td><td>Translucent backdrop behind bottom sheet</td></tr>
+      <tr><td>Mandatory topic tag</td><td>ou-tag</td><td>ou-tag--neutral, compact inside row</td></tr>
+      <tr><td>Status tag (640px header)</td><td>ou-tag</td><td>ou-tag--neutral</td></tr>
+      <tr><td>Footer / sheet buttons</td><td>ou-button</td><td>--primary, --secondary, --ghost; --sm compact; --full for sheet actions</td></tr>
+      <tr><td>.wf-mob-close</td><td>IconButton</td><td>Ghost 28px, accessible aria-label="Закрыть"</td></tr>
+      <tr><td>.wf-mob-input</td><td>ou-input / Select / Textarea</td><td>Compact (body-s font, reduced padding)</td></tr>
     </tbody>
   </table>
 </section>
 
-<script>
-function setMode(mode) {
-  var isAdaptive = mode === 'adaptive';
-  document.getElementById('mob-content-standard').classList.toggle('hidden', isAdaptive);
-  document.getElementById('mob-content-adaptive').classList.toggle('hidden', !isAdaptive);
-  document.getElementById('mob-btn-standard').classList.toggle('active', !isAdaptive);
-  document.getElementById('mob-btn-standard').setAttribute('aria-pressed', String(!isAdaptive));
-  document.getElementById('mob-btn-adaptive').classList.toggle('active', isAdaptive);
-  document.getElementById('mob-btn-adaptive').setAttribute('aria-pressed', String(isAdaptive));
-}
 
-function show(id) {
-  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
-    el.style.display = el.id === id ? '' : 'none';
+<!-- ═══════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент</th>
+        <th>Поле API / условие</th>
+        <th>Примечание</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Состояния wireframe</td>
+        <td><code>showState(btn, stateId)</code></td>
+        <td>Метанавигация переключает только визуальные состояния и не является частью продуктового UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+<script>
+function showState(btn, id) {
+  document.querySelectorAll('.wf-state').forEach(function(el) {
+    el.classList.remove('active');
   });
-  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
-    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  var target = document.getElementById('wf-' + id);
+  if (target) { target.classList.add('active'); }
+  document.querySelectorAll('.wf-nav button[onclick^="showState"]').forEach(function(b) {
+    b.classList.remove('ou-button--primary');
+    b.classList.add('ou-button--secondary');
   });
+  if (btn) {
+    btn.classList.remove('ou-button--secondary');
+    btn.classList.add('ou-button--primary');
+  }
+}
+function toggleTheme() {
+  document.body.classList.toggle('ou--dark');
+  document.body.classList.toggle('ou--light');
+}
+function toggleDensity() {
+  document.body.classList.toggle('ou--compact');
+  document.body.classList.toggle('ou--normal');
 }
 </script>
+
 <script>
-(function(){
-  var s = document.createElement('script');
-  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
-  document.head.appendChild(s);
-})();
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
 </script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.drawer-footer')) addMappingRow(rows, 'drawer-footer', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
 </body>
 </html>

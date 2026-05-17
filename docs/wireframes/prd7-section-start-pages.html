@@ -85,7 +85,7 @@
       border-radius: var(--ou-radius-s);
     }
     .wf-drawer-close:hover { background: var(--ou-bg-muted); }
-    .wf-drawer-close svg { width: 16px; height: 16px; }
+    .wf-drawer-close svg { width: var(--ou-space-4); height: var(--ou-space-4); }
 
     /* ── Tab bar ──────────────────────────────────────────────────────────── */
     .wf-drawer-tabs {
@@ -229,7 +229,7 @@
       max-height: 72px; overflow: hidden; position: relative;
     }
     .wf-page-preview-text::after {
-      content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 20px;
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: var(--ou-space-5);
       background: linear-gradient(transparent, var(--ou-bg-page));
     }
 
@@ -239,7 +239,7 @@
       text-align: center; padding: var(--ou-space-10) var(--ou-space-5);
     }
     .wf-empty-icon {
-      width: 48px; height: 48px; border-radius: var(--ou-radius-m);
+      width: var(--ou-space-9); height: var(--ou-space-9); border-radius: var(--ou-radius-m);
       border: 1px dashed var(--ou-border-soft);
       background: var(--ou-bg-canvas);
       display: flex; align-items: center; justify-content: center;
@@ -294,7 +294,7 @@
     .wf-mini-toolbar-btn:hover { background: var(--ou-bg-muted); }
     .wf-editor-area {
       padding: var(--ou-space-2) var(--ou-space-3);
-      min-height: 80px;
+      min-height: var(--ou-space-11);
       font: var(--ou-text-body-s); line-height: 1.7;
       border: 1px solid var(--ou-border-input);
       border-radius: 0 0 var(--ou-radius-s) var(--ou-radius-s);
@@ -305,14 +305,14 @@
     /* ── Toggle switch ────────────────────────────────────────────────────── */
     .wf-toggle-row { display: flex; align-items: flex-start; gap: var(--ou-space-2); margin-bottom: var(--ou-space-2); }
     .wf-toggle {
-      position: relative; width: 36px; height: 20px; flex-shrink: 0;
+      position: relative; width: 36px; height: var(--ou-space-5); flex-shrink: 0;
       border-radius: 10px; background: var(--ou-accent-default);
       cursor: pointer; border: none; margin-top: 1px;
     }
     .wf-toggle--off { background: var(--ou-fg-muted); }
     .wf-toggle-knob {
       position: absolute; top: 2px; right: 2px;
-      width: 16px; height: 16px;
+      width: var(--ou-space-4); height: var(--ou-space-4);
       background: var(--ou-bg-elevated); border-radius: 50%;
     }
     .wf-toggle--off .wf-toggle-knob { right: auto; left: 2px; }
@@ -388,7 +388,7 @@
     }
     .wf-nav-sep {
       width: 1px;
-      height: 20px;
+      height: var(--ou-space-5);
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-2);
     }
@@ -776,8 +776,8 @@
                 <div class="wf-editor-area" contenteditable="true"
                      role="textbox" aria-multiline="true"
                      aria-label="Текст стартовой страницы">
-                  <p style="margin:0 0 4px;">Этот тест проверяет ваши знания в области информационной безопасности.</p>
-                  <p style="margin:0 0 4px;"><strong>Продолжительность:</strong> около 20 минут.</p>
+                  <p style="margin:0 0 var(--ou-space-1);">Этот тест проверяет ваши знания в области информационной безопасности.</p>
+                  <p style="margin:0 0 var(--ou-space-1);"><strong>Продолжительность:</strong> около 20 минут.</p>
                   <p style="margin:0;">Для прохождения необходимо набрать <strong>75%</strong> правильных ответов.</p>
                 </div>
               </div>
@@ -786,7 +786,7 @@
               <div>
                 <div class="wf-field-sub-label">Изображение (asset, опционально)</div>
                 <div style="display:flex; align-items:center; gap: var(--ou-space-2);">
-                  <div style="width:80px; height:56px; border:1px dashed var(--ou-border-soft);
+                  <div style="width:var(--ou-space-11); height:56px; border:1px dashed var(--ou-border-soft);
                        border-radius: var(--ou-radius-s); background: var(--ou-bg-canvas);
                        display:flex; align-items:center; justify-content:center;
                        color: var(--ou-fg-muted);" aria-hidden="true">
@@ -824,7 +824,7 @@
                 </span>
                 <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="number" value="5" min="1" max="120" disabled
                        aria-label="Задержка автоперехода в секундах (недоступно)"
-                       style="width:64px; font: var(--ou-text-body-s); font-family:inherit; text-align:center; padding: var(--ou-space-1); border-radius: var(--ou-radius-s); border: 1px solid var(--ou-border-input);" /></div></div>
+                       style="width:var(--ou-space-10); font: var(--ou-text-body-s); font-family:inherit; text-align:center; padding: var(--ou-space-1); border-radius: var(--ou-radius-s); border: 1px solid var(--ou-border-input);" /></div></div>
                 <span class="wf-field-hint" style="margin:0;">хранится в мс (auto_advance_delay_ms)</span>
               </div>
             </div>

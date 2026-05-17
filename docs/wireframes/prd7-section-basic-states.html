@@ -84,7 +84,7 @@
       cursor: pointer; display: flex; align-items: center; justify-content: center;
       border-radius: var(--ou-radius-s);
     }
-    .wf-drawer-close svg { width: 16px; height: 16px; }
+    .wf-drawer-close svg { width: var(--ou-space-4); height: var(--ou-space-4); }
 
     /* ── Tab bar ──────────────────────────────────────────────────────────── */
     .wf-drawer-tabs {
@@ -134,9 +134,9 @@
       animation: wf-shimmer 1.4s ease-in-out infinite;
     }
     .wf-skel-line  { height: 14px; margin-bottom: var(--ou-space-2); }
-    .wf-skel-label { height: 11px; width: 80px; margin-bottom: var(--ou-space-1); }
+    .wf-skel-label { height: 11px; width: var(--ou-space-11); margin-bottom: var(--ou-space-1); }
     .wf-skel-input { height: 34px; margin-bottom: var(--ou-space-3); border-radius: var(--ou-radius-s); }
-    .wf-skel-badge { height: 20px; width: 60px; border-radius: 10px; display: inline-block; }
+    .wf-skel-badge { height: var(--ou-space-5); width: 60px; border-radius: 10px; display: inline-block; }
 
     /* ── Section card ─────────────────────────────────────────────────────── */
     .wf-section-card {
@@ -182,7 +182,7 @@
       display: flex; align-items: center; gap: var(--ou-space-1);
       margin-top: var(--ou-space-1);
     }
-    .wf-field-error svg { width: 12px; height: 12px; flex-shrink: 0; }
+    .wf-field-error svg { width: var(--ou-space-3); height: var(--ou-space-3); flex-shrink: 0; }
 
     /* ── Empty pane ───────────────────────────────────────────────────────── */
     .wf-empty-pane {
@@ -190,7 +190,7 @@
       text-align: center; padding: var(--ou-space-10) var(--ou-space-5);
     }
     .wf-empty-icon {
-      width: 48px; height: 48px; border-radius: var(--ou-radius-m);
+      width: var(--ou-space-9); height: var(--ou-space-9); border-radius: var(--ou-radius-m);
       border: 1px solid var(--ou-border-soft);
       background: var(--ou-bg-canvas);
       display: flex; align-items: center; justify-content: center;
@@ -219,7 +219,7 @@
       display: inline-flex; align-items: center; gap: var(--ou-space-1);
       margin-top: var(--ou-space-2);
     }
-    .wf-retry-btn svg { width: 12px; height: 12px; }
+    .wf-retry-btn svg { width: var(--ou-space-3); height: var(--ou-space-3); }
 
     /* ── Section card title modifiers ────────────────────────────────────── */
     .wf-section-card-title--error  { color: var(--ou-error-fg); }
@@ -256,7 +256,7 @@
       padding: var(--ou-space-1) var(--ou-space-2);
       border-radius: var(--ou-radius-s);
       border: 1px solid var(--ou-border-input);
-      max-width: 480px; height: 64px; resize: vertical; display: block;
+      max-width: 480px; height: var(--ou-space-10); resize: vertical; display: block;
       background: var(--ou-bg-elevated); color: var(--ou-fg-default);
     }
 
@@ -318,7 +318,7 @@
     }
     .wf-nav-sep {
       width: 1px;
-      height: 20px;
+      height: var(--ou-space-5);
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-2);
     }
@@ -390,7 +390,7 @@
 
       <!-- Header skeleton -->
       <header class="wf-drawer-header">
-        <div class="wf-skel wf-skel-line" style="width:200px; height:16px; margin:0;"></div>
+        <div class="wf-skel wf-skel-line" style="width:200px; height:var(--ou-space-4); margin:0;"></div>
         <div class="wf-skel wf-skel-badge" style="margin:0;"></div>
         <div class="wf-flex-spacer"></div>
         <div class="wf-skel" style="width:28px; height:28px; border-radius: var(--ou-radius-s);"></div>
@@ -423,7 +423,7 @@
             <div class="wf-skel wf-skel-label"></div>
             <div class="wf-skel wf-skel-input"></div>
             <div class="wf-skel wf-skel-label"></div>
-            <div class="wf-skel wf-skel-input" style="height:64px;"></div>
+            <div class="wf-skel wf-skel-input" style="height:var(--ou-space-10);"></div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap: var(--ou-space-4);">
               <div>
                 <div class="wf-skel wf-skel-label"></div>
@@ -455,7 +455,7 @@
       <footer class="wf-drawer-footer">
         <div class="wf-flex-spacer"></div>
         <div class="wf-skel" style="width:120px; height:34px; border-radius: var(--ou-radius-s);"></div>
-        <div class="wf-skel" style="width:80px; height:34px; border-radius: var(--ou-radius-s);"></div>
+        <div class="wf-skel" style="width:var(--ou-space-11); height:34px; border-radius: var(--ou-radius-s);"></div>
       </footer>
     </div>
   </div>

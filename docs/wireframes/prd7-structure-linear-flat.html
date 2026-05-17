@@ -13,17 +13,17 @@
 
     /* Background tests list */
     .wf-tests-list { filter: blur(0.5px); opacity: 0.7; pointer-events: none; }
-    .test-card-stub { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px; }
+    .test-card-stub { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); padding: 14px var(--ou-space-4); margin-bottom: 10px; display: flex; align-items: center; gap: var(--ou-space-3); }
     .test-card-stub .test-card-title { font-size: 14px; font-weight: 600; flex: 1; }
     body.has-active-shell .mobile-section { display: none; }
 
     /* flowMode indicator bar */
-    .flow-mode-bar { display: flex; align-items: center; gap: 8px; padding: 7px 0 12px; font-size: 12px; color: var(--muted-fg); border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+    .flow-mode-bar { display: flex; align-items: center; gap: var(--ou-space-2); padding: 7px 0 var(--ou-space-3); font-size: var(--ou-space-3); color: var(--muted-fg); border-bottom: 1px solid var(--border); margin-bottom: var(--ou-space-4); }
     .flow-mode-label { font-weight: 600; color: var(--fg); }
     .flow-mode-hint { font-size: 11px; }
 
     /* Page row */
-    .page-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 14px; position: relative; }
+    .page-row { display: flex; align-items: center; gap: var(--ou-space-2); padding: 6px 10px 6px 14px; position: relative; }
     .page-row:hover { background: var(--ou-bg-hover); }
     .page-row.is-selected { border-left: 3px solid var(--primary); background: var(--ou-accent-soft); padding-left: 11px; }
     .page-row.dragging { opacity: 0.5; border: 1px dashed var(--border); background: var(--accent); }
@@ -35,9 +35,9 @@
     .type-info    { background: var(--ou-success-soft);  color: var(--ou-success-on-soft); }
     .type-summary { background: var(--ou-purple-50);     color: var(--ou-purple-700); }
     .type-html    { background: var(--ou-warning-soft);  color: var(--ou-warning-on-soft); }
-    .tpl-page-marker { font-size: 10px; color: var(--muted-fg); background: var(--muted); border-radius: 3px; padding: 1px 5px; margin-left: 4px; }
+    .tpl-page-marker { font-size: 10px; color: var(--muted-fg); background: var(--muted); border-radius: 3px; padding: 1px 5px; margin-left: var(--ou-space-1); }
     .page-title { font-size: 13px; flex: 1; }
-    .page-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .page-actions { display: flex; gap: var(--ou-space-1); flex-shrink: 0; }
     .page-row--warn .page-title::after { content: ' ⚠'; color: var(--warn-fg); font-size: 11px; }
 
     /* Drop zone */
@@ -46,47 +46,47 @@
     /* Insert row */
     .insert-row { display: flex; align-items: center; padding: 3px 14px; gap: 0; }
     .insert-row-line { flex: 1; height: 1px; background: var(--primary); opacity: .35; }
-    .insert-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--primary); cursor: pointer; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--ou-accent-container-hover); background: white; white-space: nowrap; flex-shrink: 0; margin: 0 6px; }
+    .insert-btn { display: inline-flex; align-items: center; gap: var(--ou-space-1); font-size: 11px; color: var(--primary); cursor: pointer; padding: 2px var(--ou-space-2); border-radius: 10px; border: 1px solid var(--ou-accent-container-hover); background: white; white-space: nowrap; flex-shrink: 0; margin: 0 6px; }
     .insert-btn:hover { background: var(--ou-accent-soft); }
 
     /* Zone blocks (before/after test) */
-    .zone-block { margin-bottom: 12px; border: 1px dashed var(--border); border-radius: var(--radius); overflow: hidden; }
-    .zone-header { display: flex; align-items: center; gap: 8px; padding: 8px 14px; color: var(--muted-fg); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px dashed var(--border); }
+    .zone-block { margin-bottom: var(--ou-space-3); border: 1px dashed var(--border); border-radius: var(--radius); overflow: hidden; }
+    .zone-header { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) 14px; color: var(--muted-fg); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px dashed var(--border); }
 
     /* Structure hint */
-    .structure-hint { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-fg); margin-bottom: 12px; padding: 6px 10px; background: var(--ou-accent-soft); border: 1px solid var(--ou-accent-container); border-radius: var(--radius-md); }
+    .structure-hint { display: flex; align-items: center; gap: 6px; font-size: var(--ou-space-3); color: var(--muted-fg); margin-bottom: var(--ou-space-3); padding: 6px 10px; background: var(--ou-accent-soft); border: 1px solid var(--ou-accent-container); border-radius: var(--radius-md); }
 
     /* Questions block card (represents all questions in flat mode) */
-    .questions-block-card { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); margin-bottom: 12px; overflow: hidden; }
-    .questions-block-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--ou-accent-soft); border-bottom: 1px solid var(--card-border); font-size: 13px; font-weight: 600; color: var(--fg); }
-    .questions-block-body { padding: 8px 14px; font-size: 12px; color: var(--muted-fg); }
+    .questions-block-card { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); margin-bottom: var(--ou-space-3); overflow: hidden; }
+    .questions-block-header { display: flex; align-items: center; gap: var(--ou-space-2); padding: 10px 14px; background: var(--ou-accent-soft); border-bottom: 1px solid var(--card-border); font-size: 13px; font-weight: 600; color: var(--fg); }
+    .questions-block-body { padding: var(--ou-space-2) 14px; font-size: var(--ou-space-3); color: var(--muted-fg); }
 
     /* Mapping warning */
-    .mapping-warn { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: var(--radius-md); padding: 10px 12px; margin: 4px 14px; }
-    .mapping-warn-title { font-size: 12px; color: var(--warn-fg); font-weight: 500; margin-bottom: 6px; }
-    .mapping-select-row { display: flex; align-items: center; gap: 8px; }
+    .mapping-warn { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: var(--radius-md); padding: 10px var(--ou-space-3); margin: var(--ou-space-1) 14px; }
+    .mapping-warn-title { font-size: var(--ou-space-3); color: var(--warn-fg); font-weight: 500; margin-bottom: 6px; }
+    .mapping-select-row { display: flex; align-items: center; gap: var(--ou-space-2); }
 
     /* Mode change warning */
-    .mode-change-warn { border: 1px solid var(--warn-border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 16px; }
-    .mode-change-warn-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--warn-bg); color: var(--warn-fg); font-size: 13px; font-weight: 500; cursor: pointer; }
-    .mode-change-warn-body { padding: 10px 14px; background: var(--bg); font-size: 12px; }
-    .mode-change-item { display: flex; align-items: baseline; gap: 6px; padding: 4px 0; color: var(--fg); border-top: 1px dashed var(--border); }
+    .mode-change-warn { border: 1px solid var(--warn-border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: var(--ou-space-4); }
+    .mode-change-warn-header { display: flex; align-items: center; gap: var(--ou-space-2); padding: 10px 14px; background: var(--warn-bg); color: var(--warn-fg); font-size: 13px; font-weight: 500; cursor: pointer; }
+    .mode-change-warn-body { padding: 10px 14px; background: var(--bg); font-size: var(--ou-space-3); }
+    .mode-change-item { display: flex; align-items: baseline; gap: 6px; padding: var(--ou-space-1) 0; color: var(--fg); border-top: 1px dashed var(--border); }
     .mode-change-item:first-child { border-top: none; }
     .mode-change-when { font-size: 11px; color: var(--muted-fg); }
 
     /* Fallback / unavailable badges */
-    .fallback-row { display: flex; align-items: center; gap: 6px; padding: 4px 14px; font-size: 11px; background: var(--warn-bg); color: var(--warn-fg); }
-    .unavail-row  { display: flex; align-items: center; gap: 6px; padding: 4px 14px; font-size: 11px; background: var(--accent); color: var(--muted-fg); }
+    .fallback-row { display: flex; align-items: center; gap: 6px; padding: var(--ou-space-1) 14px; font-size: 11px; background: var(--warn-bg); color: var(--warn-fg); }
+    .unavail-row  { display: flex; align-items: center; gap: 6px; padding: var(--ou-space-1) 14px; font-size: 11px; background: var(--accent); color: var(--muted-fg); }
 
     /* Mode selector cards */
-    .mode-card { border: 1px solid var(--card-border); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 8px; cursor: pointer; display: flex; align-items: flex-start; gap: 10px; }
+    .mode-card { border: 1px solid var(--card-border); border-radius: var(--radius-md); padding: var(--ou-space-3) 14px; margin-bottom: var(--ou-space-2); cursor: pointer; display: flex; align-items: flex-start; gap: 10px; }
     .mode-card:hover { border-color: var(--ou-accent-container-hover); background: var(--ou-accent-soft); }
     .mode-card.selected { border-color: var(--primary); background: var(--ou-accent-soft); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ou-accent-default) 15%, transparent); }
-    .mode-radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--input-b); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+    .mode-radio { width: var(--ou-space-4); height: var(--ou-space-4); border-radius: 50%; border: 2px solid var(--input-b); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
     .mode-radio.checked { border-color: var(--primary); }
-    .mode-radio.checked::after { content:''; width:8px; height:8px; border-radius:50%; background:var(--primary); }
+    .mode-radio.checked::after { content:''; width:var(--ou-space-2); height:var(--ou-space-2); border-radius:50%; background:var(--primary); }
     .mode-info .mode-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
-    .mode-info .mode-desc  { font-size: 12px; color: var(--muted-fg); line-height: 1.4; }
+    .mode-info .mode-desc  { font-size: var(--ou-space-3); color: var(--muted-fg); line-height: 1.4; }
   </style>
 
   <style data-wf-template-overrides>
@@ -135,7 +135,7 @@
     }
     .wf-nav-sep {
       width: 1px;
-      height: 20px;
+      height: var(--ou-space-5);
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-2);
     }
@@ -382,7 +382,7 @@
       <div class="ou-drawer__body" tabindex="0">
         <div class="flow-mode-bar"><svg width="14" height="14"><use href="#i-layout"/></svg><span>Режим:</span><span class="flow-mode-label">Плоский (linear_flat)</span></div>
         <div class="ou-empty">
-          <svg width="32" height="32" style="margin-bottom:12px;color:var(--muted-fg);"><use href="#i-question"/></svg>
+          <svg width="32" height="32" style="margin-bottom:var(--ou-space-3);color:var(--muted-fg);"><use href="#i-question"/></svg>
           <div class="ou-empty__title">Нет вопросов</div>
           <div class="ou-empty__desc">Добавьте темы и вопросы в тест, чтобы настроить структуру страниц.</div>
           <button class="ou-btn ou-btn--secondary" type="button" onclick="document.querySelectorAll('.drawer-tab')[0].click();">
@@ -418,11 +418,11 @@
         <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
       </div></nav>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="skeleton" style="height:18px;width:60%;margin-bottom:16px;"></div>
-        <div class="skeleton" style="height:36px;width:100%;border-radius:var(--radius);margin-bottom:12px;"></div>
-        <div class="skeleton" style="height:80px;width:100%;border-radius:var(--radius);margin-bottom:12px;"></div>
-        <div class="skeleton" style="height:60px;width:100%;border-radius:var(--radius);margin-bottom:12px;"></div>
-        <div class="skeleton" style="height:80px;width:100%;border-radius:var(--radius);"></div>
+        <div class="skeleton" style="height:18px;width:60%;margin-bottom:var(--ou-space-4);"></div>
+        <div class="skeleton" style="height:36px;width:100%;border-radius:var(--radius);margin-bottom:var(--ou-space-3);"></div>
+        <div class="skeleton" style="height:var(--ou-space-11);width:100%;border-radius:var(--radius);margin-bottom:var(--ou-space-3);"></div>
+        <div class="skeleton" style="height:60px;width:100%;border-radius:var(--radius);margin-bottom:var(--ou-space-3);"></div>
+        <div class="skeleton" style="height:var(--ou-space-11);width:100%;border-radius:var(--radius);"></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta"></div>
@@ -454,7 +454,7 @@
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-banner ou-banner--error" role="alert"><svg width="15" height="15"><use href="#i-warn"/></svg><span>Не удалось загрузить структуру. Проверьте соединение.</span></div>
         <div class="ou-empty">
-          <svg width="28" height="28" style="color:var(--error);margin-bottom:8px;"><use href="#i-warn"/></svg>
+          <svg width="28" height="28" style="color:var(--error);margin-bottom:var(--ou-space-2);"><use href="#i-warn"/></svg>
           <div class="ou-empty__title">Ошибка загрузки</div>
           <div class="ou-empty__desc">500 Internal Server Error</div>
           <button class="ou-btn ou-btn--secondary" type="button">Попробовать снова</button>
@@ -555,12 +555,12 @@
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
       <header class="ou-drawer__head">
-        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:4px;flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:var(--ou-space-1);flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
         <div class="ou-drawer__head-text"><h1 id="dt-lf-as1-title" class="ou-drawer__title">Добавить страницу</h1></div>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0">
-        <p style="font-size:13px;color:var(--muted-fg);margin-bottom:16px;">Выберите тип страницы для добавления в зону «Перед тестом».</p>
+        <p style="font-size:13px;color:var(--muted-fg);margin-bottom:var(--ou-space-4);">Выберите тип страницы для добавления в зону «Перед тестом».</p>
         <div class="mode-card selected" tabindex="0"><div class="mode-radio checked"></div><div class="mode-info"><div class="mode-title">Информационная (info)</div><div class="mode-desc">Статический текст и медиа без вопросов.</div></div></div>
         <div class="mode-card" tabindex="0"><div class="mode-radio"></div><div class="mode-info"><div class="mode-title">Произвольный HTML (html)</div><div class="mode-desc">Свободный HTML-контент.</div></div></div>
       </div>
@@ -581,7 +581,7 @@
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
       <header class="ou-drawer__head">
-        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:4px;flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:var(--ou-space-1);flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
         <div class="ou-drawer__head-text"><h1 id="dt-lf-as2-title" class="ou-drawer__title">Новая страница: info</h1></div>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
@@ -607,9 +607,9 @@
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
       <header class="ou-drawer__head">
-        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:4px;flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:var(--ou-space-1);flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
         <div class="ou-drawer__head-text"><h1 id="dt-lf-ei-title" class="ou-drawer__title">Вводная страница</h1></div>
-        <span class="page-type-badge type-intro" style="margin-left:4px;">вводная</span>
+        <span class="page-type-badge type-intro" style="margin-left:var(--ou-space-1);">вводная</span>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0">
@@ -635,14 +635,14 @@
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
       <header class="ou-drawer__head">
-        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:4px;flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:var(--ou-space-1);flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
         <div class="ou-drawer__head-text"><h1 id="dt-lf-einfo-title" class="ou-drawer__title">Правила прохождения теста</h1></div>
-        <span class="page-type-badge type-info" style="margin-left:4px;">инфо</span>
+        <span class="page-type-badge type-info" style="margin-left:var(--ou-space-1);">инфо</span>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-einfo-title">Название страницы</label><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="lf-einfo-title" type="text" value="Правила прохождения теста"></div></div></div>
-        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-einfo-content">Содержимое (Markdown)</label><div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="lf-einfo-content" rows="8" style="font-family:monospace;font-size:12px;">## Правила
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-einfo-content">Содержимое (Markdown)</label><div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="lf-einfo-content" rows="8" style="font-family:monospace;font-size:var(--ou-space-3);">## Правила
 
 - Время: 30 минут
 - Одна попытка
@@ -666,9 +666,9 @@
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
       <header class="ou-drawer__head">
-        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:4px;flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:var(--ou-space-1);flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
         <div class="ou-drawer__head-text"><h1 id="dt-lf-esum-title" class="ou-drawer__title">Итоговая страница</h1></div>
-        <span class="page-type-badge type-summary" style="margin-left:4px;">итог</span>
+        <span class="page-type-badge type-summary" style="margin-left:var(--ou-space-1);">итог</span>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0">
@@ -694,14 +694,14 @@
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
       <header class="ou-drawer__head">
-        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:4px;flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:var(--ou-space-1);flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
         <div class="ou-drawer__head-text"><h1 id="dt-lf-ehtml-title" class="ou-drawer__title">Специальный экран</h1></div>
-        <span class="page-type-badge type-html" style="margin-left:4px;">html</span>
+        <span class="page-type-badge type-html" style="margin-left:var(--ou-space-1);">html</span>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-ehtml-title">Название страницы</label><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="lf-ehtml-title" type="text" value="Специальный экран"></div></div></div>
-        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-ehtml-code">HTML-содержимое</label><div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="lf-ehtml-code" rows="10" style="font-family:monospace;font-size:12px;">&lt;div&gt;&lt;h2&gt;Важно&lt;/h2&gt;&lt;p&gt;Текст.&lt;/p&gt;&lt;/div&gt;</textarea></div></div><div class="ou-formfield__desc">Скрипты запрещены.</div></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-ehtml-code">HTML-содержимое</label><div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="lf-ehtml-code" rows="10" style="font-family:monospace;font-size:var(--ou-space-3);">&lt;div&gt;&lt;h2&gt;Важно&lt;/h2&gt;&lt;p&gt;Текст.&lt;/p&gt;&lt;/div&gt;</textarea></div></div><div class="ou-formfield__desc">Скрипты запрещены.</div></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta">Есть несохранённые изменения.</div>
@@ -720,17 +720,17 @@
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
       <header class="ou-drawer__head">
-        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:4px;flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:var(--ou-space-1);flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
         <div class="ou-drawer__head-text"><h1 id="dt-lf-pp-title" class="ou-drawer__title">Предпросмотр: Правила прохождения</h1></div>
-        <span class="page-type-badge type-info" style="margin-left:4px;">инфо</span>
+        <span class="page-type-badge type-info" style="margin-left:var(--ou-space-1);">инфо</span>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0" data-wf-demo style="padding:0;overflow:hidden;">
-        <div style="background:hsl(217 91% 97%);border-bottom:1px solid var(--border);padding:8px 16px;font-size:11px;color:var(--muted-fg);display:flex;align-items:center;gap:6px;"><svg width="12" height="12"><use href="#i-eye"/></svg> Предпросмотр</div>
-        <div style="padding:24px 20px;">
-          <h2 style="font-size:18px;font-weight:700;margin-bottom:12px;">Правила прохождения теста</h2>
-          <ul style="font-size:14px;line-height:1.8;padding-left:20px;"><li>Время: 30 минут</li><li>Одна попытка</li><li>Проходной балл: 70%</li></ul>
-          <div style="margin-top:24px;"><button class="ou-btn ou-btn--primary" type="button" disabled>Продолжить</button></div>
+        <div style="background:hsl(217 91% 97%);border-bottom:1px solid var(--border);padding:var(--ou-space-2) var(--ou-space-4);font-size:11px;color:var(--muted-fg);display:flex;align-items:center;gap:6px;"><svg width="12" height="12"><use href="#i-eye"/></svg> Предпросмотр</div>
+        <div style="padding:var(--ou-space-6) var(--ou-space-5);">
+          <h2 style="font-size:18px;font-weight:700;margin-bottom:var(--ou-space-3);">Правила прохождения теста</h2>
+          <ul style="font-size:14px;line-height:1.8;padding-left:var(--ou-space-5);"><li>Время: 30 минут</li><li>Одна попытка</li><li>Проходной балл: 70%</li></ul>
+          <div style="margin-top:var(--ou-space-6);"><button class="ou-btn ou-btn--primary" type="button" disabled>Продолжить</button></div>
         </div>
       </div>
     </aside>
@@ -746,9 +746,9 @@
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
       <header class="ou-drawer__head">
-        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:4px;flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:var(--ou-space-1);flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
         <div class="ou-drawer__head-text"><h1 id="dt-lf-df-title" class="ou-drawer__title">Правила прохождения теста</h1></div>
-        <span class="page-type-badge type-info" style="margin-left:4px;">инфо</span>
+        <span class="page-type-badge type-info" style="margin-left:var(--ou-space-1);">инфо</span>
         <span class="status-dot dirty" aria-label="Несохранённые изменения" style="margin-left:6px;"></span>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
@@ -759,7 +759,7 @@
       </div>
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-df-title">Название страницы</label><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="lf-df-title" type="text" value="Правила (изменено)"></div></div></div>
-        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-df-content">Содержимое</label><div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="lf-df-content" rows="5" style="font-family:monospace;font-size:12px;">## Изменённые правила...</textarea></div></div></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-df-content">Содержимое</label><div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="lf-df-content" rows="5" style="font-family:monospace;font-size:var(--ou-space-3);">## Изменённые правила...</textarea></div></div></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta" style="color:var(--warn-fg);">Несохранённые изменения</div>
@@ -778,9 +778,9 @@
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
       <header class="ou-drawer__head">
-        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:4px;flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Назад" style="margin-right:var(--ou-space-1);flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
         <div class="ou-drawer__head-text"><h1 id="dt-lf-val-title" class="ou-drawer__title">Новая страница</h1></div>
-        <span class="page-type-badge type-info" style="margin-left:4px;">инфо</span>
+        <span class="page-type-badge type-info" style="margin-left:var(--ou-space-1);">инфо</span>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0">
@@ -825,9 +825,9 @@
             <span class="page-type-badge type-info">инфо</span>
             <span class="page-title" style="color:var(--error);">Правила прохождения теста</span>
           </div>
-          <div style="margin:0 10px 8px;padding:12px;background:var(--ou-error-soft);border:1px solid var(--ou-error-default);border-radius:var(--radius-md);">
-            <p style="font-size:13px;margin-bottom:8px;">Удалить страницу <strong>«Правила прохождения теста»</strong>? Это действие нельзя отменить.</p>
-            <div style="display:flex;gap:8px;"><button class="ou-btn ou-btn--ghost ou-btn--s" type="button">Отмена</button><button class="ou-btn ou-btn--destructive ou-btn--s" type="button">Удалить страницу</button></div>
+          <div style="margin:0 10px var(--ou-space-2);padding:var(--ou-space-3);background:var(--ou-error-soft);border:1px solid var(--ou-error-default);border-radius:var(--radius-md);">
+            <p style="font-size:13px;margin-bottom:var(--ou-space-2);">Удалить страницу <strong>«Правила прохождения теста»</strong>? Это действие нельзя отменить.</p>
+            <div style="display:flex;gap:var(--ou-space-2);"><button class="ou-btn ou-btn--ghost ou-btn--s" type="button">Отмена</button><button class="ou-btn ou-btn--destructive ou-btn--s" type="button">Удалить страницу</button></div>
           </div>
         </div>
       </div>
@@ -885,23 +885,23 @@
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
       <header class="ou-drawer__head">
-        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Выйти из предпросмотра" style="margin-right:4px;flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Выйти из предпросмотра" style="margin-right:var(--ou-space-1);flex-shrink:0;"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
         <div class="ou-drawer__head-text"><h1 id="dt-lf-pv-title" class="ou-drawer__title">Предпросмотр теста</h1></div>
-        <span class="ou-tag ou-tag--neutral" style="margin-left:4px;">flow runtime</span>
+        <span class="ou-tag ou-tag--neutral" style="margin-left:var(--ou-space-1);">flow runtime</span>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" data-wf-demo style="display:flex;padding:0;overflow:hidden;height:calc(100% - 56px);">
-        <nav style="width:180px;flex-shrink:0;background:hsl(220 15% 16%);color:#fff;padding:16px 0;overflow-y:auto;font-size:12px;">
-          <div style="padding:0 12px 10px;font-size:11px;font-weight:700;color:hsl(217 91% 75%);text-transform:uppercase;letter-spacing:.06em;">Структура</div>
-          <div style="padding:7px 12px;background:hsl(217 91% 35%);cursor:pointer;">Вводная страница</div>
-          <div style="padding:7px 12px;cursor:pointer;color:hsl(220 15% 85%);">Правила прохождения</div>
-          <div style="padding:4px 12px;font-size:11px;color:hsl(220 15% 55%);">&#x2022; 13 вопросов</div>
-          <div style="padding:7px 12px;cursor:pointer;color:hsl(220 15% 85%);">Итоговая страница</div>
+        <nav style="width:180px;flex-shrink:0;background:hsl(220 15% 16%);color:#fff;padding:var(--ou-space-4) 0;overflow-y:auto;font-size:var(--ou-space-3);">
+          <div style="padding:0 var(--ou-space-3) 10px;font-size:11px;font-weight:700;color:hsl(217 91% 75%);text-transform:uppercase;letter-spacing:.06em;">Структура</div>
+          <div style="padding:7px var(--ou-space-3);background:hsl(217 91% 35%);cursor:pointer;">Вводная страница</div>
+          <div style="padding:7px var(--ou-space-3);cursor:pointer;color:hsl(220 15% 85%);">Правила прохождения</div>
+          <div style="padding:var(--ou-space-1) var(--ou-space-3);font-size:11px;color:hsl(220 15% 55%);">&#x2022; 13 вопросов</div>
+          <div style="padding:7px var(--ou-space-3);cursor:pointer;color:hsl(220 15% 85%);">Итоговая страница</div>
         </nav>
-        <div style="flex:1;overflow-y:auto;padding:24px 20px;">
-          <div style="font-size:11px;color:var(--muted-fg);margin-bottom:16px;padding:6px 10px;background:hsl(217 91% 97%);border-radius:var(--radius-sm);border:1px solid hsl(217 91% 88%);"><svg width="11" height="11"><use href="#i-eye"/></svg> Предпросмотр</div>
-          <h2 style="font-size:20px;font-weight:700;margin-bottom:12px;">Добро пожаловать в тест</h2>
-          <p style="font-size:14px;line-height:1.6;margin-bottom:20px;">Этот тест проверяет базовые знания в области информационной безопасности.</p>
+        <div style="flex:1;overflow-y:auto;padding:var(--ou-space-6) var(--ou-space-5);">
+          <div style="font-size:11px;color:var(--muted-fg);margin-bottom:var(--ou-space-4);padding:6px 10px;background:hsl(217 91% 97%);border-radius:var(--radius-sm);border:1px solid hsl(217 91% 88%);"><svg width="11" height="11"><use href="#i-eye"/></svg> Предпросмотр</div>
+          <h2 style="font-size:var(--ou-space-5);font-weight:700;margin-bottom:var(--ou-space-3);">Добро пожаловать в тест</h2>
+          <p style="font-size:14px;line-height:1.6;margin-bottom:var(--ou-space-5);">Этот тест проверяет базовые знания в области информационной безопасности.</p>
           <button class="ou-btn ou-btn--primary" type="button">Начать тест</button>
         </div>
       </div>
@@ -941,7 +941,7 @@
             <div class="mode-change-item"><span>Страница «Правила» (info)</span><span class="mode-change-when">→ сохранена в зоне «Перед тестом»</span></div>
           </div>
         </div>
-        <div class="flow-mode-bar" style="margin-top:8px;"><svg width="14" height="14"><use href="#i-layout"/></svg><span>Новый режим:</span><span class="flow-mode-label">По темам (linear_by_topics)</span></div>
+        <div class="flow-mode-bar" style="margin-top:var(--ou-space-2);"><svg width="14" height="14"><use href="#i-layout"/></svg><span>Новый режим:</span><span class="flow-mode-label">По темам (linear_by_topics)</span></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta">Требуется подтверждение.</div>

@@ -13,66 +13,66 @@
 
     /* Background tests list (blurred behind drawer) */
     .wf-tests-list { filter: blur(0.5px); opacity: 0.7; pointer-events: none; }
-    .test-card-stub { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px; }
+    .test-card-stub { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); padding: 14px var(--ou-space-4); margin-bottom: 10px; display: flex; align-items: center; gap: var(--ou-space-3); }
     .test-card-stub .test-card-title { font-size: 14px; font-weight: 600; flex: 1; }
     body.has-active-shell .mobile-section { display: none; }
 
     /* Template block */
-    .tpl-block { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); padding: 14px 16px; display: flex; align-items: center; gap: 14px; }
-    .tpl-thumb { width: 80px; height: 56px; border-radius: var(--radius-md); background: var(--muted); border: 1px solid var(--border); flex-shrink: 0; overflow: hidden; }
+    .tpl-block { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); padding: 14px var(--ou-space-4); display: flex; align-items: center; gap: 14px; }
+    .tpl-thumb { width: var(--ou-space-11); height: 56px; border-radius: var(--radius-md); background: var(--muted); border: 1px solid var(--border); flex-shrink: 0; overflow: hidden; }
     .tpl-info { flex: 1; min-width: 0; }
     .tpl-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
-    .tpl-desc { font-size: 12px; color: var(--muted-fg); }
+    .tpl-desc { font-size: var(--ou-space-3); color: var(--muted-fg); }
     .tpl-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
 
     /* Mini SCORM preview sketch */
-    .preview-sketch { width: 100%; height: 100%; display: flex; flex-direction: column; font-size: 8px; }
-    .ps-header { height: 18px; background: var(--ou-accent-default); display: flex; align-items: center; padding: 0 6px; gap: 4px; }
+    .preview-sketch { width: 100%; height: 100%; display: flex; flex-direction: column; font-size: var(--ou-space-2); }
+    .ps-header { height: 18px; background: var(--ou-accent-default); display: flex; align-items: center; padding: 0 6px; gap: var(--ou-space-1); }
     .ps-logo { width: 10px; height: 10px; background: white; border-radius: 2px; opacity: 0.8; }
     .ps-title { color: color-mix(in srgb, white 80%, transparent); font-size: 7px; }
     .ps-progress { height: 3px; background: color-mix(in srgb, var(--ou-accent-default) 20%, transparent); }
     .ps-progress-bar { height: 100%; background: var(--ou-success-default); width: 40%; }
     .ps-body { flex: 1; display: flex; }
-    .ps-sidebar { width: 28%; background: var(--ou-bg-page); border-right: 1px solid var(--ou-border-soft); padding: 4px; }
+    .ps-sidebar { width: 28%; background: var(--ou-bg-page); border-right: 1px solid var(--ou-border-soft); padding: var(--ou-space-1); }
     .ps-nav-item { height: 5px; background: var(--ou-bg-surface-3); border-radius: 1px; margin-bottom: 2px; }
     .ps-nav-item.active { background: color-mix(in srgb, var(--ou-accent-default) 30%, transparent); }
     .ps-content { flex: 1; padding: 5px 6px; }
-    .ps-q { font-size: 6px; color: var(--ou-fg-default); margin-bottom: 4px; line-height: 1.3; }
+    .ps-q { font-size: 6px; color: var(--ou-fg-default); margin-bottom: var(--ou-space-1); line-height: 1.3; }
     .ps-opt { height: 5px; background: var(--ou-bg-hover); border-radius: 1px; margin-bottom: 2px; }
     .ps-opt.sel { background: color-mix(in srgb, var(--ou-accent-default) 20%, transparent); border: 1px solid color-mix(in srgb, var(--ou-accent-default) 40%, transparent); }
 
     /* Color picker */
-    .color-row { display: flex; align-items: center; gap: 8px; }
+    .color-row { display: flex; align-items: center; gap: var(--ou-space-2); }
     .color-swatch { width: 36px; height: 36px; border-radius: var(--radius-md); border: 1px solid var(--input-b); flex-shrink: 0; cursor: pointer; }
     .color-row input { flex: 1; }
-    .color-popover { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 32px color-mix(in srgb, black 18%, transparent); padding: 12px; width: 220px; margin-top: 6px; }
+    .color-popover { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 var(--ou-space-2) var(--ou-space-7) color-mix(in srgb, black 18%, transparent); padding: var(--ou-space-3); width: 220px; margin-top: 6px; }
     .color-gradient { width: 196px; height: 120px; border-radius: var(--radius-md); background: linear-gradient(to bottom, transparent, black), linear-gradient(to right, white, var(--ou-accent-default)); position: relative; margin-bottom: 10px; }
-    .color-cursor { position: absolute; width: 12px; height: 12px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, black 40%, transparent); top: 30%; right: 40%; }
+    .color-cursor { position: absolute; width: var(--ou-space-3); height: var(--ou-space-3); border: 2px solid white; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, black 40%, transparent); top: 30%; right: 40%; }
     .color-hue { width: 196px; height: 10px; border-radius: 5px; background: linear-gradient(to right, red, yellow, lime, cyan, blue, magenta, red); margin-bottom: 10px; position: relative; }
     .color-hue-thumb { position: absolute; top: -2px; left: 59%; width: 14px; height: 14px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, black 30%, transparent); background: var(--ou-accent-default); }
-    .color-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
-    .color-preset { width: 20px; height: 20px; border-radius: 4px; cursor: pointer; border: 1px solid color-mix(in srgb, black 10%, transparent); }
+    .color-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: var(--ou-space-2); }
+    .color-preset { width: var(--ou-space-5); height: var(--ou-space-5); border-radius: var(--ou-space-1); cursor: pointer; border: 1px solid color-mix(in srgb, black 10%, transparent); }
 
     /* File / asset row */
-    .file-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .file-chip { display: flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: var(--radius-md); background: var(--secondary); font-size: 12px; }
+    .file-row { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; }
+    .file-chip { display: flex; align-items: center; gap: var(--ou-space-1); padding: 3px var(--ou-space-2); border-radius: var(--radius-md); background: var(--secondary); font-size: var(--ou-space-3); }
     .file-chip .rm { cursor: pointer; color: var(--muted-fg); font-size: 11px; }
 
     /* Multiselect */
-    .multiselect-wrap { display: flex; flex-wrap: wrap; gap: 4px; border: 1px solid var(--input-b); border-radius: var(--radius-md); padding: 4px 8px; min-height: 36px; align-items: center; background: var(--bg); }
-    .multiselect-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; background: var(--secondary); border-radius: var(--radius-sm); font-size: 12px; }
+    .multiselect-wrap { display: flex; flex-wrap: wrap; gap: var(--ou-space-1); border: 1px solid var(--input-b); border-radius: var(--radius-md); padding: var(--ou-space-1) var(--ou-space-2); min-height: 36px; align-items: center; background: var(--bg); }
+    .multiselect-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; background: var(--secondary); border-radius: var(--radius-sm); font-size: var(--ou-space-3); }
     .multiselect-chip .rm { cursor: pointer; color: var(--muted-fg); font-size: 11px; }
-    .multiselect-input { border: none; outline: none; font-size: 13px; background: transparent; min-width: 80px; }
+    .multiselect-input { border: none; outline: none; font-size: 13px; background: transparent; min-width: var(--ou-space-11); }
 
     /* Gallery */
-    .gallery-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-    .gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .gallery-toolbar { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-4); }
+    .gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--ou-space-4); }
     .gallery-card { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); overflow: hidden; }
     .gallery-card.selected { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ou-accent-default) 20%, transparent); }
     .gallery-preview { aspect-ratio: 16/9; background: var(--muted); overflow: hidden; }
-    .gallery-body { padding: 10px 12px; }
+    .gallery-body { padding: 10px var(--ou-space-3); }
     .gallery-name { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
-    .gallery-desc { font-size: 12px; color: var(--muted-fg); margin-bottom: 8px; line-height: 1.4; }
+    .gallery-desc { font-size: var(--ou-space-3); color: var(--muted-fg); margin-bottom: var(--ou-space-2); line-height: 1.4; }
     .gallery-footer { display: flex; gap: 6px; }
 
     /* Section header with context menu */
@@ -80,14 +80,14 @@
     .section-header .section-label { margin-bottom: 0; }
 
 
-    .context-menu { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 8px 24px color-mix(in srgb, black 14%, transparent); padding: 4px 0; min-width: 200px; display: inline-block; }
-    .context-menu-item { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 13px; color: var(--fg); cursor: pointer; white-space: nowrap; }
+    .context-menu { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 var(--ou-space-2) var(--ou-space-6) color-mix(in srgb, black 14%, transparent); padding: var(--ou-space-1) 0; min-width: 200px; display: inline-block; }
+    .context-menu-item { display: flex; align-items: center; gap: var(--ou-space-2); padding: 7px var(--ou-space-3); font-size: 13px; color: var(--fg); cursor: pointer; white-space: nowrap; }
     .context-menu-item:hover { background: var(--accent); }
     .context-menu-item.danger { color: var(--destructive); }
-    .context-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
+    .context-menu-sep { height: 1px; background: var(--border); margin: var(--ou-space-1) 0; }
 
     /* Diagnostics */
-    .diag-grid { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 12px; margin: 8px 0; }
+    .diag-grid { display: grid; grid-template-columns: max-content 1fr; gap: var(--ou-space-1) var(--ou-space-4); font-size: var(--ou-space-3); margin: var(--ou-space-2) 0; }
     .diag-label { color: var(--muted-fg); white-space: nowrap; }
     .diag-value { font-family: ui-monospace, monospace; color: var(--fg); }
 
@@ -148,7 +148,7 @@
     }
     .wf-nav-sep {
       width: 1px;
-      height: 20px;
+      height: var(--ou-space-5);
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-2);
     }
@@ -297,7 +297,7 @@
               </div>
             </div>
             <div class="tpl-info">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:var(--ou-space-1);">
                 <div class="tpl-name">Корпоративный</div>
                 <span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span>
                 <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">v1.2.0</span>
@@ -311,8 +311,8 @@
           </div>
           <!-- Диагностика шаблона -->
           <details style="margin-top:10px;">
-            <summary style="font-size:12px;color:var(--muted-fg);cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:6px;"><svg width="14" height="14"><use href="#i-info"/></svg> Диагностика шаблона</summary>
-            <div class="diag-grid" style="margin-top:8px;padding:10px;background:var(--accent);border-radius:var(--radius-sm);">
+            <summary style="font-size:var(--ou-space-3);color:var(--muted-fg);cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:6px;"><svg width="14" height="14"><use href="#i-info"/></svg> Диагностика шаблона</summary>
+            <div class="diag-grid" style="margin-top:var(--ou-space-2);padding:10px;background:var(--accent);border-radius:var(--radius-sm);">
               <span class="diag-label">templateVersion</span><span class="diag-value">1.2.0</span>
               <span class="diag-label">templateApiVersion</span><span class="diag-value">4.0</span>
               <span class="diag-label">templateId</span><span class="diag-value">corporate-v2</span>
@@ -324,7 +324,7 @@
         <!-- Секция: Параметры -->
         <div class="section">
           <div class="section-label">Параметры</div>
-          <div style="font-size:12px;color:var(--muted-fg);margin-bottom:14px;padding:8px 10px;background:var(--accent);border-radius:var(--radius-sm);border:1px solid var(--card-border);">Набор параметров определяется разработчиком шаблона «Корпоративный».</div>
+          <div style="font-size:var(--ou-space-3);color:var(--muted-fg);margin-bottom:14px;padding:var(--ou-space-2) 10px;background:var(--accent);border-radius:var(--radius-sm);border:1px solid var(--card-border);">Набор параметров определяется разработчиком шаблона «Корпоративный».</div>
 
           <div class="subsection-label">Брендирование</div>
           <div class="ou-formfield">
@@ -367,7 +367,7 @@
             <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="© 2024 Корпоративный университет"></div></div>
           </div>
 
-          <div class="subsection-label" style="margin-top:20px;">Макет</div>
+          <div class="subsection-label" style="margin-top:var(--ou-space-5);">Макет</div>
           <div class="ou-formfield">
             <label class="ou-formfield__lbl">Позиция боковой панели</label>
             <div class="ou-formfield__inline">
@@ -394,7 +394,7 @@
             <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="number" value="1200" style="max-width:120px;"></div></div>
           </div>
 
-          <div class="subsection-label" style="margin-top:20px;">Прогресс и шапка</div>
+          <div class="subsection-label" style="margin-top:var(--ou-space-5);">Прогресс и шапка</div>
           <div class="ou-formfield">
             <label class="ou-formfield__lbl">Режим прогресса<span class="param-type">select</span></label>
             <div class="ou-field ou-field--m"><div class="ou-field__box"><select class="ou-field__input" style="max-width:220px;"><option selected>Вопросы</option><option>Страницы</option><option>Скрыть</option></select></div></div>
@@ -452,11 +452,11 @@
               <div class="preview-sketch" data-wf-demo>
                 <div class="ps-header" style="background:hsl(0 0% 30%);"><div class="ps-logo"></div></div>
                 <div class="ps-progress"><div class="ps-progress-bar" style="background:hsl(0 0% 60%);"></div></div>
-                <div class="ps-body"><div class="ps-content" style="padding:8px;"><div class="ps-q" style="background:hsl(0 0% 88%);"></div><div class="ps-opt" style="background:hsl(0 0% 88%);"></div><div class="ps-opt" style="background:hsl(0 0% 88%);"></div></div></div>
+                <div class="ps-body"><div class="ps-content" style="padding:var(--ou-space-2);"><div class="ps-q" style="background:hsl(0 0% 88%);"></div><div class="ps-opt" style="background:hsl(0 0% 88%);"></div><div class="ps-opt" style="background:hsl(0 0% 88%);"></div></div></div>
               </div>
             </div>
             <div class="tpl-info">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:var(--ou-space-1);">
                 <div class="tpl-name">Стандартный</div>
                 <span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span>
                 <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">v1.0.0</span>
@@ -473,7 +473,7 @@
         <hr class="sep">
         <div class="section">
           <div class="section-label">Параметры</div>
-          <div style="font-size:12px;color:var(--muted-fg);margin-bottom:14px;padding:8px 10px;background:var(--accent);border-radius:var(--radius-sm);border:1px solid var(--card-border);">Набор параметров определяется разработчиком шаблона «Стандартный».</div>
+          <div style="font-size:var(--ou-space-3);color:var(--muted-fg);margin-bottom:14px;padding:var(--ou-space-2) 10px;background:var(--accent);border-radius:var(--radius-sm);border:1px solid var(--card-border);">Набор параметров определяется разработчиком шаблона «Стандартный».</div>
           <div class="subsection-label">Прогресс и навигация</div>
           <div class="ou-formfield">
             <label class="ou-formfield__lbl">Режим прогресса<span class="param-type">select</span></label>
@@ -527,8 +527,8 @@
           <div class="tpl-block">
             <div class="tpl-thumb ou-skel"></div>
             <div class="tpl-info">
-              <div class="ou-skel" style="height:16px;width:140px;margin-bottom:8px;"></div>
-              <div class="ou-skel" style="height:12px;width:220px;"></div>
+              <div class="ou-skel" style="height:var(--ou-space-4);width:140px;margin-bottom:var(--ou-space-2);"></div>
+              <div class="ou-skel" style="height:var(--ou-space-3);width:220px;"></div>
             </div>
             <div class="tpl-actions">
               <div class="ou-skel" style="height:30px;width:100px;"></div>
@@ -540,10 +540,10 @@
         <!-- Params skeleton -->
         <div class="section">
           <div class="section-label">Параметры</div>
-          <div style="display:flex;flex-direction:column;gap:16px;">
-            <div><div class="ou-skel" style="height:13px;width:160px;margin-bottom:8px;"></div><div class="ou-skel" style="height:36px;width:100%;"></div></div>
-            <div><div class="ou-skel" style="height:13px;width:120px;margin-bottom:8px;"></div><div class="ou-skel" style="height:36px;width:100%;"></div></div>
-            <div><div class="ou-skel" style="height:13px;width:140px;margin-bottom:8px;"></div><div class="ou-skel" style="height:36px;width:200px;"></div></div>
+          <div style="display:flex;flex-direction:column;gap:var(--ou-space-4);">
+            <div><div class="ou-skel" style="height:13px;width:160px;margin-bottom:var(--ou-space-2);"></div><div class="ou-skel" style="height:36px;width:100%;"></div></div>
+            <div><div class="ou-skel" style="height:13px;width:120px;margin-bottom:var(--ou-space-2);"></div><div class="ou-skel" style="height:36px;width:100%;"></div></div>
+            <div><div class="ou-skel" style="height:13px;width:140px;margin-bottom:var(--ou-space-2);"></div><div class="ou-skel" style="height:36px;width:200px;"></div></div>
           </div>
         </div>
       </div>
@@ -630,7 +630,7 @@
           <div class="tpl-block">
             <div class="tpl-thumb"><div class="preview-sketch" data-wf-demo><div class="ps-header"><div class="ps-logo"></div><div class="ps-title">ИБ</div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div><div class="ps-opt"></div></div></div></div></div>
             <div class="tpl-info">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div class="tpl-name">Корпоративный</div><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span></div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:var(--ou-space-1);"><div class="tpl-name">Корпоративный</div><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span></div>
               <div class="tpl-desc">Боковая панель навигации, брендирование, прогресс по темам</div>
             </div>
             <div class="tpl-actions">
@@ -654,7 +654,7 @@
           <div class="ou-formfield">
             <label class="ou-formfield__lbl">Подпись в подвале<span class="param-type">text</span></label>
             <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="© 2025 Корпоративный университет" style="border-color:var(--primary);"></div></div>
-            <span class="ou-tag ou-tag--neutral ou-tag--s" style="margin-top:4px;display:inline-block;">изменено</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--s" style="margin-top:var(--ou-space-1);display:inline-block;">изменено</span>
           </div>
         </div>
       </div>
@@ -824,7 +824,7 @@
           <div class="tpl-block" style="opacity:0.7;">
             <div class="tpl-thumb"><div class="preview-sketch" data-wf-demo><div class="ps-header"><div class="ps-logo"></div><div class="ps-title">ИБ</div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div></div></div></div></div>
             <div class="tpl-info">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:var(--ou-space-1);">
                 <div class="tpl-name">Корпоративный</div>
                 <span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span>
               </div>
@@ -884,39 +884,39 @@
       </div></nav>
       <!-- Preview takes the full drawer body, shown as an iframe mock -->
       <div class="ou-drawer__body" tabindex="0" data-wf-demo style="padding:0;position:relative;background:hsl(0 0% 94%);">
-        <div style="position:sticky;top:0;z-index:10;background:hsl(0 0% 20%);color:white;padding:8px 16px;display:flex;align-items:center;gap:12px;font-size:12px;">
+        <div style="position:sticky;top:0;z-index:10;background:hsl(0 0% 20%);color:white;padding:var(--ou-space-2) var(--ou-space-4);display:flex;align-items:center;gap:var(--ou-space-3);font-size:var(--ou-space-3);">
           <svg width="14" height="14"><use href="#i-eye"/></svg>
           <span>Предпросмотр: шаблон «Корпоративный»</span>
           <span style="margin-left:auto;color:hsl(0 0% 60%);">только просмотр — интерактивность отключена</span>
           <button class="ou-btn ou-btn--ghost ou-btn--s" style="color:white;" type="button">&#x2715; Закрыть предпросмотр</button>
         </div>
         <!-- Mock SCORM preview frame -->
-        <div style="max-width:960px;margin:24px auto;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:white;box-shadow:0 4px 20px rgba(0,0,0,.12);">
-          <div style="height:48px;background:hsl(217 91% 42%);display:flex;align-items:center;padding:0 20px;gap:12px;">
-            <div style="width:24px;height:24px;background:white;border-radius:4px;opacity:0.9;"></div>
+        <div style="max-width:960px;margin:var(--ou-space-6) auto;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:white;box-shadow:0 var(--ou-space-1) var(--ou-space-5) rgba(0,0,0,.12);">
+          <div style="height:var(--ou-space-9);background:hsl(217 91% 42%);display:flex;align-items:center;padding:0 var(--ou-space-5);gap:var(--ou-space-3);">
+            <div style="width:var(--ou-space-6);height:var(--ou-space-6);background:white;border-radius:var(--ou-space-1);opacity:0.9;"></div>
             <span style="color:white;font-weight:600;font-size:14px;">Основы ИБ</span>
-            <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
-              <span style="color:rgba(255,255,255,0.7);font-size:12px;">3 / 12</span>
-              <div style="width:80px;height:4px;background:rgba(255,255,255,0.2);border-radius:2px;"><div style="width:25%;height:100%;background:hsl(160 75% 60%);border-radius:2px;"></div></div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:var(--ou-space-2);">
+              <span style="color:rgba(255,255,255,0.7);font-size:var(--ou-space-3);">3 / 12</span>
+              <div style="width:var(--ou-space-11);height:var(--ou-space-1);background:rgba(255,255,255,0.2);border-radius:2px;"><div style="width:25%;height:100%;background:hsl(160 75% 60%);border-radius:2px;"></div></div>
             </div>
           </div>
           <div style="display:flex;min-height:400px;">
-            <div style="width:200px;flex-shrink:0;border-right:1px solid var(--border);padding:12px 0;background:hsl(0 0% 98%);">
-              <div style="padding:8px 16px;font-size:12px;font-weight:600;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.05em;">Разделы</div>
-              <div style="padding:8px 16px;font-size:13px;background:var(--primary);color:white;margin:2px 8px;border-radius:var(--radius-sm);">Введение</div>
-              <div style="padding:8px 16px;font-size:13px;color:var(--muted-fg);margin:2px 8px;">Основные понятия</div>
-              <div style="padding:8px 16px;font-size:13px;color:var(--muted-fg);margin:2px 8px;">Угрозы</div>
-              <div style="padding:8px 16px;font-size:13px;color:var(--muted-fg);margin:2px 8px;">Итоговый тест</div>
+            <div style="width:200px;flex-shrink:0;border-right:1px solid var(--border);padding:var(--ou-space-3) 0;background:hsl(0 0% 98%);">
+              <div style="padding:var(--ou-space-2) var(--ou-space-4);font-size:var(--ou-space-3);font-weight:600;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.05em;">Разделы</div>
+              <div style="padding:var(--ou-space-2) var(--ou-space-4);font-size:13px;background:var(--primary);color:white;margin:2px var(--ou-space-2);border-radius:var(--radius-sm);">Введение</div>
+              <div style="padding:var(--ou-space-2) var(--ou-space-4);font-size:13px;color:var(--muted-fg);margin:2px var(--ou-space-2);">Основные понятия</div>
+              <div style="padding:var(--ou-space-2) var(--ou-space-4);font-size:13px;color:var(--muted-fg);margin:2px var(--ou-space-2);">Угрозы</div>
+              <div style="padding:var(--ou-space-2) var(--ou-space-4);font-size:13px;color:var(--muted-fg);margin:2px var(--ou-space-2);">Итоговый тест</div>
             </div>
-            <div style="flex:1;padding:32px;font-size:14px;">
-              <div style="font-size:18px;font-weight:700;margin-bottom:16px;">Вопрос 3 из 12</div>
-              <div style="margin-bottom:24px;color:var(--fg);">Что из перечисленного является примером социальной инженерии?</div>
+            <div style="flex:1;padding:var(--ou-space-7);font-size:14px;">
+              <div style="font-size:18px;font-weight:700;margin-bottom:var(--ou-space-4);">Вопрос 3 из 12</div>
+              <div style="margin-bottom:var(--ou-space-6);color:var(--fg);">Что из перечисленного является примером социальной инженерии?</div>
               <div style="display:flex;flex-direction:column;gap:10px;">
-                <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:2px solid var(--primary);border-radius:var(--radius-md);background:hsl(217 91% 97%);cursor:pointer;"><input type="radio" name="q3-prev" checked> Фишинговое письмо с просьбой подтвердить пароль</label>
-                <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;"><input type="radio" name="q3-prev"> SQL-инъекция через форму входа</label>
-                <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;"><input type="radio" name="q3-prev"> DDoS-атака на сервер</label>
+                <label style="display:flex;align-items:center;gap:10px;padding:var(--ou-space-3) 14px;border:2px solid var(--primary);border-radius:var(--radius-md);background:hsl(217 91% 97%);cursor:pointer;"><input type="radio" name="q3-prev" checked> Фишинговое письмо с просьбой подтвердить пароль</label>
+                <label style="display:flex;align-items:center;gap:10px;padding:var(--ou-space-3) 14px;border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;"><input type="radio" name="q3-prev"> SQL-инъекция через форму входа</label>
+                <label style="display:flex;align-items:center;gap:10px;padding:var(--ou-space-3) 14px;border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;"><input type="radio" name="q3-prev"> DDoS-атака на сервер</label>
               </div>
-              <div style="margin-top:32px;display:flex;justify-content:flex-end;">
+              <div style="margin-top:var(--ou-space-7);display:flex;justify-content:flex-end;">
                 <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Ответить &rarr;</button>
               </div>
             </div>
@@ -1023,9 +1023,9 @@
             <div class="color-popover" role="dialog" aria-label="Выбор цвета">
               <div class="color-gradient"><div class="color-cursor"></div></div>
               <div class="color-hue"><div class="color-hue-thumb"></div></div>
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+              <div style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:var(--ou-space-2);">
                 <div class="color-swatch" data-wf-demo style="background:#0099ee;width:28px;height:28px;flex-shrink:0;"></div>
-                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="#0099EE" aria-label="Hex-значение цвета" style="font-size:12px;height:28px;"></div></div>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="#0099EE" aria-label="Hex-значение цвета" style="font-size:var(--ou-space-3);height:28px;"></div></div>
               </div>
               <div class="color-presets" data-wf-demo>
                 <div class="color-preset" style="background:#0066cc;" title="#0066CC"></div>
@@ -1070,9 +1070,9 @@
         <div class="gallery-toolbar">
           <div style="position:relative;flex:1;max-width:320px;">
             <svg width="14" height="14" style="position:absolute;left:10px;top:11px;color:var(--muted-fg);"><use href="#i-search"/></svg>
-            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск шаблонов…" aria-label="Поиск шаблонов" style="padding-left:32px;"></div></div>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск шаблонов…" aria-label="Поиск шаблонов" style="padding-left:var(--ou-space-7);"></div></div>
           </div>
-          <span style="font-size:12px;color:var(--muted-fg);">6 шаблонов</span>
+          <span style="font-size:var(--ou-space-3);color:var(--muted-fg);">6 шаблонов</span>
         </div>
         <div class="gallery-grid">
           <!-- Card 1 — selected -->
@@ -1086,7 +1086,7 @@
           </div>
           <!-- Card 2 -->
           <div class="gallery-card">
-            <div class="gallery-preview" data-wf-demo><div class="preview-sketch" data-wf-demo><div class="ps-header" style="background:hsl(0 0% 25%);"><div class="ps-logo" style="background:hsl(0 0% 70%);"></div></div><div class="ps-progress" style="background:hsl(0 0% 80%);"><div class="ps-progress-bar" style="background:hsl(0 0% 50%);"></div></div><div class="ps-body"><div class="ps-content" style="padding:8px;"><div class="ps-q">Вопрос…</div><div class="ps-opt sel" style="background:hsl(0 0% 72%);"></div><div class="ps-opt"></div></div></div></div></div>
+            <div class="gallery-preview" data-wf-demo><div class="preview-sketch" data-wf-demo><div class="ps-header" style="background:hsl(0 0% 25%);"><div class="ps-logo" style="background:hsl(0 0% 70%);"></div></div><div class="ps-progress" style="background:hsl(0 0% 80%);"><div class="ps-progress-bar" style="background:hsl(0 0% 50%);"></div></div><div class="ps-body"><div class="ps-content" style="padding:var(--ou-space-2);"><div class="ps-q">Вопрос…</div><div class="ps-opt sel" style="background:hsl(0 0% 72%);"></div><div class="ps-opt"></div></div></div></div></div>
             <div class="gallery-body">
               <div class="gallery-name">Стандартный</div>
               <div class="gallery-desc">Минималистичный без брендирования</div>
@@ -1104,7 +1104,7 @@
           </div>
           <!-- Card 4 -->
           <div class="gallery-card">
-            <div class="gallery-preview" data-wf-demo style="background:hsl(38 90% 95%);"><div class="preview-sketch" data-wf-demo><div class="ps-header" style="background:hsl(32 90% 40%);"><div class="ps-logo"></div></div><div class="ps-body"><div class="ps-content" style="padding:8px;"><div class="ps-q">Вопрос…</div></div></div></div></div>
+            <div class="gallery-preview" data-wf-demo style="background:hsl(38 90% 95%);"><div class="preview-sketch" data-wf-demo><div class="ps-header" style="background:hsl(32 90% 40%);"><div class="ps-logo"></div></div><div class="ps-body"><div class="ps-content" style="padding:var(--ou-space-2);"><div class="ps-q">Вопрос…</div></div></div></div></div>
             <div class="gallery-body">
               <div class="gallery-name">Тёплый</div>
               <div class="gallery-desc">Тёплая цветовая гамма для неформального обучения</div>
@@ -1113,7 +1113,7 @@
           </div>
           <!-- Card 5 -->
           <div class="gallery-card">
-            <div class="gallery-preview" data-wf-demo><div class="preview-sketch" data-wf-demo><div class="ps-header" style="background:hsl(0 0% 12%);"><div class="ps-logo"></div></div><div class="ps-body" style="background:hsl(0 0% 14%);"><div class="ps-content" style="padding:8px;"><div class="ps-q" style="color:hsl(0 0% 80%);background:hsl(0 0% 20%);">Вопрос…</div></div></div></div></div>
+            <div class="gallery-preview" data-wf-demo><div class="preview-sketch" data-wf-demo><div class="ps-header" style="background:hsl(0 0% 12%);"><div class="ps-logo"></div></div><div class="ps-body" style="background:hsl(0 0% 14%);"><div class="ps-content" style="padding:var(--ou-space-2);"><div class="ps-q" style="color:hsl(0 0% 80%);background:hsl(0 0% 20%);">Вопрос…</div></div></div></div></div>
             <div class="gallery-body">
               <div class="gallery-name">Тёмный</div>
               <div class="gallery-desc">Тёмная тема, минимальная нагрузка на зрение</div>
@@ -1158,9 +1158,9 @@
         <div class="gallery-toolbar">
           <div style="position:relative;flex:1;max-width:320px;">
             <svg width="14" height="14" style="position:absolute;left:10px;top:11px;color:var(--muted-fg);"><use href="#i-search"/></svg>
-            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="корпор" placeholder="Поиск шаблонов…" aria-label="Поиск шаблонов" style="padding-left:32px;border-color:var(--primary);"></div></div>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="корпор" placeholder="Поиск шаблонов…" aria-label="Поиск шаблонов" style="padding-left:var(--ou-space-7);border-color:var(--primary);"></div></div>
           </div>
-          <span style="font-size:12px;color:var(--muted-fg);">1 из 6</span>
+          <span style="font-size:var(--ou-space-3);color:var(--muted-fg);">1 из 6</span>
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Сбросить поиск">&#x2715;</button>
         </div>
         <div class="gallery-grid">
@@ -1201,12 +1201,12 @@
         <div class="gallery-toolbar">
           <div style="position:relative;flex:1;max-width:320px;">
             <svg width="14" height="14" style="position:absolute;left:10px;top:11px;color:var(--muted-fg);"><use href="#i-search"/></svg>
-            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="xyzabc123" placeholder="Поиск шаблонов…" aria-label="Поиск шаблонов" style="padding-left:32px;"></div></div>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="xyzabc123" placeholder="Поиск шаблонов…" aria-label="Поиск шаблонов" style="padding-left:var(--ou-space-7);"></div></div>
           </div>
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button">&#x2715; Сбросить</button>
         </div>
-        <div class="ou-empty" style="margin-top:32px;">
-          <svg width="32" height="32" style="margin-bottom:12px;color:var(--muted-fg);"><use href="#i-search"/></svg>
+        <div class="ou-empty" style="margin-top:var(--ou-space-7);">
+          <svg width="32" height="32" style="margin-bottom:var(--ou-space-3);color:var(--muted-fg);"><use href="#i-search"/></svg>
           <div class="ou-empty__title">Ничего не найдено</div>
           <div class="ou-empty__desc">Нет шаблонов, соответствующих запросу «xyzabc123».</div>
           <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Сбросить поиск</button>
@@ -1238,16 +1238,16 @@
         <div class="gallery-toolbar">
           <div style="position:relative;flex:1;max-width:320px;">
             <svg width="14" height="14" style="position:absolute;left:10px;top:11px;color:var(--muted-fg);"><use href="#i-search"/></svg>
-            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск шаблонов…" aria-label="Поиск шаблонов" style="padding-left:32px;"></div></div>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск шаблонов…" aria-label="Поиск шаблонов" style="padding-left:var(--ou-space-7);"></div></div>
           </div>
-          <span style="font-size:12px;color:var(--muted-fg);">6 шаблонов</span>
+          <span style="font-size:var(--ou-space-3);color:var(--muted-fg);">6 шаблонов</span>
         </div>
         <!-- Warning banner: selected template differs from current -->
-        <div class="ou-banner ou-banner--warning" role="alert" style="margin-bottom:16px;border-radius:var(--radius-md);">
+        <div class="ou-banner ou-banner--warning" role="alert" style="margin-bottom:var(--ou-space-4);border-radius:var(--radius-md);">
           <svg class="ou-banner__ico"><use href="#i-warn"/></svg>
           <div>
             <div style="font-weight:600;margin-bottom:2px;">Замена шаблона сбросит текущие параметры оформления</div>
-            <div style="font-size:12px;">Изменённые параметры будут потеряны: «Основной цвет», «Логотип», «Подпись в подвале».</div>
+            <div style="font-size:var(--ou-space-3);">Изменённые параметры будут потеряны: «Основной цвет», «Логотип», «Подпись в подвале».</div>
           </div>
         </div>
         <!-- Newly selected card highlighted -->
@@ -1257,7 +1257,7 @@
             <div class="gallery-body"><div class="gallery-name">Корпоративный <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Текущий</span></div></div>
           </div>
           <div class="gallery-card selected">
-            <div class="gallery-preview" data-wf-demo><div class="preview-sketch" data-wf-demo><div class="ps-header" style="background:hsl(0 0% 25%);"><div class="ps-logo"></div></div><div class="ps-progress"><div class="ps-progress-bar" style="background:hsl(0 0% 50%);"></div></div><div class="ps-body"><div class="ps-content" style="padding:8px;"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div></div></div></div></div>
+            <div class="gallery-preview" data-wf-demo><div class="preview-sketch" data-wf-demo><div class="ps-header" style="background:hsl(0 0% 25%);"><div class="ps-logo"></div></div><div class="ps-progress"><div class="ps-progress-bar" style="background:hsl(0 0% 50%);"></div></div><div class="ps-body"><div class="ps-content" style="padding:var(--ou-space-2);"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div></div></div></div></div>
             <div class="gallery-body">
               <div class="gallery-name">Стандартный <span class="ou-tag ou-tag--accent ou-tag--s" style="vertical-align:middle;">Выбран</span></div>
               <div class="gallery-desc">Будет применён. Параметры будут сброшены.</div>

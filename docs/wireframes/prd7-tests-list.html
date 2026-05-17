@@ -9,24 +9,24 @@
   <link rel="stylesheet" href="ds/wf-utils.css" />
   <style>
     .page-header {
-      display: flex; align-items: center; gap: 12px;
-      padding: 14px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      display: flex; align-items: center; gap: var(--ou-space-3);
+      padding: 14px var(--ou-space-6); border-bottom: 1px solid var(--border); flex-shrink: 0;
     }
     .page-title { font-size: 18px; font-weight: 700; flex: 1; }
 
     .toolbar {
-      display: flex; align-items: center; gap: 8px;
-      padding: 8px 16px 8px 24px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-2) var(--ou-space-6); border-bottom: 1px solid var(--border); flex-shrink: 0;
     }
     .search-input-wrap {
       position: relative; flex: 1; max-width: 340px;
     }
-    .search-input-wrap input { height: 34px; padding-left: 32px; width: 100%; }
+    .search-input-wrap input { height: 34px; padding-left: var(--ou-space-7); width: 100%; }
     .search-icon {
       position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
       width: 14px; height: 14px; color: var(--muted-fg); pointer-events: none;
     }
-    .toolbar-sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+    .toolbar-sep { width: 1px; height: var(--ou-space-5); background: var(--border); flex-shrink: 0; }
 
     /* ── Tree ────────────────────────────────────────────────────── */
     .tree-area { flex: 1; overflow-y: auto; }
@@ -40,7 +40,7 @@
       text-transform: uppercase; letter-spacing: .05em;
       position: sticky; top: 0; background: var(--bg); z-index: 1;
     }
-    .tree-header > div:first-child { padding-left: 24px; }
+    .tree-header > div:first-child { padding-left: var(--ou-space-6); }
 
     /* Root row — same grid as data rows so last column aligns with actions */
     .tree-root {
@@ -53,8 +53,8 @@
     .tree-root-label {
       grid-column: 1 / -1;
       display: flex; align-items: center; gap: 0;
-      padding: 7px 0 7px 24px;
-      font-size: 12px; font-weight: 700; color: var(--muted-fg);
+      padding: 7px 0 7px var(--ou-space-6);
+      font-size: var(--ou-space-3); font-weight: 700; color: var(--muted-fg);
       text-transform: uppercase; letter-spacing: .04em;
     }
 
@@ -69,18 +69,18 @@
     .tree-folder:hover { background: var(--accent); }
     .tree-folder-name {
       display: flex; align-items: center; gap: 0;
-      padding: 9px 0 9px 24px; font-size: 13px; font-weight: 600; color: var(--fg);
+      padding: 9px 0 9px var(--ou-space-6); font-size: 13px; font-weight: 600; color: var(--fg);
     }
     .chevron {
-      width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
+      width: var(--ou-space-5); height: var(--ou-space-5); display: inline-flex; align-items: center; justify-content: center;
       flex-shrink: 0; color: var(--muted-fg); transition: transform .15s;
     }
     .chevron.open { transform: rotate(90deg); }
     .folder-icon { flex-shrink: 0; color: var(--ou-warning-on-soft); margin-right: 6px; }
     .folder-count { font-size: 11px; font-weight: 400; color: var(--muted-fg); margin-left: 6px; }
     .tree-folder-actions {
-      display: flex; align-items: center; gap: 4px;
-      justify-content: flex-end; padding-right: 8px;
+      display: flex; align-items: center; gap: var(--ou-space-1);
+      justify-content: flex-end; padding-right: var(--ou-space-2);
       opacity: 0;
     }
     .tree-folder:hover .tree-folder-actions { opacity: 1; }
@@ -97,19 +97,19 @@
     .tree-test.selected { background: var(--ou-accent-soft); }
     .tree-test-name {
       display: flex; align-items: flex-start; gap: 0;
-      padding: 9px 0 9px 24px;
+      padding: 9px 0 9px var(--ou-space-6);
     }
     /* Indent: folder children get extra padding */
     .tree-test.indent-1 .tree-test-name { padding-left: 43px; }
     /* The indent guide line */
     .indent-line {
-      display: inline-block; width: 12px; flex-shrink: 0;
-      border-left: 1px solid var(--card-border); margin-left: 4px;
+      display: inline-block; width: var(--ou-space-3); flex-shrink: 0;
+      border-left: 1px solid var(--card-border); margin-left: var(--ou-space-1);
       align-self: stretch; margin-right: 6px; position: relative;
     }
     .indent-line::before {
       content: ''; position: absolute;
-      top: 50%; left: 0; width: 8px; height: 1px;
+      top: 50%; left: 0; width: var(--ou-space-2); height: 1px;
       background: var(--card-border);
     }
     .test-info { flex: 1; min-width: 0; }
@@ -117,7 +117,7 @@
     .test-sub { font-size: 11px; color: var(--muted-fg); margin-top: 2px; }
     .tree-test-actions {
       display: flex; align-items: center; gap: 3px;
-      justify-content: flex-end; padding-right: 8px;
+      justify-content: flex-end; padding-right: var(--ou-space-2);
       opacity: 0;
     }
     .tree-test:hover .tree-test-actions,
@@ -137,44 +137,44 @@
     .dropdown-menu {
       position: absolute; right: 0; top: 100%;
       background: var(--bg); border: 1px solid var(--border);
-      border-radius: var(--radius-md); box-shadow: 0 8px 24px color-mix(in srgb, black 12%, transparent);
-      z-index: 20; min-width: 210px; padding: 4px 0;
+      border-radius: var(--radius-md); box-shadow: 0 var(--ou-space-2) var(--ou-space-6) color-mix(in srgb, black 12%, transparent);
+      z-index: 20; min-width: 210px; padding: var(--ou-space-1) 0;
     }
     .dropdown-item {
-      display: flex; align-items: center; gap: 8px;
-      padding: 8px 14px; font-size: 13px; cursor: pointer; color: var(--fg);
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) 14px; font-size: 13px; cursor: pointer; color: var(--fg);
     }
     .dropdown-item:hover { background: var(--accent); }
     .dropdown-item.danger { color: var(--destructive); }
     .dropdown-item.danger:hover { background: var(--error-bg); }
-    .dropdown-sep { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+    .dropdown-sep { border: none; border-top: 1px solid var(--border); margin: var(--ou-space-1) 0; }
     .more-btn-wrap { position: relative; }
 
     /* ── Search results ──────────────────────────────────────────── */
     .search-banner {
-      display: flex; align-items: center; gap: 8px;
-      padding: 8px 24px; background: var(--info-bg); border-bottom: 1px solid var(--info-border);
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-6); background: var(--info-bg); border-bottom: 1px solid var(--info-border);
       font-size: 13px; color: var(--info-fg); flex-shrink: 0;
     }
     .search-clear {
-      margin-left: auto; font-size: 12px; color: var(--primary);
+      margin-left: auto; font-size: var(--ou-space-3); color: var(--primary);
       background: none; border: none; cursor: pointer; padding: 0; font-family: inherit;
       text-decoration: underline;
     }
     /* Breadcrumb path shown in search results */
     .tree-test-path {
       font-size: 11px; color: var(--muted-fg); margin-top: 2px;
-      display: flex; align-items: center; gap: 4px;
+      display: flex; align-items: center; gap: var(--ou-space-1);
     }
     .path-sep { color: var(--card-border); }
 
     /* ── Empty state ─────────────────────────────────────────────── */
     .empty-tree {
       display: flex; flex-direction: column; align-items: center;
-      justify-content: center; padding: 60px 24px; text-align: center;
+      justify-content: center; padding: 60px var(--ou-space-6); text-align: center;
     }
     .empty-icon {
-      width: 48px; height: 48px; border-radius: var(--radius);
+      width: var(--ou-space-9); height: var(--ou-space-9); border-radius: var(--radius);
       border: 1px solid var(--card-border); background: var(--accent);
       display: flex; align-items: center; justify-content: center;
       color: var(--muted-fg); margin-bottom: 14px;
@@ -225,24 +225,24 @@
       overflow-y: auto; background: var(--bg);
     }
     .preview-header {
-      padding: 14px 16px 10px;
+      padding: 14px var(--ou-space-4) 10px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
     .preview-name {
       font-size: 13px; font-weight: 600; line-height: 1.4;
-      margin-bottom: 8px;
+      margin-bottom: var(--ou-space-2);
     }
     .preview-badges { display: flex; flex-wrap: wrap; gap: 5px; }
-    .preview-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 18px; }
+    .preview-body { padding: 14px var(--ou-space-4); display: flex; flex-direction: column; gap: 18px; }
     .preview-section-title {
       font-size: 10px; font-weight: 700; color: var(--muted-fg);
       text-transform: uppercase; letter-spacing: .06em;
-      margin-bottom: 8px;
+      margin-bottom: var(--ou-space-2);
     }
     .preview-topic-row {
       display: flex; align-items: baseline; gap: 6px;
-      font-size: 12px; padding: 3px 0;
+      font-size: var(--ou-space-3); padding: 3px 0;
     }
     .preview-topic-name {
       flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -251,22 +251,22 @@
       flex: none; color: var(--card-border);
       overflow: hidden; white-space: nowrap; font-size: 10px;
     }
-    .preview-topic-count { flex-shrink: 0; font-size: 12px; color: var(--muted-fg); white-space: nowrap; }
+    .preview-topic-count { flex-shrink: 0; font-size: var(--ou-space-3); color: var(--muted-fg); white-space: nowrap; }
     .preview-topic-total {
       font-size: 11px; color: var(--muted-fg); margin-top: 6px;
       padding-top: 6px; border-top: 1px solid var(--border);
     }
     .preview-kv-row {
       display: flex; justify-content: space-between; align-items: baseline;
-      font-size: 12px; padding: 3px 0;
+      font-size: var(--ou-space-3); padding: 3px 0;
     }
     .preview-kv-key { color: var(--muted-fg); }
     .preview-kv-val { font-weight: 500; text-align: right; }
     .preview-empty {
       flex: 1; display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      padding: 32px 16px; text-align: center;
-      font-size: 12px; color: var(--muted-fg); gap: 8px;
+      padding: var(--ou-space-7) var(--ou-space-4); text-align: center;
+      font-size: var(--ou-space-3); color: var(--muted-fg); gap: var(--ou-space-2);
     }
     /* Toggle button — icon only, sits at the RIGHT end of tree-root row */
     .preview-toggle-btn {
@@ -286,12 +286,12 @@
       position: absolute; top: calc(100% + 6px); bottom: auto; right: 0; left: auto; transform: none;
       background: var(--ou-neutral-900); color: var(--ou-neutral-0);
       font-size: 11px; white-space: nowrap; padding: 3px 7px;
-      border-radius: 4px; pointer-events: none; z-index: 30;
+      border-radius: var(--ou-space-1); pointer-events: none; z-index: 30;
     }
     .preview-toggle-btn[data-tooltip]:hover::before {
       content: ''; position: absolute; top: calc(100% + 2px); bottom: auto;
       right: 7px; left: auto; transform: none;
-      border: 4px solid transparent; border-bottom-color: var(--ou-neutral-900);
+      border: var(--ou-space-1) solid transparent; border-bottom-color: var(--ou-neutral-900);
       pointer-events: none; z-index: 30;
     }
 
@@ -302,19 +302,19 @@
       position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
       background: var(--ou-neutral-900); color: var(--ou-neutral-0);
       font-size: 11px; white-space: nowrap; padding: 3px 7px;
-      border-radius: 4px; pointer-events: none; z-index: 30;
+      border-radius: var(--ou-space-1); pointer-events: none; z-index: 30;
     }
     .action-btn[title]:hover::before {
       content: ''; position: absolute; bottom: calc(100% + 2px);
       left: 50%; transform: translateX(-50%);
-      border: 4px solid transparent; border-top-color: var(--ou-neutral-900);
+      border: var(--ou-space-1) solid transparent; border-top-color: var(--ou-neutral-900);
       pointer-events: none; z-index: 30;
     }
 
     /* ── Mode badge (Стандарт / Адаптив) ─────────────────────────── */
     .mode-badge {
-      display: inline-flex; align-items: center; gap: 4px;
-      font-size: 11px; font-weight: 500; padding: 2px 8px;
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      font-size: 11px; font-weight: 500; padding: 2px var(--ou-space-2);
       border-radius: 10px; white-space: nowrap;
     }
     .mode-badge.standard {
@@ -328,7 +328,7 @@
     .flow-chip {
       display: inline-flex; align-items: center; gap: 5px;
       font-size: 11px; font-weight: 500; color: var(--fg);
-      padding: 2px 8px; border-radius: var(--radius-sm);
+      padding: 2px var(--ou-space-2); border-radius: var(--radius-sm);
       background: var(--accent); border: 1px solid var(--card-border);
       white-space: nowrap; cursor: default; position: relative;
     }
@@ -343,15 +343,15 @@
     }
     .modal-dialog {
       background: var(--bg); border: 1px solid var(--border);
-      border-radius: var(--radius-md); box-shadow: 0 16px 48px color-mix(in srgb, black 22%, transparent);
-      width: 420px; padding: 24px; position: relative;
+      border-radius: var(--radius-md); box-shadow: 0 var(--ou-space-4) var(--ou-space-9) color-mix(in srgb, black 22%, transparent);
+      width: 420px; padding: var(--ou-space-6); position: relative;
     }
     .modal-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
-    .modal-desc { font-size: 12px; color: var(--muted-fg); margin-bottom: 14px; line-height: 1.5; }
+    .modal-desc { font-size: var(--ou-space-3); color: var(--muted-fg); margin-bottom: 14px; line-height: 1.5; }
     .modal-option {
-      display: flex; gap: 10px; padding: 11px 12px;
+      display: flex; gap: 10px; padding: 11px var(--ou-space-3);
       border: 1.5px solid var(--border); border-radius: var(--radius-sm);
-      cursor: pointer; margin-bottom: 8px; align-items: flex-start;
+      cursor: pointer; margin-bottom: var(--ou-space-2); align-items: flex-start;
     }
     .modal-option.selected { border-color: var(--primary); background: var(--ou-accent-soft); }
     .modal-option-icon { flex-shrink: 0; margin-top: 1px; color: var(--muted-fg); }
@@ -359,9 +359,9 @@
     .modal-option-danger.selected .modal-option-icon { color: var(--destructive); }
     .modal-option-danger.selected { border-color: var(--ou-error-default); background: var(--error-bg); }
     .modal-option-title { font-size: 13px; font-weight: 600; }
-    .modal-option-sub { font-size: 12px; color: var(--muted-fg); margin-top: 2px; line-height: 1.4; }
+    .modal-option-sub { font-size: var(--ou-space-3); color: var(--muted-fg); margin-top: 2px; line-height: 1.4; }
     .modal-inset {
-      margin-top: 10px; padding: 10px 12px;
+      margin-top: 10px; padding: 10px var(--ou-space-3);
       background: var(--bg); border-radius: var(--radius-sm);
       border: 1px solid var(--card-border);
     }
@@ -370,12 +370,12 @@
     .modal-inset input[type="text"]::placeholder { color: var(--card-border); font-style: italic; }
     .modal-warn {
       display: flex; align-items: flex-start; gap: 7px;
-      font-size: 12px; color: var(--destructive); line-height: 1.45;
-      margin-top: 12px; padding: 9px 11px;
+      font-size: var(--ou-space-3); color: var(--destructive); line-height: 1.45;
+      margin-top: var(--ou-space-3); padding: 9px 11px;
       background: var(--error-bg); border: 1px solid var(--ou-error-default);
       border-radius: var(--radius-sm);
     }
-    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+    .modal-actions { display: flex; gap: var(--ou-space-2); justify-content: flex-end; margin-top: var(--ou-space-5); }
     .btn-destructive { background: var(--destructive); color: white; border-color: transparent; }
     .btn-destructive:hover { opacity: .9; }
     .btn-destructive:disabled { opacity: .4; cursor: not-allowed; }
@@ -383,8 +383,8 @@
     /* Lazy-load sentinel — appears when more rows are being fetched */
     .lazy-sentinel {
       display: flex; align-items: center; justify-content: center;
-      gap: 8px; padding: 14px 24px;
-      font-size: 12px; color: var(--muted-fg);
+      gap: var(--ou-space-2); padding: 14px var(--ou-space-6);
+      font-size: var(--ou-space-3); color: var(--muted-fg);
     }
     .lazy-sentinel.hidden { visibility: hidden; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -441,7 +441,7 @@
     }
     .wf-nav-sep {
       width: 1px;
-      height: 20px;
+      height: var(--ou-space-5);
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-2);
     }
@@ -618,7 +618,7 @@
         <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
         <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск теста по названию"></div></div>
       </div>
-      <div style="font-size:12px;color:var(--muted-fg);margin-left:4px;">
+      <div style="font-size:var(--ou-space-3);color:var(--muted-fg);margin-left:var(--ou-space-1);">
         Фильтры &mdash; отдельный PRD
       </div>
     </div>
@@ -889,7 +889,7 @@
       <!-- Result 1 -->
       <div class="tree-test" role="listitem"
            aria-label="Основы информационной безопасности, папка Информационная безопасность">
-        <div class="tree-test-name" style="padding-left:24px;">
+        <div class="tree-test-name" style="padding-left:var(--ou-space-6);">
           <div class="test-info">
             <div class="test-name">Основы информационной безопасности</div>
             <div class="tree-test-path">
@@ -918,7 +918,7 @@
       <!-- Result 2 -->
       <div class="tree-test" role="listitem"
            aria-label="GDPR для разработчиков, папка Информационная безопасность">
-        <div class="tree-test-name" style="padding-left:24px;">
+        <div class="tree-test-name" style="padding-left:var(--ou-space-6);">
           <div class="test-info">
             <div class="test-name">GDPR для разработчиков</div>
             <div class="tree-test-path">
@@ -1145,7 +1145,7 @@
         <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
         <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию..." aria-label="Поиск"></div></div>
       </div>
-      <div style="font-size:12px;color:var(--muted-fg);margin-left:4px;">Фильтры &mdash; отдельный PRD</div>
+      <div style="font-size:var(--ou-space-3);color:var(--muted-fg);margin-left:var(--ou-space-1);">Фильтры &mdash; отдельный PRD</div>
     </div>
 
     <div class="content-split">
@@ -1412,40 +1412,40 @@
     <div class="toolbar">
       <div class="ou-skel" style="width:300px;height:34px;border-radius:var(--radius-sm);"></div>
     </div>
-    <div style="padding:16px 24px;">
+    <div style="padding:var(--ou-space-4) var(--ou-space-6);">
       <!-- Root skeleton -->
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:var(--ou-space-2) 0;border-bottom:1px solid var(--border);">
         <div class="ou-skel" style="width:14px;height:14px;border-radius:2px;"></div>
         <div class="ou-skel" style="width:120px;height:13px;"></div>
       </div>
       <!-- Folder skeleton -->
-      <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
-        <div class="ou-skel" style="width:12px;height:12px;border-radius:2px;"></div>
+      <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:10px 0;border-bottom:1px solid var(--border);">
+        <div class="ou-skel" style="width:var(--ou-space-3);height:var(--ou-space-3);border-radius:2px;"></div>
         <div class="ou-skel" style="width:14px;height:14px;border-radius:2px;"></div>
         <div class="ou-skel" style="width:200px;height:13px;"></div>
       </div>
       <!-- Test skeleton x2 (indented) -->
-      <div style="display:flex;align-items:center;gap:8px;padding:10px 0 10px 28px;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:10px 0 10px 28px;border-bottom:1px solid var(--border);">
         <div class="ou-skel" style="width:180px;height:13px;margin-right:auto;"></div>
-        <div class="ou-skel" style="width:70px;height:20px;border-radius:10px;"></div>
+        <div class="ou-skel" style="width:70px;height:var(--ou-space-5);border-radius:10px;"></div>
         <div class="ou-skel" style="width:28px;height:13px;"></div>
         <div class="ou-skel" style="width:28px;height:13px;"></div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;padding:10px 0 10px 28px;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:10px 0 10px 28px;border-bottom:1px solid var(--border);">
         <div class="ou-skel" style="width:140px;height:13px;margin-right:auto;"></div>
-        <div class="ou-skel" style="width:70px;height:20px;border-radius:10px;"></div>
+        <div class="ou-skel" style="width:70px;height:var(--ou-space-5);border-radius:10px;"></div>
         <div class="ou-skel" style="width:28px;height:13px;"></div>
         <div class="ou-skel" style="width:28px;height:13px;"></div>
       </div>
       <!-- Folder 2 skeleton -->
-      <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border);">
-        <div class="ou-skel" style="width:12px;height:12px;border-radius:2px;"></div>
+      <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:10px 0;border-bottom:1px solid var(--border);">
+        <div class="ou-skel" style="width:var(--ou-space-3);height:var(--ou-space-3);border-radius:2px;"></div>
         <div class="ou-skel" style="width:14px;height:14px;border-radius:2px;"></div>
-        <div class="ou-skel" style="width:80px;height:13px;"></div>
+        <div class="ou-skel" style="width:var(--ou-space-11);height:13px;"></div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;padding:10px 0 10px 28px;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:10px 0 10px 28px;border-bottom:1px solid var(--border);">
         <div class="ou-skel" style="width:160px;height:13px;margin-right:auto;"></div>
-        <div class="ou-skel" style="width:70px;height:20px;border-radius:10px;"></div>
+        <div class="ou-skel" style="width:70px;height:var(--ou-space-5);border-radius:10px;"></div>
         <div class="ou-skel" style="width:28px;height:13px;"></div>
         <div class="ou-skel" style="width:28px;height:13px;"></div>
       </div>
@@ -1487,10 +1487,10 @@
           <svg width="22" height="22"><use href="#i-clipboard"/></svg>
         </div>
         <div style="font-size:14px;font-weight:600;margin-bottom:6px;">Тестов пока нет</div>
-        <div style="font-size:13px;color:var(--muted-fg);max-width:280px;line-height:1.6;margin-bottom:16px;">
+        <div style="font-size:13px;color:var(--muted-fg);max-width:280px;line-height:1.6;margin-bottom:var(--ou-space-4);">
           Создайте первый тест или сначала добавьте папку для организации.
         </div>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:var(--ou-space-2);">
           <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-folder-plus"/></svg> Создать папку</button>
           <button class="ou-btn ou-btn--primary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-plus"/></svg> Новый тест</button>
         </div>
