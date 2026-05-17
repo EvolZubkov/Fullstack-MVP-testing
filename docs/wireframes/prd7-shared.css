@@ -106,22 +106,6 @@ body {
 .shell.active { display: flex; }
 .shell--column { flex-direction: column; align-items: center; }
 
-/* ── Tabs (editor-tabs in main area) ──────────────────────────────────── */
-.editor-tabs {
-  border-bottom: 1px solid var(--ou-border-default); padding: 0 var(--ou-space-5);
-  flex-shrink: 0; display: flex; align-items: stretch;
-}
-.etab {
-  padding: var(--ou-space-3) var(--ou-space-4); font: var(--ou-text-body-s);
-  color: var(--ou-fg-muted); cursor: pointer;
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
-  display: inline-flex; align-items: center; gap: var(--ou-space-2);
-}
-.etab:hover { color: var(--ou-fg-default); }
-.etab.active {
-  color: var(--ou-accent-default); border-bottom-color: var(--ou-accent-default); font-weight: 500;
-}
-
 /* ── Content scroll area ──────────────────────────────────────────────── */
 .content { flex: 1; overflow-y: auto; padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-9); }
 
