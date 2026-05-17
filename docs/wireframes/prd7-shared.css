@@ -226,15 +226,14 @@ body {
 .empty-desc  { font: var(--ou-text-body-s); margin-bottom: var(--ou-space-4); }
 .sep { border: none; border-top: 1px solid var(--ou-border-default); margin: var(--ou-space-6) 0; }
 
-/* ── Forms ────────────────────────────────────────────────────────────── */
-.form-group { margin-bottom: var(--ou-space-5); }
-.form-label { font: var(--ou-text-body-s); font-weight: 500; display: block; margin-bottom: var(--ou-space-1); }
-.form-label .req { color: var(--ou-error-default); margin-left: 2px; }
-.form-hint  { font: var(--ou-text-body-xs); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
-.form-error {
-  font: var(--ou-text-body-s); color: var(--ou-error-default); margin-top: var(--ou-space-1);
-  display: flex; align-items: center; gap: var(--ou-space-1);
-}
+/* ── Forms ──────────────────────────────────────────────────────────────
+ * Stage 3.3a: legacy .form-* class rules removed (HTML migrated to
+ * ou-formfield/__lbl/__desc/__msg).
+ * Stage 3.3b/3.3c (pending): replace direct input/select/textarea/radio/
+ * toggle styling with ou-field, ou-textarea, ou-select, ou-radio, ou-switch
+ * structural wraps. Until then, base input/select/textarea/radio/toggle
+ * rules below remain as WIREFRAME-ONLY scaffolding.
+ * ────────────────────────────────────────────────────────────────────── */
 input[type=text], input[type=number], input[type=email],
 input[type=password], select, textarea {
   width: 100%; height: 36px; padding: 0 var(--ou-space-3);

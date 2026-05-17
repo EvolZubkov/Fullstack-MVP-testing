@@ -327,66 +327,66 @@
           <div style="font-size:12px;color:var(--muted-fg);margin-bottom:14px;padding:8px 10px;background:var(--accent);border-radius:var(--radius-sm);border:1px solid var(--card-border);">Набор параметров определяется разработчиком шаблона «Корпоративный».</div>
 
           <div class="subsection-label">Брендирование</div>
-          <div class="form-group">
-            <label class="form-label">Основной цвет бренда <span class="req">*</span><span class="param-type">color</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Основной цвет бренда <span class="ou-formfield__lbl-req">*</span><span class="param-type">color</span></label>
             <div class="color-row"><div class="color-swatch" style="background:#0066cc;"></div><input type="text" value="#0066CC" style="max-width:120px;"></div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Дополнительный цвет<span class="param-type">color</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Дополнительный цвет<span class="param-type">color</span></label>
             <div class="color-row"><div class="color-swatch" style="background:#ff6600;"></div><input type="text" value="#FF6600" style="max-width:120px;"></div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Логотип<span class="param-type">file</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Логотип<span class="param-type">file</span></label>
             <div class="file-row"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Загрузить изображение</button><span class="file-chip">logo.png <span class="rm">&#x2715;</span></span></div>
-            <div class="form-hint">PNG, SVG, до 512 КБ</div>
+            <div class="ou-formfield__desc">PNG, SVG, до 512 КБ</div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Шрифт заголовков<span class="param-type">file</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Шрифт заголовков<span class="param-type">file</span></label>
             <div class="file-row"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Загрузить шрифт</button><span class="file-chip">Inter.woff2 <span class="rm">&#x2715;</span></span></div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Фоновое изображение<span class="param-type">asset</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Фоновое изображение<span class="param-type">asset</span></label>
             <div class="file-row"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-palette"/></svg> Выбрать из медиатеки</button><span class="file-chip">bg-corporate.jpg <span class="rm">&#x2715;</span></span></div>
-            <div class="form-hint">Выбирается из загруженных медиафайлов теста</div>
+            <div class="ou-formfield__desc">Выбирается из загруженных медиафайлов теста</div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Ссылка на регламент<span class="param-type">url</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Ссылка на регламент<span class="param-type">url</span></label>
             <div class="url-field-wrap"><input type="text" value="https://corp.example.com/policy" placeholder="https://"><button class="ou-btn ou-btn--secondary ou-btn--s url-open-btn" type="button"><svg width="13" height="13"><use href="#i-link"/></svg></button></div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Материалы для скачивания<span class="param-type">downloadLink</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Материалы для скачивания<span class="param-type">downloadLink</span></label>
             <div class="file-row"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-download"/></svg> Добавить файл</button><span class="file-chip">policy-v3.pdf <span class="rm">&#x2715;</span></span></div>
-            <div class="form-hint">Файл будет доступен обучающемуся на странице теста</div>
+            <div class="ou-formfield__desc">Файл будет доступен обучающемуся на странице теста</div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Теги шаблона<span class="param-type">multiselect</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Теги шаблона<span class="param-type">multiselect</span></label>
             <div class="multiselect-wrap"><span class="multiselect-chip">Корпоративный <span class="rm">&#x2715;</span></span><span class="multiselect-chip">Брендинг <span class="rm">&#x2715;</span></span><input class="multiselect-input" type="text" placeholder="Добавить…"></div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Подпись в подвале<span class="param-type">text</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Подпись в подвале<span class="param-type">text</span></label>
             <input type="text" value="© 2024 Корпоративный университет">
           </div>
 
           <div class="subsection-label" style="margin-top:20px;">Макет</div>
-          <div class="form-group">
-            <label class="form-label">Позиция боковой панели</label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Позиция боковой панели</label>
             <div class="radio-row">
               <label class="radio-opt"><input type="radio" name="sp-main" checked> Слева</label>
               <label class="radio-opt"><input type="radio" name="sp-main"> Справа</label>
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Максимальная ширина контента (px)<span class="param-type">number</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Максимальная ширина контента (px)<span class="param-type">number</span></label>
             <input type="number" value="1200" style="max-width:120px;">
           </div>
 
           <div class="subsection-label" style="margin-top:20px;">Прогресс и шапка</div>
-          <div class="form-group">
-            <label class="form-label">Режим прогресса<span class="param-type">select</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Режим прогресса<span class="param-type">select</span></label>
             <select style="max-width:220px;"><option selected>Вопросы</option><option>Страницы</option><option>Скрыть</option></select>
           </div>
-          <div class="form-group">
-            <div class="toggle-row"><div class="toggle on"></div><label class="form-label" style="margin:0;">Показывать шапку</label></div>
+          <div class="ou-formfield">
+            <div class="toggle-row"><div class="toggle on"></div><label class="ou-formfield__lbl" style="margin:0;">Показывать шапку</label></div>
           </div>
         </div>
       </div>
@@ -454,12 +454,12 @@
           <div class="section-label">Параметры</div>
           <div style="font-size:12px;color:var(--muted-fg);margin-bottom:14px;padding:8px 10px;background:var(--accent);border-radius:var(--radius-sm);border:1px solid var(--card-border);">Набор параметров определяется разработчиком шаблона «Стандартный».</div>
           <div class="subsection-label">Прогресс и навигация</div>
-          <div class="form-group">
-            <label class="form-label">Режим прогресса<span class="param-type">select</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Режим прогресса<span class="param-type">select</span></label>
             <select style="max-width:220px;"><option selected>Вопросы</option><option>Страницы</option><option>Скрыть</option></select>
           </div>
-          <div class="form-group">
-            <div class="toggle-row"><div class="toggle on"></div><label class="form-label" style="margin:0;">Показывать номер вопроса</label></div>
+          <div class="ou-formfield">
+            <div class="toggle-row"><div class="toggle on"></div><label class="ou-formfield__lbl" style="margin:0;">Показывать номер вопроса</label></div>
           </div>
         </div>
       </div>
@@ -615,16 +615,16 @@
         <div class="section">
           <div class="section-label">Параметры</div>
           <div class="subsection-label">Брендирование</div>
-          <div class="form-group">
-            <label class="form-label">Основной цвет бренда <span class="req">*</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Основной цвет бренда <span class="ou-formfield__lbl-req">*</span></label>
             <div class="color-row">
               <div class="color-swatch" style="background:#0099ee;border:2px solid var(--primary);"></div>
               <input type="text" value="#0099EE" style="max-width:120px;border-color:var(--primary);">
               <span class="ou-tag ou-tag--neutral ou-tag--s">изменено</span>
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Подпись в подвале<span class="param-type">text</span></label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Подпись в подвале<span class="param-type">text</span></label>
             <input type="text" value="© 2025 Корпоративный университет" style="border-color:var(--primary);">
             <span class="ou-tag ou-tag--neutral ou-tag--s" style="margin-top:4px;display:inline-block;">изменено</span>
           </div>
@@ -733,20 +733,20 @@
           <div class="section-label">Параметры</div>
           <div class="subsection-label">Брендирование</div>
           <!-- Field with error -->
-          <div class="form-group" id="field-color-brand">
-            <label class="form-label">Основной цвет бренда <span class="req">*</span></label>
+          <div class="ou-formfield" id="field-color-brand">
+            <label class="ou-formfield__lbl">Основной цвет бренда <span class="ou-formfield__lbl-req">*</span></label>
             <div class="color-row">
               <div class="color-swatch" style="background:#zzzzzz;border:2px solid var(--destructive);"></div>
               <input type="text" value="#ZZZZZZ" aria-invalid="true" aria-describedby="color-err"
                      style="max-width:120px;border-color:var(--destructive);">
             </div>
-            <div class="form-error" id="color-err">
+            <div class="ou-formfield__msg ou-formfield__msg--error" id="color-err">
               <svg width="12" height="12"><use href="#i-warn"/></svg>
               Недопустимый формат цвета. Введите значение в формате #RRGGBB.
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Дополнительный цвет</label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl">Дополнительный цвет</label>
             <div class="color-row"><div class="color-swatch" style="background:#ff6600;"></div><input type="text" value="#FF6600" style="max-width:120px;" aria-label="Дополнительный цвет"></div>
           </div>
         </div>
@@ -812,15 +812,15 @@
         <div class="section">
           <div class="section-label">Параметры</div>
           <div class="subsection-label">Брендирование</div>
-          <div class="form-group">
-            <label class="form-label" style="color:var(--muted-fg);">Основной цвет бренда</label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" style="color:var(--muted-fg);">Основной цвет бренда</label>
             <div class="color-row">
               <div class="color-swatch" style="background:#0066cc;opacity:0.6;cursor:not-allowed;"></div>
               <input type="text" value="#0066CC" disabled aria-label="Основной цвет бренда (только чтение)" style="max-width:120px;">
             </div>
           </div>
-          <div class="form-group">
-            <label class="form-label" style="color:var(--muted-fg);">Логотип</label>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" style="color:var(--muted-fg);">Логотип</label>
             <div class="file-row" style="opacity:0.6;pointer-events:none;"><button class="ou-btn ou-btn--secondary ou-btn--s" disabled>Загрузить</button><span class="file-chip">logo.png</span></div>
           </div>
         </div>
@@ -985,8 +985,8 @@
           <div class="section-label">Параметры</div>
           <div class="subsection-label">Брендирование</div>
           <!-- Field with open color picker -->
-          <div class="form-group" style="position:relative;">
-            <label class="form-label">Основной цвет бренда <span class="req">*</span></label>
+          <div class="ou-formfield" style="position:relative;">
+            <label class="ou-formfield__lbl">Основной цвет бренда <span class="ou-formfield__lbl-req">*</span></label>
             <div class="color-row">
               <div class="color-swatch" style="background:#0099ee;box-shadow:0 0 0 2px var(--primary);"></div>
               <input type="text" value="#0099EE" aria-label="Основной цвет бренда" style="max-width:120px;border-color:var(--primary);">

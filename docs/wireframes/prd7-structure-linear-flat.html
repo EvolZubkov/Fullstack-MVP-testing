@@ -586,9 +586,9 @@
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="form-group"><label class="form-label" for="lf-new-title">Название страницы</label><input id="lf-new-title" class="form-control" type="text" placeholder="Введите название…"></div>
-        <div class="form-group"><label class="form-label" for="lf-new-zone">Зона</label><select id="lf-new-zone" class="form-control"><option selected>Перед тестом</option><option>После теста</option></select></div>
-        <div class="form-group"><label class="form-label" for="lf-new-pos">Позиция</label><select id="lf-new-pos" class="form-control"><option>В начале зоны</option><option selected>После «Правила прохождения теста»</option><option>В конце зоны</option></select></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-new-title">Название страницы</label><input id="lf-new-title" class="form-control" type="text" placeholder="Введите название…"></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-new-zone">Зона</label><select id="lf-new-zone" class="form-control"><option selected>Перед тестом</option><option>После теста</option></select></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-new-pos">Позиция</label><select id="lf-new-pos" class="form-control"><option>В начале зоны</option><option selected>После «Правила прохождения теста»</option><option>В конце зоны</option></select></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta"></div>
@@ -613,10 +613,10 @@
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="form-group"><label class="form-label" for="lf-ei-title">Заголовок</label><input id="lf-ei-title" class="form-control" type="text" value="Добро пожаловать в тест"></div>
-        <div class="form-group"><label class="form-label" for="lf-ei-body">Текст приветствия</label><textarea id="lf-ei-body" class="form-control" rows="4">Этот тест проверяет базовые знания в области информационной безопасности.</textarea></div>
-        <div class="form-group"><label class="form-label" for="lf-ei-btn">Текст кнопки «Начать»</label><input id="lf-ei-btn" class="form-control" type="text" value="Начать тест"></div>
-        <div class="form-group"><label class="form-label">Автопереход</label><div class="toggle-row"><label class="toggle"><input type="checkbox"><span class="toggle-thumb"></span></label><span class="form-hint" style="margin:0;">Отключён</span></div></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-ei-title">Заголовок</label><input id="lf-ei-title" class="form-control" type="text" value="Добро пожаловать в тест"></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-ei-body">Текст приветствия</label><textarea id="lf-ei-body" class="form-control" rows="4">Этот тест проверяет базовые знания в области информационной безопасности.</textarea></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-ei-btn">Текст кнопки «Начать»</label><input id="lf-ei-btn" class="form-control" type="text" value="Начать тест"></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl">Автопереход</label><div class="toggle-row"><label class="toggle"><input type="checkbox"><span class="toggle-thumb"></span></label><span class="ou-formfield__desc" style="margin:0;">Отключён</span></div></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta">Есть несохранённые изменения.</div>
@@ -641,13 +641,13 @@
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="form-group"><label class="form-label" for="lf-einfo-title">Название страницы</label><input id="lf-einfo-title" class="form-control" type="text" value="Правила прохождения теста"></div>
-        <div class="form-group"><label class="form-label" for="lf-einfo-content">Содержимое (Markdown)</label><textarea id="lf-einfo-content" class="form-control" rows="8" style="font-family:monospace;font-size:12px;">## Правила
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-einfo-title">Название страницы</label><input id="lf-einfo-title" class="form-control" type="text" value="Правила прохождения теста"></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-einfo-content">Содержимое (Markdown)</label><textarea id="lf-einfo-content" class="form-control" rows="8" style="font-family:monospace;font-size:12px;">## Правила
 
 - Время: 30 минут
 - Одна попытка
 - Проходной балл: 70%</textarea></div>
-        <div class="form-group"><label class="form-label" for="lf-einfo-next">Текст кнопки «Далее»</label><input id="lf-einfo-next" class="form-control" type="text" value="Продолжить"></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-einfo-next">Текст кнопки «Далее»</label><input id="lf-einfo-next" class="form-control" type="text" value="Продолжить"></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta">Есть несохранённые изменения.</div>
@@ -672,10 +672,10 @@
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="form-group"><label class="form-label" for="lf-esum-title">Заголовок</label><input id="lf-esum-title" class="form-control" type="text" value="Тест завершён"></div>
-        <div class="form-group"><label class="form-label" for="lf-esum-pass">Текст при сдаче</label><textarea id="lf-esum-pass" class="form-control" rows="3">Поздравляем! Вы успешно прошли тест.</textarea></div>
-        <div class="form-group"><label class="form-label" for="lf-esum-fail">Текст при провале</label><textarea id="lf-esum-fail" class="form-control" rows="3">Результат ниже проходного балла. Попробуйте ещё раз.</textarea></div>
-        <div class="form-group"><label class="form-label">Показывать счёт</label><div class="toggle-row"><label class="toggle"><input type="checkbox" checked><span class="toggle-thumb"></span></label><span class="form-hint" style="margin:0;">Включено</span></div></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-esum-title">Заголовок</label><input id="lf-esum-title" class="form-control" type="text" value="Тест завершён"></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-esum-pass">Текст при сдаче</label><textarea id="lf-esum-pass" class="form-control" rows="3">Поздравляем! Вы успешно прошли тест.</textarea></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-esum-fail">Текст при провале</label><textarea id="lf-esum-fail" class="form-control" rows="3">Результат ниже проходного балла. Попробуйте ещё раз.</textarea></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl">Показывать счёт</label><div class="toggle-row"><label class="toggle"><input type="checkbox" checked><span class="toggle-thumb"></span></label><span class="ou-formfield__desc" style="margin:0;">Включено</span></div></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta">Изменений нет.</div>
@@ -700,8 +700,8 @@
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="form-group"><label class="form-label" for="lf-ehtml-title">Название страницы</label><input id="lf-ehtml-title" class="form-control" type="text" value="Специальный экран"></div>
-        <div class="form-group"><label class="form-label" for="lf-ehtml-code">HTML-содержимое</label><textarea id="lf-ehtml-code" class="form-control" rows="10" style="font-family:monospace;font-size:12px;">&lt;div&gt;&lt;h2&gt;Важно&lt;/h2&gt;&lt;p&gt;Текст.&lt;/p&gt;&lt;/div&gt;</textarea><div class="form-hint">Скрипты запрещены.</div></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-ehtml-title">Название страницы</label><input id="lf-ehtml-title" class="form-control" type="text" value="Специальный экран"></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-ehtml-code">HTML-содержимое</label><textarea id="lf-ehtml-code" class="form-control" rows="10" style="font-family:monospace;font-size:12px;">&lt;div&gt;&lt;h2&gt;Важно&lt;/h2&gt;&lt;p&gt;Текст.&lt;/p&gt;&lt;/div&gt;</textarea><div class="ou-formfield__desc">Скрипты запрещены.</div></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta">Есть несохранённые изменения.</div>
@@ -758,8 +758,8 @@
         <div style="display:flex;gap:6px;margin-left:auto;flex-shrink:0;"><button class="ou-btn ou-btn--ghost ou-btn--s" type="button">Отменить</button><button class="ou-btn ou-btn--destructive ou-btn--s" type="button">Закрыть без сохранения</button></div>
       </div>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="form-group"><label class="form-label" for="lf-df-title">Название страницы</label><input id="lf-df-title" class="form-control" type="text" value="Правила (изменено)"></div>
-        <div class="form-group"><label class="form-label" for="lf-df-content">Содержимое</label><textarea id="lf-df-content" class="form-control" rows="5" style="font-family:monospace;font-size:12px;">## Изменённые правила...</textarea></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-df-title">Название страницы</label><input id="lf-df-title" class="form-control" type="text" value="Правила (изменено)"></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-df-content">Содержимое</label><textarea id="lf-df-content" class="form-control" rows="5" style="font-family:monospace;font-size:12px;">## Изменённые правила...</textarea></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta" style="color:var(--warn-fg);">Несохранённые изменения</div>
@@ -785,8 +785,8 @@
       </header>
       <div class="ou-drawer__body" tabindex="0">
         <div class="banner banner-error" role="alert"><svg width="14" height="14"><use href="#i-warn"/></svg><span>Исправьте ошибки перед сохранением.</span></div>
-        <div class="form-group"><label class="form-label" for="lf-val-title">Название страницы</label><input id="lf-val-title" class="form-control form-error" type="text" value="" placeholder="Введите название…" aria-invalid="true" aria-describedby="lf-val-title-err"><div id="lf-val-title-err" class="form-error-msg" role="alert">Название обязательно.</div></div>
-        <div class="form-group"><label class="form-label" for="lf-val-content">Содержимое</label><textarea id="lf-val-content" class="form-control form-error" rows="5" aria-invalid="true" aria-describedby="lf-val-content-err"></textarea><div id="lf-val-content-err" class="form-error-msg" role="alert">Содержимое не может быть пустым.</div></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-val-title">Название страницы</label><input id="lf-val-title" class="form-control form-error" type="text" value="" placeholder="Введите название…" aria-invalid="true" aria-describedby="lf-val-title-err"><div id="lf-val-title-err" class="form-error-msg" role="alert">Название обязательно.</div></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-val-content">Содержимое</label><textarea id="lf-val-content" class="form-control form-error" rows="5" aria-invalid="true" aria-describedby="lf-val-content-err"></textarea><div id="lf-val-content-err" class="form-error-msg" role="alert">Содержимое не может быть пустым.</div></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta" style="color:var(--error);">2 ошибки</div>
