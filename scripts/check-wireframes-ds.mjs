@@ -79,6 +79,23 @@ const legacyClassTokens = [
   // DS does not provide an uppercase-caption label primitive; the wireframe
   // markup keeps these classes as a documented gap (see
   // docs/wireframes-ds-audit.md). Re-add them once DS exposes an equivalent.
+
+  // ── wf-* product controls that masquerade as wireframe infrastructure ────
+  // The wf- prefix is reserved for wireframe meta (state switcher, notes,
+  // DS Mapping). Any control class below is product UI in disguise and must
+  // migrate to ou-field / ou-textarea / ou-select. Listing them here makes
+  // the gate fail until the migration completes (stage 3.3d).
+  'wf-text-input', 'wf-textarea', 'wf-code-textarea',
+  'wf-select',
+  'wf-num-input', 'wf-level-name-input',
+  'wf-failure-input', 'wf-json-textarea',
+  'wf-link-input',
+  'wf-format-select', 'wf-flow-select', 'wf-type-select',
+  'wf-field-input',
+  'wf-draw-count-input', 'draw-count-input',
+  'wf-tbl-input-s', 'wf-tbl-input-m', 'wf-tbl-input-l', 'wf-tbl-input-num',
+  'wf-tbl-textarea', 'wf-tbl-select',
+  'wf-mob-input', 'wf-mob-settings-select', 'wf-mob-settings-selector',
 ];
 
 const rawValuePatterns = [

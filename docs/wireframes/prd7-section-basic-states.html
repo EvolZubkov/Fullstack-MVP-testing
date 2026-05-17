@@ -645,11 +645,10 @@
               <label class="wf-field-label" for="bs-empty-title">
                 Название<span class="wf-field-required" aria-hidden="true">*</span>
               </label>
-              <input id="bs-empty-title" type="text"
+              <div class="ou-field ou-field--m ou-field--error"><div class="ou-field__box"><input class="ou-field__input" id="bs-empty-title" type="text"
                      placeholder="Введите название теста..."
-                     class="wf-text-input wf-text-input--error"
                      aria-required="true" aria-invalid="true"
-                     aria-describedby="bs-empty-title-err" />
+                     aria-describedby="bs-empty-title-err" /></div></div>
               <div id="bs-empty-title-err" class="wf-field-error" role="alert">
                 <svg><use href="#i-x-circle"/></svg>
                 Поле обязательно для заполнения
@@ -658,8 +657,7 @@
 
             <div class="wf-field-group">
               <label class="wf-field-label" for="bs-empty-desc">Описание</label>
-              <textarea id="bs-empty-desc" placeholder="Краткое описание теста..."
-                        class="wf-textarea"></textarea>
+              <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="bs-empty-desc" placeholder="Краткое описание теста..."></textarea></div></div>
             </div>
 
           </div>

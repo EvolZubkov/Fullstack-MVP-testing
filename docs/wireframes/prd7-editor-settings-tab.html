@@ -511,19 +511,19 @@
               <label class="wf-form-label" for="f-title">
                 Название <span class="wf-form-required" aria-hidden="true">*</span>
               </label>
-              <input type="text" id="f-title" class="wf-text-input" value="Основы информационной безопасности" required />
+              <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="f-title" type="text" value="Основы информационной безопасности" required  /></div></div>
             </div>
             <div class="wf-form-group">
               <label class="wf-form-label" for="f-desc">Описание</label>
-              <textarea id="f-desc" class="wf-textarea" rows="3">Базовый курс по информационной безопасности для сотрудников компании.</textarea>
+              <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="f-desc" rows="3">Базовый курс по информационной безопасности для сотрудников компании.</textarea></div></div>
             </div>
             <div class="wf-form-group">
               <label class="wf-form-label" for="f-status">Статус</label>
-              <select id="f-status" class="wf-select">
+              <div class="ou-field ou-field--m"><div class="ou-field__box"><select class="ou-field__input" id="f-status">
                 <option>Черновик</option>
                 <option selected>Опубликован</option>
                 <option>В архиве</option>
-              </select>
+              </select></div></div>
               <div class="wf-form-hint">
                 Смена статуса (Опубликовать, В архив, Восстановить) выполняется через
                 действия на карточке теста, а не здесь.
@@ -599,12 +599,12 @@
             <div class="wf-section-label">Сценарий прохождения</div>
             <div class="wf-form-group">
               <label class="wf-form-label" for="f-flow-mode">Сценарий (flowMode)</label>
-              <select id="f-flow-mode" class="wf-select wf-select--full">
+              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><select class="ou-field__input" id="f-flow-mode">
                 <option selected>Линейный без тем (linear_flat)</option>
                 <option>Линейный по темам (linear_by_topics)</option>
                 <option>Смешанный (mixed)</option>
                 <option>Через страницу-маршрутизатор (router_by_topics)</option>
-              </select>
+              </select></div></div>
               <div class="wf-form-hint">
                 Сценарий определяет структуру предъявления. Изменение отражается во
                 вкладке Структура (режим read-only там).
@@ -614,21 +614,21 @@
               <div class="wf-router-box-title">Настройки Router-flow (только для router_by_topics)</div>
               <div class="wf-form-group">
                 <label class="wf-form-label" for="f-completion">Политика завершения (completionPolicy)</label>
-                <select id="f-completion" class="wf-select wf-select--full">
+                <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><select class="ou-field__input" id="f-completion">
                   <option selected>Все обязательные разделы завершены</option>
                   <option>Все разделы пройдены</option>
                   <option>Любой раздел завершён</option>
-                </select>
+                </select></div></div>
                 <div class="wf-form-hint">Условие, при котором доступен переход к итоговому результату.</div>
               </div>
               <div class="wf-form-group">
                 <label class="wf-form-label">Условия разблокировки разделов (sectionUnlockRules)</label>
                 <div class="wf-form-hint">Правило по умолчанию для разделов:</div>
-                <select class="wf-select wf-select--full" aria-label="Условие разблокировки разделов по умолчанию">
+                <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><select class="ou-field__input" aria-label="Условие разблокировки разделов по умолчанию">
                   <option selected>Всегда доступен (always_available)</option>
                   <option>После завершения выбранных разделов (after_sections_completed)</option>
                   <option>После успешного прохождения выбранных разделов (after_sections_passed)</option>
-                </select>
+                </select></div></div>
                 <div class="wf-form-hint">
                   MVP: правило AND по списку prerequisite-разделов. Индивидуальные условия
                   задаются в Структуре как read-only индикаторы.
@@ -687,22 +687,22 @@
             <div class="wf-section-label">Общий порог прохождения</div>
             <div class="wf-form-group">
               <label class="wf-form-label" for="f-pass-type">Тип правила</label>
-              <select id="f-pass-type" class="wf-select">
+              <div class="ou-field ou-field--m"><div class="ou-field__box"><select class="ou-field__input" id="f-pass-type">
                 <option selected>Процент правильных ответов (percent)</option>
                 <option>Абсолютное число (absolute)</option>
                 <option>Не проверять (none)</option>
-              </select>
+              </select></div></div>
             </div>
             <div class="wf-form-group">
               <label class="wf-form-label" for="f-pass-val">Порог</label>
               <div class="wf-threshold-row">
-                <input type="number" id="f-pass-val" class="wf-text-input wf-text-input--m" value="70" />
+                <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" id="f-pass-val" type="number" value="70"  /></div></div>
                 <span class="wf-threshold-unit">% правильных ответов</span>
               </div>
             </div>
             <div class="wf-form-group">
               <label class="wf-form-label" for="f-pass-policy">Политика итогового решения (passDecisionPolicy)</label>
-              <select id="f-pass-policy" class="wf-select wf-select--full">
+              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><select class="ou-field__input" id="f-pass-policy">
                 <option selected>Только общий результат (overall_only)</option>
                 <option>Общий результат и обязательные темы (overall_and_required_topics)</option>
                 <option>Только обязательные темы (required_topics_only)</option>
@@ -728,11 +728,11 @@
                 <tr>
                   <td>Основы ИБ</td>
                   <td>
-                    <select class="wf-tbl-select" aria-label="Источник правила для темы Основы ИБ">
+                    <div class="ou-field ou-field--s"><div class="ou-field__box"><select class="ou-field__input" aria-label="Источник правила для темы Основы ИБ">
                       <option selected>Как в тесте (inherit_overall)</option>
                       <option>Индивидуальное правило (custom)</option>
                       <option>Не проверять тему отдельно (none)</option>
-                    </select>
+                    </select></div></div>
                   </td>
                   <td>
                     <div class="wf-toggle wf-tbl-toggle wf-toggle--on" role="switch" aria-checked="true"
@@ -743,17 +743,17 @@
                   <td>Сетевая безопасность</td>
                   <td>
                     <div class="wf-tbl-custom-rule">
-                      <select class="wf-tbl-select" aria-label="Источник правила для темы Сетевая безопасность">
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><select class="ou-field__input" aria-label="Источник правила для темы Сетевая безопасность">
                         <option>Как в тесте (inherit_overall)</option>
                         <option selected>Индивидуальное правило (custom)</option>
                         <option>Не проверять тему отдельно (none)</option>
-                      </select>
+                      </select></div></div>
                       <div class="wf-tbl-custom-fields">
-                        <select class="wf-tbl-select wf-tbl-select--w" aria-label="Тип правила для темы Сетевая безопасность">
+                        <div class="ou-field ou-field--s"><div class="ou-field__box"><select class="ou-field__input" aria-label="Тип правила для темы Сетевая безопасность">
                           <option selected>Процент</option>
                           <option>Абсолютное</option>
-                        </select>
-                        <input type="number" value="80" class="wf-tbl-input-s" aria-label="Значение порога" />
+                        </select></div></div>
+                        <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="80" aria-label="Значение порога"  /></div></div>
                         <span class="wf-tbl-custom-unit">%</span>
                       </div>
                     </div>
@@ -766,11 +766,11 @@
                 <tr>
                   <td>Практика</td>
                   <td>
-                    <select class="wf-tbl-select" aria-label="Источник правила для темы Практика">
+                    <div class="ou-field ou-field--s"><div class="ou-field__box"><select class="ou-field__input" aria-label="Источник правила для темы Практика">
                       <option>Как в тесте (inherit_overall)</option>
                       <option>Индивидуальное правило (custom)</option>
                       <option selected>Не проверять тему отдельно (none)</option>
-                    </select>
+                    </select></div></div>
                   </td>
                   <td>
                     <div class="wf-toggle wf-tbl-toggle wf-toggle--off" role="switch" aria-checked="false"
@@ -832,7 +832,7 @@
             <div class="wf-form-group">
               <label class="wf-form-label" for="f-time">Лимит времени (tests.time_limit_minutes)</label>
               <div class="wf-time-row">
-                <input type="number" id="f-time" class="wf-text-input wf-text-input--m" value="45" />
+                <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" id="f-time" type="number" value="45"  /></div></div>
                 <span class="wf-time-unit">минут</span>
               </div>
               <div class="wf-form-hint">Оставьте пустым, чтобы не ограничивать.</div>
@@ -841,11 +841,11 @@
             <div class="wf-section-label">Лимит времени темы</div>
             <div class="wf-form-group">
               <label class="wf-form-label" for="f-topic-time-src">Источник лимита (topicTimeLimit.source)</label>
-              <select id="f-topic-time-src" class="wf-select wf-select--full">
+              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><select class="ou-field__input" id="f-topic-time-src">
                 <option>Как в тесте (inherit_test)</option>
                 <option selected>Индивидуальный лимит (custom)</option>
                 <option>Без отдельного лимита (none)</option>
-              </select>
+              </select></div></div>
               <div class="wf-form-hint">
                 При выборе "Как в тесте" тема делит общий таймер теста. При "Индивидуальном лимите"
                 действуют оба таймера одновременно.
@@ -861,15 +861,15 @@
               <tbody>
                 <tr>
                   <td>Основы ИБ</td>
-                  <td><input type="number" value="15" class="wf-tbl-input-m" aria-label="Лимит времени для темы Основы ИБ" /></td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" aria-label="Лимит времени для темы Основы ИБ"  /></div></div></td>
                 </tr>
                 <tr>
                   <td>Сетевая безопасность</td>
-                  <td><input type="number" value="20" class="wf-tbl-input-m" aria-label="Лимит времени для темы Сетевая безопасность" /></td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" aria-label="Лимит времени для темы Сетевая безопасность"  /></div></div></td>
                 </tr>
                 <tr>
                   <td>Практика</td>
-                  <td><input type="number" value="10" class="wf-tbl-input-m" aria-label="Лимит времени для темы Практика" /></td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="10" aria-label="Лимит времени для темы Практика"  /></div></div></td>
                 </tr>
               </tbody>
             </table>
@@ -888,7 +888,7 @@
             <div class="wf-section-label">Попытки и результаты</div>
             <div class="wf-form-group">
               <label class="wf-form-label" for="f-attempts">Максимум попыток (tests.max_attempts)</label>
-              <input type="number" id="f-attempts" class="wf-text-input wf-text-input--m" placeholder="Без ограничения" />
+              <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" id="f-attempts" type="number" placeholder="Без ограничения"  /></div></div>
               <div class="wf-form-hint">Оставьте пустым для неограниченного числа попыток.</div>
             </div>
             <div class="wf-form-group">
@@ -952,8 +952,8 @@
               <div class="wf-feedback-card-title">Общая обратная связь теста</div>
               <div class="wf-form-group">
                 <label class="wf-form-label" for="f-feedback-body">Текст обратной связи (tests.feedback)</label>
-                <textarea id="f-feedback-body" class="wf-textarea" rows="4"
-                          placeholder="Текст, который увидит обучающийся после прохождения теста...">Поздравляем с прохождением теста! Рекомендуем повторить темы, в которых допущены ошибки.</textarea>
+                <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="f-feedback-body" rows="4"
+                          placeholder="Текст, который увидит обучающийся после прохождения теста...">Поздравляем с прохождением теста! Рекомендуем повторить темы, в которых допущены ошибки.</textarea></div></div>
               </div>
               <div class="wf-form-group">
                 <label class="wf-form-label">Ссылки (test_feedback_links)</label>
@@ -1056,7 +1056,7 @@
             <div class="wf-section-label">Webhook</div>
             <div class="wf-form-group">
               <label class="wf-form-label" for="f-webhook">Webhook URL (tests.webhook_url)</label>
-              <input type="text" id="f-webhook" class="wf-text-input" placeholder="https://example.com/webhook" />
+              <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" id="f-webhook" placeholder="https://example.com/webhook" /></div></div>
               <div class="wf-form-hint">
                 POST-запрос отправляется после завершения попытки. Оставьте пустым, если
                 webhook не нужен.
@@ -1149,8 +1149,8 @@
               <div class="wf-feedback-card-title">Общие параметры адаптации (tests.adaptive_settings_json)</div>
               <div class="wf-form-group">
                 <label class="wf-form-label" for="f-adp-json">JSON / advanced settings</label>
-                <textarea id="f-adp-json" class="wf-textarea wf-code-textarea" rows="4"
-                          placeholder='{"strategy":"default","defaults":{}}'></textarea>
+                <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="f-adp-json" rows="4"
+                          placeholder='{"strategy":"default","defaults":{}}'></textarea></div></div>
                 <div class="wf-form-hint">Уточняется в следующей итерации.</div>
               </div>
             </div>
@@ -1176,8 +1176,8 @@
                          aria-label="Адаптивность включена для темы Основы ИБ"></div>
                   </td>
                   <td>
-                    <textarea rows="2" class="wf-tbl-textarea"
-                              placeholder="Текст при провале темы...">Рекомендуем повторить основные понятия информационной безопасности.</textarea>
+                    <div class="ou-textarea ou-textarea--s"><div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="2"
+                              placeholder="Текст при провале темы...">Рекомендуем повторить основные понятия информационной безопасности.</textarea></div></div>
                   </td>
                   <td>
                     <button type="button" class="ou-button ou-button--xs ou-button--outline">Уровни &rarr;</button>
@@ -1190,7 +1190,7 @@
                          aria-label="Адаптивность включена для темы Сетевая безопасность"></div>
                   </td>
                   <td>
-                    <textarea rows="2" class="wf-tbl-textarea" placeholder="Текст при провале темы..."></textarea>
+                    <div class="ou-textarea ou-textarea--s"><div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="2" placeholder="Текст при провале темы..."></textarea></div></div>
                   </td>
                   <td>
                     <button type="button" class="ou-button ou-button--xs ou-button--outline">Уровни &rarr;</button>
@@ -1225,16 +1225,16 @@
                   <tbody>
                     <tr>
                       <td>1</td>
-                      <td><input type="text" value="Базовый" class="wf-tbl-input-l" aria-label="Название уровня 1" /></td>
-                      <td><input type="number" value="1" class="wf-tbl-input-num" aria-label="Минимальная сложность уровня 1" /></td>
-                      <td><input type="number" value="3" class="wf-tbl-input-num" aria-label="Максимальная сложность уровня 1" /></td>
-                      <td><input type="number" value="5" class="wf-tbl-input-num" aria-label="Количество вопросов уровня 1" /></td>
-                      <td><input type="number" value="70" class="wf-tbl-input-num" aria-label="Порог прохождения уровня 1" /></td>
+                      <td><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Базовый" aria-label="Название уровня 1"  /></div></div></td>
+                      <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="1" aria-label="Минимальная сложность уровня 1"  /></div></div></td>
+                      <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="3" aria-label="Максимальная сложность уровня 1"  /></div></div></td>
+                      <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="5" aria-label="Количество вопросов уровня 1"  /></div></div></td>
+                      <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="70" aria-label="Порог прохождения уровня 1"  /></div></div></td>
                       <td>
-                        <select class="wf-tbl-select" aria-label="Тип порога уровня 1">
+                        <div class="ou-field ou-field--s"><div class="ou-field__box"><select class="ou-field__input" aria-label="Тип порога уровня 1">
                           <option selected>процент</option>
                           <option>абсолютное</option>
-                        </select>
+                        </select></div></div>
                       </td>
                       <td><button type="button" class="ou-button ou-button--xs ou-button--outline">Открыть</button></td>
                       <td><span class="wf-ro-chip">2</span></td>
@@ -1247,16 +1247,16 @@
                     </tr>
                     <tr>
                       <td>2</td>
-                      <td><input type="text" value="Продвинутый" class="wf-tbl-input-l" aria-label="Название уровня 2" /></td>
-                      <td><input type="number" value="4" class="wf-tbl-input-num" aria-label="Минимальная сложность уровня 2" /></td>
-                      <td><input type="number" value="7" class="wf-tbl-input-num" aria-label="Максимальная сложность уровня 2" /></td>
-                      <td><input type="number" value="8" class="wf-tbl-input-num" aria-label="Количество вопросов уровня 2" /></td>
-                      <td><input type="number" value="80" class="wf-tbl-input-num" aria-label="Порог прохождения уровня 2" /></td>
+                      <td><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Продвинутый" aria-label="Название уровня 2"  /></div></div></td>
+                      <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="4" aria-label="Минимальная сложность уровня 2"  /></div></div></td>
+                      <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="7" aria-label="Максимальная сложность уровня 2"  /></div></div></td>
+                      <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="8" aria-label="Количество вопросов уровня 2"  /></div></div></td>
+                      <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="80" aria-label="Порог прохождения уровня 2"  /></div></div></td>
                       <td>
-                        <select class="wf-tbl-select" aria-label="Тип порога уровня 2">
+                        <div class="ou-field ou-field--s"><div class="ou-field__box"><select class="ou-field__input" aria-label="Тип порога уровня 2">
                           <option selected>процент</option>
                           <option>абсолютное</option>
-                        </select>
+                        </select></div></div>
                       </td>
                       <td><button type="button" class="ou-button ou-button--xs ou-button--outline">Открыть</button></td>
                       <td><span class="wf-ro-chip">0</span></td>

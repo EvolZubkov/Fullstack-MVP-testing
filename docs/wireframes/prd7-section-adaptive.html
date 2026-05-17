@@ -615,7 +615,7 @@
             <div class="wf-section-card-body">
               <div class="wf-field-group">
                 <div class="wf-field-label">tests.adaptive_settings_json</div>
-                <textarea class="wf-json-textarea" aria-label="Общие параметры адаптации (JSON)">{}</textarea>
+                <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" aria-label="Общие параметры адаптации (JSON)">{}</textarea></div></div>
                 <p class="wf-note-text">Уточняется в следующей итерации. Сохраняется как свободный JSON.</p>
               </div>
             </div>
@@ -656,8 +656,8 @@
                       </button>
                     </td>
                     <td>
-                      <textarea class="wf-failure-input"
-                                aria-label="Обратная связь при провале, тема Основы ИБ">Рекомендуем повторить базовые понятия перед следующей попыткой.</textarea>
+                      <div class="ou-textarea ou-textarea--s"><div class="ou-textarea__box"><textarea class="ou-textarea__input"
+                                aria-label="Обратная связь при провале, тема Основы ИБ">Рекомендуем повторить базовые понятия перед следующей попыткой.</textarea></div></div>
                     </td>
                     <td>
                       <button type="button" class="ou-button ou-button--ghost ou-button--sm"
@@ -676,9 +676,9 @@
                       </button>
                     </td>
                     <td>
-                      <textarea class="wf-failure-input"
+                      <div class="ou-textarea ou-textarea--s"><div class="ou-textarea__box"><textarea class="ou-textarea__input"
                                 aria-label="Обратная связь при провале, тема Классификация угроз"
-                                placeholder="Введите текст для отображения при провале темы..."></textarea>
+                                placeholder="Введите текст для отображения при провале темы..."></textarea></div></div>
                     </td>
                     <td>
                       <button type="button" class="ou-button ou-button--ghost ou-button--sm"
@@ -729,13 +729,13 @@
                 </thead>
                 <tbody>
                   <tr>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="1" min="1" aria-label="Порядок уровня 1"></td>
-                    <td><input class="wf-level-name-input" type="text" value="Начальный" aria-label="Название уровня 1"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="1" min="1" max="10" aria-label="Мин. сложность уровня 1"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="3" min="1" max="10" aria-label="Макс. сложность уровня 1"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="5" min="1" aria-label="Количество вопросов уровня 1"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="70" min="0" max="100" aria-label="Порог прохождения уровня 1"></td>
-                    <td><select class="wf-type-select" aria-label="Тип порога уровня 1"><option selected>процент</option><option>абсолютное</option></select></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="1" min="1" aria-label="Порядок уровня 1"></div></div></td>
+                    <td><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Начальный" aria-label="Название уровня 1"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="1" min="1" max="10" aria-label="Мин. сложность уровня 1"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="3" min="1" max="10" aria-label="Макс. сложность уровня 1"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="5" min="1" aria-label="Количество вопросов уровня 1"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="70" min="0" max="100" aria-label="Порог прохождения уровня 1"></div></div></td>
+                    <td><div class="ou-field ou-field--s"><div class="ou-field__box"><select class="ou-field__input" aria-label="Тип порога уровня 1"><option selected>процент</option><option>абсолютное</option></select></div></div></td>
                     <td><button type="button" class="wf-btn-link" aria-label="Редактор обратной связи уровня 1">Открыть...</button></td>
                     <td class="wf-cell-center"><button type="button" class="wf-btn-link" aria-label="Ссылки уровня 1: 1">1</button></td>
                     <td class="wf-cell-center"><button type="button" class="wf-btn-link" aria-label="PDF уровня 1: 0">0</button></td>
@@ -754,13 +754,13 @@
                     </td>
                   </tr>
                   <tr>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="2" min="1" aria-label="Порядок уровня 2"></td>
-                    <td><input class="wf-level-name-input" type="text" value="Продвинутый" aria-label="Название уровня 2"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="4" min="1" max="10" aria-label="Мин. сложность уровня 2"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="5" min="1" max="10" aria-label="Макс. сложность уровня 2"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="8" min="1" aria-label="Количество вопросов уровня 2"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="75" min="0" max="100" aria-label="Порог прохождения уровня 2"></td>
-                    <td><select class="wf-type-select" aria-label="Тип порога уровня 2"><option selected>процент</option><option>абсолютное</option></select></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="2" min="1" aria-label="Порядок уровня 2"></div></div></td>
+                    <td><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Продвинутый" aria-label="Название уровня 2"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="4" min="1" max="10" aria-label="Мин. сложность уровня 2"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="5" min="1" max="10" aria-label="Макс. сложность уровня 2"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="8" min="1" aria-label="Количество вопросов уровня 2"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="75" min="0" max="100" aria-label="Порог прохождения уровня 2"></div></div></td>
+                    <td><div class="ou-field ou-field--s"><div class="ou-field__box"><select class="ou-field__input" aria-label="Тип порога уровня 2"><option selected>процент</option><option>абсолютное</option></select></div></div></td>
                     <td><button type="button" class="wf-btn-link" aria-label="Редактор обратной связи уровня 2">Открыть...</button></td>
                     <td class="wf-cell-center"><button type="button" class="wf-btn-link" aria-label="Ссылки уровня 2: 2">2</button></td>
                     <td class="wf-cell-center"><button type="button" class="wf-btn-link" aria-label="PDF уровня 2: 1">1</button></td>
@@ -978,7 +978,7 @@
               <span class="ou-tag ou-tag--neutral">JSON / advanced</span>
             </div>
             <div class="wf-section-card-body">
-              <textarea class="wf-json-textarea" aria-label="Общие параметры адаптации (JSON)">{}</textarea>
+              <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" aria-label="Общие параметры адаптации (JSON)">{}</textarea></div></div>
               <p class="wf-note-text">Уточняется в следующей итерации.</p>
             </div>
           </div>
@@ -1017,8 +1017,8 @@
                       </button>
                     </td>
                     <td>
-                      <textarea class="wf-failure-input"
-                                aria-label="Обратная связь при провале, тема Основы ИБ">Рекомендуем повторить базовые понятия перед следующей попыткой.</textarea>
+                      <div class="ou-textarea ou-textarea--s"><div class="ou-textarea__box"><textarea class="ou-textarea__input"
+                                aria-label="Обратная связь при провале, тема Основы ИБ">Рекомендуем повторить базовые понятия перед следующей попыткой.</textarea></div></div>
                     </td>
                     <td>
                       <button type="button" class="ou-button ou-button--ghost ou-button--sm ou-button--outline-error"
@@ -1060,13 +1060,13 @@
                 </thead>
                 <tbody>
                   <tr>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="1" min="1" aria-label="Порядок уровня 1"></td>
-                    <td><input class="wf-level-name-input" type="text" value="Начальный" aria-label="Название уровня 1"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="1" aria-label="Мин. сложность уровня 1"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="3" aria-label="Макс. сложность уровня 1"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="5" aria-label="Количество вопросов уровня 1"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="70" aria-label="Порог уровня 1"></td>
-                    <td><select class="wf-type-select" aria-label="Тип порога уровня 1"><option selected>процент</option><option>абсолютное</option></select></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="1" min="1" aria-label="Порядок уровня 1"></div></div></td>
+                    <td><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Начальный" aria-label="Название уровня 1"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="1" aria-label="Мин. сложность уровня 1"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="3" aria-label="Макс. сложность уровня 1"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="5" aria-label="Количество вопросов уровня 1"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="70" aria-label="Порог уровня 1"></div></div></td>
+                    <td><div class="ou-field ou-field--s"><div class="ou-field__box"><select class="ou-field__input" aria-label="Тип порога уровня 1"><option selected>процент</option><option>абсолютное</option></select></div></div></td>
                     <td><button type="button" class="wf-btn-link">Открыть...</button></td>
                     <td class="wf-cell-center">1</td>
                     <td class="wf-cell-center">0</td>
@@ -1078,17 +1078,17 @@
                   </tr>
                   <!-- Row with error: pass_threshold=120 exceeds 100 for type "percent" -->
                   <tr class="wf-tr--error">
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="2" min="1" aria-label="Порядок уровня 2"></td>
-                    <td><input class="wf-level-name-input" type="text" value="Продвинутый" aria-label="Название уровня 2"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="4" aria-label="Мин. сложность уровня 2"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="5" aria-label="Макс. сложность уровня 2"></td>
-                    <td class="wf-cell-center"><input class="wf-num-input" type="number" value="8" aria-label="Количество вопросов уровня 2"></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="2" min="1" aria-label="Порядок уровня 2"></div></div></td>
+                    <td><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Продвинутый" aria-label="Название уровня 2"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="4" aria-label="Мин. сложность уровня 2"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="5" aria-label="Макс. сложность уровня 2"></div></div></td>
+                    <td class="wf-cell-center"><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="8" aria-label="Количество вопросов уровня 2"></div></div></td>
                     <td class="wf-cell-center">
-                      <input class="wf-num-input wf-num-input--error" type="number" value="120"
+                      <div class="ou-field ou-field--s ou-field--error"><div class="ou-field__box"><input class="ou-field__input" type="number" value="120"
                              aria-label="Порог прохождения уровня 2"
-                             aria-invalid="true" aria-describedby="wf-err-threshold-2">
+                             aria-invalid="true" aria-describedby="wf-err-threshold-2"></div></div>
                     </td>
-                    <td><select class="wf-type-select" aria-label="Тип порога уровня 2"><option selected>процент</option><option>абсолютное</option></select></td>
+                    <td><div class="ou-field ou-field--s"><div class="ou-field__box"><select class="ou-field__input" aria-label="Тип порога уровня 2"><option selected>процент</option><option>абсолютное</option></select></div></div></td>
                     <td><button type="button" class="wf-btn-link">Открыть...</button></td>
                     <td class="wf-cell-center">2</td>
                     <td class="wf-cell-center">1</td>
