@@ -177,19 +177,6 @@ select {
   background-repeat: no-repeat; background-position: right 8px center;
   padding-right: 28px;
 }
-/* ── Badges ───────────────────────────────────────────────────────────── */
-.badge {
-  display: inline-flex; align-items: center;
-  padding: 1px var(--ou-space-2); border-radius: var(--ou-radius-s);
-  font: var(--ou-text-caption); white-space: nowrap;
-}
-.badge-outline   { border: 1px solid var(--ou-border-soft); color: var(--ou-fg-muted); }
-.badge-primary   { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); }
-.badge-secondary { background: var(--secondary); color: var(--fg); }
-.badge-warn      { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); border: 1px solid var(--ou-warning-default); }
-.badge-error     { background: var(--ou-error-soft);   color: var(--ou-error-on-soft);   border: 1px solid var(--ou-error-default); }
-.badge-success   { background: var(--ou-success-soft); color: var(--ou-success-on-soft); border: 1px solid var(--ou-success-default); }
-
 /* ── Status indicators (FR-25b, NFR-21) ───────────────────────────────── */
 .status-dot {
   width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
