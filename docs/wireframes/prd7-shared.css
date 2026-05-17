@@ -134,13 +134,6 @@ body {
   margin-bottom: var(--ou-space-3); margin-top: var(--ou-space-1);
 }
 
-/* ── Cards ────────────────────────────────────────────────────────────── */
-.card {
-  border: 1px solid var(--card-border); border-radius: var(--ou-radius-m);
-  background: var(--card); padding: var(--ou-space-4);
-}
-.card-row { display: flex; align-items: center; gap: var(--ou-space-4); }
-
 /* ── Empty / Separator ────────────────────────────────────────────────── */
 .empty-block {
   border: 1px dashed var(--ou-border-default); border-radius: var(--ou-radius-m);
