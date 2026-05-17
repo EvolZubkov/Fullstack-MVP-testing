@@ -23,6 +23,29 @@
 | Sidebar / app shell | 961 вхождение в 22 файлах | `ou-shell`, `ou-side` |
 | Cards / list items | 385 вхождений в 19 файлах | `ou-card`, `ou-tbl`, `ou-tree` или DS-паттерн списка по семантике |
 
+## Покрытие gate v2
+
+Расширенный gate `npm run check:wireframes:ds` (см. изменения от 2026-05-17)
+проверяет четыре категории нарушений плюс одну опциональную:
+
+1. **Legacy class tokens** в `class="..."` атрибутах. Полный список см.
+   `legacyClassTokens` в `scripts/check-wireframes-ds.mjs`: drawer-*, btn-*,
+   badge-*, dialog-*, modal-*, banner-*, empty-*, sidebar-*, nav-*, topbar,
+   back-btn, test-title, topbar-actions, editor-tabs, etab, form-*, card-*,
+   skel*, radio-*, toggle*, overlay. Классы `section-label` / `subsection-label`
+   исключены: DS не предоставляет uppercase-caption label primitive (gap).
+2. **Legacy CSS selectors** для тех же токенов в CSS-файлах
+   (`(?<![\w-])\.<token>(?![\w-])`).
+3. **Raw color literals**: `#hex`, `rgb()`, `rgba()`, `hsl()`, `hsla()`,
+   `oklch()`, `lab()`, `lch()`, `hwb()`, `white`, `black`. Сканируется
+   содержимое `<style>` блоков и CSS-файлов.
+4. **Direct length units**: ненулевые `\d+(\.\d+)?(px|rem|em)` в
+   `<style>` блоках и CSS-файлах. Допустим только токен или `0`-значения.
+5. **Optional `--strict-inline`**: сканирует `style="..."` на raw color и
+   direct unit. Пропуск через `data-wf-demo` на родительском теге.
+
+Время прогона: ~2 секунды на текущем наборе.
+
 ## Нарушения по CSS-значениям
 
 | Нарушение | Количество | Самые проблемные файлы |
