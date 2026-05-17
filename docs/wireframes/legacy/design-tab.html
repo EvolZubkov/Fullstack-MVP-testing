@@ -1,9 +1,11 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Wireframe: вкладка "Оформление"</title>
+  <link rel="stylesheet" href="ds/university-rt.css" />
+  <link rel="stylesheet" href="ds/wf-utils.css" />
   <style>
     /* ── Design tokens (из index.css) ─────────────────────────── */
     :root {
@@ -318,29 +320,100 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: hsl(0 0% 80%); border-radius: 3px; }
   </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: 1px solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: 1px solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: 1px;
+      height: 20px;
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, 52px);
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, 52px));
+      max-height: calc(100vh - var(--wf-nav-offset, 52px));
+    }
+  </style>
 </head>
-<body>
+<body class="ou ou--light ou--normal">
 
 <!-- Метанавигация wireframe -->
 <nav class="wf-nav">
-  <span>Вкладка "Оформление" / Галерея:</span>
-  <button class="wf-btn active" onclick="show('s-main')">Основное</button>
-  <button class="wf-btn" onclick="show('s-empty')">Новый тест (дефолт)</button>
-  <button class="wf-btn" onclick="show('s-loading')">Загрузка</button>
-  <button class="wf-btn" onclick="show('s-saving')">Сохранение</button>
-  <button class="wf-btn" onclick="show('s-dirty')">Несохранённые изм.</button>
-  <button class="wf-btn" onclick="show('s-error')">Ошибка API</button>
-  <button class="wf-btn" onclick="show('s-validation')">Ошибка валидации</button>
-  <button class="wf-btn" onclick="show('s-readonly')">Read-only</button>
-  <button class="wf-btn" onclick="show('s-preview')">Предпросмотр</button>
-  <button class="wf-btn" onclick="show('s-saved')">Сохранено</button>
-  <button class="wf-btn" onclick="show('s-color-picker')">Color picker</button>
-  <button class="wf-btn" onclick="show('s-reset-confirm')">Сброс: подтверждение</button>
-  <button class="wf-btn" onclick="show('s-gallery-confirm')">Галерея: подтверждение</button>
-  <button class="wf-btn" onclick="show('s-gallery')">Галерея</button>
-  <button class="wf-btn" onclick="show('s-gallery-search')">Галерея: поиск</button>
-  <button class="wf-btn" onclick="show('s-gallery-empty')">Галерея: нет рез.</button>
+  <span class="wf-nav-title">Вкладка "Оформление" / Галерея:</span>
+  <button class="wf-btn active" onclick="showState(this, 's-main')">Основное</button>
+  <button class="wf-btn" onclick="showState(this, 's-empty')">Новый тест (дефолт)</button>
+  <button class="wf-btn" onclick="showState(this, 's-loading')">Загрузка</button>
+  <button class="wf-btn" onclick="showState(this, 's-saving')">Сохранение</button>
+  <button class="wf-btn" onclick="showState(this, 's-dirty')">Несохранённые изм.</button>
+  <button class="wf-btn" onclick="showState(this, 's-error')">Ошибка API</button>
+  <button class="wf-btn" onclick="showState(this, 's-validation')">Ошибка валидации</button>
+  <button class="wf-btn" onclick="showState(this, 's-readonly')">Read-only</button>
+  <button class="wf-btn" onclick="showState(this, 's-preview')">Предпросмотр</button>
+  <button class="wf-btn" onclick="showState(this, 's-saved')">Сохранено</button>
+  <button class="wf-btn" onclick="showState(this, 's-color-picker')">Color picker</button>
+  <button class="wf-btn" onclick="showState(this, 's-reset-confirm')">Сброс: подтверждение</button>
+  <button class="wf-btn" onclick="showState(this, 's-gallery-confirm')">Галерея: подтверждение</button>
+  <button class="wf-btn" onclick="showState(this, 's-gallery')">Галерея</button>
+  <button class="wf-btn" onclick="showState(this, 's-gallery-search')">Галерея: поиск</button>
+  <button class="wf-btn" onclick="showState(this, 's-gallery-empty')">Галерея: нет рез.</button>
   <a href="pages-tab.html" class="wf-link">Структура &rarr;</a>
+
+  <div class="wf-nav-sep"></div>
+  <button type="button" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" onclick="toggleDensity(this)">Compact</button>
 </nav>
 
 <!-- SVG-иконки (sprite) -->
@@ -367,7 +440,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Основное (шаблон выбран)                                    -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-main" class="shell active">
+<div id="s-main" class="wf-state shell active">
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-header">
@@ -396,7 +469,7 @@
       <span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span>
       <span class="test-title">Основы информационной безопасности</span>
       <div class="topbar-actions">
-        <button class="btn btn-outline btn-sm">Экспорт SCORM</button>
+        <button class="ou-btn ou-btn--secondary ou-btn--s">Экспорт SCORM</button>
       </div>
     </div>
     <div class="editor-tabs">
@@ -429,14 +502,14 @@
           <div class="tpl-info">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
               <div class="tpl-name">Корпоративный</div>
-              <span class="badge badge-outline">Встроенный</span>
-              <span class="badge badge-outline" style="color:var(--muted-fg);font-size:10px;">v1.2.0</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline" style="color:var(--muted-fg);font-size:10px;">v1.2.0</span>
             </div>
             <div class="tpl-desc">Боковая панель навигации, брендирование, прогресс по темам</div>
           </div>
           <div class="tpl-actions">
-            <button class="btn btn-outline btn-sm"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
-            <button class="btn btn-secondary btn-sm"><svg width="13" height="13"><use href="#i-layout"/></svg> Заменить шаблон</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="13" height="13"><use href="#i-layout"/></svg> Заменить шаблон</button>
           </div>
         </div>
       </div>
@@ -466,7 +539,7 @@
         <div class="form-group">
           <label class="form-label">Логотип</label>
           <div class="file-row">
-            <button class="btn btn-outline btn-sm">Загрузить изображение</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s">Загрузить изображение</button>
             <span class="file-chip">logo.png <span class="rm">✕</span></span>
           </div>
           <div class="form-hint">PNG, SVG, до 512 КБ</div>
@@ -474,7 +547,7 @@
         <div class="form-group">
           <label class="form-label">Шрифт заголовков</label>
           <div class="file-row">
-            <button class="btn btn-outline btn-sm">Загрузить шрифт</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s">Загрузить шрифт</button>
             <span class="file-chip">Inter.woff2 <span class="rm">✕</span></span>
           </div>
         </div>
@@ -510,8 +583,8 @@
       </div>
 
       <div class="footer-row">
-        <button class="btn btn-ghost">Сбросить до умолчаний</button>
-        <button class="btn btn-primary">Сохранить оформление</button>
+        <button class="ou-btn ou-btn--ghost">Сбросить до умолчаний</button>
+        <button class="ou-btn ou-btn--primary">Сохранить оформление</button>
       </div>
     </div>
   </div>
@@ -520,7 +593,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Новый тест — дефолтный шаблон применён автоматически        -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-empty" class="shell">
+<div id="s-empty" class="wf-state shell">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav">
@@ -533,7 +606,7 @@
     <div class="topbar">
       <span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span>
       <span class="test-title">Новый тест</span>
-      <div class="topbar-actions"><button class="btn btn-outline btn-sm">Экспорт SCORM</button></div>
+      <div class="topbar-actions"><button class="ou-btn ou-btn--secondary ou-btn--s">Экспорт SCORM</button></div>
     </div>
     <div class="editor-tabs">
       <div class="etab">Вопросы</div><div class="etab">Настройки</div>
@@ -560,15 +633,15 @@
           <div class="tpl-info">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
               <div class="tpl-name">Стандартный</div>
-              <span class="badge badge-outline">Встроенный</span>
-              <span class="badge badge-outline" style="color:var(--muted-fg);font-size:10px;">v1.0.0</span>
-              <span class="badge" style="background:hsl(217 91% 95%);color:hsl(217 91% 35%);font-size:10px;">По умолчанию</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline" style="color:var(--muted-fg);font-size:10px;">v1.0.0</span>
+              <span class="ou-tag" style="background:hsl(217 91% 95%);color:hsl(217 91% 35%);font-size:10px;">По умолчанию</span>
             </div>
             <div class="tpl-desc">Минималистичный шаблон без брендирования. Применяется автоматически для всех новых тестов.</div>
           </div>
           <div class="tpl-actions">
-            <button class="btn btn-outline btn-sm"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
-            <button class="btn btn-secondary btn-sm"><svg width="13" height="13"><use href="#i-layout"/></svg> Заменить шаблон</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="13" height="13"><use href="#i-layout"/></svg> Заменить шаблон</button>
           </div>
         </div>
       </div>
@@ -598,8 +671,8 @@
       </div>
 
       <div class="footer-row">
-        <button class="btn btn-ghost">Сбросить до умолчаний</button>
-        <button class="btn btn-primary">Сохранить оформление</button>
+        <button class="ou-btn ou-btn--ghost">Сбросить до умолчаний</button>
+        <button class="ou-btn ou-btn--primary">Сохранить оформление</button>
       </div>
     </div>
   </div>
@@ -608,7 +681,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Загрузка                                                     -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-loading" class="shell">
+<div id="s-loading" class="wf-state shell">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -670,7 +743,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Сохранение                                                   -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-saving" class="shell">
+<div id="s-saving" class="wf-state shell">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -691,12 +764,12 @@
         <div class="tpl-block">
           <div class="tpl-thumb"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div><div class="ps-opt"></div></div></div></div></div>
           <div class="tpl-info">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div class="tpl-name">Корпоративный</div><span class="badge badge-outline">Встроенный</span></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div class="tpl-name">Корпоративный</div><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span></div>
             <div class="tpl-desc">Боковая панель навигации, брендирование</div>
           </div>
           <div class="tpl-actions">
-            <button class="btn btn-outline btn-sm" disabled><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
-            <button class="btn btn-secondary btn-sm" disabled>Заменить шаблон</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s" disabled><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s" disabled>Заменить шаблон</button>
           </div>
         </div>
       </div>
@@ -709,7 +782,7 @@
         </div>
         <div class="form-group">
           <label class="form-label">Логотип</label>
-          <div class="file-row"><button class="btn btn-outline btn-sm" disabled>Загрузить изображение</button><span class="file-chip">logo.png</span></div>
+          <div class="file-row"><button class="ou-btn ou-btn--secondary ou-btn--s" disabled>Загрузить изображение</button><span class="file-chip">logo.png</span></div>
         </div>
         <div class="form-group">
           <label class="form-label">Режим прогресса</label>
@@ -717,8 +790,8 @@
         </div>
       </div>
       <div class="footer-row">
-        <button class="btn btn-ghost" disabled>Сбросить до умолчаний</button>
-        <button class="btn btn-primary" disabled style="display:flex;align-items:center;gap:8px;">
+        <button class="ou-btn ou-btn--ghost" disabled>Сбросить до умолчаний</button>
+        <button class="ou-btn ou-btn--primary" disabled style="display:flex;align-items:center;gap:8px;">
           <svg width="14" height="14" style="animation:spin 1s linear infinite"><use href="#i-loader"/></svg>
           Сохранение...
         </button>
@@ -731,7 +804,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Несохранённые изменения                                     -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-dirty" class="shell">
+<div id="s-dirty" class="wf-state shell">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -757,12 +830,12 @@
         <div class="tpl-block">
           <div class="tpl-thumb"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div><div class="ps-opt"></div></div></div></div></div>
           <div class="tpl-info">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div class="tpl-name">Корпоративный</div><span class="badge badge-outline">Встроенный</span></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div class="tpl-name">Корпоративный</div><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span></div>
             <div class="tpl-desc">Боковая панель навигации, брендирование</div>
           </div>
           <div class="tpl-actions">
-            <button class="btn btn-outline btn-sm"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
-            <button class="btn btn-secondary btn-sm">Заменить шаблон</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s">Заменить шаблон</button>
           </div>
         </div>
       </div>
@@ -779,8 +852,8 @@
         </div>
       </div>
       <div class="footer-row">
-        <button class="btn btn-ghost">Сбросить до умолчаний</button>
-        <button class="btn btn-primary" style="background:hsl(217 91% 36%);">Сохранить оформление •</button>
+        <button class="ou-btn ou-btn--ghost">Сбросить до умолчаний</button>
+        <button class="ou-btn ou-btn--primary" style="background:hsl(217 91% 36%);">Сохранить оформление •</button>
       </div>
     </div>
   </div>
@@ -789,7 +862,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Ошибка API при загрузке                                     -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-error" class="shell">
+<div id="s-error" class="wf-state shell">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -810,7 +883,7 @@
         <div>
           <div style="font-weight:600;margin-bottom:4px;color:var(--destructive);">Не удалось загрузить настройки оформления</div>
           <div style="font-size:13px;color:hsl(0 50% 35%);margin-bottom:14px;">Проверьте соединение с сервером и попробуйте ещё раз.</div>
-          <button class="btn btn-outline btn-sm">Повторить</button>
+          <button class="ou-btn ou-btn--secondary ou-btn--s">Повторить</button>
         </div>
       </div>
     </div>
@@ -820,7 +893,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Ошибка валидации параметров                                 -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-validation" class="shell">
+<div id="s-validation" class="wf-state shell">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -848,7 +921,7 @@
         <div class="tpl-block">
           <div class="tpl-thumb"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div></div><div class="ps-body ps-minimal"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div><div class="ps-opt"></div></div></div></div>
           <div class="tpl-info"><div class="tpl-name">Корпоративный</div></div>
-          <div class="tpl-actions"><button class="btn btn-secondary btn-sm">Заменить шаблон</button></div>
+          <div class="tpl-actions"><button class="ou-btn ou-btn--secondary ou-btn--s">Заменить шаблон</button></div>
         </div>
       </div>
       <hr class="sep">
@@ -873,8 +946,8 @@
         </div>
       </div>
       <div class="footer-row">
-        <button class="btn btn-ghost">Сбросить до умолчаний</button>
-        <button class="btn btn-primary">Сохранить оформление</button>
+        <button class="ou-btn ou-btn--ghost">Сбросить до умолчаний</button>
+        <button class="ou-btn ou-btn--primary">Сохранить оформление</button>
       </div>
     </div>
   </div>
@@ -883,7 +956,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Read-only                                                    -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-readonly" class="shell">
+<div id="s-readonly" class="wf-state shell">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -909,12 +982,12 @@
         <div class="tpl-block">
           <div class="tpl-thumb"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div><div class="ps-opt"></div></div></div></div></div>
           <div class="tpl-info">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div class="tpl-name">Корпоративный</div><span class="badge badge-outline">Встроенный</span></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div class="tpl-name">Корпоративный</div><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span></div>
             <div class="tpl-desc">Боковая панель навигации, брендирование</div>
           </div>
           <div class="tpl-actions">
-            <button class="btn btn-outline btn-sm"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
-            <button class="btn btn-secondary btn-sm" disabled>Заменить шаблон</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s" disabled>Заменить шаблон</button>
           </div>
         </div>
       </div>
@@ -931,8 +1004,8 @@
         </div>
       </div>
       <div class="footer-row">
-        <button class="btn btn-ghost" disabled>Сбросить до умолчаний</button>
-        <button class="btn btn-primary" disabled>Сохранить оформление</button>
+        <button class="ou-btn ou-btn--ghost" disabled>Сбросить до умолчаний</button>
+        <button class="ou-btn ou-btn--primary" disabled>Сохранить оформление</button>
       </div>
     </div>
   </div>
@@ -941,7 +1014,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Предпросмотр шаблона — навигация по элементам              -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-preview" class="shell" style="position:relative;">
+<div id="s-preview" class="wf-state shell" style="position:relative;">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -961,7 +1034,7 @@
       <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0;">
         <div style="font-size:15px;font-weight:600;">Шаблон «Корпоративный» — элементы и их вид</div>
         <div style="font-size:12px;color:var(--muted-fg);">Демо-данные · элементы управления работают</div>
-        <button class="btn btn-ghost" style="margin-left:auto;width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-btn ou-btn--ghost" style="margin-left:auto;width:32px;height:32px;padding:0;display:flex;align-items:center;justify-content:center;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
 
       <!-- Body -->
@@ -1025,7 +1098,7 @@
       <!-- Footer -->
       <div style="padding:10px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0;">
         <span style="font-size:12px;color:var(--muted-fg);">8 элементов · шаблон «Корпоративный» v1.2.0</span>
-        <button class="btn btn-outline btn-sm" style="margin-left:auto;">Закрыть</button>
+        <button class="ou-btn ou-btn--secondary ou-btn--s" style="margin-left:auto;">Закрыть</button>
       </div>
     </div>
   </div>
@@ -1035,7 +1108,7 @@
 <!-- STATE: Галерея — подтверждение смены шаблона                       -->
 <!-- Показывается поверх галереи когда у теста есть авторские страницы  -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-gallery-confirm" class="shell" style="position:relative;">
+<div id="s-gallery-confirm" class="wf-state shell" style="position:relative;">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -1056,7 +1129,7 @@
       <div class="dialog-header">
         <svg width="16" height="16" style="color:var(--warn-fg);flex-shrink:0;"><use href="#i-warn"/></svg>
         <div class="dialog-title">Сменить шаблон?</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body">
         <div style="font-size:13px;line-height:1.7;color:var(--fg);margin-bottom:12px;">
@@ -1067,8 +1140,8 @@
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="btn btn-outline">Отмена</button>
-        <button class="btn btn-primary">Сменить шаблон</button>
+        <button class="ou-btn ou-btn--secondary">Отмена</button>
+        <button class="ou-btn ou-btn--primary">Сменить шаблон</button>
       </div>
     </div>
   </div>
@@ -1077,7 +1150,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Галерея шаблонов                                            -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-gallery" class="shell">
+<div id="s-gallery" class="wf-state shell">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -1111,13 +1184,13 @@
           <div class="gallery-body">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
               <div class="gallery-name">Стандартный</div>
-              <span class="badge badge-outline">Встроенный</span>
-              <span class="badge badge-outline" style="color:var(--muted-fg);font-size:10px;">v1.0.0</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline" style="color:var(--muted-fg);font-size:10px;">v1.0.0</span>
             </div>
             <div class="gallery-desc">Базовый одноколоночный плеер. Обратная совместимость.</div>
             <div class="gallery-footer">
-              <button class="btn btn-outline btn-sm"><svg width="12" height="12"><use href="#i-eye"/></svg> Предпросмотр</button>
-              <button class="btn btn-secondary btn-sm">Выбрать</button>
+              <button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="12" height="12"><use href="#i-eye"/></svg> Предпросмотр</button>
+              <button class="ou-btn ou-btn--secondary ou-btn--s">Выбрать</button>
             </div>
           </div>
         </div>
@@ -1139,12 +1212,12 @@
           <div class="gallery-body">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
               <div class="gallery-name">Корпоративный</div>
-              <span class="badge badge-outline">Встроенный</span>
-              <span class="badge badge-outline" style="color:var(--muted-fg);font-size:10px;">v1.2.0</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline" style="color:var(--muted-fg);font-size:10px;">v1.2.0</span>
             </div>
             <div class="gallery-desc">Боковая панель навигации, брендирование, прогресс по темам.</div>
             <div class="gallery-footer">
-              <button class="btn btn-outline btn-sm"><svg width="12" height="12"><use href="#i-eye"/></svg> Предпросмотр</button>
+              <button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="12" height="12"><use href="#i-eye"/></svg> Предпросмотр</button>
             </div>
           </div>
         </div>
@@ -1162,13 +1235,13 @@
           <div class="gallery-body">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
               <div class="gallery-name">Минималистский</div>
-              <span class="badge badge-outline">Встроенный</span>
-              <span class="badge badge-outline" style="color:var(--muted-fg);font-size:10px;">v1.0.0</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline" style="color:var(--muted-fg);font-size:10px;">v1.0.0</span>
             </div>
             <div class="gallery-desc">Фокус на одном макете страницы. Минимум элементов оболочки.</div>
             <div class="gallery-footer">
-              <button class="btn btn-outline btn-sm"><svg width="12" height="12"><use href="#i-eye"/></svg> Предпросмотр</button>
-              <button class="btn btn-secondary btn-sm">Выбрать</button>
+              <button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="12" height="12"><use href="#i-eye"/></svg> Предпросмотр</button>
+              <button class="ou-btn ou-btn--secondary ou-btn--s">Выбрать</button>
             </div>
           </div>
         </div>
@@ -1180,7 +1253,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Галерея — поиск с результатом                               -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-gallery-search" class="shell">
+<div id="s-gallery-search" class="wf-state shell">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -1202,10 +1275,10 @@
           <div style="position:absolute;top:10px;right:10px;z-index:2;background:white;color:var(--primary);border:1.5px solid var(--primary);border-radius:20px;padding:2px 8px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:4px;box-shadow:0 1px 4px rgba(0,0,0,.15);"><svg width="11" height="11"><use href="#i-check"/></svg> Выбран</div>
           <div class="gallery-preview"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div><div class="ps-opt"></div></div></div></div></div>
           <div class="gallery-body">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div class="gallery-name">Корпоративный</div><span class="badge badge-outline">Встроенный</span></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div class="gallery-name">Корпоративный</div><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span></div>
             <div class="gallery-desc">Боковая панель навигации, брендирование, прогресс по темам.</div>
             <div class="gallery-footer">
-              <button class="btn btn-outline btn-sm"><svg width="12" height="12"><use href="#i-eye"/></svg> Предпросмотр</button>
+              <button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="12" height="12"><use href="#i-eye"/></svg> Предпросмотр</button>
             </div>
           </div>
         </div>
@@ -1217,7 +1290,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Галерея — нет результатов поиска                            -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-gallery-empty" class="shell">
+<div id="s-gallery-empty" class="wf-state shell">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -1247,7 +1320,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Оформление сохранено (toast)                                 -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-saved" class="shell" style="position:relative;">
+<div id="s-saved" class="wf-state shell" style="position:relative;">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -1257,7 +1330,7 @@
     <div class="topbar">
       <span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span>
       <span class="test-title">Основы информационной безопасности</span>
-      <div class="topbar-actions"><button class="btn btn-outline btn-sm">Экспорт SCORM</button></div>
+      <div class="topbar-actions"><button class="ou-btn ou-btn--secondary ou-btn--s">Экспорт SCORM</button></div>
     </div>
     <div class="editor-tabs">
       <div class="etab">Вопросы</div><div class="etab">Настройки</div>
@@ -1269,12 +1342,12 @@
         <div class="tpl-block">
           <div class="tpl-thumb"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div><div class="ps-opt"></div></div></div></div></div>
           <div class="tpl-info">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div class="tpl-name">Корпоративный</div><span class="badge badge-outline">Встроенный</span></div>
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div class="tpl-name">Корпоративный</div><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span></div>
             <div class="tpl-desc">Боковая панель навигации, брендирование</div>
           </div>
           <div class="tpl-actions">
-            <button class="btn btn-outline btn-sm"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
-            <button class="btn btn-secondary btn-sm"><svg width="13" height="13"><use href="#i-layout"/></svg> Заменить шаблон</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+            <button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="13" height="13"><use href="#i-layout"/></svg> Заменить шаблон</button>
           </div>
         </div>
       </div>
@@ -1291,8 +1364,8 @@
         </div>
       </div>
       <div class="footer-row">
-        <button class="btn btn-ghost">Сбросить до умолчаний</button>
-        <button class="btn btn-primary">Сохранить оформление</button>
+        <button class="ou-btn ou-btn--ghost">Сбросить до умолчаний</button>
+        <button class="ou-btn ou-btn--primary">Сохранить оформление</button>
       </div>
     </div>
   </div>
@@ -1307,7 +1380,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Открытый color picker (popover над полем цвета)             -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-color-picker" class="shell">
+<div id="s-color-picker" class="wf-state shell">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -1317,7 +1390,7 @@
     <div class="topbar">
       <span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span>
       <span class="test-title">Основы информационной безопасности</span>
-      <div class="topbar-actions"><button class="btn btn-outline btn-sm">Экспорт SCORM</button></div>
+      <div class="topbar-actions"><button class="ou-btn ou-btn--secondary ou-btn--s">Экспорт SCORM</button></div>
     </div>
     <div class="editor-tabs">
       <div class="etab">Вопросы</div><div class="etab">Настройки</div>
@@ -1329,7 +1402,7 @@
         <div class="tpl-block">
           <div class="tpl-thumb"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div><div class="ps-opt"></div></div></div></div></div>
           <div class="tpl-info"><div class="tpl-name">Корпоративный</div></div>
-          <div class="tpl-actions"><button class="btn btn-outline btn-sm"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button><button class="btn btn-secondary btn-sm"><svg width="13" height="13"><use href="#i-layout"/></svg> Заменить</button></div>
+          <div class="tpl-actions"><button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button><button class="ou-btn ou-btn--secondary ou-btn--s"><svg width="13" height="13"><use href="#i-layout"/></svg> Заменить</button></div>
         </div>
       </div>
       <hr class="sep">
@@ -1364,8 +1437,8 @@
               <div class="color-preset" style="background:#0099cc;"></div>
             </div>
             <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:10px;">
-              <button class="btn btn-outline btn-sm">Отмена</button>
-              <button class="btn btn-primary btn-sm">OK</button>
+              <button class="ou-btn ou-btn--secondary ou-btn--s">Отмена</button>
+              <button class="ou-btn ou-btn--primary ou-btn--s">OK</button>
             </div>
           </div>
         </div>
@@ -1375,8 +1448,8 @@
         </div>
       </div>
       <div class="footer-row">
-        <button class="btn btn-ghost">Сбросить до умолчаний</button>
-        <button class="btn btn-primary">Сохранить оформление</button>
+        <button class="ou-btn ou-btn--ghost">Сбросить до умолчаний</button>
+        <button class="ou-btn ou-btn--primary">Сохранить оформление</button>
       </div>
     </div>
   </div>
@@ -1385,7 +1458,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Подтверждение сброса параметров                             -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-reset-confirm" class="shell" style="position:relative;">
+<div id="s-reset-confirm" class="wf-state shell" style="position:relative;">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav"><div class="nav-item active" style="margin-top:8px;"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav>
@@ -1402,7 +1475,7 @@
     <div class="dialog">
       <div class="dialog-header">
         <div class="dialog-title">Сбросить параметры?</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body">
         <div style="font-size:13px;line-height:1.6;color:var(--fg);">
@@ -1411,13 +1484,66 @@
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="btn btn-outline">Отмена</button>
-        <button class="btn btn-danger">Сбросить</button>
+        <button class="ou-btn ou-btn--secondary">Отмена</button>
+        <button class="ou-btn ou-btn--destructive">Сбросить</button>
       </div>
     </div>
   </div>
 </div>
 
+
+<!-- ═══════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент</th>
+        <th>Поле API / условие</th>
+        <th>Примечание</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Состояния wireframe</td>
+        <td><code>showState(btn, stateId)</code></td>
+        <td>Метанавигация переключает только визуальные состояния и не является частью продуктового UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<div class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping</h2>
+  <p class="wf-mapping-sub">
+    Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент является блокером.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент wireframe</th>
+        <th>DS-компонент</th>
+        <th>Используемые токены</th>
+        <th>Примечания</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Метанавигация состояний</td>
+        <td><code>Wireframe utility</code></td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code>, <code>--ou-accent-*</code></td>
+        <td>Не мигрируется в продуктовый UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
 <script>
   function show(id) {
     document.querySelectorAll('.shell').forEach(el => el.classList.remove('active'));
@@ -1426,5 +1552,253 @@
     event.currentTarget.classList.add('active');
   }
 </script>
+
+<script>
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
+</script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.drawer-footer')) addMappingRow(rows, 'drawer-footer', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
 </body>
 </html>

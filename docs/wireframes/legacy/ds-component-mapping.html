@@ -1,0 +1,1919 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DS Component Mapping — shadcn → @universityrt/ui-kit</title>
+  <link rel="stylesheet" href="ds/university-rt.css" />
+  <link rel="stylesheet" href="ds/wf-utils.css" />
+<style>
+/* ====================================================================
+   LAYER 0 — A11Y
+   ==================================================================== */
+:where(button,[role="button"],a,input,select,textarea,[tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--ou-border-focus);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,*::before,*::after {
+    animation-duration:.01ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.01ms!important;
+    scroll-behavior:auto!important;
+  }
+}
+
+/* ====================================================================
+   LAYER 1 — PRIMITIVES
+   ==================================================================== */
+:root {
+  --ou-purple-50:  color-mix(in oklch,#fff 92%,#7700FF);
+  --ou-purple-100: color-mix(in oklch,#fff 80%,#7700FF);
+  --ou-purple-200: color-mix(in oklch,#fff 60%,#7700FF);
+  --ou-purple-300: color-mix(in oklch,#fff 40%,#7700FF);
+  --ou-purple-400: color-mix(in oklch,#fff 18%,#7700FF);
+  --ou-purple-500: #7700FF;
+  --ou-purple-600: color-mix(in oklch,#000 16%,#7700FF);
+  --ou-purple-700: color-mix(in oklch,#000 32%,#7700FF);
+  --ou-neutral-0:   #FFFFFF;
+  --ou-neutral-50:  #F4F4F5;
+  --ou-neutral-100: #E7E8EA;
+  --ou-neutral-200: #D0D2D7;
+  --ou-neutral-300: #AEB2BB;
+  --ou-neutral-400: #828795;
+  --ou-neutral-500: #5D6371;
+  --ou-neutral-600: #444B59;
+  --ou-neutral-700: #2F3543;
+  --ou-neutral-800: #232A38;
+  --ou-neutral-900: #1D2533;
+  --ou-neutral-950: #11151E;
+  --ou-success-50:  color-mix(in oklch,#fff 90%,#0ACB5B);
+  --ou-success-100: color-mix(in oklch,#fff 76%,#0ACB5B);
+  --ou-success-500: #0ACB5B;
+  --ou-success-600: color-mix(in oklch,#000 14%,#0ACB5B);
+  --ou-success-700: color-mix(in oklch,#000 30%,#0ACB5B);
+  --ou-error-50:  color-mix(in oklch,#fff 90%,#FF2626);
+  --ou-error-100: color-mix(in oklch,#fff 76%,#FF2626);
+  --ou-error-500: #FF2626;
+  --ou-error-600: color-mix(in oklch,#000 14%,#FF2626);
+  --ou-error-700: color-mix(in oklch,#000 30%,#FF2626);
+  --ou-warning-50:  color-mix(in oklch,#fff 90%,#FFB608);
+  --ou-warning-100: color-mix(in oklch,#fff 76%,#FFB608);
+  --ou-warning-500: #FFB608;
+  --ou-warning-600: color-mix(in oklch,#000 14%,#FFB608);
+  --ou-warning-700: color-mix(in oklch,#000 30%,#FFB608);
+  --ou-info-50:  color-mix(in oklch,#fff 90%,#2563EB);
+  --ou-info-100: color-mix(in oklch,#fff 76%,#2563EB);
+  --ou-info-500: #2563EB;
+  --ou-info-600: color-mix(in oklch,#000 14%,#2563EB);
+  --ou-info-700: color-mix(in oklch,#000 30%,#2563EB);
+  --ou-font-family-base: 'Inter','Segoe UI',system-ui,-apple-system,sans-serif;
+  --ou-font-family-mono: 'JetBrains Mono','SF Mono',Menlo,Consolas,monospace;
+  --ou-shadow-xs:  0 1px 2px rgba(17,21,30,.06);
+  --ou-shadow-sm:  0 1px 2px rgba(17,21,30,.06),0 1px 3px rgba(17,21,30,.08);
+  --ou-shadow-md:  0 4px 8px rgba(17,21,30,.06),0 2px 4px rgba(17,21,30,.06);
+  --ou-shadow-lg:  0 12px 24px rgba(17,21,30,.10),0 4px 8px rgba(17,21,30,.06);
+  --ou-shadow-xl:  0 24px 48px rgba(17,21,30,.16),0 8px 16px rgba(17,21,30,.08);
+  --ou-shadow-focus: 0 0 0 3px color-mix(in oklch,transparent 70%,var(--ou-purple-500));
+  --ou-motion-fast:  120ms;
+  --ou-motion-base:  180ms;
+  --ou-easing-standard: cubic-bezier(.2,0,0,1);
+}
+
+/* ====================================================================
+   LAYER 2 — SEMANTIC · LIGHT
+   ==================================================================== */
+.ou, .ou.ou--light {
+  color-scheme: light;
+  --ou-fg-default:  var(--ou-neutral-900);
+  --ou-fg-soft:     var(--ou-neutral-700);
+  --ou-fg-muted:    var(--ou-neutral-500);
+  --ou-fg-subtle:   var(--ou-neutral-400);
+  --ou-fg-disabled: var(--ou-neutral-400);
+  --ou-fg-on-accent: var(--ou-neutral-0);
+  --ou-fg-on-soft:  var(--ou-purple-700);
+  --ou-bg-page:     var(--ou-neutral-50);
+  --ou-bg-surface-2: var(--ou-neutral-50);
+  --ou-bg-surface-3: var(--ou-neutral-100);
+  --ou-bg-elevated: var(--ou-neutral-0);
+  --ou-bg-overlay:  rgba(17,21,30,.48);
+  --ou-bg-disabled: var(--ou-neutral-200);
+  --ou-bg-hover:    color-mix(in oklch,transparent 94%,var(--ou-neutral-900));
+  --ou-bg-pressed:  color-mix(in oklch,transparent 90%,var(--ou-neutral-900));
+  --ou-bg-input:    var(--ou-neutral-0);
+  --ou-bg-backdrop: rgba(17,21,30,.48);
+  --ou-border-soft:    var(--ou-neutral-100);
+  --ou-border-default: var(--ou-neutral-300);
+  --ou-border-strong:  var(--ou-neutral-400);
+  --ou-border-focus:   var(--ou-purple-500);
+  --ou-border-hover:   var(--ou-border-strong);
+  --ou-accent-default:        var(--ou-purple-500);
+  --ou-accent-hover:          var(--ou-purple-600);
+  --ou-accent-active:         var(--ou-purple-700);
+  --ou-accent-soft:           var(--ou-purple-50);
+  --ou-accent-container:      var(--ou-purple-100);
+  --ou-accent-container-hover: var(--ou-purple-200);
+  --ou-accent-on-soft:        var(--ou-purple-700);
+  --ou-accent-muted:          var(--ou-purple-300);
+  --ou-accent-on:             var(--ou-fg-on-accent);
+  --ou-success-default:   var(--ou-success-500);
+  --ou-success-hover:     var(--ou-success-600);
+  --ou-success-soft:      var(--ou-success-50);
+  --ou-success-on-soft:   var(--ou-success-700);
+  --ou-error-default:     var(--ou-error-500);
+  --ou-error-hover:       var(--ou-error-600);
+  --ou-error-soft:        var(--ou-error-50);
+  --ou-error-on-soft:     var(--ou-error-700);
+  --ou-warning-default:   var(--ou-warning-500);
+  --ou-warning-hover:     var(--ou-warning-600);
+  --ou-warning-soft:      var(--ou-warning-50);
+  --ou-warning-on-soft:   var(--ou-warning-700);
+  --ou-warning-on:        #2A1A00;
+  --ou-info-default:      var(--ou-info-500);
+  --ou-info-hover:        var(--ou-info-600);
+  --ou-info-soft:         var(--ou-info-50);
+  --ou-info-on-soft:      var(--ou-info-700);
+  --ou-shadow-focus-error: 0 0 0 3px var(--ou-error-soft);
+}
+
+/* ====================================================================
+   LAYER 2 — SEMANTIC · DARK
+   ==================================================================== */
+.ou.ou--dark {
+  color-scheme: dark;
+  --ou-fg-default:  var(--ou-neutral-50);
+  --ou-fg-soft:     var(--ou-neutral-200);
+  --ou-fg-muted:    var(--ou-neutral-300);
+  --ou-fg-subtle:   var(--ou-neutral-400);
+  --ou-fg-disabled: var(--ou-neutral-600);
+  --ou-fg-on-accent: var(--ou-neutral-0);
+  --ou-fg-on-soft:  var(--ou-purple-200);
+  --ou-bg-page:     #11151E;
+  --ou-bg-surface-2: #232A38;
+  --ou-bg-surface-3: #2F3543;
+  --ou-bg-elevated: #232A38;
+  --ou-bg-overlay:  rgba(0,0,0,.66);
+  --ou-bg-disabled: #232A38;
+  --ou-bg-hover:    color-mix(in oklch,transparent 90%,#ffffff);
+  --ou-bg-pressed:  color-mix(in oklch,transparent 84%,#ffffff);
+  --ou-bg-input:    #232A38;
+  --ou-bg-backdrop: rgba(0,0,0,.66);
+  --ou-border-soft:    #2F3543;
+  --ou-border-default: #3A4150;
+  --ou-border-strong:  var(--ou-neutral-400);
+  --ou-border-focus:   var(--ou-purple-400);
+  --ou-accent-default:        var(--ou-purple-300);
+  --ou-accent-hover:          var(--ou-purple-200);
+  --ou-accent-soft:           color-mix(in oklch,#11151E 62%,var(--ou-purple-400));
+  --ou-accent-container:      color-mix(in oklch,#11151E 48%,var(--ou-purple-400));
+  --ou-accent-on-soft:        var(--ou-purple-100);
+  --ou-success-soft:    color-mix(in oklch,#11151E 78%,var(--ou-success-500));
+  --ou-success-on-soft: var(--ou-success-500);
+  --ou-error-soft:      color-mix(in oklch,#11151E 78%,var(--ou-error-500));
+  --ou-error-on-soft:   color-mix(in oklch,#fff 30%,var(--ou-error-500));
+  --ou-warning-soft:    color-mix(in oklch,#11151E 78%,var(--ou-warning-500));
+  --ou-warning-on-soft: var(--ou-warning-500);
+  --ou-info-soft:       color-mix(in oklch,#11151E 78%,var(--ou-info-500));
+  --ou-info-on-soft:    color-mix(in oklch,#fff 30%,var(--ou-info-500));
+  --ou-shadow-xs: 0 1px 2px rgba(0,0,0,.32);
+  --ou-shadow-sm: 0 1px 2px rgba(0,0,0,.36),0 1px 3px rgba(0,0,0,.32);
+  --ou-shadow-md: 0 4px 8px rgba(0,0,0,.32),0 2px 4px rgba(0,0,0,.28);
+  --ou-shadow-lg: 0 12px 24px rgba(0,0,0,.40),0 4px 8px rgba(0,0,0,.32);
+  --ou-shadow-xl: 0 24px 48px rgba(0,0,0,.50),0 8px 16px rgba(0,0,0,.36);
+}
+
+/* ====================================================================
+   LAYER 3 — DENSITY & SIZING (normal)
+   ==================================================================== */
+.ou, .ou.ou--normal {
+  --ou-space-1:2px; --ou-space-2:8px; --ou-space-3:12px; --ou-space-4:16px;
+  --ou-space-5:20px; --ou-space-6:24px; --ou-space-7:32px; --ou-space-8:40px;
+  --ou-size-control-s: 32px;
+  --ou-size-control-m: 40px;
+  --ou-size-control-l: 48px;
+  --ou-radius-xs: 4px; --ou-radius-s: 6px; --ou-radius-m: 8px;
+  --ou-radius-l: 12px; --ou-radius-xl: 16px; --ou-radius-pill: 999px;
+  --ou-text-heading-l:  600 24px/32px var(--ou-font-family-base);
+  --ou-text-heading-m:  600 20px/28px var(--ou-font-family-base);
+  --ou-text-heading-s:  600 16px/24px var(--ou-font-family-base);
+  --ou-text-body-l:     400 16px/24px var(--ou-font-family-base);
+  --ou-text-body-m:     400 14px/20px var(--ou-font-family-base);
+  --ou-text-body-s:     400 12px/16px var(--ou-font-family-base);
+  --ou-text-body-xs:    400 11px/15px var(--ou-font-family-base);
+  --ou-text-caption:    500 11px/16px var(--ou-font-family-base);
+  --ou-text-mono-s:     400 12px/16px var(--ou-font-family-mono);
+}
+
+/* ====================================================================
+   BASE RESET
+   ==================================================================== */
+.ou {
+  background: var(--ou-bg-page);
+  color: var(--ou-fg-default);
+  font: var(--ou-text-body-m);
+  font-family: var(--ou-font-family-base);
+  -webkit-font-smoothing: antialiased;
+}
+.ou *:focus-visible {
+  outline: none;
+  box-shadow: var(--ou-shadow-focus);
+  border-radius: var(--ou-radius-s);
+}
+
+/* ====================================================================
+   DS BUTTON
+   ==================================================================== */
+.ou-btn,.ou-iconbtn {
+  border: 1px solid transparent; cursor: pointer;
+  transition: background var(--ou-motion-fast) var(--ou-easing-standard),
+              border-color var(--ou-motion-fast) var(--ou-easing-standard),
+              color var(--ou-motion-fast) var(--ou-easing-standard),
+              box-shadow var(--ou-motion-fast);
+  user-select: none;
+}
+.ou-btn:focus-visible { outline:none; box-shadow:var(--ou-shadow-focus); }
+.ou-btn--primary { background:var(--ou-accent-default); color:var(--ou-fg-on-accent); }
+.ou-btn--primary:hover:not([disabled]) { background:var(--ou-accent-hover); }
+.ou-btn--primary:active:not([disabled]) { background:var(--ou-accent-active); }
+.ou-btn--primary[disabled] { background:var(--ou-bg-disabled); color:var(--ou-fg-disabled); }
+.ou-btn--secondary { background:var(--ou-accent-soft); color:var(--ou-accent-on-soft); }
+.ou-btn--secondary:hover:not([disabled]) { background:var(--ou-accent-container); }
+.ou-btn--ghost { background:transparent; color:var(--ou-fg-default); }
+.ou-btn--ghost:hover:not([disabled]) { background:var(--ou-bg-hover); }
+.ou-btn--destructive { background:var(--ou-error-default); color:var(--ou-fg-on-accent); }
+.ou-btn--destructive:hover:not([disabled]) { background:var(--ou-error-hover); }
+.ou-btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:var(--ou-space-2);
+  border-radius:var(--ou-radius-m); font-family:var(--ou-font-family-base); font-weight:600;
+  white-space:nowrap;
+}
+.ou-btn--s { height:var(--ou-size-control-s); padding:0 var(--ou-space-3); font-size:13px; }
+.ou-btn--m { height:var(--ou-size-control-m); padding:0 var(--ou-space-4); font-size:14px; }
+.ou-btn--l { height:var(--ou-size-control-l); padding:0 var(--ou-space-5); font-size:15px; }
+
+/* ====================================================================
+   DS INPUT (FormField)
+   ==================================================================== */
+.ou-field { display:inline-flex; flex-direction:column; gap:var(--ou-space-2); }
+.ou-field--full { display:flex; width:100%; }
+.ou-field__lbl { font:var(--ou-text-body-s); color:var(--ou-fg-default); font-weight:500; }
+.ou-field__box {
+  display:flex; align-items:center;
+  background:var(--ou-bg-input);
+  border:1px solid var(--ou-border-default);
+  border-radius:var(--ou-radius-m);
+  transition:border-color var(--ou-motion-fast),box-shadow var(--ou-motion-fast);
+}
+.ou-field__box:hover { border-color:var(--ou-border-hover); }
+.ou-field__box:focus-within { border-color:var(--ou-accent-default); box-shadow:var(--ou-shadow-focus); }
+.ou-field--m .ou-field__box { height:var(--ou-size-control-m); padding:0 var(--ou-space-3); }
+.ou-field__input {
+  flex:1; min-width:0; background:transparent; border:0; outline:none;
+  font:var(--ou-text-body-m); color:var(--ou-fg-default); padding:0 var(--ou-space-2);
+}
+.ou-field__input::placeholder { color:var(--ou-fg-muted); }
+
+/* ====================================================================
+   DS TAG
+   ==================================================================== */
+.ou-tag {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:2px 8px; background:var(--ou-bg-surface-3); color:var(--ou-fg-soft);
+  border-radius:var(--ou-radius-s); font:var(--ou-text-body-xs); font-weight:600;
+  line-height:18px; white-space:nowrap;
+}
+.ou-tag svg { width:12px; height:12px; }
+.ou-tag__dot { width:6px; height:6px; border-radius:999px; background:currentColor; }
+.ou-tag--s { padding:0 6px; font-size:10px; line-height:16px; }
+.ou-tag--l { padding:4px 10px; font-size:13px; line-height:20px; }
+.ou-tag--neutral { background:var(--ou-bg-surface-3); color:var(--ou-fg-soft); }
+.ou-tag--accent  { background:var(--ou-accent-container); color:var(--ou-accent-on-soft); }
+.ou-tag--success { background:var(--ou-success-soft); color:var(--ou-success-on-soft); }
+.ou-tag--warning { background:var(--ou-warning-soft); color:var(--ou-warning-on-soft); }
+.ou-tag--error   { background:var(--ou-error-soft);   color:var(--ou-error-on-soft); }
+.ou-tag--info    { background:var(--ou-info-soft);     color:var(--ou-info-on-soft); }
+.ou-tag--outline { background:transparent; border:1px solid var(--ou-border-default); color:var(--ou-fg-soft); padding-block:1px; }
+.ou-tag--outline.ou-tag--accent  { border-color:var(--ou-accent-default);  color:var(--ou-accent-default); }
+.ou-tag--outline.ou-tag--success { border-color:var(--ou-success-default); color:var(--ou-success-default); }
+.ou-tag--outline.ou-tag--error   { border-color:var(--ou-error-default);   color:var(--ou-error-default); }
+.ou-tag--solid { color:var(--ou-fg-on-accent); }
+.ou-tag--solid.ou-tag--neutral { background:var(--ou-fg-soft); }
+.ou-tag--solid.ou-tag--accent  { background:var(--ou-accent-default); }
+.ou-tag--solid.ou-tag--success { background:var(--ou-success-default); }
+.ou-tag-group { display:inline-flex; flex-wrap:wrap; gap:6px; }
+
+/* ====================================================================
+   DS MODAL
+   ==================================================================== */
+.ou-modal-root { position:absolute; inset:0; z-index:1000; display:grid; place-items:center; padding:var(--ou-space-4); }
+.ou-modal__backdrop { position:absolute; inset:0; background:var(--ou-bg-backdrop); backdrop-filter:blur(2px); }
+.ou-modal {
+  position:relative; z-index:1; background:var(--ou-bg-elevated);
+  border-radius:var(--ou-radius-l); box-shadow:var(--ou-shadow-xl);
+  width:100%; overflow:hidden;
+  display:flex; flex-direction:column;
+}
+.ou-modal--s { max-width:360px; }
+.ou-modal--m { max-width:480px; }
+.ou-modal__head { display:flex; align-items:flex-start; gap:var(--ou-space-4); padding:var(--ou-space-5) var(--ou-space-5) var(--ou-space-4); }
+.ou-modal__head-text { flex:1; min-width:0; }
+.ou-modal__title { font:var(--ou-text-heading-s); margin:0; color:var(--ou-fg-default); }
+.ou-modal__desc  { font:var(--ou-text-body-s); color:var(--ou-fg-muted); margin:var(--ou-space-1) 0 0; }
+.ou-modal__close {
+  flex-shrink:0; width:32px; height:32px; border:0; border-radius:var(--ou-radius-s);
+  background:transparent; color:var(--ou-fg-muted); cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.ou-modal__close:hover { background:var(--ou-bg-hover); color:var(--ou-fg-default); }
+.ou-modal__body { padding:0 var(--ou-space-5) var(--ou-space-5); overflow-y:auto; color:var(--ou-fg-default); font:var(--ou-text-body-m); }
+.ou-modal__foot { display:flex; justify-content:flex-end; gap:var(--ou-space-3); padding:var(--ou-space-4) var(--ou-space-5); }
+.ou-modal__head--icon .ou-modal__icon {
+  flex-shrink:0; width:40px; height:40px; border-radius:var(--ou-radius-m);
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.ou-modal__icon--danger  { background:var(--ou-error-soft);   color:var(--ou-error-default); }
+.ou-modal__icon--warning { background:var(--ou-warning-soft); color:var(--ou-warning-default); }
+.ou-modal__icon--success { background:var(--ou-success-soft); color:var(--ou-success-default); }
+.ou-modal__icon--info    { background:var(--ou-accent-soft);  color:var(--ou-accent-default); }
+
+/* ====================================================================
+   DS DRAWER
+   ==================================================================== */
+.ou-drawer-root { position:absolute; inset:0; z-index:1000; }
+.ou-drawer__backdrop { position:absolute; inset:0; background:var(--ou-bg-backdrop); backdrop-filter:blur(2px); }
+.ou-drawer {
+  position:absolute; top:0; bottom:0;
+  background:var(--ou-bg-elevated); display:flex; flex-direction:column;
+  box-shadow:var(--ou-shadow-xl);
+}
+.ou-drawer--right { right:0; }
+.ou-drawer--narrow { width:300px; max-width:calc(100% - 24px); }
+.ou-drawer__head { display:flex; align-items:flex-start; gap:var(--ou-space-4); padding:var(--ou-space-5); border-bottom:1px solid var(--ou-border-soft); }
+.ou-drawer__head-text { flex:1; min-width:0; }
+.ou-drawer__title { font:var(--ou-text-heading-s); margin:0; color:var(--ou-fg-default); }
+.ou-drawer__desc  { font:var(--ou-text-body-s); color:var(--ou-fg-muted); margin:var(--ou-space-1) 0 0; }
+.ou-drawer__close {
+  flex-shrink:0; width:32px; height:32px; border:0; border-radius:var(--ou-radius-s);
+  background:transparent; color:var(--ou-fg-muted); cursor:pointer;
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.ou-drawer__close:hover { background:var(--ou-bg-hover); color:var(--ou-fg-default); }
+.ou-drawer__body { flex:1; overflow-y:auto; padding:var(--ou-space-5); display:flex; flex-direction:column; gap:var(--ou-space-4); }
+.ou-drawer__foot { display:flex; justify-content:flex-end; gap:var(--ou-space-3); padding:var(--ou-space-4) var(--ou-space-5); border-top:1px solid var(--ou-border-soft); }
+
+/* ====================================================================
+   DS MENU
+   ==================================================================== */
+.ou-menu {
+  --_pad:6px; --_item-pad-y:8px; --_item-pad-x:10px;
+  display:inline-flex; flex-direction:column;
+  min-width:200px; max-width:300px; padding:var(--_pad);
+  background:var(--ou-bg-elevated); border:1px solid var(--ou-border-soft);
+  border-radius:var(--ou-radius-m); box-shadow:var(--ou-shadow-lg);
+  color:var(--ou-fg-default); z-index:100;
+}
+.ou-menu__label { padding:8px var(--_item-pad-x) 4px; font:var(--ou-text-caption); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ou-fg-subtle); }
+.ou-menu__divider { height:1px; margin:4px 0; background:var(--ou-border-soft); border:0; }
+.ou-menu__item {
+  display:flex; align-items:center; gap:10px;
+  padding:var(--_item-pad-y) var(--_item-pad-x);
+  border:0; background:transparent; font:var(--ou-text-body-m); color:var(--ou-fg-default);
+  cursor:pointer; text-align:left; border-radius:6px; width:100%; text-decoration:none;
+}
+.ou-menu__item:hover { background:var(--ou-bg-hover); }
+.ou-menu__item[aria-disabled="true"] { color:var(--ou-fg-disabled); cursor:not-allowed; pointer-events:none; }
+.ou-menu__item-ico { width:16px; height:16px; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; color:var(--ou-fg-muted); }
+.ou-menu__item-ico svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; }
+.ou-menu__item-text { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+.ou-menu__item-title { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ou-menu__item-meta { font:var(--ou-text-body-s); color:var(--ou-fg-muted); }
+.ou-menu__item--danger { color:var(--ou-error-on-soft); }
+.ou-menu__item--danger .ou-menu__item-ico { color:var(--ou-error-on-soft); }
+.ou-menu__item--danger:hover { background:color-mix(in oklch,transparent 88%,var(--ou-error-500)); }
+
+/* ====================================================================
+   DS TOAST
+   ==================================================================== */
+.ou-toast {
+  display:flex; align-items:flex-start; gap:var(--ou-space-3);
+  min-width:280px; max-width:420px;
+  padding:var(--ou-space-3) var(--ou-space-4);
+  background:var(--ou-bg-elevated); border:1px solid var(--ou-border-soft);
+  border-left-width:3px; border-radius:var(--ou-radius-m); box-shadow:var(--ou-shadow-lg);
+}
+.ou-toast__ico { flex-shrink:0; margin-top:1px; }
+.ou-toast__body { flex:1; min-width:0; }
+.ou-toast__title { font:var(--ou-text-body-m); font-weight:600; color:var(--ou-fg-default); }
+.ou-toast__desc  { font:var(--ou-text-body-s); color:var(--ou-fg-muted); margin-top:2px; }
+.ou-toast__action {
+  flex-shrink:0; align-self:center; background:transparent; border:0; cursor:pointer;
+  font:var(--ou-text-body-s); font-weight:600;
+  padding:var(--ou-space-1) var(--ou-space-2); border-radius:var(--ou-radius-s);
+}
+.ou-toast__close {
+  flex-shrink:0; width:24px; height:24px; border:0; background:transparent;
+  color:var(--ou-fg-muted); cursor:pointer; border-radius:var(--ou-radius-s);
+  display:inline-flex; align-items:center; justify-content:center;
+}
+.ou-toast__close:hover { background:var(--ou-bg-hover); color:var(--ou-fg-default); }
+.ou-toast--success { border-left-color:var(--ou-success-default); }
+.ou-toast--success .ou-toast__ico { color:var(--ou-success-default); }
+.ou-toast--success .ou-toast__action { color:var(--ou-success-default); }
+.ou-toast--error   { border-left-color:var(--ou-error-default); }
+.ou-toast--error .ou-toast__ico { color:var(--ou-error-default); }
+.ou-toast--error .ou-toast__action { color:var(--ou-error-default); }
+.ou-toast--warning { border-left-color:var(--ou-warning-default); }
+.ou-toast--warning .ou-toast__ico { color:var(--ou-warning-default); }
+.ou-toast--info    { border-left-color:var(--ou-accent-default); }
+.ou-toast--info .ou-toast__ico { color:var(--ou-accent-default); }
+.ou-toast--info .ou-toast__action { color:var(--ou-accent-default); }
+
+/* ====================================================================
+   DS PROGRESS BAR
+   ==================================================================== */
+.ou-progress { display:flex; flex-direction:column; gap:var(--ou-space-2); width:100%; }
+.ou-progress__head { display:flex; justify-content:space-between; align-items:baseline; gap:var(--ou-space-3); }
+.ou-progress__lbl { font:var(--ou-text-body-s); color:var(--ou-fg-default); font-weight:500; }
+.ou-progress__val { font:var(--ou-text-body-s); color:var(--ou-fg-muted); font-variant-numeric:tabular-nums; }
+.ou-progress__val strong { color:var(--ou-fg-default); font-weight:600; }
+.ou-progress__track { position:relative; background:var(--ou-bg-hover); border-radius:999px; overflow:hidden; }
+.ou-progress--xs .ou-progress__track { height:4px; }
+.ou-progress--s  .ou-progress__track { height:6px; }
+.ou-progress--m  .ou-progress__track { height:8px; }
+.ou-progress__fill {
+  position:absolute; inset:0 auto 0 0; background:var(--ou-accent-default);
+  border-radius:999px; transition:width var(--ou-motion-base) var(--ou-easing-standard);
+}
+.ou-progress--success .ou-progress__fill { background:var(--ou-success-default); }
+.ou-progress--warning .ou-progress__fill { background:var(--ou-warning-default); }
+.ou-progress--error   .ou-progress__fill { background:var(--ou-error-default); }
+.ou-progress--indeterminate .ou-progress__fill {
+  width:35%!important; animation:ou-progress-slide 1.4s var(--ou-easing-standard) infinite;
+}
+@keyframes ou-progress-slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(300%)} }
+
+/* ====================================================================
+   DS SWITCH
+   ==================================================================== */
+.ou-switch { position:relative; display:inline-flex; flex-shrink:0; }
+.ou-switch__input { position:absolute; inset:0; width:100%; height:100%; opacity:0; margin:0; cursor:pointer; }
+.ou-switch__input:disabled { cursor:not-allowed; }
+.ou-switch__track {
+  position:relative; display:block;
+  background:var(--ou-border-default); border-radius:999px;
+  transition:background var(--ou-motion-base) var(--ou-easing-standard);
+}
+.ou-switch__thumb {
+  position:absolute; top:2px; left:2px;
+  background:#fff; border-radius:50%;
+  box-shadow:0 1px 3px rgba(0,0,0,.2);
+  transition:transform var(--ou-motion-base) var(--ou-easing-standard);
+}
+.ou-switch--s .ou-switch__track { width:28px; height:16px; }
+.ou-switch--s .ou-switch__thumb { width:12px; height:12px; }
+.ou-switch--s.is-on .ou-switch__thumb { transform:translateX(12px); }
+.ou-switch--m .ou-switch__track { width:36px; height:20px; }
+.ou-switch--m .ou-switch__thumb { width:16px; height:16px; }
+.ou-switch--m.is-on .ou-switch__thumb { transform:translateX(16px); }
+.ou-switch--l .ou-switch__track { width:48px; height:26px; }
+.ou-switch--l .ou-switch__thumb { width:22px; height:22px; }
+.ou-switch--l.is-on .ou-switch__thumb { transform:translateX(22px); }
+.ou-switch:hover:not(.is-disabled) .ou-switch__track { background:var(--ou-fg-muted); }
+.ou-switch.is-on .ou-switch__track { background:var(--ou-accent-default); }
+.ou-switch.is-on:hover:not(.is-disabled) .ou-switch__track { background:var(--ou-accent-hover); }
+.ou-switch.is-disabled { opacity:.5; }
+.ou-switch__input:focus-visible + .ou-switch__track { box-shadow:var(--ou-shadow-focus); }
+.ou-switch-field { display:inline-flex; align-items:flex-start; gap:var(--ou-space-3); cursor:pointer; user-select:none; }
+.ou-switch-field__label { font:var(--ou-text-body-m); color:var(--ou-fg-default); }
+.ou-switch-field__label--disabled { color:var(--ou-fg-disabled); }
+
+/* ====================================================================
+   DS CHIP
+   ==================================================================== */
+.ou-chip {
+  display:inline-flex; align-items:center; gap:0;
+  padding:0;
+  background:var(--ou-bg-elevated);
+  border:1px solid var(--ou-border-default);
+  border-radius:999px;
+  font:var(--ou-text-body-s); font-weight:500;
+  color:var(--ou-fg-default);
+  cursor:pointer;
+  transition:background var(--ou-motion-fast),border-color var(--ou-motion-fast),color var(--ou-motion-fast),box-shadow var(--ou-motion-fast);
+  white-space:nowrap; -webkit-user-select:none; user-select:none;
+}
+.ou-chip:hover:not(.is-disabled) { background:var(--ou-bg-hover); border-color:var(--ou-border-strong); }
+.ou-chip:focus-within { outline:none; box-shadow:var(--ou-shadow-focus); }
+.ou-chip.is-selected { background:var(--ou-accent-container); border-color:var(--ou-accent-default); color:var(--ou-accent-on-soft); }
+.ou-chip.is-selected:hover:not(.is-disabled) { background:var(--ou-accent-container-hover); }
+.ou-chip.is-disabled { color:var(--ou-fg-disabled); background:var(--ou-bg-disabled); border-color:var(--ou-border-soft); cursor:not-allowed; }
+.ou-chip__action {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:6px 12px; border:0; border-radius:999px;
+  background:transparent; color:inherit; font:inherit; font-weight:inherit;
+  white-space:inherit; cursor:inherit;
+}
+.ou-chip__action:focus { outline:none; }
+.ou-chip--s  .ou-chip__action { padding:4px 10px; }
+.ou-chip--l  .ou-chip__action { padding:8px 16px; }
+.ou-chip__close {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:20px; height:20px; border:0; padding:0; margin-right:6px;
+  background:transparent; color:inherit; cursor:pointer; opacity:.6; border-radius:999px;
+}
+.ou-chip__close:hover { opacity:1; background:var(--ou-bg-hover); }
+.ou-chip__close svg { width:10px; height:10px; }
+.ou-chip-group { display:flex; flex-wrap:wrap; gap:8px; }
+
+/* ====================================================================
+   SHADCN COMPONENTS — light-mode reference (hardcoded, no theme vars)
+   ==================================================================== */
+
+/* shadcn Badge */
+.sh-badge {
+  display:inline-flex; align-items:center;
+  padding:2px 10px; border-radius:9999px;
+  font-size:12px; font-weight:600; line-height:20px;
+  background:#f4f4f5; color:#18181b; border:1px solid transparent;
+}
+.sh-badge--default  { background:#18181b; color:#fafafa; }
+.sh-badge--secondary{ background:#f4f4f5; color:#18181b; }
+.sh-badge--destructive { background:#ef4444; color:#fff; }
+.sh-badge--outline  { background:transparent; border-color:#e4e4e7; color:#18181b; }
+.sh-badge--success  { background:#dcfce7; color:#166534; }
+.sh-badge--warning  { background:#fef9c3; color:#854d0e; }
+.sh-badge--error    { background:#fee2e2; color:#991b1b; }
+.sh-badge--info     { background:#dbeafe; color:#1e40af; }
+
+/* shadcn Button */
+.sh-btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding:0 16px; height:36px;
+  border-radius:6px; font-size:14px; font-weight:500;
+  border:1px solid transparent; cursor:pointer; white-space:nowrap;
+  font-family:inherit;
+  transition:background 120ms, opacity 120ms;
+}
+.sh-btn--default    { background:#18181b; color:#fafafa; }
+.sh-btn--default:hover { background:#27272a; }
+.sh-btn--secondary  { background:#f4f4f5; color:#18181b; }
+.sh-btn--secondary:hover { background:#e4e4e7; }
+.sh-btn--ghost      { background:transparent; color:#18181b; }
+.sh-btn--ghost:hover { background:#f4f4f5; }
+.sh-btn--outline    { background:transparent; border-color:#e4e4e7; color:#18181b; }
+.sh-btn--outline:hover { background:#f4f4f5; }
+.sh-btn--destructive{ background:#ef4444; color:#fff; }
+.sh-btn--destructive:hover { background:#dc2626; }
+
+/* shadcn Input + Label */
+.sh-label { font-size:14px; font-weight:500; color:#18181b; line-height:20px; }
+.sh-field { display:flex; flex-direction:column; gap:6px; width:100%; }
+.sh-input {
+  display:flex; height:40px; width:100%;
+  border:1px solid #e4e4e7; border-radius:6px;
+  background:#fff; padding:0 12px;
+  font-size:14px; color:#18181b; font-family:inherit;
+  outline:none; box-sizing:border-box;
+}
+.sh-input::placeholder { color:#a1a1aa; }
+.sh-input:focus { border-color:#18181b; box-shadow:0 0 0 2px rgba(24,24,27,.12); }
+
+/* shadcn Dialog (shown open inside stage) */
+.sh-dialog-overlay {
+  position:absolute; inset:0;
+  background:rgba(0,0,0,.5);
+  display:grid; place-items:center; padding:16px;
+}
+.sh-dialog {
+  background:#fff; border-radius:8px;
+  box-shadow:0 20px 60px rgba(0,0,0,.25);
+  width:100%; padding:24px; position:relative;
+}
+.sh-dialog__close {
+  position:absolute; top:12px; right:12px; width:28px; height:28px;
+  border:0; background:transparent; cursor:pointer; border-radius:6px;
+  display:inline-flex; align-items:center; justify-content:center; color:#71717a;
+}
+.sh-dialog__close:hover { background:#f4f4f5; }
+.sh-dialog__title { font-size:18px; font-weight:600; color:#18181b; margin:0 0 4px; }
+.sh-dialog__desc  { font-size:14px; color:#71717a; margin:0 0 16px; }
+.sh-dialog__body  { display:flex; flex-direction:column; gap:12px; }
+.sh-dialog__footer{ display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
+
+/* shadcn AlertDialog */
+.sh-alertdialog { background:#fff; border-radius:8px; box-shadow:0 20px 60px rgba(0,0,0,.25); width:100%; padding:24px; }
+.sh-alertdialog__title { font-size:18px; font-weight:600; color:#18181b; margin:0 0 8px; }
+.sh-alertdialog__desc  { font-size:14px; color:#71717a; margin:0 0 20px; }
+.sh-alertdialog__footer{ display:flex; gap:8px; justify-content:flex-end; }
+
+/* shadcn Sheet (shown open inside stage) */
+.sh-sheet-overlay { position:absolute; inset:0; background:rgba(0,0,0,.5); }
+.sh-sheet {
+  position:absolute; top:0; right:0; bottom:0; width:260px;
+  background:#fff; box-shadow:-4px 0 20px rgba(0,0,0,.15);
+  display:flex; flex-direction:column;
+}
+.sh-sheet__header { padding:20px 20px 16px; border-bottom:1px solid #f4f4f5; position:relative; }
+.sh-sheet__title  { font-size:16px; font-weight:600; color:#18181b; margin:0 0 2px; }
+.sh-sheet__desc   { font-size:13px; color:#71717a; margin:0; }
+.sh-sheet__close  {
+  position:absolute; top:12px; right:12px; width:28px; height:28px;
+  border:0; background:transparent; cursor:pointer; border-radius:6px;
+  display:inline-flex; align-items:center; justify-content:center; color:#71717a;
+}
+.sh-sheet__close:hover { background:#f4f4f5; }
+.sh-sheet__body   { flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:12px; }
+.sh-sheet__footer { padding:12px 20px; border-top:1px solid #f4f4f5; display:flex; gap:8px; justify-content:flex-end; }
+
+/* shadcn DropdownMenu */
+.sh-dropdown {
+  background:#fff; border:1px solid #e4e4e7; border-radius:8px;
+  box-shadow:0 4px 16px rgba(0,0,0,.1); padding:4px;
+  min-width:180px; max-width:280px; display:inline-flex; flex-direction:column;
+}
+.sh-dropdown__label { padding:6px 8px 4px; font-size:11px; font-weight:600; color:#71717a; text-transform:uppercase; letter-spacing:.05em; }
+.sh-dropdown__sep   { height:1px; margin:4px; background:#f4f4f5; border:0; }
+.sh-dropdown__item  {
+  display:flex; align-items:center; gap:8px;
+  padding:7px 8px; border-radius:5px; border:0;
+  background:transparent; font-size:14px; color:#18181b; font-family:inherit;
+  cursor:pointer; width:100%; text-align:left;
+}
+.sh-dropdown__item:hover { background:#f4f4f5; }
+.sh-dropdown__item--destructive { color:#ef4444; }
+.sh-dropdown__item--destructive:hover { background:#fef2f2; }
+.sh-dropdown__item--disabled { color:#a1a1aa; cursor:not-allowed; }
+.sh-dropdown__ico   { width:16px; height:16px; flex-shrink:0; opacity:.55; }
+.sh-dropdown__ico svg { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:2; }
+.sh-dropdown__meta  { font-size:12px; color:#a1a1aa; margin-left:auto; }
+
+/* shadcn Toast */
+.sh-toast {
+  display:flex; align-items:flex-start; gap:12px;
+  min-width:260px; max-width:380px; padding:12px 14px;
+  background:#fff; border:1px solid #e4e4e7; border-radius:8px;
+  box-shadow:0 4px 16px rgba(0,0,0,.1);
+}
+.sh-toast__body { flex:1; min-width:0; }
+.sh-toast__title { font-size:14px; font-weight:600; color:#18181b; }
+.sh-toast__desc  { font-size:12px; color:#71717a; margin-top:2px; }
+.sh-toast__action{
+  font-size:13px; font-weight:600; color:#18181b;
+  background:transparent; border:1px solid #e4e4e7;
+  padding:4px 10px; border-radius:6px; cursor:pointer; white-space:nowrap; font-family:inherit;
+}
+.sh-toast__close {
+  width:20px; height:20px; border:0; background:transparent; color:#71717a;
+  cursor:pointer; flex-shrink:0; display:inline-flex; align-items:center; justify-content:center;
+  border-radius:4px; font-family:inherit;
+}
+.sh-toast__close:hover { background:#f4f4f5; }
+
+/* shadcn Progress */
+.sh-progress-wrap { display:flex; flex-direction:column; gap:6px; width:100%; }
+.sh-progress-label{ display:flex; justify-content:space-between; font-size:12px; color:#71717a; }
+.sh-progress { height:8px; width:100%; overflow:hidden; border-radius:9999px; background:#f4f4f5; }
+.sh-progress__fill{ height:100%; border-radius:9999px; background:#18181b; transition:width .3s; }
+.sh-progress__fill--success { background:#16a34a; }
+.sh-progress__fill--warning { background:#ca8a04; }
+.sh-progress__fill--error   { background:#dc2626; }
+
+/* shadcn Switch + Label */
+.sh-switch-field { display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
+.sh-switch-field__label { font-size:14px; color:#18181b; font-family:inherit; }
+.sh-switch {
+  position:relative; width:44px; height:24px; flex-shrink:0;
+  background:#e4e4e7; border-radius:9999px;
+  border:0; cursor:pointer; transition:background 120ms;
+}
+.sh-switch.is-on { background:#18181b; }
+.sh-switch.is-disabled { opacity:.5; cursor:not-allowed; }
+.sh-switch__thumb {
+  position:absolute; top:2px; left:2px; width:20px; height:20px;
+  background:#fff; border-radius:50%;
+  box-shadow:0 1px 3px rgba(0,0,0,.2);
+  transition:transform 120ms;
+}
+.sh-switch.is-on .sh-switch__thumb { transform:translateX(20px); }
+
+/* ====================================================================
+   COMPARE GRID LAYOUT
+   ==================================================================== */
+.compare-grid {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+}
+.compare-col {
+  padding:var(--ou-space-5);
+  display:flex; flex-direction:column; gap:var(--ou-space-3);
+}
+.compare-col + .compare-col {
+  border-left:1px solid var(--ou-border-soft);
+}
+.compare-col--from {
+  background:#fafafa;
+}
+.compare-col__header {
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em;
+  padding:3px 8px; border-radius:4px; margin-bottom:4px;
+}
+.compare-col--from .compare-col__header {
+  background:#f4f4f5; color:#71717a;
+}
+.compare-col--to .compare-col__header {
+  background:var(--ou-accent-soft); color:var(--ou-accent-on-soft);
+}
+
+/* shared row/col helpers */
+.row { display:flex; flex-wrap:wrap; gap:var(--ou-space-3); align-items:flex-start; }
+.col { display:flex; flex-direction:column; gap:var(--ou-space-3); }
+.sh-row { display:flex; flex-wrap:wrap; gap:8px; align-items:flex-start; }
+.sh-col { display:flex; flex-direction:column; gap:8px; }
+
+/* stage for overlay previews */
+.stage {
+  position:relative; overflow:hidden;
+  background:var(--ou-bg-page); border:1px solid var(--ou-border-soft);
+  border-radius:var(--ou-radius-m);
+}
+.stage--tall  { min-height:360px; }
+.stage--xtall { min-height:460px; }
+
+.sh-stage {
+  position:relative; overflow:hidden;
+  background:#f8f8f8; border:1px solid #e4e4e7;
+  border-radius:6px;
+}
+.sh-stage--tall  { min-height:360px; }
+.sh-stage--xtall { min-height:460px; }
+
+/* faded page bg inside stages */
+.stage-bg { padding:16px; opacity:.35; pointer-events:none; }
+.stage-bg__row { height:36px; background:var(--ou-bg-surface-3); border-radius:var(--ou-radius-m); margin-bottom:8px; }
+.sh-stage-bg { padding:14px; opacity:.35; pointer-events:none; }
+.sh-stage-bg__row { height:36px; background:#e4e4e7; border-radius:6px; margin-bottom:8px; }
+
+/* ====================================================================
+   PAGE CHROME
+   ==================================================================== */
+body { margin:0; padding:var(--ou-space-7) var(--ou-space-8); min-height:100vh; }
+h1  { font:var(--ou-text-heading-l); margin:0 0 var(--ou-space-2); }
+h2  { font:var(--ou-text-heading-m); margin:48px 0 var(--ou-space-1); }
+.page-sub { color:var(--ou-fg-muted); font:var(--ou-text-body-m); margin:0 0 var(--ou-space-8); max-width:680px; }
+.section-sub { color:var(--ou-fg-muted); font:var(--ou-text-body-s); margin:var(--ou-space-2) 0 var(--ou-space-5); }
+
+.map-card { border:1px solid var(--ou-border-soft); border-radius:var(--ou-radius-l); overflow:hidden; margin-bottom:var(--ou-space-8); }
+.map-card__head { display:flex; align-items:center; gap:var(--ou-space-3); padding:var(--ou-space-4) var(--ou-space-5); background:var(--ou-bg-elevated); border-bottom:1px solid var(--ou-border-soft); }
+.map-card__title { font:var(--ou-text-body-m); font-weight:600; color:var(--ou-fg-default); }
+.map-card__arrow { color:var(--ou-fg-muted); }
+.map-card__sub { font-size:13px; color:var(--ou-fg-muted); }
+.badge-shadcn { padding:2px 8px; border-radius:var(--ou-radius-s); font:var(--ou-text-body-xs); font-weight:600; background:var(--ou-bg-surface-3,#E7E8EA); color:var(--ou-fg-muted); font-family:var(--ou-font-family-mono); }
+.badge-ds { padding:2px 8px; border-radius:var(--ou-radius-s); font:var(--ou-text-body-xs); font-weight:600; background:var(--ou-accent-container); color:var(--ou-accent-on-soft); font-family:var(--ou-font-family-mono); }
+.map-card__note { padding:var(--ou-space-3) var(--ou-space-5); border-top:1px solid var(--ou-border-soft); background:var(--ou-bg-surface-2,#F4F4F5); font:var(--ou-text-body-s); color:var(--ou-fg-muted); }
+.map-card__note code { font-family:var(--ou-font-family-mono); font-size:11px; background:var(--ou-bg-surface-3,#E7E8EA); padding:1px 5px; border-radius:var(--ou-radius-xs); color:var(--ou-fg-soft); }
+
+.toggle { position:fixed; top:16px; right:16px; display:flex; gap:4px; padding:4px; background:var(--ou-bg-elevated); border:1px solid var(--ou-border-soft); border-radius:var(--ou-radius-m); box-shadow:var(--ou-shadow-sm); z-index:2000; }
+.toggle button { font:var(--ou-text-body-s); padding:6px 12px; border:none; background:transparent; color:var(--ou-fg-muted); border-radius:var(--ou-radius-xs); cursor:pointer; font-family:inherit; }
+.toggle button[aria-pressed="true"] { background:var(--ou-bg-page); color:var(--ou-fg-default); }
+</style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: 1px solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: 1px solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: 1px;
+      height: 20px;
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, 52px);
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, 52px));
+      max-height: calc(100vh - var(--wf-nav-offset, 52px));
+    }
+  </style>
+</head>
+<body class="ou ou--light ou--normal" id="root">
+
+<div class="toggle">
+  <button data-t="light" aria-pressed="true">Light</button>
+  <button data-t="dark"  aria-pressed="false">Dark</button>
+</div>
+
+<h1>DS Component Mapping</h1>
+<p class="page-sub">Сравнение shadcn/ui (текущий стек) и @universityrt/ui-kit (целевой). Левая колонка — как компонент выглядит сейчас, правая — как будет после миграции.</p>
+
+
+<!-- ══════════ 1. Badge → Tag / Chip ══════════ -->
+<h2>1. Badge → Tag (некликабельные) / Chip (кликабельные)</h2>
+<p class="section-sub">Одному shadcn Badge соответствуют два DS-компонента по признаку интерактивности.</p>
+
+<div class="map-card">
+  <div class="map-card__head">
+    <span class="badge-shadcn">Badge</span>
+    <span class="map-card__arrow">→</span>
+    <span class="badge-ds">Tag</span>
+    <span class="map-card__sub">некликабельные метки</span>
+  </div>
+  <div class="compare-grid">
+    <div class="compare-col compare-col--from">
+      <div class="compare-col__header">shadcn/ui · до</div>
+      <div class="sh-col">
+        <div class="sh-row">
+          <span class="sh-badge sh-badge--default">Default</span>
+          <span class="sh-badge sh-badge--secondary">Secondary</span>
+          <span class="sh-badge sh-badge--destructive">Destructive</span>
+          <span class="sh-badge sh-badge--outline">Outline</span>
+        </div>
+        <div class="sh-row" style="margin-top:4px;">
+          <span class="sh-badge sh-badge--success">Завершён</span>
+          <span class="sh-badge sh-badge--warning">Истекает</span>
+          <span class="sh-badge sh-badge--error">Просрочен</span>
+          <span class="sh-badge sh-badge--info">Новый</span>
+        </div>
+        <p style="font-size:12px;color:#71717a;margin:4px 0 0;">Нет dot-индикаторов. Нет solid-варианта. Нет размеров s/m/l. Цветные тоны — нестандартные классы поверх shadcn.</p>
+      </div>
+    </div>
+    <div class="compare-col compare-col--to">
+      <div class="compare-col__header">@universityrt/ui-kit · после — Tag</div>
+      <div class="col">
+        <div class="row">
+          <span class="ou-tag ou-tag--neutral">Черновик</span>
+          <span class="ou-tag ou-tag--accent">Назначен</span>
+          <span class="ou-tag ou-tag--success"><span class="ou-tag__dot"></span>Завершён</span>
+          <span class="ou-tag ou-tag--warning"><span class="ou-tag__dot"></span>Истекает</span>
+          <span class="ou-tag ou-tag--error">Просрочен</span>
+          <span class="ou-tag ou-tag--info">Новый</span>
+        </div>
+        <div class="row">
+          <span class="ou-tag ou-tag--outline ou-tag--accent">Outline accent</span>
+          <span class="ou-tag ou-tag--outline ou-tag--success">Outline success</span>
+          <span class="ou-tag ou-tag--outline ou-tag--error">Outline error</span>
+        </div>
+        <div class="row">
+          <span class="ou-tag ou-tag--solid ou-tag--accent">Solid accent</span>
+          <span class="ou-tag ou-tag--solid ou-tag--success">Solid success</span>
+          <span class="ou-tag ou-tag--solid ou-tag--neutral">Solid neutral</span>
+        </div>
+        <div class="row" style="align-items:center;">
+          <span class="ou-tag ou-tag--s ou-tag--neutral">S · 16px</span>
+          <span class="ou-tag ou-tag--accent">M default</span>
+          <span class="ou-tag ou-tag--l ou-tag--accent">L · 28px</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="map-card__note">
+    <code>Tag</code>: некликабельные метки. Props: <code>tone</code>: neutral|accent|success|warning|error|info; <code>variant</code>: soft (default) / outline / solid.
+  </div>
+</div>
+
+<div class="map-card" style="margin-top:var(--ou-space-4);">
+  <div class="map-card__head">
+    <span class="badge-shadcn">Badge (кликабельный)</span>
+    <span class="map-card__arrow">→</span>
+    <span class="badge-ds">Chip</span>
+    <span class="map-card__sub">интерактивные метки, фильтры, теги с действием</span>
+  </div>
+  <div class="compare-grid">
+    <div class="compare-col compare-col--from">
+      <div class="compare-col__header">shadcn/ui · до</div>
+      <div class="sh-col">
+        <div class="sh-row">
+          <span class="sh-badge sh-badge--secondary" style="cursor:pointer;border-radius:999px;">Математика ×</span>
+          <span class="sh-badge sh-badge--secondary" style="cursor:pointer;border-radius:999px;">Физика ×</span>
+          <span class="sh-badge sh-badge--outline" style="cursor:pointer;border-radius:999px;">+ Добавить</span>
+        </div>
+        <p style="font-size:12px;color:#71717a;margin:4px 0 0;">Кликабельность — соглашение, не встроенное в компонент. Нет состояний selected / loading.</p>
+      </div>
+    </div>
+    <div class="compare-col compare-col--to">
+      <div class="compare-col__header">@universityrt/ui-kit · после — Chip</div>
+      <div class="col">
+        <div class="row" style="align-items:center;">
+          <span class="ou-chip ou-chip--m"><button type="button" class="ou-chip__action">Математика</button></span>
+          <span class="ou-chip ou-chip--m is-selected"><button type="button" class="ou-chip__action">Физика</button></span>
+          <span class="ou-chip ou-chip--m is-disabled"><button type="button" class="ou-chip__action" disabled>Химия</button></span>
+        </div>
+        <div class="row" style="align-items:center;">
+          <span class="ou-chip ou-chip--s"><button type="button" class="ou-chip__action">S · фильтр</button></span>
+          <span class="ou-chip ou-chip--m"><button type="button" class="ou-chip__action">M · default</button></span>
+          <span class="ou-chip ou-chip--l"><button type="button" class="ou-chip__action">L · большой</button></span>
+        </div>
+        <div class="row" style="align-items:center;">
+          <span class="ou-chip ou-chip--m is-selected ou-chip--removable">
+            <button type="button" class="ou-chip__action">С иконкой закрыть</button>
+            <button type="button" class="ou-chip__close" aria-label="Удалить"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="map-card__note">
+    <code>Chip</code>: интерактивные метки, фильтры, multi-select теги. Props: <code>selected</code>, <code>onRemove</code>, <code>disabled</code>, <code>size</code>: s/m/l.
+    Фокус-состояние и клавиатурная навигация встроены.
+  </div>
+</div>
+
+
+<!-- ══════════ 2. Dialog → ModalDialog ══════════ -->
+<h2>2. Dialog → ModalDialog</h2>
+<p class="section-sub">Overlay-диалог с формой. shadcn: составной API из 8 подкомпонентов через Radix. DS: <code>ModalDialog</code> — единый компонент, Portal встроен. Для composable-верстки: <code>DialogHeader</code> + <code>DialogContent</code>.</p>
+
+<div class="map-card">
+  <div class="map-card__head">
+    <span class="badge-shadcn">Dialog + DialogContent + DialogHeader…</span>
+    <span class="map-card__arrow">→</span>
+    <span class="badge-ds">ModalDialog</span>
+    <span class="map-card__sub">+ DialogHeader, DialogContent</span>
+    <span class="map-card__title">Диалог с формой</span>
+  </div>
+  <div class="compare-grid">
+    <!-- FROM: shadcn -->
+    <div class="compare-col compare-col--from">
+      <div class="compare-col__header">shadcn/ui · до</div>
+      <div class="sh-stage sh-stage--tall">
+        <div class="sh-dialog-overlay">
+          <div class="sh-dialog">
+            <button class="sh-dialog__close" aria-label="Закрыть">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+            <h2 class="sh-dialog__title">Настройки оформления</h2>
+            <p class="sh-dialog__desc">Выберите шаблон и настройте параметры</p>
+            <div class="sh-dialog__body">
+              <div class="sh-field">
+                <label class="sh-label">Название шаблона</label>
+                <input class="sh-input" value="corporate" readonly>
+              </div>
+              <div class="sh-field">
+                <label class="sh-label">Описание</label>
+                <input class="sh-input" placeholder="Необязательно" readonly>
+              </div>
+            </div>
+            <div class="sh-dialog__footer">
+              <button class="sh-btn sh-btn--ghost">Отмена</button>
+              <button class="sh-btn sh-btn--default">Сохранить</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- TO: DS -->
+    <div class="compare-col compare-col--to">
+      <div class="compare-col__header">@universityrt/ui-kit · после</div>
+      <div class="stage stage--tall">
+        <div class="ou-modal-root">
+          <div class="ou-modal__backdrop"></div>
+          <div class="ou-modal ou-modal--m">
+            <header class="ou-modal__head">
+              <div class="ou-modal__head-text">
+                <h2 class="ou-modal__title">Настройки оформления</h2>
+                <p class="ou-modal__desc">Выберите шаблон и настройте параметры</p>
+              </div>
+              <button class="ou-modal__close" aria-label="Закрыть">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </header>
+            <div class="ou-modal__body" style="display:flex;flex-direction:column;gap:var(--ou-space-4);">
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl">Название шаблона</label>
+                <div class="ou-field__box"><input class="ou-field__input" value="corporate" readonly></div>
+              </div>
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl">Описание</label>
+                <div class="ou-field__box"><input class="ou-field__input" placeholder="Необязательно" readonly></div>
+              </div>
+            </div>
+            <footer class="ou-modal__foot">
+              <button class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+              <button class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+            </footer>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="map-card__note">
+    API: <code>onOpenChange</code> → <code>onClose</code>; <code>size</code>: s/m/l/xl; <code>title</code>, <code>description</code>, <code>footer</code> — props вместо подкомпонентов. Нет зависимости от Radix.
+  </div>
+</div>
+
+
+<!-- ══════════ 3. AlertDialog → ModalDialog iconTone ══════════ -->
+<h2>3. AlertDialog → ModalDialog с iconTone</h2>
+<p class="section-sub">Отдельного компонента AlertDialog нет — тот же ModalDialog с prop <code>iconTone="danger"</code>. Иконка и цвет передаются параметром.</p>
+
+<div class="map-card">
+  <div class="map-card__head">
+    <span class="badge-shadcn">AlertDialog + AlertDialogAction…</span>
+    <span class="map-card__arrow">→</span>
+    <span class="badge-ds">ModalDialog iconTone="danger"</span>
+    <span class="map-card__title">Подтверждение деструктивных действий</span>
+  </div>
+  <div class="compare-grid">
+    <!-- FROM: shadcn -->
+    <div class="compare-col compare-col--from">
+      <div class="compare-col__header">shadcn/ui · до</div>
+      <div class="sh-stage sh-stage--tall">
+        <div class="sh-dialog-overlay">
+          <div class="sh-alertdialog">
+            <h2 class="sh-alertdialog__title">Удалить тест?</h2>
+            <p class="sh-alertdialog__desc">Тест «Корпоративный 2026» и все попытки прохождения будут удалены без возможности восстановления.</p>
+            <div class="sh-alertdialog__footer">
+              <button class="sh-btn sh-btn--outline">Отмена</button>
+              <button class="sh-btn sh-btn--destructive">Удалить</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p style="font-size:12px;color:#71717a;margin:0;">Нет иконки тона. Нет визуального сигнала severity кроме цвета кнопки.</p>
+    </div>
+    <!-- TO: DS -->
+    <div class="compare-col compare-col--to">
+      <div class="compare-col__header">@universityrt/ui-kit · после</div>
+      <div class="stage stage--tall">
+        <div class="ou-modal-root">
+          <div class="ou-modal__backdrop"></div>
+          <div class="ou-modal ou-modal--s">
+            <header class="ou-modal__head ou-modal__head--icon">
+              <div class="ou-modal__icon ou-modal__icon--danger">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              </div>
+              <div class="ou-modal__head-text">
+                <h2 class="ou-modal__title">Удалить тест?</h2>
+                <p class="ou-modal__desc">Это действие нельзя отменить</p>
+              </div>
+              <button class="ou-modal__close" aria-label="Закрыть"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+            </header>
+            <div class="ou-modal__body">Тест «Корпоративный 2026» и все попытки прохождения будут удалены без возможности восстановления.</div>
+            <footer class="ou-modal__foot">
+              <button class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+              <button class="ou-btn ou-btn--destructive ou-btn--m">Удалить</button>
+            </footer>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="map-card__note">
+    Один компонент покрывает все сценарии. <code>iconTone</code>: <code>danger | warning | success | info | neutral</code>.
+    Иконка и цвет рамки генерируются автоматически.
+  </div>
+</div>
+
+
+<!-- ══════════ 4. Sheet → Drawer ══════════ -->
+<h2>4. Sheet → Drawer</h2>
+<p class="section-sub">Боковая панель. shadcn Sheet — тонкая обёртка над Radix Dialog с анимацией slide. DS Drawer — без Radix, поддерживает split-layout с nav-рельсой.</p>
+
+<div class="map-card">
+  <div class="map-card__head">
+    <span class="badge-shadcn">Sheet + SheetContent + SheetHeader…</span>
+    <span class="map-card__arrow">→</span>
+    <span class="badge-ds">Drawer</span>
+    <span class="map-card__title">Боковая панель — редактор, детали, настройки</span>
+  </div>
+  <div class="compare-grid">
+    <!-- FROM: shadcn -->
+    <div class="compare-col compare-col--from">
+      <div class="compare-col__header">shadcn/ui · до</div>
+      <div class="sh-stage sh-stage--xtall" style="padding:0;overflow:hidden;">
+        <div class="sh-stage-bg" style="padding:14px;">
+          <div class="sh-stage-bg__row"></div>
+          <div class="sh-stage-bg__row"></div>
+          <div class="sh-stage-bg__row"></div>
+        </div>
+        <div class="sh-sheet-overlay"></div>
+        <div class="sh-sheet">
+          <header class="sh-sheet__header">
+            <h2 class="sh-sheet__title">Параметры теста</h2>
+            <p class="sh-sheet__desc">Корпоративный тест 2026</p>
+            <button class="sh-sheet__close" aria-label="Закрыть">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+            </button>
+          </header>
+          <div class="sh-sheet__body">
+            <div class="sh-field">
+              <label class="sh-label" style="font-size:13px;">Название теста</label>
+              <input class="sh-input" style="height:36px;font-size:13px;" value="Корпоративный тест 2026" readonly>
+            </div>
+            <div class="sh-field">
+              <label class="sh-label" style="font-size:13px;">Проходной балл, %</label>
+              <input class="sh-input" style="height:36px;font-size:13px;" value="75" readonly>
+            </div>
+            <div class="sh-field">
+              <label class="sh-label" style="font-size:13px;">Ограничение времени</label>
+              <input class="sh-input" style="height:36px;font-size:13px;" value="60 мин" readonly>
+            </div>
+          </div>
+          <div class="sh-sheet__footer">
+            <button class="sh-btn sh-btn--ghost" style="height:34px;font-size:13px;">Отмена</button>
+            <button class="sh-btn sh-btn--default" style="height:34px;font-size:13px;">Сохранить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- TO: DS -->
+    <div class="compare-col compare-col--to">
+      <div class="compare-col__header">@universityrt/ui-kit · после</div>
+      <div class="stage stage--xtall" style="padding:0;overflow:hidden;">
+        <div class="stage-bg">
+          <div class="stage-bg__row"></div>
+          <div class="stage-bg__row"></div>
+          <div class="stage-bg__row"></div>
+        </div>
+        <div class="ou-drawer-root">
+          <div class="ou-drawer__backdrop"></div>
+          <div class="ou-drawer ou-drawer--right ou-drawer--narrow">
+            <header class="ou-drawer__head">
+              <div class="ou-drawer__head-text">
+                <h2 class="ou-drawer__title">Параметры теста</h2>
+                <p class="ou-drawer__desc">Корпоративный тест 2026</p>
+              </div>
+              <button class="ou-drawer__close" aria-label="Закрыть">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            </header>
+            <div class="ou-drawer__body">
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl">Название теста</label>
+                <div class="ou-field__box"><input class="ou-field__input" value="Корпоративный тест 2026" readonly></div>
+              </div>
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl">Проходной балл, %</label>
+                <div class="ou-field__box"><input class="ou-field__input" value="75" readonly></div>
+              </div>
+              <div class="ou-field ou-field--m ou-field--full">
+                <label class="ou-field__lbl">Ограничение времени</label>
+                <div class="ou-field__box"><input class="ou-field__input" value="60 мин" readonly></div>
+              </div>
+            </div>
+            <footer class="ou-drawer__foot">
+              <button class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+              <button class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+            </footer>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="map-card__note">
+    API: <code>size</code>: sm/md → narrow/wide/xl/full; <code>side</code>: left/right.
+    DS поддерживает split-layout (nav-рельса + body) для PRD-7 редактора — Sheet этого не умеет.
+  </div>
+</div>
+
+
+<!-- ══════════ 5. DropdownMenu → Menu ══════════ -->
+<h2>5. DropdownMenu / ContextMenu → Menu</h2>
+<p class="section-sub">shadcn DropdownMenu — составной Radix-компонент с 10+ подкомпонентами. DS Menu — декларативный, items через массив, позиционирование через MenuTrigger.</p>
+
+<div class="map-card">
+  <div class="map-card__head">
+    <span class="badge-shadcn">DropdownMenu + DropdownMenuContent + DropdownMenuItem…</span>
+    <span class="map-card__arrow">→</span>
+    <span class="badge-ds">Menu + MenuTrigger</span>
+    <span class="map-card__title">Контекстное меню, dropdown</span>
+  </div>
+  <div class="compare-grid">
+    <!-- FROM: shadcn -->
+    <div class="compare-col compare-col--from">
+      <div class="compare-col__header">shadcn/ui · до</div>
+      <div class="sh-dropdown">
+        <div class="sh-dropdown__label">Действия</div>
+        <button class="sh-dropdown__item">
+          <span class="sh-dropdown__ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>
+          Редактировать
+        </button>
+        <button class="sh-dropdown__item">
+          <span class="sh-dropdown__ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+          Дублировать
+        </button>
+        <button class="sh-dropdown__item sh-dropdown__item--disabled">
+          <span class="sh-dropdown__ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+          Экспорт SCORM
+          <span class="sh-dropdown__meta">недоступно</span>
+        </button>
+        <hr class="sh-dropdown__sep">
+        <button class="sh-dropdown__item sh-dropdown__item--destructive">
+          <span class="sh-dropdown__ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+          Удалить
+        </button>
+      </div>
+    </div>
+    <!-- TO: DS -->
+    <div class="compare-col compare-col--to">
+      <div class="compare-col__header">@universityrt/ui-kit · после</div>
+      <nav class="ou-menu" style="position:static;display:flex;">
+        <div class="ou-menu__label">Действия</div>
+        <button class="ou-menu__item">
+          <span class="ou-menu__item-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>
+          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Редактировать</span></span>
+        </button>
+        <button class="ou-menu__item">
+          <span class="ou-menu__item-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Дублировать</span></span>
+        </button>
+        <button class="ou-menu__item" aria-disabled="true">
+          <span class="ou-menu__item-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+          <span class="ou-menu__item-text">
+            <span class="ou-menu__item-title">Экспорт SCORM</span>
+            <span class="ou-menu__item-meta">Недоступно в черновике</span>
+          </span>
+        </button>
+        <hr class="ou-menu__divider">
+        <button class="ou-menu__item ou-menu__item--danger">
+          <span class="ou-menu__item-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+          <span class="ou-menu__item-text"><span class="ou-menu__item-title">Удалить</span></span>
+        </button>
+      </nav>
+    </div>
+  </div>
+  <div class="map-card__note">
+    DS <code>Menu</code> — визуальная панель; позиционирование — через <code>MenuTrigger</code>.
+    Убирает 10+ Radix-подкомпонентов, данные через <code>items[]</code>.
+  </div>
+</div>
+
+
+<!-- ══════════ 6. Toast → Toast ══════════ -->
+<h2>6. Toast / Toaster → Toast + ToastProvider</h2>
+<p class="section-sub">shadcn useToast → DS useToast. shadcn: viewport через Radix, variant prop. DS: ToastProvider в корне, tone prop, акцентная левая полоса.</p>
+
+<div class="map-card">
+  <div class="map-card__head">
+    <span class="badge-shadcn">Toast + Toaster + useToast</span>
+    <span class="map-card__arrow">→</span>
+    <span class="badge-ds">Toast + ToastProvider + useToast</span>
+    <span class="map-card__title">Временные уведомления</span>
+  </div>
+  <div class="compare-grid">
+    <!-- FROM: shadcn -->
+    <div class="compare-col compare-col--from">
+      <div class="compare-col__header">shadcn/ui · до</div>
+      <div class="sh-col">
+        <div class="sh-toast">
+          <div class="sh-toast__body">
+            <div class="sh-toast__title">Тест сохранён</div>
+            <div class="sh-toast__desc">Изменения применены</div>
+          </div>
+          <button class="sh-toast__close" aria-label="Закрыть">✕</button>
+        </div>
+        <div class="sh-toast">
+          <div class="sh-toast__body">
+            <div class="sh-toast__title">Не удалось сохранить</div>
+            <div class="sh-toast__desc">Проверьте соединение</div>
+          </div>
+          <button class="sh-toast__action">Повторить</button>
+          <button class="sh-toast__close" aria-label="Закрыть">✕</button>
+        </div>
+        <div class="sh-toast">
+          <div class="sh-toast__body">
+            <div class="sh-toast__title">Несохранённые изменения</div>
+          </div>
+          <button class="sh-toast__close" aria-label="Закрыть">✕</button>
+        </div>
+        <p style="font-size:12px;color:#71717a;margin:4px 0 0;">Нет цветового тона. Нет иконки. Нет акцентной полосы. Все тосты одного вида.</p>
+      </div>
+    </div>
+    <!-- TO: DS -->
+    <div class="compare-col compare-col--to">
+      <div class="compare-col__header">@universityrt/ui-kit · после</div>
+      <div class="col">
+        <div class="ou-toast ou-toast--success">
+          <span class="ou-toast__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg></span>
+          <div class="ou-toast__body"><div class="ou-toast__title">Тест сохранён</div><div class="ou-toast__desc">Изменения применены</div></div>
+          <button class="ou-toast__close" aria-label="Закрыть"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+        <div class="ou-toast ou-toast--error">
+          <span class="ou-toast__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg></span>
+          <div class="ou-toast__body"><div class="ou-toast__title">Не удалось сохранить</div><div class="ou-toast__desc">Проверьте соединение</div></div>
+          <button class="ou-toast__action">Повторить</button>
+          <button class="ou-toast__close" aria-label="Закрыть"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+        <div class="ou-toast ou-toast--warning">
+          <span class="ou-toast__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></svg></span>
+          <div class="ou-toast__body"><div class="ou-toast__title">Несохранённые изменения</div></div>
+          <button class="ou-toast__close" aria-label="Закрыть"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="map-card__note">
+    API: <code>variant</code> → <code>tone</code>: <code>success | error | warning | info</code>.
+    <code>ToastProvider</code> монтируется один раз в корне приложения вместо <code>Toaster</code>.
+  </div>
+</div>
+
+
+<!-- ══════════ 7. Progress → ProgressBar ══════════ -->
+<h2>7. Progress → ProgressBar</h2>
+<p class="section-sub">shadcn Progress — минималистичный трек без лейбла. DS ProgressBar добавляет лейбл, value display, тоны и indeterminate-режим.</p>
+
+<div class="map-card">
+  <div class="map-card__head">
+    <span class="badge-shadcn">Progress</span>
+    <span class="map-card__arrow">→</span>
+    <span class="badge-ds">ProgressBar</span>
+    <span class="map-card__title">Прогресс-бар</span>
+  </div>
+  <div class="compare-grid">
+    <!-- FROM: shadcn -->
+    <div class="compare-col compare-col--from">
+      <div class="compare-col__header">shadcn/ui · до</div>
+      <div class="sh-col" style="max-width:340px;">
+        <div class="sh-progress-wrap">
+          <div class="sh-progress"><div class="sh-progress__fill" style="width:35%"></div></div>
+        </div>
+        <div class="sh-progress-wrap">
+          <div class="sh-progress"><div class="sh-progress__fill sh-progress__fill--success" style="width:82%"></div></div>
+        </div>
+        <div class="sh-progress-wrap">
+          <div class="sh-progress"><div class="sh-progress__fill sh-progress__fill--warning" style="width:43%"></div></div>
+        </div>
+        <div class="sh-progress-wrap">
+          <div class="sh-progress"><div class="sh-progress__fill sh-progress__fill--error" style="width:100%"></div></div>
+        </div>
+        <p style="font-size:12px;color:#71717a;margin:4px 0 0;">Нет встроенного лейбла и подписи значения. Цветные варианты — кастомный CSS поверх базового компонента. Нет indeterminate.</p>
+      </div>
+    </div>
+    <!-- TO: DS -->
+    <div class="compare-col compare-col--to">
+      <div class="compare-col__header">@universityrt/ui-kit · после</div>
+      <div class="col" style="max-width:340px;">
+        <div class="ou-progress ou-progress--m">
+          <div class="ou-progress__head">
+            <span class="ou-progress__lbl">Прохождение теста</span>
+            <span class="ou-progress__val"><strong>7</strong> / 20</span>
+          </div>
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:35%"></div></div>
+        </div>
+        <div class="ou-progress ou-progress--m ou-progress--success">
+          <div class="ou-progress__head">
+            <span class="ou-progress__lbl">Результат</span>
+            <span class="ou-progress__val"><strong>82%</strong></span>
+          </div>
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:82%"></div></div>
+        </div>
+        <div class="ou-progress ou-progress--m ou-progress--warning">
+          <div class="ou-progress__head">
+            <span class="ou-progress__lbl">Охват группы</span>
+            <span class="ou-progress__val"><strong>43%</strong></span>
+          </div>
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:43%"></div></div>
+        </div>
+        <div class="ou-progress ou-progress--xs ou-progress--indeterminate">
+          <div class="ou-progress__track"><div class="ou-progress__fill" style="width:35%"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="map-card__note">
+    Новые props: <code>label</code>, <code>valueLabel</code>, <code>tone</code> (success/warning/error/neutral), <code>size</code> (xs/s/m/l), <code>indeterminate</code>.
+  </div>
+</div>
+
+
+<!-- ══════════ 8. Switch → Switch ══════════ -->
+<h2>8. Switch → Switch</h2>
+<p class="section-sub">shadcn Switch — Radix Primitive с отдельным Label. DS Switch: label встроен в компонент, нативный input внутри, нет Radix. Добавлен размер <code>l</code>.</p>
+
+<div class="map-card">
+  <div class="map-card__head">
+    <span class="badge-shadcn">Switch + Label (Radix)</span>
+    <span class="map-card__arrow">→</span>
+    <span class="badge-ds">Switch</span>
+    <span class="map-card__title">Переключатель boolean-настроек · размеры s / m / l</span>
+  </div>
+  <div class="compare-grid">
+    <!-- FROM: shadcn -->
+    <div class="compare-col compare-col--from">
+      <div class="compare-col__header">shadcn/ui · до</div>
+      <div class="sh-col" style="max-width:300px;">
+        <div class="sh-switch-field">
+          <button class="sh-switch is-on" role="switch" aria-checked="true">
+            <span class="sh-switch__thumb"></span>
+          </button>
+          <span class="sh-switch-field__label">Ограничение времени</span>
+        </div>
+        <div class="sh-switch-field">
+          <button class="sh-switch" role="switch" aria-checked="false">
+            <span class="sh-switch__thumb"></span>
+          </button>
+          <span class="sh-switch-field__label">Перемешать вопросы</span>
+        </div>
+        <div class="sh-switch-field">
+          <button class="sh-switch is-on" role="switch" aria-checked="true">
+            <span class="sh-switch__thumb"></span>
+          </button>
+          <span class="sh-switch-field__label">Показывать результаты сразу</span>
+        </div>
+        <div class="sh-switch-field">
+          <button class="sh-switch is-disabled" role="switch" aria-checked="false" disabled>
+            <span class="sh-switch__thumb"></span>
+          </button>
+          <span class="sh-switch-field__label" style="color:#a1a1aa;">Авто-переход (disabled)</span>
+        </div>
+        <p style="font-size:12px;color:#71717a;margin:4px 0 0;">Label — отдельный Radix-компонент, нужна привязка через htmlFor/id. Цвет включён — тёмный (zinc-900), не акцентный.</p>
+      </div>
+    </div>
+    <!-- TO: DS -->
+    <div class="compare-col compare-col--to">
+      <div class="compare-col__header">@universityrt/ui-kit · после</div>
+      <div class="col" style="max-width:320px;">
+        <label class="ou-switch-field">
+          <span class="ou-switch ou-switch--s is-on">
+            <input type="checkbox" class="ou-switch__input" checked readonly>
+            <span class="ou-switch__track"><span class="ou-switch__thumb"></span></span>
+          </span>
+          <span class="ou-switch-field__label">S · Ограничение времени</span>
+        </label>
+        <label class="ou-switch-field">
+          <span class="ou-switch ou-switch--m is-on">
+            <input type="checkbox" class="ou-switch__input" checked readonly>
+            <span class="ou-switch__track"><span class="ou-switch__thumb"></span></span>
+          </span>
+          <span class="ou-switch-field__label">M · Перемешать вопросы</span>
+        </label>
+        <label class="ou-switch-field">
+          <span class="ou-switch ou-switch--l is-on">
+            <input type="checkbox" class="ou-switch__input" checked readonly>
+            <span class="ou-switch__track"><span class="ou-switch__thumb"></span></span>
+          </span>
+          <span class="ou-switch-field__label">L · Показывать результаты</span>
+        </label>
+        <label class="ou-switch-field">
+          <span class="ou-switch ou-switch--m is-disabled">
+            <input type="checkbox" class="ou-switch__input" disabled readonly>
+            <span class="ou-switch__track"><span class="ou-switch__thumb"></span></span>
+          </span>
+          <span class="ou-switch-field__label ou-switch-field__label--disabled">Авто-переход (disabled)</span>
+        </label>
+      </div>
+    </div>
+  </div>
+  <div class="map-card__note">
+    Props: <code>checked</code>, <code>onChange</code>, <code>label</code>, <code>description</code>, <code>disabled</code>.
+    Включённый цвет — акцентный (purple), не zinc. Нативный <code>&lt;input type="checkbox"&gt;</code> внутри — доступность без Radix.
+  </div>
+</div>
+
+
+<!-- ══════════ Итоговая таблица ══════════ -->
+<h2>Итоговая таблица маппинга</h2>
+
+<div class="map-card">
+  <div style="overflow:auto;">
+    <table style="width:100%;border-collapse:collapse;font:var(--ou-text-body-s);">
+      <thead>
+        <tr style="background:var(--ou-bg-surface-2,#F4F4F5);border-bottom:1px solid var(--ou-border-soft);">
+          <th style="padding:10px 16px;text-align:left;font-weight:600;color:var(--ou-fg-muted);">shadcn / Radix</th>
+          <th style="padding:10px 16px;text-align:left;font-weight:600;color:var(--ou-fg-muted);">@universityrt/ui-kit</th>
+          <th style="padding:10px 16px;text-align:left;font-weight:600;color:var(--ou-fg-muted);">Ключевые изменения API</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid var(--ou-border-soft);">
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">Dialog</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">ModalDialog</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">onOpenChange → onClose; 8 подкомп. → props + DialogHeader / DialogContent</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--ou-border-soft);">
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">AlertDialog</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">ModalDialog iconTone="danger"</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">Отдельного компонента нет; iconTone: danger|warning|success|info</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--ou-border-soft);">
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">Sheet</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">Drawer</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">size: sm/md → narrow/wide/xl/full; +split-layout prop</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--ou-border-soft);">
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">Badge (некликабельный)</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">Tag</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">variant → tone; +variant: soft/outline/solid; 6 тонов × 3 вида</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--ou-border-soft);">
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">Badge (кликабельный)</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">Chip</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">+selected, onRemove, disabled; размеры s/m/l</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--ou-border-soft);">
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">DropdownMenu / ContextMenu</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">Menu + MenuTrigger</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">10+ подкомп. → items[]; опасный тон через item.danger</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--ou-border-soft);">
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">Toast + useToast</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">Toast + ToastProvider + useToast</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">variant → tone; Toaster → ToastProvider</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--ou-border-soft);">
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">Progress</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">ProgressBar</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">+label, valueLabel, tone, size, indeterminate</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--ou-border-soft);">
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">Switch + Label (Radix)</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">Switch</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">checked+onChange+label в одном; нет Radix; размеры s/m/l</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--ou-border-soft);">
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">Input + Label</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">FormField + Input</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">Label встроен в FormField; +error, hint</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--ou-border-soft);">
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">Select + SelectItem</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">Select</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">options[] вместо SelectItem подкомпонентов</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--ou-border-soft);">
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">Card + CardContent</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">Card + CardBody + CardHeader</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">+variant (elevated/outline/flat), size</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-fg-soft);">Command (cmdk)</td>
+          <td style="padding:10px 16px;font-family:var(--ou-font-family-mono);color:var(--ou-accent-default);">CommandPalette</td>
+          <td style="padding:10px 16px;color:var(--ou-fg-muted);">Не используется в PRD-1; cmdk → DS внутренняя реализация</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент</th>
+        <th>Поле API / условие</th>
+        <th>Примечание</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Состояния wireframe</td>
+        <td><code>showState(btn, stateId)</code></td>
+        <td>Метанавигация переключает только визуальные состояния и не является частью продуктового UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<div class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping</h2>
+  <p class="wf-mapping-sub">
+    Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент является блокером.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент wireframe</th>
+        <th>DS-компонент</th>
+        <th>Используемые токены</th>
+        <th>Примечания</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Метанавигация состояний</td>
+        <td><code>Wireframe utility</code></td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code>, <code>--ou-accent-*</code></td>
+        <td>Не мигрируется в продуктовый UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+<script>
+(function(){
+  const root = document.getElementById('root');
+  function setTheme(t){
+    root.classList.remove('ou--light','ou--dark');
+    root.classList.add('ou--'+t);
+    document.querySelectorAll('[data-t]').forEach(b=>{
+      b.setAttribute('aria-pressed', b.dataset.t===t?'true':'false');
+    });
+    try{localStorage.setItem('ou_preview_theme',t);}catch{}
+  }
+  document.querySelectorAll('[data-t]').forEach(b=>{
+    b.addEventListener('click',()=>setTheme(b.dataset.t));
+  });
+  let initial='light';
+  try{initial=localStorage.getItem('ou_preview_theme')||'light';}catch{}
+  setTheme(initial);
+})();
+</script>
+
+<script>
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
+</script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.drawer-footer')) addMappingRow(rows, 'drawer-footer', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
+</body>
+</html>

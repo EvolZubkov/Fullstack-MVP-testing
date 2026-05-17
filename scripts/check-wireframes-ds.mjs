@@ -26,15 +26,10 @@ const STRICT_INLINE = args.has('--strict-inline');
 const ignore = new Set([
   join(wireframesDir, 'ds', 'university-rt.css'),
   join(wireframesDir, 'approved', 'prd7-shared.css'),
-  // Legacy reference files — excluded from DS acceptance scope per wireframes-ds-fix-plan.md stage 5.
-  // These files serve as content reference only and are not being migrated to DS classes.
-  // Once moved into docs/wireframes/legacy/ at stage 5, these explicit entries will be replaced
-  // with a directory-level ignore for legacy/.
-  join(wireframesDir, 'design-tab.html'),
-  join(wireframesDir, 'pages-tab.html'),
-  // DS Mapping reference document — uses raw colors intentionally to illustrate component palettes.
-  join(wireframesDir, 'ds-component-mapping.html'),
 ]);
+// All reference / legacy documents live under docs/wireframes/legacy/ and are
+// skipped wholesale. Stage 5 of docs/wireframes-ds-fix-plan.md moved
+// design-tab.html, pages-tab.html and ds-component-mapping.html into legacy/.
 const ignoreDirs = [
   join(wireframesDir, 'legacy'),
 ];

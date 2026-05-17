@@ -1,9 +1,11 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Wireframe: вкладка "Структура"</title>
+  <link rel="stylesheet" href="ds/university-rt.css" />
+  <link rel="stylesheet" href="ds/wf-utils.css" />
   <style>
     :root {
       --bg:           hsl(0 0% 100%);
@@ -205,38 +207,109 @@
     ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: hsl(0 0% 80%); border-radius: 3px; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: 1px solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: 1px solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: 1px;
+      height: 20px;
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, 52px);
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, 52px));
+      max-height: calc(100vh - var(--wf-nav-offset, 52px));
+    }
+  </style>
 </head>
-<body>
+<body class="ou ou--light ou--normal">
 
 <nav class="wf-nav">
-  <span>Вкладка "Структура":</span>
-  <button class="wf-btn active" onclick="show('s-main')">Основное</button>
-  <button class="wf-btn" onclick="show('s-empty-pages')">Без страниц</button>
-  <button class="wf-btn" onclick="show('s-empty-topics')">Без тем</button>
-  <button class="wf-btn" onclick="show('s-loading')">Загрузка</button>
-  <button class="wf-btn" onclick="show('s-error')">Ошибка API</button>
-  <button class="wf-btn" onclick="show('s-readonly')">Read-only</button>
-  <button class="wf-btn" onclick="show('s-mapping')">Смена шаблона</button>
-  <button class="wf-btn" onclick="show('s-saved')">Сохранено</button>
-  <button class="wf-btn" onclick="show('s-add-step1')">Добавить: шаг 1</button>
-  <button class="wf-btn" onclick="show('s-add-step1-std')">Добавить: шаг 1 (без шаблона)</button>
-  <button class="wf-btn" onclick="show('s-add-step2')">Добавить: шаг 2</button>
-  <button class="wf-btn" onclick="show('s-edit-intro')">Ред. intro</button>
-  <button class="wf-btn" onclick="show('s-edit-intro-aa')">Ред. intro (автопереход)</button>
-  <button class="wf-btn" onclick="show('s-edit-info')">Ред. info</button>
-  <button class="wf-btn" onclick="show('s-edit-standard')">Ред. стандартная</button>
-  <button class="wf-btn" onclick="show('s-edit-summary')">Ред. summary</button>
-  <button class="wf-btn" onclick="show('s-edit-html')">Ред. HTML</button>
-  <button class="wf-btn" onclick="show('s-page-preview')">Предпросмотр стр.</button>
-  <button class="wf-btn" onclick="show('s-page-preview-aa')">Предпросмотр (отсчёт)</button>
-  <button class="wf-btn" onclick="show('s-dirty-form')">Форма: несохр.</button>
-  <button class="wf-btn" onclick="show('s-validation')">Форма: ошибка</button>
-  <button class="wf-btn" onclick="show('s-sanitize')">Санитизация</button>
-  <button class="wf-btn" onclick="show('s-delete')">Удаление</button>
-  <button class="wf-btn" onclick="show('s-dnd')">DnD страниц</button>
-  <button class="wf-btn" onclick="show('s-dnd-topics')">DnD тем</button>
-  <button class="wf-btn" onclick="show('s-preview')">Предпросмотр</button>
+  <span class="wf-nav-title">Вкладка "Структура":</span>
+  <button class="wf-btn active" onclick="showState(this, 's-main')">Основное</button>
+  <button class="wf-btn" onclick="showState(this, 's-empty-pages')">Без страниц</button>
+  <button class="wf-btn" onclick="showState(this, 's-empty-topics')">Без тем</button>
+  <button class="wf-btn" onclick="showState(this, 's-loading')">Загрузка</button>
+  <button class="wf-btn" onclick="showState(this, 's-error')">Ошибка API</button>
+  <button class="wf-btn" onclick="showState(this, 's-readonly')">Read-only</button>
+  <button class="wf-btn" onclick="showState(this, 's-mapping')">Смена шаблона</button>
+  <button class="wf-btn" onclick="showState(this, 's-saved')">Сохранено</button>
+  <button class="wf-btn" onclick="showState(this, 's-add-step1')">Добавить: шаг 1</button>
+  <button class="wf-btn" onclick="showState(this, 's-add-step1-std')">Добавить: шаг 1 (без шаблона)</button>
+  <button class="wf-btn" onclick="showState(this, 's-add-step2')">Добавить: шаг 2</button>
+  <button class="wf-btn" onclick="showState(this, 's-edit-intro')">Ред. intro</button>
+  <button class="wf-btn" onclick="showState(this, 's-edit-intro-aa')">Ред. intro (автопереход)</button>
+  <button class="wf-btn" onclick="showState(this, 's-edit-info')">Ред. info</button>
+  <button class="wf-btn" onclick="showState(this, 's-edit-standard')">Ред. стандартная</button>
+  <button class="wf-btn" onclick="showState(this, 's-edit-summary')">Ред. summary</button>
+  <button class="wf-btn" onclick="showState(this, 's-edit-html')">Ред. HTML</button>
+  <button class="wf-btn" onclick="showState(this, 's-page-preview')">Предпросмотр стр.</button>
+  <button class="wf-btn" onclick="showState(this, 's-page-preview-aa')">Предпросмотр (отсчёт)</button>
+  <button class="wf-btn" onclick="showState(this, 's-dirty-form')">Форма: несохр.</button>
+  <button class="wf-btn" onclick="showState(this, 's-validation')">Форма: ошибка</button>
+  <button class="wf-btn" onclick="showState(this, 's-sanitize')">Санитизация</button>
+  <button class="wf-btn" onclick="showState(this, 's-delete')">Удаление</button>
+  <button class="wf-btn" onclick="showState(this, 's-dnd')">DnD страниц</button>
+  <button class="wf-btn" onclick="showState(this, 's-dnd-topics')">DnD тем</button>
+  <button class="wf-btn" onclick="showState(this, 's-preview')">Предпросмотр</button>
   <a href="design-tab.html" class="wf-link">&larr; Оформление</a>
+
+  <div class="wf-nav-sep"></div>
+  <button type="button" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" onclick="toggleDensity(this)">Compact</button>
 </nav>
 
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
@@ -277,7 +350,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Основное                                                     -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-main" class="shell active">
+<div id="s-main" class="wf-state shell active">
   <aside class="sidebar">
     <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
     <nav class="sidebar-nav">
@@ -294,7 +367,7 @@
     <div class="topbar">
       <span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span>
       <span class="test-title">Основы информационной безопасности</span>
-      <button class="btn btn-outline btn-sm">Экспорт SCORM</button>
+      <button class="ou-btn ou-btn--secondary ou-btn--s">Экспорт SCORM</button>
     </div>
     <div class="editor-tabs">
       <div class="etab">Вопросы</div><div class="etab">Настройки</div>
@@ -318,7 +391,7 @@
             <span class="page-type-badge type-intro">Введение</span>
             <span class="page-title">Общее введение в курс<span class="tpl-page-marker">из шаблона</span></span>
             <div class="page-actions">
-              <button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
             </div>
           </div>
         </div>
@@ -342,8 +415,8 @@
             <span class="page-type-badge type-intro">Введение</span>
             <span class="page-title">Введение: Основы безопасности</span>
             <div class="page-actions">
-              <button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
-              <button class="btn btn-ghost btn-icon btn-sm" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
             </div>
           </div>
           <div class="insert-row">
@@ -360,8 +433,8 @@
             <span class="page-type-badge type-summary">Итог</span>
             <span class="page-title">Итог раздела</span>
             <div class="page-actions">
-              <button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
-              <button class="btn btn-ghost btn-icon btn-sm" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
             </div>
           </div>
         </div>
@@ -395,8 +468,8 @@
             <span class="page-type-badge type-info">Материал</span>
             <span class="page-title">Инструкция к практике</span>
             <div class="page-actions">
-              <button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
-              <button class="btn btn-ghost btn-icon btn-sm" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
             </div>
           </div>
           <div class="page-row">
@@ -404,8 +477,8 @@
             <span class="page-type-badge type-info">Материал</span>
             <span class="page-title">Важные ресурсы</span>
             <div class="page-actions">
-              <button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
-              <button class="btn btn-ghost btn-icon btn-sm" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
             </div>
           </div>
           <div class="questions-row">
@@ -424,7 +497,7 @@
             <span class="page-type-badge type-summary">Итоги</span>
             <span class="page-title">Результаты теста<span class="tpl-page-marker">из шаблона</span></span>
             <div class="page-actions">
-              <button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
             </div>
           </div>
         </div>
@@ -437,7 +510,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Пустые страницы                                             -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-empty-pages" class="shell">
+<div id="s-empty-pages" class="wf-state shell">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main">
     <div class="topbar"><span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span><span class="test-title">Основы информационной безопасности</span></div>
@@ -505,7 +578,7 @@
             <span class="page-type-badge type-summary">Итоги</span>
             <span class="page-title">Результаты теста<span class="tpl-page-marker">из шаблона</span></span>
             <div class="page-actions">
-              <button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
             </div>
           </div>
         </div>
@@ -518,7 +591,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Нет тем                                                      -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-empty-topics" class="shell">
+<div id="s-empty-topics" class="wf-state shell">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main">
     <div class="topbar"><span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span><span class="test-title">Новый тест</span></div>
@@ -528,7 +601,7 @@
         <div style="margin-bottom:12px;color:var(--muted-fg);"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg></div>
         <div class="empty-title">В тесте нет тем</div>
         <div class="empty-desc">Контентные страницы привязываются к темам. Сначала добавьте хотя бы одну тему во вкладке «Вопросы».</div>
-        <button class="btn btn-primary">Перейти к вопросам</button>
+        <button class="ou-btn ou-btn--primary">Перейти к вопросам</button>
       </div>
     </div>
   </div>
@@ -537,7 +610,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Загрузка                                                     -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-loading" class="shell">
+<div id="s-loading" class="wf-state shell">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main">
     <div class="topbar"><span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span><span class="test-title">Основы информационной безопасности</span></div>
@@ -564,7 +637,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Ошибка API при загрузке структуры                           -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-error" class="shell">
+<div id="s-error" class="wf-state shell">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main">
     <div class="topbar"><span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span><span class="test-title">Основы информационной безопасности</span></div>
@@ -575,7 +648,7 @@
         <div>
           <div style="font-weight:600;margin-bottom:4px;color:var(--destructive);">Не удалось загрузить структуру теста</div>
           <div style="font-size:13px;color:hsl(0 50% 35%);margin-bottom:14px;">Проверьте соединение с сервером и попробуйте ещё раз.</div>
-          <button class="btn btn-outline btn-sm">Повторить</button>
+          <button class="ou-btn ou-btn--secondary ou-btn--s">Повторить</button>
         </div>
       </div>
     </div>
@@ -585,7 +658,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Read-only                                                    -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-readonly" class="shell">
+<div id="s-readonly" class="wf-state shell">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main">
     <div class="topbar"><span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span><span class="test-title">Основы информационной безопасности</span></div>
@@ -600,7 +673,7 @@
             <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
             <span class="page-type-badge type-intro">Введение</span>
             <span class="page-title">Общее введение в курс<span class="tpl-page-marker">из шаблона</span></span>
-            <div class="page-actions"><button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-eye"/></svg></button></div>
+            <div class="page-actions"><button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-eye"/></svg></button></div>
           </div>
         </div>
       </div>
@@ -612,7 +685,7 @@
             <span class="page-type-badge type-intro">Введение</span>
             <span class="page-title">Введение: Основы безопасности</span>
             <div class="page-actions">
-              <button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-eye"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-eye"/></svg></button>
             </div>
           </div>
           <div class="questions-row"><svg class="questions-icon" style="color:var(--muted-fg);"><use href="#i-question"/></svg><span>15 вопросов</span></div>
@@ -625,7 +698,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Смена шаблона — сопоставление                               -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-mapping" class="shell">
+<div id="s-mapping" class="wf-state shell">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main">
     <div class="topbar"><span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span><span class="test-title">Основы информационной безопасности</span></div>
@@ -641,17 +714,17 @@
               <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
               <span class="page-type-badge type-intro">Введение</span>
               <span class="page-title">Введение: Основы безопасности</span>
-              <span class="badge badge-warn" style="margin-left:4px;">Требует сопоставления</span>
+              <span class="ou-tag ou-tag--warning" style="margin-left:4px;">Требует сопоставления</span>
               <div class="page-actions">
-                <button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
-                <button class="btn btn-ghost btn-icon btn-sm" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
               </div>
             </div>
             <div class="mapping-warn">
               <div class="mapping-warn-title">Тип страницы «corp.intro.hero» не найден в текущем шаблоне. Выберите замену:</div>
               <div class="mapping-select-row">
                 <select style="flex:1;max-width:320px;"><option value="">Выберите тип страницы...</option><option>Введение: заголовок и изображение</option><option>Введение: только заголовок</option><option>Учебный блок: текст + изображение</option></select>
-                <button class="btn btn-secondary btn-sm">Сохранить</button>
+                <button class="ou-btn ou-btn--secondary ou-btn--s">Сохранить</button>
               </div>
             </div>
           </div>
@@ -661,7 +734,7 @@
             <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
             <span class="page-type-badge type-summary">Итог</span>
             <span class="page-title">Итог раздела</span>
-            <div class="page-actions"><button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button><button class="btn btn-ghost btn-icon btn-sm" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button></div>
+            <div class="page-actions"><button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button><button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button></div>
           </div>
         </div>
       </div>
@@ -675,17 +748,17 @@
               <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
               <span class="page-type-badge type-summary">Итог</span>
               <span class="page-title">Итог: Угрозы</span>
-              <span class="badge badge-warn" style="margin-left:4px;">Требует сопоставления</span>
+              <span class="ou-tag ou-tag--warning" style="margin-left:4px;">Требует сопоставления</span>
               <div class="page-actions">
-                <button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
-                <button class="btn btn-ghost btn-icon btn-sm" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
               </div>
             </div>
             <div class="mapping-warn">
               <div class="mapping-warn-title">Тип страницы «corp.summary.chart» не найден в текущем шаблоне. Выберите замену:</div>
               <div class="mapping-select-row">
                 <select style="flex:1;max-width:320px;"><option value="">Выберите тип страницы...</option><option>Итог темы: с диаграммой</option><option selected>Итог темы: только текст</option></select>
-                <button class="btn btn-secondary btn-sm">Сохранить</button>
+                <button class="ou-btn ou-btn--secondary ou-btn--s">Сохранить</button>
               </div>
             </div>
           </div>
@@ -698,7 +771,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Добавить страницу — шаг 1 (место и режим)                  -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-add-step1" class="shell" style="position:relative;">
+<div id="s-add-step1" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;">
     <div class="topbar"><span class="test-title">Основы информационной безопасности</span></div>
@@ -708,7 +781,7 @@
     <div class="dialog">
       <div class="dialog-header">
         <div class="dialog-title">Новая страница</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body">
         <div style="font-size:12px;color:var(--muted-fg);background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius-md);padding:8px 12px;margin-bottom:16px;">
@@ -729,8 +802,8 @@
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="btn btn-outline">Отмена</button>
-        <button class="btn btn-primary">Далее</button>
+        <button class="ou-btn ou-btn--secondary">Отмена</button>
+        <button class="ou-btn ou-btn--primary">Далее</button>
       </div>
     </div>
   </div>
@@ -740,7 +813,7 @@
 <!-- STATE: Добавить страницу — шаг 1 (выбран режим «Стандартная»)     -->
 <!-- Кнопка «Создать» — шага 2 нет, страница создаётся сразу           -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-add-step1-std" class="shell" style="position:relative;">
+<div id="s-add-step1-std" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;">
     <div class="topbar"><span class="test-title">Основы информационной безопасности</span></div>
@@ -750,7 +823,7 @@
     <div class="dialog">
       <div class="dialog-header">
         <div class="dialog-title">Новая страница</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body">
         <div style="font-size:12px;color:var(--muted-fg);background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius-md);padding:8px 12px;margin-bottom:16px;">
@@ -771,8 +844,8 @@
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="btn btn-outline">Отмена</button>
-        <button class="btn btn-primary">Создать</button>
+        <button class="ou-btn ou-btn--secondary">Отмена</button>
+        <button class="ou-btn ou-btn--primary">Создать</button>
       </div>
     </div>
   </div>
@@ -781,7 +854,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Добавить страницу — шаг 2 (выбор page template)            -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-add-step2" class="shell" style="position:relative;">
+<div id="s-add-step2" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;">
     <div class="topbar"><span class="test-title">Основы информационной безопасности</span></div>
@@ -790,9 +863,9 @@
   <div class="overlay">
     <div class="dialog">
       <div class="dialog-header">
-        <button class="btn btn-ghost btn-sm" style="margin-right:4px;"><svg width="13" height="13"><use href="#i-arrow-left"/></svg> Назад</button>
+        <button class="ou-btn ou-btn--ghost ou-btn--s" style="margin-right:4px;"><svg width="13" height="13"><use href="#i-arrow-left"/></svg> Назад</button>
         <div class="dialog-title">По шаблону · перед вопросами темы 1</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body">
         <div class="form-group">
@@ -810,8 +883,8 @@
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="btn btn-outline">Отмена</button>
-        <button class="btn btn-primary">Далее</button>
+        <button class="ou-btn ou-btn--secondary">Отмена</button>
+        <button class="ou-btn ou-btn--primary">Далее</button>
       </div>
     </div>
   </div>
@@ -820,7 +893,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Редактирование — intro (форма placeholders)                 -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-edit-intro" class="shell" style="position:relative;">
+<div id="s-edit-intro" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;"><div class="topbar"><span class="test-title">Основы информационной безопасности</span></div><div class="editor-tabs"><div class="etab active">Структура</div></div></div>
   <div class="overlay">
@@ -828,7 +901,7 @@
       <div class="dialog-header">
         <span class="page-type-badge type-intro" style="font-size:11px;">Введение</span>
         <div class="dialog-title">Введение: заголовок и изображение</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body" style="max-height:70vh;overflow-y:auto;">
         <div class="form-group">
@@ -864,10 +937,10 @@
         </div>
       </div>
       <div class="dialog-footer-split">
-        <button class="btn btn-outline"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+        <button class="ou-btn ou-btn--secondary"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline">Отмена</button>
-          <button class="btn btn-primary">Сохранить</button>
+          <button class="ou-btn ou-btn--secondary">Отмена</button>
+          <button class="ou-btn ou-btn--primary">Сохранить</button>
         </div>
       </div>
     </div>
@@ -877,7 +950,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Редактирование intro — автопереход включён                  -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-edit-intro-aa" class="shell" style="position:relative;">
+<div id="s-edit-intro-aa" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;"><div class="topbar"><span class="test-title">Основы информационной безопасности</span></div><div class="editor-tabs"><div class="etab active">Структура</div></div></div>
   <div class="overlay">
@@ -885,7 +958,7 @@
       <div class="dialog-header">
         <span class="page-type-badge type-intro" style="font-size:11px;">Введение</span>
         <div class="dialog-title">Введение: заголовок и изображение</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body" style="max-height:70vh;overflow-y:auto;">
         <div class="form-group">
@@ -929,10 +1002,10 @@
         </div>
       </div>
       <div class="dialog-footer-split">
-        <button class="btn btn-outline"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+        <button class="ou-btn ou-btn--secondary"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline">Отмена</button>
-          <button class="btn btn-primary">Сохранить</button>
+          <button class="ou-btn ou-btn--secondary">Отмена</button>
+          <button class="ou-btn ou-btn--primary">Сохранить</button>
         </div>
       </div>
     </div>
@@ -942,7 +1015,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Редактирование — info (учебный материал)                    -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-edit-info" class="shell" style="position:relative;">
+<div id="s-edit-info" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;"><div class="topbar"><span class="test-title">Основы информационной безопасности</span></div><div class="editor-tabs"><div class="etab active">Структура</div></div></div>
   <div class="overlay">
@@ -950,7 +1023,7 @@
       <div class="dialog-header">
         <span class="page-type-badge type-info" style="font-size:11px;">Материал</span>
         <div class="dialog-title">Учебный блок: текст и изображение</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body" style="max-height:70vh;overflow-y:auto;">
         <div class="form-group">
@@ -967,14 +1040,14 @@
           <label class="form-label">Основной текст <span class="req">*</span></label>
           <!-- RichText toolbar -->
           <div style="border:1px solid var(--input-b);border-radius:var(--radius-md) var(--radius-md) 0 0;padding:4px 6px;display:flex;gap:2px;background:var(--accent);">
-            <button class="btn btn-ghost btn-xs" style="font-weight:700;">B</button>
-            <button class="btn btn-ghost btn-xs" style="font-style:italic;">I</button>
-            <button class="btn btn-ghost btn-xs" style="text-decoration:underline;">U</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s" style="font-weight:700;">B</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s" style="font-style:italic;">I</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s" style="text-decoration:underline;">U</button>
             <div style="width:1px;background:var(--border);margin:2px 4px;"></div>
-            <button class="btn btn-ghost btn-xs">≡ Список</button>
-            <button class="btn btn-ghost btn-xs">№ Нумер.</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s">≡ Список</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s">№ Нумер.</button>
             <div style="width:1px;background:var(--border);margin:2px 4px;"></div>
-            <button class="btn btn-ghost btn-xs">&#128279; Ссылка</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s">&#128279; Ссылка</button>
           </div>
           <textarea style="border-radius:0 0 var(--radius-md) var(--radius-md);border-top:none;height:160px;resize:vertical;">Конфиденциальность, целостность и доступность — три ключевых атрибута информационной безопасности.
 
@@ -998,8 +1071,8 @@
         </div>
       </div>
       <div class="dialog-footer-split">
-        <button class="btn btn-outline"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
-        <div style="display:flex;gap:8px;"><button class="btn btn-outline">Отмена</button><button class="btn btn-primary">Сохранить</button></div>
+        <button class="ou-btn ou-btn--secondary"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+        <div style="display:flex;gap:8px;"><button class="ou-btn ou-btn--secondary">Отмена</button><button class="ou-btn ou-btn--primary">Сохранить</button></div>
       </div>
     </div>
   </div>
@@ -1009,7 +1082,7 @@
 <!-- STATE: Редактирование — стандартная страница                       -->
 <!-- Переносимый формат: не привязан к шаблону оформления              -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-edit-standard" class="shell" style="position:relative;">
+<div id="s-edit-standard" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;"><div class="topbar"><span class="test-title">Основы информационной безопасности</span></div><div class="editor-tabs"><div class="etab active">Структура</div></div></div>
   <div class="overlay">
@@ -1017,7 +1090,7 @@
       <div class="dialog-header">
         <span class="page-type-badge type-info" style="font-size:11px;">Стандартная</span>
         <div class="dialog-title">Стандартная страница</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body" style="max-height:70vh;overflow-y:auto;">
         <!-- Информационная плашка о переносимости -->
@@ -1033,15 +1106,15 @@
         <div class="form-group">
           <label class="form-label">Содержимое <span class="req">*</span></label>
           <div style="border:1px solid var(--input-b);border-radius:var(--radius-md) var(--radius-md) 0 0;padding:4px 6px;display:flex;gap:2px;background:var(--accent);">
-            <button class="btn btn-ghost btn-xs" style="font-weight:700;">B</button>
-            <button class="btn btn-ghost btn-xs" style="font-style:italic;">I</button>
-            <button class="btn btn-ghost btn-xs" style="text-decoration:underline;">U</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s" style="font-weight:700;">B</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s" style="font-style:italic;">I</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s" style="text-decoration:underline;">U</button>
             <div style="width:1px;background:var(--border);margin:2px 4px;"></div>
-            <button class="btn btn-ghost btn-xs">≡ Список</button>
-            <button class="btn btn-ghost btn-xs">№ Нумер.</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s">≡ Список</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s">№ Нумер.</button>
             <div style="width:1px;background:var(--border);margin:2px 4px;"></div>
-            <button class="btn btn-ghost btn-xs">&#128279; Ссылка</button>
-            <button class="btn btn-ghost btn-xs">&#128444; Изображение</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s">&#128279; Ссылка</button>
+            <button class="ou-btn ou-btn--ghost ou-btn--s">&#128444; Изображение</button>
           </div>
           <textarea style="border-radius:0 0 var(--radius-md) var(--radius-md);border-top:none;height:200px;resize:vertical;">Перед началом теста ознакомьтесь с правилами:
 
@@ -1059,8 +1132,8 @@
         </div>
       </div>
       <div class="dialog-footer-split">
-        <button class="btn btn-outline"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
-        <div style="display:flex;gap:8px;"><button class="btn btn-outline">Отмена</button><button class="btn btn-primary">Сохранить</button></div>
+        <button class="ou-btn ou-btn--secondary"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+        <div style="display:flex;gap:8px;"><button class="ou-btn ou-btn--secondary">Отмена</button><button class="ou-btn ou-btn--primary">Сохранить</button></div>
       </div>
     </div>
   </div>
@@ -1069,7 +1142,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Редактирование — summary (resultField)                      -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-edit-summary" class="shell" style="position:relative;">
+<div id="s-edit-summary" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;"><div class="topbar"><span class="test-title">Основы информационной безопасности</span></div><div class="editor-tabs"><div class="etab active">Структура</div></div></div>
   <div class="overlay">
@@ -1077,7 +1150,7 @@
       <div class="dialog-header">
         <span class="page-type-badge type-summary" style="font-size:11px;">Итог</span>
         <div class="dialog-title">Итог темы: с диаграммой</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body" style="max-height:70vh;overflow-y:auto;">
         <div class="form-group">
@@ -1123,10 +1196,10 @@
         </div>
       </div>
       <div class="dialog-footer-split">
-        <button class="btn btn-outline"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+        <button class="ou-btn ou-btn--secondary"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline">Отмена</button>
-          <button class="btn btn-primary">Сохранить</button>
+          <button class="ou-btn ou-btn--secondary">Отмена</button>
+          <button class="ou-btn ou-btn--primary">Сохранить</button>
         </div>
       </div>
     </div>
@@ -1136,7 +1209,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Редактирование — HTML                                        -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-edit-html" class="shell" style="position:relative;">
+<div id="s-edit-html" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;"><div class="topbar"><span class="test-title">Основы информационной безопасности</span></div><div class="editor-tabs"><div class="etab active">Структура</div></div></div>
   <div class="overlay">
@@ -1144,7 +1217,7 @@
       <div class="dialog-header">
         <span class="page-type-badge type-html" style="font-size:11px;">html</span>
         <div class="dialog-title">HTML-страница</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body">
         <div class="form-group" style="margin-bottom:6px;">
@@ -1162,8 +1235,8 @@
         </div>
       </div>
       <div class="dialog-footer-split">
-        <button class="btn btn-outline"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
-        <div style="display:flex;gap:8px;"><button class="btn btn-outline">Отмена</button><button class="btn btn-primary">Сохранить</button></div>
+        <button class="ou-btn ou-btn--secondary"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+        <div style="display:flex;gap:8px;"><button class="ou-btn ou-btn--secondary">Отмена</button><button class="ou-btn ou-btn--primary">Сохранить</button></div>
       </div>
     </div>
   </div>
@@ -1172,7 +1245,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Предпросмотр страницы (из формы редактирования)             -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-page-preview" class="shell" style="position:relative;">
+<div id="s-page-preview" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;">
     <div class="topbar"><span class="test-title">Основы информационной безопасности</span></div>
@@ -1187,12 +1260,12 @@
 
       <!-- Header -->
       <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--sidebar);">
-        <button class="btn btn-ghost btn-sm" style="gap:6px;padding:0 10px;color:var(--primary);"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> К редактированию</button>
+        <button class="ou-btn ou-btn--ghost ou-btn--s" style="gap:6px;padding:0 10px;color:var(--primary);"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> К редактированию</button>
         <div style="width:1px;height:18px;background:var(--border);"></div>
         <span class="page-type-badge type-intro" style="font-size:11px;">Введение</span>
         <div style="font-size:13px;font-weight:500;">Введение: заголовок и изображение</div>
         <div style="font-size:11px;color:var(--muted-fg);margin-left:6px;">· данные из формы · шаблон «Корпоративный»</div>
-        <button class="btn btn-ghost btn-icon" style="width:28px;height:28px;margin-left:auto;"><svg width="14" height="14"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:28px;height:28px;margin-left:auto;"><svg width="14" height="14"><use href="#i-x"/></svg></button>
       </div>
 
       <!-- SCORM shell preview -->
@@ -1237,7 +1310,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Предпросмотр страницы — активный обратный отсчёт            -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-page-preview-aa" class="shell" style="position:relative;">
+<div id="s-page-preview-aa" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;">
     <div class="topbar"><span class="test-title">Основы информационной безопасности</span></div>
@@ -1249,12 +1322,12 @@
   <div style="position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:stretch;justify-content:center;z-index:50;padding:24px;">
     <div style="background:var(--bg);border-radius:var(--radius);box-shadow:0 24px 64px rgba(0,0,0,.4);width:100%;max-width:860px;display:flex;flex-direction:column;overflow:hidden;">
       <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--sidebar);">
-        <button class="btn btn-ghost btn-sm" style="gap:6px;padding:0 10px;color:var(--primary);"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> К редактированию</button>
+        <button class="ou-btn ou-btn--ghost ou-btn--s" style="gap:6px;padding:0 10px;color:var(--primary);"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> К редактированию</button>
         <div style="width:1px;height:18px;background:var(--border);"></div>
         <span class="page-type-badge type-info" style="font-size:11px;">Материал</span>
         <div style="font-size:13px;font-weight:500;">Учебный блок: текст и изображение</div>
         <div style="font-size:11px;color:var(--muted-fg);margin-left:6px;">· данные из формы · шаблон «Корпоративный»</div>
-        <button class="btn btn-ghost btn-icon" style="width:28px;height:28px;margin-left:auto;"><svg width="14" height="14"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:28px;height:28px;margin-left:auto;"><svg width="14" height="14"><use href="#i-x"/></svg></button>
       </div>
       <div style="flex:1;overflow-y:auto;background:hsl(0 0% 92%);padding:24px;display:flex;flex-direction:column;align-items:center;">
         <div style="background:white;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;width:100%;max-width:760px;box-shadow:0 2px 16px rgba(0,0,0,.1);">
@@ -1304,7 +1377,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Форма — несохранённые изменения                             -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-dirty-form" class="shell" style="position:relative;">
+<div id="s-dirty-form" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;"><div class="topbar"><span class="test-title">Основы информационной безопасности</span></div><div class="editor-tabs"><div class="etab active">Структура</div></div></div>
   <div class="overlay">
@@ -1312,7 +1385,7 @@
       <div class="dialog-header">
         <span class="page-type-badge type-intro" style="font-size:11px;">Введение</span>
         <div class="dialog-title">Введение: заголовок и изображение</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <!-- Плашка несохранённых изменений -->
       <div style="background:var(--warn-bg);border-bottom:1px solid var(--warn-border);padding:8px 20px;font-size:12px;color:var(--warn-fg);display:flex;align-items:center;gap:8px;">
@@ -1327,10 +1400,10 @@
         </div>
       </div>
       <div class="dialog-footer-split">
-        <button class="btn btn-outline"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+        <button class="ou-btn ou-btn--secondary"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-outline">Отмена</button>
-          <button class="btn btn-primary" style="background:hsl(217 91% 36%);">Сохранить •</button>
+          <button class="ou-btn ou-btn--secondary">Отмена</button>
+          <button class="ou-btn ou-btn--primary" style="background:hsl(217 91% 36%);">Сохранить •</button>
         </div>
       </div>
     </div>
@@ -1340,7 +1413,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Ошибка валидации в форме                                    -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-validation" class="shell" style="position:relative;">
+<div id="s-validation" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;"><div class="topbar"><span class="test-title">Основы информационной безопасности</span></div><div class="editor-tabs"><div class="etab active">Структура</div></div></div>
   <div class="overlay">
@@ -1348,7 +1421,7 @@
       <div class="dialog-header">
         <span class="page-type-badge type-intro" style="font-size:11px;">Введение</span>
         <div class="dialog-title">Введение: заголовок и изображение</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body" style="max-height:60vh;overflow-y:auto;">
         <!-- Ошибка сохранения -->
@@ -1373,8 +1446,8 @@
         </div>
       </div>
       <div class="dialog-footer-split">
-        <button class="btn btn-outline"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
-        <div style="display:flex;gap:8px;"><button class="btn btn-outline">Отмена</button><button class="btn btn-primary">Сохранить</button></div>
+        <button class="ou-btn ou-btn--secondary"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+        <div style="display:flex;gap:8px;"><button class="ou-btn ou-btn--secondary">Отмена</button><button class="ou-btn ou-btn--primary">Сохранить</button></div>
       </div>
     </div>
   </div>
@@ -1383,7 +1456,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Ошибка санитизации HTML                                     -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-sanitize" class="shell" style="position:relative;">
+<div id="s-sanitize" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;"><div class="topbar"><span class="test-title">Основы информационной безопасности</span></div><div class="editor-tabs"><div class="etab active">Структура</div></div></div>
   <div class="overlay">
@@ -1391,7 +1464,7 @@
       <div class="dialog-header">
         <span class="page-type-badge type-html" style="font-size:11px;">html</span>
         <div class="dialog-title">HTML-страница</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body">
         <div class="form-group">
@@ -1408,8 +1481,8 @@
         </div>
       </div>
       <div class="dialog-footer-split">
-        <button class="btn btn-outline"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
-        <div style="display:flex;gap:8px;"><button class="btn btn-outline">Отмена</button><button class="btn btn-primary">Сохранить</button></div>
+        <button class="ou-btn ou-btn--secondary"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+        <div style="display:flex;gap:8px;"><button class="ou-btn ou-btn--secondary">Отмена</button><button class="ou-btn ou-btn--primary">Сохранить</button></div>
       </div>
     </div>
   </div>
@@ -1418,14 +1491,14 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Диалог удаления                                             -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-delete" class="shell" style="position:relative;">
+<div id="s-delete" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;"><div class="topbar"><span class="test-title">Основы информационной безопасности</span></div><div class="editor-tabs"><div class="etab active">Структура</div></div></div>
   <div class="overlay">
     <div class="dialog" style="width:400px;">
       <div class="dialog-header">
         <div class="dialog-title">Удалить страницу?</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
       <div class="dialog-body">
         <div style="font-size:13px;line-height:1.6;">
@@ -1434,8 +1507,8 @@
         </div>
       </div>
       <div class="dialog-footer">
-        <button class="btn btn-outline">Отмена</button>
-        <button class="btn btn-danger">Удалить</button>
+        <button class="ou-btn ou-btn--secondary">Отмена</button>
+        <button class="ou-btn ou-btn--destructive">Удалить</button>
       </div>
     </div>
   </div>
@@ -1444,7 +1517,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Drag-and-drop сортировка                                    -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-dnd" class="shell">
+<div id="s-dnd" class="wf-state shell">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main">
     <div class="topbar"><span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span><span class="test-title">Основы информационной безопасности</span></div>
@@ -1458,7 +1531,7 @@
             <div class="drag-handle" style="cursor:grabbing;color:var(--primary);"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
             <span class="page-type-badge type-info">Материал</span>
             <span class="page-title" style="color:var(--primary);">Инструкция к практике</span>
-            <div class="page-actions"><button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button></div>
+            <div class="page-actions"><button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button></div>
           </div>
           <!-- Целевая зона вставки -->
           <div class="drop-zone" style="margin:4px 14px;"></div>
@@ -1467,7 +1540,7 @@
             <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
             <span class="page-type-badge type-info">Материал</span>
             <span class="page-title">Важные ресурсы</span>
-            <div class="page-actions"><button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button><button class="btn btn-ghost btn-icon btn-sm" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button></div>
+            <div class="page-actions"><button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button><button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button></div>
           </div>
           <div class="questions-row"><svg class="questions-icon" style="color:var(--muted-fg);"><use href="#i-question"/></svg><span>10 вопросов</span></div>
         </div>
@@ -1480,7 +1553,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Перемещение тем                                              -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-dnd-topics" class="shell">
+<div id="s-dnd-topics" class="wf-state shell">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main">
     <div class="topbar"><span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span><span class="test-title">Основы информационной безопасности</span></div>
@@ -1524,7 +1597,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Страница сохранена (toast)                                   -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-saved" class="shell" style="position:relative;">
+<div id="s-saved" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main">
     <div class="topbar"><span class="back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg> Тесты</span><span class="test-title">Основы информационной безопасности</span></div>
@@ -1542,7 +1615,7 @@
             <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
             <span class="page-type-badge type-intro">Введение</span>
             <span class="page-title">Общее введение в курс<span class="tpl-page-marker">из шаблона</span></span>
-            <div class="page-actions"><button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button></div>
+            <div class="page-actions"><button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button></div>
           </div>
         </div>
       </div>
@@ -1558,8 +1631,8 @@
             <span class="page-type-badge type-intro">Введение</span>
             <span class="page-title">Введение: Основы безопасности</span>
             <div class="page-actions">
-              <button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
-              <button class="btn btn-ghost btn-icon btn-sm" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button>
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s" style="color:var(--destructive);"><svg width="13" height="13"><use href="#i-trash"/></svg></button>
             </div>
           </div>
           <div class="questions-row"><svg class="questions-icon" style="color:var(--muted-fg);"><use href="#i-question"/></svg><span>15 вопросов</span></div>
@@ -1572,7 +1645,7 @@
             <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
             <span class="page-type-badge type-summary">Итоги</span>
             <span class="page-title">Результаты теста<span class="tpl-page-marker">из шаблона</span></span>
-            <div class="page-actions"><button class="btn btn-ghost btn-icon btn-sm"><svg width="13" height="13"><use href="#i-pencil"/></svg></button></div>
+            <div class="page-actions"><button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m ou-iconbtn--s"><svg width="13" height="13"><use href="#i-pencil"/></svg></button></div>
           </div>
         </div>
       </div>
@@ -1589,7 +1662,7 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- STATE: Предпросмотр шаблона (галерея элементов)                    -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
-<div id="s-preview" class="shell" style="position:relative;">
+<div id="s-preview" class="wf-state shell" style="position:relative;">
   <aside class="sidebar"><div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div><nav class="sidebar-nav"><div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div></nav><div class="sidebar-footer"><div style="display:flex;align-items:center;gap:8px;"><div class="avatar">АИ</div></div></div></aside>
   <div class="main" style="filter:blur(1px);opacity:.4;"><div class="topbar"><span class="test-title">Основы информационной безопасности</span></div><div class="editor-tabs"><div class="etab active">Структура</div></div></div>
   <div style="position:absolute;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:stretch;justify-content:center;z-index:50;padding:20px;">
@@ -1599,7 +1672,7 @@
       <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0;">
         <div style="font-size:15px;font-weight:600;">Шаблон «Корпоративный» — элементы и их вид</div>
         <div style="font-size:12px;color:var(--muted-fg);">Демо-данные · элементы управления работают</div>
-        <button class="btn btn-ghost btn-icon" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+        <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" style="width:32px;height:32px;margin-left:auto;"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </div>
 
       <!-- Body -->
@@ -1659,12 +1732,65 @@
       <!-- Footer -->
       <div style="padding:10px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-shrink:0;">
         <span style="font-size:12px;color:var(--muted-fg);">9 элементов · шаблон «Корпоративный» v1.2.0</span>
-        <button class="btn btn-outline btn-sm" style="margin-left:auto;">Закрыть</button>
+        <button class="ou-btn ou-btn--secondary ou-btn--s" style="margin-left:auto;">Закрыть</button>
       </div>
     </div>
   </div>
 </div>
 
+
+<!-- ═══════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент</th>
+        <th>Поле API / условие</th>
+        <th>Примечание</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Состояния wireframe</td>
+        <td><code>showState(btn, stateId)</code></td>
+        <td>Метанавигация переключает только визуальные состояния и не является частью продуктового UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<div class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping</h2>
+  <p class="wf-mapping-sub">
+    Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент является блокером.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент wireframe</th>
+        <th>DS-компонент</th>
+        <th>Используемые токены</th>
+        <th>Примечания</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Метанавигация состояний</td>
+        <td><code>Wireframe utility</code></td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code>, <code>--ou-accent-*</code></td>
+        <td>Не мигрируется в продуктовый UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
 <script>
   /* ── Wireframe state switcher ───────────────────────────── */
   function show(id) {
@@ -2000,5 +2126,253 @@
     document.getElementById('pv-progress-bar').style.width = PV_PANELS['pv-intro'].progress;
   });
 </script>
+
+<script>
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
+</script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.drawer-footer')) addMappingRow(rows, 'drawer-footer', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
 </body>
 </html>
