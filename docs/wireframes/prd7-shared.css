@@ -121,13 +121,7 @@ body {
   margin-bottom: var(--ou-space-3); margin-top: var(--ou-space-1);
 }
 
-/* ── Empty / Separator ────────────────────────────────────────────────── */
-.empty-block {
-  border: 1px dashed var(--ou-border-default); border-radius: var(--ou-radius-m);
-  padding: var(--ou-space-7) var(--ou-space-5); text-align: center; color: var(--ou-fg-muted);
-}
-.empty-title { font: var(--ou-text-body-m); font-weight: 500; color: var(--ou-fg-default); margin-bottom: var(--ou-space-2); }
-.empty-desc  { font: var(--ou-text-body-s); margin-bottom: var(--ou-space-4); }
+/* Separator (no DS equivalent yet — WIREFRAME-ONLY glue) */
 .sep { border: none; border-top: 1px solid var(--ou-border-default); margin: var(--ou-space-6) 0; }
 
 /* ── Forms ──────────────────────────────────────────────────────────────
@@ -168,41 +162,6 @@ select {
 .status-icon { width: 14px; height: 14px; flex-shrink: 0; }
 .status-icon.warn  { color: var(--ou-warning-on-soft); }
 .status-icon.error { color: var(--ou-error-default); }
-
-/* ── Skeleton ─────────────────────────────────────────────────────────── */
-@keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
-.skel {
-  border-radius: var(--ou-radius-s);
-  background: linear-gradient(90deg, var(--ou-bg-surface-3) 25%, var(--ou-bg-hover) 50%, var(--ou-bg-surface-3) 75%);
-  background-size: 800px 100%; animation: shimmer 1.4s infinite;
-}
-
-/* ── Dialog / overlay ─────────────────────────────────────────────────── */
-.overlay {
-  position: fixed; inset: 0; background: var(--ou-bg-backdrop);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 50;
-}
-.dialog {
-  background: var(--bg); border-radius: var(--ou-radius-m);
-  box-shadow: var(--ou-shadow-xl);
-  overflow: hidden; width: 520px; max-width: 96%;
-}
-.dialog-lg { width: 680px; }
-.dialog-header {
-  padding: var(--ou-space-4) var(--ou-space-5); border-bottom: 1px solid var(--ou-border-default);
-  display: flex; align-items: center; gap: var(--ou-space-3);
-}
-.dialog-title { font: var(--ou-text-heading-s); flex: 1; }
-.dialog-body { padding: var(--ou-space-5); }
-.dialog-footer {
-  padding: var(--ou-space-4) var(--ou-space-5); border-top: 1px solid var(--ou-border-default);
-  display: flex; justify-content: flex-end; gap: var(--ou-space-2);
-}
-.dialog-footer-split {
-  padding: var(--ou-space-4) var(--ou-space-5); border-top: 1px solid var(--ou-border-default);
-  display: flex; justify-content: space-between; align-items: center;
-}
 
 /* Two-pane Settings layout >= 960px (FR-43) */
 .settings-pane {
@@ -281,13 +240,4 @@ select {
   background: var(--ou-bg-hover); padding: 1px 4px; border-radius: var(--ou-radius-xs);
 }
 
-/* ── Toast / snackbar ─────────────────────────────────────────────────── */
-.ou-toast {
-  display: inline-flex; align-items: center; gap: var(--ou-space-2);
-  padding: var(--ou-space-3) var(--ou-space-4);
-  border-radius: var(--ou-radius-m); font: var(--ou-text-body-s); font-weight: 500;
-  box-shadow: var(--ou-shadow-xl);
-}
-.ou-toast--success { background: var(--ou-success-soft); color: var(--ou-success-on-soft); border: 1px solid var(--ou-success-default); }
-.ou-toast--error   { background: var(--ou-error-soft);   color: var(--ou-error-on-soft);   border: 1px solid var(--ou-error-default); }
-.ou-toast--warning { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); border: 1px solid var(--ou-warning-default); }
+/* Toast: ou-toast and modifiers provided by ds/university-rt.css. */
