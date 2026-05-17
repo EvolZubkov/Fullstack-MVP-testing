@@ -11,9 +11,11 @@
     "db:push": "drizzle-kit push",
     "create-admin": "tsx script/create-admin.ts",
     "test": "vitest run",
+    "check:wireframes:ds": "node scripts/check-wireframes-ds.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@universityrt/ui-kit": "file:../../ENGINERING_HANDBOOK/ui-kit",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.31",
     "@radix-ui/react-accordion": "^1.2.12",
