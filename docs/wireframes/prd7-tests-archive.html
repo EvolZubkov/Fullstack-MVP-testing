@@ -1,0 +1,1270 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Wireframe: prd7 — Tests Archive Page
+    Этап 3 — Wireframes
+    Файл: docs/wireframes/prd7-tests-archive.html
+    Состояния: s-list, s-preview, s-restore, s-restore-orphan, s-delete, s-empty
+    Покрывает: FR-31
+  -->
+  <title>prd7 — Архив тестов</title>
+  <link rel="stylesheet" href="ds/university-rt.css" />
+  <link rel="stylesheet" href="ds/wf-utils.css" />
+  <style>
+    /* Wireframe-specific helpers — not part of product UI */
+    .wf-sprite { display: none; }
+
+    /* ── Full-viewport shell ──────────────────────────────────────────────── */
+    .wf-state { padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-shell {
+      display: flex;
+      height: calc(100vh - var(--wf-size-52));
+      overflow: hidden;
+      background: var(--ou-bg-page);
+      position: relative;
+    }
+
+    /* ── Sidebar ──────────────────────────────────────────────────────────── */
+    .wf-sidebar {
+      width: var(--wf-size-224); flex-shrink: 0;
+      background: var(--ou-bg-elevated);
+      border-right: var(--wf-border-w) solid var(--ou-border-soft);
+      display: flex; flex-direction: column;
+    }
+    .wf-sidebar-header {
+      display: flex; align-items: center; gap: var(--ou-space-3);
+      padding: var(--ou-space-4); border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .wf-logo-box {
+      width: var(--wf-size-30); height: var(--wf-size-30); flex-shrink: 0;
+      background: var(--ou-accent-default); border-radius: var(--ou-radius-m);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--ou-fg-on-accent); font: var(--ou-text-body-s); font-weight: 700;
+    }
+    .wf-sidebar-title { font: var(--ou-text-body-m); font-weight: 600; }
+    .wf-sidebar-nav { flex: 1; padding: var(--ou-space-3); }
+    .wf-nav-item {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-3);
+      border-radius: var(--ou-radius-s);
+      font: var(--ou-text-body-s); color: var(--ou-fg-muted); cursor: pointer;
+    }
+    .wf-nav-item--active { background: var(--ou-bg-muted); color: var(--ou-fg-default); font-weight: 600; }
+    .wf-nav-item svg { width: var(--wf-space-14); height: var(--wf-space-14); flex-shrink: 0; }
+    .wf-sidebar-footer { padding: var(--ou-space-3) var(--ou-space-4); border-top: var(--wf-border-w) solid var(--ou-border-soft); }
+    .wf-user-row { display: flex; align-items: center; gap: var(--ou-space-2); }
+    .wf-avatar {
+      width: var(--wf-size-28); height: var(--wf-size-28); border-radius: 50%; flex-shrink: 0;
+      background: var(--ou-accent-default); color: var(--ou-fg-on-accent);
+      display: flex; align-items: center; justify-content: center;
+      font: var(--ou-text-caption); font-weight: 600;
+    }
+    .wf-user-name { font: var(--ou-text-body-s); font-weight: 500; }
+    .wf-user-role { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+    /* ── Main column ──────────────────────────────────────────────────────── */
+    .wf-main-col {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .wf-main-col--dimmed { opacity: .4; }
+
+    /* ── Page header ──────────────────────────────────────────────────────── */
+    .wf-page-header {
+      display: flex; align-items: center; gap: var(--ou-space-3);
+      padding: var(--ou-space-3) var(--ou-space-6);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft); flex-shrink: 0;
+    }
+    .wf-back-btn {
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      font: var(--ou-text-body-s); color: var(--ou-accent-default);
+      background: none; border: none; cursor: pointer; padding: 0; font-family: inherit;
+    }
+    .wf-back-btn svg { width: var(--wf-space-14); height: var(--wf-space-14); }
+    .wf-page-title { font: var(--ou-text-heading-m); font-weight: 700; flex: 1; }
+
+    /* ── Archive info banner ──────────────────────────────────────────────── */
+    .wf-archive-banner {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-6);
+      background: var(--ou-bg-canvas); border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      font: var(--ou-text-caption); color: var(--ou-fg-muted); flex-shrink: 0;
+    }
+
+    /* ── Content split (table + preview) ──────────────────────────────────── */
+    .wf-content-split { display: flex; flex: 1; overflow: hidden; }
+    .wf-tree-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+    /* ── Tests table ──────────────────────────────────────────────────────── */
+    .wf-table-header {
+      display: grid;
+      grid-template-columns: 1fr var(--wf-size-110) var(--wf-size-90) var(--wf-size-130) var(--wf-size-65) var(--wf-size-95) var(--wf-size-120) var(--wf-size-110) var(--wf-size-84);
+      padding: var(--ou-space-1) 0;
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: .05em;
+      position: sticky; top: 0; background: var(--ou-bg-elevated); z-index: 1; flex-shrink: 0;
+    }
+    .wf-table-header > :first-child { padding-left: var(--ou-space-6); }
+    .wf-table-header > :nth-child(n+2) { display: flex; align-items: center; justify-content: center; }
+
+    .wf-test-row {
+      display: grid;
+      grid-template-columns: 1fr var(--wf-size-110) var(--wf-size-90) var(--wf-size-130) var(--wf-size-65) var(--wf-size-95) var(--wf-size-120) var(--wf-size-110) var(--wf-size-84);
+      align-items: center;
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      opacity: .78; cursor: pointer;
+    }
+    .wf-test-row:hover { background: var(--ou-bg-canvas); opacity: 1; }
+    .wf-test-row--selected { background: var(--ou-bg-canvas); opacity: 1; }
+    .wf-test-row > :nth-child(n+2) { display: flex; align-items: center; justify-content: center; }
+
+    .wf-test-name-cell { padding: var(--ou-space-2) 0 var(--ou-space-2) var(--ou-space-6); }
+    .wf-test-name { font: var(--ou-text-body-s); font-weight: 500; }
+    .wf-test-sub { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-half); }
+    .wf-tree-num { font: var(--ou-text-body-s); }
+    .wf-date-cell { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+    .wf-scroll-area { flex: 1; overflow-y: auto; }
+
+    /* ── Row actions ──────────────────────────────────────────────────────── */
+    .wf-row-actions { display: flex; align-items: center; gap: var(--ou-space-1); }
+    .wf-icon-row-btn {
+      width: var(--wf-size-28); height: var(--wf-size-28); border-radius: var(--ou-radius-s);
+      border: var(--wf-border-w) solid transparent; background: transparent;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--ou-fg-muted); flex-shrink: 0; position: relative;
+    }
+    .wf-icon-row-btn svg { width: var(--wf-space-14); height: var(--wf-space-14); }
+    .wf-icon-row-btn--restore:hover { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+    .wf-icon-row-btn--delete:hover  { background: var(--ou-error-bg); color: var(--ou-error-fg); border-color: var(--ou-error-border); }
+    .wf-icon-row-btn[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; top: calc(100% + var(--wf-space-6)); right: 0;
+      background: var(--ou-neutral-900); color: var(--ou-neutral-0);
+      font: var(--ou-text-caption); white-space: nowrap; padding: var(--wf-space-1q) var(--wf-space-7);
+      border-radius: var(--ou-radius-s); pointer-events: none; z-index: 30;
+    }
+    .wf-icon-row-btn[data-tooltip]:hover::before {
+      content: ''; position: absolute; top: calc(100% + var(--wf-space-half)); right: var(--wf-space-7);
+      border: var(--ou-space-1) solid transparent; border-bottom-color: var(--ou-neutral-900);
+      pointer-events: none; z-index: 30;
+    }
+
+    /* ── Preview panel toggle ─────────────────────────────────────────────── */
+    .wf-preview-toggle-btn {
+      width: var(--wf-size-22); height: var(--wf-size-22); padding: 0; flex-shrink: 0;
+      border-radius: var(--ou-radius-s); border: var(--wf-border-w) solid transparent;
+      background: transparent; cursor: pointer; color: var(--ou-fg-muted);
+      display: inline-flex; align-items: center; justify-content: center;
+      position: relative; justify-self: end; margin-right: var(--ou-space-3);
+    }
+    .wf-preview-toggle-btn--active { color: var(--ou-accent-default); border-color: var(--ou-accent-default); background: var(--ou-bg-canvas); }
+    .wf-preview-toggle-btn svg { width: var(--wf-space-14); height: var(--wf-space-14); }
+    .wf-preview-toggle-btn[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; top: calc(100% + var(--wf-space-6)); right: 0;
+      background: var(--ou-neutral-900); color: var(--ou-neutral-0);
+      font: var(--ou-text-caption); white-space: nowrap; padding: var(--wf-space-1q) var(--wf-space-7);
+      border-radius: var(--ou-radius-s); pointer-events: none; z-index: 30;
+    }
+
+    /* ── Mode badge ───────────────────────────────────────────────────────── */
+    .wf-mode-badge {
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      font: var(--ou-text-caption); font-weight: 500; padding: var(--wf-space-half) var(--ou-space-2);
+      border-radius: var(--wf-space-10); white-space: nowrap;
+    }
+    .wf-mode-badge--standard { background: var(--ou-bg-canvas); color: var(--ou-fg-muted); border: var(--wf-border-w) solid var(--ou-border-soft); }
+    .wf-mode-badge--adaptive { background: var(--ou-purple-50); color: var(--ou-purple-700); border: var(--wf-border-w) solid var(--ou-purple-200); }
+
+    /* ── Flow chip ────────────────────────────────────────────────────────── */
+    .wf-flow-chip {
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      font: var(--ou-text-caption); font-weight: 500; color: var(--ou-fg-default);
+      padding: var(--wf-space-half) var(--ou-space-2); border-radius: var(--ou-radius-s);
+      background: var(--ou-bg-canvas); border: var(--wf-border-w) solid var(--ou-border-soft);
+      white-space: nowrap;
+    }
+    .wf-flow-chip svg { width: var(--wf-space-11); height: var(--wf-space-11); flex-shrink: 0; color: var(--ou-fg-muted); }
+
+    /* ── Preview panel (right) ────────────────────────────────────────────── */
+    .wf-preview-panel {
+      width: var(--wf-size-300); flex-shrink: 0;
+      border-left: var(--wf-border-w) solid var(--ou-border-soft);
+      display: flex; flex-direction: column; overflow-y: auto;
+      background: var(--ou-bg-elevated);
+    }
+    .wf-preview-panel-header {
+      padding: var(--ou-space-3) var(--ou-space-4) var(--ou-space-2);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft); flex-shrink: 0;
+    }
+    .wf-preview-panel-name { font: var(--ou-text-body-s); font-weight: 600; line-height: 1.4; margin-bottom: var(--ou-space-2); }
+    .wf-preview-badges { display: flex; flex-wrap: wrap; gap: var(--ou-space-1); }
+    .wf-preview-panel-body { padding: var(--ou-space-4); display: flex; flex-direction: column; gap: var(--ou-space-5); }
+    .wf-preview-section-title {
+      font: var(--ou-text-caption); font-weight: 700; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: var(--ou-space-2);
+    }
+    .wf-preview-topic-row { display: flex; align-items: baseline; gap: var(--ou-space-1); font: var(--ou-text-caption); padding: var(--wf-space-half) 0; }
+    .wf-preview-topic-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .wf-preview-topic-dots { flex: none; color: var(--ou-border-soft); overflow: hidden; white-space: nowrap; }
+    .wf-preview-topic-count { flex-shrink: 0; color: var(--ou-fg-muted); }
+    .wf-preview-topic-total { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); padding-top: var(--ou-space-1); border-top: var(--wf-border-w) solid var(--ou-border-soft); }
+    .wf-preview-kv-row { display: flex; justify-content: space-between; align-items: baseline; font: var(--ou-text-caption); padding: var(--wf-space-half) 0; }
+    .wf-preview-kv-key { color: var(--ou-fg-muted); }
+    .wf-preview-kv-val { font-weight: 500; }
+
+    /* ── Modal overlay + dialog ───────────────────────────────────────────── */
+    .wf-modal-overlay {
+      position: absolute; inset: 0;
+      background: color-mix(in srgb, var(--ou-neutral-950) 50%, transparent);
+      display: flex; align-items: center; justify-content: center; z-index: 50;
+    }
+    .wf-dialog {
+      background: var(--ou-bg-elevated); border-radius: var(--ou-radius-l);
+      box-shadow: 0 var(--ou-space-5) var(--wf-size-60) color-mix(in srgb, var(--ou-neutral-950) 30%, transparent);
+      width: var(--wf-size-440); max-width: 96%; overflow: hidden;
+    }
+    .wf-dialog-header { padding: var(--ou-space-4) var(--ou-space-5); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
+    .wf-dialog-title { font: var(--ou-text-body-l); font-weight: 600; }
+    .wf-dialog-body { padding: var(--ou-space-4) var(--ou-space-5); font: var(--ou-text-body-s); line-height: 1.6; }
+    .wf-dialog-footer { padding: var(--ou-space-3) var(--ou-space-5); border-top: var(--wf-border-w) solid var(--ou-border-soft); display: flex; justify-content: flex-end; gap: var(--ou-space-2); }
+
+    /* ── Restore orphan warning ───────────────────────────────────────────── */
+    .wf-restore-warn {
+      display: flex; align-items: flex-start; gap: var(--ou-space-2);
+      background: var(--ou-warning-bg);
+      border: var(--wf-border-w) solid var(--ou-warning-border, var(--ou-warning-default));
+      color: var(--ou-fg-default);
+      border-radius: var(--ou-radius-m);
+      font: var(--ou-text-caption); line-height: 1.5;
+      padding: var(--ou-space-2) var(--ou-space-3); margin-top: var(--ou-space-3);
+    }
+    .wf-restore-warn svg { flex-shrink: 0; margin-top: var(--wf-border-w); }
+
+    /* ── Delete note ──────────────────────────────────────────────────────── */
+    .wf-delete-note { margin-top: var(--ou-space-2); color: var(--ou-fg-muted); font: var(--ou-text-caption); }
+
+    /* ── Empty archive state ──────────────────────────────────────────────── */
+    .wf-empty-archive {
+      padding: var(--ou-space-10) var(--ou-space-6); text-align: center; color: var(--ou-fg-muted);
+    }
+    .wf-empty-archive-title { font: var(--ou-text-body-m); font-weight: 500; color: var(--ou-fg-default); margin-bottom: var(--ou-space-1); }
+    .wf-empty-archive-desc { font: var(--ou-text-body-s); }
+
+    /* ── Preview panel action row ────────────────────────────────────────── */
+    .wf-preview-panel-actions { display: flex; gap: var(--ou-space-2); flex-wrap: wrap; }
+
+    /* ── Button extensions ────────────────────────────────────────────────── */
+    .ou-button--ghost { background: transparent; color: var(--ou-fg-default); border: var(--wf-border-w) solid var(--ou-border-soft); }
+    .ou-button--ghost:hover { background: var(--ou-bg-muted); }
+    .ou-button--sm { font: var(--ou-text-caption); padding: var(--ou-space-1) var(--ou-space-3); }
+    .ou-button--danger { background: var(--ou-error-fg); color: var(--ou-neutral-0); border-color: transparent; }
+    .ou-button--danger:hover { opacity: .9; }
+  </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: var(--wf-border-w);
+      height: var(--ou-space-5);
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, var(--wf-size-52));
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+    }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+  </symbol>
+  <symbol id="i-question" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/>
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="8" height="4" x="8" y="2" rx="1"/>
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+  </symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </symbol>
+  <symbol id="i-archive-restore" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="20" height="5" x="2" y="3" rx="1"/>
+    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/>
+    <path d="m9 13 3-3 3 3"/><path d="M12 10v8"/>
+  </symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+  </symbol>
+  <symbol id="i-panel-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/>
+  </symbol>
+  <symbol id="i-flow-router" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+    <path d="M18 9a9 9 0 0 1-9 9"/>
+  </symbol>
+  <symbol id="i-flow-topics" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="4" y1="7" x2="10" y2="7"/><line x1="4" y1="12" x2="10" y2="12"/><line x1="4" y1="17" x2="10" y2="17"/>
+    <polyline points="14 9 18 12 14 15"/>
+  </symbol>
+  <symbol id="i-warn-tri" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">prd7 — Архив тестов:</span>
+  <button type="button" class="ou-button ou-button--primary" onclick="showState(this, 's-list')">s-list</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-preview')">s-preview</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-restore')">s-restore</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-restore-orphan')">s-restore-orphan</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-delete')">s-delete</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-empty')">s-empty</button>
+  <span class="wf-nav-sep"></span>
+  <button type="button" class="ou-button ou-button--secondary" onclick="toggleTheme()">Dark</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="toggleDensity()">Compact</button>
+</nav>
+
+<!-- ═══════════ STATE: s-list ═══════════ -->
+<div id="wf-s-list" class="wf-state active">
+  <div class="wf-shell">
+    <aside class="wf-sidebar">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box">SC</div>
+        <span class="wf-sidebar-title">Test Builder</span>
+      </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-nav-item"><svg><use href="#i-folder"/></svg>Темы</div>
+        <div class="wf-nav-item"><svg><use href="#i-question"/></svg>Вопросы</div>
+        <div class="wf-nav-item wf-nav-item--active"><svg><use href="#i-clipboard"/></svg>Тесты</div>
+        <div class="wf-nav-item"><svg><use href="#i-chart"/></svg>Аналитика</div>
+        <div class="wf-nav-item"><svg><use href="#i-users"/></svg>Пользователи</div>
+      </nav>
+      <div class="wf-sidebar-footer">
+        <div class="wf-user-row">
+          <div class="wf-avatar">АИ</div>
+          <div>
+            <div class="wf-user-name">Андрей Иванов</div>
+            <div class="wf-user-role">Автор</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="wf-main-col">
+      <header class="wf-page-header">
+        <button type="button" class="wf-back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg>Тесты</button>
+        <h1 class="wf-page-title">Архив тестов</h1>
+        <button type="button" class="wf-preview-toggle-btn" aria-label="Панель предпросмотра" data-tooltip="Панель предпросмотра">
+          <svg width="14" height="14"><use href="#i-panel-right"/></svg>
+        </button>
+      </header>
+      <div class="wf-archive-banner">
+        <svg width="12" height="12"><use href="#i-archive-restore"/></svg>
+        Архивированные тесты не отображаются в основном списке. Здесь можно восстановить или удалить тест навсегда.
+      </div>
+      <div class="wf-content-split">
+        <div class="wf-tree-section">
+          <div class="wf-table-header">
+            <div>Название</div>
+            <div>Статус</div>
+            <div>Режим</div>
+            <div>Сценарий</div>
+            <div>Тем</div>
+            <div>Вопросов</div>
+            <div>Архивирован</div>
+            <div>Назначений</div>
+            <div></div>
+          </div>
+          <div class="wf-scroll-area">
+            <div class="wf-test-row">
+              <div class="wf-test-name-cell">
+                <div class="wf-test-name">Аудит логов SCORM</div>
+                <div class="wf-test-sub">Папка: Системное администрирование</div>
+              </div>
+              <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+              <div><span class="wf-mode-badge wf-mode-badge--standard">Стандарт</span></div>
+              <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-router"/></svg>Роутер</span></div>
+              <div class="wf-tree-num">5</div>
+              <div class="wf-tree-num">27</div>
+              <div class="wf-date-cell">10.01.2025</div>
+              <div class="wf-tree-num">0</div>
+              <div class="wf-row-actions">
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore" aria-label="Восстановить" data-tooltip="Восстановить"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete" aria-label="Удалить навсегда" data-tooltip="Удалить навсегда"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+            <div class="wf-test-row">
+              <div class="wf-test-name-cell">
+                <div class="wf-test-name">Введение в DevOps</div>
+                <div class="wf-test-sub">Папка: Программирование</div>
+              </div>
+              <div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+              <div><span class="wf-mode-badge wf-mode-badge--adaptive">Адаптив</span></div>
+              <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-topics"/></svg>По темам</span></div>
+              <div class="wf-tree-num">3</div>
+              <div class="wf-tree-num">14</div>
+              <div class="wf-date-cell">22.12.2024</div>
+              <div class="wf-tree-num">12</div>
+              <div class="wf-row-actions">
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore" aria-label="Восстановить" data-tooltip="Восстановить"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete" aria-label="Удалить навсегда" data-tooltip="Удалить навсегда"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ STATE: s-preview ═══════════ -->
+<div id="wf-s-preview" class="wf-state">
+  <div class="wf-shell">
+    <aside class="wf-sidebar">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box">SC</div>
+        <span class="wf-sidebar-title">Test Builder</span>
+      </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-nav-item"><svg><use href="#i-folder"/></svg>Темы</div>
+        <div class="wf-nav-item"><svg><use href="#i-question"/></svg>Вопросы</div>
+        <div class="wf-nav-item wf-nav-item--active"><svg><use href="#i-clipboard"/></svg>Тесты</div>
+        <div class="wf-nav-item"><svg><use href="#i-chart"/></svg>Аналитика</div>
+        <div class="wf-nav-item"><svg><use href="#i-users"/></svg>Пользователи</div>
+      </nav>
+      <div class="wf-sidebar-footer">
+        <div class="wf-user-row">
+          <div class="wf-avatar">АИ</div>
+          <div>
+            <div class="wf-user-name">Андрей Иванов</div>
+            <div class="wf-user-role">Автор</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="wf-main-col">
+      <header class="wf-page-header">
+        <button type="button" class="wf-back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg>Тесты</button>
+        <h1 class="wf-page-title">Архив тестов</h1>
+        <button type="button" class="wf-preview-toggle-btn wf-preview-toggle-btn--active" aria-label="Панель предпросмотра" data-tooltip="Панель предпросмотра">
+          <svg width="14" height="14"><use href="#i-panel-right"/></svg>
+        </button>
+      </header>
+      <div class="wf-archive-banner">
+        <svg width="12" height="12"><use href="#i-archive-restore"/></svg>
+        Архивированные тесты не отображаются в основном списке. Здесь можно восстановить или удалить тест навсегда.
+      </div>
+      <div class="wf-content-split">
+        <div class="wf-tree-section">
+          <div class="wf-table-header">
+            <div>Название</div>
+            <div>Статус</div>
+            <div>Режим</div>
+            <div>Сценарий</div>
+            <div>Тем</div>
+            <div>Вопросов</div>
+            <div>Архивирован</div>
+            <div>Назначений</div>
+            <div></div>
+          </div>
+          <div class="wf-scroll-area">
+            <div class="wf-test-row wf-test-row--selected">
+              <div class="wf-test-name-cell">
+                <div class="wf-test-name">Аудит логов SCORM</div>
+                <div class="wf-test-sub">Папка: Системное администрирование</div>
+              </div>
+              <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+              <div><span class="wf-mode-badge wf-mode-badge--standard">Стандарт</span></div>
+              <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-router"/></svg>Роутер</span></div>
+              <div class="wf-tree-num">5</div>
+              <div class="wf-tree-num">27</div>
+              <div class="wf-date-cell">10.01.2025</div>
+              <div class="wf-tree-num">0</div>
+              <div class="wf-row-actions">
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore" aria-label="Восстановить" data-tooltip="Восстановить"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete" aria-label="Удалить навсегда" data-tooltip="Удалить навсегда"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+            <div class="wf-test-row">
+              <div class="wf-test-name-cell">
+                <div class="wf-test-name">Введение в DevOps</div>
+                <div class="wf-test-sub">Папка: Программирование</div>
+              </div>
+              <div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+              <div><span class="wf-mode-badge wf-mode-badge--adaptive">Адаптив</span></div>
+              <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-topics"/></svg>По темам</span></div>
+              <div class="wf-tree-num">3</div>
+              <div class="wf-tree-num">14</div>
+              <div class="wf-date-cell">22.12.2024</div>
+              <div class="wf-tree-num">12</div>
+              <div class="wf-row-actions">
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore" aria-label="Восстановить" data-tooltip="Восстановить"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete" aria-label="Удалить навсегда" data-tooltip="Удалить навсегда"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <aside class="wf-preview-panel">
+          <div class="wf-preview-panel-header">
+            <div class="wf-preview-panel-name">Аудит логов SCORM</div>
+            <div class="wf-preview-badges">
+              <span class="ou-tag ou-tag--neutral">Черновик</span>
+              <span class="wf-mode-badge wf-mode-badge--standard">Стандарт</span>
+              <span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-router"/></svg>Роутер</span>
+            </div>
+          </div>
+          <div class="wf-preview-panel-body">
+            <div>
+              <div class="wf-preview-section-title">Состав</div>
+              <div class="wf-preview-topic-row">
+                <span class="wf-preview-topic-name">Аудит SCORM runtime</span>
+                <span class="wf-preview-topic-dots">............</span>
+                <span class="wf-preview-topic-count">10</span>
+              </div>
+              <div class="wf-preview-topic-row">
+                <span class="wf-preview-topic-name">Настройка LRS</span>
+                <span class="wf-preview-topic-dots">............</span>
+                <span class="wf-preview-topic-count">8</span>
+              </div>
+              <div class="wf-preview-topic-row">
+                <span class="wf-preview-topic-name">SCORM 1.2 vs 2004</span>
+                <span class="wf-preview-topic-dots">............</span>
+                <span class="wf-preview-topic-count">5</span>
+              </div>
+              <div class="wf-preview-topic-row">
+                <span class="wf-preview-topic-name">Отладка</span>
+                <span class="wf-preview-topic-dots">............</span>
+                <span class="wf-preview-topic-count">4</span>
+              </div>
+              <div class="wf-preview-topic-total">Итого: 27 вопросов, 5 тем</div>
+            </div>
+            <div>
+              <div class="wf-preview-section-title">Сведения</div>
+              <div class="wf-preview-kv-row">
+                <span class="wf-preview-kv-key">Назначений</span>
+                <span class="wf-preview-kv-val">0</span>
+              </div>
+              <div class="wf-preview-kv-row">
+                <span class="wf-preview-kv-key">Архивирован</span>
+                <span class="wf-preview-kv-val">10.01.2025</span>
+              </div>
+              <div class="wf-preview-kv-row">
+                <span class="wf-preview-kv-key">Создан</span>
+                <span class="wf-preview-kv-val">05.11.2024</span>
+              </div>
+            </div>
+            <div class="wf-preview-panel-actions">
+              <button type="button" class="ou-button ou-button--primary ou-button--sm">Восстановить</button>
+              <button type="button" class="ou-button ou-button--ghost ou-button--sm">Удалить навсегда</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ STATE: s-restore ═══════════ -->
+<div id="wf-s-restore" class="wf-state">
+  <div class="wf-shell">
+    <aside class="wf-sidebar">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box">SC</div>
+        <span class="wf-sidebar-title">Test Builder</span>
+      </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-nav-item"><svg><use href="#i-folder"/></svg>Темы</div>
+        <div class="wf-nav-item"><svg><use href="#i-question"/></svg>Вопросы</div>
+        <div class="wf-nav-item wf-nav-item--active"><svg><use href="#i-clipboard"/></svg>Тесты</div>
+        <div class="wf-nav-item"><svg><use href="#i-chart"/></svg>Аналитика</div>
+        <div class="wf-nav-item"><svg><use href="#i-users"/></svg>Пользователи</div>
+      </nav>
+      <div class="wf-sidebar-footer">
+        <div class="wf-user-row">
+          <div class="wf-avatar">АИ</div>
+          <div>
+            <div class="wf-user-name">Андрей Иванов</div>
+            <div class="wf-user-role">Автор</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="wf-main-col wf-main-col--dimmed">
+      <header class="wf-page-header">
+        <button type="button" class="wf-back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg>Тесты</button>
+        <h1 class="wf-page-title">Архив тестов</h1>
+      </header>
+      <div class="wf-archive-banner">
+        <svg width="12" height="12"><use href="#i-archive-restore"/></svg>
+        Архивированные тесты не отображаются в основном списке.
+      </div>
+      <div class="wf-content-split">
+        <div class="wf-tree-section">
+          <div class="wf-table-header">
+            <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div>
+            <div>Тем</div><div>Вопросов</div><div>Архивирован</div><div>Назначений</div><div></div>
+          </div>
+          <div class="wf-scroll-area">
+            <div class="wf-test-row">
+              <div class="wf-test-name-cell">
+                <div class="wf-test-name">Аудит логов SCORM</div>
+                <div class="wf-test-sub">Папка: Системное администрирование</div>
+              </div>
+              <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+              <div><span class="wf-mode-badge wf-mode-badge--standard">Стандарт</span></div>
+              <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-router"/></svg>Роутер</span></div>
+              <div class="wf-tree-num">5</div><div class="wf-tree-num">27</div>
+              <div class="wf-date-cell">10.01.2025</div><div class="wf-tree-num">0</div>
+              <div class="wf-row-actions">
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore" aria-label="Восстановить"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete" aria-label="Удалить навсегда"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wf-modal-overlay">
+      <div class="wf-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-restore-title">
+        <div class="wf-dialog-header">
+          <div class="wf-dialog-title" id="dlg-restore-title">Восстановить тест?</div>
+        </div>
+        <div class="wf-dialog-body">
+          Тест <strong>«Аудит логов SCORM»</strong> будет восстановлен и переведён в статус <strong>«Черновик»</strong>. Он снова появится в основном списке тестов.
+        </div>
+        <div class="wf-dialog-footer">
+          <button type="button" class="ou-button ou-button--secondary">Отмена</button>
+          <button type="button" class="ou-button ou-button--primary">Восстановить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ STATE: s-restore-orphan ═══════════ -->
+<div id="wf-s-restore-orphan" class="wf-state">
+  <div class="wf-shell">
+    <aside class="wf-sidebar">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box">SC</div>
+        <span class="wf-sidebar-title">Test Builder</span>
+      </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-nav-item"><svg><use href="#i-folder"/></svg>Темы</div>
+        <div class="wf-nav-item"><svg><use href="#i-question"/></svg>Вопросы</div>
+        <div class="wf-nav-item wf-nav-item--active"><svg><use href="#i-clipboard"/></svg>Тесты</div>
+        <div class="wf-nav-item"><svg><use href="#i-chart"/></svg>Аналитика</div>
+        <div class="wf-nav-item"><svg><use href="#i-users"/></svg>Пользователи</div>
+      </nav>
+      <div class="wf-sidebar-footer">
+        <div class="wf-user-row">
+          <div class="wf-avatar">АИ</div>
+          <div>
+            <div class="wf-user-name">Андрей Иванов</div>
+            <div class="wf-user-role">Автор</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="wf-main-col wf-main-col--dimmed">
+      <header class="wf-page-header">
+        <button type="button" class="wf-back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg>Тесты</button>
+        <h1 class="wf-page-title">Архив тестов</h1>
+      </header>
+      <div class="wf-archive-banner">
+        <svg width="12" height="12"><use href="#i-archive-restore"/></svg>
+        Архивированные тесты не отображаются в основном списке.
+      </div>
+      <div class="wf-content-split">
+        <div class="wf-tree-section">
+          <div class="wf-table-header">
+            <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div>
+            <div>Тем</div><div>Вопросов</div><div>Архивирован</div><div>Назначений</div><div></div>
+          </div>
+          <div class="wf-scroll-area">
+            <div class="wf-test-row">
+              <div class="wf-test-name-cell">
+                <div class="wf-test-name">Аудит логов SCORM</div>
+                <div class="wf-test-sub">Папка удалена</div>
+              </div>
+              <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+              <div><span class="wf-mode-badge wf-mode-badge--standard">Стандарт</span></div>
+              <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-router"/></svg>Роутер</span></div>
+              <div class="wf-tree-num">5</div><div class="wf-tree-num">27</div>
+              <div class="wf-date-cell">10.01.2025</div><div class="wf-tree-num">0</div>
+              <div class="wf-row-actions">
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore" aria-label="Восстановить"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete" aria-label="Удалить навсегда"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wf-modal-overlay">
+      <div class="wf-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-orphan-title">
+        <div class="wf-dialog-header">
+          <div class="wf-dialog-title" id="dlg-orphan-title">Восстановить тест?</div>
+        </div>
+        <div class="wf-dialog-body">
+          Тест <strong>«Аудит логов SCORM»</strong> будет восстановлен и переведён в статус <strong>«Черновик»</strong>.
+          <div class="wf-restore-warn">
+            <svg width="14" height="14" color="var(--ou-warning-fg,#b45309)"><use href="#i-warn-tri"/></svg>
+            <span>Папка <strong>«Системное администрирование»</strong>, в которой находился тест, была удалена. После восстановления тест окажется в корне списка тестов.</span>
+          </div>
+        </div>
+        <div class="wf-dialog-footer">
+          <button type="button" class="ou-button ou-button--secondary">Отмена</button>
+          <button type="button" class="ou-button ou-button--primary">Восстановить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ STATE: s-delete ═══════════ -->
+<div id="wf-s-delete" class="wf-state">
+  <div class="wf-shell">
+    <aside class="wf-sidebar">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box">SC</div>
+        <span class="wf-sidebar-title">Test Builder</span>
+      </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-nav-item"><svg><use href="#i-folder"/></svg>Темы</div>
+        <div class="wf-nav-item"><svg><use href="#i-question"/></svg>Вопросы</div>
+        <div class="wf-nav-item wf-nav-item--active"><svg><use href="#i-clipboard"/></svg>Тесты</div>
+        <div class="wf-nav-item"><svg><use href="#i-chart"/></svg>Аналитика</div>
+        <div class="wf-nav-item"><svg><use href="#i-users"/></svg>Пользователи</div>
+      </nav>
+      <div class="wf-sidebar-footer">
+        <div class="wf-user-row">
+          <div class="wf-avatar">АИ</div>
+          <div>
+            <div class="wf-user-name">Андрей Иванов</div>
+            <div class="wf-user-role">Автор</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="wf-main-col wf-main-col--dimmed">
+      <header class="wf-page-header">
+        <button type="button" class="wf-back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg>Тесты</button>
+        <h1 class="wf-page-title">Архив тестов</h1>
+      </header>
+      <div class="wf-archive-banner">
+        <svg width="12" height="12"><use href="#i-archive-restore"/></svg>
+        Архивированные тесты не отображаются в основном списке.
+      </div>
+      <div class="wf-content-split">
+        <div class="wf-tree-section">
+          <div class="wf-table-header">
+            <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div>
+            <div>Тем</div><div>Вопросов</div><div>Архивирован</div><div>Назначений</div><div></div>
+          </div>
+          <div class="wf-scroll-area">
+            <div class="wf-test-row">
+              <div class="wf-test-name-cell">
+                <div class="wf-test-name">Аудит логов SCORM</div>
+                <div class="wf-test-sub">Папка: Системное администрирование</div>
+              </div>
+              <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+              <div><span class="wf-mode-badge wf-mode-badge--standard">Стандарт</span></div>
+              <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-router"/></svg>Роутер</span></div>
+              <div class="wf-tree-num">5</div><div class="wf-tree-num">27</div>
+              <div class="wf-date-cell">10.01.2025</div><div class="wf-tree-num">0</div>
+              <div class="wf-row-actions">
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore" aria-label="Восстановить"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+                <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete" aria-label="Удалить навсегда"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wf-modal-overlay">
+      <div class="wf-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-delete-title">
+        <div class="wf-dialog-header">
+          <div class="wf-dialog-title" id="dlg-delete-title">Удалить тест навсегда?</div>
+        </div>
+        <div class="wf-dialog-body">
+          Тест <strong>«Аудит логов SCORM»</strong> будет удалён безвозвратно вместе со всеми данными о попытках.
+          <div class="wf-delete-note">Это действие невозможно отменить.</div>
+        </div>
+        <div class="wf-dialog-footer">
+          <button type="button" class="ou-button ou-button--secondary">Отмена</button>
+          <button type="button" class="ou-button ou-button--danger">Удалить навсегда</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ STATE: s-empty ═══════════ -->
+<div id="wf-s-empty" class="wf-state">
+  <div class="wf-shell">
+    <aside class="wf-sidebar">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box">SC</div>
+        <span class="wf-sidebar-title">Test Builder</span>
+      </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-nav-item"><svg><use href="#i-folder"/></svg>Темы</div>
+        <div class="wf-nav-item"><svg><use href="#i-question"/></svg>Вопросы</div>
+        <div class="wf-nav-item wf-nav-item--active"><svg><use href="#i-clipboard"/></svg>Тесты</div>
+        <div class="wf-nav-item"><svg><use href="#i-chart"/></svg>Аналитика</div>
+        <div class="wf-nav-item"><svg><use href="#i-users"/></svg>Пользователи</div>
+      </nav>
+      <div class="wf-sidebar-footer">
+        <div class="wf-user-row">
+          <div class="wf-avatar">АИ</div>
+          <div>
+            <div class="wf-user-name">Андрей Иванов</div>
+            <div class="wf-user-role">Автор</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="wf-main-col">
+      <header class="wf-page-header">
+        <button type="button" class="wf-back-btn"><svg width="14" height="14"><use href="#i-arrow-left"/></svg>Тесты</button>
+        <h1 class="wf-page-title">Архив тестов</h1>
+      </header>
+      <div class="wf-archive-banner">
+        <svg width="12" height="12"><use href="#i-archive-restore"/></svg>
+        Архивированные тесты не отображаются в основном списке.
+      </div>
+      <div class="wf-content-split">
+        <div class="wf-tree-section">
+          <div class="wf-scroll-area">
+            <div class="wf-empty-archive">
+              <div class="wf-empty-archive-title">Архив пуст</div>
+              <div class="wf-empty-archive-desc">Архивированные тесты будут отображаться здесь.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<section class="wf-acceptance" aria-label="Acceptance criteria">
+  <h2>Acceptance — FR-31 покрытие</h2>
+  <table class="wf-acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>FR-31</td><td>Архивированные тесты не отображаются в основном списке. Архив доступен через отдельный раздел «Архив тестов».</td></tr>
+      <tr><td>FR-31</td><td>Восстановление через icon-кнопку с tooltip и confirmation dialog; тест переводится в статус «Черновик».</td></tr>
+      <tr><td>FR-31</td><td>Edge case orphan: если папка тест была архивирован в удалённую папку — в диалоге показывается предупреждение; тест восстанавливается в корень.</td></tr>
+      <tr><td>FR-31</td><td>Удаление навсегда (permanent delete) через icon-кнопку с confirmation dialog. Данные попыток также удаляются.</td></tr>
+      <tr><td>—</td><td>Таблица: Название, Статус, Режим, Сценарий, Тем, Вопросов, Архивирован, Назначений. Панель предпросмотра — toggle-кнопка в заголовке.</td></tr>
+      <tr><td>—</td><td>Состояние «Архив пуст» с empty-state текстом.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+/**
+ * @param {HTMLElement} btn - Triggered button element.
+ * @param {string} id - State section ID without "wf-" prefix.
+ */
+function showState(btn, id) {
+  document.querySelectorAll('.wf-state').forEach(function (el) {
+    el.classList.toggle('active', el.id === 'wf-' + id);
+  });
+  btn.closest('.wf-nav').querySelectorAll('.ou-button').forEach(function (b) {
+    var isActive = b === btn;
+    b.classList.toggle('ou-button--primary', isActive);
+    b.classList.toggle('ou-button--secondary', !isActive);
+  });
+}
+function toggleTheme() {
+  document.body.classList.toggle('ou--dark');
+  document.body.classList.toggle('ou--light');
+}
+function toggleDensity() {
+  document.body.classList.toggle('ou--compact');
+  document.body.classList.toggle('ou--normal');
+}
+</script>
+
+<!-- ═══════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент</th>
+        <th>Поле API / условие</th>
+        <th>Примечание</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Состояния wireframe</td>
+        <td><code>showState(btn, stateId)</code></td>
+        <td>Метанавигация переключает только визуальные состояния и не является частью продуктового UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<div class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping</h2>
+  <p class="wf-mapping-sub">
+    Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент является блокером.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент wireframe</th>
+        <th>DS-компонент</th>
+        <th>Используемые токены</th>
+        <th>Примечания</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Метанавигация состояний</td>
+        <td><code>Wireframe utility</code></td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code>, <code>--ou-accent-*</code></td>
+        <td>Не мигрируется в продуктовый UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+<script>
+(function () {
+  var s = document.createElement('script');
+  s.src = 'wf-links.js';
+  document.head.appendChild(s);
+}());
+</script>
+
+<script>
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
+</script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный var(--wf-size-1120).');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.drawer-footer')) addMappingRow(rows, 'drawer-footer', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
+</body>
+</html>

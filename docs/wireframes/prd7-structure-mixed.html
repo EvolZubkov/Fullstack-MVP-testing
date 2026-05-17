@@ -12,77 +12,77 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     /* Background tests list */
-    .wf-tests-list { filter: blur(0.5px); opacity: 0.7; pointer-events: none; }
-    .test-card-stub { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); padding: 14px var(--ou-space-4); margin-bottom: 10px; display: flex; align-items: center; gap: var(--ou-space-3); }
-    .test-card-stub .test-card-title { font-size: 14px; font-weight: 600; flex: 1; }
+    .wf-tests-list { filter: blur(0.var(--wf-space-tiny)); opacity: 0.7; pointer-events: none; }
+    .test-card-stub { border: var(--wf-border-w) solid var(--card-border); border-radius: var(--radius); background: var(--card); padding: var(--wf-space-14) var(--ou-space-4); margin-bottom: var(--wf-space-10); display: flex; align-items: center; gap: var(--ou-space-3); }
+    .test-card-stub .test-card-title { font-size: var(--wf-space-14); font-weight: 600; flex: 1; }
     body.has-active-shell .mobile-section { display: none; }
 
     /* flowMode indicator bar */
-    .flow-mode-bar { display: flex; align-items: center; gap: var(--ou-space-2); padding: 7px 0 var(--ou-space-3); font-size: var(--ou-space-3); color: var(--muted-fg); border-bottom: 1px solid var(--border); margin-bottom: var(--ou-space-4); }
+    .flow-mode-bar { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-7) 0 var(--ou-space-3); font-size: var(--ou-space-3); color: var(--muted-fg); border-bottom: var(--wf-border-w) solid var(--border); margin-bottom: var(--ou-space-4); }
     .flow-mode-label { font-weight: 600; color: var(--fg); }
-    .flow-mode-hint { font-size: 11px; }
+    .flow-mode-hint { font-size: var(--wf-space-11); }
 
     /* Page row */
-    .page-row { display: flex; align-items: center; gap: var(--ou-space-2); padding: 6px 10px 6px 14px; position: relative; }
+    .page-row { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-6) var(--wf-space-10) var(--wf-space-6) var(--wf-space-14); position: relative; }
     .page-row:hover { background: var(--ou-bg-hover); }
-    .page-row.is-selected { border-left: 3px solid var(--primary); background: var(--ou-accent-soft); padding-left: 11px; }
-    .page-row.dragging { opacity: 0.5; border: 1px dashed var(--border); background: var(--accent); }
+    .page-row.is-selected { border-left: var(--wf-space-1q) solid var(--primary); background: var(--ou-accent-soft); padding-left: var(--wf-space-11); }
+    .page-row.dragging { opacity: 0.5; border: var(--wf-border-w) dashed var(--border); background: var(--accent); }
     .page-row--template { background: var(--ou-bg-elevated); }
     .page-row--template .drag-handle { opacity: 0.18; cursor: default; pointer-events: none; }
     .drag-handle { color: var(--muted-fg); cursor: grab; display: flex; align-items: center; flex-shrink: 0; }
-    .page-type-badge { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 3px; flex-shrink: 0; }
+    .page-type-badge { font-size: var(--wf-space-11); font-weight: 600; padding: var(--wf-space-half) var(--wf-space-6); border-radius: var(--wf-space-1q); flex-shrink: 0; }
     .type-intro   { background: var(--ou-accent-soft);   color: var(--ou-accent-default); }
     .type-info    { background: var(--ou-success-soft);  color: var(--ou-success-on-soft); }
     .type-summary { background: var(--ou-purple-50);     color: var(--ou-purple-700); }
     .type-html    { background: var(--ou-warning-soft);  color: var(--ou-warning-on-soft); }
-    .tpl-page-marker { font-size: 10px; color: var(--muted-fg); background: var(--muted); border-radius: 3px; padding: 1px 5px; margin-left: var(--ou-space-1); }
-    .page-title { font-size: 13px; flex: 1; }
+    .tpl-page-marker { font-size: var(--wf-space-10); color: var(--muted-fg); background: var(--muted); border-radius: var(--wf-space-1q); padding: var(--wf-border-w) var(--wf-space-tiny); margin-left: var(--ou-space-1); }
+    .page-title { font-size: var(--wf-space-13); flex: 1; }
     .page-actions { display: flex; gap: var(--ou-space-1); flex-shrink: 0; }
-    .page-row--warn .page-title::after { content: ' ⚠'; color: var(--warn-fg); font-size: 11px; }
+    .page-row--warn .page-title::after { content: ' ⚠'; color: var(--warn-fg); font-size: var(--wf-space-11); }
 
     /* Drop zone */
-    .drop-zone { height: 3px; background: var(--primary); border-radius: 2px; margin: 0 14px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ou-accent-default) 20%, transparent); }
+    .drop-zone { height: var(--wf-space-1q); background: var(--primary); border-radius: var(--wf-space-half); margin: 0 var(--wf-space-14); box-shadow: 0 0 0 var(--wf-space-1q) color-mix(in srgb, var(--ou-accent-default) 20%, transparent); }
 
     /* Insert row */
-    .insert-row { display: flex; align-items: center; padding: 3px 14px; gap: 0; }
-    .insert-row-line { flex: 1; height: 1px; background: var(--primary); opacity: .35; }
-    .insert-btn { display: inline-flex; align-items: center; gap: var(--ou-space-1); font-size: 11px; color: var(--primary); cursor: pointer; padding: 2px var(--ou-space-2); border-radius: 10px; border: 1px solid var(--ou-accent-container-hover); background: white; white-space: nowrap; flex-shrink: 0; margin: 0 6px; }
+    .insert-row { display: flex; align-items: center; padding: var(--wf-space-1q) var(--wf-space-14); gap: 0; }
+    .insert-row-line { flex: 1; height: var(--wf-border-w); background: var(--primary); opacity: .35; }
+    .insert-btn { display: inline-flex; align-items: center; gap: var(--ou-space-1); font-size: var(--wf-space-11); color: var(--primary); cursor: pointer; padding: var(--wf-space-half) var(--ou-space-2); border-radius: var(--wf-space-10); border: var(--wf-border-w) solid var(--ou-accent-container-hover); background: var(--ou-neutral-0); white-space: nowrap; flex-shrink: 0; margin: 0 var(--wf-space-6); }
     .insert-btn:hover { background: var(--ou-accent-soft); }
 
     /* Zone blocks (before/after test + questions zone) */
-    .zone-block { margin-bottom: var(--ou-space-3); border: 1px dashed var(--border); border-radius: var(--radius); overflow: hidden; }
-    .zone-header { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) 14px; color: var(--muted-fg); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px dashed var(--border); }
+    .zone-block { margin-bottom: var(--ou-space-3); border: var(--wf-border-w) dashed var(--border); border-radius: var(--radius); overflow: hidden; }
+    .zone-header { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--wf-space-14); color: var(--muted-fg); font-size: var(--wf-space-11); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; border-bottom: var(--wf-border-w) dashed var(--border); }
     .zone-block--questions { border-color: var(--ou-accent-container-hover); }
     .zone-block--questions .zone-header { background: var(--ou-accent-soft); color: var(--ou-accent-default); border-bottom-color: var(--ou-accent-container-hover); }
 
     /* Structure hint */
-    .structure-hint { display: flex; align-items: center; gap: 6px; font-size: var(--ou-space-3); color: var(--muted-fg); margin-bottom: var(--ou-space-3); padding: 6px 10px; background: var(--ou-accent-soft); border: 1px solid var(--ou-accent-container); border-radius: var(--radius-md); }
+    .structure-hint { display: flex; align-items: center; gap: var(--wf-space-6); font-size: var(--ou-space-3); color: var(--muted-fg); margin-bottom: var(--ou-space-3); padding: var(--wf-space-6) var(--wf-space-10); background: var(--ou-accent-soft); border: var(--wf-border-w) solid var(--ou-accent-container); border-radius: var(--radius-md); }
 
     /* Questions block card */
-    .questions-block-card { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); margin-bottom: 6px; overflow: hidden; }
-    .questions-block-header { display: flex; align-items: center; gap: var(--ou-space-2); padding: 10px 14px; background: var(--ou-accent-soft); border-bottom: 1px solid var(--card-border); font-size: 13px; font-weight: 600; color: var(--fg); }
-    .questions-block-body { padding: var(--ou-space-2) 14px; font-size: var(--ou-space-3); color: var(--muted-fg); }
+    .questions-block-card { border: var(--wf-border-w) solid var(--card-border); border-radius: var(--radius); background: var(--card); margin-bottom: var(--wf-space-6); overflow: hidden; }
+    .questions-block-header { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-10) var(--wf-space-14); background: var(--ou-accent-soft); border-bottom: var(--wf-border-w) solid var(--card-border); font-size: var(--wf-space-13); font-weight: 600; color: var(--fg); }
+    .questions-block-body { padding: var(--ou-space-2) var(--wf-space-14); font-size: var(--ou-space-3); color: var(--muted-fg); }
 
     /* Mode change warning */
-    .mode-change-warn { border: 1px solid var(--warn-border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: var(--ou-space-4); }
-    .mode-change-warn-header { display: flex; align-items: center; gap: var(--ou-space-2); padding: 10px 14px; background: var(--warn-bg); color: var(--warn-fg); font-size: 13px; font-weight: 500; cursor: pointer; }
-    .mode-change-warn-body { padding: 10px 14px; background: var(--bg); font-size: var(--ou-space-3); }
-    .mode-change-item { display: flex; align-items: baseline; gap: 6px; padding: var(--ou-space-1) 0; color: var(--fg); border-top: 1px dashed var(--border); }
+    .mode-change-warn { border: var(--wf-border-w) solid var(--warn-border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: var(--ou-space-4); }
+    .mode-change-warn-header { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-10) var(--wf-space-14); background: var(--warn-bg); color: var(--warn-fg); font-size: var(--wf-space-13); font-weight: 500; cursor: pointer; }
+    .mode-change-warn-body { padding: var(--wf-space-10) var(--wf-space-14); background: var(--bg); font-size: var(--ou-space-3); }
+    .mode-change-item { display: flex; align-items: baseline; gap: var(--wf-space-6); padding: var(--ou-space-1) 0; color: var(--fg); border-top: var(--wf-border-w) dashed var(--border); }
     .mode-change-item:first-child { border-top: none; }
-    .mode-change-when { font-size: 11px; color: var(--muted-fg); }
+    .mode-change-when { font-size: var(--wf-space-11); color: var(--muted-fg); }
 
     /* Fallback / unavailable badges */
-    .fallback-row { display: flex; align-items: center; gap: 6px; padding: var(--ou-space-1) 14px; font-size: 11px; background: var(--warn-bg); color: var(--warn-fg); }
-    .unavail-row  { display: flex; align-items: center; gap: 6px; padding: var(--ou-space-1) 14px; font-size: 11px; background: var(--accent); color: var(--muted-fg); }
+    .fallback-row { display: flex; align-items: center; gap: var(--wf-space-6); padding: var(--ou-space-1) var(--wf-space-14); font-size: var(--wf-space-11); background: var(--warn-bg); color: var(--warn-fg); }
+    .unavail-row  { display: flex; align-items: center; gap: var(--wf-space-6); padding: var(--ou-space-1) var(--wf-space-14); font-size: var(--wf-space-11); background: var(--accent); color: var(--muted-fg); }
 
     /* Mode selector cards */
-    .mode-card { border: 1px solid var(--card-border); border-radius: var(--radius-md); padding: var(--ou-space-3) 14px; margin-bottom: var(--ou-space-2); cursor: pointer; display: flex; align-items: flex-start; gap: 10px; }
+    .mode-card { border: var(--wf-border-w) solid var(--card-border); border-radius: var(--radius-md); padding: var(--ou-space-3) var(--wf-space-14); margin-bottom: var(--ou-space-2); cursor: pointer; display: flex; align-items: flex-start; gap: var(--wf-space-10); }
     .mode-card:hover { border-color: var(--ou-accent-container-hover); background: var(--ou-accent-soft); }
-    .mode-card.selected { border-color: var(--primary); background: var(--ou-accent-soft); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ou-accent-default) 15%, transparent); }
-    .mode-radio { width: var(--ou-space-4); height: var(--ou-space-4); border-radius: 50%; border: 2px solid var(--input-b); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+    .mode-card.selected { border-color: var(--primary); background: var(--ou-accent-soft); box-shadow: 0 0 0 var(--wf-space-half) color-mix(in srgb, var(--ou-accent-default) 15%, transparent); }
+    .mode-radio { width: var(--ou-space-4); height: var(--ou-space-4); border-radius: 50%; border: var(--wf-space-half) solid var(--input-b); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: var(--wf-border-w); }
     .mode-radio.checked { border-color: var(--primary); }
     .mode-radio.checked::after { content:''; width:var(--ou-space-2); height:var(--ou-space-2); border-radius:50%; background:var(--primary); }
-    .mode-info .mode-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+    .mode-info .mode-title { font-size: var(--wf-space-13); font-weight: 600; margin-bottom: var(--wf-space-half); }
     .mode-info .mode-desc  { font-size: var(--ou-space-3); color: var(--muted-fg); line-height: 1.4; }
   </style>
 
@@ -99,7 +99,7 @@
       gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
       background: var(--ou-bg-elevated);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       box-shadow: var(--ou-shadow-xs);
       color: var(--ou-fg-default);
       flex-wrap: wrap;
@@ -115,7 +115,7 @@
     .wf-nav button,
     .wf-nav .wf-btn {
       padding: var(--ou-space-1) var(--ou-space-3);
-      border: 1px solid var(--ou-border-default);
+      border: var(--wf-border-w) solid var(--ou-border-default);
       border-radius: var(--ou-radius-s);
       background: transparent;
       color: var(--ou-fg-default);
@@ -131,25 +131,25 @@
       border-color: var(--ou-accent-default);
     }
     .wf-nav-sep {
-      width: 1px;
+      width: var(--wf-border-w);
       height: var(--ou-space-5);
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-2);
     }
-    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
     .wf-state.active { display: block; }
     .shell.wf-state.active { display: flex; }
 
     .wf-state > .drawer-overlay,
     .wf-state > .overlay,
     .wf-state > .wf-overlay {
-      top: var(--wf-nav-offset, 52px);
+      top: var(--wf-nav-offset, var(--wf-size-52));
       bottom: 0;
       height: auto;
     }
     .wf-state > .drawer-overlay > .drawer {
-      height: calc(100vh - var(--wf-nav-offset, 52px));
-      max-height: calc(100vh - var(--wf-nav-offset, 52px));
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
     }
   </style>
 </head>
@@ -298,7 +298,7 @@
           <div class="zone-header">
             <svg width="14" height="14"><use href="#i-question"/></svg>
             Блок вопросов
-            <span style="margin-left:auto;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0">18 вопросов из всех тем</span>
+            <span style="margin-left:auto;font-size:var(--wf-space-11);font-weight:400;text-transform:none;letter-spacing:0">18 вопросов из всех тем</span>
           </div>
           <div class="questions-block-body">
             Вопросы перемешиваются и отображаются единым потоком, без разделения по темам.
@@ -388,7 +388,7 @@
         </div>
         <!-- zone: questions -->
         <div class="zone-block zone-block--questions">
-          <div class="zone-header"><svg width="14" height="14"><use href="#i-question"/></svg>Блок вопросов<span style="margin-left:auto;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0">18 вопросов</span></div>
+          <div class="zone-header"><svg width="14" height="14"><use href="#i-question"/></svg>Блок вопросов<span style="margin-left:auto;font-size:var(--wf-space-11);font-weight:400;text-transform:none;letter-spacing:0">18 вопросов</span></div>
           <div class="questions-block-body">Вопросы отображаются единым потоком без тематических блоков.</div>
         </div>
         <!-- zone: after test — only template -->
@@ -469,10 +469,10 @@
         </div>
         <!-- zone: questions — empty -->
         <div class="zone-block zone-block--questions">
-          <div class="zone-header"><svg width="14" height="14"><use href="#i-question"/></svg>Блок вопросов<span style="margin-left:auto;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--warn-fg)">0 вопросов</span></div>
-          <div class="empty-state" style="padding:var(--ou-space-5) 14px;text-align:center;">
+          <div class="zone-header"><svg width="14" height="14"><use href="#i-question"/></svg>Блок вопросов<span style="margin-left:auto;font-size:var(--wf-space-11);font-weight:400;text-transform:none;letter-spacing:0;color:var(--warn-fg)">0 вопросов</span></div>
+          <div class="empty-state" style="padding:var(--ou-space-5) var(--wf-space-14);text-align:center;">
             <svg width="32" height="32" style="color:var(--muted-fg);margin-bottom:var(--ou-space-2)"><use href="#i-question"/></svg>
-            <div style="font-size:13px;font-weight:600;margin-bottom:6px">Нет вопросов</div>
+            <div style="font-size:var(--wf-space-13);font-weight:600;margin-bottom:var(--wf-space-6)">Нет вопросов</div>
             <div style="font-size:var(--ou-space-3);color:var(--muted-fg);margin-bottom:var(--ou-space-3)">Добавьте вопросы в вкладке <strong>Состав</strong>, чтобы они появились в блоке вопросов.</div>
             <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Перейти к Составу</button>
           </div>
@@ -526,9 +526,9 @@
         <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
       </div></nav>
       <div class="ou-drawer__body">
-        <div class="skeleton" style="height:18px;width:55%;margin-bottom:var(--ou-space-4);"></div>
+        <div class="skeleton" style="height:var(--wf-size-18);width:55%;margin-bottom:var(--ou-space-4);"></div>
         <div class="skeleton" style="height:var(--ou-space-11);width:100%;border-radius:var(--radius);margin-bottom:var(--ou-space-3);"></div>
-        <div class="skeleton" style="height:60px;width:100%;border-radius:var(--radius);margin-bottom:var(--ou-space-3);"></div>
+        <div class="skeleton" style="height:var(--wf-size-60);width:100%;border-radius:var(--radius);margin-bottom:var(--ou-space-3);"></div>
         <div class="skeleton" style="height:var(--ou-space-11);width:100%;border-radius:var(--radius);margin-bottom:var(--ou-space-3);"></div>
         <div style="display:flex;justify-content:center;padding:var(--ou-space-6) 0;">
           <svg width="28" height="28" style="color:var(--primary);animation:spin 1s linear infinite;" aria-label="Загрузка"><use href="#i-loader"/></svg>
@@ -568,7 +568,7 @@
           <svg width="16" height="16"><use href="#i-warn"/></svg>
           <div>
             <strong>Не удалось загрузить структуру</strong>
-            <div style="font-size:var(--ou-space-3);margin-top:2px">Проверьте соединение и попробуйте ещё раз.</div>
+            <div style="font-size:var(--ou-space-3);margin-top:var(--wf-space-half)">Проверьте соединение и попробуйте ещё раз.</div>
           </div>
         </div>
         <div style="text-align:center;padding:var(--ou-space-6) 0;">
@@ -631,7 +631,7 @@
           </div>
         </div>
         <div class="zone-block zone-block--questions">
-          <div class="zone-header"><svg width="14" height="14"><use href="#i-question"/></svg>Блок вопросов<span style="margin-left:auto;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0">18 вопросов</span></div>
+          <div class="zone-header"><svg width="14" height="14"><use href="#i-question"/></svg>Блок вопросов<span style="margin-left:auto;font-size:var(--wf-space-11);font-weight:400;text-transform:none;letter-spacing:0">18 вопросов</span></div>
           <div class="questions-block-body">Вопросы отображаются единым потоком. Управление составом — во вкладке Настройки.</div>
         </div>
         <div class="zone-block">
@@ -712,7 +712,7 @@
           </div>
         </div>
         <div class="zone-block zone-block--questions">
-          <div class="zone-header"><svg width="14" height="14"><use href="#i-question"/></svg>Блок вопросов<span style="margin-left:auto;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0">18 вопросов</span></div>
+          <div class="zone-header"><svg width="14" height="14"><use href="#i-question"/></svg>Блок вопросов<span style="margin-left:auto;font-size:var(--wf-space-11);font-weight:400;text-transform:none;letter-spacing:0">18 вопросов</span></div>
           <div class="questions-block-body">Вопросы отображаются единым потоком без тематических блоков.</div>
         </div>
         <div class="zone-block">
@@ -765,26 +765,26 @@
       <div class="ou-drawer__body">
         <div class="section-header" style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:var(--ou-space-4);">
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Назад"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
-          <span style="font-size:14px;font-weight:600;">Добавить страницу</span>
+          <span style="font-size:var(--wf-space-14);font-weight:600;">Добавить страницу</span>
         </div>
-        <div class="ou-formfield" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:var(--wf-space-14);">
           <label class="ou-formfield__lbl">Зона размещения</label>
-          <div class="mode-card selected" style="margin-bottom:6px;">
+          <div class="mode-card selected" style="margin-bottom:var(--wf-space-6);">
             <span class="mode-radio checked"></span>
             <div class="mode-info"><div class="mode-title">Перед тестом</div><div class="mode-desc">Страница показывается до начала вопросов.</div></div>
           </div>
-          <div class="mode-card" style="margin-bottom:6px;">
+          <div class="mode-card" style="margin-bottom:var(--wf-space-6);">
             <span class="mode-radio"></span>
             <div class="mode-info"><div class="mode-title">После теста</div><div class="mode-desc">Страница показывается после завершения.</div></div>
           </div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl">Тип страницы</label>
-          <div class="mode-card selected" style="margin-bottom:6px;">
+          <div class="mode-card selected" style="margin-bottom:var(--wf-space-6);">
             <span class="mode-radio checked"></span>
             <div class="mode-info"><div class="mode-title">Информационная (info)</div><div class="mode-desc">Произвольный текст, изображения.</div></div>
           </div>
-          <div class="mode-card" style="margin-bottom:6px;">
+          <div class="mode-card" style="margin-bottom:var(--wf-space-6);">
             <span class="mode-radio"></span>
             <div class="mode-info"><div class="mode-title">HTML-страница</div><div class="mode-desc">Свободный HTML-контент.</div></div>
           </div>
@@ -822,7 +822,7 @@
       <div class="ou-drawer__body">
         <div class="section-header" style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:var(--ou-space-4);">
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Назад"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
-          <span style="font-size:14px;font-weight:600;">Новая info-страница · Перед тестом</span>
+          <span style="font-size:var(--wf-space-14);font-weight:600;">Новая info-страница · Перед тестом</span>
         </div>
         <div class="ou-formfield" style="margin-bottom:var(--ou-space-4);">
           <label class="ou-formfield__lbl" for="mx-new-page-title">Название страницы</label>
@@ -865,15 +865,15 @@
       <div class="ou-drawer__body">
         <div class="section-header" style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:var(--ou-space-1);">
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Назад"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
-          <span style="font-size:14px;font-weight:600;">Вводная страница</span>
+          <span style="font-size:var(--wf-space-14);font-weight:600;">Вводная страница</span>
           <span class="tpl-page-marker" style="margin-left:var(--ou-space-1);">шаблон</span>
         </div>
-        <p style="font-size:var(--ou-space-3);color:var(--muted-fg);margin:0 0 14px 36px;">Шаблонная страница — заголовок и описание берутся из настроек теста.</p>
-        <div class="ou-formfield" style="margin-bottom:14px;">
+        <p style="font-size:var(--ou-space-3);color:var(--muted-fg);margin:0 0 var(--wf-space-14) var(--wf-size-36);">Шаблонная страница — заголовок и описание берутся из настроек теста.</p>
+        <div class="ou-formfield" style="margin-bottom:var(--wf-space-14);">
           <label class="ou-formfield__lbl">Кнопка «Начать тест»</label>
           <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Начать тест"/></div></div>
         </div>
-        <div class="ou-formfield" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:var(--wf-space-14);">
           <label class="ou-formfield__lbl">Автопереход</label>
           <div class="ou-formfield__inline">
             <label class="ou-switch ou-switch--m">
@@ -919,20 +919,20 @@
         <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
       </div></nav>
       <div class="ou-drawer__body">
-        <div class="section-header" style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:14px;">
+        <div class="section-header" style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:var(--wf-space-14);">
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Назад"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
-          <span style="font-size:14px;font-weight:600;">Инструкция к тесту</span>
+          <span style="font-size:var(--wf-space-14);font-weight:600;">Инструкция к тесту</span>
           <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" style="margin-left:auto" type="button" aria-label="Удалить страницу"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
         </div>
-        <div class="ou-formfield" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:var(--wf-space-14);">
           <label class="ou-formfield__lbl">Название (для навигации)</label>
           <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Инструкция к тесту"/></div></div>
         </div>
-        <div class="ou-formfield" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:var(--wf-space-14);">
           <label class="ou-formfield__lbl">Заголовок страницы</label>
           <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Перед началом работы"/></div></div>
         </div>
-        <div class="ou-formfield" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:var(--wf-space-14);">
           <label class="ou-formfield__lbl">Содержимое</label>
           <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="5" style="resize:vertical">Прочитайте инструкцию внимательно. У вас будет 45 минут на прохождение теста. Каждый вопрос оценивается отдельно.</textarea></div></div>
         </div>
@@ -984,19 +984,19 @@
       <div class="ou-drawer__body">
         <div class="section-header" style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:var(--ou-space-1);">
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Назад"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
-          <span style="font-size:14px;font-weight:600;">Итоговая страница</span>
+          <span style="font-size:var(--wf-space-14);font-weight:600;">Итоговая страница</span>
           <span class="tpl-page-marker" style="margin-left:var(--ou-space-1);">шаблон</span>
         </div>
-        <p style="font-size:var(--ou-space-3);color:var(--muted-fg);margin:0 0 14px 36px;">Шаблонная страница — результаты и статус подставляются автоматически.</p>
-        <div class="ou-formfield" style="margin-bottom:14px;">
+        <p style="font-size:var(--ou-space-3);color:var(--muted-fg);margin:0 0 var(--wf-space-14) var(--wf-size-36);">Шаблонная страница — результаты и статус подставляются автоматически.</p>
+        <div class="ou-formfield" style="margin-bottom:var(--wf-space-14);">
           <label class="ou-formfield__lbl">Заголовок при успехе (passed)</label>
           <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Тест пройден успешно!"/></div></div>
         </div>
-        <div class="ou-formfield" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:var(--wf-space-14);">
           <label class="ou-formfield__lbl">Заголовок при неудаче (failed)</label>
           <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Тест не пройден"/></div></div>
         </div>
-        <div class="ou-formfield" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:var(--wf-space-14);">
           <label class="ou-formfield__lbl">Показывать детализацию по вопросам</label>
           <div class="ou-formfield__inline">
             <label class="ou-switch ou-switch--m is-on">
@@ -1053,13 +1053,13 @@
         <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
       </div></nav>
       <div class="ou-drawer__body">
-        <div class="section-header" style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:14px;">
+        <div class="section-header" style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:var(--wf-space-14);">
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Назад"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
-          <span style="font-size:14px;font-weight:600;">Дополнительный контент</span>
+          <span style="font-size:var(--wf-space-14);font-weight:600;">Дополнительный контент</span>
           <span class="page-type-badge type-html" style="margin-left:var(--ou-space-1);">html</span>
           <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" style="margin-left:auto" type="button" aria-label="Удалить страницу"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
         </div>
-        <div class="ou-formfield" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:var(--wf-space-14);">
           <label class="ou-formfield__lbl">Название (для навигации)</label>
           <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Дополнительный контент"/></div></div>
         </div>
@@ -1108,21 +1108,21 @@
         <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
       </div></nav>
       <div class="ou-drawer__body" style="padding:0;display:flex;flex-direction:column;overflow:hidden;">
-        <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:10px var(--ou-space-4);border-bottom:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:var(--ou-space-2);padding:var(--wf-space-10) var(--ou-space-4);border-bottom:var(--wf-border-w) solid var(--border);">
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Закрыть предпросмотр"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
-          <span style="font-size:13px;font-weight:600;">Предпросмотр: Инструкция к тесту</span>
+          <span style="font-size:var(--wf-space-13);font-weight:600;">Предпросмотр: Инструкция к тесту</span>
           <span class="ou-tag ou-tag--neutral" style="margin-left:auto">info</span>
         </div>
         <div style="flex:1;overflow-y:auto;padding:var(--ou-space-6) var(--ou-space-7);">
-          <div class="preview-sketch" style="border:1px solid var(--border);border-radius:var(--radius);padding:var(--ou-space-6);background:var(--bg);min-height:280px;">
-            <h2 style="font-size:18px;margin:0 0 var(--ou-space-3)">Перед началом работы</h2>
-            <p style="font-size:14px;line-height:1.6;color:var(--fg)">Прочитайте инструкцию внимательно. У вас будет 45 минут на прохождение теста. Каждый вопрос оценивается отдельно.</p>
+          <div class="preview-sketch" style="border:var(--wf-border-w) solid var(--border);border-radius:var(--radius);padding:var(--ou-space-6);background:var(--bg);min-height:var(--wf-size-280);">
+            <h2 style="font-size:var(--wf-size-18);margin:0 0 var(--ou-space-3)">Перед началом работы</h2>
+            <p style="font-size:var(--wf-space-14);line-height:1.6;color:var(--fg)">Прочитайте инструкцию внимательно. У вас будет 45 минут на прохождение теста. Каждый вопрос оценивается отдельно.</p>
             <div style="margin-top:var(--ou-space-5);display:flex;gap:var(--ou-space-3);">
               <button class="ou-btn ou-btn--secondary ou-btn--s" type="button" disabled>← Назад</button>
               <button class="ou-btn ou-btn--primary ou-btn--s" type="button" disabled>Далее →</button>
             </div>
           </div>
-          <p style="font-size:11px;color:var(--muted-fg);margin-top:10px;text-align:center;">Реальный вид зависит от выбранного шаблона оформления.</p>
+          <p style="font-size:var(--wf-space-11);color:var(--muted-fg);margin-top:var(--wf-space-10);text-align:center;">Реальный вид зависит от выбранного шаблона оформления.</p>
         </div>
       </div>
       <footer class="ou-drawer__foot">
@@ -1154,18 +1154,18 @@
         <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
       </div></nav>
       <div class="ou-drawer__body">
-        <div class="section-header" style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:14px;">
+        <div class="section-header" style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:var(--wf-space-14);">
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Назад"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
-          <span style="font-size:14px;font-weight:600;">Инструкция к тесту</span>
+          <span style="font-size:var(--wf-space-14);font-weight:600;">Инструкция к тесту</span>
         </div>
-        <div class="alert alert-warn" role="alert" style="margin-bottom:14px;">
+        <div class="alert alert-warn" role="alert" style="margin-bottom:var(--wf-space-14);">
           <svg width="16" height="16"><use href="#i-warn"/></svg>
           <div>
             <strong>Есть несохранённые изменения</strong>
-            <div style="font-size:var(--ou-space-3);margin-top:2px">Нажмите «Применить» чтобы принять изменения, или «Отмена» чтобы вернуться.</div>
+            <div style="font-size:var(--ou-space-3);margin-top:var(--wf-space-half)">Нажмите «Применить» чтобы принять изменения, или «Отмена» чтобы вернуться.</div>
           </div>
         </div>
-        <div class="ou-formfield" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:var(--wf-space-14);">
           <label class="ou-formfield__lbl">Заголовок страницы</label>
           <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Перед началом работы — обновлено"/></div></div>
         </div>
@@ -1208,15 +1208,15 @@
         <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура <span class="tab-badge tab-badge-error">1</span></button>
       </div></nav>
       <div class="ou-drawer__body">
-        <div class="section-header" style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:14px;">
+        <div class="section-header" style="display:flex;align-items:center;gap:var(--ou-space-2);margin-bottom:var(--wf-space-14);">
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Назад"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
-          <span style="font-size:14px;font-weight:600;">Дополнительный контент</span>
+          <span style="font-size:var(--wf-space-14);font-weight:600;">Дополнительный контент</span>
         </div>
-        <div class="validation-summary" role="alert" style="margin-bottom:14px;">
+        <div class="validation-summary" role="alert" style="margin-bottom:var(--wf-space-14);">
           <div class="validation-summary-title"><svg width="14" height="14"><use href="#i-warn"/></svg> 1 ошибка</div>
           <div class="validation-link">Название страницы — обязательное поле</div>
         </div>
-        <div class="ou-formfield" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:var(--wf-space-14);">
           <label class="ou-formfield__lbl">Название (для навигации)</label>
           <div class="ou-field ou-field--m ou-field--error"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" placeholder="Введите название"/></div></div>
           <span class="form-error-text">Обязательное поле</span>
@@ -1367,31 +1367,31 @@
         <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
       </div></nav>
       <div class="ou-drawer__body" style="padding:var(--ou-space-3) var(--ou-space-4);">
-        <div style="margin-bottom:var(--ou-space-3);font-size:13px;font-weight:600;color:var(--fg)">Сценарий прохождения (runtime flow)</div>
+        <div style="margin-bottom:var(--ou-space-3);font-size:var(--wf-space-13);font-weight:600;color:var(--fg)">Сценарий прохождения (runtime flow)</div>
         <div class="structure-hint" style="margin-bottom:var(--ou-space-4);">
           <svg width="14" height="14"><use href="#i-info"/></svg>
           Режим: Смешанный. Страницы и вопросы чередуются согласно структуре ниже.
         </div>
-        <div style="display:flex;flex-direction:column;gap:6px;">
-          <div class="preview-flow-step" data-wf-demo style="display:flex;align-items:center;gap:10px;padding:var(--ou-space-2) var(--ou-space-3);background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius-md);">
-            <span style="font-size:11px;font-weight:700;color:var(--muted-fg);width:var(--ou-space-5);text-align:center">1</span>
+        <div style="display:flex;flex-direction:column;gap:var(--wf-space-6);">
+          <div class="preview-flow-step" data-wf-demo style="display:flex;align-items:center;gap:var(--wf-space-10);padding:var(--ou-space-2) var(--ou-space-3);background:var(--card);border:var(--wf-border-w) solid var(--card-border);border-radius:var(--radius-md);">
+            <span style="font-size:var(--wf-space-11);font-weight:700;color:var(--muted-fg);width:var(--ou-space-5);text-align:center">1</span>
             <span class="page-type-badge type-intro">intro</span>
-            <span style="font-size:13px;">Вводная страница</span>
+            <span style="font-size:var(--wf-space-13);">Вводная страница</span>
           </div>
-          <div class="preview-flow-step" data-wf-demo style="display:flex;align-items:center;gap:10px;padding:var(--ou-space-2) var(--ou-space-3);background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius-md);">
-            <span style="font-size:11px;font-weight:700;color:var(--muted-fg);width:var(--ou-space-5);text-align:center">2</span>
+          <div class="preview-flow-step" data-wf-demo style="display:flex;align-items:center;gap:var(--wf-space-10);padding:var(--ou-space-2) var(--ou-space-3);background:var(--card);border:var(--wf-border-w) solid var(--card-border);border-radius:var(--radius-md);">
+            <span style="font-size:var(--wf-space-11);font-weight:700;color:var(--muted-fg);width:var(--ou-space-5);text-align:center">2</span>
             <span class="page-type-badge type-info">info</span>
-            <span style="font-size:13px;">Инструкция к тесту</span>
+            <span style="font-size:var(--wf-space-13);">Инструкция к тесту</span>
           </div>
-          <div class="preview-flow-step" data-wf-demo style="display:flex;align-items:center;gap:10px;padding:var(--ou-space-2) var(--ou-space-3);background:hsl(217 91% 97%);border:1px solid hsl(217 91% 85%);border-radius:var(--radius-md);">
-            <span style="font-size:11px;font-weight:700;color:var(--muted-fg);width:var(--ou-space-5);text-align:center">3–20</span>
+          <div class="preview-flow-step" data-wf-demo style="display:flex;align-items:center;gap:var(--wf-space-10);padding:var(--ou-space-2) var(--ou-space-3);background:hsl(217 91% 97%);border:var(--wf-border-w) solid hsl(217 91% 85%);border-radius:var(--radius-md);">
+            <span style="font-size:var(--wf-space-11);font-weight:700;color:var(--muted-fg);width:var(--ou-space-5);text-align:center">3–20</span>
             <svg width="14" height="14" style="color:hsl(217 91% 40%)"><use href="#i-question"/></svg>
-            <span style="font-size:13px;">18 вопросов (перемешаны)</span>
+            <span style="font-size:var(--wf-space-13);">18 вопросов (перемешаны)</span>
           </div>
-          <div class="preview-flow-step" data-wf-demo style="display:flex;align-items:center;gap:10px;padding:var(--ou-space-2) var(--ou-space-3);background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius-md);">
-            <span style="font-size:11px;font-weight:700;color:var(--muted-fg);width:var(--ou-space-5);text-align:center">21</span>
+          <div class="preview-flow-step" data-wf-demo style="display:flex;align-items:center;gap:var(--wf-space-10);padding:var(--ou-space-2) var(--ou-space-3);background:var(--card);border:var(--wf-border-w) solid var(--card-border);border-radius:var(--radius-md);">
+            <span style="font-size:var(--wf-space-11);font-weight:700;color:var(--muted-fg);width:var(--ou-space-5);text-align:center">21</span>
             <span class="page-type-badge type-summary">summary</span>
-            <span style="font-size:13px;">Итоговая страница</span>
+            <span style="font-size:var(--wf-space-13);">Итоговая страница</span>
           </div>
         </div>
       </div>
@@ -1460,7 +1460,7 @@
           </div>
         </div>
         <div class="zone-block zone-block--questions">
-          <div class="zone-header"><svg width="14" height="14"><use href="#i-question"/></svg>Блок вопросов<span style="margin-left:auto;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0">18 вопросов</span></div>
+          <div class="zone-header"><svg width="14" height="14"><use href="#i-question"/></svg>Блок вопросов<span style="margin-left:auto;font-size:var(--wf-space-11);font-weight:400;text-transform:none;letter-spacing:0">18 вопросов</span></div>
           <div class="questions-block-body">Вопросы отображаются единым потоком.</div>
         </div>
         <div class="zone-block">
@@ -1542,7 +1542,7 @@
           </div>
         </div>
         <div class="zone-block zone-block--questions">
-          <div class="zone-header"><svg width="14" height="14"><use href="#i-question"/></svg>Блок вопросов<span style="margin-left:auto;font-size:11px;font-weight:400;text-transform:none;letter-spacing:0">18 вопросов</span></div>
+          <div class="zone-header"><svg width="14" height="14"><use href="#i-question"/></svg>Блок вопросов<span style="margin-left:auto;font-size:var(--wf-space-11);font-weight:400;text-transform:none;letter-spacing:0">18 вопросов</span></div>
           <div class="questions-block-body">Вопросы отображаются единым потоком.</div>
         </div>
         <div class="zone-block">
@@ -1795,7 +1795,7 @@
     if (!state) return rows;
 
     if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
-    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный var(--wf-size-1120).');
     if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
     if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
     if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');

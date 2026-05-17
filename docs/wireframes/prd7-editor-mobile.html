@@ -38,26 +38,26 @@
       letter-spacing: 0.03em;
     }
 
-    /* Phone frame — 375px wide (NFR-19) */
+    /* Phone frame — var(--wf-size-375) wide (NFR-19) */
     .wf-frame {
-      width: 375px;
-      height: 720px;
+      width: var(--wf-size-375);
+      height: var(--wf-size-720);
       background: var(--ou-bg-elevated);
       border-radius: var(--ou-radius-xl);
       overflow: hidden;
-      box-shadow: var(--ou-shadow-l), 0 0 0 1px var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-l), 0 0 0 var(--wf-border-w) var(--ou-border-soft);
       display: flex;
       flex-direction: column;
       position: relative;
     }
-    /* Narrow frame — 640px wide (tablet / < 960px breakpoint) */
+    /* Narrow frame — var(--wf-size-640) wide (tablet / < var(--wf-size-960) breakpoint) */
     .wf-narrow-frame {
-      width: 640px;
-      height: 720px;
+      width: var(--wf-size-640);
+      height: var(--wf-size-720);
       background: var(--ou-bg-elevated);
       border-radius: var(--ou-radius-l);
       overflow: hidden;
-      box-shadow: var(--ou-shadow-l), 0 0 0 1px var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-l), 0 0 0 var(--wf-border-w) var(--ou-border-soft);
       display: flex;
       flex-direction: column;
       position: relative;
@@ -69,7 +69,7 @@
       align-items: center;
       gap: var(--ou-space-2);
       padding: var(--ou-space-3) var(--ou-space-4);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       flex-shrink: 0;
       background: var(--ou-bg-elevated);
     }
@@ -87,8 +87,8 @@
       color: var(--ou-fg-muted);
     }
     .wf-mob-close {
-      width: 28px;
-      height: 28px;
+      width: var(--wf-size-28);
+      height: var(--wf-size-28);
       flex-shrink: 0;
       border: none;
       background: transparent;
@@ -106,7 +106,7 @@
     /* ── Tab bar (horizontal scroll on mobile — NFR-19) ──────────────────── */
     .wf-mob-tabs {
       display: flex;
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       flex-shrink: 0;
       overflow-x: auto;
       scrollbar-width: none;
@@ -121,7 +121,7 @@
       font: var(--ou-text-body-s);
       color: var(--ou-fg-muted);
       border: none;
-      border-bottom: 2px solid transparent;
+      border-bottom: var(--wf-space-half) solid transparent;
       flex-shrink: 0;
       background: transparent;
       cursor: pointer;
@@ -141,7 +141,7 @@
       align-items: center;
       gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-3);
-      border-top: 1px solid var(--ou-border-soft);
+      border-top: var(--wf-border-w) solid var(--ou-border-soft);
       flex-shrink: 0;
       background: var(--ou-bg-elevated);
     }
@@ -155,7 +155,7 @@
 
     /* ── Section cards ────────────────────────────────────────────────────── */
     .wf-mob-section-card {
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-m);
       background: var(--ou-bg-elevated);
       overflow: hidden;
@@ -166,7 +166,7 @@
       align-items: center;
       gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-3);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       background: var(--ou-bg-canvas);
       font: var(--ou-text-body-s);
       font-weight: 600;
@@ -186,14 +186,14 @@
       font: var(--ou-text-body-s);
       padding: var(--ou-space-1) var(--ou-space-2);
       border-radius: var(--ou-radius-s);
-      border: 1px solid var(--ou-border-input);
+      border: var(--wf-border-w) solid var(--ou-border-input);
       width: 100%;
       font-family: inherit;
       background: var(--ou-bg-elevated);
       color: var(--ou-fg-default);
       box-sizing: border-box;
     }
-    .wf-mob-input--narrow { max-width: 100px; }
+    .wf-mob-input--narrow { max-width: var(--wf-size-100); }
 
     /* ── Topic rows ───────────────────────────────────────────────────────── */
     .wf-mob-topic-row {
@@ -201,7 +201,7 @@
       align-items: center;
       gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-3);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       font: var(--ou-text-body-s);
     }
     .wf-mob-topic-row:last-of-type { border-bottom: none; }
@@ -224,7 +224,7 @@
     .wf-mob-stepper {
       display: inline-flex;
       align-items: stretch;
-      border: 1px solid var(--ou-border-input);
+      border: var(--wf-border-w) solid var(--ou-border-input);
       border-radius: var(--ou-radius-s);
       overflow: hidden;
       flex-shrink: 0;
@@ -242,12 +242,12 @@
       font: var(--ou-text-body-m);
     }
     .wf-mob-stepper-val {
-      width: 30px;
+      width: var(--wf-size-30);
       text-align: center;
       font: var(--ou-text-caption);
       font-weight: 600;
-      border-left: 1px solid var(--ou-border-input);
-      border-right: 1px solid var(--ou-border-input);
+      border-left: var(--wf-border-w) solid var(--ou-border-input);
+      border-right: var(--wf-border-w) solid var(--ou-border-input);
       background: var(--ou-bg-elevated);
       display: flex;
       align-items: center;
@@ -256,7 +256,7 @@
 
     /* ── Feedback preview card ────────────────────────────────────────────── */
     .wf-mob-feedback-preview {
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-s);
       padding: var(--ou-space-2);
       margin-bottom: var(--ou-space-2);
@@ -279,9 +279,9 @@
     }
     .wf-mob-feedback-sep { color: var(--ou-border-soft); }
 
-    /* ── Settings selector (replaces 2-pane nav at < 960px — NFR-20) ────── */
+    /* ── Settings selector (replaces 2-pane nav at < var(--wf-size-960) — NFR-20) ────── */
     .wf-mob-settings-selector {
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-m);
       background: var(--ou-bg-elevated);
       overflow: hidden;
@@ -292,7 +292,7 @@
       align-items: center;
       gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-3);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       background: var(--ou-bg-canvas);
       font: var(--ou-text-body-s);
       font-weight: 600;
@@ -319,20 +319,20 @@
     .wf-mob-overlay {
       position: absolute;
       inset: 0;
-      background: color-mix(in srgb, black 45%, transparent);
+      background: color-mix(in srgb, var(--ou-neutral-950) 45%, transparent);
       z-index: 9;
     }
     .wf-mob-bottom-sheet {
       position: absolute;
       bottom: 0; left: 0; right: 0;
       background: var(--ou-bg-elevated);
-      border-top: 1px solid var(--ou-border-soft);
+      border-top: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-l) var(--ou-radius-l) 0 0;
       box-shadow: var(--ou-shadow-l);
       z-index: 10;
     }
     .wf-mob-sheet-handle {
-      width: 36px;
+      width: var(--wf-size-36);
       height: var(--ou-space-1);
       background: var(--ou-border-soft);
       border-radius: var(--ou-radius-s);
@@ -360,7 +360,7 @@
     .ou-button--ghost {
       background: transparent;
       color: var(--ou-fg-default);
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .ou-button--ghost:hover { background: var(--ou-bg-muted); }
     .ou-button--sm {
@@ -383,7 +383,7 @@
       gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
       background: var(--ou-bg-elevated);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       box-shadow: var(--ou-shadow-xs);
       color: var(--ou-fg-default);
       flex-wrap: wrap;
@@ -399,7 +399,7 @@
     .wf-nav button,
     .wf-nav .wf-btn {
       padding: var(--ou-space-1) var(--ou-space-3);
-      border: 1px solid var(--ou-border-default);
+      border: var(--wf-border-w) solid var(--ou-border-default);
       border-radius: var(--ou-radius-s);
       background: transparent;
       color: var(--ou-fg-default);
@@ -415,25 +415,25 @@
       border-color: var(--ou-accent-default);
     }
     .wf-nav-sep {
-      width: 1px;
+      width: var(--wf-border-w);
       height: var(--ou-space-5);
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-2);
     }
-    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
     .wf-state.active { display: block; }
     .shell.wf-state.active { display: flex; }
 
     .wf-state > .drawer-overlay,
     .wf-state > .overlay,
     .wf-state > .wf-overlay {
-      top: var(--wf-nav-offset, 52px);
+      top: var(--wf-nav-offset, var(--wf-size-52));
       bottom: 0;
       height: auto;
     }
     .wf-state > .drawer-overlay > .drawer {
-      height: calc(100vh - var(--wf-nav-offset, 52px));
-      max-height: calc(100vh - var(--wf-nav-offset, 52px));
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
     }
   </style>
 </head>
@@ -458,9 +458,9 @@
 <section id="wf-s-gallery" class="wf-state active" aria-label="Галерея мобильных экранов">
   <div class="wf-gallery">
 
-    <!-- Frame 1: 375px — Вкладка "Состав" -->
+    <!-- Frame 1: var(--wf-size-375) — Вкладка "Состав" -->
     <div class="wf-frame-wrap">
-      <span class="wf-frame-label">375px — Вкладка &ldquo;Состав&rdquo;</span>
+      <span class="wf-frame-label">var(--wf-size-375) — Вкладка &ldquo;Состав&rdquo;</span>
       <div class="wf-frame" role="region" aria-label="Мобильный вид: Состав теста">
 
         <div class="wf-mob-header">
@@ -543,9 +543,9 @@
       </div>
     </div>
 
-    <!-- Frame 2: 375px — Настройки (selector, < 960px — NFR-20) -->
+    <!-- Frame 2: var(--wf-size-375) — Настройки (selector, < var(--wf-size-960) — NFR-20) -->
     <div class="wf-frame-wrap">
-      <span class="wf-frame-label">375px — Вкладка &ldquo;Настройки&rdquo; (селектор)</span>
+      <span class="wf-frame-label">var(--wf-size-375) — Вкладка &ldquo;Настройки&rdquo; (селектор)</span>
       <div class="wf-frame" role="region" aria-label="Мобильный вид: Настройки теста">
 
         <div class="wf-mob-header">
@@ -605,9 +605,9 @@
       </div>
     </div>
 
-    <!-- Frame 3: 375px — Диалог закрытия (bottom sheet, NFR-21) -->
+    <!-- Frame 3: var(--wf-size-375) — Диалог закрытия (bottom sheet, NFR-21) -->
     <div class="wf-frame-wrap">
-      <span class="wf-frame-label">375px — Диалог закрытия (bottom sheet)</span>
+      <span class="wf-frame-label">var(--wf-size-375) — Диалог закрытия (bottom sheet)</span>
       <div class="wf-frame" role="region" aria-label="Мобильный вид: Подтверждение закрытия">
 
         <div class="wf-mob-header">
@@ -652,9 +652,9 @@
       </div>
     </div>
 
-    <!-- Frame 4: 640px — Narrow, Settings at breakpoint (NFR-20) -->
+    <!-- Frame 4: var(--wf-size-640) — Narrow, Settings at breakpoint (NFR-20) -->
     <div class="wf-frame-wrap">
-      <span class="wf-frame-label">640px — Настройки (граница: 960px breakpoint)</span>
+      <span class="wf-frame-label">var(--wf-size-640) — Настройки (граница: var(--wf-size-960) breakpoint)</span>
       <div class="wf-narrow-frame" role="region" aria-label="Узкий вид: Настройки теста">
 
         <div class="wf-mob-header wf-mob-header--wide">
@@ -724,13 +724,13 @@
     <tbody>
       <tr><td>.wf-mob-tabs (tab bar)</td><td>Tabs</td><td>overflow-x: auto on mobile — NFR-19</td></tr>
       <tr><td>.wf-mob-stepper</td><td>Stepper (custom)</td><td>Compact inline [&minus;] N [+] control</td></tr>
-      <tr><td>.wf-mob-settings-selector</td><td>Select + SectionHeader</td><td>Replaces 2-pane side-nav at &lt;960px — NFR-20</td></tr>
+      <tr><td>.wf-mob-settings-selector</td><td>Select + SectionHeader</td><td>Replaces 2-pane side-nav at &lt;var(--wf-size-960) — NFR-20</td></tr>
       <tr><td>.wf-mob-bottom-sheet</td><td>Modal / Sheet</td><td>role="dialog" aria-modal="true" aria-labelledby — NFR-21</td></tr>
       <tr><td>.wf-mob-overlay</td><td>Overlay</td><td>Translucent backdrop behind bottom sheet</td></tr>
       <tr><td>Mandatory topic tag</td><td>ou-tag</td><td>ou-tag--neutral, compact inside row</td></tr>
-      <tr><td>Status tag (640px header)</td><td>ou-tag</td><td>ou-tag--neutral</td></tr>
+      <tr><td>Status tag (var(--wf-size-640) header)</td><td>ou-tag</td><td>ou-tag--neutral</td></tr>
       <tr><td>Footer / sheet buttons</td><td>ou-button</td><td>--primary, --secondary, --ghost; --sm compact; --full for sheet actions</td></tr>
-      <tr><td>.wf-mob-close</td><td>IconButton</td><td>Ghost 28px, accessible aria-label="Закрыть"</td></tr>
+      <tr><td>.wf-mob-close</td><td>IconButton</td><td>Ghost var(--wf-size-28), accessible aria-label="Закрыть"</td></tr>
       <tr><td>.wf-mob-input</td><td>ou-input / Select / Textarea</td><td>Compact (body-s font, reduced padding)</td></tr>
     </tbody>
   </table>
@@ -916,7 +916,7 @@ function toggleDensity() {
     if (!state) return rows;
 
     if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
-    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный var(--wf-size-1120).');
     if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
     if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
     if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');

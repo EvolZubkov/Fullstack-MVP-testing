@@ -20,13 +20,13 @@
     /* ── Page background ──────────────────────────────────────────────────── */
     .wf-showcase-page {
       background: var(--ou-bg-muted);
-      min-height: calc(100vh - 52px);
+      min-height: calc(100vh - var(--wf-size-52));
     }
 
     /* ── Showcase layout ──────────────────────────────────────────────────── */
     .wf-showcase {
       padding: var(--ou-space-6);
-      max-width: 900px;
+      max-width: var(--wf-size-900);
       margin: 0 auto;
     }
     .wf-showcase-title {
@@ -48,7 +48,7 @@
       color: var(--ou-fg-muted);
       margin-bottom: var(--ou-space-3);
       padding-bottom: var(--ou-space-2);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .wf-showcase-note {
       font: var(--ou-text-caption);
@@ -60,14 +60,14 @@
       background: var(--ou-bg-canvas);
       padding: 0 var(--ou-space-1);
       border-radius: var(--ou-radius-s);
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
     }
 
     /* ── Status dots (used in tabs and section cards) ─────────────────────── */
     .wf-status-dot {
       display: inline-block;
-      width: 7px;
-      height: 7px;
+      width: var(--wf-space-7);
+      height: var(--wf-space-7);
       border-radius: 50%;
       flex-shrink: 0;
     }
@@ -75,13 +75,13 @@
     .wf-status-dot--warn  { background: var(--ou-warning-fg); }
     .wf-status-dot--error { background: var(--ou-error-fg); }
 
-    /* ── Status icon wrapper (14px inline SVG) ────────────────────────────── */
+    /* ── Status icon wrapper (var(--wf-space-14) inline SVG) ────────────────────────────── */
     .wf-si {
       display: inline-flex;
       align-items: center;
       flex-shrink: 0;
     }
-    .wf-si svg { width: 14px; height: 14px; }
+    .wf-si svg { width: var(--wf-space-14); height: var(--wf-space-14); }
     .wf-si--warn { color: var(--ou-warning-fg); }
     .wf-si--error { color: var(--ou-error-fg); }
 
@@ -89,13 +89,13 @@
     .wf-tab-strip-wrap {
       background: var(--ou-bg-elevated);
       border-radius: var(--ou-radius-m);
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       overflow: hidden;
       margin-bottom: var(--ou-space-2);
     }
     .wf-tab-bar {
       display: flex;
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .wf-tab-demo {
       display: inline-flex;
@@ -105,8 +105,8 @@
       font: var(--ou-text-body-s);
       color: var(--ou-fg-muted);
       border: none;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
+      border-bottom: var(--wf-space-half) solid transparent;
+      margin-bottom: -var(--wf-border-w);
       background: transparent;
       cursor: pointer;
     }
@@ -123,7 +123,7 @@
 
     /* ── Section cards ────────────────────────────────────────────────────── */
     .wf-sc {
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-m);
       background: var(--ou-bg-elevated);
       overflow: hidden;
@@ -134,7 +134,7 @@
       align-items: center;
       gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       background: var(--ou-bg-canvas);
     }
     .wf-sc-title {
@@ -176,14 +176,14 @@
     .wf-field-input {
       font: var(--ou-text-body-s);
       padding: var(--ou-space-1) var(--ou-space-2);
-      border: 1px solid var(--ou-border-input);
+      border: var(--wf-border-w) solid var(--ou-border-input);
       border-radius: var(--ou-radius-s);
       background: var(--ou-bg-elevated);
       color: var(--ou-fg-default);
       font-family: inherit;
     }
-    .wf-field-input--wide { max-width: 400px; width: 100%; }
-    .wf-field-input--narrow { max-width: 120px; }
+    .wf-field-input--wide { max-width: var(--wf-size-400); width: 100%; }
+    .wf-field-input--narrow { max-width: var(--wf-size-120); }
     .wf-field-input--error { border-color: var(--ou-error-fg); }
 
     /* ── Inline validation messages ───────────────────────────────────────── */
@@ -204,11 +204,11 @@
       font: var(--ou-text-caption);
       color: var(--ou-warning-fg);
       background: var(--ou-warning-bg);
-      border: 1px solid var(--ou-warning-border);
+      border: var(--wf-border-w) solid var(--ou-warning-border);
       border-radius: var(--ou-radius-s);
       padding: var(--ou-space-2) var(--ou-space-2);
     }
-    .wf-inline-warn svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 1px; }
+    .wf-inline-warn svg { width: var(--wf-space-13); height: var(--wf-space-13); flex-shrink: 0; margin-top: var(--wf-border-w); }
 
     /* ── Legend grid ──────────────────────────────────────────────────────── */
     .wf-legend-grid {
@@ -221,7 +221,7 @@
       align-items: center;
       gap: var(--ou-space-3);
       padding: var(--ou-space-3);
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-m);
       background: var(--ou-bg-elevated);
     }
@@ -263,7 +263,7 @@
       gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
       background: var(--ou-bg-elevated);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       box-shadow: var(--ou-shadow-xs);
       color: var(--ou-fg-default);
       flex-wrap: wrap;
@@ -279,7 +279,7 @@
     .wf-nav button,
     .wf-nav .wf-btn {
       padding: var(--ou-space-1) var(--ou-space-3);
-      border: 1px solid var(--ou-border-default);
+      border: var(--wf-border-w) solid var(--ou-border-default);
       border-radius: var(--ou-radius-s);
       background: transparent;
       color: var(--ou-fg-default);
@@ -295,25 +295,25 @@
       border-color: var(--ou-accent-default);
     }
     .wf-nav-sep {
-      width: 1px;
+      width: var(--wf-border-w);
       height: var(--ou-space-5);
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-2);
     }
-    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
     .wf-state.active { display: block; }
     .shell.wf-state.active { display: flex; }
 
     .wf-state > .drawer-overlay,
     .wf-state > .overlay,
     .wf-state > .wf-overlay {
-      top: var(--wf-nav-offset, 52px);
+      top: var(--wf-nav-offset, var(--wf-size-52));
       bottom: 0;
       height: auto;
     }
     .wf-state > .drawer-overlay > .drawer {
-      height: calc(100vh - var(--wf-nav-offset, 52px));
-      max-height: calc(100vh - var(--wf-nav-offset, 52px));
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
     }
   </style>
 </head>
@@ -542,8 +542,8 @@
       <tr><th>Wireframe element</th><th>DS component</th><th>Variant / notes</th></tr>
     </thead>
     <tbody>
-      <tr><td>.wf-status-dot (tab indicator)</td><td>StatusDot (custom)</td><td>7px circle; --dirty (accent), --warn (warning-fg), --error (error-fg)</td></tr>
-      <tr><td>.wf-si (section icon)</td><td>Icon (inline SVG)</td><td>14px; --warn (warning-fg), --error (error-fg); aria-hidden</td></tr>
+      <tr><td>.wf-status-dot (tab indicator)</td><td>StatusDot (custom)</td><td>var(--wf-space-7) circle; --dirty (accent), --warn (warning-fg), --error (error-fg)</td></tr>
+      <tr><td>.wf-si (section icon)</td><td>Icon (inline SVG)</td><td>var(--wf-space-14); --warn (warning-fg), --error (error-fg); aria-hidden</td></tr>
       <tr><td>.wf-sc--dirty (section card)</td><td>Card</td><td>border: accent-default; header bg: color-mix accent 10%</td></tr>
       <tr><td>.wf-sc--warn (section card)</td><td>Card</td><td>border: ou-warning-border; header: ou-warning-bg</td></tr>
       <tr><td>.wf-sc--error (section card)</td><td>Card</td><td>border: ou-error-border; header: ou-error-bg</td></tr>
@@ -738,7 +738,7 @@ function toggleDensity() {
     if (!state) return rows;
 
     if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
-    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный var(--wf-size-1120).');
     if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
     if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
     if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');

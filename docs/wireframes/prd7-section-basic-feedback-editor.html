@@ -19,7 +19,7 @@
 
     /* ── Component-level wireframe background ─────────────────────────────── */
     .wf-state {
-      padding-top: var(--wf-nav-offset, 52px);
+      padding-top: var(--wf-nav-offset, var(--wf-size-52));
       min-height: 100vh;
       background: var(--ou-bg-page);
     }
@@ -27,19 +27,19 @@
       background: var(--ou-bg-canvas);
       padding: var(--ou-space-6);
     }
-    .wf-state-wrap { max-width: 760px; margin: 0 auto; }
+    .wf-state-wrap { max-width: var(--wf-size-760); margin: 0 auto; }
     .wf-state-ctx {
       font: var(--ou-text-caption); color: var(--ou-fg-muted);
       margin-bottom: var(--ou-space-3);
       padding: var(--ou-space-2) var(--ou-space-3);
       background: var(--ou-bg-elevated);
       border-radius: var(--ou-radius-s);
-      border-left: 3px solid var(--ou-accent-default);
+      border-left: var(--wf-space-1q) solid var(--ou-accent-default);
     }
 
     /* ── Feedback panel container ─────────────────────────────────────────── */
     .wf-feedback-panel {
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-m);
       background: var(--ou-bg-elevated);
       overflow: hidden;
@@ -47,7 +47,7 @@
     .wf-feedback-panel-header {
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       background: var(--ou-bg-canvas);
     }
     .wf-feedback-panel-title { font: var(--ou-text-body-s); font-weight: 600; flex: 1; }
@@ -56,15 +56,15 @@
     .wf-format-row {
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       flex-wrap: wrap;
     }
-    .wf-format-label { font: var(--ou-text-caption); font-weight: 500; color: var(--ou-fg-muted); min-width: 60px; }
+    .wf-format-label { font: var(--ou-text-caption); font-weight: 500; color: var(--ou-fg-muted); min-width: var(--wf-size-60); }
     .wf-format-select {
       font: var(--ou-text-caption); font-family: inherit;
       padding: var(--ou-space-1) var(--ou-space-2);
       border-radius: var(--ou-radius-s);
-      border: 1px solid var(--ou-border-input);
+      border: var(--wf-border-w) solid var(--ou-border-input);
       background: var(--ou-bg-elevated); color: var(--ou-fg-default);
       cursor: pointer;
     }
@@ -72,14 +72,14 @@
 
     /* ── Editor toolbar ───────────────────────────────────────────────────── */
     .wf-editor-toolbar {
-      display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
+      display: flex; align-items: center; gap: var(--wf-space-half); flex-wrap: wrap;
       padding: var(--ou-space-1) var(--ou-space-3);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       background: var(--ou-bg-elevated);
     }
     .wf-toolbar-btn {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 28px; height: 28px; border-radius: var(--ou-radius-s);
+      width: var(--wf-size-28); height: var(--wf-size-28); border-radius: var(--ou-radius-s);
       border: none; background: transparent; color: var(--ou-fg-default);
       cursor: pointer; font-family: inherit;
     }
@@ -89,17 +89,17 @@
       color: var(--ou-accent-default);
     }
     .wf-toolbar-sep {
-      width: 1px; height: 18px;
+      width: var(--wf-border-w); height: var(--wf-size-18);
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-1);
     }
 
     /* ── Rich text editor body ────────────────────────────────────────────── */
     .wf-editor-body {
-      min-height: 120px; padding: var(--ou-space-3) var(--ou-space-4);
+      min-height: var(--wf-size-120); padding: var(--ou-space-3) var(--ou-space-4);
       font: var(--ou-text-body-s); line-height: 1.7; color: var(--ou-fg-default);
       background: var(--ou-bg-elevated);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       outline: none; cursor: text;
     }
     .wf-editor-body--placeholder { color: var(--ou-fg-muted); font-style: italic; }
@@ -109,9 +109,9 @@
     .wf-editor-body a      { color: var(--ou-accent-default); text-decoration: underline; }
 
     /* ── Plain text editor ────────────────────────────────────────────────── */
-    .wf-editor-plain { padding: var(--ou-space-3) var(--ou-space-4); border-bottom: 1px solid var(--ou-border-soft); background: var(--ou-bg-elevated); }
+    .wf-editor-plain { padding: var(--ou-space-3) var(--ou-space-4); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); background: var(--ou-bg-elevated); }
     .wf-editor-plain textarea {
-      width: 100%; min-height: 100px; resize: vertical;
+      width: 100%; min-height: var(--wf-size-100); resize: vertical;
       border: none; outline: none; font-family: inherit;
       font: var(--ou-text-body-s); line-height: 1.7;
       color: var(--ou-fg-default); background: transparent;
@@ -120,7 +120,7 @@
     /* ── HTML editor ──────────────────────────────────────────────────────── */
     .wf-html-editor { background: var(--ou-bg-elevated); }
     .wf-html-editor textarea {
-      display: block; width: 100%; min-height: 140px; resize: vertical;
+      display: block; width: 100%; min-height: var(--wf-size-140); resize: vertical;
       font-family: 'Consolas', 'Courier New', monospace;
       font-size: var(--ou-space-3); line-height: 1.6;
       border: none; outline: none; background: transparent;
@@ -130,7 +130,7 @@
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
       background: var(--ou-warning-bg);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       font: var(--ou-text-caption); color: var(--ou-fg-muted);
     }
 
@@ -138,12 +138,12 @@
     .wf-char-count {
       font: var(--ou-text-caption); color: var(--ou-fg-muted);
       padding: var(--ou-space-1) var(--ou-space-4);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       text-align: right;
     }
 
     /* ── Links section ────────────────────────────────────────────────────── */
-    .wf-links-section { padding: var(--ou-space-3) var(--ou-space-4); border-bottom: 1px solid var(--ou-border-soft); }
+    .wf-links-section { padding: var(--ou-space-3) var(--ou-space-4); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
     .wf-section-subheader {
       display: flex; align-items: center; gap: var(--ou-space-2);
       font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
@@ -158,19 +158,19 @@
     .wf-link-input {
       font: var(--ou-text-caption); font-family: inherit;
       padding: var(--ou-space-1) var(--ou-space-2);
-      border: 1px solid var(--ou-border-input);
+      border: var(--wf-border-w) solid var(--ou-border-input);
       border-radius: var(--ou-radius-s);
       background: var(--ou-bg-elevated); color: var(--ou-fg-default);
     }
     .wf-icon-action-btn {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px; border-radius: var(--ou-radius-s);
-      border: 1px solid var(--ou-border-soft);
+      width: var(--wf-size-26); height: var(--wf-size-26); border-radius: var(--ou-radius-s);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       background: var(--ou-bg-elevated);
       cursor: pointer; color: var(--ou-fg-muted); flex-shrink: 0;
     }
     .wf-icon-action-btn:hover { border-color: var(--ou-error-fg); color: var(--ou-error-fg); }
-    .wf-icon-action-btn svg { width: 13px; height: 13px; }
+    .wf-icon-action-btn svg { width: var(--wf-space-13); height: var(--wf-space-13); }
     .wf-add-link-btn {
       font: var(--ou-text-caption); color: var(--ou-accent-default);
       background: none; border: none; cursor: pointer;
@@ -182,16 +182,16 @@
     .wf-section-empty { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-2); }
 
     /* ── Files section ────────────────────────────────────────────────────── */
-    .wf-files-section { padding: var(--ou-space-3) var(--ou-space-4); border-bottom: 1px solid var(--ou-border-soft); }
+    .wf-files-section { padding: var(--ou-space-3) var(--ou-space-4); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
     .wf-file-row {
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-1) var(--ou-space-2);
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-s);
       margin-bottom: var(--ou-space-1);
       background: var(--ou-bg-elevated);
     }
-    .wf-file-icon { color: var(--ou-fg-muted); flex-shrink: 0; width: 14px; height: 14px; }
+    .wf-file-icon { color: var(--ou-fg-muted); flex-shrink: 0; width: var(--wf-space-14); height: var(--wf-space-14); }
     .wf-file-name {
       flex: 1; font: var(--ou-text-caption);
       color: var(--ou-fg-default);
@@ -203,7 +203,7 @@
       display: flex; align-items: center; justify-content: center; gap: var(--ou-space-2);
       width: 100%; margin-top: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3);
       font: var(--ou-text-caption); font-family: inherit; color: var(--ou-accent-default);
-      background: transparent; border: 1px dashed var(--ou-border-soft);
+      background: transparent; border: var(--wf-border-w) dashed var(--ou-border-soft);
       border-radius: var(--ou-radius-s); cursor: pointer;
     }
     .wf-upload-btn:hover { border-color: var(--ou-accent-default); background: var(--ou-bg-canvas); }
@@ -220,7 +220,7 @@
       margin-bottom: var(--ou-space-2);
     }
     .wf-preview-box {
-      background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-soft);
+      background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-m); padding: var(--ou-space-3) var(--ou-space-4);
       font: var(--ou-text-body-s); line-height: 1.7;
     }
@@ -231,7 +231,7 @@
     .wf-preview-files {
       display: flex; flex-direction: column; gap: var(--ou-space-1);
       margin-top: var(--ou-space-2); padding-top: var(--ou-space-2);
-      border-top: 1px solid var(--ou-border-soft);
+      border-top: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .wf-preview-files-label {
       font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
@@ -242,7 +242,7 @@
       color: var(--ou-accent-default); font: var(--ou-text-body-s); text-decoration: none;
     }
     .wf-preview-file-link:hover { text-decoration: underline; }
-    .wf-preview-file-link svg { width: 13px; height: 13px; flex-shrink: 0; }
+    .wf-preview-file-link svg { width: var(--wf-space-13); height: var(--wf-space-13); flex-shrink: 0; }
     .wf-preview-file-size { color: var(--ou-fg-muted); font: var(--ou-text-caption); }
   </style>
 
@@ -259,7 +259,7 @@
       gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
       background: var(--ou-bg-elevated);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       box-shadow: var(--ou-shadow-xs);
       color: var(--ou-fg-default);
       flex-wrap: wrap;
@@ -275,7 +275,7 @@
     .wf-nav button,
     .wf-nav .wf-btn {
       padding: var(--ou-space-1) var(--ou-space-3);
-      border: 1px solid var(--ou-border-default);
+      border: var(--wf-border-w) solid var(--ou-border-default);
       border-radius: var(--ou-radius-s);
       background: transparent;
       color: var(--ou-fg-default);
@@ -291,25 +291,25 @@
       border-color: var(--ou-accent-default);
     }
     .wf-nav-sep {
-      width: 1px;
+      width: var(--wf-border-w);
       height: var(--ou-space-5);
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-2);
     }
-    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
     .wf-state.active { display: block; }
     .shell.wf-state.active { display: flex; }
 
     .wf-state > .drawer-overlay,
     .wf-state > .overlay,
     .wf-state > .wf-overlay {
-      top: var(--wf-nav-offset, 52px);
+      top: var(--wf-nav-offset, var(--wf-size-52));
       bottom: 0;
       height: auto;
     }
     .wf-state > .drawer-overlay > .drawer {
-      height: calc(100vh - var(--wf-nav-offset, 52px));
-      max-height: calc(100vh - var(--wf-nav-offset, 52px));
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
     }
   </style>
 </head>
@@ -1059,7 +1059,7 @@ function toggleDensity() {
     if (!state) return rows;
 
     if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
-    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный var(--wf-size-1120).');
     if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
     if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
     if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');

@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Wireframe: prd7 — Диалог закрытия редактора
+    Этап 3 — Wireframes
+    Файл: docs/wireframes/prd7-editor-close-confirm.html
+    Состояния: s-dirty (с изменениями), s-errors (блокирующие ошибки)
+    Покрывает: FR-05, FR-05a, FR-05b
+  -->
+  <title>prd7 — Диалог закрытия редактора</title>
+  <link rel="stylesheet" href="ds/university-rt.css" />
+  <link rel="stylesheet" href="ds/wf-utils.css" />
+  <style>
+    /* Wireframe-specific helpers — not part of product UI */
+    .wf-overlay {
+      position: fixed; inset: 0;
+      background: color-mix(in srgb, var(--ou-neutral-950) 55%, transparent);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 50;
+    }
+    .wf-dialog {
+      background: var(--ou-bg-elevated);
+      border-radius: var(--ou-radius-l);
+      box-shadow: 0 var(--ou-space-5) var(--wf-size-60) color-mix(in srgb, var(--ou-neutral-950) 28%, transparent);
+      width: var(--wf-size-480); max-width: 96vw;
+      overflow: hidden;
+    }
+    .wf-dialog-header {
+      padding: var(--ou-space-4) var(--ou-space-5);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      display: flex; align-items: center; gap: var(--ou-space-3);
+    }
+    .wf-dialog-icon {
+      width: var(--wf-size-36); height: var(--wf-size-36);
+      border-radius: var(--ou-radius-m);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .wf-dialog-icon--warn {
+      background: var(--ou-warning-bg);
+      border: var(--wf-border-w) solid var(--ou-warning-border, var(--ou-warning-fg));
+      color: var(--ou-warning-fg);
+    }
+    .wf-dialog-icon--error {
+      background: var(--ou-error-bg);
+      border: var(--wf-border-w) solid var(--ou-error-border, var(--ou-error-fg));
+      color: var(--ou-error-fg);
+    }
+    .wf-dialog-title {
+      font: var(--ou-text-heading-s);
+      margin: 0;
+    }
+    .wf-dialog-body {
+      padding: var(--ou-space-4) var(--ou-space-5);
+    }
+    .wf-dialog-desc {
+      font: var(--ou-text-body-m);
+      color: var(--ou-fg-default);
+      line-height: 1.6;
+      margin: 0 0 var(--ou-space-3);
+    }
+    .wf-dialog-footer {
+      padding: var(--ou-space-3) var(--ou-space-5);
+      border-top: var(--wf-border-w) solid var(--ou-border-soft);
+      display: flex; justify-content: space-between; align-items: center;
+      gap: var(--ou-space-2);
+    }
+    .wf-dialog-footer-right { display: flex; gap: var(--ou-space-2); }
+    .wf-changes-chips {
+      display: flex; flex-wrap: wrap; gap: var(--ou-space-2);
+      margin-top: var(--ou-space-2);
+    }
+    .ou-button--ghost {
+      background: transparent; border: none;
+      color: var(--ou-fg-muted); cursor: pointer;
+    }
+    .ou-button--ghost:hover { background: var(--ou-bg-hover); }
+    /* Notes layer — below the fixed overlay, non-interactive */
+    .wf-notes-layer {
+      position: relative; z-index: 1; pointer-events: none;
+    }
+    /* Drawer title text in the simulated background */
+    .wf-bg-drawer-title {
+      font: var(--ou-text-heading-s); flex: 1;
+    }
+    /* Error anchor link inside banner */
+    .wf-error-link {
+      color: var(--ou-error-fg); font-weight: 600;
+    }
+    /* SVG sprite — visually hidden but accessible to use-refs */
+    .wf-sprite { display: none; }
+    /* Simulated background behind dialog */
+    .wf-bg-page {
+      position: fixed; inset: 0;
+      display: flex; background: var(--ou-bg-page);
+      z-index: 0; pointer-events: none;
+    }
+    .wf-bg-sidebar {
+      width: var(--wf-size-224); flex-shrink: 0;
+      background: var(--ou-bg-elevated);
+      border-right: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .wf-bg-drawer {
+      flex: 1; display: flex; flex-direction: column;
+      border-left: var(--wf-border-w) solid var(--ou-border-soft); opacity: 0.5;
+    }
+    .wf-bg-drawer-header {
+      padding: var(--ou-space-4) var(--ou-space-5);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      display: flex; align-items: center; gap: var(--ou-space-3);
+    }
+    .wf-bg-drawer-tabs {
+      display: flex; gap: 0;
+      padding: 0 var(--ou-space-5);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+    }
+    .wf-bg-tab {
+      padding: var(--ou-space-3) var(--ou-space-4);
+      font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+    }
+    .wf-bg-tab--active {
+      color: var(--ou-accent-default);
+      border-bottom: var(--wf-space-half) solid var(--ou-accent-default);
+      font-weight: 600;
+    }
+  </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: var(--wf-border-w);
+      height: var(--ou-space-5);
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, var(--wf-size-52));
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+    }
+  </style>
+</head>
+
+<body class="ou ou--light ou--normal">
+
+  <!-- ═══ SVG sprite ════════════════════════════════════════════════════════ -->
+  <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+    </symbol>
+    <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/>
+      <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+    </symbol>
+  </svg>
+
+  <!-- ═══ State switcher ════════════════════════════════════════════════════ -->
+  <nav class="wf-nav">
+    <span class="wf-nav-title">Диалог закрытия редактора</span>
+    <button type="button" class="active" onclick="showState(this, 's-dirty')">С изменениями</button>
+    <button type="button" onclick="showState(this, 's-errors')">Блокирующие ошибки</button>
+    <div class="wf-nav-sep"></div>
+    <button type="button" onclick="toggleTheme(this)">Dark</button>
+    <button type="button" onclick="toggleDensity(this)">Compact</button>
+  </nav>
+
+  <!-- Persistent simulated background (not part of product UI) -->
+  <div class="wf-bg-page" aria-hidden="true">
+    <div class="wf-bg-sidebar"></div>
+    <div class="wf-bg-drawer">
+      <div class="wf-bg-drawer-header">
+        <span class="wf-bg-drawer-title">Основы информационной безопасности</span>
+        <span class="ou-tag ou-tag--warning">Изменено</span>
+      </div>
+      <div class="wf-bg-drawer-tabs">
+        <span class="wf-bg-tab wf-bg-tab--active">Состав</span>
+        <span class="wf-bg-tab">Настройки</span>
+        <span class="wf-bg-tab">Оформление</span>
+        <span class="wf-bg-tab">Структура</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+     STATE: С изменениями
+     ════════════════════════════════════════════════════════════════════════ -->
+  <section id="wf-s-dirty" class="wf-state active">
+    <div class="wf-overlay" role="dialog" aria-modal="true" aria-labelledby="dlg-dirty-title">
+      <div class="wf-dialog">
+        <div class="wf-dialog-header">
+          <div class="wf-dialog-icon wf-dialog-icon--warn">
+            <svg width="18" height="18"><use href="#i-warn"/></svg>
+          </div>
+          <h2 id="dlg-dirty-title" class="wf-dialog-title">Есть несохранённые изменения</h2>
+        </div>
+        <div class="wf-dialog-body">
+          <p class="wf-dialog-desc">Вы внесли изменения в тест. Что хотите сделать перед закрытием?</p>
+          <div class="wf-changes-chips" aria-label="Изменённые разделы">
+            <span class="ou-tag ou-tag--neutral">Состав</span>
+            <span class="ou-tag ou-tag--neutral">Настройки</span>
+          </div>
+        </div>
+        <div class="wf-dialog-footer">
+          <button class="ou-button ou-button--ghost" type="button">Отмена</button>
+          <div class="wf-dialog-footer-right">
+            <button class="ou-button ou-button--secondary" type="button">Выйти без сохранения</button>
+            <button class="ou-button ou-button--primary" type="button">Сохранить</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wf-page wf-notes-layer">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — С изменениями</h3>
+        <table>
+          <thead>
+            <tr><th>Элемент</th><th>Условие / API</th><th>Примечание</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Иконка Warning</td><td>Изменения есть, блокирующих ошибок нет</td><td><code>--ou-warning-fg</code></td></tr>
+            <tr><td>Чипы разделов</td><td>Перечень разделов с несохранёнными данными</td><td><code>Tag neutral</code></td></tr>
+            <tr><td>«Сохранить»</td><td>Enabled; <code>PUT /api/tests/:id</code>, затем закрыть Drawer</td><td>FR-05</td></tr>
+            <tr><td>«Выйти без сохранения»</td><td>Сбрасывает черновик, закрывает Drawer</td><td>FR-05</td></tr>
+            <tr><td>«Отмена»</td><td>Закрывает только диалог, Drawer остаётся открытым</td><td>FR-05</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+     STATE: Блокирующие ошибки
+     ════════════════════════════════════════════════════════════════════════ -->
+  <section id="wf-s-errors" class="wf-state">
+    <div class="wf-overlay" role="dialog" aria-modal="true" aria-labelledby="dlg-errors-title">
+      <div class="wf-dialog">
+        <div class="wf-dialog-header">
+          <div class="wf-dialog-icon wf-dialog-icon--error">
+            <svg width="18" height="18"><use href="#i-x-circle"/></svg>
+          </div>
+          <h2 id="dlg-errors-title" class="wf-dialog-title">Есть несохранённые изменения и ошибки</h2>
+        </div>
+        <div class="wf-dialog-body">
+          <p class="wf-dialog-desc">
+            Вы внесли изменения, но некоторые поля содержат ошибки. Сохранение сейчас невозможно.
+          </p>
+          <div class="ou-banner ou-banner--error" role="alert">
+            <span class="ou-banner-icon">
+              <svg width="14" height="14"><use href="#i-x-circle"/></svg>
+            </span>
+            <div>
+              <div class="ou-banner-body">
+                2 ошибки во вкладке «Настройки».
+                <a href="#" class="wf-error-link">Перейти к первой ошибке</a>
+              </div>
+            </div>
+          </div>
+          <div class="wf-changes-chips" aria-label="Изменённые разделы">
+            <span class="ou-tag ou-tag--neutral">Настройки</span>
+            <span class="ou-tag ou-tag--neutral">Структура</span>
+          </div>
+        </div>
+        <div class="wf-dialog-footer">
+          <button class="ou-button ou-button--ghost" type="button">Отмена</button>
+          <div class="wf-dialog-footer-right">
+            <button class="ou-button ou-button--secondary" type="button">Выйти без сохранения</button>
+            <button class="ou-button ou-button--primary" type="button"
+                    disabled aria-disabled="true"
+                    title="Исправьте ошибки перед сохранением">
+              Сохранить
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wf-page wf-notes-layer">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — Блокирующие ошибки</h3>
+        <table>
+          <thead>
+            <tr><th>Элемент</th><th>Условие / API</th><th>Примечание</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Иконка Error</td><td>Изменения есть + есть блокирующие ошибки</td><td><code>--ou-error-fg</code></td></tr>
+            <tr><td>Banner ошибки</td><td>Кол-во из состояния валидации; ссылка — скролл к первой ошибке</td><td>FR-05a</td></tr>
+            <tr><td>«Сохранить» disabled</td><td><code>aria-disabled="true"</code>; <code>title</code> — причина</td><td>FR-05a</td></tr>
+            <tr><td>«Выйти без сохранения»</td><td>Enabled даже при ошибках — пользователь теряет изменения</td><td>FR-05b</td></tr>
+            <tr><td>Кнопки «Сбросить всё» нет</td><td>Ни в этом диалоге, ни в footer Drawer</td><td>FR-05b</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- DS Mapping ════════════════════════════════════════════════════════════ -->
+  <div class="wf-page">
+    <div class="wf-mapping">
+      <h2 class="wf-mapping-title">DS Mapping — Диалог закрытия редактора</h2>
+      <p class="wf-mapping-sub">
+        Заполняется после gate этапа 3, до старта frontend (этап 3.5).<br/>
+        Строка с «custom» в колонке DS-компонент является блокером.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Overlay подложка</td><td><code>Modal</code> (overlay)</td><td><code>--ou-neutral-950</code> (color-mix 55%)</td><td>z-index 50</td></tr>
+          <tr><td>Диалоговый контейнер</td><td><code>Modal size="m"</code></td><td><code>--ou-bg-elevated</code>, <code>--ou-radius-l</code></td><td>var(--wf-size-480), max 96vw</td></tr>
+          <tr><td>Иконка Warning</td><td>Lucide <code>triangle-alert</code></td><td><code>--ou-warning-bg</code>, <code>--ou-warning-fg</code>, <code>--ou-warning-border</code></td><td></td></tr>
+          <tr><td>Иконка Error</td><td>Lucide <code>x-circle</code></td><td><code>--ou-error-bg</code>, <code>--ou-error-fg</code>, <code>--ou-error-border</code></td><td></td></tr>
+          <tr><td>Чипы разделов</td><td><code>Tag variant="neutral"</code></td><td><code>--ou-bg-hover</code>, <code>--ou-fg-muted</code></td><td></td></tr>
+          <tr><td>Banner ошибок</td><td><code>Banner variant="error"</code></td><td><code>--ou-error-bg</code>, <code>--ou-error-fg</code></td><td>FR-05a</td></tr>
+          <tr><td>«Сохранить»</td><td><code>Button variant="primary"</code></td><td><code>--ou-accent-default</code></td><td>disabled при ошибках</td></tr>
+          <tr><td>«Выйти без сохранения»</td><td><code>Button variant="secondary"</code></td><td><code>--ou-border-default</code></td><td>всегда enabled</td></tr>
+          <tr><td>«Отмена»</td><td><code>Button variant="ghost"</code></td><td><code>--ou-fg-muted</code></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function showState(btn, id) {
+      document.querySelectorAll('.wf-state').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(b => b.classList.remove('active'));
+      document.getElementById('wf-' + id).classList.add('active');
+      btn.classList.add('active');
+    }
+    function toggleTheme(btn) {
+      const dark = document.body.classList.toggle('ou--dark');
+      document.body.classList.toggle('ou--light', !dark);
+      btn.textContent = dark ? 'Light' : 'Dark';
+      btn.classList.toggle('active', dark);
+    }
+    function toggleDensity(btn) {
+      const compact = document.body.classList.toggle('ou--compact');
+      document.body.classList.toggle('ou--normal', !compact);
+      btn.textContent = compact ? 'Normal' : 'Compact';
+      btn.classList.toggle('active', compact);
+    }
+  </script>
+
+<script>
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
+</script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный var(--wf-size-1120).');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.drawer-footer')) addMappingRow(rows, 'drawer-footer', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
+</body>
+</html>

@@ -18,28 +18,28 @@
     .wf-sprite { display: none; }
 
     /* ── Full-viewport shell layout ───────────────────────────────────────── */
-    .wf-state { padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state { padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
     .wf-shell {
       display: flex;
-      height: calc(100vh - 52px);
+      height: calc(100vh - var(--wf-size-52));
       overflow: hidden;
       background: var(--ou-bg-page);
     }
 
     /* ── Sidebar ──────────────────────────────────────────────────────────── */
     .wf-sidebar {
-      width: 224px; flex-shrink: 0;
+      width: var(--wf-size-224); flex-shrink: 0;
       background: var(--ou-bg-elevated);
-      border-right: 1px solid var(--ou-border-soft);
+      border-right: var(--wf-border-w) solid var(--ou-border-soft);
       display: flex; flex-direction: column;
     }
     .wf-sidebar-header {
       display: flex; align-items: center; gap: var(--ou-space-3);
       padding: var(--ou-space-4);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .wf-logo-box {
-      width: 30px; height: 30px; flex-shrink: 0;
+      width: var(--wf-size-30); height: var(--wf-size-30); flex-shrink: 0;
       background: var(--ou-accent-default); border-radius: var(--ou-radius-m);
       display: flex; align-items: center; justify-content: center;
       color: var(--ou-fg-on-accent); font: var(--ou-text-body-s); font-weight: 700;
@@ -60,10 +60,10 @@
     .wf-nav-icon { width: var(--ou-space-4); height: var(--ou-space-4); flex-shrink: 0; }
     .wf-sidebar-footer {
       padding: var(--ou-space-3) var(--ou-space-4);
-      border-top: 1px solid var(--ou-border-soft);
+      border-top: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .wf-avatar {
-      width: 30px; height: 30px;
+      width: var(--wf-size-30); height: var(--wf-size-30);
       background: var(--ou-bg-muted); border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
@@ -74,16 +74,16 @@
 
     /* ── Drawer panel (right side) ────────────────────────────────────────── */
     .wf-drawer-panel {
-      width: 560px; flex-shrink: 0;
+      width: var(--wf-size-560); flex-shrink: 0;
       display: flex; flex-direction: column;
       background: var(--ou-bg-elevated);
-      border-left: 1px solid var(--ou-border-soft);
+      border-left: var(--wf-border-w) solid var(--ou-border-soft);
       overflow: hidden;
     }
     .wf-drawer-header {
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-3) var(--ou-space-4);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       flex-shrink: 0;
     }
     .wf-drawer-title {
@@ -92,7 +92,7 @@
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .wf-drawer-close {
-      width: 28px; height: 28px; flex-shrink: 0;
+      width: var(--wf-size-28); height: var(--wf-size-28); flex-shrink: 0;
       border: none; background: transparent; color: var(--ou-fg-muted);
       cursor: pointer; display: flex; align-items: center; justify-content: center;
       border-radius: var(--ou-radius-s);
@@ -103,14 +103,14 @@
     /* ── Tab bar ──────────────────────────────────────────────────────────── */
     .wf-drawer-tabs {
       display: flex;
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       flex-shrink: 0;
     }
     .wf-drawer-tab {
       display: inline-flex; align-items: center; gap: var(--ou-space-1);
       padding: var(--ou-space-2) var(--ou-space-4);
       font: var(--ou-text-body-s); color: var(--ou-fg-muted);
-      border: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+      border: none; border-bottom: var(--wf-space-half) solid transparent; margin-bottom: -var(--wf-border-w);
       background: transparent; cursor: pointer;
     }
     .wf-drawer-tab--active {
@@ -124,7 +124,7 @@
     .wf-drawer-footer {
       display: flex; align-items: center; gap: var(--ou-space-3);
       padding: var(--ou-space-3) var(--ou-space-4);
-      border-top: 1px solid var(--ou-border-soft);
+      border-top: var(--wf-border-w) solid var(--ou-border-soft);
       flex-shrink: 0; background: var(--ou-bg-elevated);
     }
     .wf-drawer-footer-meta {
@@ -144,7 +144,7 @@
 
     /* ── Topic rows ───────────────────────────────────────────────────────── */
     .wf-topic-row {
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-m);
       background: var(--ou-bg-elevated);
       margin-bottom: var(--ou-space-2);
@@ -154,7 +154,7 @@
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
       background: var(--ou-bg-canvas);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .wf-topic-name { font: var(--ou-text-body-s); font-weight: 600; flex: 1; }
     .wf-topic-count { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
@@ -167,13 +167,13 @@
     }
     .wf-draw-count-label {
       font: var(--ou-text-body-s);
-      width: 160px; flex-shrink: 0;
+      width: var(--wf-size-160); flex-shrink: 0;
     }
     .wf-draw-count-input {
       width: var(--ou-space-11);
       font: var(--ou-text-body-s); font-family: inherit;
       padding: var(--ou-space-1) var(--ou-space-2);
-      border: 1px solid var(--ou-border-input);
+      border: var(--wf-border-w) solid var(--ou-border-input);
       border-radius: var(--ou-radius-s);
       background: var(--ou-bg-elevated);
       color: var(--ou-fg-default);
@@ -198,7 +198,7 @@
       margin-bottom: var(--ou-space-1);
     }
     .wf-feedback-preview {
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-m);
       padding: var(--ou-space-2) var(--ou-space-3);
       font: var(--ou-text-body-s);
@@ -217,7 +217,7 @@
       display: flex; gap: var(--ou-space-2); margin-top: var(--ou-space-1);
       font: var(--ou-text-caption); color: var(--ou-fg-muted); align-items: center;
     }
-    .wf-feedback-meta svg { width: 10px; height: 10px; }
+    .wf-feedback-meta svg { width: var(--wf-space-10); height: var(--wf-space-10); }
     .wf-feedback-meta-sep { color: var(--ou-border-soft); }
 
     /* ── Form hint ────────────────────────────────────────────────────────── */
@@ -229,7 +229,7 @@
     /* ── Info banner (adaptive mode) ──────────────────────────────────────── */
     .ou-banner--info {
       background: var(--ou-accent-bg, var(--ou-bg-canvas));
-      border: 1px solid var(--ou-accent-default);
+      border: var(--wf-border-w) solid var(--ou-accent-default);
       color: var(--ou-accent-default);
     }
 
@@ -237,7 +237,7 @@
     .ou-button--ghost {
       background: transparent;
       color: var(--ou-fg-default);
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .ou-button--ghost:hover { background: var(--ou-bg-muted); }
     .ou-button--sm {
@@ -250,7 +250,7 @@
 
     /* ── Status dot ───────────────────────────────────────────────────────── */
     .wf-status-dot {
-      display: inline-block; width: 7px; height: 7px;
+      display: inline-block; width: var(--wf-space-7); height: var(--wf-space-7);
       border-radius: 50%; flex-shrink: 0;
     }
     .wf-status-dot--dirty { background: var(--ou-accent-default); }
@@ -272,7 +272,7 @@
       gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
       background: var(--ou-bg-elevated);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       box-shadow: var(--ou-shadow-xs);
       color: var(--ou-fg-default);
       flex-wrap: wrap;
@@ -288,7 +288,7 @@
     .wf-nav button,
     .wf-nav .wf-btn {
       padding: var(--ou-space-1) var(--ou-space-3);
-      border: 1px solid var(--ou-border-default);
+      border: var(--wf-border-w) solid var(--ou-border-default);
       border-radius: var(--ou-radius-s);
       background: transparent;
       color: var(--ou-fg-default);
@@ -304,25 +304,25 @@
       border-color: var(--ou-accent-default);
     }
     .wf-nav-sep {
-      width: 1px;
+      width: var(--wf-border-w);
       height: var(--ou-space-5);
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-2);
     }
-    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
     .wf-state.active { display: block; }
     .shell.wf-state.active { display: flex; }
 
     .wf-state > .drawer-overlay,
     .wf-state > .overlay,
     .wf-state > .wf-overlay {
-      top: var(--wf-nav-offset, 52px);
+      top: var(--wf-nav-offset, var(--wf-size-52));
       bottom: 0;
       height: auto;
     }
     .wf-state > .drawer-overlay > .drawer {
-      height: calc(100vh - var(--wf-nav-offset, 52px));
-      max-height: calc(100vh - var(--wf-nav-offset, 52px));
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
     }
   </style>
 </head>
@@ -715,7 +715,7 @@
       <tr><th>Wireframe element</th><th>DS component</th><th>Variant / notes</th></tr>
     </thead>
     <tbody>
-      <tr><td>.wf-drawer-panel</td><td>Drawer (sheet)</td><td>560px, right edge; role="dialog" aria-modal implied by container</td></tr>
+      <tr><td>.wf-drawer-panel</td><td>Drawer (sheet)</td><td>var(--wf-size-560), right edge; role="dialog" aria-modal implied by container</td></tr>
       <tr><td>.wf-drawer-tabs (tab bar)</td><td>Tabs</td><td>wf-drawer-tab--active with accent underline; status dot in dirty tab</td></tr>
       <tr><td>.wf-topic-row</td><td>Card</td><td>Custom card with header + body; ou-bg-canvas header</td></tr>
       <tr><td>draw_count input (.wf-draw-count-input)</td><td>Input (number)</td><td>Standard mode only; var(--ou-space-11) width</td></tr>
@@ -728,7 +728,7 @@
       <tr><td>Add topic button</td><td>ou-button</td><td>ou-button--secondary + ou-button--full</td></tr>
       <tr><td>Показать изменения</td><td>ou-button</td><td>ou-button--ghost + ou-button--sm</td></tr>
       <tr><td>Сохранить</td><td>ou-button</td><td>ou-button--primary</td></tr>
-      <tr><td>.wf-status-dot--dirty (tab)</td><td>StatusDot</td><td>7px accent circle; aria-label on button describes status</td></tr>
+      <tr><td>.wf-status-dot--dirty (tab)</td><td>StatusDot</td><td>var(--wf-space-7) accent circle; aria-label on button describes status</td></tr>
     </tbody>
   </table>
 </section>
@@ -913,7 +913,7 @@ function toggleDensity() {
     if (!state) return rows;
 
     if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
-    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный var(--wf-size-1120).');
     if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
     if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
     if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');

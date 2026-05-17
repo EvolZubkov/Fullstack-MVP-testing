@@ -18,28 +18,28 @@
     .wf-sprite { display: none; }
 
     /* ── Full-viewport shell ──────────────────────────────────────────────── */
-    .wf-state { padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state { padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
     .wf-shell {
       display: flex;
-      height: calc(100vh - 52px);
+      height: calc(100vh - var(--wf-size-52));
       overflow: hidden;
       background: var(--ou-bg-page);
     }
 
     /* ── Sidebar (minimal stub) ───────────────────────────────────────────── */
     .wf-sidebar {
-      width: 224px; flex-shrink: 0;
+      width: var(--wf-size-224); flex-shrink: 0;
       background: var(--ou-bg-elevated);
-      border-right: 1px solid var(--ou-border-soft);
+      border-right: var(--wf-border-w) solid var(--ou-border-soft);
       display: flex; flex-direction: column;
     }
     .wf-sidebar-header {
       display: flex; align-items: center; gap: var(--ou-space-3);
       padding: var(--ou-space-4);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .wf-logo-box {
-      width: 30px; height: 30px; flex-shrink: 0;
+      width: var(--wf-size-30); height: var(--wf-size-30); flex-shrink: 0;
       background: var(--ou-accent-default); border-radius: var(--ou-radius-m);
       display: flex; align-items: center; justify-content: center;
       color: var(--ou-fg-on-accent); font: var(--ou-text-body-s); font-weight: 700;
@@ -56,7 +56,7 @@
       background: var(--ou-bg-muted);
       color: var(--ou-fg-default); font-weight: 600;
     }
-    .wf-sidebar-footer { padding: var(--ou-space-3) var(--ou-space-4); border-top: 1px solid var(--ou-border-soft); }
+    .wf-sidebar-footer { padding: var(--ou-space-3) var(--ou-space-4); border-top: var(--wf-border-w) solid var(--ou-border-soft); }
 
     /* ── Main column ──────────────────────────────────────────────────────── */
     .wf-main-col {
@@ -70,7 +70,7 @@
     .wf-drawer-header {
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-3) var(--ou-space-5);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       flex-shrink: 0;
     }
     .wf-drawer-title {
@@ -79,7 +79,7 @@
     }
     .wf-flex-spacer { flex: 1; }
     .wf-drawer-close {
-      width: 28px; height: 28px; flex-shrink: 0;
+      width: var(--wf-size-28); height: var(--wf-size-28); flex-shrink: 0;
       border: none; background: transparent; color: var(--ou-fg-muted);
       cursor: pointer; display: flex; align-items: center; justify-content: center;
       border-radius: var(--ou-radius-s);
@@ -90,7 +90,7 @@
     /* ── Tab bar ──────────────────────────────────────────────────────────── */
     .wf-drawer-tabs {
       display: flex;
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       flex-shrink: 0;
       padding: 0 var(--ou-space-5);
     }
@@ -98,7 +98,7 @@
       display: inline-flex; align-items: center; gap: var(--ou-space-1);
       padding: var(--ou-space-2) var(--ou-space-4);
       font: var(--ou-text-body-s); color: var(--ou-fg-muted);
-      border: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+      border: none; border-bottom: var(--wf-space-half) solid transparent; margin-bottom: -var(--wf-border-w);
       background: transparent; cursor: pointer;
     }
     .wf-drawer-tab--active {
@@ -107,7 +107,7 @@
       font-weight: 500;
     }
     .wf-tab-dirty-dot {
-      display: inline-block; width: 6px; height: 6px;
+      display: inline-block; width: var(--wf-space-6); height: var(--wf-space-6);
       border-radius: 50%; background: var(--ou-accent-default);
     }
 
@@ -121,7 +121,7 @@
     .wf-drawer-footer {
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-3) var(--ou-space-5);
-      border-top: 1px solid var(--ou-border-soft);
+      border-top: var(--wf-border-w) solid var(--ou-border-soft);
       flex-shrink: 0; background: var(--ou-bg-elevated);
     }
     .wf-footer-hint {
@@ -137,7 +137,7 @@
       display: inline-flex; align-items: center; gap: var(--ou-space-1);
       padding: var(--ou-space-1) var(--ou-space-3);
       border-radius: var(--ou-radius-s);
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       background: var(--ou-bg-elevated);
       font: var(--ou-text-caption); white-space: nowrap;
       color: var(--ou-fg-muted);
@@ -151,12 +151,12 @@
     .wf-seq-step--dashed {
       border-style: dashed;
     }
-    .wf-seq-step svg { width: 11px; height: 11px; flex-shrink: 0; }
+    .wf-seq-step svg { width: var(--wf-space-11); height: var(--wf-space-11); flex-shrink: 0; }
     .wf-seq-arrow { color: var(--ou-fg-muted); font: var(--ou-text-caption); }
 
     /* ── Section card ─────────────────────────────────────────────────────── */
     .wf-section-card {
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-m);
       background: var(--ou-bg-elevated);
       overflow: hidden; margin-bottom: var(--ou-space-4);
@@ -165,7 +165,7 @@
     .wf-section-card-header {
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       background: var(--ou-bg-canvas);
     }
     .wf-section-card-header--active {
@@ -185,9 +185,9 @@
     .wf-cp-field {
       display: inline-flex; align-items: center; gap: var(--ou-space-1);
       font: var(--ou-text-caption);
-      padding: 2px var(--ou-space-2);
+      padding: var(--wf-space-half) var(--ou-space-2);
       border-radius: var(--ou-radius-s);
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       background: var(--ou-bg-elevated);
       color: var(--ou-fg-muted);
     }
@@ -195,7 +195,7 @@
 
     /* ── Page card (content_page display) ────────────────────────────────── */
     .wf-page-card {
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-m);
       background: var(--ou-bg-page);
       overflow: hidden;
@@ -203,12 +203,12 @@
     .wf-page-card-header {
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-3);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       background: var(--ou-bg-canvas);
     }
     .wf-page-card-type {
       font: var(--ou-text-caption); font-weight: 600;
-      padding: 2px var(--ou-space-2);
+      padding: var(--wf-space-half) var(--ou-space-2);
       border-radius: var(--ou-radius-s);
       background: var(--ou-bg-muted);
       color: var(--ou-fg-default);
@@ -222,11 +222,11 @@
     .wf-page-card-footer {
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-3);
-      border-top: 1px solid var(--ou-border-soft);
+      border-top: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .wf-page-preview-text {
       font: var(--ou-text-body-s); color: var(--ou-fg-default); line-height: 1.7;
-      max-height: 72px; overflow: hidden; position: relative;
+      max-height: var(--wf-size-72); overflow: hidden; position: relative;
     }
     .wf-page-preview-text::after {
       content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: var(--ou-space-5);
@@ -240,16 +240,16 @@
     }
     .wf-empty-icon {
       width: var(--ou-space-9); height: var(--ou-space-9); border-radius: var(--ou-radius-m);
-      border: 1px dashed var(--ou-border-soft);
+      border: var(--wf-border-w) dashed var(--ou-border-soft);
       background: var(--ou-bg-canvas);
       display: flex; align-items: center; justify-content: center;
       color: var(--ou-fg-muted); margin-bottom: var(--ou-space-3);
     }
-    .wf-empty-icon svg { width: 22px; height: 22px; }
+    .wf-empty-icon svg { width: var(--wf-size-22); height: var(--wf-size-22); }
     .wf-empty-title { font: var(--ou-text-body-m); font-weight: 600; margin-bottom: var(--ou-space-1); }
     .wf-empty-desc {
       font: var(--ou-text-body-s); color: var(--ou-fg-muted);
-      max-width: 380px; line-height: 1.6; margin-bottom: var(--ou-space-2);
+      max-width: var(--wf-size-380); line-height: 1.6; margin-bottom: var(--ou-space-2);
     }
     .wf-empty-hint {
       font: var(--ou-text-caption); color: var(--ou-fg-muted);
@@ -266,9 +266,9 @@
     .wf-ro-chip {
       display: inline-flex; align-items: center; gap: var(--ou-space-1);
       font: var(--ou-text-caption);
-      padding: 2px var(--ou-space-2);
+      padding: var(--wf-space-half) var(--ou-space-2);
       border-radius: var(--ou-radius-s);
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       background: var(--ou-bg-canvas);
       color: var(--ou-fg-muted);
     }
@@ -279,13 +279,13 @@
     .wf-mini-toolbar {
       display: flex; gap: var(--ou-space-1);
       padding: var(--ou-space-1) var(--ou-space-2);
-      border: 1px solid var(--ou-border-input);
+      border: var(--wf-border-w) solid var(--ou-border-input);
       border-bottom: none;
       border-radius: var(--ou-radius-s) var(--ou-radius-s) 0 0;
       background: var(--ou-bg-canvas);
     }
     .wf-mini-toolbar-btn {
-      width: 26px; height: 26px; border: none; background: none;
+      width: var(--wf-size-26); height: var(--wf-size-26); border: none; background: none;
       cursor: pointer; border-radius: var(--ou-radius-s);
       font-family: inherit; font: var(--ou-text-body-s);
       color: var(--ou-fg-default);
@@ -296,7 +296,7 @@
       padding: var(--ou-space-2) var(--ou-space-3);
       min-height: var(--ou-space-11);
       font: var(--ou-text-body-s); line-height: 1.7;
-      border: 1px solid var(--ou-border-input);
+      border: var(--wf-border-w) solid var(--ou-border-input);
       border-radius: 0 0 var(--ou-radius-s) var(--ou-radius-s);
       color: var(--ou-fg-default);
       background: var(--ou-bg-elevated);
@@ -305,17 +305,17 @@
     /* ── Toggle switch ────────────────────────────────────────────────────── */
     .wf-toggle-row { display: flex; align-items: flex-start; gap: var(--ou-space-2); margin-bottom: var(--ou-space-2); }
     .wf-toggle {
-      position: relative; width: 36px; height: var(--ou-space-5); flex-shrink: 0;
-      border-radius: 10px; background: var(--ou-accent-default);
-      cursor: pointer; border: none; margin-top: 1px;
+      position: relative; width: var(--wf-size-36); height: var(--ou-space-5); flex-shrink: 0;
+      border-radius: var(--wf-space-10); background: var(--ou-accent-default);
+      cursor: pointer; border: none; margin-top: var(--wf-border-w);
     }
     .wf-toggle--off { background: var(--ou-fg-muted); }
     .wf-toggle-knob {
-      position: absolute; top: 2px; right: 2px;
+      position: absolute; top: var(--wf-space-half); right: var(--wf-space-half);
       width: var(--ou-space-4); height: var(--ou-space-4);
       background: var(--ou-bg-elevated); border-radius: 50%;
     }
-    .wf-toggle--off .wf-toggle-knob { right: auto; left: 2px; }
+    .wf-toggle--off .wf-toggle-knob { right: auto; left: var(--wf-space-half); }
     .wf-toggle-label { font: var(--ou-text-body-s); font-weight: 500; }
     .wf-toggle-sub { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); }
 
@@ -325,7 +325,7 @@
     /* ── Shared button extensions ─────────────────────────────────────────── */
     .ou-button--ghost {
       background: transparent; color: var(--ou-fg-default);
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .ou-button--ghost:hover { background: var(--ou-bg-muted); }
     .ou-button--sm { font: var(--ou-text-caption); padding: var(--ou-space-1) var(--ou-space-3); }
@@ -333,13 +333,13 @@
     .ou-button--danger:hover { background: var(--ou-error-bg); }
     .wf-icon-btn {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px;
+      width: var(--wf-size-26); height: var(--wf-size-26);
       border-radius: var(--ou-radius-s);
-      border: 1px solid var(--ou-border-soft);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
       background: var(--ou-bg-elevated);
       cursor: pointer; color: var(--ou-fg-muted);
     }
-    .wf-icon-btn svg { width: 13px; height: 13px; }
+    .wf-icon-btn svg { width: var(--wf-space-13); height: var(--wf-space-13); }
   </style>
 
   <style data-wf-template-overrides>
@@ -355,7 +355,7 @@
       gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
       background: var(--ou-bg-elevated);
-      border-bottom: 1px solid var(--ou-border-soft);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
       box-shadow: var(--ou-shadow-xs);
       color: var(--ou-fg-default);
       flex-wrap: wrap;
@@ -371,7 +371,7 @@
     .wf-nav button,
     .wf-nav .wf-btn {
       padding: var(--ou-space-1) var(--ou-space-3);
-      border: 1px solid var(--ou-border-default);
+      border: var(--wf-border-w) solid var(--ou-border-default);
       border-radius: var(--ou-radius-s);
       background: transparent;
       color: var(--ou-fg-default);
@@ -387,25 +387,25 @@
       border-color: var(--ou-accent-default);
     }
     .wf-nav-sep {
-      width: 1px;
+      width: var(--wf-border-w);
       height: var(--ou-space-5);
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-2);
     }
-    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
     .wf-state.active { display: block; }
     .shell.wf-state.active { display: flex; }
 
     .wf-state > .drawer-overlay,
     .wf-state > .overlay,
     .wf-state > .wf-overlay {
-      top: var(--wf-nav-offset, 52px);
+      top: var(--wf-nav-offset, var(--wf-size-52));
       bottom: 0;
       height: auto;
     }
     .wf-state > .drawer-overlay > .drawer {
-      height: calc(100vh - var(--wf-nav-offset, 52px));
-      max-height: calc(100vh - var(--wf-nav-offset, 52px));
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
     }
   </style>
 </head>
@@ -509,7 +509,7 @@
           <div class="wf-section-card-header">
             <svg width="14" height="14" aria-hidden="true"><use href="#i-file-text"/></svg>
             <div class="wf-section-card-title">Стартовая страница</div>
-            <span class="ou-tag ou-tag--outline" style="font-size:11px;">content_page</span>
+            <span class="ou-tag ou-tag--outline" style="font-size:var(--wf-space-11);">content_page</span>
           </div>
           <div class="wf-section-card-body">
 
@@ -626,7 +626,7 @@
           <div class="wf-section-card-header">
             <svg width="14" height="14" aria-hidden="true"><use href="#i-file-text"/></svg>
             <div class="wf-section-card-title">Стартовая страница</div>
-            <span class="ou-tag ou-tag--neutral" style="font-size:11px;">Не добавлена</span>
+            <span class="ou-tag ou-tag--neutral" style="font-size:var(--wf-space-11);">Не добавлена</span>
           </div>
           <div class="wf-section-card-body">
             <div class="wf-empty-pane" aria-label="Стартовая страница не добавлена">
@@ -709,7 +709,7 @@
           <div class="wf-section-card-header wf-section-card-header--active">
             <span class="wf-page-card-type">intro</span>
             <div class="wf-section-card-title" style="color: var(--ou-accent-default);">Стартовая страница</div>
-            <span class="ou-tag ou-tag--warning" style="font-size:11px;">Изменено</span>
+            <span class="ou-tag ou-tag--warning" style="font-size:var(--wf-space-11);">Изменено</span>
           </div>
           <div class="wf-section-card-body">
 
@@ -728,7 +728,7 @@
             <div class="wf-field-group">
               <label class="wf-field-label" for="sp-edit-mode">Режим страницы (content_pages.mode)</label>
               <div class="ou-field ou-field--m"><div class="ou-field__box"><select class="ou-field__input" id="sp-edit-mode" name="sp-edit-mode"
-                      style="font: var(--ou-text-body-s); font-family: inherit; padding: var(--ou-space-1) var(--ou-space-2); border-radius: var(--ou-radius-s); border: 1px solid var(--ou-border-input); background: var(--ou-bg-elevated); color: var(--ou-fg-default);">
+                      style="font: var(--ou-text-body-s); font-family: inherit; padding: var(--ou-space-1) var(--ou-space-2); border-radius: var(--ou-radius-s); border: var(--wf-border-w) solid var(--ou-border-input); background: var(--ou-bg-elevated); color: var(--ou-fg-default);">
                 <option>template — шаблонная страница</option>
                 <option selected>standard — стандартная страница</option>
                 <option>html — HTML-разметка</option>
@@ -740,7 +740,7 @@
             <div class="wf-field-group wf-disabled-group" aria-hidden="true">
               <label class="wf-field-label">Шаблон (content_pages.template_key)</label>
               <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" placeholder="Ключ шаблона из активного SCORM-шаблона" disabled
-                     style="font: var(--ou-text-body-s); font-family: inherit; padding: var(--ou-space-1) var(--ou-space-2); border-radius: var(--ou-radius-s); border: 1px solid var(--ou-border-input); max-width: 320px; display: block;"
+                     style="font: var(--ou-text-body-s); font-family: inherit; padding: var(--ou-space-1) var(--ou-space-2); border-radius: var(--ou-radius-s); border: var(--wf-border-w) solid var(--ou-border-input); max-width: var(--wf-size-320); display: block;"
                      aria-label="Ключ шаблона (недоступно в режиме standard)" /></div></div>
               <div class="wf-field-hint">Доступно только при режиме «template».</div>
             </div>
@@ -757,7 +757,7 @@
                 <div class="wf-field-sub-label">Заголовок (text)</div>
                 <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Добро пожаловать в тест"
                        aria-label="Заголовок стартовой страницы"
-                       style="font: var(--ou-text-body-s); font-family: inherit; padding: var(--ou-space-1) var(--ou-space-2); border-radius: var(--ou-radius-s); border: 1px solid var(--ou-border-input); max-width: 480px; display: block; background: var(--ou-bg-elevated); color: var(--ou-fg-default);" /></div></div>
+                       style="font: var(--ou-text-body-s); font-family: inherit; padding: var(--ou-space-1) var(--ou-space-2); border-radius: var(--ou-radius-s); border: var(--wf-border-w) solid var(--ou-border-input); max-width: var(--wf-size-480); display: block; background: var(--ou-bg-elevated); color: var(--ou-fg-default);" /></div></div>
               </div>
 
               <!-- Текст (richText) -->
@@ -786,7 +786,7 @@
               <div>
                 <div class="wf-field-sub-label">Изображение (asset, опционально)</div>
                 <div style="display:flex; align-items:center; gap: var(--ou-space-2);">
-                  <div style="width:var(--ou-space-11); height:56px; border:1px dashed var(--ou-border-soft);
+                  <div style="width:var(--ou-space-11); height:var(--wf-size-56); border:var(--wf-border-w) dashed var(--ou-border-soft);
                        border-radius: var(--ou-radius-s); background: var(--ou-bg-canvas);
                        display:flex; align-items:center; justify-content:center;
                        color: var(--ou-fg-muted);" aria-hidden="true">
@@ -819,12 +819,12 @@
               <div class="wf-disabled-group"
                    style="display:flex; align-items:center; gap:var(--ou-space-2); margin-top:var(--ou-space-1);"
                    aria-hidden="true">
-                <span style="font: var(--ou-text-body-s); font-weight:500; min-width:140px;">
+                <span style="font: var(--ou-text-body-s); font-weight:500; min-width:var(--wf-size-140);">
                   Задержка перехода (сек)
                 </span>
                 <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="number" value="5" min="1" max="120" disabled
                        aria-label="Задержка автоперехода в секундах (недоступно)"
-                       style="width:var(--ou-space-10); font: var(--ou-text-body-s); font-family:inherit; text-align:center; padding: var(--ou-space-1); border-radius: var(--ou-radius-s); border: 1px solid var(--ou-border-input);" /></div></div>
+                       style="width:var(--ou-space-10); font: var(--ou-text-body-s); font-family:inherit; text-align:center; padding: var(--ou-space-1); border-radius: var(--ou-radius-s); border: var(--wf-border-w) solid var(--ou-border-input);" /></div></div>
                 <span class="wf-field-hint" style="margin:0;">хранится в мс (auto_advance_delay_ms)</span>
               </div>
             </div>
@@ -1073,7 +1073,7 @@ function toggleDensity() {
     if (!state) return rows;
 
     if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
-    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный var(--wf-size-1120).');
     if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
     if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
     if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');

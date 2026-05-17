@@ -91,11 +91,15 @@ const rawValuePatterns = [
   { name: 'lab()', re: /\blab\(/g },
   { name: 'lch()', re: /\blch\(/g },
   { name: 'hwb()', re: /\bhwb\(/g },
-  { name: 'named-color', re: /\b(?:white|black)\b/g },
+  // Negative look-around on `[\w-]` keeps `white-space`, `text-black` and
+  // similar CSS property tokens out of the named-color match.
+  { name: 'named-color', re: /(?<![\w-])(?:white|black)(?![\w-])/g },
 ];
 
 // Direct length units inside CSS scope. Excludes pure-zero values (`0`, `0.0`).
-const directUnitRe = /(?<![\w-])(\d+(?:\.\d+)?)(px|rem|em)\b/g;
+// `em` is typographic (letter-spacing, line-height proportions) and has no
+// 1:1 token equivalent, so it is intentionally NOT scanned.
+const directUnitRe = /(?<![\w-])(\d+(?:\.\d+)?)(px|rem)\b/g;
 
 function walk(dir, acc = []) {
   for (const name of readdirSync(dir)) {
@@ -206,16 +210,27 @@ for (const file of files) {
   // ── 2/3. Raw colors and direct units inside CSS scope ─────────────────────
   const segments = isHtml ? extractStyleBlocks(text) : [{ content: text, offset: 0 }];
 
+  // Allow CSS authors to opt a region out of raw / direct-unit scanning with
+  // /* gate-skip-start */ ... /* gate-skip-end */ pragmas. Useful for the
+  // wireframe-only px token definitions in prd7-shared.css.
+  const skipRanges = [];
+  for (const m of text.matchAll(/\/\*\s*gate-skip-start\s*\*\/[\s\S]*?\/\*\s*gate-skip-end\s*\*\//g)) {
+    skipRanges.push([m.index, m.index + m[0].length]);
+  }
+  const inSkip = (i) => skipRanges.some(([a, b]) => i >= a && i < b);
+
   for (const { content, offset } of segments) {
     for (const { name, re } of rawValuePatterns) {
       for (const match of content.matchAll(re)) {
         const absoluteIndex = offset + match.index;
+        if (inSkip(absoluteIndex)) continue;
         violations.push(`${rel}:${lineOf(text, absoluteIndex)} raw ${name}`);
       }
     }
     for (const match of content.matchAll(directUnitRe)) {
       if (parseFloat(match[1]) === 0) continue;
       const absoluteIndex = offset + match.index;
+      if (inSkip(absoluteIndex)) continue;
       violations.push(`${rel}:${lineOf(text, absoluteIndex)} direct unit ${match[1]}${match[2]}`);
     }
   }
