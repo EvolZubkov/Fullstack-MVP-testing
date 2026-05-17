@@ -184,20 +184,20 @@
 <!-- ─── Background page template ──────────────────────────────────────────── -->
 <template id="tpl-bg-page">
   <div class="shell active wf-tests-list" aria-hidden="true">
-    <aside class="sidebar">
-      <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
-      <nav class="sidebar-nav">
-        <div class="nav-group-label">Автор-панель</div>
-        <div class="nav-item"><svg class="nav-icon"><use href="#i-folder"/></svg>Темы</div>
-        <div class="nav-item"><svg class="nav-icon"><use href="#i-question"/></svg>Вопросы</div>
-        <div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div>
-        <div class="nav-item"><svg class="nav-icon"><use href="#i-chart"/></svg>Аналитика</div>
-        <div class="nav-item"><svg class="nav-icon"><use href="#i-users"/></svg>Пользователи</div>
+    <aside class="ou-side">
+      <div class="ou-side__brand"><div class="logo-box">TB</div><div class="brand-text">Test Builder</div></div>
+      <nav class="ou-side__nav">
+        <div class="ou-side__group-title">Автор-панель</div>
+        <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+        <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+        <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+        <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+        <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
       </nav>
-      <div class="sidebar-footer"><div class="user-row"><div class="avatar">АИ</div><div><div class="user-name">Алексей Иванов</div><div class="user-role">Автор</div></div></div></div>
+      <div class="ou-side__foot"><div class="user-row"><div class="avatar">АИ</div><div><div class="user-name">Алексей Иванов</div><div class="user-role">Автор</div></div></div></div>
     </aside>
     <div class="main">
-      <div class="topbar"><span class="test-title">Тесты</span><button class="ou-btn ou-btn--primary ou-btn--s" type="button">Новый тест</button></div>
+      <div class="ou-shell__header"><span>Тесты</span><button class="ou-btn ou-btn--primary ou-btn--s" type="button">Новый тест</button></div>
       <div class="content">
         <div class="test-card-stub"><div class="test-card-title">Основы информационной безопасности</div><span class="ou-tag ou-tag--success">Опубликован</span></div>
         <div class="test-card-stub"><div class="test-card-title">GDPR для разработчиков</div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
@@ -381,10 +381,10 @@
       </div></nav>
       <div class="ou-drawer__body" tabindex="0">
         <div class="flow-mode-bar"><svg width="14" height="14"><use href="#i-layout"/></svg><span>Режим:</span><span class="flow-mode-label">Плоский (linear_flat)</span></div>
-        <div class="empty-block">
+        <div class="ou-empty">
           <svg width="32" height="32" style="margin-bottom:12px;color:var(--muted-fg);"><use href="#i-question"/></svg>
-          <div class="empty-title">Нет вопросов</div>
-          <div class="empty-desc">Добавьте темы и вопросы в тест, чтобы настроить структуру страниц.</div>
+          <div class="ou-empty__title">Нет вопросов</div>
+          <div class="ou-empty__desc">Добавьте темы и вопросы в тест, чтобы настроить структуру страниц.</div>
           <button class="ou-btn ou-btn--secondary" type="button" onclick="document.querySelectorAll('.drawer-tab')[0].click();">
             Перейти во вкладку «Состав»
           </button>
@@ -453,10 +453,10 @@
       </div></nav>
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-banner ou-banner--error" role="alert"><svg width="15" height="15"><use href="#i-warn"/></svg><span>Не удалось загрузить структуру. Проверьте соединение.</span></div>
-        <div class="empty-block">
+        <div class="ou-empty">
           <svg width="28" height="28" style="color:var(--error);margin-bottom:8px;"><use href="#i-warn"/></svg>
-          <div class="empty-title">Ошибка загрузки</div>
-          <div class="empty-desc">500 Internal Server Error</div>
+          <div class="ou-empty__title">Ошибка загрузки</div>
+          <div class="ou-empty__desc">500 Internal Server Error</div>
           <button class="ou-btn ou-btn--secondary" type="button">Попробовать снова</button>
         </div>
       </div>
@@ -616,7 +616,7 @@
         <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-ei-title">Заголовок</label><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="lf-ei-title" type="text" value="Добро пожаловать в тест"></div></div></div>
         <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-ei-body">Текст приветствия</label><div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="lf-ei-body" rows="4">Этот тест проверяет базовые знания в области информационной безопасности.</textarea></div></div></div>
         <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-ei-btn">Текст кнопки «Начать»</label><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="lf-ei-btn" type="text" value="Начать тест"></div></div></div>
-        <div class="ou-formfield"><label class="ou-formfield__lbl">Автопереход</label><div class="toggle-row"><label class="toggle"><input type="checkbox"><span class="toggle-thumb"></span></label><span class="ou-formfield__desc" style="margin:0;">Отключён</span></div></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl">Автопереход</label><div class="ou-formfield__inline"><label class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox"><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></label><span class="ou-formfield__desc" style="margin:0;">Отключён</span></div></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta">Есть несохранённые изменения.</div>
@@ -675,7 +675,7 @@
         <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-esum-title">Заголовок</label><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="lf-esum-title" type="text" value="Тест завершён"></div></div></div>
         <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-esum-pass">Текст при сдаче</label><div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="lf-esum-pass" rows="3">Поздравляем! Вы успешно прошли тест.</textarea></div></div></div>
         <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-esum-fail">Текст при провале</label><div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="lf-esum-fail" rows="3">Результат ниже проходного балла. Попробуйте ещё раз.</textarea></div></div></div>
-        <div class="ou-formfield"><label class="ou-formfield__lbl">Показывать счёт</label><div class="toggle-row"><label class="toggle"><input type="checkbox" checked><span class="toggle-thumb"></span></label><span class="ou-formfield__desc" style="margin:0;">Включено</span></div></div>
+        <div class="ou-formfield"><label class="ou-formfield__lbl">Показывать счёт</label><div class="ou-formfield__inline"><label class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></label><span class="ou-formfield__desc" style="margin:0;">Включено</span></div></div>
       </div>
       <footer class="ou-drawer__foot">
         <div class="ou-drawer__foot-meta">Изменений нет.</div>

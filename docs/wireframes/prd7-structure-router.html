@@ -1,660 +1,1131 @@
-<!DOCTYPE html>
+﻿<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wireframe PRD-7: Structure - router_by_topics</title>
-  <link rel="stylesheet" href="prd7-shared.css">
+  <title>Wireframe PRD-7: Structure Tab — router_by_topics</title>
+  <link rel="stylesheet" href="ds/university-rt.css" />
+  <link rel="stylesheet" href="prd7-shared.css" />
+  <link rel="stylesheet" href="ds/wf-utils.css" />
   <style>
-    /* Drawer layout */
-    .drawer-col {
-      display: flex; flex-direction: column;
-      height: 100%; background: var(--bg); overflow: hidden;
-    }
-    .drawer-header {
-      display: flex; align-items: center; gap: 10px;
-      padding: 14px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0;
-    }
-    .drawer-title { font-size: 15px; font-weight: 700; flex: 1; }
-    .tab-bar {
-      display: flex; border-bottom: 1px solid var(--border);
-      flex-shrink: 0; padding: 0 20px;
-    }
-    .tab-item {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 10px 14px; font-size: 13px; color: var(--muted-fg);
-      border-bottom: 2px solid transparent; margin-bottom: -1px;
-      background: transparent; border-top: none; border-left: none; border-right: none;
-      cursor: pointer; font-family: inherit;
-    }
-    .tab-item.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
-    .structure-content { flex: 1; overflow-y: auto; padding: 20px; }
-    .drawer-footer {
-      display: flex; align-items: center; gap: 10px;
-      padding: 12px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
-    }
-    .footer-hint { font-size: 12px; color: var(--muted-fg); flex: 1; }
+    /* Wireframe-only helpers */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes shimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
 
-    /* Flow mode banner (read-only) */
-    .flow-mode-bar {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 14px; background: var(--info-bg); border: 1px solid var(--info-border);
-      border-radius: var(--radius); margin-bottom: 16px; font-size: 13px; color: var(--info-fg);
-    }
-    .flow-mode-label { font-weight: 600; flex: 1; }
-    .flow-mode-link {
-      font-size: 12px; color: var(--primary); background: none; border: none;
-      cursor: pointer; padding: 0; font-family: inherit; text-decoration: underline;
-    }
+    .wf-tests-list { filter: blur(0.5px); opacity: 0.7; pointer-events: none; }
+    .test-card-stub { border:1px solid var(--card-border); border-radius:var(--radius); background:var(--card); padding:14px 16px; margin-bottom:10px; display:flex; align-items:center; gap:12px; }
+    .test-card-stub .test-card-title { font-size:14px; font-weight:600; flex:1; }
+    body.has-active-shell .mobile-section { display:none; }
 
-    /* Zone block (Перед тестом / После теста) */
-    .zone-block {
-      border: 1px dashed var(--border); border-radius: var(--radius);
-      padding: 10px 14px; margin-bottom: 12px;
-    }
-    .zone-header {
-      display: flex; align-items: center; gap: 8px;
-      font-size: 12px; font-weight: 600; color: var(--muted-fg);
-      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px;
-    }
-    .page-chip {
-      display: inline-flex; align-items: center; gap: 4px;
-      font-size: 11px; padding: 3px 9px; border-radius: var(--radius-sm);
-      border: 1px solid var(--card-border); background: var(--bg); color: var(--fg);
-      margin-right: 6px; margin-bottom: 4px;
-    }
-    .page-chip-type { color: var(--muted-fg); font-size: 10px; }
-    .add-page-btn {
-      font-size: 11px; color: var(--primary); background: none; border: 1px dashed var(--primary);
-      border-radius: var(--radius-sm); cursor: pointer; padding: 3px 9px; font-family: inherit;
-    }
-    .add-page-btn:hover { background: var(--info-bg); }
+    /* flowMode indicator bar */
+    .flow-mode-bar { display:flex; align-items:center; gap:8px; padding:7px 0 12px; font-size:12px; color:var(--muted-fg); border-bottom:1px solid var(--border); margin-bottom:16px; }
+    .flow-mode-label { font-weight:600; color:var(--fg); }
 
-    /* Router page block */
-    .router-block {
-      border: 2px solid var(--primary); border-radius: var(--radius);
-      background: var(--info-bg); overflow: hidden; margin-bottom: 0;
-    }
-    .router-block-header {
-      display: flex; align-items: center; gap: 10px;
-      padding: 12px 16px; border-bottom: 1px solid hsl(217 91% 80%);
-      background: hsl(217 91% 95%);
-    }
-    .router-block-title { font-size: 14px; font-weight: 700; color: var(--primary); flex: 1; }
-    .router-block-body { padding: 14px 16px; }
+    /* Router block (outer frame) */
+    .router-block { border:2px solid var(--primary); border-radius:var(--radius); background:var(--card); margin-bottom:16px; overflow:hidden; }
+    .router-block-header { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--ou-accent-soft); border-bottom:1px solid var(--card-border); }
+    .router-block-title { font-size:13px; font-weight:600; color:var(--fg); flex:1; }
+    .mode-badge { font-size:11px; font-weight:600; padding:2px 8px; border-radius:9999px; background:var(--primary); color:white; white-space:nowrap; }
+    .router-block-body { padding:12px 14px; }
 
-    /* Read-only indicator chip */
-    .ro-indicator {
-      display: inline-flex; align-items: center; gap: 5px;
-      font-size: 12px; padding: 3px 10px; border-radius: var(--radius-sm);
-      border: 1px solid var(--border); background: var(--readonly-bg); color: var(--muted-fg);
-      margin-right: 6px; margin-bottom: 6px;
-    }
-    .ro-indicator-label { color: var(--muted-fg); }
-    .ro-indicator-value { color: var(--fg); font-weight: 500; }
+    /* Read-only policy indicators */
+    .ro-indicators { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+    .ro-indicator { display:inline-flex; align-items:center; gap:5px; font-size:11px; padding:3px 9px; border-radius:9999px; background:var(--ou-neutral-100); border:1px solid var(--card-border); }
+    .ro-indicator .ro-label { color:var(--muted-fg); font-weight:500; }
+    .ro-indicator .ro-value { color:var(--fg); font-weight:600; }
+    .ro-indicator-link { font-size:10px; color:var(--primary); text-decoration:none; margin-left:2px; cursor:pointer; }
 
-    /* Connector from router to section cards */
-    .sections-connector {
-      display: flex; align-items: center; justify-content: center;
-      padding: 8px 0; color: var(--muted-fg); font-size: 12px; gap: 8px;
-    }
-    .connector-line {
-      flex: 1; height: 1px; background: var(--primary); max-width: 80px;
-    }
+    /* Section card units */
+    .section-card-unit { border:1px solid var(--card-border); border-radius:var(--radius); background:var(--bg); margin-bottom:10px; overflow:hidden; cursor:pointer; }
+    .section-card-unit.selected { border-color:var(--primary); box-shadow:0 0 0 2px var(--ou-accent-container); cursor:default; }
+    .section-card-unit.locked-card { opacity:0.65; cursor:default; }
+    .section-card-header { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--card); border-bottom:1px solid var(--card-border); }
+    .section-card-num { width:22px; height:22px; border-radius:50%; background:var(--primary); color:white; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .section-card-num.muted-num { background:var(--ou-neutral-400); }
+    .section-card-title { font-size:13px; font-weight:600; color:var(--fg); flex:1; }
 
-    /* Section cards row */
-    .section-cards {
-      display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
-    }
-    .section-card-unit {
-      border: 1px solid var(--card-border); border-radius: var(--radius);
-      background: var(--card); overflow: hidden; flex: 1; min-width: 200px; max-width: 280px;
-    }
-    .section-card-unit.selected {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px hsl(217 91% 42% / .15);
-    }
-    .section-card-header {
-      display: flex; align-items: center; gap: 6px;
-      padding: 8px 12px; border-bottom: 1px solid var(--card-border);
-      background: var(--accent);
-    }
-    .section-card-title { font-size: 13px; font-weight: 600; flex: 1; }
-    .section-card-body { padding: 10px 12px; }
-    .section-field { margin-bottom: 8px; }
-    .section-field-label {
-      font-size: 11px; font-weight: 600; color: var(--muted-fg);
-      text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px;
-    }
-    .section-field-value { font-size: 12px; color: var(--fg); }
-    .section-card-footer {
-      padding: 6px 12px; border-top: 1px solid var(--card-border);
-      background: var(--accent); display: flex; align-items: center; gap: 6px;
-    }
+    /* Learner state badges (6 states) */
+    .state-badge { font-size:10px; font-weight:600; padding:2px 8px; border-radius:9999px; white-space:nowrap; }
+    .state-badge.not-started { background:var(--ou-neutral-200); color:var(--ou-fg-muted); }
+    .state-badge.in-progress  { background:var(--ou-warning-soft);  color:var(--ou-warning-on-soft); }
+    .state-badge.done-pass    { background:var(--ou-success-soft);  color:var(--ou-success-on-soft); }
+    .state-badge.done-fail    { background:var(--ou-error-soft);    color:var(--ou-error-on-soft); }
+    .state-badge.done         { background:var(--ou-info-soft);     color:var(--ou-info-on-soft); }
+    .state-badge.locked       { background:var(--ou-neutral-100);   color:var(--ou-fg-muted); border:1px dashed var(--ou-border-default); }
 
-    /* Preview state badges */
-    .state-badge {
-      display: inline-flex; align-items: center; gap: 4px;
-      font-size: 11px; padding: 2px 7px; border-radius: var(--radius-sm); font-weight: 500;
-    }
-    .state-badge.not-started { border: 1px solid var(--border); background: var(--bg); color: var(--muted-fg); }
-    .state-badge.in-progress { border: 1px solid hsl(38 92% 60%); background: hsl(38 92% 97%); color: hsl(38 92% 25%); }
-    .state-badge.done-pass { border: 1px solid hsl(142 71% 45%); background: hsl(142 71% 97%); color: hsl(142 71% 25%); }
-    .state-badge.done-fail { border: 1px solid var(--destructive); background: var(--error-bg); color: var(--destructive); }
-    .state-badge.locked { border: 1px solid var(--border); background: var(--accent); color: var(--muted-fg); }
+    .section-card-body { padding:8px 12px; font-size:12px; color:var(--muted-fg); }
+    .sc-row { display:flex; align-items:flex-start; gap:8px; margin-bottom:5px; }
+    .sc-label { min-width:140px; flex-shrink:0; }
+    .sc-value { font-weight:600; color:var(--fg); }
+    .sc-value.none { color:var(--muted-fg); font-weight:400; }
+
+    /* Page chips */
+    .page-chips-area { display:flex; flex-wrap:wrap; }
+    .page-chip { display:inline-flex; align-items:center; gap:3px; font-size:11px; padding:2px 7px; border-radius:var(--radius-sm); background:var(--ou-accent-soft); color:var(--ou-accent-default); border:1px solid var(--ou-accent-container); margin-right:3px; margin-bottom:2px; }
+    .page-chip.type-intro   { background:var(--ou-purple-50);    border-color:var(--ou-purple-200);          color:var(--ou-purple-700); }
+    .page-chip.type-info    { background:var(--ou-info-soft);    border-color:var(--ou-info-default);        color:var(--ou-info-on-soft); }
+    .page-chip.type-summary { background:var(--ou-success-soft); border-color:var(--ou-success-default);    color:var(--ou-success-on-soft); }
+
+    .section-card-footer { padding:5px 12px; border-top:1px solid var(--card-border); display:flex; align-items:center; justify-content:space-between; font-size:11px; color:var(--muted-fg); background:var(--ou-bg-elevated); }
+    .sc-threshold { display:flex; align-items:center; gap:4px; }
+    .sc-threshold strong { color:var(--fg); }
+
+    /* Connector to final result */
+    .connector-wrap { display:flex; flex-direction:column; align-items:center; margin:2px 0 8px; }
+    .connector-dot { width:8px; height:8px; border-radius:50%; background:var(--muted-fg); }
+    .connector-line { width:2px; height:18px; background:var(--card-border); }
+    .connector-label { font-size:10px; color:var(--muted-fg); text-align:center; padding:3px 8px; }
 
     /* Final result block */
-    .final-result-block {
-      border: 1px solid var(--card-border); border-radius: var(--radius);
-      background: var(--card); padding: 12px 16px; margin-top: 12px;
-      display: flex; align-items: center; gap: 12px;
-    }
-    .final-result-block.locked { opacity: .55; }
+    .final-result-block { border:1px solid var(--card-border); border-radius:var(--radius); background:var(--card); padding:10px 14px; display:flex; align-items:center; gap:10px; opacity:0.6; }
+    .final-result-block .fr-icon { font-size:18px; }
+    .final-result-block .fr-body { flex:1; }
+    .final-result-block .fr-title { font-size:13px; font-weight:600; color:var(--fg); }
+    .final-result-block .fr-note  { font-size:11px; color:var(--muted-fg); margin-top:2px; }
+
+    /* Compact router nav strip for s-section */
+    .compact-router { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+    .compact-chip { display:flex; align-items:center; gap:5px; padding:4px 10px; border:1px solid var(--card-border); border-radius:var(--radius-sm); background:var(--card); font-size:12px; color:var(--muted-fg); cursor:pointer; }
+    .compact-chip.active { border-color:var(--primary); background:var(--ou-accent-soft); color:var(--primary); font-weight:600; cursor:default; }
+    .compact-chip.dim { opacity:0.6; }
+
+    /* Section detail panel */
+    .sdp { border:1px solid var(--primary); border-radius:var(--radius); background:var(--card); overflow:hidden; margin-top:10px; }
+    .sdp-header { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--ou-accent-soft); border-bottom:1px solid var(--card-border); }
+    .sdp-title { font-size:13px; font-weight:600; color:var(--fg); flex:1; }
+    .sdp-body  { padding:12px 14px; }
+    .sdp-section-label { font-size:11px; font-weight:600; color:var(--muted-fg); text-transform:uppercase; letter-spacing:.05em; margin:12px 0 6px; }
+    .sdp-section-label:first-child { margin-top:0; }
+
+    .questions-meta-block { display:flex; align-items:center; gap:12px; padding:8px 12px; background:var(--ou-accent-soft); border:1px solid var(--ou-accent-container); border-radius:var(--radius-sm); }
+    .qm-count { font-size:24px; font-weight:700; color:var(--primary); line-height:1; }
+    .qm-detail { font-size:12px; color:var(--fg); }
+    .qm-detail .qm-sub { font-size:11px; color:var(--muted-fg); margin-top:2px; }
+
+    .result-states-preview { display:flex; gap:6px; flex-wrap:wrap; }
+    .rsp-item { display:flex; align-items:center; gap:6px; padding:5px 10px; border:1px solid var(--card-border); border-radius:var(--radius-sm); background:var(--bg); font-size:11px; color:var(--muted-fg); }
 
     /* Empty state */
-    .empty-center {
-      display: flex; flex-direction: column; align-items: center;
-      text-align: center; padding: 40px 20px; gap: 10px; color: var(--muted-fg);
+    .empty-center { display:flex; flex-direction:column; align-items:center; text-align:center; padding:36px 20px; }
+    .empty-center .eb-icon  { font-size:38px; margin-bottom:12px; }
+    .empty-center .eb-title { font-size:15px; font-weight:600; color:var(--fg); margin-bottom:6px; }
+    .empty-center .eb-desc  { font-size:13px; color:var(--muted-fg); margin-bottom:16px; max-width:320px; }
+
+    /* Skeleton */
+    .skel-block { height:80px; border-radius:var(--radius); background:linear-gradient(90deg,var(--ou-neutral-200) 25%,var(--ou-neutral-100) 50%,var(--ou-neutral-200) 75%); background-size:200% 100%; animation:shimmer 1.4s infinite; margin-bottom:10px; }
+
+    /* Mode change warn */
+    .mode-change-warn { border:1px solid var(--ou-warning-default); border-radius:var(--radius); background:var(--ou-warning-soft); margin-bottom:14px; overflow:hidden; }
+    .mcw-header { display:flex; align-items:flex-start; gap:10px; padding:10px 14px; cursor:pointer; -webkit-user-select:none; user-select:none; }
+    .mcw-icon { font-size:16px; margin-top:1px; flex-shrink:0; }
+    .mcw-body { flex:1; }
+    .mcw-title { font-size:13px; font-weight:600; color:var(--ou-warning-on-soft); }
+    .mcw-desc  { font-size:12px; color:var(--ou-warning-on-soft); margin-top:2px; }
+    .mcw-toggle { font-size:11px; color:var(--primary); white-space:nowrap; }
+    .mcw-list { display:none; padding:0 14px 12px 40px; border-top:1px solid var(--ou-warning-default); }
+    .mode-change-warn.expanded .mcw-list { display:block; }
+    .mcw-item { display:flex; align-items:flex-start; gap:8px; padding:6px 0; font-size:12px; color:var(--ou-warning-on-soft); border-bottom:1px solid var(--ou-warning-default); }
+    .mcw-item:last-child { border-bottom:none; }
+    .mcw-dot { width:6px; height:6px; border-radius:50%; background:var(--ou-warning-default); margin-top:4px; flex-shrink:0; }
+
+    /* Fallback / unavailable rows */
+    .fallback-row { display:flex; align-items:flex-start; gap:10px; padding:8px 12px; background:var(--ou-warning-soft); border:1px solid var(--ou-warning-default); border-radius:var(--radius-sm); margin-bottom:10px; font-size:12px; color:var(--ou-warning-on-soft); }
+    .fallback-icon { font-size:15px; flex-shrink:0; }
+    .fallback-body { flex:1; }
+    .fallback-body strong { font-size:13px; display:block; margin-bottom:2px; }
+    .unavail-row { display:flex; align-items:flex-start; gap:10px; padding:8px 12px; background:var(--ou-neutral-100); border:1px dashed var(--ou-border-default); border-radius:var(--radius-sm); margin-bottom:10px; font-size:12px; color:var(--muted-fg); }
+    .unavail-icon { font-size:15px; flex-shrink:0; }
+    .unavail-body { flex:1; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+    .unavail-hint { font-size:11px; padding:1px 7px; border-radius:9999px; background:var(--ou-neutral-200); color:var(--ou-fg-muted); }
+  </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: 1px solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: 1px solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: 1px;
+      height: 20px;
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, 52px);
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, 52px));
+      max-height: calc(100vh - var(--wf-nav-offset, 52px));
     }
   </style>
 </head>
-<body>
+<body class="ou ou--light ou--normal">
 
-<nav class="wf-nav" aria-label="Wireframe state switcher">
-  <span class="wf-label">Structure / router_by_topics:</span>
-  <button class="wf-btn active" type="button" onclick="show('s-default')">Router view</button>
-  <button class="wf-btn"        type="button" onclick="show('s-section')">Карточка (детали)</button>
-  <button class="wf-btn"        type="button" onclick="show('s-empty')">Без разделов</button>
-  <a class="wf-link" href="prd7-structure-mixed.html">&larr; mixed</a>
-</nav>
-
+<!-- ─── SVG sprite ─────────────────────────────────────────────────────────── -->
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
-  <symbol id="i-route" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/>
-    <circle cx="18" cy="5" r="3"/>
-  </symbol>
-  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-  </symbol>
-  <symbol id="i-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-    <polyline points="14 2 14 8 20 8"/>
-    <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
-  </symbol>
-  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-    <polyline points="20 6 9 17 4 12"/>
-  </symbol>
-  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <circle cx="12" cy="12" r="10"/>
-    <line x1="12" y1="16" x2="12" y2="12"/>
-    <line x1="12" y1="8" x2="12.01" y2="8"/>
-  </symbol>
+  <symbol id="i-x"             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-arrow-left"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <symbol id="i-folder"        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-question"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></symbol>
+  <symbol id="i-clipboard"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+  <symbol id="i-chart"         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></symbol>
+  <symbol id="i-users"         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-warn"          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-info"          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+  <symbol id="i-loader"        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol>
+  <symbol id="i-check"         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-lock"          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-chevron-down"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></symbol>
 </svg>
 
-<!-- ═══ STATE: Router view (router-page-centric) ══════════════════════════ -->
-<div id="s-default" class="shell active">
-  <aside class="sidebar">
-    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
-    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
-    <div class="sidebar-footer"></div>
-  </aside>
-  <div class="main" style="flex-direction:column;">
-    <div class="drawer-col">
-
-      <div class="drawer-header">
-        <div class="drawer-title">Основы информационной безопасности</div>
-        <span class="badge badge-secondary">Черновик</span>
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
+<!-- ─── Background page template ──────────────────────────────────────────── -->
+<template id="tpl-bg-page">
+  <div class="shell active wf-tests-list" aria-hidden="true">
+    <aside class="ou-side">
+      <div class="ou-side__brand"><div class="logo-box">TB</div><div class="brand-text">Test Builder</div></div>
+      <nav class="ou-side__nav">
+        <div class="ou-side__group-title">Автор-панель</div>
+        <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+        <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+        <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+        <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+        <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+      </nav>
+      <div class="ou-side__foot"><div class="user-row"><div class="avatar">АИ</div><div><div class="user-name">Алексей Иванов</div><div class="user-role">Автор</div></div></div></div>
+    </aside>
+    <div class="main">
+      <div class="ou-shell__header"><span>Тесты</span><button class="ou-btn ou-btn--primary ou-btn--s" type="button">Новый тест</button></div>
+      <div class="content">
+        <div class="test-card-stub"><div class="test-card-title">Основы информационной безопасности</div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+        <div class="test-card-stub"><div class="test-card-title">GDPR для разработчиков</div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
       </div>
-
-      <div class="tab-bar" role="tablist">
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Настройки</button>
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
-        <button class="tab-item active" type="button" role="tab" aria-selected="true">Структура</button>
-      </div>
-
-      <div class="structure-content">
-
-        <!-- Read-only flow mode banner -->
-        <div class="flow-mode-bar" role="note" aria-label="Текущий режим прохождения">
-          <svg width="14" height="14"><use href="#i-route"/></svg>
-          <span class="flow-mode-label">Режим: Через страницу-маршрутизатор (router_by_topics)</span>
-          <button class="flow-mode-link" type="button"
-                  aria-label="Изменить режим прохождения в Настройках — Режим и сценарий">
-            Изменить в Настройках &rarr; Режим и сценарий
-          </button>
-        </div>
-
-        <!-- Zone: Перед тестом -->
-        <div class="zone-block" aria-label="Зона: Перед тестом — страницы до маршрутизатора">
-          <div class="zone-header">
-            <svg width="12" height="12"><use href="#i-file-text"/></svg>
-            Перед тестом
-          </div>
-          <div>
-            <span class="page-chip">
-              <span class="page-card-type page-chip-type">intro</span>
-              Добро пожаловать в тест
-            </span>
-            <button class="add-page-btn" type="button" aria-label="Добавить страницу в зону Перед тестом">+ Добавить страницу</button>
-          </div>
-        </div>
-
-        <!-- Router page block -->
-        <div class="router-block" role="region" aria-label="Страница-маршрутизатор">
-          <div class="router-block-header">
-            <svg width="16" height="16" aria-hidden="true"><use href="#i-route"/></svg>
-            <div class="router-block-title">Страница-маршрутизатор</div>
-            <span class="badge badge-outline" style="font-size:11px;color:var(--primary);">router_by_topics</span>
-          </div>
-          <div class="router-block-body">
-
-            <!-- Read-only logic indicators -->
-            <div style="margin-bottom:12px;">
-              <div style="font-size:11px;font-weight:600;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">
-                Логика роутера (read-only) —
-                <button class="flow-mode-link" type="button" style="font-size:11px;"
-                        aria-label="Изменить логику роутера в Настройках — Режим и сценарий">
-                  Изменить в Настройках &rarr; Режим и сценарий
-                </button>
-              </div>
-              <div>
-                <span class="ro-indicator" title="completionPolicy: условие перехода к итоговому результату">
-                  <span class="ro-indicator-label">completionPolicy:</span>
-                  <span class="ro-indicator-value">overall_and_required_topics</span>
-                </span>
-                <span class="ro-indicator" title="sectionUnlockRules: условие доступности разделов">
-                  <span class="ro-indicator-label">sectionUnlockRules:</span>
-                  <span class="ro-indicator-value">always_available</span>
-                </span>
-              </div>
-            </div>
-
-            <!-- Sections note -->
-            <div style="font-size:12px;color:var(--muted-fg);margin-bottom:12px;" role="note">
-              Список разделов формируется во вкладке <strong>Состав</strong>. Здесь отображается структура
-              каждого раздела: страницы до/после блока вопросов и то, что увидит слушатель после завершения.
-            </div>
-
-            <!-- Section cards (one per topic-section) -->
-            <div class="section-cards" role="list" aria-label="Разделы маршрутизатора">
-
-              <!-- Card 1: Основы ИБ (state: Завершён/Пройден) -->
-              <div class="section-card-unit" role="listitem">
-                <div class="section-card-header">
-                  <div class="section-card-title">Основы ИБ</div>
-                  <span class="badge badge-primary" style="font-size:11px;">Обязательный</span>
-                </div>
-                <div class="section-card-body">
-                  <!-- Pages before -->
-                  <div class="section-field">
-                    <div class="section-field-label">Перед разделом</div>
-                    <div>
-                      <span class="page-chip"><span class="page-chip-type">info</span> Инструкция</span>
-                    </div>
-                    <button class="add-page-btn" type="button" aria-label="Добавить страницу перед разделом Основы ИБ">+</button>
-                  </div>
-                  <!-- Questions block (read-only) -->
-                  <div class="section-field">
-                    <div class="section-field-label">Блок вопросов</div>
-                    <div class="section-field-value">
-                      <span class="ro-indicator">15 вопросов <span class="ro-indicator-label">(из Состава)</span></span>
-                      <span class="ro-indicator">порог: <span class="ro-indicator-value">70%</span></span>
-                    </div>
-                  </div>
-                  <!-- Pages after -->
-                  <div class="section-field">
-                    <div class="section-field-label">После раздела</div>
-                    <div style="font-size:12px;color:var(--muted-fg);font-style:italic;">Нет страниц</div>
-                    <button class="add-page-btn" type="button" aria-label="Добавить страницу после раздела Основы ИБ">+</button>
-                  </div>
-                  <!-- What learner sees after completion -->
-                  <div class="section-field">
-                    <div class="section-field-label">Результат на маршрутизаторе</div>
-                    <div class="section-field-value">Статус + % результат</div>
-                  </div>
-                </div>
-                <div class="section-card-footer">
-                  <span style="font-size:11px;color:var(--muted-fg);">Предпросмотр состояния:</span>
-                  <span class="state-badge done-pass">Пройден (85%)</span>
-                </div>
-              </div>
-
-              <!-- Card 2: Классификация угроз (state: В процессе) -->
-              <div class="section-card-unit" role="listitem">
-                <div class="section-card-header">
-                  <div class="section-card-title">Классификация угроз</div>
-                  <span class="badge badge-outline" style="font-size:11px;">Опциональный</span>
-                </div>
-                <div class="section-card-body">
-                  <div class="section-field">
-                    <div class="section-field-label">Перед разделом</div>
-                    <div style="font-size:12px;color:var(--muted-fg);font-style:italic;">Нет страниц</div>
-                    <button class="add-page-btn" type="button" aria-label="Добавить страницу перед разделом Классификация угроз">+</button>
-                  </div>
-                  <div class="section-field">
-                    <div class="section-field-label">Блок вопросов</div>
-                    <div class="section-field-value">
-                      <span class="ro-indicator">10 вопросов <span class="ro-indicator-label">(из Состава)</span></span>
-                      <span class="ro-indicator">порог: <span class="ro-indicator-value">нет</span></span>
-                    </div>
-                  </div>
-                  <div class="section-field">
-                    <div class="section-field-label">После раздела</div>
-                    <div style="font-size:12px;color:var(--muted-fg);font-style:italic;">Нет страниц</div>
-                    <button class="add-page-btn" type="button" aria-label="Добавить страницу после раздела">+</button>
-                  </div>
-                  <div class="section-field">
-                    <div class="section-field-label">Результат на маршрутизаторе</div>
-                    <div class="section-field-value">Статус + % результат</div>
-                  </div>
-                </div>
-                <div class="section-card-footer">
-                  <span style="font-size:11px;color:var(--muted-fg);">Предпросмотр состояния:</span>
-                  <span class="state-badge in-progress">В процессе</span>
-                </div>
-              </div>
-
-              <!-- Card 3: СЗИ (state: Не начат) -->
-              <div class="section-card-unit" role="listitem">
-                <div class="section-card-header">
-                  <div class="section-card-title">СЗИ</div>
-                  <span class="badge badge-outline" style="font-size:11px;">Опциональный</span>
-                </div>
-                <div class="section-card-body">
-                  <div class="section-field">
-                    <div class="section-field-label">Перед разделом</div>
-                    <div style="font-size:12px;color:var(--muted-fg);font-style:italic;">Нет страниц</div>
-                    <button class="add-page-btn" type="button" aria-label="Добавить страницу перед разделом СЗИ">+</button>
-                  </div>
-                  <div class="section-field">
-                    <div class="section-field-label">Блок вопросов</div>
-                    <div class="section-field-value">
-                      <span class="ro-indicator">5 вопросов <span class="ro-indicator-label">(из Состава)</span></span>
-                      <span class="ro-indicator">порог: <span class="ro-indicator-value">нет</span></span>
-                    </div>
-                  </div>
-                  <div class="section-field">
-                    <div class="section-field-label">После раздела</div>
-                    <div style="font-size:12px;color:var(--muted-fg);font-style:italic;">Нет страниц</div>
-                    <button class="add-page-btn" type="button" aria-label="Добавить страницу после раздела СЗИ">+</button>
-                  </div>
-                  <div class="section-field">
-                    <div class="section-field-label">Результат на маршрутизаторе</div>
-                    <div class="section-field-value">Статус + % результат</div>
-                  </div>
-                </div>
-                <div class="section-card-footer">
-                  <span style="font-size:11px;color:var(--muted-fg);">Предпросмотр состояния:</span>
-                  <span class="state-badge not-started">Не начат</span>
-                </div>
-              </div>
-
-            </div><!-- /section-cards -->
-          </div><!-- /router-block-body -->
-        </div><!-- /router-block -->
-
-        <!-- Final result block (locked until completionPolicy met) -->
-        <div class="sections-connector" aria-hidden="true">
-          <div class="connector-line"></div>
-          <svg width="14" height="14"><use href="#i-lock"/></svg>
-          <span>доступно при выполнении completionPolicy</span>
-          <div class="connector-line"></div>
-        </div>
-        <div class="final-result-block locked" role="note" aria-label="Итоговый результат — заблокирован до выполнения completionPolicy">
-          <svg width="16" height="16"><use href="#i-lock"/></svg>
-          <div>
-            <div style="font-size:13px;font-weight:600;">Итоговый результат</div>
-            <div style="font-size:12px;color:var(--muted-fg);">Доступен после выполнения completionPolicy = overall_and_required_topics</div>
-          </div>
-        </div>
-
-      </div><!-- /structure-content -->
-
-      <div class="drawer-footer">
-        <div class="footer-hint">Структура: router_by_topics — 3 раздела. Разделы управляются в Составе.</div>
-        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
-        <button class="btn btn-primary" type="button">Сохранить</button>
-      </div>
-
     </div>
   </div>
-</div>
+</template>
 
-<!-- ═══ STATE: Карточка раздела (детали выбранной карточки) ══════════════ -->
-<div id="s-section" class="shell">
-  <aside class="sidebar">
-    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
-    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
-    <div class="sidebar-footer"></div>
-  </aside>
-  <div class="main" style="flex-direction:column;">
-    <div class="drawer-col">
+<!-- ─── State switcher ─────────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Структура: router_by_topics:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this, 's-main')">Основное</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-section')">Детали раздела</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-empty')">Нет тем</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-loading')">Загрузка</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-error')">Ошибка API</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-readonly')">Read-only</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-saved')">Сохранено</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-mode-change')">Смена режима</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-tpl-fallback')">Fallback шаблона</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-tpl-unavail')">Элемент недоступен</button>
+  <a class="wf-link" href="prd7-structure-mixed.html">&larr; mixed</a>
+  <a class="wf-link" href="prd7-design-tab.html" style="margin-left:0;">Оформление &rarr;</a>
 
-      <div class="drawer-header">
-        <div class="drawer-title">Основы информационной безопасности</div>
-        <span class="badge badge-secondary">Черновик</span>
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
-      </div>
+  <div class="wf-nav-sep"></div>
+  <button type="button" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
 
-      <div class="tab-bar" role="tablist">
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Настройки</button>
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
-        <button class="tab-item active" type="button" role="tab" aria-selected="true">Структура</button>
-      </div>
-
-      <div class="structure-content">
-        <div class="flow-mode-bar" role="note">
-          <svg width="14" height="14"><use href="#i-route"/></svg>
-          <span class="flow-mode-label">Режим: Через страницу-маршрутизатор (router_by_topics)</span>
-          <button class="flow-mode-link" type="button">Изменить в Настройках &rarr; Режим и сценарий</button>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-main — Основное (router overview, 6 карточек разделов)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-main" class="wf-state shell active" data-state="main">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-rt-main-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-rt-main-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body">
+        <div class="flow-mode-bar">
+          <span class="flow-mode-label">Режим прохождения:</span>
+          <span>По разделам (маршрутизатор)</span>
+          <span style="font-size:11px;color:var(--muted-fg)">· задаётся во вкладке Настройки → Сценарий</span>
         </div>
 
-        <!-- Compact router overview + selected card highlighted -->
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:flex-start;">
-
-          <div class="router-block" style="flex:1;min-width:220px;max-width:300px;">
-            <div class="router-block-header" style="padding:8px 12px;">
-              <svg width="14" height="14" aria-hidden="true"><use href="#i-route"/></svg>
-              <div class="router-block-title" style="font-size:13px;">Страница-маршрутизатор</div>
-            </div>
-            <div style="padding:8px 12px;font-size:12px;color:var(--muted-fg);">
-              <div class="ro-indicator" style="font-size:11px;margin-bottom:4px;">completionPolicy: <span style="color:var(--fg);">overall_and_required_topics</span></div>
-              <div class="ro-indicator" style="font-size:11px;">sectionUnlockRules: <span style="color:var(--fg);">always_available</span></div>
-            </div>
+        <div class="router-block">
+          <div class="router-block-header">
+            <span class="router-block-title">Структура теста</span>
+            <span class="mode-badge">router_by_topics</span>
           </div>
+          <div class="router-block-body">
+            <div class="ro-indicators">
+              <div class="ro-indicator">
+                <span class="ro-label">Политика завершения:</span>
+                <span class="ro-value">all</span>
+                <a class="ro-indicator-link" onclick="show('s-main')" title="Изменить в Настройках → Сценарий">↗</a>
+              </div>
+              <div class="ro-indicator">
+                <span class="ro-label">Порядок разделов:</span>
+                <span class="ro-value">sequential</span>
+                <a class="ro-indicator-link" onclick="show('s-main')" title="Изменить в Настройках → Сценарий">↗</a>
+              </div>
+            </div>
 
-          <!-- Cards row (selected: Основы ИБ) -->
-          <div style="display:flex;gap:8px;flex:2;flex-wrap:wrap;align-items:flex-start;">
-            <div class="section-card-unit selected" style="max-width:220px;" aria-label="Выбранный раздел: Основы ИБ">
+            <!-- Section 1: Пройден -->
+            <div class="section-card-unit" onclick="show('s-section')" role="button" tabindex="0">
               <div class="section-card-header">
-                <div class="section-card-title">Основы ИБ</div>
-                <span class="badge badge-primary" style="font-size:10px;">Обяз.</span>
+                <div class="section-card-num">1</div>
+                <span class="section-card-title">Основы ИБ</span>
+                <span class="state-badge done-pass">Пройден · 85%</span>
               </div>
-              <div class="section-card-body" style="padding:6px 10px;font-size:12px;color:var(--primary);font-weight:500;">
-                Редактируется &darr;
+              <div class="section-card-body">
+                <div class="sc-row"><span class="sc-label">Страниц перед разделом:</span><div class="page-chips-area"><span class="page-chip type-intro">Введение</span><span class="page-chip type-info">Инструктаж</span></div></div>
+                <div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">12 из 20</span></div>
+                <div class="sc-row"><span class="sc-label">Страниц после раздела:</span><div class="page-chips-area"><span class="page-chip type-summary">Итог раздела</span></div></div>
               </div>
+              <div class="section-card-footer"><div class="sc-threshold"><span>Порог прохождения:</span><strong>70%</strong></div><span>→ Детали</span></div>
             </div>
-            <div class="section-card-unit" style="max-width:180px;opacity:.55;" aria-hidden="true">
+
+            <!-- Section 2: В процессе -->
+            <div class="section-card-unit" onclick="show('s-section')" role="button" tabindex="0">
               <div class="section-card-header">
-                <div class="section-card-title" style="font-size:12px;">Классификация угроз</div>
+                <div class="section-card-num">2</div>
+                <span class="section-card-title">Классификация угроз</span>
+                <span class="state-badge in-progress">В процессе</span>
               </div>
+              <div class="section-card-body">
+                <div class="sc-row"><span class="sc-label">Страниц перед разделом:</span><div class="page-chips-area"><span class="page-chip type-intro">Введение</span></div></div>
+                <div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">8 из 15</span></div>
+                <div class="sc-row"><span class="sc-label">Страниц после раздела:</span><span class="sc-value none">—</span></div>
+              </div>
+              <div class="section-card-footer"><div class="sc-threshold"><span>Порог прохождения:</span><strong>65%</strong></div><span>→ Детали</span></div>
             </div>
-            <div class="section-card-unit" style="max-width:120px;opacity:.55;" aria-hidden="true">
+
+            <!-- Section 3: Не начат -->
+            <div class="section-card-unit" onclick="show('s-section')" role="button" tabindex="0">
               <div class="section-card-header">
-                <div class="section-card-title" style="font-size:12px;">СЗИ</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Detail panel: Основы ИБ (read-only indicators + content_page slots) -->
-        <div style="border:1px solid var(--primary);border-radius:var(--radius);overflow:hidden;"
-             aria-label="Детали раздела: Основы ИБ">
-          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:hsl(217 91% 97%);border-bottom:1px solid hsl(217 91% 80%);">
-            <div style="font-size:13px;font-weight:600;color:var(--primary);flex:1;">Раздел: Основы ИБ</div>
-            <span class="badge badge-primary" style="font-size:11px;">Обязательный</span>
-            <button class="btn btn-ghost btn-sm" type="button" style="font-size:11px;" aria-label="Закрыть детали раздела">&#215; Закрыть</button>
-          </div>
-          <div style="padding:14px;">
-
-            <!-- Read-only data from Состав -->
-            <div style="margin-bottom:14px;">
-              <div style="font-size:11px;font-weight:600;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">
-                Параметры из вкладки Состав (read-only)
-                <button class="flow-mode-link" type="button" style="font-size:11px;margin-left:8px;">Перейти к Составу</button>
-              </div>
-              <span class="ro-indicator">15 вопросов (draw_count)</span>
-              <span class="ro-indicator">порог: 70% (из Настройки → Правила прохождения)</span>
-              <span class="ro-indicator">Обязательный: <span style="color:var(--fg);">да</span></span>
-            </div>
-
-            <!-- Pages before -->
-            <div style="margin-bottom:14px;">
-              <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Страницы перед разделом</div>
-              <div>
-                <span class="page-chip" style="cursor:pointer;" tabindex="0" role="button" aria-label="Редактировать страницу Инструкция">
-                  <svg width="10" height="10"><use href="#i-file-text"/></svg>
-                  <span class="page-chip-type">info</span>
-                  Инструкция
-                </span>
-                <button class="add-page-btn" type="button" aria-label="Добавить страницу перед разделом">+ Добавить</button>
-              </div>
-            </div>
-
-            <!-- Questions block (read-only) -->
-            <div style="margin-bottom:14px;padding:10px 12px;background:var(--accent);border-radius:var(--radius-sm);border:1px solid var(--border);">
-              <div style="font-size:12px;font-weight:600;margin-bottom:4px;">Блок вопросов (из Состава)</div>
-              <div style="font-size:12px;color:var(--muted-fg);">15 вопросов из темы "Основы ИБ" · Случайный порядок</div>
-            </div>
-
-            <!-- Pages after -->
-            <div style="margin-bottom:14px;">
-              <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Страницы после раздела</div>
-              <div style="font-size:12px;color:var(--muted-fg);font-style:italic;margin-bottom:4px;">Нет страниц</div>
-              <button class="add-page-btn" type="button" aria-label="Добавить страницу после раздела">+ Добавить</button>
-            </div>
-
-            <!-- What learner sees on router after completion (read-only) -->
-            <div style="margin-bottom:0;">
-              <div style="font-size:12px;font-weight:600;margin-bottom:6px;">Результат раздела на маршрутизаторе</div>
-              <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                <div style="font-size:12px;color:var(--muted-fg);">После завершения слушатель увидит:</div>
-                <span class="state-badge done-pass">Пройден (85%)</span>
-                <span class="state-badge done-fail">Не пройден (52%)</span>
+                <div class="section-card-num">3</div>
+                <span class="section-card-title">СЗИ</span>
                 <span class="state-badge not-started">Не начат</span>
-                <span class="state-badge locked">Заблокирован</span>
+              </div>
+              <div class="section-card-body">
+                <div class="sc-row"><span class="sc-label">Страниц перед разделом:</span><span class="sc-value none">—</span></div>
+                <div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">10 из 10</span></div>
+                <div class="sc-row"><span class="sc-label">Страниц после раздела:</span><span class="sc-value none">—</span></div>
+              </div>
+              <div class="section-card-footer"><div class="sc-threshold"><span>Порог прохождения:</span><strong>75%</strong></div><span>→ Детали</span></div>
+            </div>
+
+            <!-- Section 4: Не пройден -->
+            <div class="section-card-unit" onclick="show('s-section')" role="button" tabindex="0">
+              <div class="section-card-header">
+                <div class="section-card-num">4</div>
+                <span class="section-card-title">Шифрование</span>
+                <span class="state-badge done-fail">Не пройден · 45%</span>
+              </div>
+              <div class="section-card-body">
+                <div class="sc-row"><span class="sc-label">Страниц перед разделом:</span><div class="page-chips-area"><span class="page-chip type-info">Подготовка</span></div></div>
+                <div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">15 из 15</span></div>
+                <div class="sc-row"><span class="sc-label">Страниц после раздела:</span><span class="sc-value none">—</span></div>
+              </div>
+              <div class="section-card-footer"><div class="sc-threshold"><span>Порог прохождения:</span><strong>80%</strong></div><span>→ Детали</span></div>
+            </div>
+
+            <!-- Section 5: Завершён (без pass/fail) -->
+            <div class="section-card-unit" onclick="show('s-section')" role="button" tabindex="0">
+              <div class="section-card-header">
+                <div class="section-card-num">5</div>
+                <span class="section-card-title">Протоколы безопасности</span>
+                <span class="state-badge done">Завершён</span>
+              </div>
+              <div class="section-card-body">
+                <div class="sc-row"><span class="sc-label">Страниц перед разделом:</span><span class="sc-value none">—</span></div>
+                <div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">8 из 8</span></div>
+                <div class="sc-row"><span class="sc-label">Страниц после раздела:</span><span class="sc-value none">—</span></div>
+              </div>
+              <div class="section-card-footer"><div class="sc-threshold"><span>Порог прохождения:</span><strong>60%</strong></div><span>→ Детали</span></div>
+            </div>
+
+            <!-- Section 6: Заблокирован -->
+            <div class="section-card-unit locked-card" aria-disabled="true">
+              <div class="section-card-header">
+                <div class="section-card-num muted-num">6</div>
+                <span class="section-card-title">Нормативная база</span>
+                <span class="state-badge locked"><svg width="10" height="10" style="vertical-align:middle"><use href="#i-lock"/></svg> Заблокирован</span>
+              </div>
+              <div class="section-card-body">
+                <div class="sc-row"><span class="sc-label">Страниц перед разделом:</span><span class="sc-value none">—</span></div>
+                <div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">6 из 6</span></div>
+                <div class="sc-row"><span class="sc-label">Страниц после раздела:</span><span class="sc-value none">—</span></div>
+              </div>
+              <div class="section-card-footer">
+                <div class="sc-threshold"><span>Порог прохождения:</span><strong>70%</strong></div>
+                <span style="font-style:italic;font-size:10px">Заблокирован по sectionUnlockRules</span>
               </div>
             </div>
 
+            <!-- Connector + Final result (locked) -->
+            <div class="connector-wrap">
+              <div class="connector-dot"></div>
+              <div class="connector-line"></div>
+              <div class="connector-label">Доступно при выполнении completionPolicy = all</div>
+              <div class="connector-line"></div>
+              <div class="connector-dot"></div>
+            </div>
+            <div class="final-result-block" aria-label="Финальный результат заблокирован">
+              <div class="fr-icon"><svg width="18" height="18"><use href="#i-lock"/></svg></div>
+              <div class="fr-body">
+                <div class="fr-title">Финальный результат</div>
+                <div class="fr-note">Отображается после выполнения политики завершения (completionPolicy)</div>
+              </div>
+            </div>
           </div>
         </div>
-
       </div>
-
-      <div class="drawer-footer">
-        <div class="footer-hint">Структура: раздел "Основы ИБ" — параметры разделов задаются в Составе</div>
-        <button class="btn btn-ghost btn-sm" type="button">Показать изменения</button>
-        <button class="btn btn-primary" type="button">Сохранить</button>
-      </div>
-
-    </div>
+      <footer class="ou-drawer__foot">
+        <div class="footer-changed">
+          <span class="footer-changed-label">Изменены:</span>
+          <span class="ou-tag ou-tag--neutral ou-tag--s">Состав</span>
+          <button class="ou-btn ou-btn--ghost ou-btn--s" type="button">Показать изменения</button>
+        </div>
+        <div class="footer-actions">
+          <button class="ou-btn ou-btn--ghost" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
   </div>
 </div>
 
-<!-- ═══ STATE: Без разделов (empty) ══════════════════════════════════════ -->
-<div id="s-empty" class="shell">
-  <aside class="sidebar">
-    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
-    <nav class="sidebar-nav"><div class="nav-item active">Тесты</div></nav>
-    <div class="sidebar-footer"></div>
-  </aside>
-  <div class="main" style="flex-direction:column;">
-    <div class="drawer-col">
-
-      <div class="drawer-header">
-        <div class="drawer-title">Новый тест</div>
-        <span class="badge badge-secondary">Черновик</span>
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;" aria-label="Закрыть">&#215;</button>
-      </div>
-
-      <div class="tab-bar" role="tablist">
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Состав</button>
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Настройки</button>
-        <button class="tab-item" type="button" role="tab" aria-selected="false">Оформление</button>
-        <button class="tab-item active" type="button" role="tab" aria-selected="true">Структура</button>
-      </div>
-
-      <div class="structure-content">
-        <div class="flow-mode-bar" role="note">
-          <svg width="14" height="14"><use href="#i-route"/></svg>
-          <span class="flow-mode-label">Режим: Через страницу-маршрутизатор (router_by_topics)</span>
-          <button class="flow-mode-link" type="button">Изменить в Настройках &rarr; Режим и сценарий</button>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-section — Детали раздела (compact nav + detail panel)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-section" class="wf-state shell" data-state="section">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-rt-sec-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-rt-sec-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body">
+        <div class="flow-mode-bar">
+          <span class="flow-mode-label">Режим прохождения:</span>
+          <span>По разделам (маршрутизатор)</span>
         </div>
 
-        <div class="router-block" style="margin-bottom:12px;">
+        <!-- Compact section nav strip -->
+        <div class="compact-router" role="tablist" aria-label="Разделы теста">
+          <div class="compact-chip" onclick="show('s-section')" role="tab">
+            <span class="state-badge done-pass" style="font-size:9px;padding:1px 5px;">✓</span>Основы ИБ
+          </div>
+          <div class="compact-chip active" role="tab" aria-selected="true">
+            <span class="state-badge in-progress" style="font-size:9px;padding:1px 5px;">▶</span>Угрозы
+          </div>
+          <div class="compact-chip" onclick="show('s-section')" role="tab">
+            <span class="state-badge not-started" style="font-size:9px;padding:1px 5px;">○</span>СЗИ
+          </div>
+          <div class="compact-chip" onclick="show('s-section')" role="tab">
+            <span class="state-badge done-fail" style="font-size:9px;padding:1px 5px;">✗</span>Шифрование
+          </div>
+          <div class="compact-chip dim" aria-disabled="true">
+            <svg width="10" height="10"><use href="#i-lock"/></svg>Нормативная база
+          </div>
+        </div>
+
+        <!-- Selected card -->
+        <div class="section-card-unit selected">
+          <div class="section-card-header">
+            <div class="section-card-num">2</div>
+            <span class="section-card-title">Классификация угроз</span>
+            <span class="state-badge in-progress">В процессе</span>
+          </div>
+          <div class="section-card-body">
+            <div class="sc-row"><span class="sc-label">Страниц перед разделом:</span><div class="page-chips-area"><span class="page-chip type-intro">Введение</span></div></div>
+            <div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">8 из 15</span></div>
+          </div>
+          <div class="section-card-footer">
+            <div class="sc-threshold"><span>Порог:</span><strong>65%</strong></div>
+            <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" onclick="show('s-main')">↑ К списку</button>
+          </div>
+        </div>
+
+        <!-- Detail panel -->
+        <div class="sdp">
+          <div class="sdp-header">
+            <span class="sdp-title">Детали раздела: Классификация угроз</span>
+            <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" type="button" aria-label="Закрыть детали" onclick="show('s-main')"><svg width="14" height="14"><use href="#i-x"/></svg></button>
+          </div>
+          <div class="sdp-body">
+            <div class="sdp-section-label">Страницы перед разделом</div>
+            <div class="page-chips-area" style="margin-bottom:10px">
+              <span class="page-chip type-intro">Введение</span>
+            </div>
+
+            <div class="sdp-section-label">Вопросы</div>
+            <div class="questions-meta-block" style="margin-bottom:12px">
+              <div class="qm-count">8</div>
+              <div class="qm-detail">
+                из 15 доступных
+                <div class="qm-sub">Тема: Классификация угроз · Случайный порядок</div>
+              </div>
+            </div>
+
+            <div class="sdp-section-label">Страницы после раздела</div>
+            <div style="font-size:12px;color:var(--muted-fg);margin-bottom:12px">Не настроены</div>
+
+            <div class="sdp-section-label">Что видно на router-странице после завершения</div>
+            <div class="result-states-preview">
+              <div class="rsp-item"><span class="state-badge done-pass" style="font-size:10px">Пройден</span><span>Процент: 78%</span></div>
+              <div class="rsp-item"><span class="state-badge done-fail" style="font-size:10px">Не пройден</span><span>Процент: 45%</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="footer-actions">
+          <button class="ou-btn ou-btn--ghost" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-empty — Нет тем (нет вопросов в составе)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-empty" class="wf-state shell" data-state="empty">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-rt-em-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-rt-em-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body">
+        <div class="flow-mode-bar">
+          <span class="flow-mode-label">Режим прохождения:</span>
+          <span>По разделам (маршрутизатор)</span>
+        </div>
+        <div class="empty-center">
+          <div class="eb-icon"><svg width="40" height="40" style="color:var(--muted-fg)"><use href="#i-question"/></svg></div>
+          <div class="eb-title">Нет тем с вопросами</div>
+          <div class="eb-desc">Режим «По разделам» требует хотя бы одной темы с вопросами. Добавьте вопросы во вкладке <strong>Состав</strong>.</div>
+          <button class="ou-btn ou-btn--secondary" type="button">Перейти к Составу</button>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="footer-actions">
+          <button class="ou-btn ou-btn--ghost" type="button">Закрыть</button>
+          <button class="ou-btn ou-btn--primary" type="button" disabled>Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-loading — Загрузка структуры
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-loading" class="wf-state shell" data-state="loading">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-rt-ld-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-rt-ld-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть" disabled><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body">
+        <div class="skeleton" style="height:18px;width:55%;margin-bottom:16px;"></div>
+        <div class="ou-skel"></div>
+        <div class="ou-skel"></div>
+        <div class="ou-skel"></div>
+        <div style="display:flex;justify-content:center;padding:20px 0;">
+          <svg width="28" height="28" style="color:var(--primary);animation:spin 1s linear infinite;" aria-label="Загрузка"><use href="#i-loader"/></svg>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="footer-actions">
+          <button class="ou-btn ou-btn--ghost" type="button" disabled>Закрыть</button>
+          <button class="ou-btn ou-btn--primary" type="button" disabled>Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-error — Ошибка загрузки структуры
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-error" class="wf-state shell" data-state="error">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-rt-er-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-rt-er-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body">
+        <div class="alert alert-error" role="alert">
+          <svg width="16" height="16"><use href="#i-warn"/></svg>
+          <div>
+            <strong>Не удалось загрузить структуру</strong>
+            <div style="font-size:12px;margin-top:2px">Проверьте соединение и попробуйте ещё раз.</div>
+          </div>
+        </div>
+        <div style="text-align:center;padding:24px 0;">
+          <button class="ou-btn ou-btn--primary" type="button">Повторить загрузку</button>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="footer-actions">
+          <button class="ou-btn ou-btn--ghost" type="button">Закрыть</button>
+          <button class="ou-btn ou-btn--primary" type="button" disabled>Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-readonly — Read-only (тест опубликован)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-readonly" class="wf-state shell" data-state="readonly">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-rt-ro-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-rt-ro-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--success">Опубликован</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body">
+        <div class="alert alert-info" role="note" style="margin-bottom:16px">
+          <svg width="16" height="16"><use href="#i-info"/></svg>
+          <span>Тест опубликован. Структура доступна только для просмотра.</span>
+        </div>
+        <div class="flow-mode-bar">
+          <span class="flow-mode-label">Режим прохождения:</span>
+          <span>По разделам (маршрутизатор)</span>
+        </div>
+        <div class="router-block">
           <div class="router-block-header">
-            <svg width="16" height="16" aria-hidden="true"><use href="#i-route"/></svg>
-            <div class="router-block-title">Страница-маршрутизатор</div>
+            <span class="router-block-title">Структура теста</span>
+            <span class="mode-badge">router_by_topics</span>
           </div>
           <div class="router-block-body">
-            <div class="empty-center" role="note">
-              <div style="font-size:14px;font-weight:600;margin-bottom:6px;">Разделы не добавлены</div>
-              <div style="font-size:13px;color:var(--muted-fg);max-width:360px;line-height:1.6;margin-bottom:14px;">
-                Маршрутизатор направляет слушателей в разделы (темы). Добавьте темы в вкладке
-                <strong>Состав</strong>, чтобы они появились здесь.
-              </div>
-              <button class="btn btn-primary" type="button" aria-label="Перейти к вкладке Состав">
-                Перейти к Составу
-              </button>
+            <div class="ro-indicators">
+              <div class="ro-indicator"><span class="ro-label">Политика завершения:</span><span class="ro-value">all</span></div>
+              <div class="ro-indicator"><span class="ro-label">Порядок разделов:</span><span class="ro-value">sequential</span></div>
+            </div>
+            <div class="section-card-unit" style="pointer-events:none">
+              <div class="section-card-header"><div class="section-card-num">1</div><span class="section-card-title">Основы ИБ</span></div>
+              <div class="section-card-body" style="font-size:12px;color:var(--muted-fg)">12 вопросов · Порог 70%</div>
+            </div>
+            <div class="section-card-unit" style="pointer-events:none">
+              <div class="section-card-header"><div class="section-card-num">2</div><span class="section-card-title">Классификация угроз</span></div>
+              <div class="section-card-body" style="font-size:12px;color:var(--muted-fg)">8 вопросов · Порог 65%</div>
+            </div>
+            <div class="connector-wrap">
+              <div class="connector-dot"></div><div class="connector-line"></div>
+              <div class="connector-label">completionPolicy = all</div>
+              <div class="connector-line"></div><div class="connector-dot"></div>
+            </div>
+            <div class="final-result-block">
+              <div class="fr-icon"><svg width="18" height="18"><use href="#i-lock"/></svg></div>
+              <div class="fr-body"><div class="fr-title">Финальный результат</div><div class="fr-note">Доступен после выполнения completionPolicy</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="footer-actions">
+          <button class="ou-btn ou-btn--ghost" type="button">Закрыть</button>
+          <button class="ou-btn ou-btn--primary" type="button" disabled>Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-saved — Успешное сохранение (toast)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-saved" class="wf-state shell" data-state="saved">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-rt-sv-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-rt-sv-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body">
+        <div class="ou-toast ou-toast--success" role="status" aria-live="polite">
+          <svg width="16" height="16"><use href="#i-check"/></svg>
+          Структура сохранена
+        </div>
+        <div class="flow-mode-bar">
+          <span class="flow-mode-label">Режим прохождения:</span>
+          <span>По разделам (маршрутизатор)</span>
+        </div>
+        <div class="router-block">
+          <div class="router-block-header">
+            <span class="router-block-title">Структура теста</span>
+            <span class="mode-badge">router_by_topics</span>
+          </div>
+          <div class="router-block-body">
+            <div class="ro-indicators">
+              <div class="ro-indicator"><span class="ro-label">Политика завершения:</span><span class="ro-value">all</span></div>
+              <div class="ro-indicator"><span class="ro-label">Порядок разделов:</span><span class="ro-value">sequential</span></div>
+            </div>
+            <div class="section-card-unit" onclick="show('s-section')" role="button" tabindex="0">
+              <div class="section-card-header"><div class="section-card-num">1</div><span class="section-card-title">Основы ИБ</span><span class="state-badge done-pass">Пройден · 85%</span></div>
+              <div class="section-card-body"><div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">12 из 20</span></div></div>
+              <div class="section-card-footer"><div class="sc-threshold"><span>Порог:</span><strong>70%</strong></div><span>→ Детали</span></div>
+            </div>
+            <div class="section-card-unit" onclick="show('s-section')" role="button" tabindex="0">
+              <div class="section-card-header"><div class="section-card-num">2</div><span class="section-card-title">Классификация угроз</span><span class="state-badge in-progress">В процессе</span></div>
+              <div class="section-card-body"><div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">8 из 15</span></div></div>
+              <div class="section-card-footer"><div class="sc-threshold"><span>Порог:</span><strong>65%</strong></div><span>→ Детали</span></div>
+            </div>
+            <div class="connector-wrap">
+              <div class="connector-dot"></div><div class="connector-line"></div>
+              <div class="connector-label">completionPolicy = all</div>
+              <div class="connector-line"></div><div class="connector-dot"></div>
+            </div>
+            <div class="final-result-block">
+              <div class="fr-icon"><svg width="18" height="18"><use href="#i-lock"/></svg></div>
+              <div class="fr-body"><div class="fr-title">Финальный результат</div><div class="fr-note">Доступен после выполнения completionPolicy</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="footer-actions">
+          <button class="ou-btn ou-btn--ghost" type="button">Закрыть</button>
+          <button class="ou-btn ou-btn--primary" type="button" disabled>Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-mode-change — Смена режима flowMode (warning о несовместимых элементах)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-mode-change" class="wf-state shell" data-state="mode-change">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-rt-mc-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-rt-mc-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body">
+        <!-- Mode change warning — expanded -->
+        <div class="mode-change-warn expanded">
+          <div class="mcw-header" onclick="this.closest('.mode-change-warn').classList.toggle('expanded')" role="button" aria-expanded="true" tabindex="0">
+            <span class="mcw-icon">⚠️</span>
+            <div class="mcw-body">
+              <div class="mcw-title">Есть настройки, не применимые к текущему режиму</div>
+              <div class="mcw-desc">При смене на «По разделам» часть настроек была скрыта.</div>
+            </div>
+            <span class="mcw-toggle">Свернуть ↑</span>
+          </div>
+          <div class="mcw-list">
+            <div class="mcw-item">
+              <div class="mcw-dot"></div>
+              <span>Тематические блоки (linear_by_topics) — скрыты. Настройки страниц внутри тем сохранены, но не отображаются.</span>
+            </div>
+            <div class="mcw-item">
+              <div class="mcw-dot"></div>
+              <span>Единый блок вопросов (mixed, linear_flat) — скрыт. Доступен при переключении в соответствующий режим.</span>
             </div>
           </div>
         </div>
 
+        <div class="flow-mode-bar">
+          <span class="flow-mode-label">Текущий режим:</span>
+          <span>По разделам (маршрутизатор)</span>
+        </div>
+        <div class="router-block">
+          <div class="router-block-header">
+            <span class="router-block-title">Структура теста</span>
+            <span class="mode-badge">router_by_topics</span>
+          </div>
+          <div class="router-block-body">
+            <div class="ro-indicators">
+              <div class="ro-indicator"><span class="ro-label">Политика завершения:</span><span class="ro-value">all</span></div>
+              <div class="ro-indicator"><span class="ro-label">Порядок разделов:</span><span class="ro-value">sequential</span></div>
+            </div>
+            <div class="section-card-unit" onclick="show('s-section')" role="button" tabindex="0">
+              <div class="section-card-header"><div class="section-card-num">1</div><span class="section-card-title">Основы ИБ</span></div>
+              <div class="section-card-body"><div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">12 из 20</span></div></div>
+              <div class="section-card-footer"><div class="sc-threshold"><span>Порог:</span><strong>70%</strong></div><span>→ Детали</span></div>
+            </div>
+          </div>
+        </div>
       </div>
-
-      <div class="drawer-footer">
-        <div class="footer-hint" style="color:var(--warn-fg);">Добавьте темы в Составе, чтобы разделы появились в маршрутизаторе</div>
-        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
-      </div>
-
-    </div>
+      <footer class="ou-drawer__foot">
+        <div class="footer-actions">
+          <button class="ou-btn ou-btn--ghost" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
   </div>
 </div>
 
-<section class="acceptance" aria-label="Acceptance">
-  <h2>Acceptance -- PRD-7 покрытие</h2>
-    <table class="acceptance-table">
-    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
-    <tbody>
-      <tr><td>§5.1</td><td>Вкладка Структура в режиме router_by_topics использует router-page-centric макет: блок "Страница-маршрутизатор" с карточками разделов, прикреплёнными к нему. НЕ используется линейный flow-chart Старт → Роутер → Секции → Итог.</td></tr>
-      <tr><td>§5.1 / §3.3</td><td>Логика роутера (<code>completionPolicy</code>, <code>sectionUnlockRules</code>) отображается только как read-only индикаторы со ссылкой "Изменить в Настройках → Режим и сценарий". Не редактируется в Структуре.</td></tr>
-      <tr><td>§5</td><td>Кнопка "Добавить секцию" отсутствует. Список разделов формируется в Составе. Показывается информационная заметка об этом.</td></tr>
-      <tr><td>§5</td><td><code>draw_count</code> и порог прохождения в карточке раздела — read-only chips со ссылкой "Перейти к Составу" / ссылкой на Настройки. Не редактируется в Структуре.</td></tr>
-      <tr><td>§5</td><td>Каждая карточка раздела показывает: название темы, обязательный/опциональный badge, количество вопросов (read-only), порог (read-only), слоты для страниц до/после блока вопросов (content_page + "Добавить страницу"), то что увидит слушатель на маршрутизаторе после завершения (preview states: Не начат / В процессе / Пройден / Не пройден / Заблокирован).</td></tr>
-      <tr><td>§5.1</td><td>Блок "Итоговый результат" показывается в заблокированном состоянии до выполнения <code>completionPolicy</code>.</td></tr>
-      <tr><td class="no-code">—</td><td>Empty state: Маршрутизатор пустой с CTA "Перейти к Составу". Кнопка "Сохранить" disabled.</td></tr>
-      <tr><td>NFR-21</td><td>Блок роутера: <code>role="region"</code> + <code>aria-label</code>; карточки: <code>role="listitem"</code>; read-only режим: чипы без интерактивных элементов управления.</td></tr>
-    </tbody>
-  </table>
-</section>
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-tpl-fallback — Fallback шаблона (раздел использует fallback)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-tpl-fallback" class="wf-state shell" data-state="tpl-fallback">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-rt-tf-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-rt-tf-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление <span class="tab-badge tab-badge-warn">1</span></button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура <span class="tab-badge tab-badge-warn">1</span></button>
+      </div></nav>
+      <div class="ou-drawer__body">
+        <div class="flow-mode-bar">
+          <span class="flow-mode-label">Режим прохождения:</span>
+          <span>По разделам (маршрутизатор)</span>
+        </div>
+        <div class="router-block">
+          <div class="router-block-header">
+            <span class="router-block-title">Структура теста</span>
+            <span class="mode-badge">router_by_topics</span>
+          </div>
+          <div class="router-block-body">
+            <div class="ro-indicators">
+              <div class="ro-indicator"><span class="ro-label">Политика завершения:</span><span class="ro-value">all</span></div>
+              <div class="ro-indicator"><span class="ro-label">Порядок разделов:</span><span class="ro-value">sequential</span></div>
+            </div>
+
+            <!-- Section 1 with fallback warning -->
+            <div class="section-card-unit" onclick="show('s-section')" role="button" tabindex="0">
+              <div class="section-card-header"><div class="section-card-num">1</div><span class="section-card-title">Основы ИБ</span><span class="state-badge done-pass">Пройден · 85%</span></div>
+              <div class="section-card-body">
+                <div class="fallback-row">
+                  <span class="fallback-icon">⚠</span>
+                  <div class="fallback-body">
+                    <strong>Fallback шаблона</strong>
+                    Страница <code>intro</code> отсутствует в шаблоне «RTK Modern». Используется вариант из <code>default</code>.
+                  </div>
+                </div>
+                <div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">12 из 20</span></div>
+              </div>
+              <div class="section-card-footer"><div class="sc-threshold"><span>Порог:</span><strong>70%</strong></div><span>→ Детали</span></div>
+            </div>
+
+            <div class="section-card-unit" onclick="show('s-section')" role="button" tabindex="0">
+              <div class="section-card-header"><div class="section-card-num">2</div><span class="section-card-title">Классификация угроз</span><span class="state-badge in-progress">В процессе</span></div>
+              <div class="section-card-body"><div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">8 из 15</span></div></div>
+              <div class="section-card-footer"><div class="sc-threshold"><span>Порог:</span><strong>65%</strong></div><span>→ Детали</span></div>
+            </div>
+
+            <div class="connector-wrap">
+              <div class="connector-dot"></div><div class="connector-line"></div>
+              <div class="connector-label">completionPolicy = all</div>
+              <div class="connector-line"></div><div class="connector-dot"></div>
+            </div>
+            <div class="final-result-block">
+              <div class="fr-icon"><svg width="18" height="18"><use href="#i-lock"/></svg></div>
+              <div class="fr-body"><div class="fr-title">Финальный результат</div><div class="fr-note">Доступен после выполнения completionPolicy</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="footer-actions">
+          <button class="ou-btn ou-btn--ghost" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-tpl-unavail — Элемент недоступен в текущем режиме шаблона
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-tpl-unavail" class="wf-state shell" data-state="tpl-unavail">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-rt-tu-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-rt-tu-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура <span class="tab-badge tab-badge-warn">1</span></button>
+      </div></nav>
+      <div class="ou-drawer__body">
+        <div class="flow-mode-bar">
+          <span class="flow-mode-label">Режим прохождения:</span>
+          <span>По разделам (маршрутизатор)</span>
+        </div>
+        <div class="router-block">
+          <div class="router-block-header">
+            <span class="router-block-title">Структура теста</span>
+            <span class="mode-badge">router_by_topics</span>
+          </div>
+          <div class="router-block-body">
+            <div class="ro-indicators">
+              <div class="ro-indicator"><span class="ro-label">Политика завершения:</span><span class="ro-value">all</span></div>
+              <div class="ro-indicator"><span class="ro-label">Порядок разделов:</span><span class="ro-value">sequential</span></div>
+            </div>
+
+            <!-- Section 1 with unavailable element -->
+            <div class="section-card-unit" onclick="show('s-section')" role="button" tabindex="0">
+              <div class="section-card-header"><div class="section-card-num">1</div><span class="section-card-title">Основы ИБ</span><span class="state-badge done-pass">Пройден · 85%</span></div>
+              <div class="section-card-body">
+                <div class="sc-row"><span class="sc-label">Страниц перед разделом:</span><div class="page-chips-area"><span class="page-chip type-intro">Введение</span></div></div>
+                <div class="unavail-row">
+                  <span class="unavail-icon">○</span>
+                  <div class="unavail-body">
+                    <span>Страница <code>section-router-result</code> недоступна в шаблоне «Classic»</span>
+                    <span class="unavail-hint">Доступна в: RTK Modern, RTK Corporate</span>
+                  </div>
+                </div>
+                <div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">12 из 20</span></div>
+              </div>
+              <div class="section-card-footer"><div class="sc-threshold"><span>Порог:</span><strong>70%</strong></div><span>→ Детали</span></div>
+            </div>
+
+            <div class="section-card-unit" onclick="show('s-section')" role="button" tabindex="0">
+              <div class="section-card-header"><div class="section-card-num">2</div><span class="section-card-title">Классификация угроз</span><span class="state-badge in-progress">В процессе</span></div>
+              <div class="section-card-body"><div class="sc-row"><span class="sc-label">Вопросов:</span><span class="sc-value">8 из 15</span></div></div>
+              <div class="section-card-footer"><div class="sc-threshold"><span>Порог:</span><strong>65%</strong></div><span>→ Детали</span></div>
+            </div>
+
+            <div class="connector-wrap">
+              <div class="connector-dot"></div><div class="connector-line"></div>
+              <div class="connector-label">completionPolicy = all</div>
+              <div class="connector-line"></div><div class="connector-dot"></div>
+            </div>
+            <div class="final-result-block">
+              <div class="fr-icon"><svg width="18" height="18"><use href="#i-lock"/></svg></div>
+              <div class="fr-body"><div class="fr-title">Финальный результат</div><div class="fr-note">Доступен после выполнения completionPolicy</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="footer-actions">
+          <button class="ou-btn ou-btn--ghost" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--primary" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
 
 <script>
-function show(id) {
-  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
-    el.classList.toggle('active', el.id === id);
-  });
-  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
-    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
-  });
-}
+  /**
+   * @module prd7-structure-router
+   * @description Wireframe: PRD-7 Structure tab — router_by_topics flow mode.
+   * States: s-main, s-section, s-empty, s-loading, s-error, s-readonly,
+   *         s-saved, s-mode-change, s-tpl-fallback, s-tpl-unavail.
+   */
+
+  (function () {
+    var tpl = document.getElementById('tpl-bg-page');
+    if (!tpl) return;
+    document.querySelectorAll('[data-template="tpl-bg-page"]').forEach(function (slot) {
+      slot.appendChild(tpl.content.cloneNode(true));
+    });
+  })();
+
+  function show(id) {
+    document.querySelectorAll('[id^="s-"]').forEach(function (el) {
+      el.classList.toggle('active', el.id === id);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+    });
+    document.body.classList.add('has-active-shell');
+  }
+
+  function showMobile() {
+    document.querySelectorAll('[id^="s-"]').forEach(function (el) { el.classList.remove('active'); });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('onclick') === 'showMobile()');
+    });
+    document.body.classList.remove('has-active-shell');
+  }
+
+  if (document.querySelector('.shell.active')) document.body.classList.add('has-active-shell');
 </script>
+
+<!-- ═══════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент</th>
+        <th>Поле API / условие</th>
+        <th>Примечание</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Состояния wireframe</td>
+        <td><code>showState(btn, stateId)</code></td>
+        <td>Метанавигация переключает только визуальные состояния и не является частью продуктового UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<div class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping</h2>
+  <p class="wf-mapping-sub">
+    Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент является блокером.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент wireframe</th>
+        <th>DS-компонент</th>
+        <th>Используемые токены</th>
+        <th>Примечания</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Метанавигация состояний</td>
+        <td><code>Wireframe utility</code></td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code>, <code>--ou-accent-*</code></td>
+        <td>Не мигрируется в продуктовый UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
 <script>
 (function(){
   var s = document.createElement('script');
@@ -662,5 +1133,253 @@ function show(id) {
   document.head.appendChild(s);
 })();
 </script>
+
+<script>
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
+</script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.drawer-footer')) addMappingRow(rows, 'drawer-footer', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
 </body>
 </html>
