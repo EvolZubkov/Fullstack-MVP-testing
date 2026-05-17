@@ -1,424 +1,1047 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wireframe PRD-7: Basic Section States</title>
-  <link rel="stylesheet" href="prd7-shared.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Wireframe: prd7 — Basic Section Loading & Error States (Состав tab)
+    Этап 3 — Wireframes
+    Файл: docs/wireframes/prd7-section-basic-states.html
+    Состояния: s-loading, s-error, s-partial, s-empty
+    Покрывает: NFR-21, §3.1
+  -->
+  <title>prd7 — Basic Section States</title>
+  <link rel="stylesheet" href="ds/university-rt.css" />
+  <link rel="stylesheet" href="ds/wf-utils.css" />
   <style>
-    .content-area { flex: 1; overflow-y: auto; padding: 24px; }
-    .section-card {
-      border: 1px solid var(--card-border); border-radius: var(--radius);
-      background: var(--card); overflow: hidden; margin-bottom: 16px;
-    }
-    .section-card-header {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 16px; border-bottom: 1px solid var(--card-border);
-      background: var(--accent);
-    }
-    .section-card-title { font-size: 13px; font-weight: 600; flex: 1; }
-    .section-card-body { padding: 20px; }
+    /* Wireframe-specific helpers — not part of product UI */
+    .wf-sprite { display: none; }
 
-    /* Skeleton loader */
-    .skel {
-      border-radius: var(--radius-sm); background: var(--muted);
-      animation: shimmer 1.4s ease-in-out infinite;
+    /* ── Full-viewport shell ──────────────────────────────────────────────── */
+    .wf-state { padding-top: var(--wf-nav-offset, 52px); }
+    .wf-shell {
+      display: flex;
+      height: calc(100vh - 52px);
+      overflow: hidden;
+      background: var(--ou-bg-page);
     }
-    @keyframes shimmer {
+
+    /* ── Sidebar (minimal stub) ───────────────────────────────────────────── */
+    .wf-sidebar {
+      width: 224px; flex-shrink: 0;
+      background: var(--ou-bg-elevated);
+      border-right: 1px solid var(--ou-border-soft);
+      display: flex; flex-direction: column;
+    }
+    .wf-sidebar-header {
+      display: flex; align-items: center; gap: var(--ou-space-3);
+      padding: var(--ou-space-4);
+      border-bottom: 1px solid var(--ou-border-soft);
+    }
+    .wf-logo-box {
+      width: 30px; height: 30px; flex-shrink: 0;
+      background: var(--ou-accent-default); border-radius: var(--ou-radius-m);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--ou-fg-on-accent); font: var(--ou-text-body-s); font-weight: 700;
+    }
+    .wf-sidebar-title { font: var(--ou-text-body-m); font-weight: 600; }
+    .wf-sidebar-nav { flex: 1; padding: var(--ou-space-3); }
+    .wf-sidebar-nav-item {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-3);
+      border-radius: var(--ou-radius-s);
+      font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+    }
+    .wf-sidebar-nav-item--active {
+      background: var(--ou-bg-muted);
+      color: var(--ou-fg-default); font-weight: 600;
+    }
+    .wf-sidebar-footer { padding: var(--ou-space-3) var(--ou-space-4); border-top: 1px solid var(--ou-border-soft); }
+
+    /* ── Main column ──────────────────────────────────────────────────────── */
+    .wf-main-col {
+      flex: 1;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      background: var(--ou-bg-elevated);
+    }
+
+    /* ── Drawer header ────────────────────────────────────────────────────── */
+    .wf-drawer-header {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-3) var(--ou-space-5);
+      border-bottom: 1px solid var(--ou-border-soft);
+      flex-shrink: 0;
+    }
+    .wf-drawer-title {
+      font: var(--ou-text-body-l); font-weight: 700;
+      flex: 1; margin: 0;
+    }
+    .wf-flex-spacer { flex: 1; }
+    .wf-drawer-close {
+      width: 28px; height: 28px; flex-shrink: 0;
+      border: none; background: transparent; color: var(--ou-fg-muted);
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      border-radius: var(--ou-radius-s);
+    }
+    .wf-drawer-close svg { width: 16px; height: 16px; }
+
+    /* ── Tab bar ──────────────────────────────────────────────────────────── */
+    .wf-drawer-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--ou-border-soft);
+      flex-shrink: 0;
+      padding: 0 var(--ou-space-5);
+    }
+    .wf-drawer-tab {
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+      border: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+      background: transparent; cursor: pointer;
+    }
+    .wf-drawer-tab--active {
+      color: var(--ou-accent-default);
+      border-bottom-color: var(--ou-accent-default);
+      font-weight: 500;
+    }
+    .wf-drawer-tab:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Content area ─────────────────────────────────────────────────────── */
+    .wf-content-area {
+      flex: 1; overflow-y: auto;
+      padding: var(--ou-space-5);
+    }
+
+    /* ── Drawer footer ────────────────────────────────────────────────────── */
+    .wf-drawer-footer {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-3) var(--ou-space-5);
+      border-top: 1px solid var(--ou-border-soft);
+      flex-shrink: 0; background: var(--ou-bg-elevated);
+    }
+    .wf-footer-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); flex: 1; }
+
+    /* ── Skeleton loader ──────────────────────────────────────────────────── */
+    @keyframes wf-shimmer {
       0%   { opacity: 1; }
-      50%  { opacity: .45; }
+      50%  { opacity: .35; }
       100% { opacity: 1; }
     }
-    .skel-line { height: 14px; margin-bottom: 10px; }
-    .skel-input { height: 34px; margin-bottom: 16px; border-radius: var(--radius-sm); }
-    .skel-label { height: 11px; width: 80px; margin-bottom: 6px; }
-    .skel-badge { height: 20px; width: 60px; border-radius: 10px; display: inline-block; }
-
-    /* Error state */
-    .error-banner {
-      display: flex; align-items: flex-start; gap: 12px;
-      padding: 14px 20px; background: var(--error-bg);
-      border: 1px solid var(--error-border); border-radius: var(--radius);
-      margin-bottom: 16px;
+    .wf-skel {
+      border-radius: var(--ou-radius-s);
+      background: var(--ou-bg-muted);
+      animation: wf-shimmer 1.4s ease-in-out infinite;
     }
-    .error-banner-icon { flex-shrink: 0; color: var(--destructive); margin-top: 1px; }
-    .error-banner-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
-    .error-banner-desc { font-size: 12px; color: var(--muted-fg); }
-    .retry-btn { margin-top: 8px; font-size: 12px; color: var(--primary); background: none;
-      border: none; cursor: pointer; padding: 0; font-family: inherit;
-      display: inline-flex; align-items: center; gap: 4px; }
-    .retry-btn:hover { text-decoration: underline; }
+    .wf-skel-line  { height: 14px; margin-bottom: var(--ou-space-2); }
+    .wf-skel-label { height: 11px; width: 80px; margin-bottom: var(--ou-space-1); }
+    .wf-skel-input { height: 34px; margin-bottom: var(--ou-space-3); border-radius: var(--ou-radius-s); }
+    .wf-skel-badge { height: 20px; width: 60px; border-radius: 10px; display: inline-block; }
 
-    /* Empty state */
-    .empty-pane {
+    /* ── Section card ─────────────────────────────────────────────────────── */
+    .wf-section-card {
+      border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m);
+      background: var(--ou-bg-elevated);
+      overflow: hidden; margin-bottom: var(--ou-space-4);
+    }
+    .wf-section-card--error { border-color: var(--ou-error-fg); }
+    .wf-section-card-header {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      border-bottom: 1px solid var(--ou-border-soft);
+      background: var(--ou-bg-canvas);
+    }
+    .wf-section-card-header--error {
+      background: var(--ou-error-bg);
+      border-bottom-color: var(--ou-error-border);
+    }
+    .wf-section-card-header--required {
+      background: color-mix(in srgb, var(--ou-accent-default) 6%, var(--ou-bg-canvas));
+      border-bottom-color: var(--ou-accent-default);
+    }
+    .wf-section-card-title { font: var(--ou-text-body-s); font-weight: 600; flex: 1; }
+    .wf-section-card-body { padding: var(--ou-space-4); }
+
+    /* ── Error banner ─────────────────────────────────────────────────────── */
+    .wf-error-banner {
+      display: flex; align-items: flex-start; gap: var(--ou-space-3);
+      padding: var(--ou-space-3) var(--ou-space-4);
+      background: var(--ou-error-bg);
+      border: 1px solid var(--ou-error-border);
+      border-radius: var(--ou-radius-m);
+      margin-bottom: var(--ou-space-4);
+    }
+    .wf-error-banner svg { flex-shrink: 0; margin-top: 1px; color: var(--ou-error-fg); }
+    .wf-error-banner-title { font: var(--ou-text-body-s); font-weight: 600; margin-bottom: var(--ou-space-1); }
+    .wf-error-banner-desc { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+    /* ── Inline validation error ──────────────────────────────────────────── */
+    .wf-field-error {
+      font: var(--ou-text-caption); color: var(--ou-error-fg);
+      display: flex; align-items: center; gap: var(--ou-space-1);
+      margin-top: var(--ou-space-1);
+    }
+    .wf-field-error svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+    /* ── Empty pane ───────────────────────────────────────────────────────── */
+    .wf-empty-pane {
       display: flex; flex-direction: column; align-items: center;
-      justify-content: center; padding: 48px 24px; text-align: center;
+      text-align: center; padding: var(--ou-space-10) var(--ou-space-5);
     }
-    .empty-icon-box {
-      width: 48px; height: 48px; border-radius: var(--radius);
-      border: 1px solid var(--card-border); background: var(--accent);
+    .wf-empty-icon {
+      width: 48px; height: 48px; border-radius: var(--ou-radius-m);
+      border: 1px solid var(--ou-border-soft);
+      background: var(--ou-bg-canvas);
       display: flex; align-items: center; justify-content: center;
-      margin-bottom: 14px; color: var(--muted-fg);
+      color: var(--ou-fg-muted); margin-bottom: var(--ou-space-3);
     }
-    .empty-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-    .empty-desc { font-size: 13px; color: var(--muted-fg); max-width: 300px; line-height: 1.6; }
+    .wf-empty-icon svg { width: 22px; height: 22px; }
+    .wf-empty-title { font: var(--ou-text-body-m); font-weight: 600; margin-bottom: var(--ou-space-1); }
+    .wf-empty-desc {
+      font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+      max-width: 300px; line-height: 1.6;
+    }
 
-    /* Content placeholders for loaded state */
-    .field-group { margin-bottom: 16px; }
-    .field-label { font-size: 13px; font-weight: 500; margin-bottom: 5px; }
-    .field-hint { font-size: 12px; color: var(--muted-fg); margin-top: 4px; }
-    .skeleton-drawer { display: flex; flex-direction: column; height: 100vh; }
-    .skeleton-header {
-      display: flex; align-items: center; gap: 10px; padding: 14px 20px;
-      border-bottom: 1px solid var(--border);
+    /* ── Field group ──────────────────────────────────────────────────────── */
+    .wf-field-group { margin-bottom: var(--ou-space-3); }
+    .wf-field-label { font: var(--ou-text-body-s); font-weight: 500; margin-bottom: var(--ou-space-1); }
+    .wf-field-required { color: var(--ou-error-fg); margin-left: 2px; }
+    .wf-input-error {
+      border-color: var(--ou-error-fg) !important;
     }
-    .skeleton-tabs {
-      display: flex; gap: 0; border-bottom: 1px solid var(--border);
-      padding: 0 20px;
+
+    /* ── Retry link button ────────────────────────────────────────────────── */
+    .wf-retry-btn {
+      font: var(--ou-text-caption); color: var(--ou-accent-default);
+      background: none; border: none; cursor: pointer;
+      padding: 0; font-family: inherit; text-decoration: underline;
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      margin-top: var(--ou-space-2);
     }
-    .skeleton-tab { padding: 10px 14px; }
-    .skeleton-footer {
-      display: flex; align-items: center; justify-content: flex-end; gap: 8px;
-      padding: 12px 20px; border-top: 1px solid var(--border); margin-top: auto;
+    .wf-retry-btn svg { width: 12px; height: 12px; }
+
+    /* ── Section card title modifiers ────────────────────────────────────── */
+    .wf-section-card-title--error  { color: var(--ou-error-fg); }
+    .wf-section-card-title--accent { color: var(--ou-accent-default); }
+
+    /* ── Section card body flush (no padding) ─────────────────────────────── */
+    .wf-section-card-body--flush { padding: 0; }
+
+    /* ── Partial-error inline row ─────────────────────────────────────────── */
+    .wf-section-load-error-row {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+    }
+    .wf-icon-error { color: var(--ou-error-fg); flex-shrink: 0; }
+
+    /* ── Retry btn inline variant (no top margin) ─────────────────────────── */
+    .wf-retry-btn--inline { margin-top: 0; }
+
+    /* ── Drawer title placeholder (italic muted, new test) ────────────────── */
+    .wf-drawer-title--placeholder { color: var(--ou-fg-muted); font-style: italic; }
+
+    /* ── Form inputs (replaces inline style blocks) ───────────────────────── */
+    .wf-text-input {
+      font: var(--ou-text-body-s); font-family: inherit;
+      padding: var(--ou-space-1) var(--ou-space-2);
+      border-radius: var(--ou-radius-s);
+      border: 1px solid var(--ou-border-input);
+      max-width: 480px; display: block;
+      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+    }
+    .wf-text-input--error { border-color: var(--ou-error-fg); }
+    .wf-textarea {
+      font: var(--ou-text-body-s); font-family: inherit;
+      padding: var(--ou-space-1) var(--ou-space-2);
+      border-radius: var(--ou-radius-s);
+      border: 1px solid var(--ou-border-input);
+      max-width: 480px; height: 64px; resize: vertical; display: block;
+      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+    }
+
+    /* ── Spacing utility ──────────────────────────────────────────────────── */
+    .wf-mt-4 { margin-top: var(--ou-space-4); }
+
+    /* ── Button extensions ────────────────────────────────────────────────── */
+    .ou-button--ghost {
+      background: transparent; color: var(--ou-fg-default);
+      border: 1px solid var(--ou-border-soft);
+    }
+    .ou-button--ghost:hover { background: var(--ou-bg-muted); }
+    .ou-button--sm { font: var(--ou-text-caption); padding: var(--ou-space-1) var(--ou-space-3); }
+  </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: 1px solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: 1px solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: 1px;
+      height: 20px;
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, 52px);
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, 52px));
+      max-height: calc(100vh - var(--wf-nav-offset, 52px));
     }
   </style>
 </head>
-<body>
+<body class="ou ou--light ou--normal">
 
-<nav class="wf-nav" aria-label="Wireframe state switcher">
-  <span class="wf-label">Basic section states:</span>
-  <button class="wf-btn active" type="button" onclick="show('s-loading')">Загрузка</button>
-  <button class="wf-btn"        type="button" onclick="show('s-error')">Ошибка загрузки</button>
-  <button class="wf-btn"        type="button" onclick="show('s-partial')">Частичная ошибка</button>
-  <button class="wf-btn"        type="button" onclick="show('s-empty')">Новый тест</button>
-  <a class="wf-link" href="prd7-section-basic.html">Состав (loaded) &rarr;</a>
-</nav>
-
-<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+  </symbol>
   <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <circle cx="12" cy="12" r="10"/>
     <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
   </symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
-    <path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+    <path d="M21 3v5h-5"/>
+    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
     <path d="M8 16H3v5"/>
   </symbol>
   <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <rect width="8" height="4" x="8" y="2" rx="1"/>
     <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
   </symbol>
-  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-  </symbol>
 </svg>
 
-<!-- ═══ STATE: Loading ════════════════════════════════════════════════════ -->
-<div id="s-loading" class="shell active">
-  <aside class="sidebar">
-    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
-    <nav class="sidebar-nav">
-      <div class="nav-item active">Тесты</div>
-    </nav>
-    <div class="sidebar-footer"></div>
-  </aside>
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">prd7 — Состав (состояния загрузки):</span>
+  <button type="button" class="ou-button ou-button--primary" onclick="showState(this, 's-loading')">s-loading</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-error')">s-error</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-partial')">s-partial</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-empty')">s-empty</button>
+  <span class="wf-nav-sep"></span>
+  <button type="button" class="ou-button ou-button--secondary" onclick="toggleTheme()">Dark</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="toggleDensity()">Compact</button>
+</nav>
 
-  <div class="main" style="flex-direction:column;">
-    <!-- Drawer skeleton -->
-    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg);">
-      <!-- Header skeleton -->
-      <div class="skeleton-header">
-        <div class="skel skel-line" style="width:200px;height:16px;margin:0;"></div>
-        <div class="skel skel-badge" style="margin:0;"></div>
-        <div style="flex:1;"></div>
-        <div class="skel" style="width:28px;height:28px;border-radius:var(--radius-sm);"></div>
+<!-- ═══ STATE: s-loading — skeleton loader ═══════════════════════════════════ -->
+<section id="wf-s-loading" class="wf-state active" aria-label="Состав — загрузка">
+  <div class="wf-shell">
+    <aside class="wf-sidebar" aria-label="Боковая навигация">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box" aria-hidden="true">TB</div>
+        <span class="wf-sidebar-title">Test Builder</span>
       </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-sidebar-nav-item wf-sidebar-nav-item--active" aria-current="page">Тесты</div>
+      </nav>
+      <div class="wf-sidebar-footer"></div>
+    </aside>
+
+    <div class="wf-main-col" aria-busy="true" aria-label="Загрузка данных теста">
+
+      <!-- Header skeleton -->
+      <header class="wf-drawer-header">
+        <div class="wf-skel wf-skel-line" style="width:200px; height:16px; margin:0;"></div>
+        <div class="wf-skel wf-skel-badge" style="margin:0;"></div>
+        <div class="wf-flex-spacer"></div>
+        <div class="wf-skel" style="width:28px; height:28px; border-radius: var(--ou-radius-s);"></div>
+      </header>
 
       <!-- Tabs skeleton -->
-      <div class="skeleton-tabs">
-        <div class="skeleton-tab"><div class="skel skel-line" style="width:52px;height:13px;margin:0;"></div></div>
-        <div class="skeleton-tab"><div class="skel skel-line" style="width:72px;height:13px;margin:0;"></div></div>
-        <div class="skeleton-tab"><div class="skel skel-line" style="width:68px;height:13px;margin:0;"></div></div>
-        <div class="skeleton-tab"><div class="skel skel-line" style="width:62px;height:13px;margin:0;"></div></div>
+      <div class="wf-drawer-tabs" role="tablist" aria-label="Вкладки редактора (загрузка)">
+        <div style="padding: var(--ou-space-2) var(--ou-space-4);">
+          <div class="wf-skel wf-skel-line" style="width:52px; height:13px; margin:0;"></div>
+        </div>
+        <div style="padding: var(--ou-space-2) var(--ou-space-4);">
+          <div class="wf-skel wf-skel-line" style="width:72px; height:13px; margin:0;"></div>
+        </div>
+        <div style="padding: var(--ou-space-2) var(--ou-space-4);">
+          <div class="wf-skel wf-skel-line" style="width:68px; height:13px; margin:0;"></div>
+        </div>
+        <div style="padding: var(--ou-space-2) var(--ou-space-4);">
+          <div class="wf-skel wf-skel-line" style="width:62px; height:13px; margin:0;"></div>
+        </div>
       </div>
 
       <!-- Content skeleton -->
-      <div style="flex:1;overflow:auto;padding:24px;">
+      <div class="wf-content-area">
         <!-- Section 1 skeleton -->
-        <div class="section-card" style="margin-bottom:16px;">
-          <div class="section-card-header">
-            <div class="skel skel-line" style="width:140px;height:13px;margin:0;"></div>
+        <div class="wf-section-card">
+          <div class="wf-section-card-header">
+            <div class="wf-skel wf-skel-line" style="width:140px; height:13px; margin:0;"></div>
           </div>
-          <div class="section-card-body">
-            <div class="skel skel-label"></div>
-            <div class="skel skel-input"></div>
-            <div class="skel skel-label"></div>
-            <div class="skel skel-input" style="height:64px;"></div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div class="wf-section-card-body">
+            <div class="wf-skel wf-skel-label"></div>
+            <div class="wf-skel wf-skel-input"></div>
+            <div class="wf-skel wf-skel-label"></div>
+            <div class="wf-skel wf-skel-input" style="height:64px;"></div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap: var(--ou-space-4);">
               <div>
-                <div class="skel skel-label"></div>
-                <div class="skel skel-input"></div>
+                <div class="wf-skel wf-skel-label"></div>
+                <div class="wf-skel wf-skel-input"></div>
               </div>
               <div>
-                <div class="skel skel-label"></div>
-                <div class="skel skel-input"></div>
+                <div class="wf-skel wf-skel-label"></div>
+                <div class="wf-skel wf-skel-input"></div>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Section 2 skeleton -->
-        <div class="section-card">
-          <div class="section-card-header">
-            <div class="skel skel-line" style="width:110px;height:13px;margin:0;"></div>
+        <div class="wf-section-card">
+          <div class="wf-section-card-header">
+            <div class="wf-skel wf-skel-line" style="width:110px; height:13px; margin:0;"></div>
           </div>
-          <div class="section-card-body">
-            <div class="skel skel-label"></div>
-            <div class="skel skel-input"></div>
-            <div class="skel skel-label"></div>
-            <div class="skel skel-input"></div>
+          <div class="wf-section-card-body">
+            <div class="wf-skel wf-skel-label"></div>
+            <div class="wf-skel wf-skel-input"></div>
+            <div class="wf-skel wf-skel-label"></div>
+            <div class="wf-skel wf-skel-input"></div>
           </div>
         </div>
       </div>
 
       <!-- Footer skeleton -->
-      <div class="skeleton-footer">
-        <div class="skel" style="width:120px;height:34px;border-radius:var(--radius-sm);"></div>
-        <div class="skel" style="width:80px;height:34px;border-radius:var(--radius-sm);"></div>
-      </div>
+      <footer class="wf-drawer-footer">
+        <div class="wf-flex-spacer"></div>
+        <div class="wf-skel" style="width:120px; height:34px; border-radius: var(--ou-radius-s);"></div>
+        <div class="wf-skel" style="width:80px; height:34px; border-radius: var(--ou-radius-s);"></div>
+      </footer>
     </div>
   </div>
-</div>
+</section>
 
-<!-- ═══ STATE: Ошибка загрузки ═══════════════════════════════════════════ -->
-<div id="s-error" class="shell">
-  <aside class="sidebar">
-    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
-    <nav class="sidebar-nav">
-      <div class="nav-item active">Тесты</div>
-    </nav>
-    <div class="sidebar-footer"></div>
-  </aside>
-
-  <div class="main" style="flex-direction:column;">
-    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg);">
-      <div class="skeleton-header">
-        <div style="font-size:15px;font-weight:600;">Основы информационной безопасности</div>
-        <span class="badge badge-secondary">Черновик</span>
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;">&#215;</button>
+<!-- ═══ STATE: s-error — полная ошибка загрузки ══════════════════════════════ -->
+<section id="wf-s-error" class="wf-state" aria-label="Состав — ошибка загрузки">
+  <div class="wf-shell">
+    <aside class="wf-sidebar" aria-label="Боковая навигация">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box" aria-hidden="true">TB</div>
+        <span class="wf-sidebar-title">Test Builder</span>
       </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-sidebar-nav-item wf-sidebar-nav-item--active" aria-current="page">Тесты</div>
+      </nav>
+      <div class="wf-sidebar-footer"></div>
+    </aside>
 
-      <div class="skeleton-tabs">
-        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--primary);border-bottom:2px solid var(--primary);cursor:pointer;font-family:inherit;">Состав</button>
-        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;">Настройки</button>
-        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;">Оформление</button>
-        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;">Структура</button>
-      </div>
+    <div class="wf-main-col">
+      <header class="wf-drawer-header">
+        <h1 class="wf-drawer-title">Основы информационной безопасности</h1>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <div class="wf-flex-spacer"></div>
+        <button type="button" class="wf-drawer-close" aria-label="Закрыть редактор">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x"/></svg>
+        </button>
+      </header>
 
-      <div style="flex:1;overflow:auto;padding:24px;">
-        <div class="error-banner" role="alert" aria-live="assertive">
-          <div class="error-banner-icon">
-            <svg width="18" height="18"><use href="#i-x-circle"/></svg>
-          </div>
+      <nav class="wf-drawer-tabs" role="tablist">
+        <button type="button" class="wf-drawer-tab wf-drawer-tab--active" role="tab" aria-selected="true">Состав</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Настройки</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Оформление</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Структура</button>
+      </nav>
+
+      <div class="wf-content-area">
+        <div class="wf-error-banner" role="alert" aria-live="assertive">
+          <svg width="18" height="18"><use href="#i-x-circle"/></svg>
           <div>
-            <div class="error-banner-title">Не удалось загрузить данные теста</div>
-            <div class="error-banner-desc">Ошибка соединения с сервером. Проверьте подключение и попробуйте ещё раз.</div>
-            <button class="retry-btn" type="button" aria-label="Повторить загрузку">
-              <svg width="12" height="12"><use href="#i-refresh"/></svg>
+            <div class="wf-error-banner-title">Не удалось загрузить данные теста</div>
+            <div class="wf-error-banner-desc">
+              Ошибка соединения с сервером. Проверьте подключение и попробуйте ещё раз.
+            </div>
+            <button type="button" class="wf-retry-btn" aria-label="Повторить загрузку">
+              <svg><use href="#i-refresh"/></svg>
               Повторить
             </button>
           </div>
         </div>
       </div>
 
-      <div class="skeleton-footer">
-        <button class="btn btn-ghost btn-sm" type="button">Закрыть</button>
-        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
-      </div>
+      <footer class="wf-drawer-footer">
+        <div class="wf-flex-spacer"></div>
+        <button type="button" class="ou-button ou-button--ghost ou-button--sm">Закрыть</button>
+        <button type="button" class="ou-button ou-button--primary" disabled aria-disabled="true">Сохранить</button>
+      </footer>
     </div>
   </div>
-</div>
+</section>
 
-<!-- ═══ STATE: Частичная ошибка (один раздел) ════════════════════════════ -->
-<div id="s-partial" class="shell">
-  <aside class="sidebar">
-    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
-    <nav class="sidebar-nav">
-      <div class="nav-item active">Тесты</div>
-    </nav>
-    <div class="sidebar-footer"></div>
-  </aside>
-
-  <div class="main" style="flex-direction:column;">
-    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg);">
-      <div class="skeleton-header">
-        <div style="font-size:15px;font-weight:600;">Основы информационной безопасности</div>
-        <span class="badge badge-secondary">Черновик</span>
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;">&#215;</button>
+<!-- ═══ STATE: s-partial — частичная ошибка (одна секция) ═══════════════════ -->
+<section id="wf-s-partial" class="wf-state" aria-label="Состав — частичная ошибка загрузки">
+  <div class="wf-shell">
+    <aside class="wf-sidebar" aria-label="Боковая навигация">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box" aria-hidden="true">TB</div>
+        <span class="wf-sidebar-title">Test Builder</span>
       </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-sidebar-nav-item wf-sidebar-nav-item--active" aria-current="page">Тесты</div>
+      </nav>
+      <div class="wf-sidebar-footer"></div>
+    </aside>
 
-      <div class="skeleton-tabs">
-        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--primary);border-bottom:2px solid var(--primary);cursor:pointer;font-family:inherit;">Состав</button>
-        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;">Настройки</button>
-        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;">Оформление</button>
-        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;">Структура</button>
-      </div>
+    <div class="wf-main-col">
+      <header class="wf-drawer-header">
+        <h1 class="wf-drawer-title">Основы информационной безопасности</h1>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <div class="wf-flex-spacer"></div>
+        <button type="button" class="wf-drawer-close" aria-label="Закрыть редактор">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x"/></svg>
+        </button>
+      </header>
 
-      <div style="flex:1;overflow:auto;padding:24px;">
-        <!-- Normal section loaded OK -->
-        <div class="section-card" style="margin-bottom:16px;">
-          <div class="section-card-header">
-            <div class="section-card-title">Основные настройки</div>
-            <span class="badge badge-outline">Сохранено</span>
+      <nav class="wf-drawer-tabs" role="tablist">
+        <button type="button" class="wf-drawer-tab wf-drawer-tab--active" role="tab" aria-selected="true">Состав</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Настройки</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Оформление</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false">Структура</button>
+      </nav>
+
+      <div class="wf-content-area">
+
+        <!-- Normal section — loaded OK -->
+        <div class="wf-section-card">
+          <div class="wf-section-card-header">
+            <div class="wf-section-card-title">Основные настройки</div>
+            <span class="ou-tag ou-tag--success" style="font-size:11px;">Сохранено</span>
           </div>
-          <div class="section-card-body">
-            <div class="field-group">
-              <div class="field-label">Название</div>
-              <input type="text" value="Основы информационной безопасности" style="max-width:480px;">
+          <div class="wf-section-card-body">
+            <div class="wf-field-group">
+              <label class="wf-field-label">Название</label>
+              <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Основы информационной безопасности"
+                     style="font: var(--ou-text-body-s); font-family:inherit; padding: var(--ou-space-1) var(--ou-space-2); border-radius: var(--ou-radius-s); border: 1px solid var(--ou-border-input); max-width:480px; display:block; background: var(--ou-bg-elevated); color: var(--ou-fg-default);" /></div></div>
             </div>
           </div>
         </div>
 
         <!-- Section with load error -->
-        <div class="section-card" style="border-color:var(--error-border);">
-          <div class="section-card-header" style="background:var(--error-bg);border-bottom-color:var(--error-border);">
-            <div class="section-card-title">Темы и обратная связь</div>
-            <span class="status-icon error" aria-hidden="true">
-              <svg width="14" height="14"><use href="#i-x-circle"/></svg>
-            </span>
-            <span class="badge badge-error" aria-label="Статус: ошибка загрузки">Ошибка загрузки</span>
+        <div class="wf-section-card wf-section-card--error">
+          <div class="wf-section-card-header wf-section-card-header--error">
+            <div class="wf-section-card-title wf-section-card-title--error">Темы и обратная связь</div>
+            <svg width="14" height="14" aria-hidden="true" class="wf-icon-error">
+              <use href="#i-x-circle"/>
+            </svg>
+            <span class="ou-tag ou-tag--error" aria-label="Статус: ошибка загрузки">Ошибка загрузки</span>
           </div>
-          <div class="section-card-body">
-            <div style="display:flex;align-items:center;gap:10px;color:var(--muted-fg);font-size:13px;">
-              <svg width="14" height="14"><use href="#i-x-circle"/></svg>
+          <div class="wf-section-card-body">
+            <div class="wf-section-load-error-row">
+              <svg width="14" height="14" class="wf-icon-error"><use href="#i-x-circle"/></svg>
               Не удалось загрузить список тем.
-              <button class="retry-btn" type="button">
-                <svg width="12" height="12"><use href="#i-refresh"/></svg>
+              <button type="button" class="wf-retry-btn wf-retry-btn--inline">
+                <svg><use href="#i-refresh"/></svg>
                 Повторить
               </button>
             </div>
           </div>
         </div>
+
       </div>
 
-      <div class="skeleton-footer">
-        <button class="btn btn-ghost btn-sm" type="button">Закрыть</button>
-        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
-      </div>
+      <footer class="wf-drawer-footer">
+        <div class="wf-flex-spacer"></div>
+        <button type="button" class="ou-button ou-button--ghost ou-button--sm">Закрыть</button>
+        <button type="button" class="ou-button ou-button--primary" disabled aria-disabled="true">Сохранить</button>
+      </footer>
     </div>
   </div>
-</div>
+</section>
 
-<!-- ═══ STATE: Новый тест (empty) ════════════════════════════════════════ -->
-<div id="s-empty" class="shell">
-  <aside class="sidebar">
-    <div class="sidebar-header"><div class="logo-box">TB</div><div class="sidebar-title">Test Builder</div></div>
-    <nav class="sidebar-nav">
-      <div class="nav-item active">Тесты</div>
-    </nav>
-    <div class="sidebar-footer"></div>
-  </aside>
-
-  <div class="main" style="flex-direction:column;">
-    <div style="display:flex;flex-direction:column;height:100%;background:var(--bg);">
-      <div class="skeleton-header">
-        <div style="font-size:15px;font-weight:600;color:var(--muted-fg);font-style:italic;">Новый тест</div>
-        <span class="badge badge-secondary">Черновик</span>
-        <div style="flex:1;"></div>
-        <button class="btn btn-ghost btn-sm" type="button" style="width:28px;padding:0;">&#215;</button>
+<!-- ═══ STATE: s-empty — новый тест (пустой) ═════════════════════════════════ -->
+<section id="wf-s-empty" class="wf-state" aria-label="Состав — новый тест">
+  <div class="wf-shell">
+    <aside class="wf-sidebar" aria-label="Боковая навигация">
+      <div class="wf-sidebar-header">
+        <div class="wf-logo-box" aria-hidden="true">TB</div>
+        <span class="wf-sidebar-title">Test Builder</span>
       </div>
+      <nav class="wf-sidebar-nav">
+        <div class="wf-sidebar-nav-item wf-sidebar-nav-item--active" aria-current="page">Тесты</div>
+      </nav>
+      <div class="wf-sidebar-footer"></div>
+    </aside>
 
-      <div class="skeleton-tabs">
-        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--primary);border-bottom:2px solid var(--primary);cursor:pointer;font-family:inherit;">Состав</button>
-        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;" disabled>Настройки</button>
-        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;" disabled>Оформление</button>
-        <button style="padding:10px 14px;border:none;background:none;font-size:13px;color:var(--muted-fg);cursor:pointer;font-family:inherit;" disabled>Структура</button>
-      </div>
+    <div class="wf-main-col">
+      <header class="wf-drawer-header">
+        <h1 class="wf-drawer-title wf-drawer-title--placeholder">Новый тест</h1>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <div class="wf-flex-spacer"></div>
+        <button type="button" class="wf-drawer-close" aria-label="Закрыть редактор">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-x"/></svg>
+        </button>
+      </header>
 
-      <div style="flex:1;overflow:auto;padding:24px;">
-        <!-- Basic info (empty) -->
-        <div class="section-card" style="margin-bottom:16px;">
-          <div class="section-card-header" style="border-color:hsl(217 91% 80%);background:hsl(217 91% 98%);">
-            <div class="section-card-title">Основные настройки</div>
-            <span class="status-dot dirty" aria-hidden="true" style="margin-right:4px;"></span>
-            <span class="badge badge-outline" style="color:var(--primary);">Требует заполнения</span>
+      <nav class="wf-drawer-tabs" role="tablist">
+        <button type="button" class="wf-drawer-tab wf-drawer-tab--active" role="tab" aria-selected="true">Состав</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false" disabled
+                title="Доступно после сохранения основных данных">Настройки</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false" disabled
+                title="Доступно после сохранения основных данных">Оформление</button>
+        <button type="button" class="wf-drawer-tab" role="tab" aria-selected="false" disabled
+                title="Доступно после сохранения основных данных">Структура</button>
+      </nav>
+
+      <div class="wf-content-area">
+
+        <!-- Basic info — empty, required field invalid -->
+        <div class="wf-section-card">
+          <div class="wf-section-card-header wf-section-card-header--required">
+            <div class="wf-section-card-title wf-section-card-title--accent">Основные настройки</div>
+            <span class="ou-tag ou-tag--warning">Требует заполнения</span>
           </div>
-          <div class="section-card-body">
-            <div class="field-group">
-              <div class="field-label">Название <span style="color:var(--destructive);">*</span></div>
-              <input type="text" placeholder="Введите название теста..."
-                     style="max-width:480px;border-color:var(--destructive);"
-                     aria-invalid="true" aria-describedby="err-title-empty">
-              <div style="font-size:12px;color:var(--destructive);margin-top:4px;display:flex;align-items:center;gap:4px;"
-                   id="err-title-empty" role="alert">
-                <svg width="12" height="12"><use href="#i-x-circle"/></svg>
+          <div class="wf-section-card-body">
+
+            <div class="wf-field-group">
+              <label class="wf-field-label" for="bs-empty-title">
+                Название<span class="wf-field-required" aria-hidden="true">*</span>
+              </label>
+              <input id="bs-empty-title" type="text"
+                     placeholder="Введите название теста..."
+                     class="wf-text-input wf-text-input--error"
+                     aria-required="true" aria-invalid="true"
+                     aria-describedby="bs-empty-title-err" />
+              <div id="bs-empty-title-err" class="wf-field-error" role="alert">
+                <svg><use href="#i-x-circle"/></svg>
                 Поле обязательно для заполнения
               </div>
             </div>
-            <div class="field-group">
-              <div class="field-label">Описание</div>
-              <textarea placeholder="Краткое описание теста..." style="max-width:480px;height:64px;resize:vertical;"></textarea>
+
+            <div class="wf-field-group">
+              <label class="wf-field-label" for="bs-empty-desc">Описание</label>
+              <textarea id="bs-empty-desc" placeholder="Краткое описание теста..."
+                        class="wf-textarea"></textarea>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Topics — empty state -->
+        <div class="wf-section-card">
+          <div class="wf-section-card-header">
+            <div class="wf-section-card-title">Темы</div>
+          </div>
+          <div class="wf-section-card-body wf-section-card-body--flush">
+            <div class="wf-empty-pane">
+              <div class="wf-empty-icon" aria-hidden="true">
+                <svg><use href="#i-clipboard"/></svg>
+              </div>
+              <div class="wf-empty-title">Темы не добавлены</div>
+              <p class="wf-empty-desc">
+                Добавьте хотя бы одну тему, чтобы продолжить настройку теста.
+              </p>
+              <button type="button" class="ou-button ou-button--primary wf-mt-4">
+                Добавить тему
+              </button>
             </div>
           </div>
         </div>
 
-        <!-- Topics — empty -->
-        <div class="section-card">
-          <div class="section-card-header">
-            <div class="section-card-title">Темы</div>
-          </div>
-          <div class="empty-pane">
-            <div class="empty-icon-box" aria-hidden="true">
-              <svg width="22" height="22"><use href="#i-clipboard"/></svg>
-            </div>
-            <div class="empty-title">Темы не добавлены</div>
-            <div class="empty-desc">Добавьте хотя бы одну тему, чтобы продолжить настройку теста.</div>
-            <button class="btn btn-primary" type="button" style="margin-top:16px;">Добавить тему</button>
-          </div>
-        </div>
       </div>
 
-      <div class="skeleton-footer">
-        <button class="btn btn-ghost btn-sm" type="button">Закрыть</button>
-        <button class="btn btn-primary" type="button" disabled aria-disabled="true">Сохранить</button>
-      </div>
+      <footer class="wf-drawer-footer">
+        <div class="wf-flex-spacer"></div>
+        <button type="button" class="ou-button ou-button--ghost ou-button--sm">Закрыть</button>
+        <button type="button" class="ou-button ou-button--primary" disabled aria-disabled="true">Сохранить</button>
+      </footer>
     </div>
   </div>
-</div>
+</section>
 
-<section class="acceptance" aria-label="Acceptance">
-  <h2>Acceptance -- PRD-7 покрытие</h2>
-    <table class="acceptance-table">
+<section class="wf-acceptance" aria-label="Acceptance criteria">
+  <h2>Acceptance — PRD-7 §3.1, NFR-21 покрытие</h2>
+  <table class="wf-acceptance-table">
     <thead><tr><th>Код</th><th>Описание</th></tr></thead>
     <tbody>
-      <tr><td class="no-code">—</td><td>Состояние загрузки: skeleton-placeholder со shimmer-анимацией для header, вкладок, секций и footer. Кнопка "Сохранить" disabled во время загрузки.</td></tr>
-      <tr><td class="no-code">—</td><td>Состояние полной ошибки: error-banner с <code>role="alert"</code>, кнопка "Повторить" для повторного запроса. Кнопка "Сохранить" disabled.</td></tr>
-      <tr><td class="no-code">—</td><td>Состояние частичной ошибки: нормальные секции отображаются, секция с ошибкой показывает error-заголовок + кнопку "Повторить" внутри секции.</td></tr>
-      <tr><td class="no-code">—</td><td>Состояние нового теста: поле "Название" пустое с inline-ошибкой; раздел "Темы" показывает empty-state с призывом добавить тему; вкладки кроме "Состав" disabled до сохранения основных данных.</td></tr>
-      <tr><td>NFR-21</td><td>Error-banner имеет <code>role="alert"</code> и <code>aria-live="assertive"</code>; поле с ошибкой имеет <code>aria-invalid</code> и <code>aria-describedby</code>.</td></tr>
+      <tr><td>—</td><td>s-loading: skeleton-placeholder со shimmer-анимацией для header, вкладок, секций и footer. Кнопка «Сохранить» disabled; <code>aria-busy="true"</code> на main-col.</td></tr>
+      <tr><td>—</td><td>s-error: error-banner с <code>role="alert"</code> и <code>aria-live="assertive"</code>, кнопка «Повторить». Кнопка «Сохранить» disabled.</td></tr>
+      <tr><td>—</td><td>s-partial: нормальные секции отображаются, секция с ошибкой показывает error-заголовок и кнопку «Повторить» внутри секции. Кнопка «Сохранить» disabled.</td></tr>
+      <tr><td>§3.1</td><td>s-empty: поле «Название» пустое с <code>aria-invalid</code> и <code>aria-describedby</code> на inline-ошибке. Раздел «Темы» показывает empty-state. Вкладки кроме «Состав» disabled.</td></tr>
+      <tr><td>NFR-21</td><td>Error-banner: <code>role="alert"</code>, <code>aria-live="assertive"</code>. Поле с ошибкой: <code>aria-invalid</code>, <code>aria-describedby</code>. Обязательное поле: <code>aria-required="true"</code>.</td></tr>
     </tbody>
   </table>
 </section>
 
 <script>
-function show(id) {
-  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
-    el.classList.toggle('active', el.id === id);
+/**
+ * @param {HTMLElement} btn - Triggered button element.
+ * @param {string} id - State section ID without "wf-" prefix.
+ */
+function showState(btn, id) {
+  document.querySelectorAll('.wf-state').forEach(function (el) {
+    el.classList.toggle('active', el.id === 'wf-' + id);
   });
-  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
-    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  btn.closest('.wf-nav').querySelectorAll('.ou-button').forEach(function (b) {
+    var isActive = b === btn;
+    b.classList.toggle('ou-button--primary', isActive);
+    b.classList.toggle('ou-button--secondary', !isActive);
   });
 }
+function toggleTheme() {
+  document.body.classList.toggle('ou--dark');
+  document.body.classList.toggle('ou--light');
+}
+function toggleDensity() {
+  document.body.classList.toggle('ou--compact');
+  document.body.classList.toggle('ou--normal');
+}
 </script>
+
+<!-- ═══════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент</th>
+        <th>Поле API / условие</th>
+        <th>Примечание</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Состояния wireframe</td>
+        <td><code>showState(btn, stateId)</code></td>
+        <td>Метанавигация переключает только визуальные состояния и не является частью продуктового UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<div class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping</h2>
+  <p class="wf-mapping-sub">
+    Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент является блокером.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент wireframe</th>
+        <th>DS-компонент</th>
+        <th>Используемые токены</th>
+        <th>Примечания</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Метанавигация состояний</td>
+        <td><code>Wireframe utility</code></td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code>, <code>--ou-accent-*</code></td>
+        <td>Не мигрируется в продуктовый UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
 <script>
-(function(){
+(function () {
   var s = document.createElement('script');
-  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  s.src = 'wf-links.js';
   document.head.appendChild(s);
-})();
+}());
 </script>
+
+<script>
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
+</script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.drawer-footer')) addMappingRow(rows, 'drawer-footer', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
 </body>
 </html>

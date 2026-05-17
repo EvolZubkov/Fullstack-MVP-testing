@@ -1,209 +1,324 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wireframe PRD-7: Feedback Editor</title>
-  <link rel="stylesheet" href="prd7-shared.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Wireframe: prd7 — Feedback Editor Panel (component-level)
+    Этап 3 — Wireframes
+    Файл: docs/wireframes/prd7-section-basic-feedback-editor.html
+    Состояния: s-richtext, s-plain, s-html, s-empty, s-topic
+    Покрывает: FR-36, NFR-21
+  -->
+  <title>prd7 — Feedback Editor</title>
+  <link rel="stylesheet" href="ds/university-rt.css" />
+  <link rel="stylesheet" href="ds/wf-utils.css" />
   <style>
-    /* Layout helpers */
-    .svg-sprite { display: none; }
-    .state-bg   { background: hsl(0 0% 90%); padding: 24px; }
-    .state-wrap { max-width: 720px; margin: 0 auto; }
-    .state-ctx  { font-size: 12px; color: var(--muted-fg); margin-bottom: 12px; }
+    /* Wireframe-specific helpers — not part of product UI */
+    .wf-sprite { display: none; }
 
-    /* Drawer shell (narrow — just content pane context) */
-    .content-area  { flex: 1; overflow-y: auto; padding: 24px; max-width: 800px; }
-    .section-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
-    .section-sub   { font-size: 13px; color: var(--muted-fg); margin-bottom: 20px; }
+    /* ── Component-level wireframe background ─────────────────────────────── */
+    .wf-state {
+      padding-top: var(--wf-nav-offset, 52px);
+      min-height: 100vh;
+      background: var(--ou-bg-page);
+    }
+    .wf-state-bg {
+      background: var(--ou-bg-canvas);
+      padding: var(--ou-space-6);
+    }
+    .wf-state-wrap { max-width: 760px; margin: 0 auto; }
+    .wf-state-ctx {
+      font: var(--ou-text-caption); color: var(--ou-fg-muted);
+      margin-bottom: var(--ou-space-3);
+      padding: var(--ou-space-2) var(--ou-space-3);
+      background: var(--ou-bg-elevated);
+      border-radius: var(--ou-radius-s);
+      border-left: 3px solid var(--ou-accent-default);
+    }
 
-    /* Feedback editor panel */
-    .feedback-panel {
-      border: 1px solid var(--card-border); border-radius: var(--radius);
-      background: var(--card); overflow: hidden;
+    /* ── Feedback panel container ─────────────────────────────────────────── */
+    .wf-feedback-panel {
+      border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m);
+      background: var(--ou-bg-elevated);
+      overflow: hidden;
     }
-    .feedback-panel-header {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 14px; border-bottom: 1px solid var(--card-border);
-      background: var(--accent);
+    .wf-feedback-panel-header {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      border-bottom: 1px solid var(--ou-border-soft);
+      background: var(--ou-bg-canvas);
     }
-    .feedback-panel-title { font-size: 13px; font-weight: 600; flex: 1; }
-    .badge-sm { font-size: 11px; }
-    .format-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 12px 14px; border-bottom: 1px solid var(--card-border);
+    .wf-feedback-panel-title { font: var(--ou-text-body-s); font-weight: 600; flex: 1; }
+
+    /* ── Format selector row ──────────────────────────────────────────────── */
+    .wf-format-row {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      border-bottom: 1px solid var(--ou-border-soft);
       flex-wrap: wrap;
     }
-    .format-label  { font-size: 12px; font-weight: 500; color: var(--muted-fg); min-width: 60px; }
-    .format-select {
-      font-size: 12px; padding: 4px 8px; border-radius: var(--radius-sm);
-      border: 1px solid var(--input-b); background: var(--bg); color: var(--fg);
-      font-family: inherit; cursor: pointer;
+    .wf-format-label { font: var(--ou-text-caption); font-weight: 500; color: var(--ou-fg-muted); min-width: 60px; }
+    .wf-format-select {
+      font: var(--ou-text-caption); font-family: inherit;
+      padding: var(--ou-space-1) var(--ou-space-2);
+      border-radius: var(--ou-radius-s);
+      border: 1px solid var(--ou-border-input);
+      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+      cursor: pointer;
     }
-    .format-hint { font-size: 12px; color: var(--muted-fg); }
+    .wf-format-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
 
-    /* Toolbar */
-    .editor-toolbar {
+    /* ── Editor toolbar ───────────────────────────────────────────────────── */
+    .wf-editor-toolbar {
       display: flex; align-items: center; gap: 2px; flex-wrap: wrap;
-      padding: 6px 10px; border-bottom: 1px solid var(--card-border);
-      background: var(--bg);
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border-bottom: 1px solid var(--ou-border-soft);
+      background: var(--ou-bg-elevated);
     }
-    .toolbar-btn {
+    .wf-toolbar-btn {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 28px; height: 28px; border-radius: var(--radius-sm);
-      border: none; background: transparent; color: var(--fg);
-      font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+      width: 28px; height: 28px; border-radius: var(--ou-radius-s);
+      border: none; background: transparent; color: var(--ou-fg-default);
+      cursor: pointer; font-family: inherit;
     }
-    .toolbar-btn:hover { background: var(--accent); }
-    .toolbar-btn.active { background: var(--secondary); color: var(--primary); }
-    .toolbar-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+    .wf-toolbar-btn:hover { background: var(--ou-bg-canvas); }
+    .wf-toolbar-btn--active {
+      background: var(--ou-bg-muted);
+      color: var(--ou-accent-default);
+    }
+    .wf-toolbar-sep {
+      width: 1px; height: 18px;
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-1);
+    }
 
-    /* Editor area */
-    .editor-body {
-      min-height: 120px; padding: 12px 14px;
-      font-size: 13px; line-height: 1.7; color: var(--fg);
-      background: var(--bg); border-bottom: 1px solid var(--card-border);
+    /* ── Rich text editor body ────────────────────────────────────────────── */
+    .wf-editor-body {
+      min-height: 120px; padding: var(--ou-space-3) var(--ou-space-4);
+      font: var(--ou-text-body-s); line-height: 1.7; color: var(--ou-fg-default);
+      background: var(--ou-bg-elevated);
+      border-bottom: 1px solid var(--ou-border-soft);
       outline: none; cursor: text;
     }
-    .editor-body.placeholder { color: var(--muted-fg); font-style: italic; }
-    .editor-body p      { margin-bottom: 6px; }
-    .editor-body strong { font-weight: 700; }
-    .editor-body em     { font-style: italic; }
-    .editor-body ul     { padding-left: 20px; list-style: disc; margin-bottom: 6px; }
-    .editor-body ol     { padding-left: 20px; list-style: decimal; margin-bottom: 6px; }
-    .editor-body a      { color: var(--primary); text-decoration: underline; }
+    .wf-editor-body--placeholder { color: var(--ou-fg-muted); font-style: italic; }
+    .wf-editor-body p      { margin-bottom: var(--ou-space-1); }
+    .wf-editor-body ul     { padding-left: var(--ou-space-5); list-style: disc; margin-bottom: var(--ou-space-1); }
+    .wf-editor-body ol     { padding-left: var(--ou-space-5); list-style: decimal; margin-bottom: var(--ou-space-1); }
+    .wf-editor-body a      { color: var(--ou-accent-default); text-decoration: underline; }
 
-    /* Plain-text variant */
-    .editor-plain { padding: 12px 14px; border-bottom: 1px solid var(--card-border); background: var(--bg); }
-    .editor-plain textarea {
+    /* ── Plain text editor ────────────────────────────────────────────────── */
+    .wf-editor-plain { padding: var(--ou-space-3) var(--ou-space-4); border-bottom: 1px solid var(--ou-border-soft); background: var(--ou-bg-elevated); }
+    .wf-editor-plain textarea {
       width: 100%; min-height: 100px; resize: vertical;
       border: none; outline: none; font-family: inherit;
-      font-size: 13px; line-height: 1.7; color: var(--fg); background: transparent;
+      font: var(--ou-text-body-s); line-height: 1.7;
+      color: var(--ou-fg-default); background: transparent;
     }
 
-    /* Links section */
-    .links-section { padding: 12px 14px; border-bottom: 1px solid var(--card-border); }
-    .links-header {
-      display: flex; align-items: center; gap: 8px;
-      font-size: 12px; font-weight: 600; color: var(--muted-fg);
-      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px;
+    /* ── HTML editor ──────────────────────────────────────────────────────── */
+    .wf-html-editor { background: var(--ou-bg-elevated); }
+    .wf-html-editor textarea {
+      display: block; width: 100%; min-height: 140px; resize: vertical;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 12px; line-height: 1.6;
+      border: none; outline: none; background: transparent;
+      color: var(--ou-fg-default); padding: var(--ou-space-3) var(--ou-space-4);
     }
-    .link-row {
-      display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px;
-      margin-bottom: 8px; align-items: center;
+    .wf-html-warn {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-warning-bg);
+      border-bottom: 1px solid var(--ou-border-soft);
+      font: var(--ou-text-caption); color: var(--ou-fg-muted);
     }
-    .link-row input { font-size: 12px; padding: 5px 8px; }
-    .link-delete {
+
+    /* ── Char count ───────────────────────────────────────────────────────── */
+    .wf-char-count {
+      font: var(--ou-text-caption); color: var(--ou-fg-muted);
+      padding: var(--ou-space-1) var(--ou-space-4);
+      border-bottom: 1px solid var(--ou-border-soft);
+      text-align: right;
+    }
+
+    /* ── Links section ────────────────────────────────────────────────────── */
+    .wf-links-section { padding: var(--ou-space-3) var(--ou-space-4); border-bottom: 1px solid var(--ou-border-soft); }
+    .wf-section-subheader {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: .05em;
+      margin-bottom: var(--ou-space-2);
+    }
+    .wf-section-subheader svg { width: 12px; height: 12px; flex-shrink: 0; }
+    .wf-link-row {
+      display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--ou-space-2);
+      margin-bottom: var(--ou-space-2); align-items: center;
+    }
+    .wf-link-input {
+      font: var(--ou-text-caption); font-family: inherit;
+      padding: var(--ou-space-1) var(--ou-space-2);
+      border: 1px solid var(--ou-border-input);
+      border-radius: var(--ou-radius-s);
+      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+    }
+    .wf-icon-action-btn {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px; border-radius: var(--radius-sm);
-      border: 1px solid var(--border); background: var(--bg);
-      cursor: pointer; color: var(--muted-fg);
+      width: 26px; height: 26px; border-radius: var(--ou-radius-s);
+      border: 1px solid var(--ou-border-soft);
+      background: var(--ou-bg-elevated);
+      cursor: pointer; color: var(--ou-fg-muted); flex-shrink: 0;
     }
-    .link-delete:hover { border-color: var(--destructive); color: var(--destructive); }
-    .add-link-btn {
-      font-size: 12px; color: var(--primary); background: none;
-      border: none; cursor: pointer; padding: 0; font-family: inherit;
-      display: inline-flex; align-items: center; gap: 4px;
+    .wf-icon-action-btn:hover { border-color: var(--ou-error-fg); color: var(--ou-error-fg); }
+    .wf-icon-action-btn svg { width: 13px; height: 13px; }
+    .wf-add-link-btn {
+      font: var(--ou-text-caption); color: var(--ou-accent-default);
+      background: none; border: none; cursor: pointer;
+      padding: 0; font-family: inherit;
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      text-decoration: underline;
     }
-    .add-link-btn:hover { text-decoration: underline; }
-    .section-empty { font-size: 12px; color: var(--muted-fg); margin-bottom: 8px; }
+    .wf-add-link-btn svg { width: 12px; height: 12px; }
+    .wf-section-empty { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-2); }
 
-    /* Files section */
-    .files-section { padding: 12px 14px; border-bottom: 1px solid var(--card-border); }
-    .files-header {
-      display: flex; align-items: center; gap: 8px;
-      font-size: 12px; font-weight: 600; color: var(--muted-fg);
-      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px;
+    /* ── Files section ────────────────────────────────────────────────────── */
+    .wf-files-section { padding: var(--ou-space-3) var(--ou-space-4); border-bottom: 1px solid var(--ou-border-soft); }
+    .wf-file-row {
+      display: flex; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-1) var(--ou-space-2);
+      border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-s);
+      margin-bottom: var(--ou-space-1);
+      background: var(--ou-bg-elevated);
     }
-    .file-row {
-      display: flex; align-items: center; gap: 8px;
-      padding: 6px 8px; border: 1px solid var(--border);
-      border-radius: var(--radius-sm); margin-bottom: 6px; background: var(--bg);
+    .wf-file-icon { color: var(--ou-fg-muted); flex-shrink: 0; width: 14px; height: 14px; }
+    .wf-file-name {
+      flex: 1; font: var(--ou-text-caption);
+      color: var(--ou-fg-default);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .file-icon { color: var(--muted-fg); flex-shrink: 0; }
-    .file-name { flex: 1; font-size: 12px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file-size { font-size: 11px; color: var(--muted-fg); flex-shrink: 0; white-space: nowrap; }
-    .file-delete {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 26px; height: 26px; border-radius: var(--radius-sm);
-      border: 1px solid var(--border); background: transparent;
-      cursor: pointer; color: var(--muted-fg); flex-shrink: 0;
+    .wf-file-size { font: var(--ou-text-caption); color: var(--ou-fg-muted); flex-shrink: 0; }
+    .wf-file-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-2); }
+    .wf-upload-btn {
+      display: flex; align-items: center; justify-content: center; gap: var(--ou-space-2);
+      width: 100%; margin-top: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3);
+      font: var(--ou-text-caption); font-family: inherit; color: var(--ou-accent-default);
+      background: transparent; border: 1px dashed var(--ou-border-soft);
+      border-radius: var(--ou-radius-s); cursor: pointer;
     }
-    .file-delete:hover { border-color: var(--destructive); color: var(--destructive); }
-    .file-hint { font-size: 11px; color: var(--muted-fg); margin-top: 8px; }
-    .upload-btn {
-      display: flex; align-items: center; justify-content: center; gap: 6px;
-      width: 100%; margin-top: 8px; padding: 7px 12px;
-      font-size: 12px; font-family: inherit; color: var(--primary);
-      background: transparent; border: 1px dashed var(--border);
-      border-radius: var(--radius-sm); cursor: pointer;
-    }
-    .upload-btn:hover { border-color: var(--primary); background: var(--accent); }
+    .wf-upload-btn:hover { border-color: var(--ou-accent-default); background: var(--ou-bg-canvas); }
+    .wf-upload-btn svg { width: 12px; height: 12px; }
 
-    /* Preview */
-    .preview-section { padding: 12px 14px; background: var(--readonly-bg); }
-    .preview-label {
-      font-size: 11px; font-weight: 600; color: var(--muted-fg);
-      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px;
+    /* ── Preview section ──────────────────────────────────────────────────── */
+    .wf-preview-section {
+      padding: var(--ou-space-3) var(--ou-space-4);
+      background: var(--ou-bg-canvas);
     }
-    .preview-box {
-      background: var(--bg); border: 1px solid var(--card-border);
-      border-radius: var(--radius-md); padding: 12px 14px;
-      font-size: 13px; line-height: 1.7;
+    .wf-preview-label {
+      font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: .05em;
+      margin-bottom: var(--ou-space-2);
     }
-    .preview-box p      { margin-bottom: 6px; }
-    .preview-box ul     { padding-left: 18px; list-style: disc; margin-bottom: 6px; }
-    .preview-box a      { color: var(--primary); text-decoration: underline; }
-    .preview-links      { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
-    .preview-files {
-      display: flex; flex-direction: column; gap: 6px;
-      margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+    .wf-preview-box {
+      background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-m); padding: var(--ou-space-3) var(--ou-space-4);
+      font: var(--ou-text-body-s); line-height: 1.7;
     }
-    .preview-files-label {
-      font-size: 11px; font-weight: 600; color: var(--muted-fg);
-      text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px;
+    .wf-preview-box p  { margin-bottom: var(--ou-space-1); }
+    .wf-preview-box ul { padding-left: var(--ou-space-5); list-style: disc; margin-bottom: var(--ou-space-1); }
+    .wf-preview-box a  { color: var(--ou-accent-default); text-decoration: underline; }
+    .wf-preview-links  { display: flex; flex-direction: column; gap: var(--ou-space-1); margin-top: var(--ou-space-2); }
+    .wf-preview-files {
+      display: flex; flex-direction: column; gap: var(--ou-space-1);
+      margin-top: var(--ou-space-2); padding-top: var(--ou-space-2);
+      border-top: 1px solid var(--ou-border-soft);
     }
-    .preview-file-link {
-      display: inline-flex; align-items: center; gap: 6px;
-      color: var(--primary); font-size: 13px; text-decoration: none;
+    .wf-preview-files-label {
+      font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: .05em; margin-bottom: var(--ou-space-1);
     }
-    .preview-file-link:hover { text-decoration: underline; }
-    .preview-file-size { color: var(--muted-fg); font-size: 11px; }
+    .wf-preview-file-link {
+      display: inline-flex; align-items: center; gap: var(--ou-space-2);
+      color: var(--ou-accent-default); font: var(--ou-text-body-s); text-decoration: none;
+    }
+    .wf-preview-file-link:hover { text-decoration: underline; }
+    .wf-preview-file-link svg { width: 13px; height: 13px; flex-shrink: 0; }
+    .wf-preview-file-size { color: var(--ou-fg-muted); font: var(--ou-text-caption); }
+  </style>
 
-    /* HTML raw editor */
-    .html-editor textarea {
-      width: 100%; min-height: 140px; resize: vertical;
-      font-family: 'Consolas', 'Courier New', monospace; font-size: 12px;
-      line-height: 1.6; border: none; outline: none;
-      background: transparent; color: var(--fg);
-      padding: 12px 14px; display: block;
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: 1px solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
     }
-    .html-warn {
-      display: flex; align-items: center; gap: 8px;
-      padding: 8px 14px; background: var(--warn-bg); border-bottom: 1px solid var(--warn-border);
-      font-size: 12px; color: var(--warn-fg);
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
     }
-    .char-count {
-      font-size: 11px; color: var(--muted-fg); padding: 6px 14px;
-      border-top: 1px solid var(--card-border); text-align: right;
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: 1px solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: 1px;
+      height: 20px;
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, 52px);
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, 52px));
+      max-height: calc(100vh - var(--wf-nav-offset, 52px));
     }
   </style>
 </head>
-<body>
+<body class="ou ou--light ou--normal">
 
-<nav class="wf-nav" aria-label="Wireframe state switcher">
-  <span class="wf-label">Feedback editor:</span>
-  <button class="wf-btn active" type="button" onclick="show('s-richtext')">richText — тест</button>
-  <button class="wf-btn"        type="button" onclick="show('s-plain')">plain — тест</button>
-  <button class="wf-btn"        type="button" onclick="show('s-html')">html — тест</button>
-  <button class="wf-btn"        type="button" onclick="show('s-empty')">Пустой — тест</button>
-  <button class="wf-btn"        type="button" onclick="show('s-topic')">Уровень темы</button>
-  <a class="wf-link" href="prd7-section-basic.html">Состав &rarr;</a>
-</nav>
-
-<svg class="svg-sprite" xmlns="http://www.w3.org/2000/svg">
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
   <symbol id="i-bold" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-    <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/>
+    <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/>
+    <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/>
   </symbol>
   <symbol id="i-italic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/>
@@ -244,122 +359,62 @@
   </symbol>
 </svg>
 
-<!-- ═══ STATE: richText ═══════════════════════════════════════════════════ -->
-<div id="s-richtext" class="shell active state-bg">
-  <div class="state-wrap">
-    <p class="state-ctx">Контекст: внутри Drawer, вкладка Настройки &rarr; Обратная связь, карточка Общая обратная связь теста</p>
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">prd7 — Редактор обратной связи:</span>
+  <button type="button" class="ou-button ou-button--primary" onclick="showState(this, 's-richtext')">s-richtext</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-plain')">s-plain</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-html')">s-html</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-empty')">s-empty</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="showState(this, 's-topic')">s-topic</button>
+  <span class="wf-nav-sep"></span>
+  <button type="button" class="ou-button ou-button--secondary" onclick="toggleTheme()">Dark</button>
+  <button type="button" class="ou-button ou-button--secondary" onclick="toggleDensity()">Compact</button>
+</nav>
 
-    <div class="feedback-panel">
-      <div class="feedback-panel-header">
-        <div class="feedback-panel-title">Общая обратная связь теста</div>
-        <span class="badge badge-outline badge-sm">richText</span>
-      </div>
+<!-- ═══ STATE: s-richtext — форматированный текст ════════════════════════════ -->
+<section id="wf-s-richtext" class="wf-state active" aria-label="Редактор обратной связи — richText">
+  <div class="wf-state-bg">
+    <div class="wf-state-wrap">
+      <p class="wf-state-ctx">Контекст: Drawer → Настройки → Обратная связь, карточка «Общая обратная связь теста»</p>
 
-      <!-- Format selector -->
-      <div class="format-row">
-        <span class="format-label">Формат:</span>
-        <select class="format-select" aria-label="Формат обратной связи">
-          <option>plain — простой текст</option>
-          <option selected>richText — форматированный текст</option>
-          <option>html — HTML-разметка</option>
-        </select>
-        <span class="format-hint">Формат можно изменить — содержимое сохранится.</span>
-      </div>
-
-      <!-- Toolbar -->
-      <div class="editor-toolbar" role="toolbar" aria-label="Панель форматирования">
-        <button class="toolbar-btn active" type="button" title="Жирный (Ctrl+B)" aria-pressed="true">
-          <svg width="14" height="14"><use href="#i-bold"/></svg>
-        </button>
-        <button class="toolbar-btn" type="button" title="Курсив (Ctrl+I)" aria-pressed="false">
-          <svg width="14" height="14"><use href="#i-italic"/></svg>
-        </button>
-        <div class="toolbar-sep" aria-hidden="true"></div>
-        <button class="toolbar-btn" type="button" title="Вставить ссылку (Ctrl+K)">
-          <svg width="14" height="14"><use href="#i-link"/></svg>
-        </button>
-        <div class="toolbar-sep" aria-hidden="true"></div>
-        <button class="toolbar-btn" type="button" title="Маркированный список">
-          <svg width="14" height="14"><use href="#i-list"/></svg>
-        </button>
-        <button class="toolbar-btn" type="button" title="Нумерованный список">
-          <svg width="14" height="14"><use href="#i-list-ordered"/></svg>
-        </button>
-      </div>
-
-      <!-- Rich text body -->
-      <div class="editor-body" contenteditable="true" role="textbox" aria-multiline="true"
-           aria-label="Текст обратной связи">
-        <p>Поздравляем с прохождением теста! <strong>Ваш результат</strong> зависит от правильности ответов.</p>
-        <p>Если вы не набрали нужный порог, обратитесь к следующим материалам:</p>
-        <ul>
-          <li>Модуль 1 — Основы информационной безопасности</li>
-          <li>Модуль 3 — <em>Классификация угроз</em></li>
-        </ul>
-        <p>Вы также можете <a href="#">связаться с куратором</a> для уточнения деталей.</p>
-      </div>
-
-      <div class="char-count" aria-live="polite">224 / 2000 символов</div>
-
-      <!-- External links -->
-      <div class="links-section">
-        <div class="links-header">
-          <svg width="12" height="12"><use href="#i-link"/></svg>
-          Ссылки
+      <div class="wf-feedback-panel">
+        <div class="wf-feedback-panel-header">
+          <div class="wf-feedback-panel-title">Общая обратная связь теста</div>
+          <span class="ou-tag ou-tag--outline">richText</span>
         </div>
-        <div class="link-row">
-          <input type="text" value="Материалы курса" placeholder="Подпись ссылки" aria-label="Подпись ссылки 1">
-          <input type="url" value="https://example.com/course" placeholder="https://..." aria-label="URL ссылки 1">
-          <button class="link-delete" type="button" aria-label="Удалить ссылку">
-            <svg width="13" height="13"><use href="#i-trash"/></svg>
+
+        <div class="wf-format-row">
+          <span class="wf-format-label">Формат:</span>
+          <select class="wf-format-select" aria-label="Формат обратной связи">
+            <option>plain — простой текст</option>
+            <option selected>richText — форматированный текст</option>
+            <option>html — HTML-разметка</option>
+          </select>
+          <span class="wf-format-hint">Формат можно изменить — содержимое сохранится.</span>
+        </div>
+
+        <div class="wf-editor-toolbar" role="toolbar" aria-label="Панель форматирования">
+          <button type="button" class="wf-toolbar-btn wf-toolbar-btn--active" title="Жирный (Ctrl+B)" aria-pressed="true">
+            <svg width="14" height="14"><use href="#i-bold"/></svg>
+          </button>
+          <button type="button" class="wf-toolbar-btn" title="Курсив (Ctrl+I)" aria-pressed="false">
+            <svg width="14" height="14"><use href="#i-italic"/></svg>
+          </button>
+          <div class="wf-toolbar-sep" aria-hidden="true"></div>
+          <button type="button" class="wf-toolbar-btn" title="Вставить ссылку (Ctrl+K)">
+            <svg width="14" height="14"><use href="#i-link"/></svg>
+          </button>
+          <div class="wf-toolbar-sep" aria-hidden="true"></div>
+          <button type="button" class="wf-toolbar-btn" title="Маркированный список">
+            <svg width="14" height="14"><use href="#i-list"/></svg>
+          </button>
+          <button type="button" class="wf-toolbar-btn" title="Нумерованный список">
+            <svg width="14" height="14"><use href="#i-list-ordered"/></svg>
           </button>
         </div>
-        <div class="link-row">
-          <input type="text" value="" placeholder="Подпись ссылки" aria-label="Подпись ссылки 2">
-          <input type="url" value="" placeholder="https://..." aria-label="URL ссылки 2">
-          <button class="link-delete" type="button" aria-label="Удалить ссылку">
-            <svg width="13" height="13"><use href="#i-trash"/></svg>
-          </button>
-        </div>
-        <button class="add-link-btn" type="button" aria-label="Добавить ссылку">
-          <svg width="12" height="12"><use href="#i-plus"/></svg>
-          Добавить ссылку
-        </button>
-      </div>
 
-      <!-- Downloadable files (feedback_assets) -->
-      <div class="files-section">
-        <div class="files-header">
-          <svg width="12" height="12"><use href="#i-paperclip"/></svg>
-          Файлы для скачивания
-        </div>
-        <div class="file-row">
-          <svg class="file-icon" width="14" height="14"><use href="#i-file"/></svg>
-          <span class="file-name">module1-basics.pdf</span>
-          <span class="file-size">1.2 МБ</span>
-          <button class="file-delete" type="button" aria-label="Удалить файл">
-            <svg width="13" height="13"><use href="#i-trash"/></svg>
-          </button>
-        </div>
-        <div class="file-row">
-          <svg class="file-icon" width="14" height="14"><use href="#i-file"/></svg>
-          <span class="file-name">threat-classification-guide.pdf</span>
-          <span class="file-size">840 КБ</span>
-          <button class="file-delete" type="button" aria-label="Удалить файл">
-            <svg width="13" height="13"><use href="#i-trash"/></svg>
-          </button>
-        </div>
-        <button class="upload-btn" type="button">
-          <svg width="12" height="12"><use href="#i-plus"/></svg>
-          Прикрепить файл
-        </button>
-        <p class="file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
-      </div>
-
-      <!-- Preview -->
-      <div class="preview-section">
-        <div class="preview-label">Предпросмотр (как увидит слушатель)</div>
-        <div class="preview-box" aria-label="Предпросмотр обратной связи">
+        <div class="wf-editor-body" contenteditable="true" role="textbox" aria-multiline="true"
+             aria-label="Текст обратной связи">
           <p>Поздравляем с прохождением теста! <strong>Ваш результат</strong> зависит от правильности ответов.</p>
           <p>Если вы не набрали нужный порог, обратитесь к следующим материалам:</p>
           <ul>
@@ -367,379 +422,762 @@
             <li>Модуль 3 — <em>Классификация угроз</em></li>
           </ul>
           <p>Вы также можете <a href="#">связаться с куратором</a> для уточнения деталей.</p>
-          <div class="preview-links">
-            <a href="#">Материалы курса</a>
+        </div>
+
+        <div class="wf-char-count" aria-live="polite">224 / 2000 символов</div>
+
+        <div class="wf-links-section">
+          <div class="wf-section-subheader">
+            <svg><use href="#i-link"/></svg>
+            Ссылки
           </div>
-          <div class="preview-files">
-            <div class="preview-files-label">Файлы для скачивания</div>
-            <a href="#" class="preview-file-link">
-              <svg width="13" height="13"><use href="#i-paperclip"/></svg>
-              module1-basics.pdf <span class="preview-file-size">(1.2 МБ)</span>
-            </a>
-            <a href="#" class="preview-file-link">
-              <svg width="13" height="13"><use href="#i-paperclip"/></svg>
-              threat-classification-guide.pdf <span class="preview-file-size">(840 КБ)</span>
-            </a>
+          <div class="wf-link-row">
+            <input type="text" class="wf-link-input" value="Материалы курса" placeholder="Подпись ссылки" aria-label="Подпись ссылки 1" />
+            <input type="url" class="wf-link-input" value="https://example.com/course" placeholder="https://..." aria-label="URL ссылки 1" />
+            <button type="button" class="wf-icon-action-btn" aria-label="Удалить ссылку 1">
+              <svg><use href="#i-trash"/></svg>
+            </button>
+          </div>
+          <div class="wf-link-row">
+            <input type="text" class="wf-link-input" value="" placeholder="Подпись ссылки" aria-label="Подпись ссылки 2" />
+            <input type="url" class="wf-link-input" value="" placeholder="https://..." aria-label="URL ссылки 2" />
+            <button type="button" class="wf-icon-action-btn" aria-label="Удалить ссылку 2">
+              <svg><use href="#i-trash"/></svg>
+            </button>
+          </div>
+          <button type="button" class="wf-add-link-btn" aria-label="Добавить ссылку">
+            <svg><use href="#i-plus"/></svg>
+            Добавить ссылку
+          </button>
+        </div>
+
+        <div class="wf-files-section">
+          <div class="wf-section-subheader">
+            <svg><use href="#i-paperclip"/></svg>
+            Файлы для скачивания
+          </div>
+          <div class="wf-file-row">
+            <svg class="wf-file-icon"><use href="#i-file"/></svg>
+            <span class="wf-file-name">module1-basics.pdf</span>
+            <span class="wf-file-size">1.2 МБ</span>
+            <button type="button" class="wf-icon-action-btn" aria-label="Удалить файл module1-basics.pdf">
+              <svg><use href="#i-trash"/></svg>
+            </button>
+          </div>
+          <div class="wf-file-row">
+            <svg class="wf-file-icon"><use href="#i-file"/></svg>
+            <span class="wf-file-name">threat-classification-guide.pdf</span>
+            <span class="wf-file-size">840 КБ</span>
+            <button type="button" class="wf-icon-action-btn" aria-label="Удалить файл threat-classification-guide.pdf">
+              <svg><use href="#i-trash"/></svg>
+            </button>
+          </div>
+          <button type="button" class="wf-upload-btn">
+            <svg><use href="#i-plus"/></svg>
+            Прикрепить файл
+          </button>
+          <p class="wf-file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
+        </div>
+
+        <div class="wf-preview-section">
+          <div class="wf-preview-label">Предпросмотр (как увидит слушатель)</div>
+          <div class="wf-preview-box" aria-label="Предпросмотр обратной связи">
+            <p>Поздравляем с прохождением теста! <strong>Ваш результат</strong> зависит от правильности ответов.</p>
+            <p>Если вы не набрали нужный порог, обратитесь к следующим материалам:</p>
+            <ul>
+              <li>Модуль 1 — Основы информационной безопасности</li>
+              <li>Модуль 3 — <em>Классификация угроз</em></li>
+            </ul>
+            <p>Вы также можете <a href="#">связаться с куратором</a>.</p>
+            <div class="wf-preview-links">
+              <a href="#">Материалы курса</a>
+            </div>
+            <div class="wf-preview-files">
+              <div class="wf-preview-files-label">Файлы для скачивания</div>
+              <a href="#" class="wf-preview-file-link">
+                <svg><use href="#i-paperclip"/></svg>
+                module1-basics.pdf <span class="wf-preview-file-size">(1.2 МБ)</span>
+              </a>
+              <a href="#" class="wf-preview-file-link">
+                <svg><use href="#i-paperclip"/></svg>
+                threat-classification-guide.pdf <span class="wf-preview-file-size">(840 КБ)</span>
+              </a>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
-</div>
+</section>
 
-<!-- ═══ STATE: plain ══════════════════════════════════════════════════════ -->
-<div id="s-plain" class="shell state-bg">
-  <div class="state-wrap">
-    <p class="state-ctx">Контекст: внутри Drawer, вкладка Настройки &rarr; Обратная связь, карточка Общая обратная связь теста (формат plain)</p>
+<!-- ═══ STATE: s-plain — простой текст ══════════════════════════════════════ -->
+<section id="wf-s-plain" class="wf-state" aria-label="Редактор обратной связи — plain">
+  <div class="wf-state-bg">
+    <div class="wf-state-wrap">
+      <p class="wf-state-ctx">Контекст: Drawer → Настройки → Обратная связь, карточка «Общая обратная связь теста» (формат plain)</p>
 
-    <div class="feedback-panel">
-      <div class="feedback-panel-header">
-        <div class="feedback-panel-title">Общая обратная связь теста</div>
-        <span class="badge badge-outline badge-sm">plain</span>
-      </div>
-
-      <div class="format-row">
-        <span class="format-label">Формат:</span>
-        <select class="format-select" aria-label="Формат обратной связи">
-          <option selected>plain — простой текст</option>
-          <option>richText — форматированный текст</option>
-          <option>html — HTML-разметка</option>
-        </select>
-      </div>
-
-      <div class="editor-plain">
-        <textarea aria-label="Текст обратной связи (plain)" placeholder="Введите текст обратной связи...">Поздравляем с прохождением теста! Ваш результат зависит от правильности ответов. Если вы не набрали нужный порог, обратитесь к материалам курса.</textarea>
-      </div>
-
-      <div class="char-count" aria-live="polite">167 / 2000 символов</div>
-
-      <div class="links-section">
-        <div class="links-header">
-          <svg width="12" height="12"><use href="#i-link"/></svg>
-          Ссылки
+      <div class="wf-feedback-panel">
+        <div class="wf-feedback-panel-header">
+          <div class="wf-feedback-panel-title">Общая обратная связь теста</div>
+          <span class="ou-tag ou-tag--outline">plain</span>
         </div>
-        <p class="section-empty">Ссылки будут добавлены под текстом.</p>
-        <button class="add-link-btn" type="button">
-          <svg width="12" height="12"><use href="#i-plus"/></svg>
-          Добавить ссылку
-        </button>
-      </div>
 
-      <!-- Downloadable files (feedback_assets) -->
-      <div class="files-section">
-        <div class="files-header">
-          <svg width="12" height="12"><use href="#i-paperclip"/></svg>
-          Файлы для скачивания
+        <div class="wf-format-row">
+          <span class="wf-format-label">Формат:</span>
+          <select class="wf-format-select" aria-label="Формат обратной связи">
+            <option selected>plain — простой текст</option>
+            <option>richText — форматированный текст</option>
+            <option>html — HTML-разметка</option>
+          </select>
         </div>
-        <p class="section-empty">Файлы не прикреплены.</p>
-        <button class="upload-btn" type="button">
-          <svg width="12" height="12"><use href="#i-plus"/></svg>
-          Прикрепить файл
-        </button>
-        <p class="file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
+
+        <div class="wf-editor-plain">
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" aria-label="Текст обратной связи (plain)" placeholder="Введите текст обратной связи...">Поздравляем с прохождением теста! Ваш результат зависит от правильности ответов. Если вы не набрали нужный порог, обратитесь к материалам курса.</textarea></div></div>
+        </div>
+
+        <div class="wf-char-count" aria-live="polite">167 / 2000 символов</div>
+
+        <div class="wf-links-section">
+          <div class="wf-section-subheader">
+            <svg><use href="#i-link"/></svg>
+            Ссылки
+          </div>
+          <p class="wf-section-empty">Ссылки будут добавлены под текстом.</p>
+          <button type="button" class="wf-add-link-btn">
+            <svg><use href="#i-plus"/></svg>
+            Добавить ссылку
+          </button>
+        </div>
+
+        <div class="wf-files-section">
+          <div class="wf-section-subheader">
+            <svg><use href="#i-paperclip"/></svg>
+            Файлы для скачивания
+          </div>
+          <p class="wf-section-empty">Файлы не прикреплены.</p>
+          <button type="button" class="wf-upload-btn">
+            <svg><use href="#i-plus"/></svg>
+            Прикрепить файл
+          </button>
+          <p class="wf-file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
+        </div>
       </div>
     </div>
   </div>
-</div>
+</section>
 
-<!-- ═══ STATE: html raw ═══════════════════════════════════════════════════ -->
-<div id="s-html" class="shell state-bg">
-  <div class="state-wrap">
-    <p class="state-ctx">Контекст: внутри Drawer, вкладка Настройки &rarr; Обратная связь, карточка Общая обратная связь теста (формат html)</p>
+<!-- ═══ STATE: s-html — HTML-разметка ═══════════════════════════════════════ -->
+<section id="wf-s-html" class="wf-state" aria-label="Редактор обратной связи — html">
+  <div class="wf-state-bg">
+    <div class="wf-state-wrap">
+      <p class="wf-state-ctx">Контекст: Drawer → Настройки → Обратная связь, карточка «Общая обратная связь теста» (формат html)</p>
 
-    <div class="feedback-panel">
-      <div class="feedback-panel-header">
-        <div class="feedback-panel-title">Общая обратная связь теста</div>
-        <span class="badge badge-outline badge-sm">html</span>
-      </div>
+      <div class="wf-feedback-panel">
+        <div class="wf-feedback-panel-header">
+          <div class="wf-feedback-panel-title">Общая обратная связь теста</div>
+          <span class="ou-tag ou-tag--outline">html</span>
+        </div>
 
-      <div class="format-row">
-        <span class="format-label">Формат:</span>
-        <select class="format-select" aria-label="Формат обратной связи">
-          <option>plain — простой текст</option>
-          <option>richText — форматированный текст</option>
-          <option selected>html — HTML-разметка</option>
-        </select>
-      </div>
+        <div class="wf-format-row">
+          <span class="wf-format-label">Формат:</span>
+          <select class="wf-format-select" aria-label="Формат обратной связи">
+            <option>plain — простой текст</option>
+            <option>richText — форматированный текст</option>
+            <option selected>html — HTML-разметка</option>
+          </select>
+        </div>
 
-      <div class="html-warn" role="note">
-        <svg width="13" height="13"><use href="#i-warn"/></svg>
-        HTML-режим: разметка отображается как есть. Убедитесь в безопасности содержимого.
-      </div>
+        <div class="wf-html-warn" role="note">
+          <svg width="13" height="13"><use href="#i-warn"/></svg>
+          HTML-режим: разметка отображается как есть. Убедитесь в безопасности содержимого.
+        </div>
 
-      <div class="html-editor">
-        <textarea aria-label="HTML-код обратной связи" spellcheck="false">&lt;p&gt;Поздравляем с прохождением теста!&lt;/p&gt;
+        <div class="wf-html-editor">
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" aria-label="HTML-код обратной связи" spellcheck="false">&lt;p&gt;Поздравляем с прохождением теста!&lt;/p&gt;
 &lt;ul&gt;
   &lt;li&gt;Модуль 1 — Основы информационной безопасности&lt;/li&gt;
   &lt;li&gt;Модуль 3 — Классификация угроз&lt;/li&gt;
 &lt;/ul&gt;
-&lt;p&gt;&lt;a href="https://example.com"&gt;Материалы курса&lt;/a&gt;&lt;/p&gt;</textarea>
-      </div>
-
-      <div class="char-count" aria-live="polite">198 / 5000 символов</div>
-
-      <!-- Downloadable files (feedback_assets) -->
-      <div class="files-section">
-        <div class="files-header">
-          <svg width="12" height="12"><use href="#i-paperclip"/></svg>
-          Файлы для скачивания
+&lt;p&gt;&lt;a href="https://example.com"&gt;Материалы курса&lt;/a&gt;&lt;/p&gt;</textarea></div></div>
         </div>
-        <div class="file-row">
-          <svg class="file-icon" width="14" height="14"><use href="#i-file"/></svg>
-          <span class="file-name">quick-reference-card.pdf</span>
-          <span class="file-size">320 КБ</span>
-          <button class="file-delete" type="button" aria-label="Удалить файл">
-            <svg width="13" height="13"><use href="#i-trash"/></svg>
+
+        <div class="wf-char-count" aria-live="polite">198 / 5000 символов</div>
+
+        <div class="wf-files-section">
+          <div class="wf-section-subheader">
+            <svg><use href="#i-paperclip"/></svg>
+            Файлы для скачивания
+          </div>
+          <div class="wf-file-row">
+            <svg class="wf-file-icon"><use href="#i-file"/></svg>
+            <span class="wf-file-name">quick-reference-card.pdf</span>
+            <span class="wf-file-size">320 КБ</span>
+            <button type="button" class="wf-icon-action-btn" aria-label="Удалить файл quick-reference-card.pdf">
+              <svg><use href="#i-trash"/></svg>
+            </button>
+          </div>
+          <button type="button" class="wf-upload-btn">
+            <svg><use href="#i-plus"/></svg>
+            Прикрепить файл
           </button>
+          <p class="wf-file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
         </div>
-        <button class="upload-btn" type="button">
-          <svg width="12" height="12"><use href="#i-plus"/></svg>
-          Прикрепить файл
-        </button>
-        <p class="file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
-      </div>
 
-      <div class="preview-section">
-        <div class="preview-label">HTML-предпросмотр</div>
-        <div class="preview-box">
-          <p>Поздравляем с прохождением теста!</p>
-          <ul>
-            <li>Модуль 1 — Основы информационной безопасности</li>
-            <li>Модуль 3 — Классификация угроз</li>
-          </ul>
-          <p><a href="#">Материалы курса</a></p>
-          <div class="preview-files">
-            <div class="preview-files-label">Файлы для скачивания</div>
-            <a href="#" class="preview-file-link">
-              <svg width="13" height="13"><use href="#i-paperclip"/></svg>
-              quick-reference-card.pdf <span class="preview-file-size">(320 КБ)</span>
-            </a>
+        <div class="wf-preview-section">
+          <div class="wf-preview-label">HTML-предпросмотр</div>
+          <div class="wf-preview-box">
+            <p>Поздравляем с прохождением теста!</p>
+            <ul>
+              <li>Модуль 1 — Основы информационной безопасности</li>
+              <li>Модуль 3 — Классификация угроз</li>
+            </ul>
+            <p><a href="#">Материалы курса</a></p>
+            <div class="wf-preview-files">
+              <div class="wf-preview-files-label">Файлы для скачивания</div>
+              <a href="#" class="wf-preview-file-link">
+                <svg><use href="#i-paperclip"/></svg>
+                quick-reference-card.pdf <span class="wf-preview-file-size">(320 КБ)</span>
+              </a>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
-</div>
+</section>
 
-<!-- ═══ STATE: Empty ══════════════════════════════════════════════════════ -->
-<div id="s-empty" class="shell state-bg">
-  <div class="state-wrap">
-    <p class="state-ctx">Контекст: внутри Drawer, вкладка Настройки &rarr; Обратная связь, карточка Общая обратная связь теста (пустое состояние)</p>
+<!-- ═══ STATE: s-empty — пустая обратная связь ═══════════════════════════════ -->
+<section id="wf-s-empty" class="wf-state" aria-label="Редактор обратной связи — пустой">
+  <div class="wf-state-bg">
+    <div class="wf-state-wrap">
+      <p class="wf-state-ctx">Контекст: Drawer → Настройки → Обратная связь, карточка «Общая обратная связь теста» (пустое состояние)</p>
 
-    <div class="feedback-panel">
-      <div class="feedback-panel-header">
-        <div class="feedback-panel-title">Общая обратная связь теста</div>
-        <span class="badge badge-outline badge-sm">richText</span>
-      </div>
-
-      <div class="format-row">
-        <span class="format-label">Формат:</span>
-        <select class="format-select" aria-label="Формат обратной связи">
-          <option>plain — простой текст</option>
-          <option selected>richText — форматированный текст</option>
-          <option>html — HTML-разметка</option>
-        </select>
-      </div>
-
-      <div class="editor-toolbar" role="toolbar" aria-label="Панель форматирования">
-        <button class="toolbar-btn" type="button" title="Жирный" aria-pressed="false">
-          <svg width="14" height="14"><use href="#i-bold"/></svg>
-        </button>
-        <button class="toolbar-btn" type="button" title="Курсив" aria-pressed="false">
-          <svg width="14" height="14"><use href="#i-italic"/></svg>
-        </button>
-        <div class="toolbar-sep" aria-hidden="true"></div>
-        <button class="toolbar-btn" type="button" title="Вставить ссылку">
-          <svg width="14" height="14"><use href="#i-link"/></svg>
-        </button>
-        <div class="toolbar-sep" aria-hidden="true"></div>
-        <button class="toolbar-btn" type="button" title="Маркированный список">
-          <svg width="14" height="14"><use href="#i-list"/></svg>
-        </button>
-        <button class="toolbar-btn" type="button" title="Нумерованный список">
-          <svg width="14" height="14"><use href="#i-list-ordered"/></svg>
-        </button>
-      </div>
-
-      <div class="editor-body placeholder" contenteditable="true" role="textbox" aria-multiline="true"
-           aria-label="Текст обратной связи"
-           aria-placeholder="Введите текст, который увидит слушатель после завершения теста...">
-        Введите текст, который увидит слушатель после завершения теста...
-      </div>
-
-      <div class="char-count" aria-live="polite">0 / 2000 символов</div>
-
-      <div class="links-section">
-        <div class="links-header">
-          <svg width="12" height="12"><use href="#i-link"/></svg>
-          Ссылки
+      <div class="wf-feedback-panel">
+        <div class="wf-feedback-panel-header">
+          <div class="wf-feedback-panel-title">Общая обратная связь теста</div>
+          <span class="ou-tag ou-tag--outline">richText</span>
         </div>
-        <p class="section-empty">Ссылки не добавлены.</p>
-        <button class="add-link-btn" type="button">
-          <svg width="12" height="12"><use href="#i-plus"/></svg>
-          Добавить ссылку
-        </button>
-      </div>
 
-      <!-- Downloadable files (feedback_assets) -->
-      <div class="files-section">
-        <div class="files-header">
-          <svg width="12" height="12"><use href="#i-paperclip"/></svg>
-          Файлы для скачивания
+        <div class="wf-format-row">
+          <span class="wf-format-label">Формат:</span>
+          <select class="wf-format-select" aria-label="Формат обратной связи">
+            <option>plain — простой текст</option>
+            <option selected>richText — форматированный текст</option>
+            <option>html — HTML-разметка</option>
+          </select>
         </div>
-        <p class="section-empty">Файлы не прикреплены.</p>
-        <button class="upload-btn" type="button">
-          <svg width="12" height="12"><use href="#i-plus"/></svg>
-          Прикрепить файл
-        </button>
-        <p class="file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
+
+        <div class="wf-editor-toolbar" role="toolbar" aria-label="Панель форматирования">
+          <button type="button" class="wf-toolbar-btn" title="Жирный" aria-pressed="false">
+            <svg width="14" height="14"><use href="#i-bold"/></svg>
+          </button>
+          <button type="button" class="wf-toolbar-btn" title="Курсив" aria-pressed="false">
+            <svg width="14" height="14"><use href="#i-italic"/></svg>
+          </button>
+          <div class="wf-toolbar-sep" aria-hidden="true"></div>
+          <button type="button" class="wf-toolbar-btn" title="Вставить ссылку">
+            <svg width="14" height="14"><use href="#i-link"/></svg>
+          </button>
+          <div class="wf-toolbar-sep" aria-hidden="true"></div>
+          <button type="button" class="wf-toolbar-btn" title="Маркированный список">
+            <svg width="14" height="14"><use href="#i-list"/></svg>
+          </button>
+          <button type="button" class="wf-toolbar-btn" title="Нумерованный список">
+            <svg width="14" height="14"><use href="#i-list-ordered"/></svg>
+          </button>
+        </div>
+
+        <div class="wf-editor-body wf-editor-body--placeholder"
+             contenteditable="true" role="textbox" aria-multiline="true"
+             aria-label="Текст обратной связи"
+             aria-placeholder="Введите текст, который увидит слушатель после завершения теста...">
+          Введите текст, который увидит слушатель после завершения теста...
+        </div>
+
+        <div class="wf-char-count" aria-live="polite">0 / 2000 символов</div>
+
+        <div class="wf-links-section">
+          <div class="wf-section-subheader">
+            <svg><use href="#i-link"/></svg>
+            Ссылки
+          </div>
+          <p class="wf-section-empty">Ссылки не добавлены.</p>
+          <button type="button" class="wf-add-link-btn">
+            <svg><use href="#i-plus"/></svg>
+            Добавить ссылку
+          </button>
+        </div>
+
+        <div class="wf-files-section">
+          <div class="wf-section-subheader">
+            <svg><use href="#i-paperclip"/></svg>
+            Файлы для скачивания
+          </div>
+          <p class="wf-section-empty">Файлы не прикреплены.</p>
+          <button type="button" class="wf-upload-btn">
+            <svg><use href="#i-plus"/></svg>
+            Прикрепить файл
+          </button>
+          <p class="wf-file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
+        </div>
       </div>
     </div>
   </div>
-</div>
+</section>
 
-<!-- ═══ STATE: topic-level feedback ══════════════════════════════════════ -->
-<div id="s-topic" class="shell state-bg">
-  <div class="state-wrap">
-    <p class="state-ctx">Контекст: внутри Drawer, вкладка Состав, карточка темы &laquo;Основы ИБ&raquo;, поле Обратная связь по теме</p>
+<!-- ═══ STATE: s-topic — обратная связь уровня темы ════════════════════════ -->
+<section id="wf-s-topic" class="wf-state" aria-label="Редактор обратной связи — уровень темы">
+  <div class="wf-state-bg">
+    <div class="wf-state-wrap">
+      <p class="wf-state-ctx">Контекст: Drawer → Состав, карточка темы «Основы ИБ», поле «Обратная связь по теме»</p>
 
-    <div class="feedback-panel">
-      <div class="feedback-panel-header">
-        <div class="feedback-panel-title">Обратная связь по теме: Основы ИБ</div>
-        <span class="badge badge-outline badge-sm">richText</span>
-      </div>
-
-      <!-- Format selector -->
-      <div class="format-row">
-        <span class="format-label">Формат:</span>
-        <select class="format-select" aria-label="Формат обратной связи по теме">
-          <option>plain — простой текст</option>
-          <option selected>richText — форматированный текст</option>
-          <option>html — HTML-разметка</option>
-        </select>
-        <span class="format-hint">Формат можно изменить — содержимое сохранится.</span>
-      </div>
-
-      <!-- Toolbar -->
-      <div class="editor-toolbar" role="toolbar" aria-label="Панель форматирования">
-        <button class="toolbar-btn active" type="button" title="Жирный (Ctrl+B)" aria-pressed="true">
-          <svg width="14" height="14"><use href="#i-bold"/></svg>
-        </button>
-        <button class="toolbar-btn" type="button" title="Курсив (Ctrl+I)" aria-pressed="false">
-          <svg width="14" height="14"><use href="#i-italic"/></svg>
-        </button>
-        <div class="toolbar-sep" aria-hidden="true"></div>
-        <button class="toolbar-btn" type="button" title="Вставить ссылку (Ctrl+K)">
-          <svg width="14" height="14"><use href="#i-link"/></svg>
-        </button>
-        <div class="toolbar-sep" aria-hidden="true"></div>
-        <button class="toolbar-btn" type="button" title="Маркированный список">
-          <svg width="14" height="14"><use href="#i-list"/></svg>
-        </button>
-        <button class="toolbar-btn" type="button" title="Нумерованный список">
-          <svg width="14" height="14"><use href="#i-list-ordered"/></svg>
-        </button>
-      </div>
-
-      <!-- Rich text body -->
-      <div class="editor-body" contenteditable="true" role="textbox" aria-multiline="true"
-           aria-label="Текст обратной связи по теме">
-        <p>Тема &laquo;Основы ИБ&raquo; завершена. <strong>Изучите дополнительные материалы</strong>, чтобы закрепить знания.</p>
-        <p>Рекомендуем повторить:</p>
-        <ul>
-          <li>Принципы конфиденциальности, целостности и доступности</li>
-          <li>Основные типы атак и методы защиты</li>
-        </ul>
-      </div>
-
-      <div class="char-count" aria-live="polite">196 / 2000 символов</div>
-
-      <!-- External links -->
-      <div class="links-section">
-        <div class="links-header">
-          <svg width="12" height="12"><use href="#i-link"/></svg>
-          Ссылки
+      <div class="wf-feedback-panel">
+        <div class="wf-feedback-panel-header">
+          <div class="wf-feedback-panel-title">Обратная связь по теме: Основы ИБ</div>
+          <span class="ou-tag ou-tag--outline">richText</span>
         </div>
-        <div class="link-row">
-          <input type="text" value="Глоссарий по ИБ" placeholder="Подпись ссылки" aria-label="Подпись ссылки 1">
-          <input type="url" value="https://example.com/glossary" placeholder="https://..." aria-label="URL ссылки 1">
-          <button class="link-delete" type="button" aria-label="Удалить ссылку">
-            <svg width="13" height="13"><use href="#i-trash"/></svg>
+
+        <div class="wf-format-row">
+          <span class="wf-format-label">Формат:</span>
+          <select class="wf-format-select" aria-label="Формат обратной связи по теме">
+            <option>plain — простой текст</option>
+            <option selected>richText — форматированный текст</option>
+            <option>html — HTML-разметка</option>
+          </select>
+          <span class="wf-format-hint">Формат можно изменить — содержимое сохранится.</span>
+        </div>
+
+        <div class="wf-editor-toolbar" role="toolbar" aria-label="Панель форматирования">
+          <button type="button" class="wf-toolbar-btn wf-toolbar-btn--active" title="Жирный (Ctrl+B)" aria-pressed="true">
+            <svg width="14" height="14"><use href="#i-bold"/></svg>
+          </button>
+          <button type="button" class="wf-toolbar-btn" title="Курсив (Ctrl+I)" aria-pressed="false">
+            <svg width="14" height="14"><use href="#i-italic"/></svg>
+          </button>
+          <div class="wf-toolbar-sep" aria-hidden="true"></div>
+          <button type="button" class="wf-toolbar-btn" title="Вставить ссылку (Ctrl+K)">
+            <svg width="14" height="14"><use href="#i-link"/></svg>
+          </button>
+          <div class="wf-toolbar-sep" aria-hidden="true"></div>
+          <button type="button" class="wf-toolbar-btn" title="Маркированный список">
+            <svg width="14" height="14"><use href="#i-list"/></svg>
+          </button>
+          <button type="button" class="wf-toolbar-btn" title="Нумерованный список">
+            <svg width="14" height="14"><use href="#i-list-ordered"/></svg>
           </button>
         </div>
-        <button class="add-link-btn" type="button" aria-label="Добавить ссылку">
-          <svg width="12" height="12"><use href="#i-plus"/></svg>
-          Добавить ссылку
-        </button>
-      </div>
 
-      <!-- Downloadable files (feedback_assets scope=topic) -->
-      <div class="files-section">
-        <div class="files-header">
-          <svg width="12" height="12"><use href="#i-paperclip"/></svg>
-          Файлы для скачивания
-        </div>
-        <p class="section-empty">Файлы не прикреплены.</p>
-        <button class="upload-btn" type="button">
-          <svg width="12" height="12"><use href="#i-plus"/></svg>
-          Прикрепить файл
-        </button>
-        <p class="file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
-      </div>
-
-      <!-- Preview -->
-      <div class="preview-section">
-        <div class="preview-label">Предпросмотр (как увидит слушатель)</div>
-        <div class="preview-box" aria-label="Предпросмотр обратной связи по теме">
-          <p>Тема &laquo;Основы ИБ&raquo; завершена. <strong>Изучите дополнительные материалы</strong>, чтобы закрепить знания.</p>
+        <div class="wf-editor-body" contenteditable="true" role="textbox" aria-multiline="true"
+             aria-label="Текст обратной связи по теме">
+          <p>Тема «Основы ИБ» завершена. <strong>Изучите дополнительные материалы</strong>, чтобы закрепить знания.</p>
           <p>Рекомендуем повторить:</p>
           <ul>
             <li>Принципы конфиденциальности, целостности и доступности</li>
             <li>Основные типы атак и методы защиты</li>
           </ul>
-          <div class="preview-links">
-            <a href="#">Глоссарий по ИБ</a>
+        </div>
+
+        <div class="wf-char-count" aria-live="polite">196 / 2000 символов</div>
+
+        <div class="wf-links-section">
+          <div class="wf-section-subheader">
+            <svg><use href="#i-link"/></svg>
+            Ссылки
+          </div>
+          <div class="wf-link-row">
+            <input type="text" class="wf-link-input" value="Глоссарий по ИБ" placeholder="Подпись ссылки" aria-label="Подпись ссылки 1" />
+            <input type="url" class="wf-link-input" value="https://example.com/glossary" placeholder="https://..." aria-label="URL ссылки 1" />
+            <button type="button" class="wf-icon-action-btn" aria-label="Удалить ссылку Глоссарий по ИБ">
+              <svg><use href="#i-trash"/></svg>
+            </button>
+          </div>
+          <button type="button" class="wf-add-link-btn" aria-label="Добавить ссылку">
+            <svg><use href="#i-plus"/></svg>
+            Добавить ссылку
+          </button>
+        </div>
+
+        <div class="wf-files-section">
+          <div class="wf-section-subheader">
+            <svg><use href="#i-paperclip"/></svg>
+            Файлы для скачивания
+          </div>
+          <p class="wf-section-empty">Файлы не прикреплены.</p>
+          <button type="button" class="wf-upload-btn">
+            <svg><use href="#i-plus"/></svg>
+            Прикрепить файл
+          </button>
+          <p class="wf-file-hint">Допустимые форматы: PDF, DOCX, XLSX, PPTX. Максимум 20 МБ на файл.</p>
+        </div>
+
+        <div class="wf-preview-section">
+          <div class="wf-preview-label">Предпросмотр (как увидит слушатель)</div>
+          <div class="wf-preview-box" aria-label="Предпросмотр обратной связи по теме">
+            <p>Тема «Основы ИБ» завершена. <strong>Изучите дополнительные материалы</strong>, чтобы закрепить знания.</p>
+            <p>Рекомендуем повторить:</p>
+            <ul>
+              <li>Принципы конфиденциальности, целостности и доступности</li>
+              <li>Основные типы атак и методы защиты</li>
+            </ul>
+            <div class="wf-preview-links">
+              <a href="#">Глоссарий по ИБ</a>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
-</div>
+</section>
 
-<section class="acceptance" aria-label="Acceptance">
-  <h2>Acceptance -- PRD-7 покрытие</h2>
-    <table class="acceptance-table">
+
+<section class="wf-acceptance" aria-label="Acceptance criteria">
+  <h2>Acceptance — FR-36, NFR-21 покрытие</h2>
+  <table class="wf-acceptance-table">
     <thead><tr><th>Код</th><th>Описание</th></tr></thead>
     <tbody>
-      <tr><td>FR-36</td><td>Feedback-редактор поддерживает три формата: <code>plain</code> (textarea), <code>richText</code> (toolbar: bold, italic, link, list, ordered-list), <code>html</code> (raw textarea + предпросмотр). Переключение формата сохраняет содержимое.</td></tr>
-      <tr><td>FR-36</td><td>Секция "Ссылки" (<code>test_feedback_links</code> / <code>links[]</code>) доступна во всех форматах: список строк "подпись / URL" с кнопкой удаления и "Добавить ссылку".</td></tr>
-      <tr><td>FR-36</td><td>Секция "Файлы для скачивания" (<code>feedback_assets</code>) доступна во всех форматах: список файлов с именем, размером и кнопкой удаления; кнопка "Прикрепить файл" с подсказкой о допустимых форматах и ограничении размера. Файлы отображаются в предпросмотре как ссылки для скачивания с иконкой и размером.</td></tr>
-      <tr><td>FR-36</td><td>Предпросмотр показывается для форматов <code>richText</code> и <code>html</code>; plain-формат не нуждается в отдельном предпросмотре.</td></tr>
+      <tr><td>FR-36</td><td>Три формата: <code>plain</code> (textarea), <code>richText</code> (toolbar + contenteditable), <code>html</code> (raw textarea + предпросмотр). Переключение формата сохраняет содержимое.</td></tr>
+      <tr><td>FR-36</td><td>Секция «Ссылки» доступна во всех форматах: список пар «подпись / URL» с удалением и «Добавить ссылку».</td></tr>
+      <tr><td>FR-36</td><td>Секция «Файлы для скачивания» (<code>feedback_assets</code>): список файлов с именем, размером и удалением; кнопка загрузки с подсказкой по форматам и ограничению. Файлы отображаются в предпросмотре как ссылки.</td></tr>
+      <tr><td>FR-36</td><td>Предпросмотр: для <code>richText</code> и <code>html</code>; plain не нуждается в предпросмотре.</td></tr>
       <tr><td>FR-36</td><td>HTML-режим показывает предупреждение о безопасности содержимого.</td></tr>
-      <tr><td class="no-code">—</td><td>Пустое состояние: placeholder-текст в области ввода; счётчик символов 0/max; секции ссылок и файлов показывают empty-state текст.</td></tr>
-      <tr><td class="no-code">—</td><td><strong>Контекст теста</strong> (s-richtext, s-plain, s-html, s-empty): редактор открывается из вкладки Настройки &rarr; Обратная связь, карточка "Общая обратная связь теста"; поле <code>tests.feedback</code>, ресурсы <code>feedback_assets</code> с <code>scope=test</code>.</td></tr>
-      <tr><td class="no-code">—</td><td><strong>Контекст темы</strong> (s-topic): редактор открывается из вкладки Состав, карточки темы, поле <code>tests.topics[].feedback</code>; ресурсы <code>feedback_assets</code> с <code>scope=topic</code>. Разметка редактора идентична тестовому контексту, отличаются только заголовок и контекстная строка.</td></tr>
-      <tr><td>NFR-21</td><td>Toolbar-кнопки имеют <code>title</code> и <code>aria-pressed</code>; область ввода имеет <code>aria-label</code> и <code>aria-multiline</code>; счётчик символов -- <code>aria-live="polite"</code>.</td></tr>
+      <tr><td>—</td><td>s-empty: placeholder в редакторе, счётчик 0/max, empty-текст в секциях ссылок и файлов.</td></tr>
+      <tr><td>—</td><td>s-topic: редактор открывается из вкладки Состав, карточки темы. Разметка идентична тестовому контексту, отличаются заголовок и строка контекста.</td></tr>
+      <tr><td>NFR-21</td><td>Toolbar-кнопки: <code>title</code>, <code>aria-pressed</code>. Область ввода: <code>aria-label</code>, <code>aria-multiline</code>. Счётчик: <code>aria-live="polite"</code>.</td></tr>
     </tbody>
   </table>
 </section>
 
 <script>
-function show(id) {
-  document.querySelectorAll('[id^="s-"]').forEach(function(el) {
-    el.classList.toggle('active', el.id === id);
+/**
+ * @param {HTMLElement} btn - Triggered button element.
+ * @param {string} id - State section ID without "wf-" prefix.
+ */
+function showState(btn, id) {
+  document.querySelectorAll('.wf-state').forEach(function (el) {
+    el.classList.toggle('active', el.id === 'wf-' + id);
   });
-  document.querySelectorAll('.wf-nav .wf-btn').forEach(function(btn) {
-    btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+  btn.closest('.wf-nav').querySelectorAll('.ou-button').forEach(function (b) {
+    var isActive = b === btn;
+    b.classList.toggle('ou-button--primary', isActive);
+    b.classList.toggle('ou-button--secondary', !isActive);
   });
 }
+function toggleTheme() {
+  document.body.classList.toggle('ou--dark');
+  document.body.classList.toggle('ou--light');
+}
+function toggleDensity() {
+  document.body.classList.toggle('ou--compact');
+  document.body.classList.toggle('ou--normal');
+}
 </script>
+
+<!-- ═══════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент</th>
+        <th>Поле API / условие</th>
+        <th>Примечание</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Состояния wireframe</td>
+        <td><code>showState(btn, stateId)</code></td>
+        <td>Метанавигация переключает только визуальные состояния и не является частью продуктового UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<div class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping</h2>
+  <p class="wf-mapping-sub">
+    Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент является блокером.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент wireframe</th>
+        <th>DS-компонент</th>
+        <th>Используемые токены</th>
+        <th>Примечания</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Метанавигация состояний</td>
+        <td><code>Wireframe utility</code></td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code>, <code>--ou-accent-*</code></td>
+        <td>Не мигрируется в продуктовый UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
 <script>
-(function(){
+(function () {
   var s = document.createElement('script');
-  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  s.src = 'wf-links.js';
   document.head.appendChild(s);
-})();
+}());
 </script>
+
+<script>
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
+</script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.drawer-footer')) addMappingRow(rows, 'drawer-footer', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
 </body>
 </html>

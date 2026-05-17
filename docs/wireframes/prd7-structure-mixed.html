@@ -767,7 +767,7 @@
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Назад"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
           <span style="font-size:14px;font-weight:600;">Добавить страницу</span>
         </div>
-        <div class="form-field" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:14px;">
           <label class="ou-formfield__lbl">Зона размещения</label>
           <div class="mode-card selected" style="margin-bottom:6px;">
             <span class="mode-radio checked"></span>
@@ -778,7 +778,7 @@
             <div class="mode-info"><div class="mode-title">После теста</div><div class="mode-desc">Страница показывается после завершения.</div></div>
           </div>
         </div>
-        <div class="form-field">
+        <div class="ou-formfield">
           <label class="ou-formfield__lbl">Тип страницы</label>
           <div class="mode-card selected" style="margin-bottom:6px;">
             <span class="mode-radio checked"></span>
@@ -824,9 +824,9 @@
           <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Назад"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
           <span style="font-size:14px;font-weight:600;">Новая info-страница · Перед тестом</span>
         </div>
-        <div class="form-field" style="margin-bottom:16px;">
+        <div class="ou-formfield" style="margin-bottom:16px;">
           <label class="ou-formfield__lbl" for="mx-new-page-title">Название страницы</label>
-          <input id="mx-new-page-title" class="form-input" type="text" placeholder="Например, Инструкция к тесту" value="Правила прохождения"/>
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="mx-new-page-title" type="text" placeholder="Например, Инструкция к тесту" value="Правила прохождения"/></div></div>
         </div>
         <div class="structure-hint">
           <svg width="14" height="14"><use href="#i-info"/></svg>
@@ -869,18 +869,19 @@
           <span class="tpl-page-marker" style="margin-left:4px;">шаблон</span>
         </div>
         <p style="font-size:12px;color:var(--muted-fg);margin:0 0 14px 36px;">Шаблонная страница — заголовок и описание берутся из настроек теста.</p>
-        <div class="form-field" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:14px;">
           <label class="ou-formfield__lbl">Кнопка «Начать тест»</label>
-          <input class="form-input" type="text" value="Начать тест"/>
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Начать тест"/></div></div>
         </div>
-        <div class="form-field" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:14px;">
           <label class="ou-formfield__lbl">Автопереход</label>
-          <div class="toggle-row">
-            <label class="toggle">
-              <input type="checkbox" name="mx-intro-aa"/>
-              <span class="toggle-slider"></span>
+          <div class="ou-formfield__inline">
+            <label class="ou-switch ou-switch--m">
+              <input class="ou-switch__input" type="checkbox" name="mx-intro-aa"/>
+              <span class="ou-switch__track"></span>
+              <span class="ou-switch__thumb"></span>
             </label>
-            <span class="toggle-label">Автоматически начать через N секунд</span>
+            <span>Автоматически начать через N секунд</span>
           </div>
         </div>
       </div>
@@ -923,26 +924,27 @@
           <span style="font-size:14px;font-weight:600;">Инструкция к тесту</span>
           <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" style="margin-left:auto" type="button" aria-label="Удалить страницу"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
         </div>
-        <div class="form-field" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:14px;">
           <label class="ou-formfield__lbl">Название (для навигации)</label>
-          <input class="form-input" type="text" value="Инструкция к тесту"/>
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Инструкция к тесту"/></div></div>
         </div>
-        <div class="form-field" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:14px;">
           <label class="ou-formfield__lbl">Заголовок страницы</label>
-          <input class="form-input" type="text" value="Перед началом работы"/>
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Перед началом работы"/></div></div>
         </div>
-        <div class="form-field" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:14px;">
           <label class="ou-formfield__lbl">Содержимое</label>
-          <textarea class="form-textarea" rows="5" style="resize:vertical">Прочитайте инструкцию внимательно. У вас будет 45 минут на прохождение теста. Каждый вопрос оценивается отдельно.</textarea>
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="5" style="resize:vertical">Прочитайте инструкцию внимательно. У вас будет 45 минут на прохождение теста. Каждый вопрос оценивается отдельно.</textarea></div></div>
         </div>
-        <div class="form-field">
+        <div class="ou-formfield">
           <label class="ou-formfield__lbl">Автопереход</label>
-          <div class="toggle-row">
-            <label class="toggle">
-              <input type="checkbox" name="mx-info-aa"/>
-              <span class="toggle-slider"></span>
+          <div class="ou-formfield__inline">
+            <label class="ou-switch ou-switch--m">
+              <input class="ou-switch__input" type="checkbox" name="mx-info-aa"/>
+              <span class="ou-switch__track"></span>
+              <span class="ou-switch__thumb"></span>
             </label>
-            <span class="toggle-label">Автоматически перейти к следующей странице</span>
+            <span>Автоматически перейти к следующей странице</span>
           </div>
         </div>
       </div>
@@ -986,32 +988,34 @@
           <span class="tpl-page-marker" style="margin-left:4px;">шаблон</span>
         </div>
         <p style="font-size:12px;color:var(--muted-fg);margin:0 0 14px 36px;">Шаблонная страница — результаты и статус подставляются автоматически.</p>
-        <div class="form-field" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:14px;">
           <label class="ou-formfield__lbl">Заголовок при успехе (passed)</label>
-          <input class="form-input" type="text" value="Тест пройден успешно!"/>
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Тест пройден успешно!"/></div></div>
         </div>
-        <div class="form-field" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:14px;">
           <label class="ou-formfield__lbl">Заголовок при неудаче (failed)</label>
-          <input class="form-input" type="text" value="Тест не пройден"/>
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Тест не пройден"/></div></div>
         </div>
-        <div class="form-field" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:14px;">
           <label class="ou-formfield__lbl">Показывать детализацию по вопросам</label>
-          <div class="toggle-row">
-            <label class="toggle">
-              <input type="checkbox" name="mx-sum-detail" checked/>
-              <span class="toggle-slider"></span>
+          <div class="ou-formfield__inline">
+            <label class="ou-switch ou-switch--m is-on">
+              <input class="ou-switch__input" type="checkbox" name="mx-sum-detail" checked/>
+              <span class="ou-switch__track"></span>
+              <span class="ou-switch__thumb"></span>
             </label>
-            <span class="toggle-label">Показывать ответы слушателя</span>
+            <span>Показывать ответы слушателя</span>
           </div>
         </div>
-        <div class="form-field">
+        <div class="ou-formfield">
           <label class="ou-formfield__lbl">Кнопка «Пройти повторно»</label>
-          <div class="toggle-row">
-            <label class="toggle">
-              <input type="checkbox" name="mx-sum-retry" checked/>
-              <span class="toggle-slider"></span>
+          <div class="ou-formfield__inline">
+            <label class="ou-switch ou-switch--m is-on">
+              <input class="ou-switch__input" type="checkbox" name="mx-sum-retry" checked/>
+              <span class="ou-switch__track"></span>
+              <span class="ou-switch__thumb"></span>
             </label>
-            <span class="toggle-label">Разрешить повторное прохождение</span>
+            <span>Разрешить повторное прохождение</span>
           </div>
         </div>
       </div>
@@ -1055,15 +1059,15 @@
           <span class="page-type-badge type-html" style="margin-left:4px;">html</span>
           <button class="ou-iconbtn ou-iconbtn--m ou-iconbtn--s" style="margin-left:auto" type="button" aria-label="Удалить страницу"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
         </div>
-        <div class="form-field" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:14px;">
           <label class="ou-formfield__lbl">Название (для навигации)</label>
-          <input class="form-input" type="text" value="Дополнительный контент"/>
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Дополнительный контент"/></div></div>
         </div>
-        <div class="form-field" style="margin-bottom:8px;">
+        <div class="ou-formfield" style="margin-bottom:8px;">
           <label class="ou-formfield__lbl">HTML-содержимое</label>
-          <textarea class="form-textarea" rows="8" style="font-family:monospace;font-size:12px;resize:vertical">&lt;h2&gt;Дополнительные материалы&lt;/h2&gt;
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="8" style="font-family:monospace;font-size:12px;resize:vertical">&lt;h2&gt;Дополнительные материалы&lt;/h2&gt;
 &lt;p&gt;Ознакомьтесь с презентацией перед прохождением теста.&lt;/p&gt;
-&lt;a href="https://example.com/slides.pdf"&gt;Скачать слайды&lt;/a&gt;</textarea>
+&lt;a href="https://example.com/slides.pdf"&gt;Скачать слайды&lt;/a&gt;</textarea></div></div>
         </div>
         <div class="structure-hint">
           <svg width="14" height="14"><use href="#i-info"/></svg>
@@ -1161,13 +1165,13 @@
             <div style="font-size:12px;margin-top:2px">Нажмите «Применить» чтобы принять изменения, или «Отмена» чтобы вернуться.</div>
           </div>
         </div>
-        <div class="form-field" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:14px;">
           <label class="ou-formfield__lbl">Заголовок страницы</label>
-          <input class="form-input" type="text" value="Перед началом работы — обновлено"/>
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Перед началом работы — обновлено"/></div></div>
         </div>
-        <div class="form-field">
+        <div class="ou-formfield">
           <label class="ou-formfield__lbl">Содержимое</label>
-          <textarea class="form-textarea" rows="4" style="resize:vertical">Прочитайте инструкцию внимательно...</textarea>
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="4" style="resize:vertical">Прочитайте инструкцию внимательно...</textarea></div></div>
         </div>
       </div>
       <footer class="ou-drawer__foot">
@@ -1212,14 +1216,14 @@
           <div class="validation-summary-title"><svg width="14" height="14"><use href="#i-warn"/></svg> 1 ошибка</div>
           <div class="validation-link">Название страницы — обязательное поле</div>
         </div>
-        <div class="form-field form-field--error" style="margin-bottom:14px;">
+        <div class="ou-formfield" style="margin-bottom:14px;">
           <label class="ou-formfield__lbl">Название (для навигации)</label>
-          <input class="form-input form-input--error" type="text" value="" placeholder="Введите название"/>
+          <div class="ou-field ou-field--m ou-field--error"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" placeholder="Введите название"/></div></div>
           <span class="form-error-text">Обязательное поле</span>
         </div>
-        <div class="form-field">
+        <div class="ou-formfield">
           <label class="ou-formfield__lbl">HTML-содержимое</label>
-          <textarea class="form-textarea" rows="5" style="resize:vertical;font-family:monospace;font-size:12px">&lt;h2&gt;Контент&lt;/h2&gt;</textarea>
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" rows="5" style="resize:vertical;font-family:monospace;font-size:12px">&lt;h2&gt;Контент&lt;/h2&gt;</textarea></div></div>
         </div>
       </div>
       <footer class="ou-drawer__foot">

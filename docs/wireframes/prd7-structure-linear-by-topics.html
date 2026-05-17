@@ -728,11 +728,11 @@
             <div class="mapping-warn">
               <div class="mapping-warn-title">Тип «info» не поддерживается новым шаблоном. Выберите замену:</div>
               <div class="mapping-select-row">
-                <select class="form-control form-control-sm" style="flex:1;">
+                <div class="ou-field ou-field--s" style="flex:1;"><div class="ou-field__box"><select class="ou-field__input">
                   <option>— выберите тип —</option>
                   <option>html (произвольная страница)</option>
                   <option selected>Удалить страницу</option>
-                </select>
+                </select></div></div>
               </div>
             </div>
             <div class="questions-row"><svg class="questions-icon"><use href="#i-question"/></svg>5 вопросов из темы «Основы ИБ»</div>
@@ -930,16 +930,16 @@
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="new-page-title">Название страницы</label>
-          <input id="new-page-title" class="form-control" type="text" placeholder="Введите название…" value="">
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="new-page-title" type="text" placeholder="Введите название…" value=""></div></div>
           <div class="ou-formfield__desc">Будет показано в навигации SCORM-пакета.</div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="new-page-pos">Позиция</label>
-          <select id="new-page-pos" class="form-control">
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><select class="ou-field__input" id="new-page-pos">
             <option>В начале темы «Основы ИБ»</option>
             <option selected>После страницы «Что такое ИБ»</option>
             <option>В конце темы «Основы ИБ»</option>
-          </select>
+          </select></div></div>
         </div>
       </div>
       <footer class="ou-drawer__foot">
@@ -970,15 +970,15 @@
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="intro-title">Заголовок</label>
-          <input id="intro-title" class="form-control" type="text" value="Добро пожаловать в тест">
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="intro-title" type="text" value="Добро пожаловать в тест"></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="intro-body">Текст приветствия</label>
-          <textarea id="intro-body" class="form-control" rows="4">Этот тест проверяет базовые знания в области информационной безопасности. Время прохождения: 30 минут.</textarea>
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="intro-body" rows="4">Этот тест проверяет базовые знания в области информационной безопасности. Время прохождения: 30 минут.</textarea></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="intro-btn">Текст кнопки «Начать»</label>
-          <input id="intro-btn" class="form-control" type="text" value="Начать тест">
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="intro-btn" type="text" value="Начать тест"></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl">Автопереход</label>
@@ -1016,11 +1016,11 @@
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="intro-aa-title">Заголовок</label>
-          <input id="intro-aa-title" class="form-control" type="text" value="Добро пожаловать в тест">
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="intro-aa-title" type="text" value="Добро пожаловать в тест"></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="intro-aa-body">Текст приветствия</label>
-          <textarea id="intro-aa-body" class="form-control" rows="4">Этот тест проверяет базовые знания в области информационной безопасности.</textarea>
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="intro-aa-body" rows="4">Этот тест проверяет базовые знания в области информационной безопасности.</textarea></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl">Автопереход</label>
@@ -1032,7 +1032,7 @@
         <!-- Delay shown only when auto-advance is on -->
         <div class="ou-formfield" style="padding-left:12px;border-left:3px solid var(--primary);">
           <label class="ou-formfield__lbl" for="intro-aa-delay">Задержка (секунды)</label>
-          <input id="intro-aa-delay" class="form-control" type="number" min="1" max="60" value="5" style="width:100px;">
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="intro-aa-delay" type="number" min="1" max="60" value="5" style="width:100px;"></div></div>
           <div class="ou-formfield__desc">Страница автоматически перейдёт через указанное время.</div>
         </div>
       </div>
@@ -1064,21 +1064,21 @@
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="info-title">Название страницы</label>
-          <input id="info-title" class="form-control" type="text" value="Что такое информационная безопасность">
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="info-title" type="text" value="Что такое информационная безопасность"></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="info-content">Содержимое (Markdown)</label>
-          <textarea id="info-content" class="form-control" rows="8" style="font-family:monospace;font-size:12px;">## Информационная безопасность
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="info-content" rows="8" style="font-family:monospace;font-size:12px;">## Информационная безопасность
 
 Защита информации от несанкционированного доступа, изменения и уничтожения.
 
 - Конфиденциальность
 - Целостность
-- Доступность</textarea>
+- Доступность</textarea></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="info-next-btn">Текст кнопки «Далее»</label>
-          <input id="info-next-btn" class="form-control" type="text" value="Продолжить">
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="info-next-btn" type="text" value="Продолжить"></div></div>
         </div>
       </div>
       <footer class="ou-drawer__foot">
@@ -1109,13 +1109,13 @@
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="std-title">Название страницы</label>
-          <input id="std-title" class="form-control" type="text" value="Правила работы с паролями">
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="std-title" type="text" value="Правила работы с паролями"></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="std-content">Содержимое (Markdown)</label>
-          <textarea id="std-content" class="form-control" rows="8" style="font-family:monospace;font-size:12px;">## Безопасный пароль
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="std-content" rows="8" style="font-family:monospace;font-size:12px;">## Безопасный пароль
 
-Пароль должен содержать не менее 12 символов, включая буквы верхнего и нижнего регистра, цифры и специальные символы.</textarea>
+Пароль должен содержать не менее 12 символов, включая буквы верхнего и нижнего регистра, цифры и специальные символы.</textarea></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="std-media">Медиафайл (необязательно)</label>
@@ -1154,15 +1154,15 @@
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="sum-title">Заголовок</label>
-          <input id="sum-title" class="form-control" type="text" value="Тест завершён">
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="sum-title" type="text" value="Тест завершён"></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="sum-pass-text">Текст при сдаче (пройден)</label>
-          <textarea id="sum-pass-text" class="form-control" rows="3">Поздравляем! Вы успешно прошли тест.</textarea>
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="sum-pass-text" rows="3">Поздравляем! Вы успешно прошли тест.</textarea></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="sum-fail-text">Текст при провале (не пройден)</label>
-          <textarea id="sum-fail-text" class="form-control" rows="3">К сожалению, результат ниже проходного балла. Попробуйте ещё раз.</textarea>
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="sum-fail-text" rows="3">К сожалению, результат ниже проходного балла. Попробуйте ещё раз.</textarea></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl">Показывать счёт</label>
@@ -1207,18 +1207,18 @@
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="html-title">Название страницы</label>
-          <input id="html-title" class="form-control" type="text" value="Специальный экран">
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="html-title" type="text" value="Специальный экран"></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="html-code">HTML-содержимое</label>
-          <textarea id="html-code" class="form-control" rows="10" style="font-family:monospace;font-size:12px;">&lt;div class="custom-block"&gt;
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="html-code" rows="10" style="font-family:monospace;font-size:12px;">&lt;div class="custom-block"&gt;
   &lt;h2&gt;Важная информация&lt;/h2&gt;
   &lt;p&gt;Перед началом теста ознакомьтесь с правилами.&lt;/p&gt;
   &lt;ul&gt;
     &lt;li&gt;Время ограничено: 30 минут&lt;/li&gt;
     &lt;li&gt;Разрешено &lt;strong&gt;одно&lt;/strong&gt; прохождение&lt;/li&gt;
   &lt;/ul&gt;
-&lt;/div&gt;</textarea>
+&lt;/div&gt;</textarea></div></div>
           <div class="ou-formfield__desc">Допустимые теги: h1–h6, p, ul, ol, li, a, strong, em, img, table. Скрипты запрещены.</div>
         </div>
       </div>
@@ -1337,13 +1337,13 @@
       <div class="ou-drawer__body" tabindex="0">
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="df-title">Название страницы</label>
-          <input id="df-title" class="form-control" type="text" value="Что такое ИБ (изменено)">
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="df-title" type="text" value="Что такое ИБ (изменено)"></div></div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="df-content">Содержимое (Markdown)</label>
-          <textarea id="df-content" class="form-control" rows="6" style="font-family:monospace;font-size:12px;">## Информационная безопасность
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="df-content" rows="6" style="font-family:monospace;font-size:12px;">## Информационная безопасность
 
-Изменённый текст...</textarea>
+Изменённый текст...</textarea></div></div>
         </div>
       </div>
       <footer class="ou-drawer__foot">
@@ -1378,13 +1378,13 @@
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="val-title">Название страницы</label>
-          <input id="val-title" class="form-control form-error" type="text" value="" placeholder="Введите название…" aria-invalid="true" aria-describedby="val-title-err">
-          <div id="val-title-err" class="form-error-msg" role="alert">Название обязательно.</div>
+          <div class="ou-field ou-field--m ou-field--error"><div class="ou-field__box"><input class="ou-field__input" id="val-title" type="text" value="" placeholder="Введите название…" aria-invalid="true" aria-describedby="val-title-err"></div></div>
+          <div id="val-title-err" class="ou-formfield__msg ou-formfield__msg--error" role="alert">Название обязательно.</div>
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="val-content">Содержимое (Markdown)</label>
-          <textarea id="val-content" class="form-control form-error" rows="6" style="font-family:monospace;font-size:12px;" aria-invalid="true" aria-describedby="val-content-err"></textarea>
-          <div id="val-content-err" class="form-error-msg" role="alert">Содержимое не может быть пустым.</div>
+          <div class="ou-textarea ou-textarea--m ou-textarea--error"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="val-content" rows="6" style="font-family:monospace;font-size:12px;" aria-invalid="true" aria-describedby="val-content-err"></textarea></div></div>
+          <div id="val-content-err" class="ou-formfield__msg ou-formfield__msg--error" role="alert">Содержимое не может быть пустым.</div>
         </div>
       </div>
       <footer class="ou-drawer__foot">
@@ -1425,10 +1425,10 @@
         </div>
         <div class="ou-formfield">
           <label class="ou-formfield__lbl" for="san-code">HTML (после санитизации)</label>
-          <textarea id="san-code" class="form-control" rows="8" style="font-family:monospace;font-size:12px;">&lt;div class="custom-block"&gt;
+          <div class="ou-textarea ou-textarea--m"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="san-code" rows="8" style="font-family:monospace;font-size:12px;">&lt;div class="custom-block"&gt;
   &lt;h2&gt;Важная информация&lt;/h2&gt;
   &lt;p&gt;Перед началом теста ознакомьтесь с правилами.&lt;/p&gt;
-&lt;/div&gt;</textarea>
+&lt;/div&gt;</textarea></div></div>
           <div class="ou-formfield__desc">Опасные теги и атрибуты автоматически удалены. Проверьте результат.</div>
         </div>
       </div>

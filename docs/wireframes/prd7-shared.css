@@ -73,32 +73,12 @@ body {
 .sep { border: none; border-top: 1px solid var(--ou-border-default); margin: var(--ou-space-6) 0; }
 
 /* ── Forms ──────────────────────────────────────────────────────────────
- * Stage 3.3a: legacy .form-* class rules removed (HTML migrated to
- * ou-formfield/__lbl/__desc/__msg).
- * Stage 3.3b/3.3c (pending): replace direct input/select/textarea/radio/
- * toggle styling with ou-field, ou-textarea, ou-select, ou-radio, ou-switch
- * structural wraps. Until then, base input/select/textarea/radio/toggle
- * rules below remain as WIREFRAME-ONLY scaffolding.
+ * Stage 3.3a-c complete: legacy .form-* classes renamed to ou-formfield,
+ * input/select/textarea wrapped in ou-field/ou-textarea, toggle/radio
+ * rewritten to ou-switch/ou-radio. Native control styling is provided
+ * by ds/university-rt.css; no shared scaffolding needed here.
  * ────────────────────────────────────────────────────────────────────── */
-input[type=text], input[type=number], input[type=email],
-input[type=password], select, textarea {
-  width: 100%; height: 36px; padding: 0 var(--ou-space-3);
-  border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-s);
-  background: var(--ou-bg-elevated); font: var(--ou-text-body-s); color: var(--ou-fg-default);
-  outline: none; font-family: inherit;
-}
-input:focus, select:focus, textarea:focus {
-  border-color: var(--ou-accent-default);
-  box-shadow: var(--ou-shadow-focus);
-}
-input:disabled, select:disabled, textarea:disabled { opacity: 0.5; cursor: not-allowed; }
-textarea { height: 80px; resize: vertical; padding: var(--ou-space-2) var(--ou-space-3); }
-select {
-  cursor: pointer; appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 8px center;
-  padding-right: 28px;
-}
+
 /* ── Status indicators (FR-25b, NFR-21) ───────────────────────────────── */
 .status-dot {
   width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
