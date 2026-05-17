@@ -125,32 +125,6 @@
     }
     .wf-form-required { color: var(--ou-error-fg); }
     .wf-form-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); line-height: 1.5; }
-    .wf-text-input {
-      display: block; width: 100%; height: var(--wf-size-36); padding: 0 var(--ou-space-3);
-      border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s);
-      font: var(--ou-text-body-s); font-family: inherit;
-      background: var(--ou-bg-elevated); color: var(--ou-fg-default); box-sizing: border-box;
-    }
-    .wf-text-input--m { width: var(--wf-size-140); }
-    .wf-textarea {
-      display: block; width: 100%; padding: var(--ou-space-2) var(--ou-space-3);
-      border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s);
-      font: var(--ou-text-body-s); font-family: inherit;
-      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
-      resize: vertical; box-sizing: border-box;
-    }
-    .wf-select {
-      height: var(--wf-size-36); padding: 0 var(--ou-space-5) 0 var(--ou-space-3);
-      border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s);
-      font: var(--ou-text-body-s); font-family: inherit;
-      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
-    }
-    .wf-select--full { width: 100%; }
-    .wf-section-label {
-      font: var(--ou-text-caption); font-weight: 700;
-      text-transform: uppercase; letter-spacing: .06em;
-      color: var(--ou-fg-muted); margin-bottom: var(--ou-space-3);
-    }
     .wf-sep { border: none; border-top: var(--wf-border-w) solid var(--ou-border-soft); margin: var(--ou-space-5) 0; }
 
     /* ── Segmented control ───────────────────────────────────────────────── */
@@ -207,43 +181,6 @@
     .wf-tbl-td-nowrap { white-space: nowrap; }
 
     /* Table compact controls */
-    .wf-tbl-select {
-      height: var(--wf-size-30); padding: 0 var(--ou-space-3) 0 var(--ou-space-2);
-      border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s);
-      font: var(--ou-text-caption); font-family: inherit;
-      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
-    }
-    .wf-tbl-select--w { width: var(--wf-size-100); }
-    .wf-tbl-input-s {
-      width: var(--wf-size-60); height: var(--wf-size-30); padding: 0 var(--ou-space-2);
-      border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s);
-      font: var(--ou-text-caption); font-family: inherit;
-      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
-    }
-    .wf-tbl-input-m {
-      width: var(--ou-space-11); height: var(--wf-size-30); padding: 0 var(--ou-space-2);
-      border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s);
-      font: var(--ou-text-caption); font-family: inherit;
-      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
-    }
-    .wf-tbl-input-l {
-      width: var(--wf-size-90); height: var(--wf-size-28); padding: 0 var(--ou-space-2);
-      border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s);
-      font: var(--ou-text-caption); font-family: inherit;
-      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
-    }
-    .wf-tbl-input-num {
-      width: var(--wf-size-55); height: var(--wf-size-28); padding: 0 var(--ou-space-2);
-      border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s);
-      font: var(--ou-text-caption); font-family: inherit;
-      background: var(--ou-bg-elevated); color: var(--ou-fg-default);
-    }
-    .wf-tbl-textarea {
-      width: 100%; font: var(--ou-text-caption); font-family: inherit;
-      padding: var(--ou-space-1) var(--ou-space-2);
-      border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s);
-      resize: vertical; background: var(--ou-bg-elevated); color: var(--ou-fg-default);
-    }
     .wf-tbl-custom-rule { display: flex; flex-direction: column; gap: var(--ou-space-1); }
     .wf-tbl-custom-fields { display: flex; align-items: center; gap: var(--ou-space-1); margin-top: var(--ou-space-1); }
     .wf-tbl-custom-unit { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
@@ -331,13 +268,6 @@
     .wf-adaptive-mode-row { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-4); }
     .wf-link-text { font: var(--ou-text-caption); color: var(--ou-accent-default); text-decoration: none; }
     .wf-link-text:hover { text-decoration: underline; }
-    .wf-code-textarea { font-family: ui-monospace, monospace; font-size: var(--ou-space-3); }
-
-    /* ── Detail panel ────────────────────────────────────────────────────── */
-    .wf-detail-panel {
-      border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-m);
-      margin-top: var(--ou-space-4); overflow: hidden;
-    }
     .wf-detail-panel-header {
       background: var(--ou-bg-muted); padding: var(--ou-space-2) var(--ou-space-4);
       font: var(--ou-text-body-s); font-weight: 600;
