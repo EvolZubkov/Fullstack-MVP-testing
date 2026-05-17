@@ -67,11 +67,13 @@ const legacyClassTokens = [
   // Modal/dialog parts
   'modal-overlay', 'modal-dialog', 'modal-title', 'modal-desc',
   'modal-actions', 'modal-warn',
+  'modal-option', 'modal-option-title', 'modal-option-sub',
+  'modal-option-icon', 'modal-option-danger', 'modal-inset',
   'dialog-header', 'dialog-body', 'dialog-footer', 'dialog-title',
   'dialog-footer-split', 'dialog-lg',
   'overlay',
-  // Note: modal-option / modal-option-{title,sub,icon,danger} / modal-inset
-  // have no DS equivalent (radio-card pattern inside modal) — gap, see audit.
+  // modal-option-* / modal-inset migrated to DS ou-choice-card (3.3d / 4a-fix);
+  // listed here as a regression guard.
   // Toggle / radio
   'toggle', 'toggle-row', 'toggle-on', 'toggle-off',
   'radio-row', 'radio-opt',

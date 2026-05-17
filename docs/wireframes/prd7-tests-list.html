@@ -348,33 +348,6 @@
     }
     .modal-title { font-size: var(--wf-space-14); font-weight: 700; margin-bottom: var(--wf-space-6); }
     .modal-desc { font-size: var(--ou-space-3); color: var(--muted-fg); margin-bottom: var(--wf-space-14); line-height: 1.5; }
-    .modal-option {
-      display: flex; gap: var(--wf-space-10); padding: var(--wf-space-11) var(--ou-space-3);
-      border: var(--wf-border-w-1-5) solid var(--border); border-radius: var(--radius-sm);
-      cursor: pointer; margin-bottom: var(--ou-space-2); align-items: flex-start;
-    }
-    .modal-option.selected { border-color: var(--primary); background: var(--ou-accent-soft); }
-    .modal-option-icon { flex-shrink: 0; margin-top: var(--wf-border-w); color: var(--muted-fg); }
-    .modal-option.selected .modal-option-icon { color: var(--primary); }
-    .modal-option-danger.selected .modal-option-icon { color: var(--destructive); }
-    .modal-option-danger.selected { border-color: var(--ou-error-default); background: var(--error-bg); }
-    .modal-option-title { font-size: var(--wf-space-13); font-weight: 600; }
-    .modal-option-sub { font-size: var(--ou-space-3); color: var(--muted-fg); margin-top: var(--wf-space-half); line-height: 1.4; }
-    .modal-inset {
-      margin-top: var(--wf-space-10); padding: var(--wf-space-10) var(--ou-space-3);
-      background: var(--bg); border-radius: var(--radius-sm);
-      border: var(--wf-border-w) solid var(--card-border);
-    }
-    .modal-inset label { font-size: var(--wf-space-11); color: var(--muted-fg); display: block; margin-bottom: var(--wf-space-tiny); }
-    .modal-inset select, .modal-inset input[type="text"] { width: 100%; }
-    .modal-inset input[type="text"]::placeholder { color: var(--card-border); font-style: italic; }
-    .modal-warn {
-      display: flex; align-items: flex-start; gap: var(--wf-space-7);
-      font-size: var(--ou-space-3); color: var(--destructive); line-height: 1.45;
-      margin-top: var(--ou-space-3); padding: var(--wf-space-9) var(--wf-space-11);
-      background: var(--error-bg); border: var(--wf-border-w) solid var(--ou-error-default);
-      border-radius: var(--radius-sm);
-    }
     .modal-actions { display: flex; gap: var(--ou-space-2); justify-content: flex-end; margin-top: var(--ou-space-5); }
     .btn-destructive { background: var(--destructive); color: var(--ou-neutral-0); border-color: transparent; }
     .btn-destructive:hover { opacity: .9; }
@@ -1632,35 +1605,41 @@
         <div class="ou-modal__title" id="del-a-title">Удалить папку «Информационная безопасность»?</div>
         <div class="ou-modal__desc">Папка содержит 2 теста. Выберите, что сделать с тестами.</div>
 
-        <!-- Option A — selected -->
-        <div class="modal-option selected" role="radio" aria-checked="true">
-          <div class="modal-option-icon">
-            <svg width="15" height="15" aria-hidden="true"><use href="#i-folder"/></svg>
-          </div>
-          <div style="flex:1;">
-            <div class="modal-option-title">Только папку</div>
-            <div class="modal-option-sub">Тесты сохраняются и перемещаются в указанное место.</div>
-            <div class="modal-inset">
-              <label for="del-a-dest">Переместить тесты в:</label>
-              <div class="ou-field ou-field--m"><div class="ou-field__box"><select class="ou-field__input" id="del-a-dest">
-                <option value="">Корень (Все тесты)</option>
-                <option>Онбординг</option>
-                <option>Охрана труда</option>
-              </select></div></div>
-            </div>
-          </div>
-        </div>
+        <fieldset class="ou-choice-card-group">
+          <div class="ou-choice-card-group__items">
+            <!-- Option A — selected -->
+            <label class="ou-choice-card is-selected">
+              <input class="ou-choice-card__input" type="radio" name="del-a-action" value="folder-only" checked>
+              <span class="ou-choice-card__lead" aria-hidden="true">
+                <svg width="20" height="20"><use href="#i-folder"/></svg>
+              </span>
+              <span class="ou-choice-card__body">
+                <span class="ou-choice-card__title">Только папку</span>
+                <span class="ou-choice-card__desc">Тесты сохраняются и перемещаются в указанное место.</span>
+                <span class="ou-choice-card__inset">
+                  <label for="del-a-dest">Переместить тесты в:</label>
+                  <div class="ou-field ou-field--m"><div class="ou-field__box"><select class="ou-field__input" id="del-a-dest">
+                    <option value="">Корень (Все тесты)</option>
+                    <option>Онбординг</option>
+                    <option>Охрана труда</option>
+                  </select></div></div>
+                </span>
+              </span>
+            </label>
 
-        <!-- Option B — not selected -->
-        <div class="modal-option modal-option-danger" role="radio" aria-checked="false">
-          <div class="modal-option-icon">
-            <svg width="15" height="15" aria-hidden="true"><use href="#i-trash"/></svg>
+            <!-- Option B — not selected -->
+            <label class="ou-choice-card ou-choice-card--destructive">
+              <input class="ou-choice-card__input" type="radio" name="del-a-action" value="folder-and-tests">
+              <span class="ou-choice-card__lead" aria-hidden="true">
+                <svg width="20" height="20"><use href="#i-trash"/></svg>
+              </span>
+              <span class="ou-choice-card__body">
+                <span class="ou-choice-card__title">Папку и все тесты</span>
+                <span class="ou-choice-card__desc">2 теста будут удалены без возможности восстановления.</span>
+              </span>
+            </label>
           </div>
-          <div>
-            <div class="modal-option-title">Папку и все тесты</div>
-            <div class="modal-option-sub">2 теста будут удалены без возможности восстановления.</div>
-          </div>
-        </div>
+        </fieldset>
 
         <div class="ou-modal__foot">
           <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
@@ -1716,39 +1695,45 @@
         <div class="ou-modal__title" id="del-b-title">Удалить папку «Информационная безопасность»?</div>
         <div class="ou-modal__desc">Папка содержит 2 теста. Выберите, что сделать с тестами.</div>
 
-        <!-- Option A — not selected -->
-        <div class="modal-option" role="radio" aria-checked="false">
-          <div class="modal-option-icon">
-            <svg width="15" height="15" aria-hidden="true"><use href="#i-folder"/></svg>
-          </div>
-          <div>
-            <div class="modal-option-title">Только папку</div>
-            <div class="modal-option-sub">Тесты сохраняются и перемещаются в указанное место.</div>
-          </div>
-        </div>
+        <fieldset class="ou-choice-card-group">
+          <div class="ou-choice-card-group__items">
+            <!-- Option A — not selected -->
+            <label class="ou-choice-card">
+              <input class="ou-choice-card__input" type="radio" name="del-b-action" value="folder-only">
+              <span class="ou-choice-card__lead" aria-hidden="true">
+                <svg width="20" height="20"><use href="#i-folder"/></svg>
+              </span>
+              <span class="ou-choice-card__body">
+                <span class="ou-choice-card__title">Только папку</span>
+                <span class="ou-choice-card__desc">Тесты сохраняются и перемещаются в указанное место.</span>
+              </span>
+            </label>
 
-        <!-- Option B — selected (destructive) -->
-        <div class="modal-option modal-option-danger selected" role="radio" aria-checked="true">
-          <div class="modal-option-icon">
-            <svg width="15" height="15" aria-hidden="true"><use href="#i-trash"/></svg>
+            <!-- Option B — selected (destructive) -->
+            <label class="ou-choice-card ou-choice-card--destructive is-selected">
+              <input class="ou-choice-card__input" type="radio" name="del-b-action" value="folder-and-tests" checked>
+              <span class="ou-choice-card__lead" aria-hidden="true">
+                <svg width="20" height="20"><use href="#i-trash"/></svg>
+              </span>
+              <span class="ou-choice-card__body">
+                <span class="ou-choice-card__title">Папку и все тесты</span>
+                <span class="ou-choice-card__desc">2 теста будут удалены без возможности восстановления.</span>
+                <span class="ou-banner ou-banner--warning">
+                  <svg width="14" height="14" aria-hidden="true" style="flex-shrink:0;margin-top:var(--wf-border-w);"><use href="#i-info"/></svg>
+                  Это действие необратимо. Все попытки прохождения, назначения и вопросы этих тестов также будут удалены.
+                </span>
+                <span class="ou-choice-card__inset">
+                  <label for="del-b-confirm">Введите название папки для подтверждения:</label>
+                  <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" id="del-b-confirm" placeholder="Информационная безопасность"
+                         aria-describedby="del-b-hint"></div></div>
+                  <span id="del-b-hint" style="font: var(--ou-text-body-xs); color: var(--ou-fg-muted); margin-top: var(--wf-space-tiny);">
+                    Введите точно: <strong>Информационная безопасность</strong>
+                  </span>
+                </span>
+              </span>
+            </label>
           </div>
-          <div style="flex:1;">
-            <div class="modal-option-title">Папку и все тесты</div>
-            <div class="modal-option-sub">2 теста будут удалены без возможности восстановления.</div>
-            <div class="ou-banner ou-banner--warning">
-              <svg width="14" height="14" flex-shrink="0" aria-hidden="true" style="flex-shrink:0;margin-top:var(--wf-border-w);"><use href="#i-info"/></svg>
-              Это действие необратимо. Все попытки прохождения, назначения и вопросы этих тестов также будут удалены.
-            </div>
-            <div class="modal-inset">
-              <label for="del-b-confirm">Введите название папки для подтверждения:</label>
-              <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" id="del-b-confirm" placeholder="Информационная безопасность"
-                     aria-describedby="del-b-hint"></div></div>
-              <div id="del-b-hint" style="font-size:var(--wf-space-11);color:var(--muted-fg);margin-top:var(--wf-space-tiny);">
-                Введите точно: <strong>Информационная безопасность</strong>
-              </div>
-            </div>
-          </div>
-        </div>
+        </fieldset>
 
         <div class="ou-modal__foot">
           <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
