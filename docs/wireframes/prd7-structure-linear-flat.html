@@ -452,7 +452,7 @@
         <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
       </div></nav>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="banner banner-error" role="alert"><svg width="15" height="15"><use href="#i-warn"/></svg><span>Не удалось загрузить структуру. Проверьте соединение.</span></div>
+        <div class="ou-banner ou-banner--error" role="alert"><svg width="15" height="15"><use href="#i-warn"/></svg><span>Не удалось загрузить структуру. Проверьте соединение.</span></div>
         <div class="empty-block">
           <svg width="28" height="28" style="color:var(--error);margin-bottom:8px;"><use href="#i-warn"/></svg>
           <div class="empty-title">Ошибка загрузки</div>
@@ -488,7 +488,7 @@
         <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
       </div></nav>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="banner banner-warn" role="status"><svg width="15" height="15"><use href="#i-info"/></svg><span>Тест опубликован. Структура доступна только для просмотра.</span></div>
+        <div class="ou-banner ou-banner--warning" role="status"><svg width="15" height="15"><use href="#i-info"/></svg><span>Тест опубликован. Структура доступна только для просмотра.</span></div>
         <div class="flow-mode-bar"><svg width="14" height="14"><use href="#i-layout"/></svg><span>Режим:</span><span class="flow-mode-label">Плоский (linear_flat)</span></div>
         <div class="zone-block">
           <div class="zone-header"><svg width="14" height="14"><use href="#i-chevron-down"/></svg> Перед тестом</div>
@@ -752,7 +752,7 @@
         <span class="status-dot dirty" aria-label="Несохранённые изменения" style="margin-left:6px;"></span>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
-      <div class="banner banner-warn" role="alert" style="border-radius:0;border-left:none;border-right:none;border-top:none;">
+      <div class="ou-banner ou-banner--warning" role="alert" style="border-radius:0;border-left:none;border-right:none;border-top:none;">
         <svg width="14" height="14"><use href="#i-warn"/></svg>
         <span>Есть несохранённые изменения. Закрыть без сохранения?</span>
         <div style="display:flex;gap:6px;margin-left:auto;flex-shrink:0;"><button class="ou-btn ou-btn--ghost ou-btn--s" type="button">Отменить</button><button class="ou-btn ou-btn--destructive ou-btn--s" type="button">Закрыть без сохранения</button></div>
@@ -784,7 +784,7 @@
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="banner banner-error" role="alert"><svg width="14" height="14"><use href="#i-warn"/></svg><span>Исправьте ошибки перед сохранением.</span></div>
+        <div class="ou-banner ou-banner--error" role="alert"><svg width="14" height="14"><use href="#i-warn"/></svg><span>Исправьте ошибки перед сохранением.</span></div>
         <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-val-title">Название страницы</label><input id="lf-val-title" class="form-control form-error" type="text" value="" placeholder="Введите название…" aria-invalid="true" aria-describedby="lf-val-title-err"><div id="lf-val-title-err" class="form-error-msg" role="alert">Название обязательно.</div></div>
         <div class="ou-formfield"><label class="ou-formfield__lbl" for="lf-val-content">Содержимое</label><textarea id="lf-val-content" class="form-control form-error" rows="5" aria-invalid="true" aria-describedby="lf-val-content-err"></textarea><div id="lf-val-content-err" class="form-error-msg" role="alert">Содержимое не может быть пустым.</div></div>
       </div>
@@ -929,7 +929,7 @@
         <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
       </div></nav>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="banner banner-warn" role="alert"><svg width="14" height="14"><use href="#i-warn"/></svg><span>Режим изменён на <strong>linear_by_topics</strong>. Проверьте совместимость.</span></div>
+        <div class="ou-banner ou-banner--warning" role="alert"><svg width="14" height="14"><use href="#i-warn"/></svg><span>Режим изменён на <strong>linear_by_topics</strong>. Проверьте совместимость.</span></div>
         <div class="mode-change-warn">
           <div class="mode-change-warn-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none';">
             <svg width="14" height="14"><use href="#i-warn"/></svg>

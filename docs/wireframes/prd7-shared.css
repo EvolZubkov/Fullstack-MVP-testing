@@ -109,19 +109,6 @@ body {
 /* ── Content scroll area ──────────────────────────────────────────────── */
 .content { flex: 1; overflow-y: auto; padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-9); }
 
-/* ── Banners ──────────────────────────────────────────────────────────── */
-.banner {
-  display: flex; align-items: center; gap: var(--ou-space-2);
-  padding: var(--ou-space-3) var(--ou-space-4); font: var(--ou-text-body-s);
-  border-bottom: 1px solid transparent; flex-shrink: 0;
-}
-.banner.warn     { background: var(--warn-bg);     border-color: var(--warn-border);     color: var(--warn-fg); }
-.banner.error    { background: var(--error-bg);    border-color: var(--error-border);    color: var(--destructive); }
-.banner.info     { background: var(--info-bg);     border-color: var(--info-border);     color: var(--info-fg); }
-.banner.readonly { background: var(--readonly-bg); border-color: var(--ou-border-soft);  color: var(--ou-fg-muted); }
-.banner-icon { width: 16px; height: 16px; flex-shrink: 0; }
-.banner-close { margin-left: auto; cursor: pointer; opacity: 0.6; font-size: 16px; line-height: 1; }
-
 /* ── Sections ─────────────────────────────────────────────────────────── */
 .section { margin-bottom: var(--ou-space-6); }
 .section-label {
