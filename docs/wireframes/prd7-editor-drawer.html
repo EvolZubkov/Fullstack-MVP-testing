@@ -50,25 +50,26 @@
       letter-spacing: .06em; color: var(--muted-fg); margin-bottom: var(--ou-space-3);
     }
     .topic-row {
-      border: var(--wf-border-w) solid var(--border); border-radius: var(--radius);
-      background: var(--bg); margin-bottom: var(--ou-space-2); overflow: hidden;
+      border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-l);
+      background: var(--ou-bg-elevated); box-shadow: var(--ou-shadow-sm);
+      margin-bottom: var(--ou-space-2); overflow: hidden;
     }
     .topic-row-header {
       display: flex; align-items: center; gap: var(--ou-space-2);
-      padding: var(--ou-space-2) var(--wf-space-14); background: var(--card); border-bottom: var(--wf-border-w) solid var(--border);
+      padding: var(--ou-space-2) var(--ou-space-4); background: var(--ou-bg-subtle); border-bottom: var(--wf-border-w) solid var(--ou-border-default);
     }
-    .topic-name { font-size: var(--wf-space-13); font-weight: 600; flex: 1; }
-    .topic-count { font-size: var(--ou-space-3); color: var(--muted-fg); }
-    .topic-row-body { padding: var(--ou-space-3) var(--wf-space-14); }
+    .topic-name { font: var(--ou-text-heading-s); flex: 1; }
+    .topic-count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    .topic-row-body { padding: var(--ou-space-3) var(--ou-space-4); }
     .draw-count-row { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-2); }
-    .draw-count-label { font-size: var(--wf-space-13); width: var(--wf-size-150); flex-shrink: 0; }
-    .draw-count-max { font-size: var(--ou-space-3); color: var(--muted-fg); }
-    .feedback-label { font-size: var(--ou-space-3); color: var(--muted-fg); margin-bottom: var(--ou-space-1); }
+    .draw-count-label { font: var(--ou-text-body-s); width: var(--wf-size-150); flex-shrink: 0; }
+    .draw-count-max { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+    .feedback-label { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-1); }
     .feedback-preview {
-      border: var(--wf-border-w) solid var(--border); border-radius: var(--radius-md);
-      padding: var(--ou-space-2) var(--ou-space-3); font-size: var(--wf-space-13); cursor: pointer;
+      border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-m);
+      padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); cursor: pointer;
     }
-    .feedback-preview:hover { border-color: var(--primary); }
+    .feedback-preview:hover { border-color: var(--ou-accent-default); }
     .feedback-preview.empty { color: var(--muted-fg); font-style: italic; }
     .feedback-text { display: flex; align-items: baseline; gap: var(--ou-space-2); }
     .feedback-snippet { flex: 1; }
@@ -335,7 +336,7 @@
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
       <header class="ou-drawer__head">
         <div class="ou-drawer__head-text"><h1 id="dt-default" class="ou-drawer__title">Основы информационной безопасности</h1></div>
-        <span class="ou-tag ou-tag--success">Опубликован</span>
+        <span class="ou-tag ou-tag--success ou-tag--outline">Опубликован</span>
         <span class="ou-tag ou-tag--neutral ou-tag--outline">v7</span>
         <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
           <svg width="16" height="16"><use href="#i-x"/></svg>
@@ -419,7 +420,6 @@
         <p class="form-hint-small">Общая обратная связь теста редактируется во вкладке Настройки &rarr; Обратная связь.</p>
       </div>
       <footer class="ou-drawer__foot">
-        <span class="ou-tag ou-tag--neutral ou-tag--outline">Изменений нет</span>
         <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true">Сохранить</button>
       </footer>
     </aside>
