@@ -1,0 +1,1618 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-7: Design Tab (Оформление)</title>
+  <link rel="stylesheet" href="ds/university-rt.css" />
+  <link rel="stylesheet" href="prd7-shared.css" />
+  <link rel="stylesheet" href="ds/wf-utils.css" />
+  <style>
+    /* Wireframe-only helpers — do not migrate to prd7-shared.css */
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Background tests list (blurred behind drawer) */
+    .wf-tests-list { filter: blur(0.5px); opacity: 0.7; pointer-events: none; }
+    .test-card-stub { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px; }
+    .test-card-stub .test-card-title { font-size: 14px; font-weight: 600; flex: 1; }
+    body.has-active-shell .mobile-section { display: none; }
+
+    /* Template block */
+    .tpl-block { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); padding: 14px 16px; display: flex; align-items: center; gap: 14px; }
+    .tpl-thumb { width: 80px; height: 56px; border-radius: var(--radius-md); background: var(--muted); border: 1px solid var(--border); flex-shrink: 0; overflow: hidden; }
+    .tpl-info { flex: 1; min-width: 0; }
+    .tpl-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+    .tpl-desc { font-size: 12px; color: var(--muted-fg); }
+    .tpl-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+
+    /* Mini SCORM preview sketch */
+    .preview-sketch { width: 100%; height: 100%; display: flex; flex-direction: column; font-size: 8px; }
+    .ps-header { height: 18px; background: var(--ou-accent-default); display: flex; align-items: center; padding: 0 6px; gap: 4px; }
+    .ps-logo { width: 10px; height: 10px; background: white; border-radius: 2px; opacity: 0.8; }
+    .ps-title { color: color-mix(in srgb, white 80%, transparent); font-size: 7px; }
+    .ps-progress { height: 3px; background: color-mix(in srgb, var(--ou-accent-default) 20%, transparent); }
+    .ps-progress-bar { height: 100%; background: var(--ou-success-default); width: 40%; }
+    .ps-body { flex: 1; display: flex; }
+    .ps-sidebar { width: 28%; background: var(--ou-bg-page); border-right: 1px solid var(--ou-border-soft); padding: 4px; }
+    .ps-nav-item { height: 5px; background: var(--ou-bg-surface-3); border-radius: 1px; margin-bottom: 2px; }
+    .ps-nav-item.active { background: color-mix(in srgb, var(--ou-accent-default) 30%, transparent); }
+    .ps-content { flex: 1; padding: 5px 6px; }
+    .ps-q { font-size: 6px; color: var(--ou-fg-default); margin-bottom: 4px; line-height: 1.3; }
+    .ps-opt { height: 5px; background: var(--ou-bg-hover); border-radius: 1px; margin-bottom: 2px; }
+    .ps-opt.sel { background: color-mix(in srgb, var(--ou-accent-default) 20%, transparent); border: 1px solid color-mix(in srgb, var(--ou-accent-default) 40%, transparent); }
+
+    /* Color picker */
+    .color-row { display: flex; align-items: center; gap: 8px; }
+    .color-swatch { width: 36px; height: 36px; border-radius: var(--radius-md); border: 1px solid var(--input-b); flex-shrink: 0; cursor: pointer; }
+    .color-row input { flex: 1; }
+    .color-popover { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 32px color-mix(in srgb, black 18%, transparent); padding: 12px; width: 220px; margin-top: 6px; }
+    .color-gradient { width: 196px; height: 120px; border-radius: var(--radius-md); background: linear-gradient(to bottom, transparent, black), linear-gradient(to right, white, var(--ou-accent-default)); position: relative; margin-bottom: 10px; }
+    .color-cursor { position: absolute; width: 12px; height: 12px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, black 40%, transparent); top: 30%; right: 40%; }
+    .color-hue { width: 196px; height: 10px; border-radius: 5px; background: linear-gradient(to right, red, yellow, lime, cyan, blue, magenta, red); margin-bottom: 10px; position: relative; }
+    .color-hue-thumb { position: absolute; top: -2px; left: 59%; width: 14px; height: 14px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, black 30%, transparent); background: var(--ou-accent-default); }
+    .color-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+    .color-preset { width: 20px; height: 20px; border-radius: 4px; cursor: pointer; border: 1px solid color-mix(in srgb, black 10%, transparent); }
+
+    /* File / asset row */
+    .file-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .file-chip { display: flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: var(--radius-md); background: var(--secondary); font-size: 12px; }
+    .file-chip .rm { cursor: pointer; color: var(--muted-fg); font-size: 11px; }
+
+    /* Multiselect */
+    .multiselect-wrap { display: flex; flex-wrap: wrap; gap: 4px; border: 1px solid var(--input-b); border-radius: var(--radius-md); padding: 4px 8px; min-height: 36px; align-items: center; background: var(--bg); }
+    .multiselect-chip { display: inline-flex; align-items: center; gap: 3px; padding: 1px 6px; background: var(--secondary); border-radius: var(--radius-sm); font-size: 12px; }
+    .multiselect-chip .rm { cursor: pointer; color: var(--muted-fg); font-size: 11px; }
+    .multiselect-input { border: none; outline: none; font-size: 13px; background: transparent; min-width: 80px; }
+
+    /* Gallery */
+    .gallery-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+    .gallery-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .gallery-card { border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card); overflow: hidden; }
+    .gallery-card.selected { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ou-accent-default) 20%, transparent); }
+    .gallery-preview { aspect-ratio: 16/9; background: var(--muted); overflow: hidden; }
+    .gallery-body { padding: 10px 12px; }
+    .gallery-name { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+    .gallery-desc { font-size: 12px; color: var(--muted-fg); margin-bottom: 8px; line-height: 1.4; }
+    .gallery-footer { display: flex; gap: 6px; }
+
+    /* Section header with context menu */
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .section-header .section-label { margin-bottom: 0; }
+
+
+    .context-menu { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 8px 24px color-mix(in srgb, black 14%, transparent); padding: 4px 0; min-width: 200px; display: inline-block; }
+    .context-menu-item { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 13px; color: var(--fg); cursor: pointer; white-space: nowrap; }
+    .context-menu-item:hover { background: var(--accent); }
+    .context-menu-item.danger { color: var(--destructive); }
+    .context-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
+
+    /* Diagnostics */
+    .diag-grid { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; font-size: 12px; margin: 8px 0; }
+    .diag-label { color: var(--muted-fg); white-space: nowrap; }
+    .diag-value { font-family: ui-monospace, monospace; color: var(--fg); }
+
+    /* Param type badge */
+    .param-type { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 3px; background: var(--muted); color: var(--muted-fg); margin-left: 6px; vertical-align: middle; }
+
+    /* Read-only field */
+    .readonly-field { background: var(--readonly-bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 6px 10px; font-size: 13px; color: var(--muted-fg); font-family: ui-monospace, monospace; display: block; }
+
+    /* URL field */
+    .url-field-wrap { display: flex; align-items: center; gap: 6px; }
+    .url-field-wrap input { flex: 1; }
+  </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: 1px solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: 1px solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: 1px;
+      height: 20px;
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, 52px); }
+    .wf-state.active { display: block; }
+    .shell.wf-state.active { display: flex; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, 52px);
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, 52px));
+      max-height: calc(100vh - var(--wf-nav-offset, 52px));
+    }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<!-- ─── SVG sprite ─────────────────────────────────────────────────────────── -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x"          viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <symbol id="i-folder"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-question"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></symbol>
+  <symbol id="i-clipboard"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+  <symbol id="i-chart"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></symbol>
+  <symbol id="i-users"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-warn"       viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-loader"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol>
+  <symbol id="i-eye"        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-search"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+  <symbol id="i-check"      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-info"       viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+  <symbol id="i-layout"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></symbol>
+  <symbol id="i-link"       viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+  <symbol id="i-download"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-palette"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></symbol>
+</svg>
+
+<!-- ─── Background page template ──────────────────────────────────────────── -->
+<template id="tpl-bg-page">
+  <div class="shell active wf-tests-list" aria-hidden="true">
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-box">TB</div>
+        <div class="sidebar-title">Test Builder</div>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="nav-group-label">Автор-панель</div>
+        <div class="nav-item"><svg class="nav-icon"><use href="#i-folder"/></svg>Темы</div>
+        <div class="nav-item"><svg class="nav-icon"><use href="#i-question"/></svg>Вопросы</div>
+        <div class="nav-item active"><svg class="nav-icon"><use href="#i-clipboard"/></svg>Тесты</div>
+        <div class="nav-item"><svg class="nav-icon"><use href="#i-chart"/></svg>Аналитика</div>
+        <div class="nav-item"><svg class="nav-icon"><use href="#i-users"/></svg>Пользователи</div>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="user-row">
+          <div class="avatar">АИ</div>
+          <div><div class="user-name">Алексей Иванов</div><div class="user-role">Автор</div></div>
+        </div>
+      </div>
+    </aside>
+    <div class="main">
+      <div class="topbar">
+        <span class="test-title">Тесты</span>
+        <button class="ou-btn ou-btn--primary ou-btn--s" type="button">Новый тест</button>
+      </div>
+      <div class="content">
+        <div class="test-card-stub"><div class="test-card-title">Основы информационной безопасности</div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+        <div class="test-card-stub"><div class="test-card-title">GDPR для разработчиков</div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+        <div class="test-card-stub"><div class="test-card-title">Аудит логов SCORM</div><span class="ou-tag ou-tag--neutral ou-tag--outline">Архив</span></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ─── State switcher ─────────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Оформление (PRD-7 Drawer):</span>
+  <button class="wf-btn active" type="button" onclick="showState(this, 's-main')">Основное</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-empty')">Новый тест (дефолт)</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-loading')">Загрузка</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-saving')">Сохранение</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-dirty')">Несохранённые изм.</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-error')">Ошибка API</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-validation')">Ошибка валидации</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-readonly')">Read-only</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-preview')">Предпросмотр</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-saved')">Сохранено</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-color-picker')">Color picker</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-gallery')">Галерея</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-gallery-search')">Галерея: поиск</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-gallery-empty')">Галерея: нет рез.</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-gallery-confirm')">Галерея: подтвержд.</button>
+  <a class="wf-link" href="prd7-editor-drawer.html">&larr; Drawer</a>
+  <a class="wf-link" href="prd7-structure-linear-by-topics.html" style="margin-left:0;">Структура &rarr;</a>
+
+  <div class="wf-nav-sep"></div>
+  <button type="button" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-main — Основное (шаблон выбран, все параметры)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-main" class="wf-state shell active" data-state="main">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-main-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-main-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--success">Опубликован</span>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline">v7</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <!-- Секция: Шаблон -->
+        <div class="section">
+          <div class="section-header">
+            <div class="section-label">Шаблон</div>
+            <div style="position:relative;display:inline-block;">
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" type="button" aria-label="Действия с шаблоном" aria-haspopup="menu"><svg width="16" height="16"><use href="#i-more"/></svg></button>
+            </div>
+          </div>
+          <div class="tpl-block">
+            <div class="tpl-thumb">
+              <div class="preview-sketch">
+                <div class="ps-header"><div class="ps-logo"></div><div class="ps-title">ИБ</div></div>
+                <div class="ps-progress"><div class="ps-progress-bar"></div></div>
+                <div class="ps-body">
+                  <div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div><div class="ps-nav-item"></div></div>
+                  <div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div><div class="ps-opt"></div><div class="ps-opt"></div></div>
+                </div>
+              </div>
+            </div>
+            <div class="tpl-info">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <div class="tpl-name">Корпоративный</div>
+                <span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">v1.2.0</span>
+              </div>
+              <div class="tpl-desc">Боковая панель навигации, брендирование, прогресс по темам</div>
+            </div>
+            <div class="tpl-actions">
+              <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+              <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-layout"/></svg> Заменить шаблон</button>
+            </div>
+          </div>
+          <!-- Диагностика шаблона -->
+          <details style="margin-top:10px;">
+            <summary style="font-size:12px;color:var(--muted-fg);cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:6px;"><svg width="14" height="14"><use href="#i-info"/></svg> Диагностика шаблона</summary>
+            <div class="diag-grid" style="margin-top:8px;padding:10px;background:var(--accent);border-radius:var(--radius-sm);">
+              <span class="diag-label">templateVersion</span><span class="diag-value">1.2.0</span>
+              <span class="diag-label">templateApiVersion</span><span class="diag-value">4.0</span>
+              <span class="diag-label">templateId</span><span class="diag-value">corporate-v2</span>
+              <span class="diag-label">Статус совместимости</span><span class="diag-value" style="color:var(--ou-success-default);">OK</span>
+            </div>
+          </details>
+        </div>
+        <hr class="sep">
+        <!-- Секция: Параметры -->
+        <div class="section">
+          <div class="section-label">Параметры</div>
+          <div style="font-size:12px;color:var(--muted-fg);margin-bottom:14px;padding:8px 10px;background:var(--accent);border-radius:var(--radius-sm);border:1px solid var(--card-border);">Набор параметров определяется разработчиком шаблона «Корпоративный».</div>
+
+          <div class="subsection-label">Брендирование</div>
+          <div class="form-group">
+            <label class="form-label">Основной цвет бренда <span class="req">*</span><span class="param-type">color</span></label>
+            <div class="color-row"><div class="color-swatch" style="background:#0066cc;"></div><input type="text" value="#0066CC" style="max-width:120px;"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Дополнительный цвет<span class="param-type">color</span></label>
+            <div class="color-row"><div class="color-swatch" style="background:#ff6600;"></div><input type="text" value="#FF6600" style="max-width:120px;"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Логотип<span class="param-type">file</span></label>
+            <div class="file-row"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Загрузить изображение</button><span class="file-chip">logo.png <span class="rm">&#x2715;</span></span></div>
+            <div class="form-hint">PNG, SVG, до 512 КБ</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Шрифт заголовков<span class="param-type">file</span></label>
+            <div class="file-row"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Загрузить шрифт</button><span class="file-chip">Inter.woff2 <span class="rm">&#x2715;</span></span></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Фоновое изображение<span class="param-type">asset</span></label>
+            <div class="file-row"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-palette"/></svg> Выбрать из медиатеки</button><span class="file-chip">bg-corporate.jpg <span class="rm">&#x2715;</span></span></div>
+            <div class="form-hint">Выбирается из загруженных медиафайлов теста</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ссылка на регламент<span class="param-type">url</span></label>
+            <div class="url-field-wrap"><input type="text" value="https://corp.example.com/policy" placeholder="https://"><button class="ou-btn ou-btn--secondary ou-btn--s url-open-btn" type="button"><svg width="13" height="13"><use href="#i-link"/></svg></button></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Материалы для скачивания<span class="param-type">downloadLink</span></label>
+            <div class="file-row"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-download"/></svg> Добавить файл</button><span class="file-chip">policy-v3.pdf <span class="rm">&#x2715;</span></span></div>
+            <div class="form-hint">Файл будет доступен обучающемуся на странице теста</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Теги шаблона<span class="param-type">multiselect</span></label>
+            <div class="multiselect-wrap"><span class="multiselect-chip">Корпоративный <span class="rm">&#x2715;</span></span><span class="multiselect-chip">Брендинг <span class="rm">&#x2715;</span></span><input class="multiselect-input" type="text" placeholder="Добавить…"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Подпись в подвале<span class="param-type">text</span></label>
+            <input type="text" value="© 2024 Корпоративный университет">
+          </div>
+
+          <div class="subsection-label" style="margin-top:20px;">Макет</div>
+          <div class="form-group">
+            <label class="form-label">Позиция боковой панели</label>
+            <div class="radio-row">
+              <label class="radio-opt"><input type="radio" name="sp-main" checked> Слева</label>
+              <label class="radio-opt"><input type="radio" name="sp-main"> Справа</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Максимальная ширина контента (px)<span class="param-type">number</span></label>
+            <input type="number" value="1200" style="max-width:120px;">
+          </div>
+
+          <div class="subsection-label" style="margin-top:20px;">Прогресс и шапка</div>
+          <div class="form-group">
+            <label class="form-label">Режим прогресса<span class="param-type">select</span></label>
+            <select style="max-width:220px;"><option selected>Вопросы</option><option>Страницы</option><option>Скрыть</option></select>
+          </div>
+          <div class="form-group">
+            <div class="toggle-row"><div class="toggle on"></div><label class="form-label" style="margin:0;">Показывать шапку</label></div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">Изменений нет.</div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-empty — Новый тест, дефолтный шаблон применён автоматически
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-empty" class="wf-state shell" data-state="empty">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-empty-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-empty-title" class="ou-drawer__title">Новый тест</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline">v1</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="section">
+          <div class="section-header">
+            <div class="section-label">Шаблон</div>
+            <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" type="button" aria-label="Действия с шаблоном" aria-haspopup="menu"><svg width="16" height="16"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="tpl-block">
+            <div class="tpl-thumb">
+              <div class="preview-sketch">
+                <div class="ps-header" style="background:hsl(0 0% 30%);"><div class="ps-logo"></div></div>
+                <div class="ps-progress"><div class="ps-progress-bar" style="background:hsl(0 0% 60%);"></div></div>
+                <div class="ps-body"><div class="ps-content" style="padding:8px;"><div class="ps-q" style="background:hsl(0 0% 88%);"></div><div class="ps-opt" style="background:hsl(0 0% 88%);"></div><div class="ps-opt" style="background:hsl(0 0% 88%);"></div></div></div>
+              </div>
+            </div>
+            <div class="tpl-info">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <div class="tpl-name">Стандартный</div>
+                <span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">v1.0.0</span>
+                <span class="ou-tag ou-tag--accent ou-tag--s">По умолчанию</span>
+              </div>
+              <div class="tpl-desc">Минималистичный шаблон без брендирования. Применяется автоматически для новых тестов.</div>
+            </div>
+            <div class="tpl-actions">
+              <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+              <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-layout"/></svg> Заменить шаблон</button>
+            </div>
+          </div>
+        </div>
+        <hr class="sep">
+        <div class="section">
+          <div class="section-label">Параметры</div>
+          <div style="font-size:12px;color:var(--muted-fg);margin-bottom:14px;padding:8px 10px;background:var(--accent);border-radius:var(--radius-sm);border:1px solid var(--card-border);">Набор параметров определяется разработчиком шаблона «Стандартный».</div>
+          <div class="subsection-label">Прогресс и навигация</div>
+          <div class="form-group">
+            <label class="form-label">Режим прогресса<span class="param-type">select</span></label>
+            <select style="max-width:220px;"><option selected>Вопросы</option><option>Страницы</option><option>Скрыть</option></select>
+          </div>
+          <div class="form-group">
+            <div class="toggle-row"><div class="toggle on"></div><label class="form-label" style="margin:0;">Показывать номер вопроса</label></div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">Изменений нет.</div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-loading — Загрузка параметров оформления
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-loading" class="wf-state shell" data-state="loading">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-loading-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-loading-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Загрузка…</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <!-- Template block skeleton -->
+        <div class="section">
+          <div class="section-label">Шаблон</div>
+          <div class="tpl-block">
+            <div class="tpl-thumb skel"></div>
+            <div class="tpl-info">
+              <div class="skel" style="height:16px;width:140px;margin-bottom:8px;"></div>
+              <div class="skel" style="height:12px;width:220px;"></div>
+            </div>
+            <div class="tpl-actions">
+              <div class="skel" style="height:30px;width:100px;"></div>
+              <div class="skel" style="height:30px;width:130px;"></div>
+            </div>
+          </div>
+        </div>
+        <hr class="sep">
+        <!-- Params skeleton -->
+        <div class="section">
+          <div class="section-label">Параметры</div>
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <div><div class="skel" style="height:13px;width:160px;margin-bottom:8px;"></div><div class="skel" style="height:36px;width:100%;"></div></div>
+            <div><div class="skel" style="height:13px;width:120px;margin-bottom:8px;"></div><div class="skel" style="height:36px;width:100%;"></div></div>
+            <div><div class="skel" style="height:13px;width:140px;margin-bottom:8px;"></div><div class="skel" style="height:36px;width:200px;"></div></div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">Загрузка…</div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-saving — Сохранение (запрос в процессе)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-saving" class="wf-state shell" data-state="saving">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-saving-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-saving-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Сохраняется…</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор" disabled aria-disabled="true"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0" aria-busy="true">
+        <div class="section">
+          <div class="section-label">Шаблон</div>
+          <div class="tpl-block" style="opacity:0.6;pointer-events:none;">
+            <div class="tpl-thumb"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div><div class="ps-title">ИБ</div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div><div class="ps-opt"></div></div></div></div></div>
+            <div class="tpl-info"><div class="tpl-name">Корпоративный</div><div class="tpl-desc">Сохранение изменений…</div></div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">Сохранение…</div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">
+            <svg width="14" height="14" style="animation:spin 1s linear infinite;"><use href="#i-loader"/></svg>
+            Сохранение…
+          </button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-dirty — Несохранённые изменения в параметрах оформления
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-dirty" class="wf-state shell" data-state="dirty">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-dirty-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-dirty-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Изменено</span>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline">v7</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button"
+                aria-label="Оформление, есть несохранённые изменения">
+          Оформление <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="section">
+          <div class="section-header">
+            <div class="section-label">Шаблон</div>
+            <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--m" type="button" aria-label="Действия с шаблоном" aria-haspopup="menu"><svg width="16" height="16"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="tpl-block">
+            <div class="tpl-thumb"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div><div class="ps-title">ИБ</div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div><div class="ps-opt"></div></div></div></div></div>
+            <div class="tpl-info">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;"><div class="tpl-name">Корпоративный</div><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span></div>
+              <div class="tpl-desc">Боковая панель навигации, брендирование, прогресс по темам</div>
+            </div>
+            <div class="tpl-actions">
+              <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+              <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-layout"/></svg> Заменить шаблон</button>
+            </div>
+          </div>
+        </div>
+        <hr class="sep">
+        <div class="section">
+          <div class="section-label">Параметры</div>
+          <div class="subsection-label">Брендирование</div>
+          <div class="form-group">
+            <label class="form-label">Основной цвет бренда <span class="req">*</span></label>
+            <div class="color-row">
+              <div class="color-swatch" style="background:#0099ee;border:2px solid var(--primary);"></div>
+              <input type="text" value="#0099EE" style="max-width:120px;border-color:var(--primary);">
+              <span class="ou-tag ou-tag--neutral ou-tag--s">изменено</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Подпись в подвале<span class="param-type">text</span></label>
+            <input type="text" value="© 2025 Корпоративный университет" style="border-color:var(--primary);">
+            <span class="ou-tag ou-tag--neutral ou-tag--s" style="margin-top:4px;display:inline-block;">изменено</span>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">
+          Изменены:
+          <span class="changed-areas" aria-label="Изменены: Оформление">
+            <span class="ou-tag ou-tag--neutral ou-tag--s">Оформление</span>
+          </span>
+        </div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Показать изменения</button>
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-error — Ошибка API при загрузке/сохранении
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-error" class="wf-state shell" data-state="error">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-error-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-error-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--error">Ошибка</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button"
+                aria-label="Оформление, ошибка API">
+          Оформление <span class="status-dot error" aria-hidden="true"></span>
+        </button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="banner error" role="alert">
+        <svg class="banner-icon"><use href="#i-warn"/></svg>
+        <span>Не удалось загрузить параметры шаблона. Проверьте соединение.</span>
+        <button class="ou-btn ou-btn--s ou-btn--secondary" style="margin-left:auto;" type="button">Повторить</button>
+      </div>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="section">
+          <div class="section-label">Шаблон</div>
+          <div class="empty-block">
+            <div class="empty-title">Параметры не загружены</div>
+            <div class="empty-desc">Не удалось получить настройки шаблона с сервера.</div>
+            <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Повторить загрузку</button>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">Изменений нет.</div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-validation — Ошибка валидации параметра шаблона
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-validation" class="wf-state shell" data-state="validation">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-val-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-val-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--error">Есть ошибки</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button"
+                aria-label="Оформление, есть ошибки валидации">
+          Оформление <span class="status-dot error" aria-hidden="true"></span>
+        </button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="banner error" role="alert">
+        <svg class="banner-icon"><use href="#i-warn"/></svg>
+        <span>1 поле содержит ошибку. Исправьте перед сохранением.</span>
+        <a href="#field-color-brand" class="ou-btn ou-btn--s ou-btn--secondary" style="margin-left:auto;">К ошибке</a>
+      </div>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="section">
+          <div class="section-header"><div class="section-label">Шаблон</div></div>
+          <div class="tpl-block">
+            <div class="tpl-thumb"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div></div></div></div></div>
+            <div class="tpl-info"><div class="tpl-name">Корпоративный</div><div class="tpl-desc">Боковая панель, брендирование</div></div>
+          </div>
+        </div>
+        <hr class="sep">
+        <div class="section">
+          <div class="section-label">Параметры</div>
+          <div class="subsection-label">Брендирование</div>
+          <!-- Field with error -->
+          <div class="form-group" id="field-color-brand">
+            <label class="form-label">Основной цвет бренда <span class="req">*</span></label>
+            <div class="color-row">
+              <div class="color-swatch" style="background:#zzzzzz;border:2px solid var(--destructive);"></div>
+              <input type="text" value="#ZZZZZZ" aria-invalid="true" aria-describedby="color-err"
+                     style="max-width:120px;border-color:var(--destructive);">
+            </div>
+            <div class="form-error" id="color-err">
+              <svg width="12" height="12"><use href="#i-warn"/></svg>
+              Недопустимый формат цвета. Введите значение в формате #RRGGBB.
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Дополнительный цвет</label>
+            <div class="color-row"><div class="color-swatch" style="background:#ff6600;"></div><input type="text" value="#FF6600" style="max-width:120px;" aria-label="Дополнительный цвет"></div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">
+          Изменены: <span class="changed-areas"><span class="ou-tag ou-tag--neutral ou-tag--s">Оформление</span></span>
+        </div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Показать изменения</button>
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true"
+                  aria-describedby="val-save-hint">Сохранить</button>
+        </div>
+      </footer>
+      <span id="val-save-hint" class="sr-only">Сохранение недоступно: есть ошибки валидации</span>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-readonly — Read-only режим (тест опубликован, изменения запрещены)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-readonly" class="wf-state shell" data-state="readonly">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-ro-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-ro-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--success">Опубликован</span>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline">v7</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="banner readonly" role="note">
+        <svg class="banner-icon"><use href="#i-info"/></svg>
+        <span>Тест опубликован. Изменение оформления недоступно. Переведите в черновик, чтобы редактировать.</span>
+      </div>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="section">
+          <div class="section-label">Шаблон</div>
+          <div class="tpl-block" style="opacity:0.7;">
+            <div class="tpl-thumb"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div><div class="ps-title">ИБ</div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div></div></div></div></div>
+            <div class="tpl-info">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+                <div class="tpl-name">Корпоративный</div>
+                <span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span>
+              </div>
+              <div class="tpl-desc">Боковая панель навигации, брендирование, прогресс по темам</div>
+            </div>
+            <div class="tpl-actions">
+              <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+              <button class="ou-btn ou-btn--secondary ou-btn--s" type="button" disabled aria-disabled="true"><svg width="13" height="13"><use href="#i-layout"/></svg> Заменить шаблон</button>
+            </div>
+          </div>
+        </div>
+        <hr class="sep">
+        <div class="section">
+          <div class="section-label">Параметры</div>
+          <div class="subsection-label">Брендирование</div>
+          <div class="form-group">
+            <label class="form-label" style="color:var(--muted-fg);">Основной цвет бренда</label>
+            <div class="color-row">
+              <div class="color-swatch" style="background:#0066cc;opacity:0.6;cursor:not-allowed;"></div>
+              <input type="text" value="#0066CC" disabled aria-label="Основной цвет бренда (только чтение)" style="max-width:120px;">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" style="color:var(--muted-fg);">Логотип</label>
+            <div class="file-row" style="opacity:0.6;pointer-events:none;"><button class="ou-btn ou-btn--secondary ou-btn--s" disabled>Загрузить</button><span class="file-chip">logo.png</span></div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta" style="color:var(--muted-fg);">Просмотр (только чтение)</div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Закрыть</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-preview — Предпросмотр шаблона (полноэкранный overlay)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-preview" class="wf-state shell" data-state="preview">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-prev-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-prev-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--success">Опубликован</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <!-- Preview takes the full drawer body, shown as an iframe mock -->
+      <div class="ou-drawer__body" tabindex="0" style="padding:0;position:relative;background:hsl(0 0% 94%);">
+        <div style="position:sticky;top:0;z-index:10;background:hsl(0 0% 20%);color:white;padding:8px 16px;display:flex;align-items:center;gap:12px;font-size:12px;">
+          <svg width="14" height="14"><use href="#i-eye"/></svg>
+          <span>Предпросмотр: шаблон «Корпоративный»</span>
+          <span style="margin-left:auto;color:hsl(0 0% 60%);">только просмотр — интерактивность отключена</span>
+          <button class="ou-btn ou-btn--ghost ou-btn--s" style="color:white;" type="button">&#x2715; Закрыть предпросмотр</button>
+        </div>
+        <!-- Mock SCORM preview frame -->
+        <div style="max-width:960px;margin:24px auto;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:white;box-shadow:0 4px 20px rgba(0,0,0,.12);">
+          <div style="height:48px;background:hsl(217 91% 42%);display:flex;align-items:center;padding:0 20px;gap:12px;">
+            <div style="width:24px;height:24px;background:white;border-radius:4px;opacity:0.9;"></div>
+            <span style="color:white;font-weight:600;font-size:14px;">Основы ИБ</span>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+              <span style="color:rgba(255,255,255,0.7);font-size:12px;">3 / 12</span>
+              <div style="width:80px;height:4px;background:rgba(255,255,255,0.2);border-radius:2px;"><div style="width:25%;height:100%;background:hsl(160 75% 60%);border-radius:2px;"></div></div>
+            </div>
+          </div>
+          <div style="display:flex;min-height:400px;">
+            <div style="width:200px;flex-shrink:0;border-right:1px solid var(--border);padding:12px 0;background:hsl(0 0% 98%);">
+              <div style="padding:8px 16px;font-size:12px;font-weight:600;color:var(--muted-fg);text-transform:uppercase;letter-spacing:.05em;">Разделы</div>
+              <div style="padding:8px 16px;font-size:13px;background:var(--primary);color:white;margin:2px 8px;border-radius:var(--radius-sm);">Введение</div>
+              <div style="padding:8px 16px;font-size:13px;color:var(--muted-fg);margin:2px 8px;">Основные понятия</div>
+              <div style="padding:8px 16px;font-size:13px;color:var(--muted-fg);margin:2px 8px;">Угрозы</div>
+              <div style="padding:8px 16px;font-size:13px;color:var(--muted-fg);margin:2px 8px;">Итоговый тест</div>
+            </div>
+            <div style="flex:1;padding:32px;font-size:14px;">
+              <div style="font-size:18px;font-weight:700;margin-bottom:16px;">Вопрос 3 из 12</div>
+              <div style="margin-bottom:24px;color:var(--fg);">Что из перечисленного является примером социальной инженерии?</div>
+              <div style="display:flex;flex-direction:column;gap:10px;">
+                <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:2px solid var(--primary);border-radius:var(--radius-md);background:hsl(217 91% 97%);cursor:pointer;"><input type="radio" name="q3-prev" checked> Фишинговое письмо с просьбой подтвердить пароль</label>
+                <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;"><input type="radio" name="q3-prev"> SQL-инъекция через форму входа</label>
+                <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;"><input type="radio" name="q3-prev"> DDoS-атака на сервер</label>
+              </div>
+              <div style="margin-top:32px;display:flex;justify-content:flex-end;">
+                <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Ответить &rarr;</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">Изменений нет.</div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-saved — Сохранено (toast подтверждение)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-saved" class="wf-state shell" data-state="saved">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-saved-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-saved-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--success">Опубликован</span>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline">v8</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Оформление</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="section">
+          <div class="section-header"><div class="section-label">Шаблон</div></div>
+          <div class="tpl-block">
+            <div class="tpl-thumb"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div><div class="ps-title">ИБ</div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div></div></div></div></div>
+            <div class="tpl-info"><div class="tpl-name">Корпоративный</div><div class="tpl-desc">Боковая панель, брендирование</div></div>
+            <div class="tpl-actions"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button></div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">Изменений нет.</div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+  <!-- Toast notification -->
+  <div class="ou-toast ou-toast--success" role="status" aria-live="polite">
+    <svg width="16" height="16"><use href="#i-check"/></svg>
+    Оформление сохранено
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-color-picker — Color picker открыт для параметра "цвет бренда"
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-color-picker" class="wf-state shell" data-state="color-picker">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-cp-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-cp-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Изменено</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button"
+                aria-label="Оформление, есть несохранённые изменения">
+          Оформление <span class="status-dot dirty" aria-hidden="true"></span>
+        </button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="section">
+          <div class="section-header"><div class="section-label">Шаблон</div></div>
+          <div class="tpl-block">
+            <div class="tpl-thumb"><div class="preview-sketch"><div class="ps-header" style="background:#0099ee;"><div class="ps-logo"></div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div></div><div class="ps-content"><div class="ps-q">…</div></div></div></div></div>
+            <div class="tpl-info"><div class="tpl-name">Корпоративный</div></div>
+          </div>
+        </div>
+        <hr class="sep">
+        <div class="section">
+          <div class="section-label">Параметры</div>
+          <div class="subsection-label">Брендирование</div>
+          <!-- Field with open color picker -->
+          <div class="form-group" style="position:relative;">
+            <label class="form-label">Основной цвет бренда <span class="req">*</span></label>
+            <div class="color-row">
+              <div class="color-swatch" style="background:#0099ee;box-shadow:0 0 0 2px var(--primary);"></div>
+              <input type="text" value="#0099EE" aria-label="Основной цвет бренда" style="max-width:120px;border-color:var(--primary);">
+            </div>
+            <!-- Inline color popover (Drawer body has room) -->
+            <div class="color-popover" role="dialog" aria-label="Выбор цвета">
+              <div class="color-gradient"><div class="color-cursor"></div></div>
+              <div class="color-hue"><div class="color-hue-thumb"></div></div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <div class="color-swatch" style="background:#0099ee;width:28px;height:28px;flex-shrink:0;"></div>
+                <input type="text" value="#0099EE" aria-label="Hex-значение цвета" style="font-size:12px;height:28px;">
+              </div>
+              <div class="color-presets">
+                <div class="color-preset" style="background:#0066cc;" title="#0066CC"></div>
+                <div class="color-preset" style="background:#ff6600;" title="#FF6600"></div>
+                <div class="color-preset" style="background:#009900;" title="#009900"></div>
+                <div class="color-preset" style="background:#cc0000;" title="#CC0000"></div>
+                <div class="color-preset" style="background:#6633cc;" title="#6633CC"></div>
+                <div class="color-preset" style="background:#333333;" title="#333333"></div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;gap:6px;margin-top:10px;">
+                <button class="ou-btn ou-btn--ghost ou-btn--s" type="button">Отмена</button>
+                <button class="ou-btn ou-btn--primary ou-btn--s" type="button">Применить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">Изменены: <span class="changed-areas"><span class="ou-tag ou-tag--neutral ou-tag--s">Оформление</span></span></div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Показать изменения</button>
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сохранить</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-gallery — Галерея шаблонов (список)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-gallery" class="wf-state shell" data-state="gallery">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-gal-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-gal-title" class="ou-drawer__title">Выбор шаблона</h1></div>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть галерею"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="gallery-toolbar">
+          <div style="position:relative;flex:1;max-width:320px;">
+            <svg width="14" height="14" style="position:absolute;left:10px;top:11px;color:var(--muted-fg);"><use href="#i-search"/></svg>
+            <input type="text" placeholder="Поиск шаблонов…" aria-label="Поиск шаблонов" style="padding-left:32px;">
+          </div>
+          <span style="font-size:12px;color:var(--muted-fg);">6 шаблонов</span>
+        </div>
+        <div class="gallery-grid">
+          <!-- Card 1 — selected -->
+          <div class="gallery-card selected" aria-selected="true">
+            <div class="gallery-preview"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div><div class="ps-title">ИБ</div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div><div class="ps-opt"></div></div></div></div></div>
+            <div class="gallery-body">
+              <div class="gallery-name">Корпоративный <span class="ou-tag ou-tag--accent ou-tag--s" style="vertical-align:middle;">Текущий</span></div>
+              <div class="gallery-desc">Боковая панель навигации, брендирование, прогресс по темам</div>
+              <div class="gallery-footer"><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span><span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">v1.2.0</span></div>
+            </div>
+          </div>
+          <!-- Card 2 -->
+          <div class="gallery-card">
+            <div class="gallery-preview"><div class="preview-sketch"><div class="ps-header" style="background:hsl(0 0% 25%);"><div class="ps-logo" style="background:hsl(0 0% 70%);"></div></div><div class="ps-progress" style="background:hsl(0 0% 80%);"><div class="ps-progress-bar" style="background:hsl(0 0% 50%);"></div></div><div class="ps-body"><div class="ps-content" style="padding:8px;"><div class="ps-q">Вопрос…</div><div class="ps-opt sel" style="background:hsl(0 0% 72%);"></div><div class="ps-opt"></div></div></div></div></div>
+            <div class="gallery-body">
+              <div class="gallery-name">Стандартный</div>
+              <div class="gallery-desc">Минималистичный без брендирования</div>
+              <div class="gallery-footer"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="12" height="12"><use href="#i-eye"/></svg> Просмотр</button><button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Выбрать</button></div>
+            </div>
+          </div>
+          <!-- Card 3 -->
+          <div class="gallery-card">
+            <div class="gallery-preview"><div class="preview-sketch"><div class="ps-header" style="background:hsl(160 60% 30%);"><div class="ps-logo"></div><div class="ps-title">ИБ</div></div><div class="ps-progress"><div class="ps-progress-bar" style="background:hsl(160 60% 60%);"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active" style="background:hsl(160 60% 40%/.3);"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div></div></div></div></div>
+            <div class="gallery-body">
+              <div class="gallery-name">Экологичный</div>
+              <div class="gallery-desc">Зелёная цветовая схема, акцент на прогрессе</div>
+              <div class="gallery-footer"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="12" height="12"><use href="#i-eye"/></svg> Просмотр</button><button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Выбрать</button></div>
+            </div>
+          </div>
+          <!-- Card 4 -->
+          <div class="gallery-card">
+            <div class="gallery-preview" style="background:hsl(38 90% 95%);"><div class="preview-sketch"><div class="ps-header" style="background:hsl(32 90% 40%);"><div class="ps-logo"></div></div><div class="ps-body"><div class="ps-content" style="padding:8px;"><div class="ps-q">Вопрос…</div></div></div></div></div>
+            <div class="gallery-body">
+              <div class="gallery-name">Тёплый</div>
+              <div class="gallery-desc">Тёплая цветовая гамма для неформального обучения</div>
+              <div class="gallery-footer"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="12" height="12"><use href="#i-eye"/></svg> Просмотр</button><button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Выбрать</button></div>
+            </div>
+          </div>
+          <!-- Card 5 -->
+          <div class="gallery-card">
+            <div class="gallery-preview"><div class="preview-sketch"><div class="ps-header" style="background:hsl(0 0% 12%);"><div class="ps-logo"></div></div><div class="ps-body" style="background:hsl(0 0% 14%);"><div class="ps-content" style="padding:8px;"><div class="ps-q" style="color:hsl(0 0% 80%);background:hsl(0 0% 20%);">Вопрос…</div></div></div></div></div>
+            <div class="gallery-body">
+              <div class="gallery-name">Тёмный</div>
+              <div class="gallery-desc">Тёмная тема, минимальная нагрузка на зрение</div>
+              <div class="gallery-footer"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="12" height="12"><use href="#i-eye"/></svg> Просмотр</button><button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Выбрать</button></div>
+            </div>
+          </div>
+          <!-- Card 6: external -->
+          <div class="gallery-card">
+            <div class="gallery-preview" style="display:flex;align-items:center;justify-content:center;"><span style="font-size:11px;color:var(--muted-fg);">Превью недоступно</span></div>
+            <div class="gallery-body">
+              <div class="gallery-name">Внешний v3 <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s" style="vertical-align:middle;">Внешний</span></div>
+              <div class="gallery-desc">Шаблон, загруженный из внешнего источника</div>
+              <div class="gallery-footer"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Выбрать</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">Выбран: <strong>Корпоративный</strong></div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Применить шаблон</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-gallery-search — Галерея: активный поиск
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-gallery-search" class="wf-state shell" data-state="gallery-search">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-gals-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-gals-title" class="ou-drawer__title">Выбор шаблона</h1></div>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="gallery-toolbar">
+          <div style="position:relative;flex:1;max-width:320px;">
+            <svg width="14" height="14" style="position:absolute;left:10px;top:11px;color:var(--muted-fg);"><use href="#i-search"/></svg>
+            <input type="text" value="корпор" placeholder="Поиск шаблонов…" aria-label="Поиск шаблонов" style="padding-left:32px;border-color:var(--primary);">
+          </div>
+          <span style="font-size:12px;color:var(--muted-fg);">1 из 6</span>
+          <button class="ou-btn ou-btn--ghost ou-btn--s" type="button" aria-label="Сбросить поиск">&#x2715;</button>
+        </div>
+        <div class="gallery-grid">
+          <div class="gallery-card selected">
+            <div class="gallery-preview"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div><div class="ps-title">ИБ</div></div><div class="ps-progress"><div class="ps-progress-bar"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div><div class="ps-nav-item"></div></div><div class="ps-content"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div></div></div></div></div>
+            <div class="gallery-body">
+              <div class="gallery-name">Корпоративный <span class="ou-tag ou-tag--accent ou-tag--s" style="vertical-align:middle;">Текущий</span></div>
+              <div class="gallery-desc">Боковая панель, брендирование</div>
+              <div class="gallery-footer"><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">Результаты для: «корпор»</div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Применить шаблон</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-gallery-empty — Галерея: поиск без результатов
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-gallery-empty" class="wf-state shell" data-state="gallery-empty">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-gale-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-gale-title" class="ou-drawer__title">Выбор шаблона</h1></div>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="gallery-toolbar">
+          <div style="position:relative;flex:1;max-width:320px;">
+            <svg width="14" height="14" style="position:absolute;left:10px;top:11px;color:var(--muted-fg);"><use href="#i-search"/></svg>
+            <input type="text" value="xyzabc123" placeholder="Поиск шаблонов…" aria-label="Поиск шаблонов" style="padding-left:32px;">
+          </div>
+          <button class="ou-btn ou-btn--ghost ou-btn--s" type="button">&#x2715; Сбросить</button>
+        </div>
+        <div class="empty-block" style="margin-top:32px;">
+          <svg width="32" height="32" style="margin-bottom:12px;color:var(--muted-fg);"><use href="#i-search"/></svg>
+          <div class="empty-title">Ничего не найдено</div>
+          <div class="empty-desc">Нет шаблонов, соответствующих запросу «xyzabc123».</div>
+          <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Сбросить поиск</button>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">0 результатов</div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Отмена</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-gallery-confirm — Замена шаблона: подтверждение (есть изменённые параметры)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-gallery-confirm" class="wf-state shell" data-state="gallery-confirm">
+  <div style="display:contents" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-galc-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-galc-title" class="ou-drawer__title">Выбор шаблона</h1></div>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="gallery-toolbar">
+          <div style="position:relative;flex:1;max-width:320px;">
+            <svg width="14" height="14" style="position:absolute;left:10px;top:11px;color:var(--muted-fg);"><use href="#i-search"/></svg>
+            <input type="text" placeholder="Поиск шаблонов…" aria-label="Поиск шаблонов" style="padding-left:32px;">
+          </div>
+          <span style="font-size:12px;color:var(--muted-fg);">6 шаблонов</span>
+        </div>
+        <!-- Warning banner: selected template differs from current -->
+        <div class="banner warn" role="alert" style="margin-bottom:16px;border-radius:var(--radius-md);">
+          <svg class="banner-icon"><use href="#i-warn"/></svg>
+          <div>
+            <div style="font-weight:600;margin-bottom:2px;">Замена шаблона сбросит текущие параметры оформления</div>
+            <div style="font-size:12px;">Изменённые параметры будут потеряны: «Основной цвет», «Логотип», «Подпись в подвале».</div>
+          </div>
+        </div>
+        <!-- Newly selected card highlighted -->
+        <div class="gallery-grid">
+          <div class="gallery-card" style="opacity:0.5;">
+            <div class="gallery-preview"><div class="preview-sketch"><div class="ps-header"><div class="ps-logo"></div></div><div class="ps-body"><div class="ps-sidebar"><div class="ps-nav-item active"></div></div><div class="ps-content"><div class="ps-q">…</div></div></div></div></div>
+            <div class="gallery-body"><div class="gallery-name">Корпоративный <span class="ou-tag ou-tag--neutral ou-tag--outline ou-tag--s">Текущий</span></div></div>
+          </div>
+          <div class="gallery-card selected">
+            <div class="gallery-preview"><div class="preview-sketch"><div class="ps-header" style="background:hsl(0 0% 25%);"><div class="ps-logo"></div></div><div class="ps-progress"><div class="ps-progress-bar" style="background:hsl(0 0% 50%);"></div></div><div class="ps-body"><div class="ps-content" style="padding:8px;"><div class="ps-q">Вопрос…</div><div class="ps-opt sel"></div></div></div></div></div>
+            <div class="gallery-body">
+              <div class="gallery-name">Стандартный <span class="ou-tag ou-tag--accent ou-tag--s" style="vertical-align:middle;">Выбран</span></div>
+              <div class="gallery-desc">Будет применён. Параметры будут сброшены.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <div class="ou-drawer__foot-meta">Выбран: <strong>Стандартный</strong></div>
+        <div class="ou-drawer__foot-actions">
+          <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--destructive ou-btn--m" type="button">Заменить шаблон и сбросить параметры</button>
+        </div>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     Acceptance: FR/NFR покрытие этого wireframe.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance &mdash; PRD-7: вкладка "Оформление"</h2>
+  <table class="acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>FR-30</td><td>Блок шаблона: миниатюра превью, название, бейдж "Встроенный", версия, описание; кнопки "Предпросмотр" и "Заменить шаблон".</td></tr>
+      <tr><td>FR-31</td><td>Параметры шаблона по секциям (Брендирование, Макет, Прогресс и шапка). Набор определяется разработчиком шаблона.</td></tr>
+      <tr><td>FR-31a</td><td>Типы параметров: <code>color</code>, <code>file</code>, <code>select</code>, <code>toggle</code>, <code>text</code>, <code>number</code>, <code>multiselect</code>, <code>url</code>, <code>asset</code>, <code>downloadLink</code>.</td></tr>
+      <tr><td>FR-31b</td><td>Read-only поля диагностики шаблона: <code>templateVersion</code>, <code>templateApiVersion</code> в секции "Шаблон &rsaquo; Диагностика".</td></tr>
+      <tr><td>FR-32</td><td>"Сбросить до умолчаний" — в "···"-меню блока шаблона. Не footer, не отдельный экран.</td></tr>
+      <tr><td>FR-33</td><td>Галерея шаблонов: поиск, сетка 3 колонки, подтверждение при замене шаблона с изменёнными параметрами.</td></tr>
+      <tr><td>FR-05b</td><td>Нет кнопки "Сохранить оформление" и "Сбросить всё" в footer Drawer.</td></tr>
+      <tr><td>FR-25a</td><td>Единственный primary action "Сохранить" в footer; активен при dirty и отсутствии блокирующих ошибок.</td></tr>
+      <tr><td>FR-25b</td><td>Статус-индикаторы (dirty/warn/error) на вкладках и секциях с aria-label.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ─── Script ────────────────────────────────────────────────────────────── -->
+<style>
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+</style>
+<script>
+  (function injectBgPage() {
+    var tpl = document.getElementById('tpl-bg-page');
+    if (!tpl) return;
+    document.querySelectorAll('[data-template="tpl-bg-page"]').forEach(function (slot) {
+      slot.appendChild(tpl.content.cloneNode(true));
+    });
+  })();
+
+  function show(id) {
+    document.querySelectorAll('[id^="s-"]').forEach(function (el) {
+      el.classList.toggle('active', el.id === id);
+    });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('onclick') === "show('" + id + "')");
+    });
+    document.body.classList.add('has-active-shell');
+  }
+
+  function showMobile() {
+    document.querySelectorAll('[id^="s-"]').forEach(function (el) { el.classList.remove('active'); });
+    document.querySelectorAll('.wf-nav .wf-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('onclick') === 'showMobile()');
+    });
+    document.body.classList.remove('has-active-shell');
+    var t = document.getElementById('mobile');
+    if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  if (document.querySelector('.shell.active')) document.body.classList.add('has-active-shell');
+  if (window.location.hash === '#mobile') window.addEventListener('DOMContentLoaded', showMobile);
+</script>
+
+<!-- ═══════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════ -->
+<div class="wf-page">
+
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент</th>
+        <th>Поле API / условие</th>
+        <th>Примечание</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Состояния wireframe</td>
+        <td><code>showState(btn, stateId)</code></td>
+        <td>Метанавигация переключает только визуальные состояния и не является частью продуктового UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<div class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping</h2>
+  <p class="wf-mapping-sub">
+    Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент является блокером.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Элемент wireframe</th>
+        <th>DS-компонент</th>
+        <th>Используемые токены</th>
+        <th>Примечания</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Метанавигация состояний</td>
+        <td><code>Wireframe utility</code></td>
+        <td><code>--ou-space-*</code>, <code>--ou-border-*</code>, <code>--ou-accent-*</code></td>
+        <td>Не мигрируется в продуктовый UI.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+<script>
+(function(){
+  var s = document.createElement('script');
+  s.src = (location.pathname.replace(/\\/g,'/').indexOf('/approved/') !== -1 ? '../' : '') + 'wf-links.js';
+  document.head.appendChild(s);
+})();
+</script>
+
+<script>
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      var isActive = button === btn;
+      button.classList.toggle('active', isActive);
+      if (button.classList.contains('ou-button')) {
+        button.classList.toggle('ou-button--primary', isActive);
+        button.classList.toggle('ou-button--secondary', !isActive);
+      }
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.show = function show(id) {
+    window.showState(window.event && window.event.currentTarget, id);
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleDensity = function toggleDensity(btn) {
+    var body = document.body;
+    var isCompact = body.classList.contains('ou--compact');
+    body.classList.toggle('ou--compact', !isCompact);
+    body.classList.toggle('ou--normal', isCompact);
+    if (btn) {
+      btn.textContent = isCompact ? 'Compact' : 'Normal';
+      btn.classList.toggle('active', !isCompact);
+    }
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+
+  if (document.querySelector('.shell.active')) {
+    document.body.classList.add('has-active-shell');
+  }
+}());
+</script>
+
+<script data-wf-drawer-notes>
+(function () {
+  function hasDrawerSketch() {
+    return !!document.querySelector('.drawer-overlay, .drawer, .wf-overlay, .wf-drawer, .drawer-header');
+  }
+
+  function currentState() {
+    return document.querySelector('.wf-state.active') || document.querySelector('.shell.active');
+  }
+
+  function currentStateTitle(state) {
+    var activeButton = document.querySelector('.wf-nav button.active');
+    if (activeButton && activeButton.textContent.trim()) return activeButton.textContent.trim();
+    return state && state.id ? state.id : 'Текущее состояние';
+  }
+
+  function cloneWithoutModal(selector, root) {
+    var scope = root || document;
+    var node = scope.querySelector(selector);
+    if (!node || node.closest('.wf-notes-modal')) return null;
+    return node.cloneNode(true);
+  }
+
+  function fallbackNotesTable(state, stateName) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-notes';
+    wrap.innerHTML = '<h3 class="wf-notes-title">Пояснения — ' + stateName + '</h3>' +
+      '<table><thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>' +
+      '<tbody><tr><td>Активное состояние</td><td><code>' + (state && state.id ? state.id : 'state') + '</code></td>' +
+      '<td>Для этого состояния отдельная таблица не заполнена; используйте DS Mapping ниже как обязательный gate этапа 3.5.</td></tr></tbody></table>';
+    return wrap;
+  }
+
+  function hasIn(scope, selector) {
+    return !!(scope && scope.querySelector(selector));
+  }
+
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, function (char) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char];
+    });
+  }
+
+  function codeTokens(tokens) {
+    return tokens.map(function (token) { return '<code>' + escapeHtml(token) + '</code>'; }).join(', ');
+  }
+
+  function addMappingRow(rows, key, element, component, tokens, note) {
+    if (rows.some(function (row) { return row.key === key; })) return;
+    rows.push({ key: key, element: element, component: component, tokens: tokens, note: note });
+  }
+
+  function inferredMappingRows(state) {
+    var rows = [];
+    addMappingRow(rows, 'state-nav', 'Метанавигация состояний', '<code>Wireframe utility</code>', ['--ou-space-*', '--ou-border-*', '--ou-accent-*'], 'Не мигрируется в продуктовый UI.');
+    if (!state) return rows;
+
+    if (hasIn(state, '.drawer-overlay')) addMappingRow(rows, 'drawer-overlay', 'Затемнение под drawer', '<code>.ou-drawer-root</code> + <code>.ou-drawer__backdrop</code>', ['--ou-bg-backdrop', '--ou-easing-standard'], 'Backdrop из DS Drawer; разметка WF использует alias .drawer-overlay.');
+    if (hasIn(state, '.drawer')) addMappingRow(rows, 'drawer', 'Контейнер drawer', '<code>.ou-drawer</code> <code>.ou-drawer--xl</code> <code>.ou-drawer--right</code>', ['--ou-bg-elevated', '--ou-shadow-xl', '--ou-space-7'], 'Правая панель по DS; WF alias .drawer больше не задает произвольный 1120px.');
+    if (hasIn(state, '.drawer-header')) addMappingRow(rows, 'drawer-header', 'Header drawer', '<code>.ou-drawer__head</code>', ['--ou-space-5', '--ou-space-4', '--ou-border-soft'], 'Header drawer из DS: title/description/close.');
+    if (hasIn(state, '.drawer-title')) addMappingRow(rows, 'drawer-title', 'Заголовок drawer', '<code>.ou-drawer__title</code>', ['--ou-text-heading-m', '--ou-fg-default'], 'Заголовок drawer использует DS heading-m.');
+    if (hasIn(state, '.drawer-close, .btn-icon')) addMappingRow(rows, 'icon-button', 'Иконка-действие', '<code>.ou-drawer__close</code> / <code>IconButton</code>', ['--ou-radius-s', '--ou-bg-hover', '--ou-fg-muted'], 'Close action в DS без border; прочие иконки остаются IconButton.');
+    if (hasIn(state, '.drawer-tabs, .editor-tabs')) addMappingRow(rows, 'tabs', 'Вкладки drawer', '<code>Tabs</code> + <code>Tabs.Trigger</code>', ['--ou-space-3', '--ou-space-4', '--ou-accent-default', '--ou-border-default'], 'Состав / Настройки / Оформление / Структура.');
+    if (hasIn(state, '.drawer-body')) addMappingRow(rows, 'drawer-body', 'Scrollable body', '<code>.ou-drawer__body</code> / <code>ScrollArea</code>', ['--ou-space-5', '--ou-bg-elevated', '--ou-fg-default'], 'Scrollable body из DS Drawer.');
+    if (hasIn(state, '.ou-drawer__foot')) addMappingRow(rows, 'ou-drawer__foot', 'Footer drawer', '<code>.ou-drawer__foot</code>', ['--ou-space-4', '--ou-space-5', '--ou-border-soft'], 'Footer drawer из DS, если footer нужен для сценария.');
+    if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
+    if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
+    if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
+    if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
+    if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
+    if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
+    if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
+    if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
+    if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
+    if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
+    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    return rows;
+  }
+
+  function stateMappingTable(state) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-mapping';
+    var rows = inferredMappingRows(state);
+    wrap.innerHTML = '<h2 class="wf-mapping-title">DS Mapping — текущее состояние</h2>' +
+      '<p class="wf-mapping-sub">Автоматически собрано из элементов активного drawer-состояния. Проверьте и уточните перед gate этапа 3.5.</p>' +
+      '<table><thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead><tbody>' +
+      rows.map(function (row) {
+        return '<tr><td>' + escapeHtml(row.element) + '</td><td>' + row.component + '</td><td>' + codeTokens(row.tokens) + '</td><td>' + escapeHtml(row.note) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+    return wrap;
+  }
+
+  function pageMappingTable() {
+    var mapping = cloneWithoutModal('.wf-mapping', document);
+    if (!mapping) return null;
+    var text = mapping.textContent || '';
+    if (text.indexOf('Метанавигация состояний') !== -1 && text.indexOf('Drawer') === -1 && text.indexOf('Button') === -1) return null;
+    return mapping;
+  }
+
+  function ensureModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.className = 'wf-notes-modal';
+    modal.hidden = true;
+    modal.innerHTML = '<div class="wf-notes-modal__panel" role="dialog" aria-modal="true" aria-labelledby="wf-notes-modal-title">' +
+      '<div class="wf-notes-modal__header"><h2 class="wf-notes-modal__title" id="wf-notes-modal-title">Пояснения wireframe</h2>' +
+      '<button class="wf-notes-modal__close" type="button" aria-label="Закрыть">×</button></div>' +
+      '<div class="wf-notes-modal__body"></div></div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || event.target.closest('.wf-notes-modal__close')) closeNotesModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !modal.hidden) closeNotesModal();
+    });
+    return modal;
+  }
+
+  function openNotesModal() {
+    var state = currentState();
+    var stateName = currentStateTitle(state);
+    var modal = ensureModal();
+    var body = modal.querySelector('.wf-notes-modal__body');
+    var title = modal.querySelector('.wf-notes-modal__title');
+    title.textContent = 'Пояснения — ' + stateName;
+    body.innerHTML = '';
+
+    var notesSection = document.createElement('section');
+    notesSection.className = 'wf-notes-modal__section';
+    notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
+    notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
+    body.appendChild(notesSection);
+
+    var mappingSection = document.createElement('section');
+    mappingSection.className = 'wf-notes-modal__section';
+    mappingSection.innerHTML = '<h3 class="wf-notes-modal__section-title">DS Mapping</h3>';
+    mappingSection.appendChild(stateMappingTable(state));
+    var manualMapping = pageMappingTable();
+    if (manualMapping) mappingSection.appendChild(manualMapping);
+    body.appendChild(mappingSection);
+
+    modal.hidden = false;
+    var closeButton = modal.querySelector('.wf-notes-modal__close');
+    if (closeButton) closeButton.focus();
+  }
+
+  function closeNotesModal() {
+    var modal = document.querySelector('.wf-notes-modal');
+    if (modal) modal.hidden = true;
+  }
+
+  function installNotesButton() {
+    if (!hasDrawerSketch()) return;
+    var nav = document.querySelector('.wf-nav');
+    if (!nav || nav.querySelector('[data-wf-notes-toggle]')) return;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'wf-notes-toggle';
+    button.dataset.wfNotesToggle = 'true';
+    button.textContent = 'Пояснения';
+    button.addEventListener('click', openNotesModal);
+    nav.appendChild(button);
+  }
+
+  window.openWireframeNotes = openNotesModal;
+  installNotesButton();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
+</body>
+</html>
