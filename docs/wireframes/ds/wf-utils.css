@@ -1,0 +1,443 @@
+/* ── Wireframe utility styles ──────────────────────────────────────────────
+   Not part of the product UI.
+   Only --ou-* design tokens are used — no raw hex / px values.          */
+
+/* ── Body reset ─────────────────────────────────────────────────────────── */
+body {
+  margin: 0;
+  background: var(--ou-bg-page);
+  color: var(--ou-fg-default);
+  font: var(--ou-text-body-m);
+  --wf-nav-offset: 52px;
+}
+
+/* ── State switcher nav ──────────────────────────────────────────────────── */
+.wf-nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-4);
+  background: var(--ou-bg-elevated);
+  border-bottom: 1px solid var(--ou-border-soft);
+  box-shadow: var(--ou-shadow-xs);
+}
+
+.wf-nav-title {
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  color: var(--ou-fg-muted);
+  margin-right: var(--ou-space-2);
+  white-space: nowrap;
+}
+
+.wf-nav button {
+  padding: var(--ou-space-1) var(--ou-space-3);
+  border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  background: transparent;
+  color: var(--ou-fg-default);
+  font: var(--ou-text-body-s);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.wf-nav button:hover  { background: var(--ou-bg-hover); }
+.wf-nav button.active {
+  background: var(--ou-accent-default);
+  color: var(--ou-fg-on-accent);
+  border-color: var(--ou-accent-default);
+}
+
+.wf-nav-sep {
+  width: 1px; height: 20px;
+  background: var(--ou-border-soft);
+  margin: 0 var(--ou-space-2);
+}
+
+/* ── State visibility ────────────────────────────────────────────────────── */
+.wf-state        { display: none; padding-top: var(--wf-nav-offset); }
+.wf-state.active { display: block; }
+
+/* Legacy PRD-7 wireframes use .shell as the visual state container. Keep the
+   template state API without changing their product layout. */
+.shell.wf-state.active { display: flex; }
+
+/* Product sketches often use fixed overlays/drawers. Fixed elements ignore
+   the .wf-state padding, so they must be offset from the viewport directly. */
+.wf-state > .ou-drawer-root,
+.wf-state > .wf-overlay {
+  top: var(--wf-nav-offset);
+  bottom: 0;
+  height: auto;
+}
+
+.wf-state > .ou-drawer-root > .ou-drawer {
+  height: calc(100vh - var(--wf-nav-offset));
+  max-height: calc(100vh - var(--wf-nav-offset));
+}
+
+/* ── Page layout ─────────────────────────────────────────────────────────── */
+.wf-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--ou-space-6) var(--ou-space-4);
+}
+
+/* ── Technical notes block ───────────────────────────────────────────────── */
+.wf-notes {
+  margin-top: var(--ou-space-8);
+  padding: var(--ou-space-5);
+  background: var(--ou-bg-elevated);
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+}
+
+.wf-notes h3,
+.wf-notes-title {
+  font: var(--ou-text-heading-s);
+  margin: 0 0 var(--ou-space-3);
+  color: var(--ou-fg-muted);
+}
+
+.wf-notes table    { width: 100%; border-collapse: collapse; font: var(--ou-text-body-s); }
+.wf-notes th,
+.wf-notes td       { padding: var(--ou-space-2) var(--ou-space-3); border: 1px solid var(--ou-border-soft); text-align: left; vertical-align: top; }
+.wf-notes th       { background: var(--ou-bg-hover); font-weight: 600; white-space: nowrap; }
+.wf-notes code     { font-family: monospace; font-size: 0.9em; background: var(--ou-bg-hover); padding: 1px 4px; border-radius: var(--ou-radius-xs); }
+
+/* ── DS Mapping block ────────────────────────────────────────────────────── */
+.wf-mapping {
+  margin-top: var(--ou-space-10);
+  padding: var(--ou-space-5);
+  background: var(--ou-bg-elevated);
+  border: 2px solid var(--ou-accent-default);
+  border-radius: var(--ou-radius-m);
+}
+
+.wf-mapping h2,
+.wf-mapping-title  { font: var(--ou-text-heading-s); margin: 0 0 var(--ou-space-1); }
+.wf-mapping p,
+.wf-mapping-sub    { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-4); }
+.wf-mapping table  { width: 100%; border-collapse: collapse; font: var(--ou-text-body-s); }
+.wf-mapping th,
+.wf-mapping td     { padding: var(--ou-space-2) var(--ou-space-3); border: 1px solid var(--ou-border-soft); text-align: left; vertical-align: top; }
+.wf-mapping th     { background: var(--ou-bg-hover); font-weight: 600; }
+.wf-mapping code   { font-family: monospace; font-size: 0.9em; background: var(--ou-bg-hover); padding: 1px 4px; border-radius: var(--ou-radius-xs); }
+
+/* ── Drawer notes modal ─────────────────────────────────────────────────── */
+.wf-notes-toggle {
+  margin-left: var(--ou-space-2);
+}
+
+.wf-notes-modal[hidden] {
+  display: none;
+}
+
+.wf-notes-modal {
+  position: fixed;
+  inset: var(--wf-nav-offset) 0 0 0;
+  z-index: 10000;
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in srgb, var(--ou-neutral-950) 34%, transparent);
+}
+
+.wf-notes-modal__panel {
+  width: min(760px, calc(100vw - var(--ou-space-6)));
+  height: 100%;
+  overflow: auto;
+  background: var(--ou-bg-elevated);
+  color: var(--ou-fg-default);
+  border-left: 1px solid var(--ou-border-soft);
+  box-shadow: var(--ou-shadow-xl);
+}
+
+.wf-notes-modal__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-4) var(--ou-space-5);
+  background: var(--ou-bg-elevated);
+  border-bottom: 1px solid var(--ou-border-soft);
+}
+
+.wf-notes-modal__title {
+  flex: 1;
+  margin: 0;
+  font: var(--ou-text-heading-s);
+}
+
+.wf-notes-modal__close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  background: transparent;
+  color: var(--ou-fg-default);
+  font: var(--ou-text-body-m);
+  cursor: pointer;
+}
+
+.wf-notes-modal__body {
+  padding: var(--ou-space-5);
+}
+
+.wf-notes-modal__section + .wf-notes-modal__section {
+  margin-top: var(--ou-space-6);
+}
+
+.wf-notes-modal__section-title {
+  margin: 0 0 var(--ou-space-3);
+  font: var(--ou-text-heading-s);
+  color: var(--ou-fg-muted);
+}
+
+.wf-notes-modal .wf-notes,
+.wf-notes-modal .wf-mapping {
+  margin-top: 0;
+}
+
+.wf-notes-modal table {
+  width: 100%;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Simulated DS components — remove this section when @universityrt/ui-kit
+   is consumed by the product. All values use --ou-* tokens only.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Page header ─────────────────────────────────────────────────────────── */
+.ou-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--ou-space-5);
+}
+
+.ou-page-title {
+  font: var(--ou-text-heading-l);
+  margin: 0;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+.ou-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-3);
+  margin-bottom: var(--ou-space-4);
+}
+
+.ou-toolbar__spacer { margin-left: auto; }
+
+/* ── Input ───────────────────────────────────────────────────────────────── */
+.ou-input {
+  box-sizing: border-box;
+  padding: var(--ou-space-2) var(--ou-space-3);
+  border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-page);
+  color: var(--ou-fg-default);
+  font: var(--ou-text-body-m);
+  line-height: 1.5;
+  min-width: 240px;
+}
+
+.ou-input:focus {
+  outline: none;
+  border-color: var(--ou-border-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ou-accent-default) 20%, transparent);
+}
+
+.ou-input::placeholder { color: var(--ou-fg-muted); }
+
+/* ── Select ──────────────────────────────────────────────────────────────── */
+.ou-select {
+  box-sizing: border-box;
+  padding: var(--ou-space-2) var(--ou-space-3);
+  border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-page);
+  color: var(--ou-fg-default);
+  font: var(--ou-text-body-m);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+/* ── Button ──────────────────────────────────────────────────────────────── */
+.ou-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  height: 36px;
+  padding: 0 var(--ou-space-4);
+  border-radius: var(--ou-radius-s);
+  font: var(--ou-text-body-m);
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.ou-button--primary           { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); }
+.ou-button--primary:hover     { background: var(--ou-accent-hover); }
+.ou-button--secondary         { background: transparent; color: var(--ou-fg-default); border-color: var(--ou-border-default); }
+.ou-button--secondary:hover   { background: var(--ou-bg-hover); }
+.ou-button--sm                { height: 28px; padding: 0 var(--ou-space-3); }
+.ou-button--xs                { height: 32px; padding: 0 var(--ou-space-3); }
+.ou-button[disabled]          { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Tag / Badge ─────────────────────────────────────────────────────────── */
+.ou-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--ou-space-2);
+  border-radius: var(--ou-radius-xs);
+  font: var(--ou-text-caption);
+  font-weight: 500;
+}
+
+.ou-tag--success { background: var(--ou-success-bg); color: var(--ou-success-fg); }
+.ou-tag--warning { background: var(--ou-warning-bg); color: var(--ou-warning-fg); }
+.ou-tag--error   { background: var(--ou-error-bg);   color: var(--ou-error-fg);   }
+.ou-tag--neutral { background: var(--ou-bg-hover);   color: var(--ou-fg-muted);   }
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+.ou-table-wrap {
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  overflow: hidden;
+}
+
+.ou-table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--ou-text-body-s);
+}
+
+.ou-table th {
+  padding: var(--ou-space-2) var(--ou-space-3);
+  background: var(--ou-bg-hover);
+  border-bottom: 1px solid var(--ou-border-soft);
+  text-align: left;
+  font-weight: 600;
+  color: var(--ou-fg-muted);
+  white-space: nowrap;
+}
+
+.ou-table td {
+  padding: var(--ou-space-3) var(--ou-space-3);
+  border-bottom: 1px solid var(--ou-border-soft);
+  color: var(--ou-fg-default);
+}
+
+.ou-table tr:last-child td   { border-bottom: none; }
+.ou-table tbody tr:hover td  { background: var(--ou-bg-hover); }
+
+.ou-table__th--right         { text-align: right; }
+.ou-table__td--amount        { text-align: right; font-weight: 600; }
+.ou-table__td--amount--negative { text-align: right; font-weight: 600; color: var(--ou-error-fg); }
+
+/* ── Pagination ──────────────────────────────────────────────────────────── */
+.ou-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--ou-space-4);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+
+.ou-pagination-pages { display: flex; gap: var(--ou-space-1); }
+
+.ou-pagination-pages button {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  background: transparent;
+  color: var(--ou-fg-default);
+  font: var(--ou-text-body-s);
+  cursor: pointer;
+}
+
+.ou-pagination-pages button.active             { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+.ou-pagination-pages button:hover:not(.active) { background: var(--ou-bg-hover); }
+
+/* ── Banner ──────────────────────────────────────────────────────────────── */
+.ou-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-4);
+  border-radius: var(--ou-radius-m);
+  margin-bottom: var(--ou-space-4);
+}
+
+.ou-banner--error {
+  background: var(--ou-error-bg);
+  color: var(--ou-error-fg);
+  border: 1px solid var(--ou-error-border, var(--ou-error-fg));
+}
+
+.ou-banner-icon  { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.ou-banner-title { font-weight: 600; margin-bottom: var(--ou-space-1); }
+.ou-banner-body  { font: var(--ou-text-body-s); }
+.ou-banner__action { margin-top: var(--ou-space-3); }
+
+/* ── Skeleton ────────────────────────────────────────────────────────────── */
+.ou-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--ou-bg-hover) 25%,
+    var(--ou-bg-elevated) 50%,
+    var(--ou-bg-hover) 75%
+  );
+  background-size: 200% 100%;
+  border-radius: var(--ou-radius-s);
+  animation: skeleton-wave 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-wave {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Toolbar skeleton sizes */
+.ou-skeleton--input          { width: 240px; height: 36px; }
+.ou-skeleton--select         { width: 130px; height: 36px; }
+.ou-skeleton--action-toolbar { width: 120px; height: 36px; margin-left: auto; }
+
+/* Table cell skeleton sizes */
+.ou-skeleton--col-id     { width: 80px;  height: 16px; }
+.ou-skeleton--col-date   { width: 120px; height: 16px; }
+.ou-skeleton--col-desc   { height: 16px; width: var(--sk-w, 200px); }
+.ou-skeleton--col-amount { width: 70px;  height: 16px; margin-left: auto; }
+.ou-skeleton--col-tag    { width: 70px;  height: 20px; border-radius: var(--ou-radius-xs); }
+.ou-skeleton--col-action { width: 60px;  height: 28px; }
+
+.ou-skeleton-row { pointer-events: none; }
+
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+.ou-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ou-space-12) var(--ou-space-6);
+  text-align: center;
+  color: var(--ou-fg-muted);
+}
+
+.ou-empty-state-icon  { font-size: 48px; margin-bottom: var(--ou-space-4); }
+.ou-empty-state-title { font: var(--ou-text-heading-s); color: var(--ou-fg-default); margin: 0 0 var(--ou-space-2); }
+.ou-empty-state-desc  { font: var(--ou-text-body-m); margin: 0 0 var(--ou-space-5); }
+
+/* ── Wireframe text helper ───────────────────────────────────────────────── */
+.wf-notes-text { font: var(--ou-text-body-s); margin: 0; }
