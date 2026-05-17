@@ -253,22 +253,6 @@ select {
   background-repeat: no-repeat; background-position: right 8px center;
   padding-right: 28px;
 }
-.radio-row { display: flex; align-items: center; gap: var(--ou-space-4); }
-.radio-opt { display: flex; align-items: center; gap: var(--ou-space-1); font: var(--ou-text-body-s); cursor: pointer; }
-.toggle-row { display: flex; align-items: center; gap: var(--ou-space-3); font: var(--ou-text-body-s); }
-.toggle {
-  width: 36px; height: 20px; border-radius: 10px;
-  position: relative; cursor: pointer; flex-shrink: 0;
-}
-.toggle.on  { background: var(--ou-accent-default); }
-.toggle.off { background: var(--ou-bg-surface-3); }
-.toggle::after {
-  content: ''; position: absolute; top: 2px; width: 16px; height: 16px;
-  border-radius: 50%; background: var(--ou-fg-on-accent); transition: left .15s;
-}
-.toggle.on::after  { left: 18px; background: var(--ou-fg-on-accent); }
-.toggle.off::after { left: 2px;  background: var(--ou-fg-on-accent); }
-
 /* ── Badges ───────────────────────────────────────────────────────────── */
 .badge {
   display: inline-flex; align-items: center;

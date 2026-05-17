@@ -370,9 +370,23 @@
           <div class="subsection-label" style="margin-top:20px;">Макет</div>
           <div class="ou-formfield">
             <label class="ou-formfield__lbl">Позиция боковой панели</label>
-            <div class="radio-row">
-              <label class="radio-opt"><input type="radio" name="sp-main" checked> Слева</label>
-              <label class="radio-opt"><input type="radio" name="sp-main"> Справа</label>
+            <div class="ou-formfield__inline">
+              <label class="ou-formfield__inline">
+                <span class="ou-radio ou-radio--m">
+                  <input class="ou-radio__input" type="radio" name="sp-main" checked>
+                  <span class="ou-radio__ring"></span>
+                  <span class="ou-radio__dot"></span>
+                </span>
+                <span>Слева</span>
+              </label>
+              <label class="ou-formfield__inline">
+                <span class="ou-radio ou-radio--m">
+                  <input class="ou-radio__input" type="radio" name="sp-main">
+                  <span class="ou-radio__ring"></span>
+                  <span class="ou-radio__dot"></span>
+                </span>
+                <span>Справа</span>
+              </label>
             </div>
           </div>
           <div class="ou-formfield">
@@ -386,7 +400,14 @@
             <select style="max-width:220px;"><option selected>Вопросы</option><option>Страницы</option><option>Скрыть</option></select>
           </div>
           <div class="ou-formfield">
-            <div class="toggle-row"><div class="toggle on"></div><label class="ou-formfield__lbl" style="margin:0;">Показывать шапку</label></div>
+            <div class="ou-formfield__inline">
+              <label class="ou-switch ou-switch--m is-on">
+                <input class="ou-switch__input" type="checkbox" checked>
+                <span class="ou-switch__track"></span>
+                <span class="ou-switch__thumb"></span>
+              </label>
+              <span class="ou-formfield__lbl" style="margin:0;">Показывать шапку</span>
+            </div>
           </div>
         </div>
       </div>
@@ -459,7 +480,14 @@
             <select style="max-width:220px;"><option selected>Вопросы</option><option>Страницы</option><option>Скрыть</option></select>
           </div>
           <div class="ou-formfield">
-            <div class="toggle-row"><div class="toggle on"></div><label class="ou-formfield__lbl" style="margin:0;">Показывать номер вопроса</label></div>
+            <div class="ou-formfield__inline">
+              <label class="ou-switch ou-switch--m is-on">
+                <input class="ou-switch__input" type="checkbox" checked>
+                <span class="ou-switch__track"></span>
+                <span class="ou-switch__thumb"></span>
+              </label>
+              <span class="ou-formfield__lbl" style="margin:0;">Показывать номер вопроса</span>
+            </div>
           </div>
         </div>
       </div>
