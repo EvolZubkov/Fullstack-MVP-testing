@@ -725,7 +725,7 @@
         <span class="page-type-badge type-info" style="margin-left:4px;">инфо</span>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
-      <div class="ou-drawer__body" tabindex="0" style="padding:0;overflow:hidden;">
+      <div class="ou-drawer__body" tabindex="0" data-wf-demo style="padding:0;overflow:hidden;">
         <div style="background:hsl(217 91% 97%);border-bottom:1px solid var(--border);padding:8px 16px;font-size:11px;color:var(--muted-fg);display:flex;align-items:center;gap:6px;"><svg width="12" height="12"><use href="#i-eye"/></svg> Предпросмотр</div>
         <div style="padding:24px 20px;">
           <h2 style="font-size:18px;font-weight:700;margin-bottom:12px;">Правила прохождения теста</h2>
@@ -820,12 +820,12 @@
         <div class="zone-block">
           <div class="zone-header"><svg width="14" height="14"><use href="#i-chevron-down"/></svg> Перед тестом</div>
           <div class="page-row page-row--template"><div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div><span class="page-type-badge type-intro">вводная</span><span class="page-title">Вводная страница <span class="tpl-page-marker">шаблон</span></span></div>
-          <div class="page-row is-selected" style="border-left-color:var(--error);background:hsl(0 72% 97%);">
+          <div class="page-row is-selected" style="border-left-color:var(--error);background:var(--ou-error-soft);">
             <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
             <span class="page-type-badge type-info">инфо</span>
             <span class="page-title" style="color:var(--error);">Правила прохождения теста</span>
           </div>
-          <div style="margin:0 10px 8px;padding:12px;background:hsl(0 72% 97%);border:1px solid hsl(0 72% 80%);border-radius:var(--radius-md);">
+          <div style="margin:0 10px 8px;padding:12px;background:var(--ou-error-soft);border:1px solid var(--ou-error-default);border-radius:var(--radius-md);">
             <p style="font-size:13px;margin-bottom:8px;">Удалить страницу <strong>«Правила прохождения теста»</strong>? Это действие нельзя отменить.</p>
             <div style="display:flex;gap:8px;"><button class="ou-btn ou-btn--ghost ou-btn--s" type="button">Отмена</button><button class="ou-btn ou-btn--destructive ou-btn--s" type="button">Удалить страницу</button></div>
           </div>
@@ -890,7 +890,7 @@
         <span class="ou-tag ou-tag--neutral" style="margin-left:4px;">flow runtime</span>
         <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
-      <div class="ou-drawer__body" style="display:flex;padding:0;overflow:hidden;height:calc(100% - 56px);">
+      <div class="ou-drawer__body" data-wf-demo style="display:flex;padding:0;overflow:hidden;height:calc(100% - 56px);">
         <nav style="width:180px;flex-shrink:0;background:hsl(220 15% 16%);color:#fff;padding:16px 0;overflow-y:auto;font-size:12px;">
           <div style="padding:0 12px 10px;font-size:11px;font-weight:700;color:hsl(217 91% 75%);text-transform:uppercase;letter-spacing:.06em;">Структура</div>
           <div style="padding:7px 12px;background:hsl(217 91% 35%);cursor:pointer;">Вводная страница</div>

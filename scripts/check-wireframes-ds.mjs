@@ -137,6 +137,51 @@ function tagContaining(text, index) {
   return text.slice(open, close + 1);
 }
 
+const VOID_TAGS = new Set([
+  'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link',
+  'meta', 'param', 'source', 'track', 'wbr',
+]);
+
+/**
+ * Build a sorted list of half-open `[start, end)` byte ranges where the
+ * carrying element OR any ancestor is tagged with `data-wf-demo`. Used to
+ * whitelist demo subtrees (color swatches, preview sketches, mock chrome)
+ * from inline raw-value scanning.
+ */
+function demoRanges(text) {
+  const ranges = [];
+  const stack = [];
+  const tagRe = /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>/g;
+  let m;
+  while ((m = tagRe.exec(text))) {
+    const [full, slash, name, attrs] = m;
+    if (slash) {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].name === name) {
+          const opened = stack[i];
+          if (opened.hasDemo && stack.findIndex((f, j) => j < i && f.hasDemo) < 0) {
+            ranges.push([opened.start, m.index + full.length]);
+          }
+          stack.splice(i);
+          break;
+        }
+      }
+    } else if (!VOID_TAGS.has(name.toLowerCase()) && !/\/\s*$/.test(attrs)) {
+      stack.push({
+        name,
+        start: m.index,
+        hasDemo: /\bdata-wf-demo\b/.test(attrs),
+      });
+    }
+  }
+  return ranges;
+}
+
+function inDemoRange(ranges, index) {
+  for (const [a, b] of ranges) if (index >= a && index < b) return true;
+  return false;
+}
+
 const violations = [];
 const files = walk(wireframesDir);
 
@@ -187,9 +232,11 @@ for (const file of files) {
 
   // ── 5. Optional strict inline scan ────────────────────────────────────────
   if (STRICT_INLINE && isHtml) {
+    const ranges = demoRanges(text);
     for (const match of text.matchAll(/style="([^"]*)"/g)) {
       const tag = tagContaining(text, match.index);
       if (/\bdata-wf-demo\b/.test(tag)) continue;
+      if (inDemoRange(ranges, match.index)) continue;
       const value = match[1];
       const valueOffset = match.index + match[0].indexOf(value);
       for (const { name, re } of rawValuePatterns) {
