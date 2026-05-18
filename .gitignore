@@ -16,3 +16,7 @@ logs/
 docker/config/deploy.env
 docker/build/
 coverage/
+.playwright-mcp/console-2026-05-17T17-59-14-682Z.log
+.playwright-mcp/console-2026-05-17T17-59-41-413Z.log
+.playwright-mcp/page-2026-05-17T17-59-15-185Z.yml
+.playwright-mcp/page-2026-05-17T17-59-41-477Z.yml

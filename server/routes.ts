@@ -79,6 +79,7 @@ export async function registerRoutes(
 
   // Static files
   app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
+  app.use("/docs", express.static(path.resolve(process.cwd(), "docs")));
 
   // ========== Модульные роуты ==========
   for (const { path, router } of routerConfig) {
