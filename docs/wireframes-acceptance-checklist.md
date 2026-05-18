@@ -31,15 +31,19 @@ Drawer-контейнер), затем точки входа пользоват�
 - [x] Корень: `<div class="ou-drawer-root">` с `role="dialog" aria-modal="true"`
 - [x] Backdrop: `<div class="ou-drawer__backdrop">`, размеры через токены DS
 - [x] Drawer: `<aside class="ou-drawer ou-drawer--xl ou-drawer--right">`
-- [ ] Header: `<header class="ou-drawer__head">` — заголовок (`ou-drawer__title`),
+- [x] Header: `<header class="ou-drawer__head">` — заголовок (`ou-drawer__title`),
   бейдж статуса `ou-tag ou-tag--*` (`Черновик / Опубликован / В архиве`),
-  крестик `ou-iconbtn ou-drawer__close` с `aria-label="Закрыть"`
+  крестик `ou-drawer__close` с `aria-label="Закрыть"` (`ou-drawer__close` —
+  самостоятельный DS-класс; рефакторинг на базе `ou-iconbtn` отложен в DS-бэклог)
 - [x] Вкладки: `<div class="ou-tabs__list">` со списком `ou-tabs__tab` —
   `Состав | Настройки | Оформление | Структура`; активная вкладка имеет
   `is-active`
-- [ ] Footer: `<footer class="ou-drawer__foot">` с `ou-drawer__foot-meta`
-  (changed-chips) и `ou-drawer__foot-actions` (`ou-btn--primary` Сохранить
-  и `ou-btn--ghost` Отмена)
+- [x] Footer: `<footer class="ou-drawer__foot">` — кнопки-действия прямые дочерние
+  элементы (`ou-btn--primary` Сохранить, `ou-btn--secondary` Отменить,
+  `ou-btn--ghost` Показать изменения); `justify-content: flex-end` из DS
+  (`ou-drawer__foot-meta` / `ou-drawer__foot-actions` в DS отсутствуют —
+  добавление отложено в DS-бэклог до появления реальной потребности в
+  left/right-зонировании footer)
 - [x] `data-template="tpl-bg-page"` присутствует в каждом `.shell`
 - [x] `show(id)` и `injectBgPage()` работают без JS-ошибок
 - [x] State-switcher `.wf-nav` переключает состояния корректно
