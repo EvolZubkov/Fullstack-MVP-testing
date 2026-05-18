@@ -231,6 +231,9 @@
       font-size: var(--wf-space-11); color: var(--muted-fg); text-align: center; max-width: var(--wf-size-380);
     }
 
+    /* Template injection slot — renders children as direct flex children of .shell */
+    .wf-tpl-slot { display: contents; }
+
     /* ── Annotation badges ── */
     .wf-annot {
       display: none; position: absolute;
@@ -317,6 +320,26 @@
 </head>
 <body class="ou ou--light ou--normal">
 
+<template id="tpl-bg-page">
+  <div class="bg-page" aria-hidden="true">
+    <div class="bg-sidebar">
+      <div class="bg-logo">TB</div>
+      <div class="bg-nav-item">Темы</div>
+      <div class="bg-nav-item">Вопросы</div>
+      <div class="bg-nav-item active">Тесты</div>
+      <div class="bg-nav-item">Аналитика</div>
+      <div class="bg-nav-item">Пользователи</div>
+    </div>
+    <div class="bg-main">
+      <div class="bg-topbar"><span>Тесты</span></div>
+      <div class="bg-content">
+        <div class="bg-card"><div class="bg-card-title">Основы информационной безопасности</div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+        <div class="bg-card"><div class="bg-card-title">GDPR для разработчиков</div><span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span></div>
+      </div>
+    </div>
+  </div>
+</template>
+
 <svg class="wf-svg-sprite" xmlns="http://www.w3.org/2000/svg">
   <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -369,26 +392,7 @@
 
 <!-- ═══════════ STATE: s-default ═══════════ -->
 <div id="s-default" class="wf-state shell active">
-  <div class="bg-page" aria-hidden="true">
-    <div class="bg-sidebar">
-      <div class="bg-logo">TB</div>
-      <div class="bg-nav-item">Темы</div>
-      <div class="bg-nav-item">Вопросы</div>
-      <div class="bg-nav-item active">Тесты</div>
-      <div class="bg-nav-item">Аналитика</div>
-      <div class="bg-nav-item">Пользователи</div>
-    </div>
-    <div class="bg-main">
-      <div class="bg-topbar">
-        <span>Тесты</span>
-        <span class="ou-btn ou-btn--primary ou-btn--s" tabindex="-1">Новый тест</span>
-      </div>
-      <div class="bg-content">
-        <div class="bg-card"><div class="bg-card-title">Основы информационной безопасности</div><span class="ou-tag ou-tag--success">Опубликован</span></div>
-        <div class="bg-card"><div class="bg-card-title">GDPR для разработчиков</div><span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span></div>
-      </div>
-    </div>
-  </div>
+  <div class="wf-tpl-slot" data-template="tpl-bg-page"></div>
   <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-default">
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
@@ -486,23 +490,7 @@
 
 <!-- ═══════════ STATE: s-dirty ═══════════ -->
 <div id="s-dirty" class="wf-state shell">
-  <div class="bg-page" aria-hidden="true">
-    <div class="bg-sidebar">
-      <div class="bg-logo">TB</div>
-      <div class="bg-nav-item">Темы</div>
-      <div class="bg-nav-item">Вопросы</div>
-      <div class="bg-nav-item active">Тесты</div>
-      <div class="bg-nav-item">Аналитика</div>
-      <div class="bg-nav-item">Пользователи</div>
-    </div>
-    <div class="bg-main">
-      <div class="bg-topbar"><span>Тесты</span></div>
-      <div class="bg-content">
-        <div class="bg-card"><div class="bg-card-title">Основы информационной безопасности</div><span class="ou-tag ou-tag--success">Опубликован</span></div>
-        <div class="bg-card"><div class="bg-card-title">GDPR для разработчиков</div><span class="ou-tag ou-tag--neutral ou-tag--outline">Черновик</span></div>
-      </div>
-    </div>
-  </div>
+  <div class="wf-tpl-slot" data-template="tpl-bg-page"></div>
   <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-dirty">
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
@@ -578,22 +566,7 @@
 
 <!-- ═══════════ STATE: s-error ═══════════ -->
 <div id="s-error" class="wf-state shell">
-  <div class="bg-page" aria-hidden="true">
-    <div class="bg-sidebar">
-      <div class="bg-logo">TB</div>
-      <div class="bg-nav-item">Темы</div>
-      <div class="bg-nav-item">Вопросы</div>
-      <div class="bg-nav-item active">Тесты</div>
-      <div class="bg-nav-item">Аналитика</div>
-      <div class="bg-nav-item">Пользователи</div>
-    </div>
-    <div class="bg-main">
-      <div class="bg-topbar"><span>Тесты</span></div>
-      <div class="bg-content">
-        <div class="bg-card"><div class="bg-card-title">Основы информационной безопасности</div><span class="ou-tag ou-tag--success">Опубликован</span></div>
-      </div>
-    </div>
-  </div>
+  <div class="wf-tpl-slot" data-template="tpl-bg-page"></div>
   <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-error">
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
@@ -692,22 +665,7 @@
 
 <!-- ═══════════ STATE: s-saving ═══════════ -->
 <div id="s-saving" class="wf-state shell">
-  <div class="bg-page" aria-hidden="true">
-    <div class="bg-sidebar">
-      <div class="bg-logo">TB</div>
-      <div class="bg-nav-item">Темы</div>
-      <div class="bg-nav-item">Вопросы</div>
-      <div class="bg-nav-item active">Тесты</div>
-      <div class="bg-nav-item">Аналитика</div>
-      <div class="bg-nav-item">Пользователи</div>
-    </div>
-    <div class="bg-main">
-      <div class="bg-topbar"><span>Тесты</span></div>
-      <div class="bg-content">
-        <div class="bg-card"><div class="bg-card-title">Основы информационной безопасности</div><span class="ou-tag ou-tag--success">Опубликован</span></div>
-      </div>
-    </div>
-  </div>
+  <div class="wf-tpl-slot" data-template="tpl-bg-page"></div>
   <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-saving">
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
@@ -790,22 +748,7 @@
 
 <!-- ═══════════ STATE: s-changes ═══════════ -->
 <div id="s-changes" class="wf-state shell">
-  <div class="bg-page" aria-hidden="true">
-    <div class="bg-sidebar">
-      <div class="bg-logo">TB</div>
-      <div class="bg-nav-item">Темы</div>
-      <div class="bg-nav-item">Вопросы</div>
-      <div class="bg-nav-item active">Тесты</div>
-      <div class="bg-nav-item">Аналитика</div>
-      <div class="bg-nav-item">Пользователи</div>
-    </div>
-    <div class="bg-main">
-      <div class="bg-topbar"><span>Тесты</span></div>
-      <div class="bg-content">
-        <div class="bg-card"><div class="bg-card-title">Основы информационной безопасности</div><span class="ou-tag ou-tag--success">Опубликован</span></div>
-      </div>
-    </div>
-  </div>
+  <div class="wf-tpl-slot" data-template="tpl-bg-page"></div>
   <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-changes">
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
@@ -938,22 +881,7 @@
 
 <!-- ═══════════ STATE: s-settings ═══════════ -->
 <div id="s-settings" class="wf-state shell">
-  <div class="bg-page" aria-hidden="true">
-    <div class="bg-sidebar">
-      <div class="bg-logo">TB</div>
-      <div class="bg-nav-item">Темы</div>
-      <div class="bg-nav-item">Вопросы</div>
-      <div class="bg-nav-item active">Тесты</div>
-      <div class="bg-nav-item">Аналитика</div>
-      <div class="bg-nav-item">Пользователи</div>
-    </div>
-    <div class="bg-main">
-      <div class="bg-topbar"><span>Тесты</span></div>
-      <div class="bg-content">
-        <div class="bg-card"><div class="bg-card-title">Основы информационной безопасности</div><span class="ou-tag ou-tag--success">Опубликован</span></div>
-      </div>
-    </div>
-  </div>
+  <div class="wf-tpl-slot" data-template="tpl-bg-page"></div>
   <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-settings">
     <div class="ou-drawer__backdrop"></div>
     <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
@@ -1531,6 +1459,16 @@
 
 </div>
 <script>(function(){var s=document.createElement('script');s.src='/docs/wireframes/wf-links.js';document.head.appendChild(s);}());</script>
+
+<script>
+(function injectBgPage() {
+  var tpl = document.getElementById('tpl-bg-page');
+  if (!tpl) return;
+  document.querySelectorAll('[data-template="tpl-bg-page"]').forEach(function (slot) {
+    slot.appendChild(tpl.content.cloneNode(true));
+  });
+}());
+</script>
 
 <script>
 (function () {
