@@ -10,15 +10,15 @@ Drawer-контейнер), затем точки входа пользоват�
 
 Общий CSS — фундамент для всех остальных файлов. Принимается первым.
 
-- [ ] Файл подключается во всех wireframe-файлах одной и той же `<link>`-строкой
-- [ ] Импортирует `ds/university-rt.css` — Drawer (`ou-drawer-root`,
+- [x] Файл подключается во всех wireframe-файлах одной и той же `<link>`-строкой
+- [x] Импортирует `ds/university-rt.css` — Drawer (`ou-drawer-root`,
   `ou-drawer__backdrop`, `ou-drawer`, `ou-drawer__head`, `ou-drawer__body`,
   `ou-drawer__foot`), кнопки (`ou-btn`, `ou-iconbtn`) и компоненты
   предоставлены DS, не дублируются в `prd7-shared.css`
-- [ ] Содержит wireframe-инфраструктуру: `wf-nav`, `wf-btn`, `wf-label`,
+- [x] Содержит wireframe-инфраструктуру: `wf-nav`, `wf-btn`, `wf-label`,
   `wf-link`, `shell`, `shell.active`, `notes-page`
 - [ ] Размер файла ≤ 200 строк (только WIREFRAME-ONLY-glue и инфраструктура)
-- [ ] Нет дублирования классов из `ds/university-rt.css` и других CSS-файлов проекта
+- [x] Нет дублирования классов из `ds/university-rt.css` и других CSS-файлов проекта
 
 ---
 
@@ -26,21 +26,21 @@ Drawer-контейнер), затем точки входа пользоват�
 
 Эталон контейнера Drawer. Все вкладочные файлы должны повторять эту структуру.
 
-- [ ] Корень: `<div class="ou-drawer-root">` с `role="dialog" aria-modal="true"`
-- [ ] Backdrop: `<div class="ou-drawer__backdrop">`, размеры через токены DS
-- [ ] Drawer: `<aside class="ou-drawer ou-drawer--xl ou-drawer--right">`
+- [x] Корень: `<div class="ou-drawer-root">` с `role="dialog" aria-modal="true"`
+- [x] Backdrop: `<div class="ou-drawer__backdrop">`, размеры через токены DS
+- [x] Drawer: `<aside class="ou-drawer ou-drawer--xl ou-drawer--right">`
 - [ ] Header: `<header class="ou-drawer__head">` — заголовок (`ou-drawer__title`),
   бейдж статуса `ou-tag ou-tag--*` (`Черновик / Опубликован / В архиве`),
   крестик `ou-iconbtn ou-drawer__close` с `aria-label="Закрыть"`
-- [ ] Вкладки: `<div class="ou-tabs__list">` со списком `ou-tabs__tab` —
+- [x] Вкладки: `<div class="ou-tabs__list">` со списком `ou-tabs__tab` —
   `Состав | Настройки | Оформление | Структура`; активная вкладка имеет
   `is-active`
 - [ ] Footer: `<footer class="ou-drawer__foot">` с `ou-drawer__foot-meta`
   (changed-chips) и `ou-drawer__foot-actions` (`ou-btn--primary` Сохранить
   и `ou-btn--ghost` Отмена)
-- [ ] `data-template="tpl-bg-page"` присутствует в каждом `.shell`
-- [ ] `show(id)` и `injectBgPage()` работают без JS-ошибок
-- [ ] State-switcher `.wf-nav` переключает состояния корректно
+- [x] `data-template="tpl-bg-page"` присутствует в каждом `.shell`
+- [x] `show(id)` и `injectBgPage()` работают без JS-ошибок
+- [x] State-switcher `.wf-nav` переключает состояния корректно
 
 ---
 
