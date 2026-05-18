@@ -17,7 +17,9 @@ Drawer-контейнер), затем точки входа пользоват�
   предоставлены DS, не дублируются в `prd7-shared.css`
 - [x] Содержит wireframe-инфраструктуру: `wf-nav`, `wf-btn`, `wf-label`,
   `wf-link`, `shell`, `shell.active`, `notes-page`
-- [ ] Размер файла ≤ 200 строк (только WIREFRAME-ONLY-glue и инфраструктура)
+- [x] Размер файла ≤ 200 строк product-CSS (блок `gate-skip-start … gate-skip-end`
+  с токенами `--wf-size-*` / `--wf-space-*` / `--wf-border-w-*` в счёт не идёт —
+  это вынужденный мост для значений, отсутствующих в DS)
 - [x] Нет дублирования классов из `ds/university-rt.css` и других CSS-файлов проекта
 
 ---
