@@ -74,10 +74,10 @@
     .topic-name { font: var(--ou-text-heading-s); flex: 1; min-width: 0; }
     /* Mobile: 2-line clamp; desktop keeps single line (overridden in .mobile-canvas below) */
     .mobile-canvas .topic-name {
-      display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+      display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
     }
     .mobile-canvas .topic-name.is-expanded {
-      display: block; overflow: visible; -webkit-line-clamp: unset;
+      display: block; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset;
     }
     .topic-count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
     .topic-row-body { padding: var(--ou-space-3) var(--ou-space-4); }
@@ -295,6 +295,7 @@
       background: var(--ou-border-soft);
       margin: 0 var(--ou-space-2);
     }
+    .wf-svg-sprite { display: none; }
     .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
     .wf-state.active { display: block; }
     .shell.wf-state.active { display: flex; }
@@ -316,7 +317,7 @@
 </head>
 <body class="ou ou--light ou--normal">
 
-<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+<svg class="wf-svg-sprite" xmlns="http://www.w3.org/2000/svg">
   <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
   </symbol>
@@ -871,7 +872,7 @@
         </button>
       </div>
       <footer class="ou-drawer__foot">
-        <div class="changes-anchor wf-annot-wrap--block" style="position:relative">
+        <div class="changes-anchor wf-annot-wrap--block">
           <span class="wf-annot">FR-25c</span>
           <button type="button" class="ou-btn ou-btn--ghost"
                     aria-expanded="true" aria-controls="changes-popover"
