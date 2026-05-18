@@ -1730,6 +1730,18 @@
     return modal;
   }
 
+  function frCodesSection() {
+    var notesState = document.getElementById('s-notes');
+    if (!notesState) return null;
+    var firstBox = notesState.querySelector('.notes-box');
+    if (!firstBox) return null;
+    var section = document.createElement('section');
+    section.className = 'wf-notes-modal__section';
+    section.innerHTML = '<h3 class="wf-notes-modal__section-title">Коды требований FR / NFR</h3>';
+    section.appendChild(firstBox.cloneNode(true));
+    return section;
+  }
+
   function openNotesModal() {
     var state = currentState();
     var stateName = currentStateTitle(state);
@@ -1744,6 +1756,9 @@
     notesSection.innerHTML = '<h3 class="wf-notes-modal__section-title">Текущее состояние</h3>';
     notesSection.appendChild(cloneWithoutModal('.wf-notes', state) || fallbackNotesTable(state, stateName));
     body.appendChild(notesSection);
+
+    var frSection = frCodesSection();
+    if (frSection) body.appendChild(frSection);
 
     var mappingSection = document.createElement('section');
     mappingSection.className = 'wf-notes-modal__section';
