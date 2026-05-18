@@ -107,6 +107,10 @@
     /* DS sets align-items: flex-start; override to center for single-line titles */
     .ou-drawer__head { align-items: center; }
 
+    /* Tabs must stack above saving-overlay (z-index:10). In s-saving the nav has
+       no positioning context and would be painted under the overlay without this. */
+    .ou-drawer > .ou-tabs { position: relative; z-index: 11; }
+
     /* ── Tabs padding — align with ou-drawer__head/body ou-space-5 ── */
     .ou-drawer .ou-tabs--underline { padding: 0 var(--ou-space-5); }
 
