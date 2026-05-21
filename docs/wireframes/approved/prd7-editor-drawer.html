@@ -107,60 +107,54 @@
       background: var(--accent); padding: var(--wf-border-w) var(--ou-space-1); border-radius: var(--radius-sm);
     }
 
-    /* ── Mobile samples (s-mobile state) ── */
-    .mobile-state {
-      width: 100%; padding: var(--ou-space-7); min-height: 100vh;
-      display: flex; flex-direction: column; align-items: center;
-      gap: var(--ou-space-7); background: var(--card);
-    }
-    .mobile-state-title {
-      font: var(--ou-text-caption); font-weight: 700; color: var(--muted-fg);
-      text-transform: uppercase; letter-spacing: .05em;
-    }
-    .mobile-row {
-      display: flex; gap: var(--ou-space-8); flex-wrap: wrap;
-      justify-content: center; align-items: flex-start;
-    }
-    .mobile-sample { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-2); }
-    .mobile-sample-title { font: var(--ou-text-body-s); font-weight: 600; }
-    .mobile-canvas {
-      width: var(--wf-size-380); height: var(--wf-size-720);
-      border: var(--wf-border-w) solid var(--border); border-radius: var(--wf-size-18);
-      overflow: hidden; background: var(--bg);
-      box-shadow: var(--ou-shadow-xl); display: flex; flex-direction: column;
-    }
-    /* Single border source — prevents double/misaligned lines from ou-tabs__list + arrow elements */
-    .mobile-tabs-nav { display: flex; align-items: stretch; border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
-    .mobile-tabs-nav__arrow {
-      flex-shrink: 0; width: var(--ou-space-7); display: flex; align-items: center; justify-content: center;
-      background: none; border: none;
-      color: var(--ou-fg-muted); cursor: pointer; padding: 0;
-    }
-    .mobile-tabs-nav__arrow:disabled { opacity: 0.3; cursor: default; }
-    .mobile-tabs-nav .ou-tabs--underline { flex: 1; min-width: 0; }
-    .mobile-canvas .ou-tabs__list { overflow: hidden; padding: 0 var(--ou-space-1); border-bottom: none; }
-    .mobile-canvas .ou-drawer__foot { flex-direction: column; align-items: stretch; gap: var(--ou-space-2); }
-    /* wf-annot-wrap is inline-flex by default; must be flex so child ou-btn stretches */
-    .mobile-canvas .ou-drawer__foot .wf-annot-wrap { display: flex; }
-    .mobile-canvas .ou-drawer__foot .wf-annot-wrap > .ou-btn { flex: 1; }
-    .mobile-canvas .settings-accordion { display: flex; }
-    .mobile-canvas .settings-pane { display: none; }
-    /* Changes bottom sheet — replaces body area, footer stays accessible */
-    .mobile-canvas--changes-open .ou-drawer__body {
-      flex: 0 0 var(--ou-space-10); overflow: hidden; opacity: 0.35; pointer-events: none;
-    }
-    .mobile-canvas .changes-sheet {
-      flex: 1; display: flex; flex-direction: column; overflow: hidden;
-      background: var(--bg);
-      border-top: var(--wf-border-w) solid var(--border);
-      border-radius: var(--ou-radius-m) var(--ou-radius-m) 0 0;
-    }
-    .mobile-label {
-      font: var(--ou-text-caption); color: var(--muted-fg); text-align: center; max-width: var(--wf-size-380);
-    }
-
     /* Template injection slot — renders children as direct flex children of .shell */
     .wf-tpl-slot { display: contents; }
+
+    /* ── Feedback editor modal (s-feedback-edit) ── */
+    .tb-feedback-editor { display: flex; flex-direction: column; gap: var(--ou-space-5); }
+    .tb-feedback-editor__section { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+    .tb-feedback-editor__section--inline { flex-direction: row; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; }
+    .tb-feedback-editor__sec-title {
+      font: var(--ou-text-body-s); font-weight: 600;
+      color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: 0.04em;
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+    }
+    /* Rich-text editor */
+    .tb-rte {
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s); background: var(--ou-bg-elevated); overflow: hidden;
+    }
+    .tb-rte__toolbar {
+      display: flex; align-items: center; gap: var(--ou-space-1);
+      padding: var(--ou-space-1) var(--ou-space-2);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      background: var(--ou-bg-surface-2);
+    }
+    .tb-rte__sep { width: var(--wf-border-w); height: var(--wf-space-15); background: var(--ou-border-soft); margin: 0 var(--ou-space-1); }
+    .tb-rte__area {
+      min-height: var(--wf-size-140); padding: var(--ou-space-3);
+      font: var(--ou-text-body-m); color: var(--ou-fg-default); outline: none;
+    }
+    .tb-rte__area p { margin: 0 0 var(--ou-space-2); }
+    .tb-rte__area ul { padding-left: var(--ou-space-5); margin: 0 0 var(--ou-space-2); }
+    /* Feedback list items (links / assets) */
+    .tb-feedback-editor__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: var(--ou-space-2); }
+    .tb-feedback-editor__item {
+      display: flex; align-items: flex-start; gap: var(--ou-space-2);
+      padding: var(--ou-space-2);
+      border: var(--wf-border-w) solid var(--ou-border-soft);
+      border-radius: var(--ou-radius-s); background: var(--ou-bg-elevated);
+    }
+    .tb-feedback-editor__item-fields { flex: 1; display: flex; flex-direction: row; gap: var(--ou-space-2); min-width: 0; }
+    .tb-feedback-editor__item-fields > .ou-field { flex: 1; min-width: 0; }
+    .tb-feedback-editor__asset { flex: 1; display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0; }
+    .tb-feedback-editor__asset-ico { color: var(--ou-fg-muted); flex-shrink: 0; }
+    .tb-feedback-editor__asset-meta { flex: 1; display: flex; flex-direction: column; gap: var(--wf-space-half); min-width: 0; }
+    .tb-feedback-editor__asset-file { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    .tb-feedback-editor__upload { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; }
+    .tb-feedback-editor__upload-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    /* Drawer dimmed beneath the modal */
+    #s-feedback-edit .ou-drawer { opacity: 0.55; }
 
     /* ── Annotation badges ── */
     .wf-annot {
@@ -298,6 +292,9 @@
   <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="m9 18 6-6-6-6"/>
   </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+  </symbol>
 </svg>
 
 <nav class="wf-nav" aria-label="State switcher">
@@ -308,7 +305,7 @@
   <button class="wf-btn"        type="button" onclick="showState(this, 's-saving')">s-saving</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-changes')">s-changes</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-settings')">s-settings</button>
-  <button class="wf-btn"        type="button" onclick="showState(this, 's-mobile')">s-mobile</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-feedback-edit')">s-feedback-edit</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-notes')">notes</button>
   <a class="wf-link" href="prd7-tests-list.html">← Список тестов</a>
 
@@ -880,347 +877,147 @@
   </div>
 </div>
 
-<!-- ═══════════ STATE: s-mobile ═══════════ -->
-<div id="s-mobile" class="wf-state shell">
-  <div class="mobile-state">
-    <div class="mobile-state-title">Mobile / Narrow Viewport (&lt; 960 px)</div>
-    <div class="mobile-row">
-
-      <div class="mobile-sample">
-        <div class="mobile-sample-title">Вкладка «Состав»</div>
-        <div class="mobile-canvas">
-          <header class="ou-drawer__head">
-            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Основы ИБ</h2></div>
-            <span class="ou-tag ou-tag--warning ou-tag--outline">Изменено</span>
-            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
-              <svg width="16" height="16"><use href="#i-x"/></svg>
-            </button>
-          </header>
-          <div class="mobile-tabs-nav">
-            <button type="button" class="mobile-tabs-nav__arrow" aria-label="Предыдущая вкладка" disabled>
-              <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-left"/></svg>
-            </button>
-            <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
-              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true" aria-label="Состав, есть изменения">
-                Состав <span class="status-dot dirty" aria-hidden="true"></span>
-              </button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
-            </div></nav>
-            <button type="button" class="mobile-tabs-nav__arrow" aria-label="Следующая вкладка">
-              <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-right"/></svg>
-            </button>
+<!-- ═══════════ STATE: s-feedback-edit ═══════════ -->
+<div id="s-feedback-edit" class="wf-state shell">
+  <div class="wf-tpl-slot" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-feedback-edit">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right" aria-hidden="true">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-feedback-edit" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--success ou-tag--outline">Опубликован</span>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline">v7</span>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор" tabindex="-1"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true" tabindex="-1">Состав</button>
+        <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false" tabindex="-1">Настройки</button>
+        <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false" tabindex="-1">Оформление</button>
+        <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false" tabindex="-1">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="-1" aria-hidden="true">
+        <div class="tb-section-label">Темы и выборка вопросов</div>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header">
+            <span class="tb-topic-row__name">Основы ИБ</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязательная</span>
+            <span class="tb-topic-row__count">45 вопросов</span>
           </div>
-          <div class="ou-drawer__body" tabindex="0">
-            <div class="tb-section-label">Темы и выборка вопросов</div>
-            <div class="tb-topic-row">
-              <div class="tb-topic-row__header">
-                <span class="tb-topic-row__name">Основы ИБ</span>
-                <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязат.</span>
-                <span class="tb-topic-row__count">45</span>
+        </div>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header">
+            <span class="tb-topic-row__name">Сетевая безопасность</span>
+            <span class="tb-topic-row__count">30 вопросов</span>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button type="button" class="ou-btn ou-btn--ghost" disabled>Закрыть</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+
+  <!-- Feedback edit modal (FR-36 / FR-37) -->
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="fb-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--l">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h2 id="fb-title" class="ou-modal__title">Обратная связь по теме «Основы ИБ»</h2>
+          <p class="tb-card-desc">Показывается учащемуся после прохождения темы</p>
+        </div>
+        <span class="wf-annot-wrap"><button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button><span class="wf-annot">FR-36</span></span>
+      </header>
+      <div class="ou-modal__body tb-feedback-editor">
+
+        <!-- Format selector: plain / richText / html -->
+        <div class="tb-feedback-editor__section tb-feedback-editor__section--inline">
+          <span class="tb-feedback-editor__sec-title">Формат</span>
+          <div class="ou-seg ou-seg--s" role="tablist" aria-label="Формат текста">
+            <button type="button" class="ou-seg__item" role="tab" aria-selected="false">Простой</button>
+            <button type="button" class="ou-seg__item is-active" role="tab" aria-selected="true">Форматированный</button>
+            <button type="button" class="ou-seg__item" role="tab" aria-selected="false">HTML</button>
+          </div>
+        </div>
+
+        <!-- Rich text editor -->
+        <div class="tb-feedback-editor__section">
+          <div class="tb-feedback-editor__sec-title">Текст обратной связи</div>
+          <div class="tb-rte">
+            <div class="tb-rte__toolbar" role="toolbar" aria-label="Форматирование">
+              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Жирный (Ctrl+B)" aria-pressed="false"><strong>B</strong></button>
+              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Курсив (Ctrl+I)" aria-pressed="false"><em>I</em></button>
+              <span class="tb-rte__sep" aria-hidden="true"></span>
+              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Вставить ссылку"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-link"/></svg></button>
+            </div>
+            <div class="tb-rte__area" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Текст обратной связи">
+              <p><strong>Поздравляем</strong> с прохождением базового модуля!</p>
+              <p>Для углублённого изучения темы рекомендуем:</p>
+              <ul>
+                <li>Изучить нормативные документы (см. ссылку ниже).</li>
+                <li>Пройти практический сценарий из вложения.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Links section (FR-37) -->
+        <div class="tb-feedback-editor__section">
+          <div class="tb-feedback-editor__sec-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-link"/></svg>
+            Ссылки на материалы
+          </div>
+          <ul class="tb-feedback-editor__list" aria-label="Ссылки">
+            <li class="tb-feedback-editor__item">
+              <div class="tb-feedback-editor__item-fields">
+                <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Политика безопасности компании" aria-label="Название ссылки"></div></div>
+                <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="url" value="https://wiki.internal/sec-policy" aria-label="URL ссылки"></div></div>
               </div>
-              <div class="tb-topic-row__body">
-                <div class="tb-draw-count-row">
-                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
-                  <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" min="1" max="45" aria-label="Вопросов из Основы ИБ"></div></div>
-                  <span class="tb-draw-count-row__max">/ 45</span>
+              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить ссылку"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-trash"/></svg></button>
+            </li>
+          </ul>
+          <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-plus"/></svg>
+            Добавить ссылку
+          </button>
+        </div>
+
+        <!-- PDF assets section (FR-37) -->
+        <span class="wf-annot-wrap--block">
+        <div class="tb-feedback-editor__section">
+          <div class="tb-feedback-editor__sec-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-paperclip"/></svg>
+            Прикреплённые файлы (PDF)
+          </div>
+          <ul class="tb-feedback-editor__list" aria-label="Прикреплённые файлы">
+            <li class="tb-feedback-editor__item">
+              <div class="tb-feedback-editor__asset">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tb-feedback-editor__asset-ico" aria-hidden="true"><use href="#i-paperclip"/></svg>
+                <div class="tb-feedback-editor__asset-meta">
+                  <div class="ou-field ou-field--s ou-field--full"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Памятка по информационной безопасности" aria-label="Название файла"></div></div>
+                  <div class="tb-feedback-editor__asset-file">security-basics.pdf · 245 KB</div>
                 </div>
               </div>
-            </div>
-            <div class="tb-topic-row">
-              <div class="tb-topic-row__header"><span class="tb-topic-row__name">Сетевая безопасность</span><span class="tb-topic-row__count">30</span></div>
-              <div class="tb-topic-row__body">
-                <div class="tb-draw-count-row">
-                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
-                  <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" min="1" max="30" aria-label="Вопросов из Сетевая безопасность"></div></div>
-                  <span class="tb-draw-count-row__max">/ 30</span>
-                </div>
-              </div>
-            </div>
-        <button type="button" class="ou-btn ou-btn--secondary ou-btn--m ou-btn--full">
+              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Удалить файл"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-trash"/></svg></button>
+            </li>
+          </ul>
+          <div class="tb-feedback-editor__upload">
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-plus"/></svg>
-              Добавить тему
+              Загрузить PDF
             </button>
+            <span class="tb-feedback-editor__upload-hint">PDF до 5 MB; попадёт в SCORM-пакет и доступен по download-link</span>
           </div>
-          <footer class="ou-drawer__foot">
-            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--ghost">Изменения</button><span class="wf-annot">FR-25c</span></span>
-            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
-            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button><span class="wf-annot">FR-25a</span></span>
-          </footer>
         </div>
-        <div class="mobile-label">Drawer 100 vw, табы с навигацией &lt; / &gt;, footer вертикальный</div>
-      </div>
+        <span class="wf-annot">FR-37</span>
+        </span>
 
-      <div class="mobile-sample">
-        <div class="mobile-sample-title">Вкладка «Настройки» — аккордеон</div>
-        <div class="mobile-canvas">
-          <header class="ou-drawer__head">
-            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Основы ИБ</h2></div>
-            <span class="ou-tag ou-tag--warning ou-tag--outline">Изменено</span>
-            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
-              <svg width="16" height="16"><use href="#i-x"/></svg>
-            </button>
-          </header>
-          <div class="mobile-tabs-nav">
-            <button type="button" class="mobile-tabs-nav__arrow" aria-label="Предыдущая вкладка">
-              <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-left"/></svg>
-            </button>
-            <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
-              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true" aria-label="Настройки, есть изменения">
-                Настройки <span class="status-dot dirty" aria-hidden="true"></span>
-              </button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
-            </div></nav>
-            <button type="button" class="mobile-tabs-nav__arrow" aria-label="Следующая вкладка">
-              <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-right"/></svg>
-            </button>
-          </div>
-          <div class="ou-drawer__body" tabindex="0">
-            <div class="settings-accordion" role="group" aria-label="Подразделы настроек">
-              <details class="settings-accordion-item" open><summary>Основное</summary><div class="settings-accordion-body"></div></details>
-              <details class="settings-accordion-item"><summary>Режим и сценарий</summary><div class="settings-accordion-body"></div></details>
-              <details class="settings-accordion-item"><summary>Правила прохождения</summary><div class="settings-accordion-body"></div></details>
-              <details class="settings-accordion-item"><summary>Ограничения</summary><div class="settings-accordion-body"></div></details>
-              <details class="settings-accordion-item"><summary>Обратная связь</summary><div class="settings-accordion-body"></div></details>
-            </div>
-          </div>
-          <footer class="ou-drawer__foot">
-            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--ghost">Изменения</button><span class="wf-annot">FR-25c</span></span>
-            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
-            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button><span class="wf-annot">FR-25a</span></span>
-          </footer>
-        </div>
-        <div class="mobile-label">Side-nav «Настройки» заменяется аккордеоном (&lt;details&gt;)</div>
       </div>
-
-      <div class="mobile-sample">
-        <div class="mobile-sample-title">Длинное название темы — truncation</div>
-        <div class="mobile-canvas">
-          <header class="ou-drawer__head">
-            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Основы ИБ</h2></div>
-            <span class="ou-tag ou-tag--warning ou-tag--outline">Изменено</span>
-            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
-              <svg width="16" height="16"><use href="#i-x"/></svg>
-            </button>
-          </header>
-          <div class="mobile-tabs-nav">
-            <button type="button" class="mobile-tabs-nav__arrow" aria-label="Предыдущая вкладка" disabled>
-              <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-left"/></svg>
-            </button>
-            <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
-              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true" aria-label="Состав, есть изменения">
-                Состав <span class="status-dot dirty" aria-hidden="true"></span>
-              </button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
-            </div></nav>
-            <button type="button" class="mobile-tabs-nav__arrow" aria-label="Следующая вкладка">
-              <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-right"/></svg>
-            </button>
-          </div>
-          <div class="ou-drawer__body" tabindex="0">
-            <div class="tb-section-label">Темы и выборка вопросов</div>
-            <div class="tb-topic-row">
-              <div class="tb-topic-row__header">
-                <span class="tb-topic-row__name" title="Защита персональных данных и конфиденциальной информации">Защита персональных данных и конфиденциальной информации</span>
-                <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязат.</span>
-                <span class="tb-topic-row__count">45</span>
-              </div>
-              <div class="tb-topic-row__body">
-                <div class="tb-draw-count-row">
-                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
-                  <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" min="1" max="45" aria-label="Вопросов из темы"></div></div>
-                  <span class="tb-draw-count-row__max">/ 45</span>
-                </div>
-              </div>
-            </div>
-            <div class="tb-topic-row">
-              <div class="tb-topic-row__header">
-                <span class="tb-topic-row__name" title="Правовое регулирование информационной безопасности в РФ">Правовое регулирование информационной безопасности в РФ</span>
-                <span class="tb-topic-row__count">30</span>
-              </div>
-              <div class="tb-topic-row__body">
-                <div class="tb-draw-count-row">
-                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
-                  <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" min="1" max="30" aria-label="Вопросов из темы"></div></div>
-                  <span class="tb-draw-count-row__max">/ 30</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <footer class="ou-drawer__foot">
-            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--ghost">Изменения</button><span class="wf-annot">FR-25c</span></span>
-            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
-            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button><span class="wf-annot">FR-25a</span></span>
-          </footer>
-        </div>
-        <div class="mobile-label">Длинное имя — 2-строчный clamp, тег и счётчик остаются видны</div>
-      </div>
-
-      <div class="mobile-sample">
-        <div class="mobile-sample-title">Тап по названию — разворачивает строку</div>
-        <div class="mobile-canvas">
-          <header class="ou-drawer__head">
-            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Основы ИБ</h2></div>
-            <span class="ou-tag ou-tag--warning ou-tag--outline">Изменено</span>
-            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
-              <svg width="16" height="16"><use href="#i-x"/></svg>
-            </button>
-          </header>
-          <div class="mobile-tabs-nav">
-            <button type="button" class="mobile-tabs-nav__arrow" aria-label="Предыдущая вкладка" disabled>
-              <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-left"/></svg>
-            </button>
-            <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
-              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true" aria-label="Состав, есть изменения">
-                Состав <span class="status-dot dirty" aria-hidden="true"></span>
-              </button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
-            </div></nav>
-            <button type="button" class="mobile-tabs-nav__arrow" aria-label="Следующая вкладка">
-              <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-right"/></svg>
-            </button>
-          </div>
-          <div class="ou-drawer__body" tabindex="0">
-            <div class="tb-section-label">Темы и выборка вопросов</div>
-            <div class="tb-topic-row">
-              <div class="tb-topic-row__header">
-                <span class="topic-name is-expanded">Защита персональных данных и конфиденциальной информации</span>
-                <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязат.</span>
-                <span class="tb-topic-row__count">45</span>
-              </div>
-              <div class="tb-topic-row__body">
-                <div class="tb-draw-count-row">
-                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
-                  <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" min="1" max="45" aria-label="Вопросов из темы"></div></div>
-                  <span class="tb-draw-count-row__max">/ 45</span>
-                </div>
-              </div>
-            </div>
-            <div class="tb-topic-row">
-              <div class="tb-topic-row__header">
-                <span class="tb-topic-row__name" title="Правовое регулирование информационной безопасности в РФ">Правовое регулирование информационной безопасности в РФ</span>
-                <span class="tb-topic-row__count">30</span>
-              </div>
-              <div class="tb-topic-row__body">
-                <div class="tb-draw-count-row">
-                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
-                  <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" min="1" max="30" aria-label="Вопросов из темы"></div></div>
-                  <span class="tb-draw-count-row__max">/ 30</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <footer class="ou-drawer__foot">
-            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--ghost">Изменения</button><span class="wf-annot">FR-25c</span></span>
-            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
-            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button><span class="wf-annot">FR-25a</span></span>
-          </footer>
-        </div>
-        <div class="mobile-label">После тапа по имени: clamp снимается, строка разворачивается до полного текста</div>
-      </div>
-
-      <div class="mobile-sample">
-        <div class="mobile-sample-title">Нижний лист изменений (FR-25c)</div>
-        <div class="mobile-canvas mobile-canvas--changes-open">
-          <header class="ou-drawer__head">
-            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Основы ИБ</h2></div>
-            <span class="ou-tag ou-tag--warning ou-tag--outline">Изменено</span>
-            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
-              <svg width="16" height="16"><use href="#i-x"/></svg>
-            </button>
-          </header>
-          <div class="mobile-tabs-nav">
-            <button type="button" class="mobile-tabs-nav__arrow" aria-label="Предыдущая вкладка" disabled>
-              <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-left"/></svg>
-            </button>
-            <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
-              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true" aria-label="Состав, есть изменения">
-                Состав <span class="status-dot dirty" aria-hidden="true"></span>
-              </button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false" aria-label="Настройки, есть изменения">
-                Настройки <span class="status-dot dirty" aria-hidden="true"></span>
-              </button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
-              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
-            </div></nav>
-            <button type="button" class="mobile-tabs-nav__arrow" aria-label="Следующая вкладка">
-              <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-right"/></svg>
-            </button>
-          </div>
-          <div class="ou-drawer__body" tabindex="-1" aria-hidden="true">
-            <div class="tb-section-label">Темы и выборка вопросов</div>
-            <div class="tb-topic-row">
-              <div class="tb-topic-row__header">
-                <span class="tb-topic-row__name">Основы ИБ</span>
-                <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязат.</span>
-                <span class="tb-topic-row__count">45</span>
-              </div>
-            </div>
-          </div>
-          <div class="changes-sheet" role="dialog" aria-modal="false" aria-labelledby="mcs-title">
-            <div class="tb-changes-popover__header">
-              <span>
-                <span class="tb-changes-popover__title" id="mcs-title">Изменения в черновике</span>
-                <span class="tb-changes-popover__count">&nbsp;(5)</span>
-              </span>
-              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Закрыть список изменений">
-                <svg width="14" height="14"><use href="#i-x"/></svg>
-              </button>
-            </div>
-            <div class="tb-changes-popover__body">
-              <div class="tb-changes-popover__group" aria-label="Изменения во вкладке Состав">
-                <div class="tb-changes-popover__group-title">Состав · 2 изменения</div>
-                <div class="tb-changes-popover__item">
-                  <span class="tb-changes-popover__label">Добавлена тема</span>
-                  <span class="tb-changes-popover__new">Криптография</span>
-                  <span class="tb-changes-popover__context">3 вопроса, минимум 3</span>
-                </div>
-                <div class="tb-changes-popover__item">
-                  <span class="tb-changes-popover__label">Минимум темы «Сетевая безопасность»</span>
-                  <span class="tb-changes-popover__old">5</span>
-                  <span class="tb-changes-popover__arrow">→</span>
-                  <span class="tb-changes-popover__new">8</span>
-                </div>
-              </div>
-              <div class="tb-changes-popover__group" aria-label="Изменения во вкладке Настройки">
-                <div class="tb-changes-popover__group-title">Настройки · 3 изменения</div>
-                <div class="tb-changes-popover__item">
-                  <span class="tb-changes-popover__label">Порог успеха</span>
-                  <span class="tb-changes-popover__old">60 %</span>
-                  <span class="tb-changes-popover__arrow">→</span>
-                  <span class="tb-changes-popover__new">75 %</span>
-                </div>
-                <div class="tb-changes-popover__item">
-                  <span class="tb-changes-popover__label">Перемешать вопросы</span>
-                  <span class="tb-changes-popover__old">Нет</span>
-                  <span class="tb-changes-popover__arrow">→</span>
-                  <span class="tb-changes-popover__new">Да</span>
-                </div>
-                <div class="tb-changes-popover__item">
-                  <span class="tb-changes-popover__label">Лимит времени</span>
-                  <span class="tb-changes-popover__old">не задан</span>
-                  <span class="tb-changes-popover__arrow">→</span>
-                  <span class="tb-changes-popover__new">30 мин</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <footer class="ou-drawer__foot">
-            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--ghost" aria-expanded="true" aria-controls="mcs-title">Изменения</button><span class="wf-annot">FR-25c</span></span>
-            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
-            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button><span class="wf-annot">FR-25a</span></span>
-          </footer>
-        </div>
-        <div class="mobile-label">Нижний лист перекрывает тело; header, tabs и footer остаются доступны</div>
-      </div>
-
+      <footer class="ou-modal__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Отменить</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сохранить</button>
+      </footer>
     </div>
   </div>
 </div>
@@ -1290,10 +1087,10 @@
             <td>Side-nav с подразделами при viewport &ge;960px. Полный wireframe настроек — в отдельном файле prd7-editor-settings-tab.html.</td>
           </tr>
           <tr>
-            <td><code>s-mobile</code></td>
-            <td>Viewport &lt;960px</td>
-            <td>[Тег вкладки] + Изменения + Сохранить (column layout)</td>
-            <td>Drawer 100vw. Табы с навигацией &lt;&nbsp;/&nbsp;&gt;. Длинные названия тем: 2-строчный clamp, тап разворачивает. Side-nav настроек заменяется аккордеоном.</td>
+            <td><code>s-feedback-edit</code></td>
+            <td>Клик по `tb-feedback-preview` (любой состав) или CTA «Добавить обратную связь»</td>
+            <td>Отменить | Сохранить (modal footer)</td>
+            <td>Модал `ou-modal--l` поверх Drawer (Состав). Селектор формата (plain/richText/html), richtext-editor, секция ссылок (FR-37), секция PDF-assets (FR-37). Drawer footer disabled, body `aria-hidden`. FR-36.</td>
           </tr>
         </tbody>
       </table>
@@ -1335,14 +1132,9 @@
             <td>—</td>
           </tr>
           <tr>
-            <td>Длинное название темы (мобильный)</td>
-            <td>2-строчный CSS clamp. Тап по имени снимает clamp — строка разворачивается до полного текста. Повторный тап сворачивает.</td>
-            <td>s-mobile</td>
-          </tr>
-          <tr>
-            <td>Drawer на мобильном</td>
-            <td>100vw, высота 100dvh. Footer — column layout: тег текущей вкладки слева, «Изменения» и «Сохранить» растянуты на ширину.</td>
-            <td>s-mobile</td>
+            <td>Редактирование обратной связи по теме (FR-36/37)</td>
+            <td>Клик по `tb-feedback-preview` (read-only / empty) открывает модал поверх Drawer; richtext + ссылки + PDF-assets. Сохранить → возврат к Состав, drawer переходит в s-dirty.</td>
+            <td>s-feedback-edit</td>
           </tr>
         </tbody>
       </table>
@@ -1648,7 +1440,8 @@
     if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
     if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
     if (hasIn(state, '.skel, .skeleton, .ou-skeleton')) addMappingRow(rows, 'skeleton', 'Загрузка', '<code>Skeleton</code>', ['--ou-bg-surface-3', '--ou-bg-hover'], 'Повторяет структуру default-состояния.');
-    if (hasIn(state, '.mobile-canvas')) addMappingRow(rows, 'mobile-preview', 'Mobile preview canvas', '<code>Wireframe preview</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-xl'], 'Демонстрационный canvas, не продуктовый компонент.');
+    if (hasIn(state, '.tb-feedback-editor')) addMappingRow(rows, 'feedback-editor', 'Feedback edit modal', '<code>FeedbackEditor</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-accent-soft'], 'Модал richtext + ссылки + PDF-assets (FR-36/FR-37).');
+    if (hasIn(state, '.tb-rte')) addMappingRow(rows, 'rich-text', 'Rich-text editor', '<code>RichTextEditor</code>', ['--ou-bg-elevated', '--ou-border-soft', '--ou-bg-surface-2'], 'Toolbar + contenteditable area; формат plain/richText/html.');
     return rows;
   }
 
