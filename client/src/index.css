@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Project-specific UI components (namespace `tb-`). См. styles/tb-components.css. */
+@import './styles/tb-components.css';
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0,0,0, .10);
