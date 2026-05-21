@@ -62,8 +62,9 @@
     .inside-test__label { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--wf-space-14); color: var(--ou-fg-muted); font: var(--ou-text-caption); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; border-bottom: var(--wf-border-w) dashed var(--ou-border-default); }
     .inside-test__body { padding: var(--ou-space-3) var(--wf-space-14); }
 
-    /* Page row базовая — общая для info и системных kind */
-    .page-row { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-6) var(--wf-space-10) var(--wf-space-6) var(--wf-space-14); position: relative; background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s); margin-bottom: var(--wf-space-6); }
+    /* Page row базовая — общая для info и системных kind.
+       flex-wrap позволяет meta-блоку перенестись на вторую строку. */
+    .page-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-6) var(--wf-space-10) var(--wf-space-6) var(--wf-space-14); position: relative; background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s); margin-bottom: var(--wf-space-6); }
     .page-row:hover { background: var(--ou-bg-hover); }
     .page-row.is-expanded { background: var(--ou-bg-surface-2); border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-style: dashed; }
     .drag-handle { color: var(--ou-fg-muted); cursor: grab; display: flex; align-items: center; flex-shrink: 0; }
@@ -82,13 +83,21 @@
     .page-row--questions .page-title { color: var(--ou-fg-muted); }
     .page-row--questions .questions-count { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-left: auto; margin-right: var(--ou-space-2); }
 
-    /* Multi-variant hint — caption-метка возле бейджа, появляется при N > 1
-       вариантах нужного kind в шаблоне. */
-    .multi-variant-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); font-style: italic; }
-
-    /* Fallback warning — варнинг для системной row при 0 вариантах нужного kind
-       (используется fallback на стандартный шаблон). */
-    .fallback-warn { display: inline-flex; align-items: center; gap: var(--wf-space-tiny); font: var(--ou-text-caption); color: var(--ou-warning-on-soft); background: var(--ou-warning-soft); padding: var(--wf-space-half) var(--wf-space-6); border-radius: var(--wf-space-1q); }
+    /* Meta-строка под page-row — отдельная строка для info/warning DS-тегов
+       (хинт «Доступно N вариантов», warning «Из стандартного шаблона»).
+       flex-basis: 100% переносит блок на новую строку внутри flex-wrap'нутой
+       .page-row. Лейаут — горизонтальный flex с small-gap'ом для нескольких
+       тегов; левый отступ выравнивает теги с бейджем варианта в шапке. */
+    .page-row__meta {
+      flex-basis: 100%;
+      display: flex; flex-wrap: wrap; gap: var(--wf-space-6);
+      padding-top: var(--wf-space-tiny);
+      margin-left: calc(var(--ou-space-4) + var(--ou-space-2));
+    }
+    /* На системной row meta также выровнена с бейджем
+       (учитывая accent-border-left). */
+    .page-row--system .page-row__meta { margin-left: var(--ou-space-4); }
+    .page-row__meta .ou-tag { display: inline-flex; align-items: center; gap: var(--wf-space-tiny); }
 
     /* Page expand toggle */
     .page-expand-toggle { display: inline-flex; align-items: center; justify-content: center; width: var(--ou-space-5); height: var(--ou-space-5); flex-shrink: 0; padding: 0; border: 0; background: transparent; color: var(--ou-fg-muted); cursor: pointer; border-radius: var(--ou-radius-xs); transition: transform var(--ou-motion-fast), background var(--ou-motion-fast); }
@@ -487,14 +496,16 @@
         <div class="inside-test">
           <div class="inside-test__label"><svg width="14" height="14"><use href="#i-chevron-down"/></svg> Внутри теста</div>
             <div class="inside-test__body">
-          <!-- Router-row с хинтом «Доступно 3 варианта» возле бейджа -->
+          <!-- Router-row + meta-строка с info-тегом «Доступно 3 варианта» -->
           <div class="page-row page-row--system" data-kind="router">
             <svg class="page-icon"><use href="#i-signpost"/></svg>
             <span class="page-variant-badge">Меню карточек</span>
-            <span class="multi-variant-hint">Доступно 3 варианта</span>
             <span class="page-title">Страница-маршрутизатор</span>
             <div class="page-actions">
               <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+            </div>
+            <div class="page-row__meta">
+              <span class="ou-tag ou-tag--info ou-tag--s"><svg width="11" height="11"><use href="#i-info"/></svg> Доступно 3 варианта</span>
             </div>
           </div>
 
@@ -510,10 +521,12 @@
                   <div class="page-row page-row--system page-row--questions" data-kind="questions">
                     <svg class="page-icon"><use href="#i-question"/></svg>
                     <span class="page-variant-badge">Минимальный</span>
-                    <span class="multi-variant-hint">Доступно 2 варианта</span>
                     <span class="page-title">5 вопросов</span>
                     <div class="page-actions">
                       <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                    <div class="page-row__meta">
+                      <span class="ou-tag ou-tag--info ou-tag--s"><svg width="11" height="11"><use href="#i-info"/></svg> Доступно 2 варианта</span>
                     </div>
                   </div>
                 </div>
@@ -530,10 +543,12 @@
                   <div class="page-row page-row--system page-row--questions" data-kind="questions">
                     <svg class="page-icon"><use href="#i-question"/></svg>
                     <span class="page-variant-badge">Минимальный</span>
-                    <span class="multi-variant-hint">Доступно 2 варианта</span>
                     <span class="page-title">8 вопросов</span>
                     <div class="page-actions">
                       <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                    <div class="page-row__meta">
+                      <span class="ou-tag ou-tag--info ou-tag--s"><svg width="11" height="11"><use href="#i-info"/></svg> Доступно 2 варианта</span>
                     </div>
                   </div>
                 </div>
@@ -580,14 +595,17 @@
         <div class="inside-test">
           <div class="inside-test__label"><svg width="14" height="14"><use href="#i-chevron-down"/></svg> Внутри теста</div>
             <div class="inside-test__body">
-          <!-- Router-row с warning fallback — нет router-варианта в текущем шаблоне -->
+          <!-- Router-row + meta-строка с warning «Из стандартного шаблона» —
+               нет router-варианта в текущем шаблоне, fallback на standard. -->
           <div class="page-row page-row--system" data-kind="router">
             <svg class="page-icon"><use href="#i-signpost"/></svg>
             <span class="page-variant-badge">Меню карточек</span>
-            <span class="fallback-warn"><svg width="11" height="11" class="wf-icon-warn wf-icon-baseline"><use href="#i-warn"/></svg> Из стандартного шаблона</span>
             <span class="page-title">Страница-маршрутизатор</span>
             <div class="page-actions">
               <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+            </div>
+            <div class="page-row__meta">
+              <span class="ou-tag ou-tag--warning ou-tag--s"><svg width="11" height="11"><use href="#i-warn"/></svg> Из стандартного шаблона</span>
             </div>
           </div>
 
@@ -603,10 +621,12 @@
                   <div class="page-row page-row--system page-row--questions" data-kind="questions">
                     <svg class="page-icon"><use href="#i-question"/></svg>
                     <span class="page-variant-badge">Стандартный</span>
-                    <span class="fallback-warn"><svg width="11" height="11" class="wf-icon-warn wf-icon-baseline"><use href="#i-warn"/></svg> Из стандартного шаблона</span>
                     <span class="page-title">5 вопросов</span>
                     <div class="page-actions">
                       <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                    <div class="page-row__meta">
+                      <span class="ou-tag ou-tag--warning ou-tag--s"><svg width="11" height="11"><use href="#i-warn"/></svg> Из стандартного шаблона</span>
                     </div>
                   </div>
                 </div>
@@ -885,7 +905,6 @@
           <div class="page-row page-row--system" data-kind="router">
             <svg class="page-icon"><use href="#i-signpost"/></svg>
             <span class="page-variant-badge">Меню карточек</span>
-            <span class="multi-variant-hint">Доступно 3 варианта</span>
             <span class="page-title">Страница-маршрутизатор</span>
             <div class="page-actions">
               <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия" aria-expanded="true"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
@@ -896,6 +915,9 @@
                 <div class="row-menu__sep"></div>
                 <button class="row-menu__item is-disabled" type="button" role="menuitem" aria-disabled="true" title="Системную страницу нельзя удалить"><svg class="row-menu__icon"><use href="#i-trash"/></svg>Удалить</button>
               </div>
+            </div>
+            <div class="page-row__meta">
+              <span class="ou-tag ou-tag--info ou-tag--s"><svg width="11" height="11"><use href="#i-info"/></svg> Доступно 3 варианта</span>
             </div>
           </div>
 
@@ -911,10 +933,12 @@
                   <div class="page-row page-row--system page-row--questions" data-kind="questions">
                     <svg class="page-icon"><use href="#i-question"/></svg>
                     <span class="page-variant-badge">Минимальный</span>
-                    <span class="multi-variant-hint">Доступно 2 варианта</span>
                     <span class="page-title">5 вопросов из темы «Основы ИБ»</span>
                     <div class="page-actions">
                       <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                    <div class="page-row__meta">
+                      <span class="ou-tag ou-tag--info ou-tag--s"><svg width="11" height="11"><use href="#i-info"/></svg> Доступно 2 варианта</span>
                     </div>
                   </div>
                 </div>
