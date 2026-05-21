@@ -226,12 +226,6 @@
     /* Spacer */
     .wf-flex-spacer { flex: 1; }
 
-    /* Ghost + primary buttons (wf-utils already has ou-button, add missing variants) */
-    .ou-button--ghost {
-      background: transparent; border: none; color: var(--ou-fg-muted); cursor: pointer;
-    }
-    .ou-button--ghost:hover { background: var(--ou-bg-hover); }
-    .ou-button--sm { height: var(--wf-size-28); padding: 0 var(--ou-space-3); font: var(--ou-text-body-s); }
   </style>
 
   <style data-wf-template-overrides>
@@ -323,14 +317,14 @@
   </svg>
 
   <!-- ═══ State switcher ════════════════════════════════════════════════════ -->
-  <nav class="wf-nav">
-    <span class="wf-nav-title">Предупреждения при смене режима</span>
-    <button type="button" class="active" onclick="showState(this, 's-mode-warn')">Смена режима</button>
-    <button type="button" onclick="showState(this, 's-flow-warn')">Смена flowMode</button>
-    <button type="button" onclick="showState(this, 's-after')">После переключения</button>
+  <nav class="wf-nav" aria-label="Wireframe state switcher">
+    <span class="wf-nav-title">Предупреждения при смене режима:</span>
+    <button type="button" class="wf-btn active" onclick="showState(this, 's-mode-warn')">Смена режима</button>
+    <button type="button" class="wf-btn" onclick="showState(this, 's-flow-warn')">Смена flowMode</button>
+    <button type="button" class="wf-btn" onclick="showState(this, 's-after')">После переключения</button>
     <div class="wf-nav-sep"></div>
-    <button type="button" onclick="toggleTheme(this)">Dark</button>
-    <button type="button" onclick="toggleDensity(this)">Compact</button>
+    <button type="button" class="wf-btn" onclick="toggleTheme(this)">Dark</button>
+    <button type="button" class="wf-btn" onclick="toggleDensity(this)">Compact</button>
   </nav>
 
   <!-- ════════════════════════════════════════════════════════════════════════
@@ -414,8 +408,8 @@
             <svg class="wf-footer-icon" width="12" height="12"><use href="#i-warn"/></svg>
             Переключение режима: проверьте настройки адаптации
           </div>
-          <button class="ou-button ou-button--ghost ou-button--sm" type="button">Показать изменения</button>
-          <button class="ou-button ou-button--primary ou-button--sm" type="button">Сохранить</button>
+          <button class="ou-btn ou-btn--ghost" type="button">Показать изменения</button>
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сохранить</button>
         </div>
       </div>
     </div>
@@ -462,26 +456,26 @@
               <div class="wf-field-group">
                 <span class="wf-field-label">Режим воспроизведения вопросов</span>
                 <div class="ou-field ou-field--m"><div class="ou-field__box"><select class="ou-field__input" aria-label="Режим потока вопросов">
-                  <option value="linear_flat">Плоская последовательность (linear_flat)</option>
-                  <option value="linear_by_topics">Последовательность по темам (linear_by_topics)</option>
-                  <option value="mixed" selected>Смешанный Before/Block/After (mixed)</option>
-                  <option value="router_by_topics">Маршрутизация по темам (router_by_topics)</option>
+                  <option value="linear_flat">Последовательный — единый поток с зонами До/После (linear_flat)</option>
+                  <option value="linear_by_topics" selected>Последовательный по темам (linear_by_topics)</option>
+                  <option value="router_by_topics">Через страницу-маршрутизатор (router_by_topics)</option>
                 </select></div></div>
-                <!-- FR-25e: inline warning, no Apply/Cancel -->
+                <!-- FR-25d/e: inline warning, no Apply/Cancel — смена применяется к draft, фиксируется общим Save -->
                 <div class="wf-mode-warn" role="status" aria-live="polite">
                   <span class="wf-mode-warn-icon">
                     <svg width="16" height="16"><use href="#i-warn"/></svg>
                   </span>
                   <div>
-                    <p class="wf-mode-warn-title">Режим структуры изменится на «mixed»</p>
+                    <p class="wf-mode-warn-title">Структура будет реорганизована</p>
                     <p class="wf-mode-warn-body">
-                      Вкладка «Структура» покажет три зоны: <strong>Before / Block / After</strong>.
-                      Текущие настройки тем (порядок, draw) <strong>сохранены</strong> и будут
-                      отображаться в зоне Block. Зоны Before и After будут пустыми.
+                      Вкладка «Структура» сгруппирует вопросы по темам.
+                      Авторские страницы из зоны «Внутри теста» будут распределены по темам
+                      (если возможно). Текущие настройки тем (порядок, draw count) <strong>сохранены</strong>.
+                      Возврат к режиму <strong>linear_flat</strong> восстановит исходный плоский поток.
                     </p>
                     <p class="wf-data-note">
                       <svg width="13" height="13"><use href="#i-check"/></svg>
-                      Настройки тем не удаляются — переключение применяется к черновику немедленно
+                      Настройки тем не удаляются — переключение применяется к черновику немедленно (FR-25d/e)
                     </p>
                   </div>
                 </div>
@@ -494,8 +488,8 @@
             <svg class="wf-footer-icon" width="12" height="12"><use href="#i-warn"/></svg>
             Смена flowMode применена к черновику. Нажмите «Сохранить» для фиксации.
           </div>
-          <button class="ou-button ou-button--ghost ou-button--sm" type="button">Показать изменения</button>
-          <button class="ou-button ou-button--primary ou-button--sm" type="button">Сохранить</button>
+          <button class="ou-btn ou-btn--ghost" type="button">Показать изменения</button>
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сохранить</button>
         </div>
       </div>
     </div>
@@ -562,8 +556,8 @@
           <div class="wf-footer-hint wf-footer-hint--accent">
             Режим изменён. Нажмите «Сохранить» для применения.
           </div>
-          <button class="ou-button ou-button--ghost ou-button--sm" type="button">Показать изменения</button>
-          <button class="ou-button ou-button--primary ou-button--sm" type="button">Сохранить</button>
+          <button class="ou-btn ou-btn--ghost" type="button">Показать изменения</button>
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сохранить</button>
         </div>
       </div>
     </div>
@@ -625,27 +619,6 @@
 </div>
 
 </div>
-<script>
-    function showState(btn, id) {
-      document.querySelectorAll('.wf-state').forEach(s => s.classList.remove('active'));
-      document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(b => b.classList.remove('active'));
-      document.getElementById('wf-' + id).classList.add('active');
-      btn.classList.add('active');
-    }
-    function toggleTheme(btn) {
-      const dark = document.body.classList.toggle('ou--dark');
-      document.body.classList.toggle('ou--light', !dark);
-      btn.textContent = dark ? 'Light' : 'Dark';
-      btn.classList.toggle('active', dark);
-    }
-    function toggleDensity(btn) {
-      const compact = document.body.classList.toggle('ou--compact');
-      document.body.classList.toggle('ou--normal', !compact);
-      btn.textContent = compact ? 'Normal' : 'Compact';
-      btn.classList.toggle('active', compact);
-    }
-  </script>
-
 <script>
 (function () {
   function resolveState(id) {
