@@ -87,16 +87,17 @@
        для backwards-compat с s-validation). Приоритет: error > warning > info.
        Цвета — DS-токены. Компенсирующий padding-left сохраняет выравнивание
        контента при появлении border. */
-    .page-row:has(> .page-row__meta .ou-tag--info):not(:has(> .page-row__meta .ou-tag--warning)):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn) {
-      border-left: var(--wf-space-1q) solid var(--ou-accent-default);
+    .page-row:has(> .page-row__meta .ou-tag--info):not(:has(> .page-row__meta .ou-tag--warning)):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn):not(.page-row--error) {
+      border-left: var(--wf-space-1q) solid var(--ou-info-default);
       padding-left: var(--wf-space-11);
     }
-    .page-row:has(> .page-row__meta .ou-tag--warning):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn) {
+    .page-row:has(> .page-row__meta .ou-tag--warning):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--error),
+    .page-row.page-row--warn:not(.page-row--error) {
       border-left: var(--wf-space-1q) solid var(--ou-warning-default);
       padding-left: var(--wf-space-11);
     }
     .page-row:has(> .page-row__meta .ou-tag--error),
-    .page-row.page-row--warn {
+    .page-row.page-row--error {
       border-left: var(--wf-space-1q) solid var(--ou-error-default);
       padding-left: var(--wf-space-11);
     }
@@ -127,7 +128,26 @@
     .page-expand-toggle:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
     .page-row.is-expanded .page-expand-toggle { transform: rotate(90deg); }
     .page-row-expand { padding: var(--ou-space-3) var(--ou-space-4) var(--ou-space-4) var(--wf-space-14); background: var(--ou-bg-surface-2); border: var(--wf-border-w) solid var(--ou-border-soft); border-top: 0; border-bottom-left-radius: var(--ou-radius-s); border-bottom-right-radius: var(--ou-radius-s); margin-top: calc(-1 * var(--wf-space-6)); margin-bottom: var(--wf-space-6); }
-    .page-row--system + .page-row-expand { border-left-width: var(--wf-space-1q); border-left-color: var(--ou-accent-default); padding-left: var(--wf-space-11); }
+    /* Inherit severity border-left from the preceding row, so the expand body
+       continues the same visual signal (red on validation, blue on info, etc.).
+       Without a severity trigger, expand stays without an accent border. */
+    .page-row.page-row--error + .page-row-expand,
+    .page-row:has(> .page-row__meta .ou-tag--error) + .page-row-expand {
+      border-left-width: var(--wf-space-1q);
+      border-left-color: var(--ou-error-default);
+      padding-left: var(--wf-space-11);
+    }
+    .page-row.page-row--warn:not(.page-row--error) + .page-row-expand,
+    .page-row:has(> .page-row__meta .ou-tag--warning):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--error) + .page-row-expand {
+      border-left-width: var(--wf-space-1q);
+      border-left-color: var(--ou-warning-default);
+      padding-left: var(--wf-space-11);
+    }
+    .page-row:has(> .page-row__meta .ou-tag--info):not(:has(> .page-row__meta .ou-tag--warning)):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn):not(.page-row--error) + .page-row-expand {
+      border-left-width: var(--wf-space-1q);
+      border-left-color: var(--ou-info-default);
+      padding-left: var(--wf-space-11);
+    }
     .page-row-expand .ou-formfield { margin-bottom: var(--ou-space-3); }
     .page-row-expand .ou-formfield:last-child { margin-bottom: 0; }
 
@@ -830,7 +850,7 @@
             <div class="inside-test__body">
 
           <!-- Router-row с warn-цветом заголовка (незаполнено обязательное поле) -->
-          <div class="page-row page-row--system page-row--warn is-expanded" data-kind="router">
+          <div class="page-row page-row--system page-row--error is-expanded" data-kind="router">
             <button class="page-expand-toggle" type="button" aria-label="Свернуть" aria-expanded="true"><svg width="14" height="14"><use href="#i-chevron-right"/></svg></button>
             <svg class="page-icon wf-icon-warn"><use href="#i-signpost"/></svg>
             <span class="page-variant-badge">Меню карточек</span>

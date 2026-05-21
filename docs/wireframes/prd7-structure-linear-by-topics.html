@@ -110,7 +110,8 @@
       display: flex; justify-content: flex-end; gap: var(--ou-space-2);
       margin-top: var(--ou-space-3);
     }
-    .page-row--warn .page-title { color: var(--ou-error-on-soft); }
+    .page-row--warn .page-title { color: var(--ou-warning-on-soft); }
+    .page-row--error .page-title { color: var(--ou-error-on-soft); }
 
     /* `.page-row--system` — семантический маркер «системный kind»
        (router/summary/intro/questions, см. PRD-1 §4.3). CSS-правил не имеет —
@@ -124,16 +125,17 @@
        Приоритет: красный (error) > жёлтый (warning) > синий (info).
        Где нет meta-тегов и нет .page-row--warn — border не показывается
        (norma — не засоряем эфир). */
-    .page-row:has(> .page-row__meta .ou-tag--info):not(:has(> .page-row__meta .ou-tag--warning)):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn) {
-      border-left: var(--wf-space-1q) solid var(--ou-accent-default);
+    .page-row:has(> .page-row__meta .ou-tag--info):not(:has(> .page-row__meta .ou-tag--warning)):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn):not(.page-row--error) {
+      border-left: var(--wf-space-1q) solid var(--ou-info-default);
       padding-left: var(--wf-space-11);
     }
-    .page-row:has(> .page-row__meta .ou-tag--warning):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn) {
+    .page-row:has(> .page-row__meta .ou-tag--warning):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--error),
+    .page-row.page-row--warn:not(.page-row--error) {
       border-left: var(--wf-space-1q) solid var(--ou-warning-default);
       padding-left: var(--wf-space-11);
     }
     .page-row:has(> .page-row__meta .ou-tag--error),
-    .page-row.page-row--warn {
+    .page-row.page-row--error {
       border-left: var(--wf-space-1q) solid var(--ou-error-default);
       padding-left: var(--wf-space-11);
     }
@@ -1133,7 +1135,7 @@
             <span class="topic-name">Основы ИБ</span><span class="topic-count">5 вопросов</span>
           </div>
           <div class="topic-body">
-            <div class="page-row is-expanded">
+            <div class="page-row page-row--error is-expanded">
               <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
               <button class="page-expand-toggle" type="button" aria-label="Свернуть" aria-expanded="true"><svg width="14" height="14"><use href="#i-chevron-right"/></svg></button>
               <span class="page-variant-badge">Материал</span>
