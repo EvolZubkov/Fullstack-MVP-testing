@@ -60,7 +60,11 @@
        + tree-branches тем. Контур замыкает иерархию внутри теста. */
     .inside-test { margin-bottom: var(--ou-space-3); border: var(--wf-border-w) dashed var(--ou-border-default); border-radius: var(--ou-radius-m); }
     .inside-test__label { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--wf-space-14); color: var(--ou-fg-muted); font: var(--ou-text-caption); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; border-bottom: var(--wf-border-w) dashed var(--ou-border-default); }
-    .inside-test__body { padding: var(--ou-space-3) var(--wf-space-14); }
+    .inside-test__body { padding: var(--ou-space-2) var(--ou-space-4); }
+    /* Унифицированный inset для зон «До/После теста» — выравнивает router
+       с linear_flat / linear_by_topics: дочерние карточки не должны
+       прижиматься к dashed-границе зоны. */
+    .zone-block > .topic-body { padding: var(--ou-space-2) var(--ou-space-4); }
 
     /* Page row базовая — общая для info и системных kind.
        flex-wrap позволяет meta-блоку перенестись на вторую строку. */
@@ -456,6 +460,7 @@
                 <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
               </div>
             </div>
+            <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить страницу</button><div class="insert-row-line"></div></div>
           </div>
         </div>
       </div>
@@ -968,6 +973,7 @@
                 <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
               </div>
             </div>
+            <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить страницу</button><div class="insert-row-line"></div></div>
           </div>
         </div>
       </div>
