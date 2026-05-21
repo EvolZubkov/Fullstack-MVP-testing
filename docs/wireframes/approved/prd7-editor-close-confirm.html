@@ -16,118 +16,10 @@
   <script defer src="/docs/wireframes/prd7-shared.js"></script>
   <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
   <style>
-    /* Wireframe-specific helpers — not part of product UI */
-    .wf-overlay {
-      position: fixed; inset: 0;
-      background: color-mix(in srgb, var(--ou-neutral-950) 55%, transparent);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 50;
-    }
-    .wf-dialog {
-      background: var(--ou-bg-elevated);
-      border-radius: var(--ou-radius-l);
-      box-shadow: 0 var(--ou-space-5) var(--wf-size-60) color-mix(in srgb, var(--ou-neutral-950) 28%, transparent);
-      width: var(--wf-size-480); max-width: 96vw;
-      overflow: hidden;
-    }
-    .wf-dialog-header {
-      padding: var(--ou-space-4) var(--ou-space-5);
-      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
-      display: flex; align-items: center; gap: var(--ou-space-3);
-    }
-    .wf-dialog-icon {
-      width: var(--wf-size-36); height: var(--wf-size-36);
-      border-radius: var(--ou-radius-m);
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0;
-    }
-    .wf-dialog-icon--warn {
-      background: var(--ou-warning-soft);
-      border: var(--wf-border-w) solid var(--ou-warning-default, var(--ou-warning-on-soft));
-      color: var(--ou-warning-on-soft);
-    }
-    .wf-dialog-icon--error {
-      background: var(--ou-error-soft);
-      border: var(--wf-border-w) solid var(--ou-border-error, var(--ou-error-on-soft));
-      color: var(--ou-error-on-soft);
-    }
-    .wf-dialog-title {
-      font: var(--ou-text-heading-s);
-      margin: 0;
-    }
-    .wf-dialog-body {
-      padding: var(--ou-space-4) var(--ou-space-5);
-    }
-    .wf-dialog-desc {
-      font: var(--ou-text-body-m);
-      color: var(--ou-fg-default);
-      line-height: 1.6;
-      margin: 0 0 var(--ou-space-3);
-    }
-    .wf-dialog-footer {
-      padding: var(--ou-space-3) var(--ou-space-5);
-      border-top: var(--wf-border-w) solid var(--ou-border-soft);
-      display: flex; justify-content: space-between; align-items: center;
-      gap: var(--ou-space-2);
-    }
-    .wf-dialog-footer-right { display: flex; gap: var(--ou-space-2); }
-    .wf-changes-chips {
-      display: flex; flex-wrap: wrap; gap: var(--ou-space-2);
-      margin-top: var(--ou-space-2);
-    }
-    .ou-button--ghost {
-      background: transparent; border: none;
-      color: var(--ou-fg-muted); cursor: pointer;
-    }
-    .ou-button--ghost:hover { background: var(--ou-bg-hover); }
-    /* Notes layer — below the fixed overlay, non-interactive */
-    .wf-notes-layer {
-      position: relative; z-index: 1; pointer-events: none;
-    }
-    /* Drawer title text in the simulated background */
-    .wf-bg-drawer-title {
-      font: var(--ou-text-heading-s); flex: 1;
-    }
-    /* Error anchor link inside banner */
-    .wf-error-link {
-      color: var(--ou-error-on-soft); font-weight: 600;
-    }
-    /* SVG sprite — visually hidden but accessible to use-refs */
+    /* Wireframe frame — sprite hiding only. Everything else is DS / tb-* / inline. */
     .wf-sprite { display: none; }
-    /* Simulated background behind dialog */
-    .wf-bg-page {
-      position: fixed; inset: 0;
-      display: flex; background: var(--ou-bg-page);
-      z-index: 0; pointer-events: none;
-    }
-    .wf-bg-sidebar {
-      width: var(--wf-size-224); flex-shrink: 0;
-      background: var(--ou-bg-elevated);
-      border-right: var(--wf-border-w) solid var(--ou-border-soft);
-    }
-    .wf-bg-drawer {
-      flex: 1; display: flex; flex-direction: column;
-      border-left: var(--wf-border-w) solid var(--ou-border-soft); opacity: 0.5;
-    }
-    .wf-bg-drawer-header {
-      padding: var(--ou-space-4) var(--ou-space-5);
-      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
-      display: flex; align-items: center; gap: var(--ou-space-3);
-    }
-    .wf-bg-drawer-tabs {
-      display: flex; gap: 0;
-      padding: 0 var(--ou-space-5);
-      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
-    }
-    .wf-bg-tab {
-      padding: var(--ou-space-3) var(--ou-space-4);
-      font: var(--ou-text-body-s); color: var(--ou-fg-muted);
-    }
-    .wf-bg-tab--active {
-      color: var(--ou-accent-default);
-      border-bottom: var(--wf-space-half) solid var(--ou-accent-default);
-      font-weight: 600;
-    }
+    /* Notes block sits under modal overlay; non-interactive so demo clicks pass through. */
+    .wf-notes-layer { position: relative; z-index: 1; pointer-events: none; }
   </style>
 
   <style data-wf-template-overrides>
@@ -215,57 +107,41 @@
   </svg>
 
   <!-- ═══ State switcher ════════════════════════════════════════════════════ -->
-  <nav class="wf-nav">
-    <span class="wf-nav-title">Диалог закрытия редактора</span>
-    <button type="button" class="active" onclick="showState(this, 's-dirty')">С изменениями</button>
-    <button type="button" onclick="showState(this, 's-errors')">Блокирующие ошибки</button>
+  <nav class="wf-nav" aria-label="Wireframe state switcher">
+    <span class="wf-nav-title">Диалог закрытия редактора:</span>
+    <button type="button" class="wf-btn active" onclick="showState(this, 's-dirty')">С изменениями</button>
+    <button type="button" class="wf-btn" onclick="showState(this, 's-errors')">Блокирующие ошибки</button>
     <div class="wf-nav-sep"></div>
-    <button type="button" onclick="toggleTheme(this)">Dark</button>
-    <button type="button" onclick="toggleDensity(this)">Compact</button>
+    <button type="button" class="wf-btn" onclick="toggleTheme(this)">Dark</button>
+    <button type="button" class="wf-btn" onclick="toggleDensity(this)">Compact</button>
   </nav>
-
-  <!-- Persistent simulated background (not part of product UI) -->
-  <div class="wf-bg-page" aria-hidden="true">
-    <div class="wf-bg-sidebar"></div>
-    <div class="wf-bg-drawer">
-      <div class="wf-bg-drawer-header">
-        <span class="wf-bg-drawer-title">Основы информационной безопасности</span>
-        <span class="ou-tag ou-tag--warning">Изменено</span>
-      </div>
-      <div class="wf-bg-drawer-tabs">
-        <span class="wf-bg-tab wf-bg-tab--active">Состав</span>
-        <span class="wf-bg-tab">Настройки</span>
-        <span class="wf-bg-tab">Оформление</span>
-        <span class="wf-bg-tab">Структура</span>
-      </div>
-    </div>
-  </div>
 
   <!-- ════════════════════════════════════════════════════════════════════════
      STATE: С изменениями
      ════════════════════════════════════════════════════════════════════════ -->
-  <section id="wf-s-dirty" class="wf-state active">
-    <div class="wf-overlay" role="dialog" aria-modal="true" aria-labelledby="dlg-dirty-title">
-      <div class="wf-dialog">
-        <div class="wf-dialog-header">
-          <div class="wf-dialog-icon wf-dialog-icon--warn">
-            <svg width="18" height="18"><use href="#i-warn"/></svg>
+  <section id="s-dirty" class="wf-state active">
+    <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-dirty-title">
+      <div class="ou-modal__backdrop"></div>
+      <div class="ou-modal ou-modal--m">
+        <div class="ou-modal__head ou-modal__head--icon">
+          <span class="ou-modal__icon ou-modal__icon--warning" aria-hidden="true">
+            <svg width="20" height="20"><use href="#i-warn"/></svg>
+          </span>
+          <div class="ou-modal__head-text">
+            <h2 id="dlg-dirty-title" class="ou-modal__title">Есть несохранённые изменения</h2>
           </div>
-          <h2 id="dlg-dirty-title" class="wf-dialog-title">Есть несохранённые изменения</h2>
         </div>
-        <div class="wf-dialog-body">
-          <p class="wf-dialog-desc">Вы внесли изменения в тест. Что хотите сделать перед закрытием?</p>
-          <div class="wf-changes-chips" aria-label="Изменённые разделы">
+        <div class="ou-modal__body">
+          <p>Вы внесли изменения в тест. Что хотите сделать перед закрытием?</p>
+          <div class="ou-tag-group" aria-label="Изменённые разделы">
             <span class="ou-tag ou-tag--neutral">Состав</span>
             <span class="ou-tag ou-tag--neutral">Настройки</span>
           </div>
         </div>
-        <div class="wf-dialog-footer">
-          <button class="ou-button ou-button--ghost" type="button">Отмена</button>
-          <div class="wf-dialog-footer-right">
-            <button class="ou-button ou-button--secondary" type="button">Выйти без сохранения</button>
-            <button class="ou-button ou-button--primary" type="button">Сохранить</button>
-          </div>
+        <div class="ou-modal__foot">
+          <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Выйти без сохранения</button>
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сохранить</button>
         </div>
       </div>
     </div>
@@ -291,45 +167,44 @@
   <!-- ════════════════════════════════════════════════════════════════════════
      STATE: Блокирующие ошибки
      ════════════════════════════════════════════════════════════════════════ -->
-  <section id="wf-s-errors" class="wf-state">
-    <div class="wf-overlay" role="dialog" aria-modal="true" aria-labelledby="dlg-errors-title">
-      <div class="wf-dialog">
-        <div class="wf-dialog-header">
-          <div class="wf-dialog-icon wf-dialog-icon--error">
-            <svg width="18" height="18"><use href="#i-x-circle"/></svg>
+  <section id="s-errors" class="wf-state">
+    <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-errors-title">
+      <div class="ou-modal__backdrop"></div>
+      <div class="ou-modal ou-modal--m">
+        <div class="ou-modal__head ou-modal__head--icon">
+          <span class="ou-modal__icon ou-modal__icon--danger" aria-hidden="true">
+            <svg width="20" height="20"><use href="#i-x-circle"/></svg>
+          </span>
+          <div class="ou-modal__head-text">
+            <h2 id="dlg-errors-title" class="ou-modal__title">Есть несохранённые изменения и ошибки</h2>
           </div>
-          <h2 id="dlg-errors-title" class="wf-dialog-title">Есть несохранённые изменения и ошибки</h2>
         </div>
-        <div class="wf-dialog-body">
-          <p class="wf-dialog-desc">
-            Вы внесли изменения, но некоторые поля содержат ошибки. Сохранение сейчас невозможно.
-          </p>
+        <div class="ou-modal__body">
+          <p>Вы внесли изменения, но некоторые поля содержат ошибки. Сохранение сейчас невозможно.</p>
           <div class="ou-banner ou-banner--error" role="alert">
-            <span class="ou-banner-icon">
+            <span class="ou-banner__ico" aria-hidden="true">
               <svg width="14" height="14"><use href="#i-x-circle"/></svg>
             </span>
-            <div>
-              <div class="ou-banner-body">
+            <div class="ou-banner__body">
+              <p class="ou-banner__desc">
                 2 ошибки во вкладке «Настройки».
-                <a href="#" class="wf-error-link">Перейти к первой ошибке</a>
-              </div>
+                <a href="#">Перейти к первой ошибке</a>
+              </p>
             </div>
           </div>
-          <div class="wf-changes-chips" aria-label="Изменённые разделы">
+          <div class="ou-tag-group" aria-label="Изменённые разделы">
             <span class="ou-tag ou-tag--neutral">Настройки</span>
             <span class="ou-tag ou-tag--neutral">Структура</span>
           </div>
         </div>
-        <div class="wf-dialog-footer">
-          <button class="ou-button ou-button--ghost" type="button">Отмена</button>
-          <div class="wf-dialog-footer-right">
-            <button class="ou-button ou-button--secondary" type="button">Выйти без сохранения</button>
-            <button class="ou-button ou-button--primary" type="button"
-                    disabled aria-disabled="true"
-                    title="Исправьте ошибки перед сохранением">
-              Сохранить
-            </button>
-          </div>
+        <div class="ou-modal__foot">
+          <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Отмена</button>
+          <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Выйти без сохранения</button>
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button"
+                  disabled aria-disabled="true"
+                  title="Исправьте ошибки перед сохранением">
+            Сохранить
+          </button>
         </div>
       </div>
     </div>
@@ -378,27 +253,6 @@
       </table>
     </div>
   </div>
-
-  <script>
-    function showState(btn, id) {
-      document.querySelectorAll('.wf-state').forEach(s => s.classList.remove('active'));
-      document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(b => b.classList.remove('active'));
-      document.getElementById('wf-' + id).classList.add('active');
-      btn.classList.add('active');
-    }
-    function toggleTheme(btn) {
-      const dark = document.body.classList.toggle('ou--dark');
-      document.body.classList.toggle('ou--light', !dark);
-      btn.textContent = dark ? 'Light' : 'Dark';
-      btn.classList.toggle('active', dark);
-    }
-    function toggleDensity(btn) {
-      const compact = document.body.classList.toggle('ou--compact');
-      document.body.classList.toggle('ou--normal', !compact);
-      btn.textContent = compact ? 'Normal' : 'Compact';
-      btn.classList.toggle('active', compact);
-    }
-  </script>
 
 <script>
 (function () {
