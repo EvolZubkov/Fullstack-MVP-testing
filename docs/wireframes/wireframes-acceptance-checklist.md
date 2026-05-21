@@ -55,9 +55,27 @@ Drawer-контейнер), затем точки входа пользоват�
   «Подбор вопросов: адаптивный» + link «Настроить уровни →» (DS:
   `tb-draw-count-row--adaptive` + `ou-tag--neutral` + `tb-link-text`). В верху
   body — `ou-banner--info` про адаптивный режим
-- [ ] **Feedback edit form** (FR-36, FR-37): модал/inline-редактор с richtext +
-  ссылки на материалы + PDF-assets. Сейчас в editor-drawer есть только
-  read-only `tb-feedback-preview`, edit-открывает модал без эскиза
+- [x] **Feedback edit form** (FR-36, FR-37): модал/inline-редактор с richtext +
+  ссылки на материалы + PDF-assets.
+  *(2026-05-21: добавлен state `s-feedback-edit` в editor-drawer с модалом*
+  *`ou-modal--l` поверх drawer-Состав. Содержит:*
+  *(1) inline format-selector `ou-seg ou-seg--s` (Простой / Форматированный /*
+  *HTML, выбран Форматированный) — компактный DS SegmentedControl вместо*
+  *громоздких choice-cards;*
+  *(2) rich-text editor `tb-rte` с toolbar (B / I / link) и contenteditable*
+  *area с примером;*
+  *(3) section «Ссылки на материалы» (FR-37) — single-row item (title + url*
+  *в одной строке, `__item-fields` flex-row, +trash) + кнопка «Добавить ссылку»;*
+  *(4) section «Прикреплённые файлы (PDF)» (FR-37) — asset-row с*
+  *paperclip-иконкой, inline-rename + file-meta (filename · size) +*
+  *delete + upload-button «Загрузить PDF» с hint про SCORM-пакет.*
+  *Footer: Отменить / Сохранить. Drawer на бэке dimmed (`opacity: 0.55`),*
+  *body `aria-hidden`, footer disabled. FR-аннотации: FR-36 на close-button,*
+  *FR-37 на assets-section. Добавлены: `tb-feedback-editor*` / `tb-rte*`*
+  *CSS-секция в `<style>` (gate-passing DS-токены), иконка `i-trash`*
+  *в sprite, DS-mapping fallback для feedback-editor / rich-text.*
+  *Линтер: 0 violations, visual-проверка в Playwright 1440×900 — модал*
+  *умещается в viewport без скролла, отрисован корректно.)*
 - [x] **DS+tb-* частичный рефакторинг editor-drawer** (2026-05-21):
   компонентные классы вкладки «Состав» во всех state'ах мигрированы на tb-*
   (`tb-topic-row` + BEM, `tb-draw-count-row` + BEM + `--adaptive` modifier,
@@ -77,11 +95,15 @@ Drawer-контейнер), затем точки входа пользоват�
   _`.spin` keyframe (инфраструктура), `.shell--column` (wireframe layout),_
   _`.settings-content` (single layout helper для s-settings),_
   _`.ou-drawer__head` / `.ou-drawer > .ou-tabs` / `.ou-drawer .ou-tabs--underline`_
-  _(минимальные DS-overrides), `.mobile-*` (для s-mobile — out-of-scope, остаётся_
-  _как заглушка), `.ou {}` legacy WF alias bridge.)_
-- [ ] **s-mobile state** — формально out-of-scope PRD-7 (mobile вынесен за рамки
-  2026-05-21). Решение об удалении state из editor-drawer — за пользователем
-  (требует согласования)
+  *(минимальные DS-overrides), `.ou {}` legacy WF alias bridge.*
+  *`.mobile-*` блок удалён вместе с s-mobile state 2026-05-21.*
+  *Добавлены `.tb-feedback-editor*` / `.tb-rte*` (gate-passing DS-токены)*
+  *для нового s-feedback-edit state 2026-05-21.)*
+- [x] **s-mobile state** — удалён из editor-drawer (2026-05-21, согласовано
+  пользователем). Удалены: state-button в `.wf-nav`, state-блок (343 строки
+  HTML), CSS-блок `.mobile-*` (50 строк), 1 строка из notes-таблицы состояний,
+  2 строки из notes-таблицы взаимодействий, DS-mapping fallback на
+  `.mobile-canvas`. Mobile-эскизы будет покрывать отдельный PRD.
 
 ---
 
@@ -652,18 +674,31 @@ fallback понятен / проверено на 375px и 768px) — out-of-sco
 
 После приёмки всех файлов:
 
-- [ ] Нет файлов с legacy-классами (`btn`, `btn-*`, `drawer-*`, `dialog-*`,
+- [x] Нет файлов с legacy-классами (`btn`, `btn-*`, `drawer-*`, `dialog-*`,
   `sidebar`, `nav-item`, `form-group`, `form-label`, `badge`, `card-*`,
   `banner` с прямыми модификаторами и т.д.) — `npm run check:wireframes:ds`
   проходит на базовом профиле
-  _(fact-check 2026-05-21: линтер падает с 21 violation — direct units / named-color_
-  _в approved-файлах: `prd7-design-tab.html:32,34,157`, `prd7-editor-settings-tab.html:51`,_
-  _все три structure-файла (`linear-by-topics:42,245,271,325`, `linear-flat:46,257,283,337`,_
-  _`router:201,201,209,244`), общий `tb-components.css:56,146,195,249,293`._
-  _`prd7-variant-replace.html` починен (был fallback `280px` и `font-size: 10px`)._
-  _Это самостоятельная задача — фиксить токены, не относится к 10 неутверждённым_
-  _эскизам §12-§21.)_
-- [ ] Нет файлов в старом формате (`ou-button`, `wf-state`, `wf-page-wrap`, `showState`)
+  *(fact-check 2026-05-21: 21 violation (direct units / named-color) пофикшены.*
+  *Добавлены токены `--wf-size-360` / `--wf-border-w-2` в `prd7-shared.css` и*
+  *локальные `--tb-input-w-md` / `--tb-input-w-sm` / `--tb-accent-rail-w` /*
+  *`--tb-space-half` в `tb-components.css` (gate-skip-блок). Fallback'и*
+  *`var(--wf-size-360, 360px)` / `var(--wf-size-160, 160px)` заменены на*
+  *прямые `var(...)` без fallback. `10px` → `var(--wf-space-10)` в `.wf-annot`*
+  *во всех затронутых файлах. `8px` width/height status-dot → `var(--ou-space-2)`.*
+  *`@container (max-width: 720px)` обёрнут в `gate-skip-pragma` с пояснением*
+  *(var() в @container не поддерживается production-браузерами). Комментарии*
+  *с `8px/11px/white` в `prd7-design-tab.html` / structure-файлах*
+  *переформулированы без литералов. Линтер: 0 violations, 17 файлов passed.)*
+- [x] Нет файлов с legacy product-разметкой `ou-button` (DS использует `ou-btn`)
+  и legacy wireframe-каркасом `wf-page-wrap` (заменён на `wf-state` / `shell`).
+  *(fact-check 2026-05-21: 0 occurrences `class="ou-button"` в HTML-разметке*
+  *любого файла `docs/wireframes/`; 0 occurrences `wf-page-wrap` в коде.*
+  *Остатки `ou-button` в коде — инфраструктурный JS state-switcher fallback*
+  *(`button.classList.contains('ou-button')`) и DS-mapping legend selector*
+  *`'.btn-primary, .ou-button--primary'` — dead-code в shared snippet'е,*
+  *на разметку не влияет. Подлежит cleanup отдельным проходом по shared snippet.)*
+  *(`wf-state` / `showState` исключены из списка legacy: это обязательная*
+  *wireframe-инфраструктура per `feedback_wf_only_skeleton_frame`, не legacy.)*
 - [x] Нет файлов с маркером `STATES_INSERT_POINT`
   _(fact-check 2026-05-21: `STATES_INSERT_POINT` не найден ни в одном файле_
   _`docs/wireframes/`, кроме самого чек-листа.)_
