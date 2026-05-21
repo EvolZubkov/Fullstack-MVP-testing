@@ -314,10 +314,10 @@
 
 <nav class="wf-nav" aria-label="Wireframe state switcher">
   <span class="wf-nav-title">prd7 — Status Indicators:</span>
-  <button type="button" class="ou-button ou-button--primary" onclick="showState(this, 's-showcase')">Showcase</button>
+  <button type="button" class="wf-btn active" onclick="showState(this, 's-showcase')">Showcase</button>
   <span class="wf-nav-sep"></span>
-  <button type="button" class="ou-button ou-button--secondary" onclick="toggleTheme()">Dark</button>
-  <button type="button" class="ou-button ou-button--secondary" onclick="toggleDensity()">Compact</button>
+  <button type="button" class="wf-btn" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" class="wf-btn" onclick="toggleDensity(this)">Compact</button>
 </nav>
 
 <!-- ═══ Showcase ══════════════════════════════════════════════════════════════ -->
@@ -461,9 +461,65 @@
         </div>
       </div>
 
+      <!-- ── 4. Save-button states ────────────────────────────────────────── -->
+      <div class="wf-showcase-section">
+        <div class="wf-showcase-section-title">3. Поведение кнопки «Сохранить» (FR-25b, NFR-21)</div>
+
+        <div class="wf-tab-strip-wrap">
+          <div style="display:flex;flex-direction:column;gap:var(--ou-space-3);padding:var(--ou-space-4)">
+
+            <!-- Clean: save is enabled, nothing to save (visual: enabled but no dirty signal) -->
+            <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
+              <span style="min-width:var(--wf-size-180);font:var(--ou-text-body-s);color:var(--ou-fg-muted)">
+                Чисто (нет изменений)
+              </span>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true">
+                Сохранить
+              </button>
+              <span class="wf-showcase-note" style="margin:0">
+                <code>disabled</code> — сохранять нечего
+              </span>
+            </div>
+
+            <!-- Dirty + warning only: save enabled -->
+            <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
+              <span style="min-width:var(--wf-size-180);font:var(--ou-text-body-s);color:var(--ou-fg-muted)">
+                Есть warnings, нет errors
+              </span>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m">
+                Сохранить
+              </button>
+              <span class="wf-showcase-note" style="margin:0">
+                Активна — warning не блокирует
+              </span>
+            </div>
+
+            <!-- Has blocking errors: save disabled -->
+            <div style="display:flex;align-items:center;gap:var(--ou-space-3)">
+              <span style="min-width:var(--wf-size-180);font:var(--ou-text-body-s);color:var(--ou-fg-muted)">
+                Есть блокирующие errors
+              </span>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true"
+                      aria-describedby="wf-save-disabled-hint">
+                Сохранить
+              </button>
+              <span id="wf-save-disabled-hint" class="wf-showcase-note" style="margin:0;color:var(--ou-error-on-soft)">
+                <code>disabled</code> — исправьте ошибки в выделенных секциях
+              </span>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="wf-showcase-note">
+          Правило: <code>error</code> блокирует кнопку «Сохранить» (NFR-21);
+          <code>warning</code> — нет (показывается, но не мешает сохранению).
+        </div>
+      </div>
+
       <!-- ── 3. Legend ──────────────────────────────────────────────────────── -->
       <div class="wf-showcase-section">
-        <div class="wf-showcase-section-title">3. Легенда состояний</div>
+        <div class="wf-showcase-section-title">4. Легенда состояний</div>
         <div class="wf-legend-grid" role="list">
 
           <div class="wf-legend-item" role="listitem">
@@ -564,32 +620,6 @@
 </div>
 
 </div>
-<script>
-function showState(btn, id) {
-  document.querySelectorAll('.wf-state').forEach(function(el) {
-    el.classList.remove('active');
-  });
-  var target = document.getElementById('wf-' + id);
-  if (target) { target.classList.add('active'); }
-  document.querySelectorAll('.wf-nav button[onclick^="showState"]').forEach(function(b) {
-    b.classList.remove('ou-button--primary');
-    b.classList.add('ou-button--secondary');
-  });
-  if (btn) {
-    btn.classList.remove('ou-button--secondary');
-    btn.classList.add('ou-button--primary');
-  }
-}
-function toggleTheme() {
-  document.body.classList.toggle('ou--dark');
-  document.body.classList.toggle('ou--light');
-}
-function toggleDensity() {
-  document.body.classList.toggle('ou--compact');
-  document.body.classList.toggle('ou--normal');
-}
-</script>
-
 <script>
 (function () {
   function resolveState(id) {
