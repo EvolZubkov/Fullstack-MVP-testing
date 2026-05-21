@@ -242,11 +242,13 @@ Sonnet для остальных экранов).
 
 Минимальный набор для разблокировки Фазы 5 (доменные секции):
 
-- [ ] `prd7-structure-linear-flat.html`: вкладка **"Структура"** для `linear_flat`.
-- [ ] `prd7-structure-linear-by-topics.html`: для `linear_by_topics`.
-- [ ] `prd7-structure-mixed.html`: для `mixed` с зонами "Перед/Блок/После".
+- [ ] `prd7-structure-linear-flat.html`: вкладка **"Структура"** для `linear_flat`
+      (зоны «До теста» / «После теста» + единый блок вопросов из всех тем,
+      без группировки по темам).
+- [ ] `prd7-structure-linear-by-topics.html`: для `linear_by_topics`
+      (темы со страницами до/после внутри каждой темы).
 - [ ] `prd7-structure-router.html`: для `router_by_topics` как сценарная карта
-      `Router -> Раздел -> Возврат -> Итог` (FR-29, FR-33, FR-40, блокер §7).
+      `Router → Раздел → Возврат → Итог` (FR-29, FR-33, FR-40, блокер §7).
 - [ ] `prd7-section-adaptive.html`: adaptive-секция с уровнями теста
       и темы (FR-38).
 - [ ] `prd7-tests-delete-confirm.html`: confirmation dialog удаления теста

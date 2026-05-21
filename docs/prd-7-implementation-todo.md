@@ -97,8 +97,9 @@ PRD-7 проектирует поверхность для `flowMode`, `passDeci
 которые принадлежат скоупу PRD-4. Контракты согласованы одним заходом и зафиксированы
 в [decisions.md](prd-7-decisions.md) §2 и §3.
 
-- [x] Согласованы значения `flowMode`: `linear_flat`, `linear_by_topics`, `mixed`,
-      `router_by_topics` (decisions.md §2.3).
+- [x] Согласованы значения `flowMode`: `linear_flat`, `linear_by_topics`,
+      `router_by_topics` (decisions.md §2.3). Значение `mixed` удалено
+      как функциональный дубль `linear_flat` (decisions.md §2.3a).
 - [x] Согласован `passDecisionPolicy`: `overall_only`, `overall_and_required_topics`,
       `required_topics_only`, `all_topics_passed` (decisions.md §2.4).
 - [x] Согласованы источники правил темы: `inherit_overall`, `custom`, `none` (decisions.md §2.6).
@@ -124,8 +125,25 @@ Wireframes хранятся в `docs/wireframes/`. Существующие `des
 - [ ] Подготовить wireframes вкладки **"Оформление"**: выбор шаблона, params, read-only
       `templateVersion`/`templateApiVersion` (FR-26, FR-41, FR-42).
 - [ ] Обновить wireframes вкладки **"Структура"** для всех `flowMode`:
-      `linear_flat`, `linear_by_topics`, `mixed`, `router_by_topics`
+      `linear_flat`, `linear_by_topics`, `router_by_topics`
       (FR-29, FR-33, FR-40, блокер из §7 PRD-7).
+- [ ] Полностью переписать `prd7-structure-router.html` под новую модель
+      `router_by_topics`: системная router-row + темы как ветки иерархии через
+      tree-connectors (см. [prd-7-decisions.md §2.3b](prd-7-decisions.md)).
+- [ ] Создать `prd7-variant-replace.html` — модал смены варианта на page-row
+      с diff-блоком потерь параметров; состояния: `s-replace-modal`,
+      `s-replace-empty-diff`, `s-replace-no-fields`.
+- [ ] Обновить `prd7-structure-linear-flat.html` и
+      `prd7-structure-linear-by-topics.html`:
+      (1) добавить questions-row как `page-row--system` с variant select,
+      expand при непустой schema, `…` row-menu;
+      (2) добавить `…` row-menu на page-row всех системных kind
+      (`intro`/`summary`/`questions`) с пунктом «Сменить вариант»;
+      (3) хинт «Доступно N вариантов» рядом с бейджем при N > 1 вариантах
+      нужного `kind`;
+      (4) warning fallback на стандартный шаблон при 0 вариантов нужного `kind`;
+      (5) inline-alert + warning-цвет заголовка row при незаполненных
+      обязательных параметрах варианта (см. PRD-1 §4.3.6).
 - [ ] Покрыть состояния: пустое, loading/saving, ошибки API, ошибки валидации,
       read-only, mobile/narrow viewport.
 - [ ] Покрыть edge cases: 20+ тем, тема без вопросов, ошибка загрузки difficulty
@@ -174,6 +192,52 @@ Wireframes хранятся в `docs/wireframes/`. Существующие `des
       _(перенесено в [decisions.md §12.1](prd-7-decisions.md#121-колонки-отложенные-на-следующие-prd)_
       _как зависимость PRD-4: без `flowMode` runtime у колонки нет потребителя,_
       _PRD-7 использует порядок массива `sections[]` в payload.)_
+- [ ] Добавить enum `VariantKind` = `"questions" | "router" | "summary" | "intro" | "info"`
+      в zod-схему манифеста шаблона (см. PRD-1 §4.3).
+- [ ] Валидация манифеста шаблона: каждый `variant` обязан иметь `kind`;
+      шаблон с минимум одним вариантом `kind: questions` (один ejs-файл,
+      рендерящий обёртки под все четыре типа интерактивов) — обязательное
+      требование для встроенного default-шаблона.
+- [ ] Унификация хранения системных kind: все четыре (`questions`/`router`/
+      `summary`/`intro`) живут в `content_pages` как обычные записи с особым
+      `kind`, см. PRD-1 §4.3.5; **в `design_settings_json` отдельное поле для
+      комбо НЕ заводится** — variant `kind: questions` локальный per-row.
+- [ ] Server-side логика тихой привязки системных вариантов (типы 1-4) при
+      сохранении/смене `flowMode` или `templateId`: 1 → молча, N → default + dirty
+      flag для UI-хинта, 0 → fallback на стандартный шаблон + warning flag.
+- [ ] Server-side логика: при смене `flowMode` с `router_by_topics` на любой
+      `linear_*` — авто-удаление страницы `kind: router` из `content_pages`
+      (без миграции параметров).
+- [ ] Server-side логика: при смене `flowMode` между `linear_flat` и
+      `linear_by_topics`/`router_by_topics` — пересборка записей `kind: questions`:
+      `linear_flat` → одна запись с `topicId: null`; `linear_by_topics`/
+      `router_by_topics` → по одной записи на каждую тему с `topicId: <id>`.
+      Параметры одной из старых записей переносятся на новые по правилу
+      «имя поля = контракт между вариантами одного `kind`».
+- [ ] Server-side логика: при добавлении темы в `test_sections` (в режимах
+      `linear_by_topics` / `router_by_topics`) — auto-create записи
+      `kind: questions` с `topicId: <new-topic-id>` и тихой привязкой
+      default-варианта. При удалении темы — каскадное удаление records.
+- [ ] Server-side логика: при смене `templateId` для системных вариантов —
+      пересчёт привязки по `kind` с применением контракта «имя поля = контракт
+      между вариантами одного `kind`»; несовместимые параметры удаляются молча
+      (без диалога `s-mapping`).
+- [ ] API endpoint `POST /api/tests/:id/pages/:pageId/replace-variant`:
+      смена варианта существующей страницы с возвратом diff потерь параметров
+      (для UI confirm-модала из `prd7-variant-replace.html`).
+- [ ] **Валидация обязательных параметров** (PRD-1 §4.3.6): сервер при
+      `PUT /api/tests/:id` проверяет, что все поля `required: true` в schema
+      привязанного варианта заполнены для каждой записи `content_pages`.
+      При нарушении — возвращает структурированную ошибку с указанием конкретных
+      `pageId` и имён полей. Save не выполняется.
+- [ ] Frontend: для каждой записи `content_pages` сравнить `values_json.values`
+      с `variant.schema.fields` (только поля `required: true`). При незаполненных
+      полях:
+      - помечать `page-row` модификатором `page-row--warn` (warning-цвет заголовка);
+      - показывать список конкретных полей в `page-row-expand` (warning-баннер);
+      - агрегировать в `.status-dot--error` на табе «Структура» (общий по всем
+        вкладкам индикатор согласно FR-25b / NFR-21);
+      - блокировать кнопку «Сохранить» в footer Drawer'а (disabled + tooltip).
 
 ### 1.5 Доменная модель редактора - frontend (S3 часть 1 / Фаза 2A + 2B, Opus -> Sonnet)
 
@@ -360,9 +424,13 @@ Reference для всех секций после S4: `basic-settings-section.ts
 
 - [ ] Реализовать секцию **"Структура"** как точку доступа к content pages (FR-27).
 - [ ] Структура для `linear_by_topics`: темы и страницы до/после каждой темы.
-- [ ] Структура для `mixed`: зоны "Перед тестом", "Блок вопросов", "После теста".
-- [ ] Структура для `router_by_topics`: сценарная карта
-      `Router -> Раздел -> Возврат -> Итог` (готовится в PRD-8, в PRD-7 заглушка/disabled).
+- [ ] Структура для `linear_flat`: зоны «До теста», «Блок вопросов», «После теста»;
+      вопросы из всех выбранных тем единым потоком без группировки.
+- [ ] Структура для `router_by_topics`: зоны «До теста» / «После теста»
+      (как `linear_flat`) + системная router-row внутри теста + темы как ветки
+      иерархии под router-row через tree-connectors. См.
+      [prd-7-decisions.md §2.3b](prd-7-decisions.md) и
+      [prd-8-section-router-flow.md §4.1.1](prd-8-section-router-flow.md).
 - [ ] При отсутствии нужного template/system element показывать warning во вкладке "Структура" (FR-39).
 
 #### S8 часть 2 / Фаза 5E (Sonnet) - design
