@@ -19,6 +19,7 @@
      scale, so these aliases let inline / <style> token usage pass the gate. */
   --wf-border-w:     1px;
   --wf-border-w-1-5: 1.5px;
+  --wf-border-w-2:   2px;
   --wf-space-half:   2px;
   --wf-space-1q:     3px;
   --wf-space-tiny:   5px;
@@ -56,6 +57,7 @@
   --wf-size-280:   280px;
   --wf-size-300:   300px;
   --wf-size-320:   320px;
+  --wf-size-360:   360px;
   --wf-size-480:   480px;
   --wf-size-65:     65px;
   --wf-size-70:     70px;

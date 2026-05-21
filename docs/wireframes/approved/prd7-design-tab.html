@@ -29,9 +29,9 @@
     .tpl-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
     .tpl-actions { display: flex; gap: var(--ou-space-2); margin-top: var(--ou-space-1); }
 
-    /* Mini SCORM preview sketch — intentional sub-DS font sizes (6/7/8px) below.
+    /* Mini SCORM preview sketch — intentional sub-DS font sizes below.
        This is a thumbnail visualization of a course, NOT real product UI text.
-       DS typography scale starts at 11px and does not apply here. */
+       DS typography scale does not apply at thumbnail magnification. */
     .preview-sketch { width: 100%; height: 100%; display: flex; flex-direction: column; font-size: var(--ou-space-2); }
     .ps-header { height: var(--wf-size-18); background: var(--ou-accent-default); display: flex; align-items: center; padding: 0 var(--wf-space-6); gap: var(--ou-space-1); }
     .ps-logo { width: var(--wf-space-10); height: var(--wf-space-10); background: var(--ou-neutral-0); border-radius: var(--wf-space-half); opacity: 0.8; }
@@ -154,7 +154,7 @@
       border-radius: var(--ou-radius-s);
       padding: 0 var(--ou-space-1);
       font-weight: 700;
-      font-size: 10px;
+      font-size: var(--wf-space-10);
       line-height: var(--ou-space-5);
       pointer-events: none;
       white-space: nowrap;

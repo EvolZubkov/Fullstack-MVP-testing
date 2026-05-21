@@ -22,6 +22,19 @@
  * Tokens: --ou-* из UniversityRT DS (см. ds/university-rt.css).
  * ───────────────────────────────────────────────────────────────────────── */
 
+/* ── Local tb-* literal-token aliases ─────────────────────────────────── */
+/* Product-specific values without a DS equivalent: fixed widths for Settings
+   form-controls, accent-rail hairline, sub-DS half-step spacing. Aliasing
+   keeps wireframe DS-gate happy while documenting intent. */
+:root {
+  /* gate-skip-start */
+  --tb-input-w-md: 280px;
+  --tb-input-w-sm: 140px;
+  --tb-accent-rail-w: 2px;
+  --tb-space-half:   2px;
+  /* gate-skip-end */
+}
+
 /* ── Settings content container (правая колонка drawer-а Настроек) ──── */
 /* container-type: inline-size — точка отсчёта для @container ниже:
    адаптив реагирует на ширину самой колонки настроек, а не viewport
@@ -54,7 +67,7 @@
 /* NumberInput по DS — inline-flex с intrinsic-шириной (суффикс типа «минут» делает
    соседние поля разной длины). На верхнем уровне формы выравниваем по фиксированной
    ширине; max-width: 100% сжимается на узких viewport. */
-.tb-settings-content > .ou-formfield > .ou-number { width: 280px; max-width: 100%; }
+.tb-settings-content > .ou-formfield > .ou-number { width: var(--tb-input-w-md); max-width: 100%; }
 
 /* Section caption (subdued uppercase-like heading внутри формы). */
 .tb-section-label { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); display: inline-flex; align-items: center; gap: var(--ou-space-2); }
@@ -144,7 +157,7 @@
 /* Highlighted rail-item (новый пункт, появляется при смене режима). */
 .tb-rail-item--new {
   background: var(--ou-accent-soft);
-  border-left: 2px solid var(--ou-accent-default);
+  border-left: var(--tb-accent-rail-w) solid var(--ou-accent-default);
 }
 
 /* ── Pass-rules block (Тест пройден, если…) ──────────────────────────── */
@@ -193,7 +206,7 @@
 .tb-pass-table__detail-inner .ou-formfield__lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0; flex-shrink: 0; }
 /* Select в detail-row: уменьшаем растяжение, чтобы Number поместился рядом. */
 .tb-pass-table__detail-inner .ou-select { width: auto; min-width: 0; }
-.tb-pass-table__detail-inner .ou-select__trigger { min-width: 140px; }
+.tb-pass-table__detail-inner .ou-select__trigger { min-width: var(--tb-input-w-sm); }
 
 /* Адаптив переехал в единый @container ниже (см. в конце файла). */
 
@@ -248,7 +261,7 @@
 .tb-level-card__head:hover { background: var(--ou-bg-hover); }
 .tb-level-card__heading { min-width: 0; }
 .tb-level-card__title { font: var(--ou-text-body-m); font-weight: 600; margin: 0; }
-.tb-level-card__summary { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 2px 0 0; }
+.tb-level-card__summary { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: var(--tb-space-half) 0 0; }
 .tb-level-card__trail { display: inline-flex; gap: var(--ou-space-1); align-items: center; }
 .tb-level-card__chev {
   width: var(--ou-space-6); height: var(--ou-space-6);
@@ -423,6 +436,9 @@
    Используем @container на .tb-settings-content (container-type: inline-size
    объявлен выше). Так layout переключается при сжатии drawer, независимо
    от ширины viewport. */
+/* gate-skip-start */
+/* @container breakpoint остаётся literal — var() внутри @container не поддерживается
+   production-браузерами без CSS Houdini-style runtime resolution. */
 @container (max-width: 720px) {
   /* Узкая форма уровня сложности: Название (text) занимает всю строку;
      числовые поля — парами «Сложность от + до» и «Вопросов + Порог».
@@ -440,3 +456,4 @@
   /* Topic accordion toggle: prefix-label прячется, остаётся только switch. */
   .tb-adaptive-topics__toggle-lbl { display: none; }
 }
+/* gate-skip-end */

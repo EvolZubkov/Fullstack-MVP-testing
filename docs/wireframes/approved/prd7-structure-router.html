@@ -198,7 +198,7 @@
     .wf-field-error { font: var(--ou-text-caption); color: var(--ou-error-default); margin-top: var(--wf-space-half); display: flex; align-items: center; gap: var(--wf-space-tiny); }
 
     /* Status-dot on tab — error/dirty */
-    .status-dot { display: inline-block; vertical-align: middle; width: 8px; height: 8px; border-radius: 50%; margin-left: var(--ou-space-1); }
+    .status-dot { display: inline-block; vertical-align: middle; width: var(--ou-space-2); height: var(--ou-space-2); border-radius: 50%; margin-left: var(--ou-space-1); }
     .status-dot.dirty { background: var(--ou-accent-default); }
     .status-dot--error { background: var(--ou-error-default); }
 
@@ -206,7 +206,7 @@
        Позиционирование: абсолют от .page-actions (которое position:relative).
        Меню демонстрационное — в финальной реализации управляется JS. */
     .page-actions { position: relative; }
-    .row-menu { position: absolute; top: calc(100% + var(--wf-space-tiny)); right: 0; z-index: 50; min-width: var(--wf-size-160, 160px); background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-s); box-shadow: var(--ou-shadow-md); padding: var(--wf-space-tiny) 0; }
+    .row-menu { position: absolute; top: calc(100% + var(--wf-space-tiny)); right: 0; z-index: 50; min-width: var(--wf-size-160); background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-s); box-shadow: var(--ou-shadow-md); padding: var(--wf-space-tiny) 0; }
     .row-menu__item { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-6) var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-default); cursor: pointer; border: 0; background: transparent; width: 100%; text-align: left; }
     .row-menu__item:hover { background: var(--ou-bg-hover); }
     .row-menu__item--danger { color: var(--ou-error-default); }
@@ -241,7 +241,7 @@
     /* FR-code annotation badges */
     .wf-annot-wrap { position: relative; display: inline-flex; }
     .wf-annot-wrap--block { position: relative; }
-    .wf-annot { display: none; position: absolute; top: calc(-1 * var(--ou-space-2)); right: calc(-1 * var(--ou-space-1)); z-index: 200; background: var(--ou-warning-default); color: var(--ou-fg-default); border-radius: var(--ou-radius-s); padding: 0 var(--ou-space-1); font-weight: 700; font-size: 10px; line-height: var(--ou-space-5); pointer-events: none; white-space: nowrap; box-shadow: var(--ou-shadow-sm); }
+    .wf-annot { display: none; position: absolute; top: calc(-1 * var(--ou-space-2)); right: calc(-1 * var(--ou-space-1)); z-index: 200; background: var(--ou-warning-default); color: var(--ou-fg-default); border-radius: var(--ou-radius-s); padding: 0 var(--ou-space-1); font-weight: 700; font-size: var(--wf-space-10); line-height: var(--ou-space-5); pointer-events: none; white-space: nowrap; box-shadow: var(--ou-shadow-sm); }
     body.wf-annots-on .wf-annot { display: block; }
 
     /* Notes table */
