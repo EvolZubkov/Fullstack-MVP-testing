@@ -50,11 +50,22 @@ Drawer-контейнер), затем точки входа пользоват�
 
 ### Gaps — добавить в editor-drawer (нашлись при удалении дубликатов section-*, 2026-05-21)
 
-- [ ] **Adaptive-вариант вкладки «Состав»** (FR-36): новый state в editor-drawer
+- [x] **Adaptive-вариант вкладки «Состав»** (FR-36): новый state в editor-drawer
   (например, `s-default-adaptive`) — draw-count input заменён на read-only tag
   «Подбор вопросов: адаптивный» + link «Настроить уровни →» (DS:
   `tb-draw-count-row--adaptive` + `ou-tag--neutral` + `tb-link-text`). В верху
   body — `ou-banner--info` про адаптивный режим
+  *(2026-05-21: добавлен state `s-default-adaptive` в editor-drawer (button*
+  *в `.wf-nav` рядом с s-default). Header: тег `ou-tag--accent` «Адаптивный»*
+  *рядом со статусом «Опубликован». Body начинается с `ou-banner--subtle`*
+  *`ou-banner--info` («Адаптивный режим теста» + desc про настройку уровней*
+  *в «Настройки → Адаптивность»). Каждая `tb-topic-row` — `tb-draw-count-row`*
+  *с модификатором `--adaptive`: label «Подбор вопросов», `ou-tag--accent`*
+  *«Адаптивный», `tb-link-text` «Настроить уровни →». Feedback-preview*
+  *унаследован от standard s-default (full / empty cases). Иконка `i-info`*
+  *добавлена в sprite. Линтер: 0 violations, visual-проверка в Playwright*
+  *1440×900 — состояние умещается без скролла, info-banner и adaptive-tag*
+  *читаются корректно.)*
 - [x] **Feedback edit form** (FR-36, FR-37): модал/inline-редактор с richtext +
   ссылки на материалы + PDF-assets.
   *(2026-05-21: добавлен state `s-feedback-edit` в editor-drawer с модалом*
