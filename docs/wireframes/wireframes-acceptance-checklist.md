@@ -618,13 +618,13 @@ prod-ready BEM-классы для будущего рефакторинга edi
 
 ---
 
-## 21. `docs/wireframes/prd7-editor-mobile.html`
+## 21. ~~`docs/wireframes/prd7-editor-mobile.html`~~ — out-of-scope PRD-7
 
-Мобильный fallback при ширине < 960px.
-
-- [ ] Drawer не обрезается по горизонтали
-- [ ] Fallback-контент понятен пользователю
-- [ ] Проверено на ширине 375px и 768px
+Мобильная адаптивность (< 960px) **вынесена за рамки PRD-7** (2026-05-21,
+явное решение пользователя). Временный fallback-файл удалён; mobile-эскизы
+будет делать отдельный PRD. 3 пункта чек-листа (Drawer не обрезается /
+fallback понятен / проверено на 375px и 768px) — out-of-scope, не учитываются
+в подсчёте.
 
 ---
 
@@ -657,8 +657,10 @@ prod-ready BEM-классы для будущего рефакторинга edi
   _новый `branding` rail-пункт и `template-incompatible` — расширения PRD-7.)_
 - [x] Все состояния из `pages-tab.html` присутствуют в `prd7-structure-linear-by-topics.html`
 - [x] Проверено на ширине 1440px (desktop). **Мобильная адаптивность
-      (< 960px) вынесена за scope текущего PRD** — будет покрыта отдельным
-      PRD; временный fallback оформлен в `prd7-editor-mobile.html` (§21)
+      (< 960px) вынесена за scope PRD-7** — будет покрыта отдельным PRD.
+      _(2026-05-21: временный fallback-файл `prd7-editor-mobile.html` (§21)_
+      _удалён как избыточный — пользователь явно вынес mobile за рамки PRD-7,_
+      _отдельный PRD сам сделает свои mobile-эскизы.)_
 - [x] Дизайнер / PM подтвердил три Structure-эскиза (§8 / §9 / §11) — 2026-05-21
 - [x] Файлы перенесены в `docs/wireframes/approved/`:
       `prd7-structure-linear-flat.html`, `prd7-structure-linear-by-topics.html`,
