@@ -413,6 +413,11 @@ inline-expand редактирование, `s-dirty-form` / `s-sanitize`,
   полей, на табе «Структура» — `.status-dot.status-dot--error` (агрегированный
   error-индикатор согласно FR-25b / NFR-21), кнопка «Сохранить» disabled с
   tooltip. Серверный API возвращает структурированную ошибку
+- [x] `s-row-menu-open` — открытый `…` row-menu (`.row-menu`):
+  для системных kind пункты «Сменить вариант…» / «Предпросмотр» /
+  «Удалить» (disabled, «Системную страницу нельзя удалить»). Для
+  пользовательских `info`-row «Удалить» активен (destructive-стиль).
+  Позиционирование dropdown — `position: absolute` от `.page-actions`
 - [x] Общие state'ы (read-only, mapping, add-page, preview, dirty / sanitize-html,
   delete, DnD) **не дублируются** — поведение задокументировано в §8
 - [x] **`completionPolicy` и `sectionUnlockRules` НЕ отображаются в Структуре** —

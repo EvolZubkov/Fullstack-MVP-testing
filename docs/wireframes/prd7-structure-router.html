@@ -146,6 +146,20 @@
     .status-dot.dirty { background: var(--ou-accent-default); }
     .status-dot--error { background: var(--ou-error-default); }
 
+    /* Row-menu dropdown — открывается из `…` iconbtn в page-actions.
+       Позиционирование: абсолют от .page-actions (которое position:relative).
+       Меню демонстрационное — в финальной реализации управляется JS. */
+    .page-actions { position: relative; }
+    .row-menu { position: absolute; top: calc(100% + var(--wf-space-tiny)); right: 0; z-index: 50; min-width: var(--wf-size-160, 160px); background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-s); box-shadow: var(--ou-shadow-md); padding: var(--wf-space-tiny) 0; }
+    .row-menu__item { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-6) var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-default); cursor: pointer; border: 0; background: transparent; width: 100%; text-align: left; }
+    .row-menu__item:hover { background: var(--ou-bg-hover); }
+    .row-menu__item--danger { color: var(--ou-error-default); }
+    .row-menu__item--danger:hover { background: var(--ou-error-soft); }
+    .row-menu__item.is-disabled { color: var(--ou-fg-muted); cursor: not-allowed; }
+    .row-menu__item.is-disabled:hover { background: transparent; }
+    .row-menu__sep { height: var(--wf-border-w); background: var(--ou-border-soft); margin: var(--wf-space-tiny) 0; }
+    .row-menu__icon { width: var(--ou-space-4); height: var(--ou-space-4); flex-shrink: 0; }
+
     /* Mode change warning */
     .mode-change-warn { border: var(--wf-border-w) solid var(--ou-warning-default); border-radius: var(--ou-radius-s); overflow: hidden; margin-bottom: var(--ou-space-4); }
     .mode-change-warn-header { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-10) var(--wf-space-14); background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); font: var(--ou-text-body-s); font-weight: 500; cursor: pointer; }
@@ -255,6 +269,7 @@
   <button class="wf-btn"        type="button" onclick="showState(this, 's-empty-topics')">Без тем</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-mode-change')">Смена режима</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-validation')">Валидация</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-row-menu-open')">Меню «…»</button>
   <a class="wf-link" href="prd7-structure-linear-flat.html">&larr; linear_flat</a>
 
   <div class="wf-nav-sep"></div>
@@ -825,6 +840,108 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-row-menu-open — открытый `…` row-menu dropdown на questions-row
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-row-menu-open" class="wf-state shell" data-state="row-menu-open">
+  <div class="wf-tpl-slot" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-rm-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-rm-title" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--neutral">Черновик</span>
+        <button class="ou-drawer__close" type="button" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist">
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Состав</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Настройки</button>
+        <button class="ou-tabs__tab" role="tab" aria-selected="false" type="button">Оформление</button>
+        <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="flow-mode-bar">
+          <svg width="14" height="14" class="wf-icon-muted"><use href="#i-layout"/></svg>
+          <span>Режим:</span><span class="flow-mode-label">Через страницу-маршрутизатор</span>
+        </div>
+
+        <div class="inside-test">
+          <div class="inside-test__label"><svg width="14" height="14"><use href="#i-router"/></svg> Внутри теста</div>
+
+          <!-- Router-row: иллюстрирует меню для системного kind (без «Удалить») -->
+          <div class="page-row page-row--system" data-kind="router">
+            <svg class="page-icon"><use href="#i-router"/></svg>
+            <span class="page-variant-badge">Меню карточек</span>
+            <span class="multi-variant-hint">Доступно 3 варианта</span>
+            <span class="page-title">Страница-маршрутизатор</span>
+            <div class="page-actions">
+              <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия" aria-expanded="true"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+              <!-- Открытый dropdown для системной row: только «Сменить вариант» + «Предпросмотр» (без «Удалить» — системную page нельзя удалить вручную) -->
+              <div class="row-menu" role="menu" aria-label="Действия со страницей маршрутизатора">
+                <button class="row-menu__item" type="button" role="menuitem"><svg class="row-menu__icon"><use href="#i-chevron-right"/></svg>Сменить вариант…</button>
+                <button class="row-menu__item" type="button" role="menuitem"><svg class="row-menu__icon"><use href="#i-eye"/></svg>Предпросмотр</button>
+                <div class="row-menu__sep"></div>
+                <button class="row-menu__item is-disabled" type="button" role="menuitem" aria-disabled="true" title="Системную страницу нельзя удалить"><svg class="row-menu__icon"><use href="#i-trash"/></svg>Удалить</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="tree-branches">
+            <div class="tree-branch">
+              <div class="topic-block">
+                <div class="topic-header">
+                  <div class="topic-grip"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+                  <span class="topic-name">Основы ИБ</span>
+                  <span class="topic-count">5 вопросов</span>
+                </div>
+                <div class="topic-body">
+                  <div class="page-row page-row--system page-row--questions" data-kind="questions">
+                    <svg class="page-icon"><use href="#i-question"/></svg>
+                    <span class="page-variant-badge">Минимальный</span>
+                    <span class="multi-variant-hint">Доступно 2 варианта</span>
+                    <span class="page-title">5 вопросов из темы «Основы ИБ»</span>
+                    <div class="page-actions">
+                      <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Зона «После теста» — пример меню для info-row (с «Удалить») -->
+        <div class="zone-block">
+          <div class="zone-header"><svg width="14" height="14"><use href="#i-chevron-down"/></svg> После теста</div>
+          <div class="topic-body">
+            <div class="page-row">
+              <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
+              <span class="page-variant-badge">Материал</span>
+              <span class="page-title">Дополнительные источники</span>
+              <div class="page-actions">
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+              </div>
+            </div>
+            <div class="page-row page-row--system" data-kind="summary">
+              <svg class="page-icon"><use href="#i-clipboard"/></svg>
+              <span class="page-variant-badge">Итоги</span>
+              <span class="page-title">Итоговая страница теста</span>
+              <div class="page-actions">
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button class="ou-btn ou-btn--ghost ou-btn--m" type="button" disabled aria-disabled="true">Показать изменения</button>
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button" disabled aria-disabled="true">Отменить</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
      Notes table (FR/state mapping)
      ═══════════════════════════════════════════════════════════════════════════ -->
 <section class="wf-notes" aria-label="State annotations">
@@ -897,6 +1014,22 @@
           <strong>disabled</strong> с tooltip'ом. Серверный API возвращает
           структурированную ошибку при попытке сохранения.</td>
         <td>PRD-1 §4.3.6, FR-25b, NFR-21</td>
+      </tr>
+      <tr>
+        <td><code>s-row-menu-open</code></td>
+        <td>Иллюстрирует открытый <code>…</code> row-menu (<code>.row-menu</code>)
+          для системной router-row. Состав меню для системных kind
+          (<code>router</code> / <code>summary</code> / <code>intro</code> /
+          <code>questions</code>):
+          «Сменить вариант…» (открывает модал <code>prd7-variant-replace.html</code>),
+          «Предпросмотр», разделитель, «Удалить» — disabled с tooltip
+          «Системную страницу нельзя удалить». Для пользовательских
+          <code>info</code>-row пункт «Удалить» активен (демонстрируется в
+          секции «После теста» — info-row без `--system` модификатора
+          получает полный набор действий, включая destructive «Удалить»).
+          В финальной реализации dropdown управляется JS, позиционирование
+          через <code>position: absolute</code> от <code>.page-actions</code>.</td>
+        <td>PRD-1 §4.3.3</td>
       </tr>
     </tbody>
   </table>
