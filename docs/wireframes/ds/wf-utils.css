@@ -304,8 +304,8 @@ body {
 }
 
 .ou-tag--success { background: var(--ou-success-bg); color: var(--ou-success-fg); }
-.ou-tag--warning { background: var(--ou-warning-bg); color: var(--ou-warning-fg); }
-.ou-tag--error   { background: var(--ou-error-bg);   color: var(--ou-error-fg);   }
+.ou-tag--warning { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
+.ou-tag--error   { background: var(--ou-error-soft);   color: var(--ou-error-on-soft);   }
 .ou-tag--neutral { background: var(--ou-bg-hover);   color: var(--ou-fg-muted);   }
 
 /* ── Table ───────────────────────────────────────────────────────────────── */
@@ -342,7 +342,7 @@ body {
 
 .ou-table__th--right         { text-align: right; }
 .ou-table__td--amount        { text-align: right; font-weight: 600; }
-.ou-table__td--amount--negative { text-align: right; font-weight: 600; color: var(--ou-error-fg); }
+.ou-table__td--amount--negative { text-align: right; font-weight: 600; color: var(--ou-error-on-soft); }
 
 /* ── Pagination ──────────────────────────────────────────────────────────── */
 .ou-pagination {
@@ -381,9 +381,9 @@ body {
 }
 
 .ou-banner--error {
-  background: var(--ou-error-bg);
-  color: var(--ou-error-fg);
-  border: var(--wf-border-w) solid var(--ou-error-border, var(--ou-error-fg));
+  background: var(--ou-error-soft);
+  color: var(--ou-error-on-soft);
+  border: var(--wf-border-w) solid var(--ou-border-error, var(--ou-error-on-soft));
 }
 
 .ou-banner-icon  { font-size: var(--wf-size-18); flex-shrink: 0; margin-top: var(--wf-border-w); }

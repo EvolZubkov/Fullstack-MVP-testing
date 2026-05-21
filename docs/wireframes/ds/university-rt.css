@@ -713,7 +713,7 @@
 .ou-shell__actions { display: inline-flex; align-items: center; gap: var(--ou-space-2); margin-left: auto; flex-shrink: 0; }
 /* User entry — clean avatar + label, no chip frame. The avatar itself
    is the click target; the meta is a passive caption sitting next to it. */
-.ou-shell__user { display: inline-flex; align-items: center; gap: var(--ou-space-3); padding: 2px; margin-left: var(--ou-space-1); border-radius: var(--ou-radius-pill); cursor: pointer; background: transparent; border: 0; }
+.ou-shell__user { display: inline-flex; align-items: center; gap: var(--ou-space-3); padding: 2px; margin-left: var(--ou-space-1); border-radius: var(--ou-radius-pill); cursor: pointer; background: transparent; border: 0; text-align: left; }
 .ou-shell__user:hover .ou-shell__avatar { box-shadow: 0 0 0 2px var(--ou-bg-hover); }
 .ou-shell__avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--ou-accent-soft); color: var(--ou-accent-default); display: inline-flex; align-items: center; justify-content: center; font: var(--ou-text-body-s); font-weight: 600; transition: box-shadow var(--ou-motion-fast) var(--ou-easing-standard); }
 .ou-shell__user-meta { display: flex; flex-direction: column; line-height: 1.2; gap: 1px; }
@@ -936,7 +936,7 @@
 .ou-banner__desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 .ou-banner__desc a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 
-.ou-banner__actions { display: inline-flex; gap: var(--ou-space-2); flex-shrink: 0; align-items: center; align-self: center; }
+.ou-banner__actions { display: inline-flex; gap: var(--ou-space-2); flex-shrink: 0; align-items: center; align-self: flex-start; }
 .ou-banner__link {
   background: transparent; border: 0; cursor: pointer;
   font: var(--ou-text-body-s); font-weight: 600;
@@ -1820,6 +1820,41 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 }
 .ou-ring__value { font: var(--ou-text-heading-m); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ou-fg-default); }
 .ou-ring__label { font: var(--ou-text-body-xs); color: var(--ou-fg-muted); }
+
+/* === Histogram ===
+   Compact CSS-based distribution chart (без SVG, без tooltip).
+   Use for inline density bars: difficulty distribution, score buckets, frequency.
+   Each .ou-histogram__bar gets its height through `--h` custom property (0..100%). */
+.ou-histogram { display: flex; flex-direction: column; gap: var(--ou-space-2); min-width: 0; }
+.ou-histogram__bars {
+  display: flex; align-items: end; gap: 3px;
+  height: var(--ou-histogram-h, 64px);
+  padding-bottom: 2px;
+}
+.ou-histogram__bar {
+  flex: 1; min-width: 0;
+  height: var(--h, 10%); min-height: 4px;
+  background: var(--ou-accent-soft);
+  border-top: 2px solid var(--ou-accent-default);
+  border-radius: var(--ou-radius-s) var(--ou-radius-s) 0 0;
+  transition: opacity var(--ou-motion-fast);
+}
+.ou-histogram__bar:hover { opacity: 0.85; }
+.ou-histogram__axis {
+  display: flex; justify-content: space-between;
+  font: var(--ou-text-body-xs); color: var(--ou-fg-muted);
+  padding-top: var(--ou-space-1);
+  border-top: 1px solid var(--ou-border-soft);
+}
+.ou-histogram__axis-tick { font-variant-numeric: tabular-nums; }
+/* Sizes */
+.ou-histogram--s .ou-histogram__bars { --ou-histogram-h: 48px; }
+.ou-histogram--m .ou-histogram__bars { --ou-histogram-h: 64px; }
+.ou-histogram--l .ou-histogram__bars { --ou-histogram-h: 96px; }
+/* Tones — map bar colour onto status tokens */
+.ou-histogram--success .ou-histogram__bar { background: color-mix(in oklch, var(--ou-success-default) 22%, transparent); border-top-color: var(--ou-success-default); }
+.ou-histogram--warn    .ou-histogram__bar { background: color-mix(in oklch, var(--ou-warning-default) 22%, transparent); border-top-color: var(--ou-warning-default); }
+.ou-histogram--danger  .ou-histogram__bar { background: color-mix(in oklch, var(--ou-error-default)   22%, transparent); border-top-color: var(--ou-error-default); }
 
 /* === Heatmap === */
 .ou-heatmap { display: grid; gap: 3px; }
@@ -6003,12 +6038,19 @@ span.ou-quiz__dot:hover { transform: none; }
   border-radius: var(--ou-radius-m);
   color: var(--ou-fg-muted);
   font: var(--ou-text-body-m); font-weight: 500;
-  text-align: left;
+  text-align: left; text-decoration: none;
   transition: background var(--ou-motion-fast), color var(--ou-motion-fast);
 }
 .ou-side__item:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
 .ou-side__item.is-active { background: var(--ou-accent-soft); color: var(--ou-accent-on-soft); }
 .ou-side__item.is-active .ou-side__ico { color: var(--ou-accent-default); }
+
+/* Sub-item: text aligned with parent label (icon 20px + gap --ou-space-3 on each side). */
+.ou-side__item--sub {
+  padding-left: calc(var(--ou-space-3) + 20px + var(--ou-space-3));
+  height: 36px;
+  font: var(--ou-text-body-s); font-weight: 400;
+}
 
 .ou-side__ico { flex-shrink: 0; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; color: var(--ou-fg-muted); }
 .ou-side__lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -6023,6 +6065,7 @@ span.ou-quiz__dot:hover { transform: none; }
 .ou-side.is-collapsed .ou-side__badge,
 .ou-side.is-collapsed .ou-side__group-title { display: none; }
 .ou-side.is-collapsed .ou-side__item { justify-content: center; padding: 0; }
+.ou-side.is-collapsed .ou-side__item--sub { display: none; }
 
 .ou-side__foot { padding: var(--ou-space-3); border-top: 1px solid var(--ou-border-soft); }
 
