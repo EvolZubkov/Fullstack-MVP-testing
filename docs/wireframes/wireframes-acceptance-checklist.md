@@ -48,6 +48,24 @@ Drawer-контейнер), затем точки входа пользоват�
 - [x] `show(id)` и `injectBgPage()` работают без JS-ошибок
 - [x] State-switcher `.wf-nav` переключает состояния корректно
 
+### Gaps — добавить в editor-drawer (нашлись при удалении дубликатов section-*, 2026-05-21)
+
+- [ ] **Adaptive-вариант вкладки «Состав»** (FR-36): новый state в editor-drawer
+  (например, `s-default-adaptive`) — draw-count input заменён на read-only tag
+  «Подбор вопросов: адаптивный» + link «Настроить уровни →» (DS:
+  `tb-draw-count-row--adaptive` + `ou-tag--neutral` + `tb-link-text`). В верху
+  body — `ou-banner--info` про адаптивный режим
+- [ ] **Feedback edit form** (FR-36, FR-37): модал/inline-редактор с richtext +
+  ссылки на материалы + PDF-assets. Сейчас в editor-drawer есть только
+  read-only `tb-feedback-preview`, edit-открывает модал без эскиза
+- [ ] **DS+tb-* рефакторинг editor-drawer** — файл сам содержит ~700 строк
+  inline CSS под `.topic-row*`, `.feedback-preview*`, `.bg-*` etc. По правилу
+  [feedback_wf_only_skeleton_frame](../../C%3A/Users/%D0%92%D0%BB%D0%B0%D0%B4/.claude/projects/c--Repositories-test-builder/memory/feedback_wf_only_skeleton_frame.md)
+  это запрещено в `<style>` блоке. Уже подготовленные `tb-*` классы
+  ([tb-components.css](tb-components.css): `tb-topic-row`, `tb-draw-count-row`,
+  `tb-feedback-preview`, `tb-status-dot--dirty`) можно использовать; нужно
+  заменить inline `.topic-row*` → `tb-topic-row*` etc. в editor-drawer
+
 ---
 
 ## 3. `docs/wireframes/prd7-tests-list.html`
@@ -61,11 +79,14 @@ Drawer-контейнер), затем точки входа пользоват�
 - [x] Отображаются статусы тестов: `Черновик`, `Опубликован`. Архивные тесты вынесены
   на отдельную страницу `prd7-tests-archive.html`; доступ — sub-ссылка «Архив»
   в сайдбаре под пунктом «Тесты»
-- [ ] Дополнительная статус-метка «Требует обновления» на карточке/строке теста, если
+- [x] Дополнительная статус-метка «Требует обновления» на карточке/строке теста, если
   его варианты страниц несовместимы с актуальным snapshot'ом шаблона (дрейф версий
   шаблона). Метка `ou-tag ou-tag--warning` рядом со стандартным статусом; при открытии
   такого теста автор-владелец видит принудительный диалог `s-mapping` (см. §8),
   read-only пользователь — только метку
+  _(реализовано на тесте «Аудит логов SCORM» в `s-default`: ячейка статуса —_
+  _`flex-direction: column`, второй тег `ou-tag--warning` с tooltip про `s-mapping`;_
+  _aria-label строки расширен.)_
 - [x] Кнопки действий на тесте: открыть редактор (`action-btn` на строке),
   удалить / архивировать (`dropdown-item` в row-меню)
 - [x] Пустое состояние: заглушка «Тестов пока нет» + кнопки `Создать папку` и `Новый тест`
@@ -458,7 +479,7 @@ inline-expand редактирование, `s-dirty-form` / `s-sanitize`,
 
 ---
 
-## 11a. `docs/wireframes/prd7-variant-replace.html`
+## 11a. `docs/wireframes/approved/prd7-variant-replace.html`
 
 Модал смены варианта на существующей `page-row` (PRD-1 §4.3.3).
 Триггер — `…` row-menu → «Сменить вариант». Применим **ко всем `kind`**
@@ -466,87 +487,95 @@ inline-expand редактирование, `s-dirty-form` / `s-sanitize`,
 
 - [x] `ou-modal --m` с поиском вариантов того же `kind` из текущего шаблона;
   текущий вариант помечен меткой «Текущий» и disabled (нельзя «сменить» на тот же)
-- [x] **Diff-блок потерь параметров** под списком вариантов: две группы —
-  «Будут удалены» (`--ou-warning-soft` фон) и «Будут сохранены»
-  (`--ou-success-soft` фон). Каждое поле показано с именем + текущим
-  значением. Меняется при выборе другого варианта по правилу «имя поля =
-  контракт между вариантами одного `kind`»
-- [x] `s-replace-modal` — основное: list + diff (есть потери, есть сохранения)
-- [x] `s-replace-empty-diff` — schema нового варианта симметрична текущей;
-  показывается только группа «Будут сохранены», без warning-блока
-- [x] `s-replace-no-fields` — у нового варианта пустая schema; все параметры
-  текущего варианта будут удалены + info-note «У выбранного варианта пустая
-  schema — страница станет шаблонной»
+- [x] **Warning-блок «что теряется»** под списком вариантов:
+  `--ou-warning-soft` фон, перечень полей с именем + текущим значением + пояснение,
+  почему поле не переносится. Положительная информация («что переносится») в модал
+  не выводится — это штатное поведение, перенесённые значения автор увидит в
+  `page-row-expand` при следующем редактировании. Контракт совпадения полей —
+  «имя поля = совместимый тип» между вариантами одного `kind`
+  _(2026-05-21: дизайн упрощён под фидбэк — счётчики «N параметров» под_
+  _вариантами и зелёный блок «Будут сохранены» удалены; технические термины_
+  _`schema` / `kind` исключены из user-facing текста; в `s-replace-no-fields`_
+  _объяснение «новый вариант — шаблонный» объединено с warning-блоком как_
+  _`diff-block__meta`, отдельный `confirm-note` удалён.)_
+- [x] `s-replace-modal` — основное: список вариантов + warning-блок
+  «Часть настроек не переносится» с перечнем теряемых полей
+- [x] `s-replace-empty-diff` — спокойный случай: все поля совпадают, в модале
+  только список вариантов без warning-блока. Кнопка «Сменить вариант» доступна
+- [x] `s-replace-no-fields` — у нового варианта нет редактируемых полей;
+  единый warning-блок «Текущие настройки страницы будут потеряны» с перечнем
+  значений и пояснением «У нового варианта нет редактируемых полей —
+  содержимое страницы будет полностью задано шаблоном»
 - [x] Footer: «Отменить» (secondary) / «Сменить вариант» (primary)
 - [x] FR-аннотации: PRD-1 §4.3.3 на diff-блоке
 - [x] Полная поддержка dark-темы: только DS-токены
 
 ---
 
-## 12. `docs/wireframes/prd7-section-basic.html`
+## 12-16. `prd7-section-*` — удалены как дубликаты `prd7-editor-drawer.html`
 
-Вкладка "Состав" — базовая секция.
+5 файлов (`prd7-section-basic`, `-basic-states`, `-adaptive`, `-start-pages`,
+`-basic-feedback-editor`) удалены 2026-05-21 как **дубликаты** approved-эталона
+[approved/prd7-editor-drawer.html](approved/prd7-editor-drawer.html) (§2): этот
+файл уже содержит state'ы `s-default` / `s-dirty` / `s-error` / `s-saving` /
+`s-changes` / `s-settings` / `s-mobile` / `s-notes`, покрывающие вкладку «Состав»
+со всеми её edit-состояниями. Отдельные section-* остались с старого подхода
+до того, как был сделан многосостояточный editor-drawer.
 
-- [ ] Список вопросов с типами: single, multiple, matching, ranking
-- [ ] Кнопка добавления вопроса с выбором типа
-- [ ] Состояния: `s-main`, `s-empty`, `s-loading`, `s-error`, `s-readonly`
+13 пунктов чек-листа §12-§16 закрываются как **out-of-scope** для PRD-7 wireframes.
 
----
+**Уникальный контент, который надо добавить в editor-drawer** (см. §2):
 
-## 13. `docs/wireframes/prd7-section-basic-states.html`
+- **Adaptive вариант вкладки «Состав»** — `tb-draw-count-row--adaptive` modifier
+  с tag «Подбор вопросов: адаптивный» + link «Настроить уровни →» вместо
+  draw-count input (FR-36). Info banner про адаптивный режим в верху body.
+  В editor-drawer этого state'а сейчас НЕТ (только standard).
+- **Feedback edit form** — модал/inline-редактор с richtext + ссылки + PDF-assets
+  (FR-36, FR-37). В editor-drawer есть только read-only `tb-feedback-preview`.
 
-Все состояния базовой секции.
-
-- [ ] Состояния формы добавления / редактирования вопроса
-- [ ] `s-dirty-form`, `s-validation`, `s-delete`
-- [ ] `s-dnd` — drag-and-drop вопросов
-- [ ] `s-saved`
-
----
-
-## 14. `docs/wireframes/prd7-section-adaptive.html`
-
-Адаптивный режим секции.
-
-- [ ] Показаны специфичные для adaptive поля (пороги, ветвление)
-- [ ] Визуально отличается от базовой секции
-
----
-
-## 15. `docs/wireframes/prd7-section-start-pages.html`
-
-Страницы до/после в секции.
-
-- [ ] Редакторы intro / summary / html страниц внутри секции
-- [ ] Состояние без страниц — кнопка добавления
+**Полезная экстракция** ([tb-components.css](tb-components.css)) — добавлены
+prod-ready BEM-классы для будущего рефакторинга editor-drawer:
+`tb-topic-row` (+ `__header/__name/__count/__body`), `tb-draw-count-row`
+(+ `__label/__max`, `--adaptive`), `tb-feedback-preview`
+(+ `__text/__snippet/__meta/__sep`, `.is-empty`), `tb-status-dot--dirty`.
+Синхронизировано в обе копии (docs/wireframes/ + client/src/styles/).
 
 ---
 
-## 16. `docs/wireframes/prd7-section-basic-feedback-editor.html`
-
-Редактор обратной связи.
-
-- [ ] Редактор feedback для correct / incorrect / partial ответов
-- [ ] Предпросмотр feedback
-
----
-
-## 17. `docs/wireframes/prd7-editor-close-confirm.html`
+## 17. `docs/wireframes/approved/prd7-editor-close-confirm.html`
 
 Диалог подтверждения закрытия Drawer с несохранёнными изменениями.
 
-- [ ] Три кнопки: `Сохранить`, `Выйти без сохранения`, `Отмена`
-- [ ] Кнопка `Сохранить` disabled при наличии блокирующих ошибок
-- [ ] При disabled `Сохранить` — краткая причина и ссылка на первую ошибку
+- [x] Три кнопки: `Сохранить`, `Выйти без сохранения`, `Отмена`
+  _(s-dirty: «Сохранить» primary, «Выйти без сохранения» secondary, «Отмена» ghost.)_
+- [x] Кнопка `Сохранить` disabled при наличии блокирующих ошибок
+  _(s-errors: `disabled aria-disabled="true" title="Исправьте ошибки перед сохранением"`.)_
+- [x] При disabled `Сохранить` — краткая причина и ссылка на первую ошибку
+  _(s-errors: `ou-banner ou-banner--error` с текстом «2 ошибки во вкладке "Настройки"»_
+  _и ссылкой `<a class="wf-error-link">Перейти к первой ошибке</a>` — скролл к первой error-field.)_
 
 ---
 
-## 18. `docs/wireframes/prd7-editor-conflict.html`
+## 18. `docs/wireframes/approved/prd7-editor-conflict.html`
 
 Диалог конфликта версий (concurrent edit).
 
-- [ ] Два действия: `Обновить данные` (recommended, default) и `Сохранить поверх`
-- [ ] `Обновить данные` визуально выделена как рекомендуемое действие
+- [x] Два действия: `Обновить данные` (recommended, default) и `Сохранить поверх`
+  _(s-conflict: обе кнопки в footer + option-cards с описанием. «Обновить данные»_
+  _имеет `autofocus` → default по Enter. State `s-status-conflict` удалён 2026-05-21:_
+  _архитектурно невозможен — `PATCH /status` не инкрементирует `version`_
+  _([prd-7-implementation-todo §1.10](../prd-7-implementation-todo.md)),_
+  _поэтому параллельная смена статуса не вызывает 409 при save Drawer'а._
+  _Это корректирует устаревшую формулировку FR-25k «включая внешнюю смену статуса».)_
+- [x] `Обновить данные` визуально выделена как рекомендуемое действие
+  _(footer выровнен `justify-content: space-between` per DS canon: «Отмена» (ghost)_
+  _слева, action-группа справа — «Сохранить поверх» (`ou-btn--destructive`) +_
+  _«Обновить данные» (`ou-btn--primary` accent purple, `autofocus` + `title` с_
+  _описанием эффекта). Технические термины (`v7`/`v8`, «Сервер (v8)») убраны из_
+  _user-facing body, оставлены только в notes-таблице._
+  _Option-cards удалены 2026-05-21 — они дублировали footer-кнопки (двойной_
+  _affordance); описание эффекта каждой кнопки перенесено в `title` (нативный_
+  _tooltip).)_
 
 ---
 
@@ -554,9 +583,22 @@ inline-expand редактирование, `s-dirty-form` / `s-sanitize`,
 
 Предупреждение при смене `flowMode`.
 
-- [ ] Список настроек, несовместимых с новым режимом
+- [x] Список настроек, несовместимых с новым режимом
+  _(s-mode-warn: «Раздел Адаптивность станет доступен», «поле draw_count заменяется»,_
+  _«несовместимые настройки сохраняются»; s-flow-warn: реорганизация «Вопросы будут сгруппированы_
+  _по темам», «авторские страницы распределены по темам».)_
 - [ ] Для каждой настройки указан режим, при котором она снова становится доступной
+  _(2026-05-21: формулировка эскиза общая — «появятся снова при возврате к совместимому режиму»,_
+  _без явного per-setting списка целевого режима. Требует доработки эскиза для full [x]._
+  _Альтернатива — переформулировка чек-листа в PRD-7 §FR-25g термине: «при возврате режима_
+  _скрытые настройки снова отображаются».)_
 - [ ] Кнопки: подтвердить смену и отмена
+  _(2026-05-21: пункт **противоречит** PRD-7 §FR-25e — «Переключение критичных режимов не требует_
+  _modal confirmation, если данные не удаляются; предупреждение показывается inline»._
+  _Текущий эскиз корректно показывает inline-warning без Apply/Cancel (s-mode-warn / s-flow-warn);_
+  _смена применяется к draft, фиксируется общим Save Drawer (FR-25a). Требует переформулировки_
+  _пункта чек-листа на «inline warning без Apply/Cancel; смена применяется к draft»._
+  _По PRD-7 §2.3b auto-удаление router-page при router→linear* — тоже молча без диалога.)_
 
 ---
 
@@ -564,10 +606,15 @@ inline-expand редактирование, `s-dirty-form` / `s-sanitize`,
 
 Агрегированные индикаторы вкладок Drawer.
 
-- [ ] Индикатор `изменено` на вкладке при наличии изменений
-- [ ] Индикатор `warning` на вкладке при наличии предупреждений
-- [ ] Индикатор `error` на вкладке при наличии ошибок
-- [ ] Кнопка `Сохранить` disabled при наличии ошибок; при наличии только warning — активна
+- [x] Индикатор `изменено` на вкладке при наличии изменений
+  _(раздел 1 showcase: `wf-tab-demo` с `wf-status-dot--dirty` + `aria-label`.)_
+- [x] Индикатор `warning` на вкладке при наличии предупреждений
+  _(раздел 1 showcase: `wf-status-dot--warn` + `aria-label`.)_
+- [x] Индикатор `error` на вкладке при наличии ошибок
+  _(раздел 1 showcase: `wf-status-dot--error` + `aria-label`.)_
+- [x] Кнопка `Сохранить` disabled при наличии ошибок; при наличии только warning — активна
+  _(раздел 3 showcase: три состояния кнопки — clean/disabled, warnings/enabled, errors/disabled —_
+  _с `aria-describedby` на error-кейсе.)_
 
 ---
 
@@ -589,9 +636,25 @@ inline-expand редактирование, `s-dirty-form` / `s-sanitize`,
   `sidebar`, `nav-item`, `form-group`, `form-label`, `badge`, `card-*`,
   `banner` с прямыми модификаторами и т.д.) — `npm run check:wireframes:ds`
   проходит на базовом профиле
+  _(fact-check 2026-05-21: линтер падает с 21 violation — direct units / named-color_
+  _в approved-файлах: `prd7-design-tab.html:32,34,157`, `prd7-editor-settings-tab.html:51`,_
+  _все три structure-файла (`linear-by-topics:42,245,271,325`, `linear-flat:46,257,283,337`,_
+  _`router:201,201,209,244`), общий `tb-components.css:56,146,195,249,293`._
+  _`prd7-variant-replace.html` починен (был fallback `280px` и `font-size: 10px`)._
+  _Это самостоятельная задача — фиксить токены, не относится к 10 неутверждённым_
+  _эскизам §12-§21.)_
 - [ ] Нет файлов в старом формате (`ou-button`, `wf-state`, `wf-page-wrap`, `showState`)
-- [ ] Нет файлов с маркером `STATES_INSERT_POINT`
-- [ ] Все состояния из `design-tab.html` присутствуют в `prd7-design-tab.html`
+- [x] Нет файлов с маркером `STATES_INSERT_POINT`
+  _(fact-check 2026-05-21: `STATES_INSERT_POINT` не найден ни в одном файле_
+  _`docs/wireframes/`, кроме самого чек-листа.)_
+- [x] Все состояния из `design-tab.html` присутствуют в `prd7-design-tab.html`
+  _(fact-check 2026-05-21: legacy 16 → prd7 10. Mapping:_
+  _`s-main`→`template`, `s-empty`→`template-empty`, `s-preview`→`template-preview`,_
+  _`s-color-picker`→`branding-color-picker`, `s-gallery*`→`template-gallery*` (×4);_
+  _generic `s-loading`/`s-saving`/`s-dirty`/`s-error`/`s-validation`/`s-readonly`/`s-saved`_
+  _вынесены в `prd7-editor-drawer.html` (явно зафиксировано в §7 строка 166-168);_
+  _`s-reset-confirm` — стандартный confirm-dialog DS (PRD-1 §3.1, §7 строка 186-188);_
+  _новый `branding` rail-пункт и `template-incompatible` — расширения PRD-7.)_
 - [x] Все состояния из `pages-tab.html` присутствуют в `prd7-structure-linear-by-topics.html`
 - [x] Проверено на ширине 1440px (desktop). **Мобильная адаптивность
       (< 960px) вынесена за scope текущего PRD** — будет покрыта отдельным
@@ -599,5 +662,22 @@ inline-expand редактирование, `s-dirty-form` / `s-sanitize`,
 - [x] Дизайнер / PM подтвердил три Structure-эскиза (§8 / §9 / §11) — 2026-05-21
 - [x] Файлы перенесены в `docs/wireframes/approved/`:
       `prd7-structure-linear-flat.html`, `prd7-structure-linear-by-topics.html`,
-      `prd7-structure-router.html`. `prd7-variant-replace.html` (§11a)
-      остаётся в `docs/wireframes/` до отдельного ревью
+      `prd7-structure-router.html`, `prd7-variant-replace.html` (§11a),
+      `prd7-editor-close-confirm.html` (§17), `prd7-editor-conflict.html` (§18)
+      _(variant-replace согласован дизайнером 2026-05-21 после упрощения:_
+      _счётчики «N параметров» удалены, зелёный блок «Будут сохранены» удалён,_
+      _технические термины `schema`/`kind` убраны из user-facing текста, иконка_
+      _warning-блока заменена `i-trash` → `i-warn`, заголовок модала обёрнут в_
+      _`ou-modal__head-text` для корректной позиции close-кнопки.)_
+      _(close-confirm + conflict согласованы 2026-05-21 после полной DS-миграции:_
+      _весь custom `<style>` блок (`.wf-dialog*`, `.wf-overlay`, `.wf-bg-*`, ~150 строк)_
+      _удалён; HTML переведён на DS-канон (`ou-modal-root`, `ou-modal__backdrop`,_
+      _`ou-modal ou-modal--m`, `ou-modal__head--icon` + `ou-modal__icon--warning|--danger`,_
+      _`ou-modal__head-text`, `ou-modal__body`, `ou-modal__foot`, `ou-tag-group`)._
+      _В conflict удалён state `s-status-conflict` (архитектурно невозможен —_
+      _`PATCH /status` не инкрементирует `version`), удалены option-cards_
+      _(дублировали footer-кнопки), `v7`/`v8` убраны из user-facing body в notes;_
+      _diff-таблица очищена от `.wf-diff-*` color overrides._
+      _В close-confirm иконка danger использует DS `ou-modal__icon--danger`,_
+      _banner следует DS BEM (`__ico`/`__body`/`__desc`), ссылка на ошибку через_
+      _нативный `<a>` без `wf-error-link` override.)_
