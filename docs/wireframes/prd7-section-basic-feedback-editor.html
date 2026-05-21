@@ -13,6 +13,7 @@
   <title>prd7 — Feedback Editor</title>
   <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
   <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
   <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
   <style>
     /* Wireframe-specific helpers — not part of product UI */
@@ -25,7 +26,7 @@
       background: var(--ou-bg-page);
     }
     .wf-state-bg {
-      background: var(--ou-bg-canvas);
+      background: var(--ou-bg-muted);
       padding: var(--ou-space-6);
     }
     .wf-state-wrap { max-width: var(--wf-size-760); margin: 0 auto; }
@@ -49,7 +50,7 @@
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
       border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
-      background: var(--ou-bg-canvas);
+      background: var(--ou-bg-muted);
     }
     .wf-feedback-panel-title { font: var(--ou-text-body-s); font-weight: 600; flex: 1; }
 
@@ -76,9 +77,9 @@
       border: none; background: transparent; color: var(--ou-fg-default);
       cursor: pointer; font-family: inherit;
     }
-    .wf-toolbar-btn:hover { background: var(--ou-bg-canvas); }
+    .wf-toolbar-btn:hover { background: var(--ou-bg-muted); }
     .wf-toolbar-btn--active {
-      background: var(--ou-bg-muted);
+      background: var(--ou-accent-soft);
       color: var(--ou-accent-default);
     }
     .wf-toolbar-sep {
@@ -115,16 +116,16 @@
     .wf-html-editor textarea {
       display: block; width: 100%; min-height: var(--wf-size-140); resize: vertical;
       font-family: 'Consolas', 'Courier New', monospace;
-      font-size: var(--ou-space-3); line-height: 1.6;
+      font: var(--ou-text-body-s); line-height: 1.6;
       border: none; outline: none; background: transparent;
       color: var(--ou-fg-default); padding: var(--ou-space-3) var(--ou-space-4);
     }
     .wf-html-warn {
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
-      background: var(--ou-warning-bg);
+      background: var(--ou-warning-soft);
       border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
-      font: var(--ou-text-caption); color: var(--ou-fg-muted);
+      font: var(--ou-text-body-s); color: var(--ou-fg-muted);
     }
 
     /* ── Char count ───────────────────────────────────────────────────────── */
@@ -155,7 +156,7 @@
       background: var(--ou-bg-elevated);
       cursor: pointer; color: var(--ou-fg-muted); flex-shrink: 0;
     }
-    .wf-icon-action-btn:hover { border-color: var(--ou-error-fg); color: var(--ou-error-fg); }
+    .wf-icon-action-btn:hover { border-color: var(--ou-error-on-soft); color: var(--ou-error-on-soft); }
     .wf-icon-action-btn svg { width: var(--wf-space-13); height: var(--wf-space-13); }
     .wf-add-link-btn {
       font: var(--ou-text-caption); color: var(--ou-accent-default);
@@ -192,13 +193,13 @@
       background: transparent; border: var(--wf-border-w) dashed var(--ou-border-soft);
       border-radius: var(--ou-radius-s); cursor: pointer;
     }
-    .wf-upload-btn:hover { border-color: var(--ou-accent-default); background: var(--ou-bg-canvas); }
+    .wf-upload-btn:hover { border-color: var(--ou-accent-default); background: var(--ou-bg-muted); }
     .wf-upload-btn svg { width: var(--ou-space-3); height: var(--ou-space-3); }
 
     /* ── Preview section ──────────────────────────────────────────────────── */
     .wf-preview-section {
       padding: var(--ou-space-3) var(--ou-space-4);
-      background: var(--ou-bg-canvas);
+      background: var(--ou-bg-muted);
     }
     .wf-preview-label {
       font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
@@ -1055,13 +1056,13 @@ function toggleDensity() {
     if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
     if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
     if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
-    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-soft', '--ou-error-soft'], 'Черновик, Опубликован, Изменено, Встроенный.');
     if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
     if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
     if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
     if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
     if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
-    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-soft', '--ou-error-soft', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
     if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
     if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
     if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');

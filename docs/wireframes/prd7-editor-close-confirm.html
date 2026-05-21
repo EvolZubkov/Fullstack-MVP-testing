@@ -13,6 +13,7 @@
   <title>prd7 — Диалог закрытия редактора</title>
   <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
   <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
   <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
   <style>
     /* Wireframe-specific helpers — not part of product UI */
@@ -41,14 +42,14 @@
       flex-shrink: 0;
     }
     .wf-dialog-icon--warn {
-      background: var(--ou-warning-bg);
-      border: var(--wf-border-w) solid var(--ou-warning-border, var(--ou-warning-fg));
-      color: var(--ou-warning-fg);
+      background: var(--ou-warning-soft);
+      border: var(--wf-border-w) solid var(--ou-warning-default, var(--ou-warning-on-soft));
+      color: var(--ou-warning-on-soft);
     }
     .wf-dialog-icon--error {
-      background: var(--ou-error-bg);
-      border: var(--wf-border-w) solid var(--ou-error-border, var(--ou-error-fg));
-      color: var(--ou-error-fg);
+      background: var(--ou-error-soft);
+      border: var(--wf-border-w) solid var(--ou-border-error, var(--ou-error-on-soft));
+      color: var(--ou-error-on-soft);
     }
     .wf-dialog-title {
       font: var(--ou-text-heading-s);
@@ -89,7 +90,7 @@
     }
     /* Error anchor link inside banner */
     .wf-error-link {
-      color: var(--ou-error-fg); font-weight: 600;
+      color: var(--ou-error-on-soft); font-weight: 600;
     }
     /* SVG sprite — visually hidden but accessible to use-refs */
     .wf-sprite { display: none; }
@@ -276,7 +277,7 @@
             <tr><th>Элемент</th><th>Условие / API</th><th>Примечание</th></tr>
           </thead>
           <tbody>
-            <tr><td>Иконка Warning</td><td>Изменения есть, блокирующих ошибок нет</td><td><code>--ou-warning-fg</code></td></tr>
+            <tr><td>Иконка Warning</td><td>Изменения есть, блокирующих ошибок нет</td><td><code>--ou-warning-on-soft</code></td></tr>
             <tr><td>Чипы разделов</td><td>Перечень разделов с несохранёнными данными</td><td><code>Tag neutral</code></td></tr>
             <tr><td>«Сохранить»</td><td>Enabled; <code>PUT /api/tests/:id</code>, затем закрыть Drawer</td><td>FR-05</td></tr>
             <tr><td>«Выйти без сохранения»</td><td>Сбрасывает черновик, закрывает Drawer</td><td>FR-05</td></tr>
@@ -340,7 +341,7 @@
             <tr><th>Элемент</th><th>Условие / API</th><th>Примечание</th></tr>
           </thead>
           <tbody>
-            <tr><td>Иконка Error</td><td>Изменения есть + есть блокирующие ошибки</td><td><code>--ou-error-fg</code></td></tr>
+            <tr><td>Иконка Error</td><td>Изменения есть + есть блокирующие ошибки</td><td><code>--ou-error-on-soft</code></td></tr>
             <tr><td>Banner ошибки</td><td>Кол-во из состояния валидации; ссылка — скролл к первой ошибке</td><td>FR-05a</td></tr>
             <tr><td>«Сохранить» disabled</td><td><code>aria-disabled="true"</code>; <code>title</code> — причина</td><td>FR-05a</td></tr>
             <tr><td>«Выйти без сохранения»</td><td>Enabled даже при ошибках — пользователь теряет изменения</td><td>FR-05b</td></tr>
@@ -366,10 +367,10 @@
         <tbody>
           <tr><td>Overlay подложка</td><td><code>Modal</code> (overlay)</td><td><code>--ou-neutral-950</code> (color-mix 55%)</td><td>z-index 50</td></tr>
           <tr><td>Диалоговый контейнер</td><td><code>Modal size="m"</code></td><td><code>--ou-bg-elevated</code>, <code>--ou-radius-l</code></td><td>var(--wf-size-480), max 96vw</td></tr>
-          <tr><td>Иконка Warning</td><td>Lucide <code>triangle-alert</code></td><td><code>--ou-warning-bg</code>, <code>--ou-warning-fg</code>, <code>--ou-warning-border</code></td><td></td></tr>
-          <tr><td>Иконка Error</td><td>Lucide <code>x-circle</code></td><td><code>--ou-error-bg</code>, <code>--ou-error-fg</code>, <code>--ou-error-border</code></td><td></td></tr>
+          <tr><td>Иконка Warning</td><td>Lucide <code>triangle-alert</code></td><td><code>--ou-warning-soft</code>, <code>--ou-warning-on-soft</code>, <code>--ou-warning-default</code></td><td></td></tr>
+          <tr><td>Иконка Error</td><td>Lucide <code>x-circle</code></td><td><code>--ou-error-soft</code>, <code>--ou-error-on-soft</code>, <code>--ou-border-error</code></td><td></td></tr>
           <tr><td>Чипы разделов</td><td><code>Tag variant="neutral"</code></td><td><code>--ou-bg-hover</code>, <code>--ou-fg-muted</code></td><td></td></tr>
-          <tr><td>Banner ошибок</td><td><code>Banner variant="error"</code></td><td><code>--ou-error-bg</code>, <code>--ou-error-fg</code></td><td>FR-05a</td></tr>
+          <tr><td>Banner ошибок</td><td><code>Banner variant="error"</code></td><td><code>--ou-error-soft</code>, <code>--ou-error-on-soft</code></td><td>FR-05a</td></tr>
           <tr><td>«Сохранить»</td><td><code>Button variant="primary"</code></td><td><code>--ou-accent-default</code></td><td>disabled при ошибках</td></tr>
           <tr><td>«Выйти без сохранения»</td><td><code>Button variant="secondary"</code></td><td><code>--ou-border-default</code></td><td>всегда enabled</td></tr>
           <tr><td>«Отмена»</td><td><code>Button variant="ghost"</code></td><td><code>--ou-fg-muted</code></td><td></td></tr>
@@ -536,13 +537,13 @@
     if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
     if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
     if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
-    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-soft', '--ou-error-soft'], 'Черновик, Опубликован, Изменено, Встроенный.');
     if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
     if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
     if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
     if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
     if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
-    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-soft', '--ou-error-soft', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
     if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
     if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
     if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');

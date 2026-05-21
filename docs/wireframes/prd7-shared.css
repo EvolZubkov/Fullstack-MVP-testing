@@ -152,6 +152,10 @@ body {
   margin-bottom: var(--ou-space-3); margin-top: var(--ou-space-1);
 }
 
+/* Page title inside ou-shell__header: flex: 1 keeps it growing so ou-shell__user
+   stays at the far right regardless of whether ou-shell__actions is present. */
+.page-title { flex: 1; min-width: 0; }
+
 /* Separator (no DS equivalent yet — WIREFRAME-ONLY glue) */
 .sep { border: none; border-top: var(--wf-border-w) solid var(--ou-border-default); margin: var(--ou-space-6) 0; }
 

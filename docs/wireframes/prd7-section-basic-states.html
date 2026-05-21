@@ -13,6 +13,7 @@
   <title>prd7 — Basic Section States</title>
   <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
   <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
   <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
   <style>
     /* Wireframe-specific helpers — not part of product UI */
@@ -54,7 +55,7 @@
       font: var(--ou-text-body-s); color: var(--ou-fg-muted);
     }
     .wf-sidebar-nav-item--active {
-      background: var(--ou-bg-muted);
+      background: var(--ou-accent-soft);
       color: var(--ou-fg-default); font-weight: 600;
     }
     .wf-sidebar-footer { padding: var(--ou-space-3) var(--ou-space-4); border-top: var(--wf-border-w) solid var(--ou-border-soft); }
@@ -146,19 +147,19 @@
       background: var(--ou-bg-elevated);
       overflow: hidden; margin-bottom: var(--ou-space-4);
     }
-    .wf-section-card--error { border-color: var(--ou-error-fg); }
+    .wf-section-card--error { border-color: var(--ou-error-on-soft); }
     .wf-section-card-header {
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
       border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
-      background: var(--ou-bg-canvas);
+      background: var(--ou-bg-muted);
     }
     .wf-section-card-header--error {
-      background: var(--ou-error-bg);
-      border-bottom-color: var(--ou-error-border);
+      background: var(--ou-error-soft);
+      border-bottom-color: var(--ou-border-error);
     }
     .wf-section-card-header--required {
-      background: color-mix(in srgb, var(--ou-accent-default) 6%, var(--ou-bg-canvas));
+      background: color-mix(in srgb, var(--ou-accent-default) 6%, var(--ou-bg-muted));
       border-bottom-color: var(--ou-accent-default);
     }
     .wf-section-card-title { font: var(--ou-text-body-s); font-weight: 600; flex: 1; }
@@ -168,18 +169,18 @@
     .wf-error-banner {
       display: flex; align-items: flex-start; gap: var(--ou-space-3);
       padding: var(--ou-space-3) var(--ou-space-4);
-      background: var(--ou-error-bg);
-      border: var(--wf-border-w) solid var(--ou-error-border);
+      background: var(--ou-error-soft);
+      border: var(--wf-border-w) solid var(--ou-border-error);
       border-radius: var(--ou-radius-m);
       margin-bottom: var(--ou-space-4);
     }
-    .wf-error-banner svg { flex-shrink: 0; margin-top: var(--wf-border-w); color: var(--ou-error-fg); }
+    .wf-error-banner svg { flex-shrink: 0; margin-top: var(--wf-border-w); color: var(--ou-error-on-soft); }
     .wf-error-banner-title { font: var(--ou-text-body-s); font-weight: 600; margin-bottom: var(--ou-space-1); }
-    .wf-error-banner-desc { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    .wf-error-banner-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
 
     /* ── Inline validation error ──────────────────────────────────────────── */
     .wf-field-error {
-      font: var(--ou-text-caption); color: var(--ou-error-fg);
+      font: var(--ou-text-caption); color: var(--ou-error-on-soft);
       display: flex; align-items: center; gap: var(--ou-space-1);
       margin-top: var(--ou-space-1);
     }
@@ -193,7 +194,7 @@
     .wf-empty-icon {
       width: var(--ou-space-9); height: var(--ou-space-9); border-radius: var(--ou-radius-m);
       border: var(--wf-border-w) solid var(--ou-border-soft);
-      background: var(--ou-bg-canvas);
+      background: var(--ou-bg-muted);
       display: flex; align-items: center; justify-content: center;
       color: var(--ou-fg-muted); margin-bottom: var(--ou-space-3);
     }
@@ -207,9 +208,9 @@
     /* ── Field group ──────────────────────────────────────────────────────── */
     .wf-field-group { margin-bottom: var(--ou-space-3); }
     .wf-field-label { font: var(--ou-text-body-s); font-weight: 500; margin-bottom: var(--ou-space-1); }
-    .wf-field-required { color: var(--ou-error-fg); margin-left: var(--wf-space-half); }
+    .wf-field-required { color: var(--ou-error-on-soft); margin-left: var(--wf-space-half); }
     .wf-input-error {
-      border-color: var(--ou-error-fg) !important;
+      border-color: var(--ou-error-on-soft) !important;
     }
 
     /* ── Retry link button ────────────────────────────────────────────────── */
@@ -223,7 +224,7 @@
     .wf-retry-btn svg { width: var(--ou-space-3); height: var(--ou-space-3); }
 
     /* ── Section card title modifiers ────────────────────────────────────── */
-    .wf-section-card-title--error  { color: var(--ou-error-fg); }
+    .wf-section-card-title--error  { color: var(--ou-error-on-soft); }
     .wf-section-card-title--accent { color: var(--ou-accent-default); }
 
     /* ── Section card body flush (no padding) ─────────────────────────────── */
@@ -234,7 +235,7 @@
       display: flex; align-items: center; gap: var(--ou-space-2);
       font: var(--ou-text-body-s); color: var(--ou-fg-muted);
     }
-    .wf-icon-error { color: var(--ou-error-fg); flex-shrink: 0; }
+    .wf-icon-error { color: var(--ou-error-on-soft); flex-shrink: 0; }
 
     /* ── Retry btn inline variant (no top margin) ─────────────────────────── */
     .wf-retry-btn--inline { margin-top: 0; }
@@ -538,7 +539,7 @@
         <div class="wf-section-card">
           <div class="wf-section-card-header">
             <div class="wf-section-card-title">Основные настройки</div>
-            <span class="ou-tag ou-tag--success" style="font-size:var(--wf-space-11);">Сохранено</span>
+            <span class="ou-tag ou-tag--success" style="font: var(--ou-text-caption);">Сохранено</span>
           </div>
           <div class="wf-section-card-body">
             <div class="wf-field-group">
@@ -915,13 +916,13 @@ function toggleDensity() {
     if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
     if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
     if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
-    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-soft', '--ou-error-soft'], 'Черновик, Опубликован, Изменено, Встроенный.');
     if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
     if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
     if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
     if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
     if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
-    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-soft', '--ou-error-soft', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
     if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
     if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
     if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');

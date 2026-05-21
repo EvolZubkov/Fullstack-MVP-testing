@@ -13,6 +13,7 @@
   <title>prd7 — Предупреждения при смене режима</title>
   <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
   <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
   <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
   <style>
     /* Wireframe-specific helpers — not part of product UI */
@@ -77,7 +78,7 @@
       display: flex; align-items: center; justify-content: center;
       background: transparent; border: none; cursor: pointer;
       border-radius: var(--ou-radius-s); color: var(--ou-fg-muted);
-      font-size: var(--wf-size-18); line-height: 1;
+      font: var(--ou-text-heading-s); line-height: 1;
     }
     .wf-drawer-close:hover { background: var(--ou-bg-hover); }
 
@@ -102,7 +103,7 @@
     .wf-status-dot {
       width: var(--wf-space-6); height: var(--wf-space-6); border-radius: 50%; display: inline-block; flex-shrink: 0;
     }
-    .wf-status-dot--warn  { background: var(--ou-warning-fg); }
+    .wf-status-dot--warn  { background: var(--ou-warning-on-soft); }
     .wf-status-dot--dirty { background: var(--ou-accent-default); }
 
     /* Content area */
@@ -116,7 +117,7 @@
       overflow: hidden;
       margin-bottom: var(--ou-space-4);
     }
-    .wf-section-card--warn { border-color: var(--ou-warning-border, var(--ou-warning-fg)); }
+    .wf-section-card--warn { border-color: var(--ou-warning-default, var(--ou-warning-on-soft)); }
     .wf-section-card--disabled { opacity: 0.5; pointer-events: none; }
     .wf-section-card-header {
       display: flex; align-items: center; gap: var(--ou-space-2);
@@ -125,8 +126,8 @@
       background: var(--ou-bg-hover);
     }
     .wf-section-card-header--warn {
-      background: var(--ou-warning-bg);
-      border-bottom-color: var(--ou-warning-border, var(--ou-warning-fg));
+      background: var(--ou-warning-soft);
+      border-bottom-color: var(--ou-warning-default, var(--ou-warning-on-soft));
     }
     .wf-section-card-title { font: var(--ou-text-body-s); font-weight: 600; flex: 1; }
     .wf-section-card-body { padding: var(--ou-space-4); }
@@ -158,15 +159,15 @@
     .wf-mode-warn {
       display: flex; align-items: flex-start; gap: var(--ou-space-3);
       padding: var(--ou-space-3) var(--ou-space-4);
-      background: var(--ou-warning-bg);
-      border: var(--wf-border-w) solid var(--ou-warning-border, var(--ou-warning-fg));
+      background: var(--ou-warning-soft);
+      border: var(--wf-border-w) solid var(--ou-warning-default, var(--ou-warning-on-soft));
       border-radius: var(--ou-radius-s);
       margin-top: var(--ou-space-3);
     }
-    .wf-mode-warn-icon { flex-shrink: 0; color: var(--ou-warning-fg); margin-top: var(--wf-space-half); }
+    .wf-mode-warn-icon { flex-shrink: 0; color: var(--ou-warning-on-soft); margin-top: var(--wf-space-half); }
     .wf-mode-warn-title {
       font: var(--ou-text-body-s); font-weight: 600;
-      color: var(--ou-warning-fg); margin: 0 0 var(--ou-space-1);
+      color: var(--ou-warning-on-soft); margin: 0 0 var(--ou-space-1);
     }
     .wf-mode-warn-body {
       font: var(--ou-text-body-s); color: var(--ou-fg-default);
@@ -176,7 +177,7 @@
     /* Data preservation note */
     .wf-data-note {
       display: flex; align-items: center; gap: var(--ou-space-2);
-      font: var(--ou-text-caption); color: var(--ou-success-fg);
+      font: var(--ou-text-body-s); color: var(--ou-success-fg);
       margin-top: var(--ou-space-2);
     }
 
@@ -218,7 +219,7 @@
     }
     .wf-footer-hint { font: var(--ou-text-body-s); flex: 1; display: flex; align-items: center; gap: var(--ou-space-1); }
     .wf-footer-hint--muted  { color: var(--ou-fg-muted); }
-    .wf-footer-hint--warn   { color: var(--ou-warning-fg); }
+    .wf-footer-hint--warn   { color: var(--ou-warning-on-soft); }
     .wf-footer-hint--accent { color: var(--ou-accent-default); }
     .wf-footer-icon { vertical-align: -var(--wf-border-w); }
 
@@ -366,7 +367,7 @@
           <div class="wf-section-card wf-section-card--warn">
             <div class="wf-section-card-header wf-section-card-header--warn">
               <span class="wf-section-card-title">Режим и сценарий</span>
-              <svg width="14" height="14" aria-hidden="true" color="var(--ou-warning-fg)"><use href="#i-warn"/></svg>
+              <svg width="14" height="14" aria-hidden="true" color="var(--ou-warning-on-soft)"><use href="#i-warn"/></svg>
               <span class="ou-tag ou-tag--warning">Предупреждение</span>
             </div>
             <div class="wf-section-card-body">
@@ -454,7 +455,7 @@
           <div class="wf-section-card wf-section-card--warn">
             <div class="wf-section-card-header wf-section-card-header--warn">
               <span class="wf-section-card-title">Режим потока (Flow Mode)</span>
-              <svg width="14" height="14" aria-hidden="true" color="var(--ou-warning-fg)"><use href="#i-warn"/></svg>
+              <svg width="14" height="14" aria-hidden="true" color="var(--ou-warning-on-soft)"><use href="#i-warn"/></svg>
               <span class="ou-tag ou-tag--warning">Предупреждение</span>
             </div>
             <div class="wf-section-card-body">
@@ -582,11 +583,11 @@
         </thead>
         <tbody>
           <tr><td>Вкладки Drawer</td><td><code>Tabs</code> / <code>TabList</code></td><td><code>--ou-accent-default</code>, <code>--ou-border-soft</code></td><td></td></tr>
-          <tr><td>Точка-статус на вкладке</td><td>custom indicator</td><td><code>--ou-warning-fg</code>, <code>--ou-accent-default</code></td><td>FR-25b</td></tr>
+          <tr><td>Точка-статус на вкладке</td><td>custom indicator</td><td><code>--ou-warning-on-soft</code>, <code>--ou-accent-default</code></td><td>FR-25b</td></tr>
           <tr><td>Сegmented control режима</td><td><code>SegmentedControl</code></td><td><code>--ou-accent-default</code>, <code>--ou-border-default</code></td><td></td></tr>
-          <tr><td>Inline warn-блок</td><td><code>Banner variant="warning"</code></td><td><code>--ou-warning-bg</code>, <code>--ou-warning-fg</code></td><td><code>role="status"</code> FR-25d</td></tr>
+          <tr><td>Inline warn-блок</td><td><code>Banner variant="warning"</code></td><td><code>--ou-warning-soft</code>, <code>--ou-warning-on-soft</code></td><td><code>role="status"</code> FR-25d</td></tr>
           <tr><td>Пометка сохранения данных</td><td>custom caption</td><td><code>--ou-success-fg</code></td><td>checkmark icon</td></tr>
-          <tr><td>Бейдж «Предупреждение»</td><td><code>Tag variant="warning"</code></td><td><code>--ou-warning-bg</code>, <code>--ou-warning-fg</code></td><td></td></tr>
+          <tr><td>Бейдж «Предупреждение»</td><td><code>Tag variant="warning"</code></td><td><code>--ou-warning-soft</code>, <code>--ou-warning-on-soft</code></td><td></td></tr>
           <tr><td>Flow select</td><td><code>Select</code></td><td><code>--ou-border-default</code></td><td></td></tr>
           <tr><td>Info banner (s-after)</td><td><code>Banner</code></td><td><code>--ou-bg-hover</code>, <code>--ou-border-default</code></td><td><code>role="status"</code></td></tr>
           <tr><td>Readonly поле режима</td><td>display-only input</td><td><code>--ou-bg-hover</code>, <code>--ou-fg-muted</code></td><td></td></tr>
@@ -782,13 +783,13 @@
     if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
     if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
     if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
-    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-soft', '--ou-error-soft'], 'Черновик, Опубликован, Изменено, Встроенный.');
     if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
     if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
     if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
     if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
     if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
-    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-soft', '--ou-error-soft', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
     if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
     if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
     if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');

@@ -13,6 +13,7 @@
   <title>prd7 — Status Indicators</title>
   <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
   <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
   <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
   <style>
     /* Wireframe-specific helpers — not part of product UI */
@@ -58,7 +59,7 @@
     }
     .wf-showcase-note code {
       font-family: monospace;
-      background: var(--ou-bg-canvas);
+      background: var(--ou-bg-muted);
       padding: 0 var(--ou-space-1);
       border-radius: var(--ou-radius-s);
       border: var(--wf-border-w) solid var(--ou-border-soft);
@@ -73,8 +74,8 @@
       flex-shrink: 0;
     }
     .wf-status-dot--dirty { background: var(--ou-accent-default); }
-    .wf-status-dot--warn  { background: var(--ou-warning-fg); }
-    .wf-status-dot--error { background: var(--ou-error-fg); }
+    .wf-status-dot--warn  { background: var(--ou-warning-on-soft); }
+    .wf-status-dot--error { background: var(--ou-error-on-soft); }
 
     /* ── Status icon wrapper (var(--wf-space-14) inline SVG) ────────────────────────────── */
     .wf-si {
@@ -83,8 +84,8 @@
       flex-shrink: 0;
     }
     .wf-si svg { width: var(--wf-space-14); height: var(--wf-space-14); }
-    .wf-si--warn { color: var(--ou-warning-fg); }
-    .wf-si--error { color: var(--ou-error-fg); }
+    .wf-si--warn { color: var(--ou-warning-on-soft); }
+    .wf-si--error { color: var(--ou-error-on-soft); }
 
     /* ── Tab strip demo ───────────────────────────────────────────────────── */
     .wf-tab-strip-wrap {
@@ -136,7 +137,7 @@
       gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
       border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
-      background: var(--ou-bg-canvas);
+      background: var(--ou-bg-muted);
     }
     .wf-sc-title {
       font: var(--ou-text-body-s);
@@ -148,22 +149,22 @@
     /* dirty (accent/blue) */
     .wf-sc--dirty { border-color: var(--ou-accent-default); }
     .wf-sc--dirty .wf-sc-header {
-      background: var(--ou-accent-bg, var(--ou-bg-canvas));
+      background: var(--ou-accent-bg, var(--ou-bg-muted));
       border-bottom-color: var(--ou-accent-default);
     }
 
     /* warning (yellow) */
-    .wf-sc--warn { border-color: var(--ou-warning-border); }
+    .wf-sc--warn { border-color: var(--ou-warning-default); }
     .wf-sc--warn .wf-sc-header {
-      background: var(--ou-warning-bg);
-      border-bottom-color: var(--ou-warning-border);
+      background: var(--ou-warning-soft);
+      border-bottom-color: var(--ou-warning-default);
     }
 
     /* error (red) */
-    .wf-sc--error { border-color: var(--ou-error-border); }
+    .wf-sc--error { border-color: var(--ou-border-error); }
     .wf-sc--error .wf-sc-header {
-      background: var(--ou-error-bg);
-      border-bottom-color: var(--ou-error-border);
+      background: var(--ou-error-soft);
+      border-bottom-color: var(--ou-border-error);
     }
 
     /* ── Field and input demos ────────────────────────────────────────────── */
@@ -173,17 +174,17 @@
       font-weight: 500;
       margin-bottom: var(--ou-space-1);
     }
-    .wf-field-required { color: var(--ou-error-fg); }
+    .wf-field-required { color: var(--ou-error-on-soft); }
     .wf-inline-error svg { width: var(--ou-space-3); height: var(--ou-space-3); flex-shrink: 0; }
     .wf-inline-warn {
       display: flex;
       align-items: flex-start;
       gap: var(--ou-space-2);
       margin-top: var(--ou-space-2);
-      font: var(--ou-text-caption);
-      color: var(--ou-warning-fg);
-      background: var(--ou-warning-bg);
-      border: var(--wf-border-w) solid var(--ou-warning-border);
+      font: var(--ou-text-body-s);
+      color: var(--ou-warning-on-soft);
+      background: var(--ou-warning-soft);
+      border: var(--wf-border-w) solid var(--ou-warning-default);
       border-radius: var(--ou-radius-s);
       padding: var(--ou-space-2) var(--ou-space-2);
     }
@@ -212,8 +213,8 @@
     }
     .wf-legend-dot--clean { background: var(--ou-fg-muted); }
     .wf-legend-dot--dirty { background: var(--ou-accent-default); }
-    .wf-legend-dot--warn  { background: var(--ou-warning-fg); }
-    .wf-legend-dot--error { background: var(--ou-error-fg); }
+    .wf-legend-dot--warn  { background: var(--ou-warning-on-soft); }
+    .wf-legend-dot--error { background: var(--ou-error-on-soft); }
     .wf-legend-dot--saved { background: var(--ou-success-fg); }
     .wf-legend-text {
       font: var(--ou-text-body-s);
@@ -726,13 +727,13 @@ function toggleDensity() {
     if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
     if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
     if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
-    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-soft', '--ou-error-soft'], 'Черновик, Опубликован, Изменено, Встроенный.');
     if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
     if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
     if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
     if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
     if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
-    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-soft', '--ou-error-soft', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
     if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
     if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
     if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');

@@ -13,7 +13,9 @@
   <title>prd7 — Adaptivity Settings</title>
   <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
   <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
   <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
   <style>
     /* Wireframe-specific helpers — not part of product UI */
     .wf-sprite { display: none; }
@@ -54,7 +56,7 @@
       font: var(--ou-text-body-s); color: var(--ou-fg-muted);
     }
     .wf-sidebar-nav-item--active {
-      background: var(--ou-bg-muted);
+      background: var(--ou-accent-soft);
       color: var(--ou-fg-default); font-weight: 600;
     }
     .wf-sidebar-footer { padding: var(--ou-space-3) var(--ou-space-4); border-top: var(--wf-border-w) solid var(--ou-border-soft); }
@@ -128,13 +130,13 @@
     .wf-nav-section-item--active {
       border-left-color: var(--ou-accent-default);
       color: var(--ou-accent-default);
-      background: var(--ou-bg-canvas);
+      background: var(--ou-accent-soft);
       font-weight: 500;
     }
     .wf-nav-section-item:hover:not(.wf-nav-section-item--active) {
-      background: var(--ou-bg-canvas);
+      background: var(--ou-accent-soft);
     }
-    .wf-settings-content {
+    .tb-settings-content {
       flex: 1; overflow-y: auto;
       padding: var(--ou-space-5);
     }
@@ -149,13 +151,13 @@
     .wf-footer-hint {
       font: var(--ou-text-caption); color: var(--ou-fg-muted); flex: 1;
     }
-    .wf-footer-hint--error { color: var(--ou-error-fg); }
+    .wf-footer-hint--error { color: var(--ou-error-on-soft); }
 
     /* ── Mode chip (read-only context indicator) ──────────────────────────── */
     .wf-mode-chip {
       display: inline-flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-1) var(--ou-space-3);
-      background: var(--ou-bg-canvas);
+      background: var(--ou-bg-muted);
       border: var(--wf-border-w) solid var(--ou-border-soft);
       border-radius: var(--ou-radius-m);
       font: var(--ou-text-body-s);
@@ -179,7 +181,7 @@
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-4);
       border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
-      background: var(--ou-bg-canvas);
+      background: var(--ou-bg-muted);
     }
     .wf-section-card-title {
       font: var(--ou-text-body-s); font-weight: 600; flex: 1;
@@ -188,7 +190,7 @@
     .wf-section-card-body--flush { padding: 0; }
 
     /* ── Toggle switch ────────────────────────────────────────────────────── */
-    .wf-toggle-row { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-3); }
+    .tb-toggle-row { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-3); }
     .wf-toggle {
       position: relative; width: var(--wf-size-36); height: var(--ou-space-5);
       border-radius: var(--wf-space-10); background: var(--ou-accent-default);
@@ -209,7 +211,7 @@
     .wf-field-group { margin-bottom: var(--ou-space-3); }
     .wf-field-label { font: var(--ou-text-body-s); font-weight: 500; margin-bottom: var(--ou-space-1); }
     .wf-field-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-2); }
-    .wf-note-text { font: var(--ou-text-caption); color: var(--ou-fg-muted); font-style: italic; margin-top: var(--ou-space-1); }
+    .wf-note-text { font: var(--ou-text-body-s); color: var(--ou-fg-muted); font-style: italic; margin-top: var(--ou-space-1); }
 
     /* ── JSON textarea ────────────────────────────────────────────────────── */
 
@@ -222,14 +224,14 @@
       border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .wf-topics-table tbody tr { border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
-    .wf-topics-table tbody tr:hover { background: var(--ou-bg-canvas); }
+    .wf-topics-table tbody tr:hover { background: var(--ou-accent-soft); }
     .wf-topics-table tbody td { padding: var(--ou-space-2); font: var(--ou-text-body-s); vertical-align: middle; }
     .wf-col-enabled    { width: var(--ou-space-11); }
     .wf-col-failure-fb { width: var(--wf-size-240); }
     .wf-col-t-actions  { width: var(--wf-size-100); }
     .wf-topic-name-cell { font-weight: 500; }
     .wf-topic-sub-cell { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-border-w); }
-    .wf-topic-sub-cell--error { color: var(--ou-error-fg); }
+    .wf-topic-sub-cell--error { color: var(--ou-error-on-soft); }
 
 
     /* ── Levels panel ─────────────────────────────────────────────────────── */
@@ -238,19 +240,19 @@
       border-radius: var(--ou-radius-m); overflow: hidden;
       margin-bottom: var(--ou-space-4); background: var(--ou-bg-elevated);
     }
-    .wf-levels-panel--error { border-color: var(--ou-error-fg); }
+    .wf-levels-panel--error { border-color: var(--ou-error-on-soft); }
     .wf-levels-panel-header {
       display: flex; align-items: center; gap: var(--ou-space-2);
       padding: var(--ou-space-2) var(--ou-space-3);
-      background: var(--ou-bg-canvas);
+      background: var(--ou-bg-muted);
       border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
     }
     .wf-levels-panel-header--error {
-      background: var(--ou-error-bg);
-      border-bottom-color: var(--ou-error-border);
+      background: var(--ou-error-soft);
+      border-bottom-color: var(--ou-border-error);
     }
     .wf-levels-panel-title { font: var(--ou-text-body-s); font-weight: 600; flex: 1; }
-    .wf-levels-panel-title--error { color: var(--ou-error-fg); }
+    .wf-levels-panel-title--error { color: var(--ou-error-on-soft); }
     .wf-levels-table-wrap { overflow-x: auto; }
     .wf-levels-table {
       border-collapse: collapse;
@@ -265,9 +267,9 @@
       white-space: nowrap;
     }
     .wf-levels-table tbody tr { border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
-    .wf-levels-table tbody tr:hover { background: var(--ou-bg-canvas); }
+    .wf-levels-table tbody tr:hover { background: var(--ou-accent-soft); }
     .wf-levels-table tbody td { padding: var(--ou-space-1) var(--ou-space-2); vertical-align: middle; }
-    .wf-tr--error { background: var(--ou-error-bg); }
+    .wf-tr--error { background: var(--ou-error-soft); }
     .wf-cell-center { text-align: center; }
     .wf-levels-panel-footer {
       padding: var(--ou-space-2) var(--ou-space-3);
@@ -275,10 +277,10 @@
     }
     .wf-levels-panel-error-msg {
       padding: var(--ou-space-2) var(--ou-space-3);
-      background: var(--ou-error-bg);
-      border-top: var(--wf-border-w) solid var(--ou-error-border);
+      background: var(--ou-error-soft);
+      border-top: var(--wf-border-w) solid var(--ou-border-error);
     }
-    .wf-error-msg-text { font: var(--ou-text-caption); color: var(--ou-error-fg); }
+    .wf-error-msg-text { font: var(--ou-text-caption); color: var(--ou-error-on-soft); }
 
     /* Levels table column widths */
     .wf-col-order     { width: var(--ou-space-9); }
@@ -310,7 +312,7 @@
       cursor: pointer; color: var(--ou-fg-muted);
     }
     .wf-icon-btn:hover { border-color: var(--ou-accent-default); color: var(--ou-accent-default); }
-    .wf-icon-btn--danger:hover { border-color: var(--ou-error-fg); color: var(--ou-error-fg); }
+    .wf-icon-btn--danger:hover { border-color: var(--ou-error-on-soft); color: var(--ou-error-on-soft); }
     .wf-icon-btn svg { width: var(--ou-space-3); height: var(--ou-space-3); }
     .wf-action-row { display: flex; gap: var(--ou-space-1); align-items: center; }
 
@@ -364,7 +366,7 @@
       display: inline-block; width: var(--wf-space-7); height: var(--wf-space-7);
       border-radius: 50%; flex-shrink: 0;
     }
-    .wf-status-dot--error { background: var(--ou-error-fg); }
+    .wf-status-dot--error { background: var(--ou-error-on-soft); }
     .wf-ml-auto { margin-left: auto; }
 
     /* ── Local button and banner extensions ───────────────────────────────── */
@@ -374,13 +376,13 @@
     }
     .ou-button--ghost:hover { background: var(--ou-bg-muted); }
     .ou-button--sm { font: var(--ou-text-caption); padding: var(--ou-space-1) var(--ou-space-3); }
-    .ou-button--outline-error { color: var(--ou-error-fg); border-color: var(--ou-error-fg); }
+    .ou-button--outline-error { color: var(--ou-error-on-soft); border-color: var(--ou-error-on-soft); }
     .wf-btn-icon { width: var(--ou-space-3); height: var(--ou-space-3); flex-shrink: 0; }
 
     .ou-banner--error {
       display: flex; align-items: flex-start; gap: var(--ou-space-2);
-      background: var(--ou-error-bg); border: var(--wf-border-w) solid var(--ou-error-border);
-      color: var(--ou-error-fg); border-radius: var(--ou-radius-m);
+      background: var(--ou-error-soft); border: var(--wf-border-w) solid var(--ou-border-error);
+      color: var(--ou-error-on-soft); border-radius: var(--ou-radius-m);
       padding: var(--ou-space-3) var(--ou-space-4);
       margin-bottom: var(--ou-space-4); font: var(--ou-text-body-s);
     }
@@ -534,7 +536,7 @@
           <button type="button" class="wf-nav-section-item wf-nav-section-item--active" aria-current="page">Адаптивность</button>
         </nav>
 
-        <div class="wf-settings-content">
+        <div class="tb-settings-content">
 
           <!-- Read-only mode chip (§3.8) -->
           <div class="wf-mode-chip" role="note" aria-label="Текущий режим теста: Адаптивный">
@@ -549,7 +551,7 @@
               <span class="wf-section-card-title">Отображение сложности</span>
             </div>
             <div class="wf-section-card-body">
-              <div class="wf-toggle-row">
+              <div class="tb-toggle-row">
                 <button type="button" class="wf-toggle" role="switch" aria-checked="true"
                         aria-label="Показывать уровень сложности обучающемуся">
                   <div class="wf-toggle-knob"></div>
@@ -822,7 +824,7 @@
           <!-- "Адаптивность" is NOT shown when tests.mode = standard -->
         </nav>
 
-        <div class="wf-settings-content">
+        <div class="tb-settings-content">
           <div class="wf-no-mode-placeholder" role="note">
             <svg class="wf-no-mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
               <path d="m9 18 6-6-6-6"/>
@@ -890,7 +892,7 @@
           </button>
         </nav>
 
-        <div class="wf-settings-content">
+        <div class="tb-settings-content">
 
           <!-- Error summary banner (NFR-21: role=alert) -->
           <div class="ou-banner--error" role="alert" aria-live="assertive">
@@ -914,7 +916,7 @@
               <span class="wf-section-card-title">Отображение сложности</span>
             </div>
             <div class="wf-section-card-body">
-              <div class="wf-toggle-row">
+              <div class="tb-toggle-row">
                 <button type="button" class="wf-toggle" role="switch" aria-checked="true"
                         aria-label="Показывать уровень сложности обучающемуся">
                   <div class="wf-toggle-knob"></div>
@@ -1296,13 +1298,13 @@ function toggleDensity() {
     if (hasIn(state, '.btn-primary, .ou-button--primary')) addMappingRow(rows, 'button-primary', 'Primary action', '<code>Button</code> <code>variant="primary"</code>', ['--ou-accent-default', '--ou-accent-hover', '--ou-fg-on-accent'], 'Например «Сохранить».');
     if (hasIn(state, '.btn-ghost, .btn-outline, .ou-button--secondary, .ou-button--ghost')) addMappingRow(rows, 'button-secondary', 'Secondary / ghost action', '<code>Button</code> <code>variant="secondary|ghost"</code>', ['--ou-border-default', '--ou-bg-hover', '--ou-fg-default'], 'Отмена, показать изменения, вторичные действия.');
     if (hasIn(state, '.btn-danger')) addMappingRow(rows, 'button-danger', 'Destructive action', '<code>Button</code> <code>variant="destructive"</code>', ['--ou-error-default', '--ou-error-hover', '--ou-fg-on-accent'], 'Подтверждение удаления или сброса.');
-    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-bg', '--ou-error-bg'], 'Черновик, Опубликован, Изменено, Встроенный.');
+    if (hasIn(state, '.badge, .ou-tag')) addMappingRow(rows, 'badge', 'Статус / бейдж', '<code>Badge</code> / <code>Tag</code>', ['--ou-bg-hover', '--ou-success-bg', '--ou-warning-soft', '--ou-error-soft'], 'Черновик, Опубликован, Изменено, Встроенный.');
     if (hasIn(state, '.status-dot')) addMappingRow(rows, 'status-dot', 'Индикатор состояния вкладки', '<code>StatusIndicator</code>', ['--ou-success-default', '--ou-warning-default', '--ou-error-default'], 'Dirty / warning / error рядом с tab label.');
     if (hasIn(state, 'input, textarea, select, .draw-count-input')) addMappingRow(rows, 'form-controls', 'Поля формы', '<code>Input</code>, <code>Textarea</code>, <code>Select</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-border-focus', '--ou-shadow-focus'], 'Настройки количества вопросов, текстовые поля, select-поля.');
     if (hasIn(state, '.topic-row, .section-card, .card, .test-card-stub')) addMappingRow(rows, 'cards', 'Карточки / строки сущностей', '<code>Card</code> / <code>ListItem</code>', ['--ou-bg-surface-2', '--ou-border-soft', '--ou-radius-m', '--ou-space-4'], 'Темы, вопросы, тесты и повторяемые блоки.');
     if (hasIn(state, '.feedback-preview, .feedback-text')) addMappingRow(rows, 'feedback-preview', 'Preview обратной связи', '<code>RichTextPreview</code> / <code>Button surface</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-fg-muted'], 'Кликабельный preview с метаданными ссылок и файлов.');
     if (hasIn(state, '.changed-chip, .changed-area')) addMappingRow(rows, 'changed-chip', 'Чип изменённого раздела', '<code>Tag</code> <code>variant="neutral"</code>', ['--ou-bg-hover', '--ou-border-soft', '--ou-fg-muted'], 'Footer показывает агрегированные dirty-разделы.');
-    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-bg', '--ou-error-bg', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
+    if (hasIn(state, '.banner, .drawer-banner')) addMappingRow(rows, 'banner', 'Banner состояния', '<code>Banner</code>', ['--ou-info-bg', '--ou-warning-soft', '--ou-error-soft', '--ou-border-soft'], 'Ошибки API, read-only, предупреждения.');
     if (hasIn(state, '.changes-popover, .context-menu, .color-popover')) addMappingRow(rows, 'popover', 'Popover / menu', '<code>Popover</code> / <code>DropdownMenu</code>', ['--ou-bg-elevated', '--ou-border-default', '--ou-shadow-lg', '--ou-radius-m'], 'Список изменений, контекстные меню, color picker.');
     if (hasIn(state, '.settings-accordion, details')) addMappingRow(rows, 'accordion', 'Accordion', '<code>Accordion</code>', ['--ou-border-soft', '--ou-bg-hover', '--ou-space-3'], 'Мобильная навигация настроек и раскрываемые секции.');
     if (hasIn(state, '.empty-block, .ou-empty-state')) addMappingRow(rows, 'empty-state', 'Пустое состояние', '<code>EmptyState</code>', ['--ou-border-default', '--ou-fg-muted', '--ou-space-7'], 'Первый вход или отсутствие данных.');
