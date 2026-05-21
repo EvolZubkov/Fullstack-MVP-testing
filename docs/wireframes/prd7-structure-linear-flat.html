@@ -544,15 +544,19 @@
             <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить страницу</button><div class="insert-row-line"></div></div>
           </div>
         </div>
-        <!-- Questions-row — системная страница `kind: questions` (одна на тест в linear_flat,
-             с `topicId: null`). Полная унификация с router/summary/intro: бейдж имени
-             варианта, `…` row-menu со «Сменить вариант». См. PRD-1 §4.3 + §4.3.5. -->
-        <div class="page-row page-row--system page-row--questions" data-kind="questions">
-          <svg class="page-icon" width="14" height="14"><use href="#i-question"/></svg>
-          <span class="page-variant-badge">Минимальный</span>
-          <span class="page-title">Вопросы — 13 шт. (5 «Основы ИБ» + 8 «Угрозы и атаки») единым потоком</span>
-          <div class="page-actions">
-            <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+        <!-- Зона «Внутри теста» — единая questions-row (одна на тест в linear_flat
+             с topicId: null). См. PRD-1 §4.3 + §4.3.5. -->
+        <div class="zone-block">
+          <div class="zone-header"><svg width="14" height="14"><use href="#i-chevron-down"/></svg> Внутри теста</div>
+          <div class="topic-body">
+            <div class="page-row page-row--system page-row--questions" data-kind="questions">
+              <svg class="page-icon" width="14" height="14"><use href="#i-question"/></svg>
+              <span class="page-variant-badge">Минимальный</span>
+              <span class="page-title">Вопросы — 13 шт. (5 «Основы ИБ» + 8 «Угрозы и атаки») единым потоком</span>
+              <div class="page-actions">
+                <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+              </div>
+            </div>
           </div>
         </div>
         <div class="zone-block">

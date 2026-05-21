@@ -495,7 +495,7 @@
               <div class="drag-handle"><svg width="14" height="14"><use href="#i-grip"/></svg></div>
               <span class="page-variant-badge">Введение</span>
               <span class="page-title">Вводная страница <span class="tpl-page-marker">шаблон</span></span>
-              
+
             </div>
             <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить страницу</button><div class="insert-row-line"></div></div>
           </div>
@@ -2155,6 +2155,52 @@
   installNotesButton();
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', installNotesButton);
+  }
+}());
+</script>
+
+<script>
+/**
+ * Group consecutive `.topic-block` siblings in each wireframe state into a
+ * single `.zone-block` titled «Внутри теста» — matching the dashed-contour
+ * style used for «До теста» / «После теста». Applied at runtime to keep the
+ * static markup of all 10+ topic-bearing states unchanged.
+ *
+ * The wrapper is created once per state and inserted before the first
+ * topic-block; all consecutive topic-block siblings are moved into the
+ * wrapper's `.topic-body`. The «После теста» zone-block that follows is
+ * not touched.
+ */
+(function wrapTopicsInZone() {
+  function wrapState(stateEl) {
+    if (!stateEl || stateEl.dataset.topicsWrapped === 'true') return;
+    var drawerBody = stateEl.querySelector('.ou-drawer__body');
+    if (!drawerBody) return;
+    var topics = drawerBody.querySelectorAll(':scope > .topic-block');
+    if (topics.length === 0) return;
+
+    var wrapper = document.createElement('div');
+    wrapper.className = 'zone-block zone-block--topics';
+    wrapper.innerHTML =
+      '<div class="zone-header">' +
+      '<svg width="14" height="14"><use href="#i-chevron-down"/></svg> Внутри теста' +
+      '</div>' +
+      '<div class="topic-body"></div>';
+    var body = wrapper.querySelector('.topic-body');
+
+    topics[0].parentNode.insertBefore(wrapper, topics[0]);
+    topics.forEach(function (t) { body.appendChild(t); });
+    stateEl.dataset.topicsWrapped = 'true';
+  }
+
+  function wrapAll() {
+    document.querySelectorAll('.wf-state').forEach(wrapState);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wrapAll);
+  } else {
+    wrapAll();
   }
 }());
 </script>
