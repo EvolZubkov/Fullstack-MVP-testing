@@ -65,15 +65,20 @@ Drawer-контейнер), затем точки входа пользоват�
   Подключён `tb-components.css` в head. Удалено ~43 строки dead inline CSS под
   `.topic-row*` / `.draw-count-row*` / `.feedback-*` / `.topic-section-label`.
   Линтер не получил новых violations.
-- [ ] **Остаточный inline CSS** в editor-drawer (~550 строк): `.changes-popover*`,
-  `.changes-anchor`, `.saving-overlay*`, `.settings-content`, `.changed-area`,
-  `.spin`, mobile-state CSS (`.mobile-state*`, `.mobile-canvas*`, `.mobile-tabs-nav*`,
-  `.mobile-*`, `.notes-page`, `.notes-box`, `.notes-table`), `.form-hint-small`,
-  bg-page slot CSS (`.bg-page`, `.bg-sidebar`, `.bg-logo`, `.bg-nav-item`, `.bg-main`,
-  `.bg-topbar`, `.bg-content`, `.bg-card`). Эти паттерны либо специфичны для
-  одного state (saving-overlay, settings-content), либо относятся к out-of-scope
-  mobile / эскизной декорации (bg-page slot). Решение о выносе или удалении —
-  следующая итерация
+- [x] **Остаточный inline CSS** в editor-drawer — частично подчищен
+  _(2026-05-21: `.saving-overlay*` (5 классов) → `tb-saving-overlay` + `tb-saving-host`_
+  _в `tb-components.css`; `.changes-popover*` + 14 child classes → `tb-changes-popover*`_
+  _с BEM в `tb-components.css`; `.ou-drawer__body--saving` modifier → `tb-saving-host`._
+  _Удалены dead CSS: `.changed-area`, `.form-hint-small` (не использовались в HTML)._
+  _Удалено ~70 строк inline CSS._
+  _Остались inline как **wireframe-frame** (правомерны по правилу feedback_wf_only_skeleton_frame):_
+  _`.bg-*` slot (simulated background — wireframe-каркас для demo контекста),_
+  _`.notes-page`/`.notes-box`/`.notes-table` (для s-notes — wireframe-helper),_
+  _`.spin` keyframe (инфраструктура), `.shell--column` (wireframe layout),_
+  _`.settings-content` (single layout helper для s-settings),_
+  _`.ou-drawer__head` / `.ou-drawer > .ou-tabs` / `.ou-drawer .ou-tabs--underline`_
+  _(минимальные DS-overrides), `.mobile-*` (для s-mobile — out-of-scope, остаётся_
+  _как заглушка), `.ou {}` legacy WF alias bridge.)_
 - [ ] **s-mobile state** — формально out-of-scope PRD-7 (mobile вынесен за рамки
   2026-05-21). Решение об удалении state из editor-drawer — за пользователем
   (требует согласования)

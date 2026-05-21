@@ -352,6 +352,73 @@
 .tb-feedback-preview__meta svg { width: var(--wf-space-10); height: var(--wf-space-10); flex-shrink: 0; }
 .tb-feedback-preview__sep { color: var(--ou-border-soft); }
 
+/* ── Saving overlay (наложение со спиннером поверх Drawer body) ─────────
+   Используется во время атомарного сохранения теста (PUT /api/tests/:id).
+   Host-контейнер (например, ou-drawer__body) должен получить tb-saving-host
+   modifier — он переключает positioning, чтобы overlay лёг абсолютом внутри.
+   В client/ — будущий React-компонент <SavingOverlay show={isSaving} />. */
+.tb-saving-host { position: relative; overflow: hidden; }
+.tb-saving-overlay { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; }
+.tb-saving-overlay__bd { position: absolute; inset: 0; background: var(--ou-bg-elevated); opacity: 0.88; }
+.tb-saving-overlay__inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); }
+.tb-saving-overlay__spinner { color: var(--ou-accent-default); }
+.tb-saving-overlay__text { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+
+/* ── Changes popover (список изменений в Drawer footer) ─────────────────
+   Открывается по клику на «Показать изменения» в Drawer footer; показывает
+   grouped summary по вкладкам/секциям (FR-25c1). Якорь — кнопка в footer,
+   popover позиционируется относительно anchor (bottom-up).
+   В client/ — будущий <ChangesPopover anchorEl items />. */
+.tb-changes-anchor { position: relative; display: flex; align-items: center; }
+.tb-changes-popover {
+  position: absolute; bottom: calc(100% + var(--wf-space-10)); right: 0;
+  width: var(--wf-size-400); max-height: var(--wf-size-420); overflow: hidden;
+  background: var(--ou-bg-elevated);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  box-shadow: var(--ou-shadow-lg);
+  display: flex; flex-direction: column; z-index: 70;
+}
+.tb-changes-popover__header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+  flex-shrink: 0;
+}
+.tb-changes-popover__title { font: var(--ou-text-body-s); font-weight: 600; }
+.tb-changes-popover__count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-changes-popover__body { flex: 1; overflow-y: auto; }
+.tb-changes-popover__group { padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-3); }
+.tb-changes-popover__group + .tb-changes-popover__group {
+  border-top: var(--wf-border-w) solid var(--ou-border-default);
+}
+.tb-changes-popover__group-title {
+  font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--ou-fg-muted);
+  padding: var(--ou-space-2) 0;
+}
+.tb-changes-popover__item {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ou-space-2);
+  padding: var(--ou-space-2) 0; font: var(--ou-text-body-s);
+  border-top: var(--wf-border-w) dashed var(--ou-border-default);
+}
+.tb-changes-popover__item:first-of-type { border-top: none; }
+.tb-changes-popover__label { font-weight: 500; flex-basis: 100%; }
+.tb-changes-popover__old {
+  padding: var(--wf-border-w) var(--wf-space-6); border-radius: var(--ou-radius-s);
+  font-family: ui-monospace, monospace;
+  color: var(--ou-error-on-soft); background: var(--ou-error-soft);
+  text-decoration: line-through;
+}
+.tb-changes-popover__new {
+  padding: var(--wf-border-w) var(--wf-space-6); border-radius: var(--ou-radius-s);
+  font-family: ui-monospace, monospace;
+  color: var(--ou-success-on-soft); background: var(--ou-success-soft);
+  font-weight: 500;
+}
+.tb-changes-popover__arrow { color: var(--ou-fg-muted); }
+.tb-changes-popover__context { color: var(--ou-fg-muted); flex-basis: 100%; }
+
 /* ── Адаптив по ширине drawer-а Настроек ─────────────────────────────────
    Используем @container на .tb-settings-content (container-type: inline-size
    объявлен выше). Так layout переключается при сжатии drawer, независимо

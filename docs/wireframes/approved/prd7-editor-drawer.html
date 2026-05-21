@@ -63,73 +63,21 @@
        tb-section-label, tb-topic-row + BEM children, tb-draw-count-row + BEM,
        tb-feedback-preview + BEM children, tb-card-desc для muted-label. */
 
-    /* ── Changed chips in footer ── */
-    .changed-area { display: inline-flex; align-items: center; gap: var(--ou-space-1); flex-wrap: wrap; }
+    /* Saving overlay (s-saving) и changes popover (s-changes) — компоненты
+       в tb-components.css: tb-saving-host + tb-saving-overlay + BEM,
+       tb-changes-anchor + tb-changes-popover + BEM. */
 
-    /* DS sets align-items: flex-start; override to center for single-line titles */
+    /* DS-overrides — минимальные, специфичны для этого эскиза.
+       align-items: center для single-line title; tabs z-index стек над saving-overlay;
+       tabs padding выравнивает с body padding. */
     .ou-drawer__head { align-items: center; }
-
-    /* Tabs must stack above saving-overlay (z-index:10). In s-saving the nav has
-       no positioning context and would be painted under the overlay without this. */
     .ou-drawer > .ou-tabs { position: relative; z-index: 11; }
-
-    /* ── Tabs padding — align with ou-drawer__head/body ou-space-5 ── */
     .ou-drawer .ou-tabs--underline { padding: 0 var(--ou-space-5); }
 
-    /* ── Saving overlay — inside ou-drawer__body, covers only the body area ── */
-    .ou-drawer__body--saving { position: relative; overflow: hidden; }
-    .saving-overlay { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; }
-    .saving-overlay__bd { position: absolute; inset: 0; background: var(--ou-bg-elevated); opacity: 0.88; }
-    .saving-overlay__inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); }
-    .saving-overlay__spinner { color: var(--ou-accent-default); }
-    .saving-overlay__text { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
-
-    /* ── Changes popover ── */
-    .changes-anchor { position: relative; display: flex; align-items: center; }
-    .changes-popover {
-      position: absolute; bottom: calc(100% + var(--wf-space-10)); right: 0;
-      width: var(--wf-size-400); max-height: var(--wf-size-420); overflow: hidden;
-      background: var(--bg); border: var(--wf-border-w) solid var(--border);
-      border-radius: var(--radius); box-shadow: var(--ou-shadow-lg);
-      display: flex; flex-direction: column; z-index: 70;
-    }
-
-    .changes-popover-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: var(--ou-space-3) var(--ou-space-4); border-bottom: var(--wf-border-w) solid var(--border); flex-shrink: 0;
-    }
-    .changes-popover-title { font: var(--ou-text-body-s); font-weight: 600; }
-    .changes-popover-count { font: var(--ou-text-body-s); color: var(--muted-fg); }
-    .changes-popover-body { flex: 1; overflow-y: auto; }
-    .changes-group { padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-3); }
-    .changes-group + .changes-group { border-top: var(--wf-border-w) solid var(--border); }
-    .changes-group-title {
-      font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase;
-      letter-spacing: .06em; color: var(--muted-fg); padding: var(--ou-space-2) 0;
-    }
-    .change-item {
-      display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ou-space-2);
-      padding: var(--ou-space-2) 0; font: var(--ou-text-body-s); border-top: var(--wf-border-w) dashed var(--border);
-    }
-    .change-item:first-of-type { border-top: none; }
-    .change-label { font-weight: 500; flex-basis: 100%; }
-    .change-old {
-      padding: var(--wf-border-w) var(--wf-space-6); border-radius: var(--radius-sm);
-      font-family: ui-monospace, monospace;
-      color: var(--destructive); background: var(--error-bg); text-decoration: line-through;
-    }
-    .change-new {
-      padding: var(--wf-border-w) var(--wf-space-6); border-radius: var(--radius-sm);
-      font-family: ui-monospace, monospace;
-      color: var(--ou-success-on-soft); background: var(--ou-success-soft); font-weight: 500;
-    }
-    .change-arrow { color: var(--muted-fg); }
-    .change-context { color: var(--muted-fg); flex-basis: 100%; }
-
-    /* ── Settings layout ── */
+    /* Settings layout — точечный helper для s-settings split-pane. */
     .settings-content { flex: 1; padding-left: var(--ou-space-6); overflow-y: auto; }
 
-    /* ── Saving spinner ── */
+    /* Saving spinner — keyframe-анимация для tb-saving-overlay__spinner. */
     @keyframes spin { to { transform: rotate(360deg); } }
     .spin { animation: spin 1s linear infinite; display: inline-block; line-height: 1; }
 
@@ -661,7 +609,7 @@
         <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
         <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
       </div></nav>
-      <div class="ou-drawer__body ou-drawer__body--saving" tabindex="-1">
+      <div class="ou-drawer__body tb-saving-host" tabindex="-1">
         <div inert>
           <div class="tb-section-label">Темы и выборка вопросов</div>
           <div class="tb-topic-row">
@@ -697,14 +645,14 @@
             </div>
           </div>
         </div>
-        <div class="saving-overlay" role="status" aria-live="polite" aria-label="Сохранение в процессе">
+        <div class="tb-saving-overlay" role="status" aria-live="polite" aria-label="Сохранение в процессе">
           <span class="wf-annot">isSaving → overlay</span>
-          <div class="saving-overlay__bd" aria-hidden="true"></div>
-          <div class="saving-overlay__inner">
-            <span class="saving-overlay__spinner spin" aria-hidden="true">
+          <div class="tb-saving-overlay__bd" aria-hidden="true"></div>
+          <div class="tb-saving-overlay__inner">
+            <span class="tb-saving-overlay__spinner spin" aria-hidden="true">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-loader"/></svg>
             </span>
-            <span class="saving-overlay__text">Сохранение…</span>
+            <span class="tb-saving-overlay__text">Сохранение…</span>
           </div>
         </div>
       </div>
@@ -792,55 +740,55 @@
         </button>
       </div>
       <footer class="ou-drawer__foot">
-        <div class="changes-anchor wf-annot-wrap--block">
+        <div class="tb-changes-anchor wf-annot-wrap--block">
           <span class="wf-annot">FR-25c</span>
           <button type="button" class="ou-btn ou-btn--ghost"
                     aria-expanded="true" aria-controls="changes-popover"
                     aria-label="Скрыть список изменений">Показать изменения</button>
-          <div class="changes-popover" id="changes-popover" role="dialog" aria-modal="false" aria-labelledby="cp-title">
-              <div class="changes-popover-header">
+          <div class="tb-changes-popover" id="changes-popover" role="dialog" aria-modal="false" aria-labelledby="cp-title">
+              <div class="tb-changes-popover__header">
                 <span>
-                  <span class="changes-popover-title" id="cp-title">Изменения в черновике</span>
-                  <span class="changes-popover-count">&nbsp;(5)</span>
+                  <span class="tb-changes-popover__title" id="cp-title">Изменения в черновике</span>
+                  <span class="tb-changes-popover__count">&nbsp;(5)</span>
                 </span>
                 <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Закрыть список изменений">
                   <svg width="14" height="14"><use href="#i-x"/></svg>
                 </button>
               </div>
-              <div class="changes-popover-body">
-                <div class="changes-group" aria-label="Изменения во вкладке Состав">
-                  <div class="changes-group-title">Состав · 2 изменения</div>
-                  <div class="change-item">
-                    <span class="change-label">Добавлена тема</span>
-                    <span class="change-new">Криптография</span>
-                    <span class="change-context">3 вопроса, минимум 3</span>
+              <div class="tb-changes-popover__body">
+                <div class="tb-changes-popover__group" aria-label="Изменения во вкладке Состав">
+                  <div class="tb-changes-popover__group-title">Состав · 2 изменения</div>
+                  <div class="tb-changes-popover__item">
+                    <span class="tb-changes-popover__label">Добавлена тема</span>
+                    <span class="tb-changes-popover__new">Криптография</span>
+                    <span class="tb-changes-popover__context">3 вопроса, минимум 3</span>
                   </div>
-                  <div class="change-item">
-                    <span class="change-label">Минимум темы «Сетевая безопасность»</span>
-                    <span class="change-old">5</span>
-                    <span class="change-arrow">→</span>
-                    <span class="change-new">8</span>
+                  <div class="tb-changes-popover__item">
+                    <span class="tb-changes-popover__label">Минимум темы «Сетевая безопасность»</span>
+                    <span class="tb-changes-popover__old">5</span>
+                    <span class="tb-changes-popover__arrow">→</span>
+                    <span class="tb-changes-popover__new">8</span>
                   </div>
                 </div>
-                <div class="changes-group" aria-label="Изменения во вкладке Настройки">
-                  <div class="changes-group-title">Настройки · 3 изменения</div>
-                  <div class="change-item">
-                    <span class="change-label">Порог успеха</span>
-                    <span class="change-old">60 %</span>
-                    <span class="change-arrow">→</span>
-                    <span class="change-new">75 %</span>
+                <div class="tb-changes-popover__group" aria-label="Изменения во вкладке Настройки">
+                  <div class="tb-changes-popover__group-title">Настройки · 3 изменения</div>
+                  <div class="tb-changes-popover__item">
+                    <span class="tb-changes-popover__label">Порог успеха</span>
+                    <span class="tb-changes-popover__old">60 %</span>
+                    <span class="tb-changes-popover__arrow">→</span>
+                    <span class="tb-changes-popover__new">75 %</span>
                   </div>
-                  <div class="change-item">
-                    <span class="change-label">Перемешать вопросы</span>
-                    <span class="change-old">Нет</span>
-                    <span class="change-arrow">→</span>
-                    <span class="change-new">Да</span>
+                  <div class="tb-changes-popover__item">
+                    <span class="tb-changes-popover__label">Перемешать вопросы</span>
+                    <span class="tb-changes-popover__old">Нет</span>
+                    <span class="tb-changes-popover__arrow">→</span>
+                    <span class="tb-changes-popover__new">Да</span>
                   </div>
-                  <div class="change-item">
-                    <span class="change-label">Лимит времени</span>
-                    <span class="change-old">не задан</span>
-                    <span class="change-arrow">→</span>
-                    <span class="change-new">30 мин</span>
+                  <div class="tb-changes-popover__item">
+                    <span class="tb-changes-popover__label">Лимит времени</span>
+                    <span class="tb-changes-popover__old">не задан</span>
+                    <span class="tb-changes-popover__arrow">→</span>
+                    <span class="tb-changes-popover__new">30 мин</span>
                   </div>
                 </div>
               </div>
@@ -1217,49 +1165,49 @@
             </div>
           </div>
           <div class="changes-sheet" role="dialog" aria-modal="false" aria-labelledby="mcs-title">
-            <div class="changes-popover-header">
+            <div class="tb-changes-popover__header">
               <span>
-                <span class="changes-popover-title" id="mcs-title">Изменения в черновике</span>
-                <span class="changes-popover-count">&nbsp;(5)</span>
+                <span class="tb-changes-popover__title" id="mcs-title">Изменения в черновике</span>
+                <span class="tb-changes-popover__count">&nbsp;(5)</span>
               </span>
               <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Закрыть список изменений">
                 <svg width="14" height="14"><use href="#i-x"/></svg>
               </button>
             </div>
-            <div class="changes-popover-body">
-              <div class="changes-group" aria-label="Изменения во вкладке Состав">
-                <div class="changes-group-title">Состав · 2 изменения</div>
-                <div class="change-item">
-                  <span class="change-label">Добавлена тема</span>
-                  <span class="change-new">Криптография</span>
-                  <span class="change-context">3 вопроса, минимум 3</span>
+            <div class="tb-changes-popover__body">
+              <div class="tb-changes-popover__group" aria-label="Изменения во вкладке Состав">
+                <div class="tb-changes-popover__group-title">Состав · 2 изменения</div>
+                <div class="tb-changes-popover__item">
+                  <span class="tb-changes-popover__label">Добавлена тема</span>
+                  <span class="tb-changes-popover__new">Криптография</span>
+                  <span class="tb-changes-popover__context">3 вопроса, минимум 3</span>
                 </div>
-                <div class="change-item">
-                  <span class="change-label">Минимум темы «Сетевая безопасность»</span>
-                  <span class="change-old">5</span>
-                  <span class="change-arrow">→</span>
-                  <span class="change-new">8</span>
+                <div class="tb-changes-popover__item">
+                  <span class="tb-changes-popover__label">Минимум темы «Сетевая безопасность»</span>
+                  <span class="tb-changes-popover__old">5</span>
+                  <span class="tb-changes-popover__arrow">→</span>
+                  <span class="tb-changes-popover__new">8</span>
                 </div>
               </div>
-              <div class="changes-group" aria-label="Изменения во вкладке Настройки">
-                <div class="changes-group-title">Настройки · 3 изменения</div>
-                <div class="change-item">
-                  <span class="change-label">Порог успеха</span>
-                  <span class="change-old">60 %</span>
-                  <span class="change-arrow">→</span>
-                  <span class="change-new">75 %</span>
+              <div class="tb-changes-popover__group" aria-label="Изменения во вкладке Настройки">
+                <div class="tb-changes-popover__group-title">Настройки · 3 изменения</div>
+                <div class="tb-changes-popover__item">
+                  <span class="tb-changes-popover__label">Порог успеха</span>
+                  <span class="tb-changes-popover__old">60 %</span>
+                  <span class="tb-changes-popover__arrow">→</span>
+                  <span class="tb-changes-popover__new">75 %</span>
                 </div>
-                <div class="change-item">
-                  <span class="change-label">Перемешать вопросы</span>
-                  <span class="change-old">Нет</span>
-                  <span class="change-arrow">→</span>
-                  <span class="change-new">Да</span>
+                <div class="tb-changes-popover__item">
+                  <span class="tb-changes-popover__label">Перемешать вопросы</span>
+                  <span class="tb-changes-popover__old">Нет</span>
+                  <span class="tb-changes-popover__arrow">→</span>
+                  <span class="tb-changes-popover__new">Да</span>
                 </div>
-                <div class="change-item">
-                  <span class="change-label">Лимит времени</span>
-                  <span class="change-old">не задан</span>
-                  <span class="change-arrow">→</span>
-                  <span class="change-new">30 мин</span>
+                <div class="tb-changes-popover__item">
+                  <span class="tb-changes-popover__label">Лимит времени</span>
+                  <span class="tb-changes-popover__old">не задан</span>
+                  <span class="tb-changes-popover__arrow">→</span>
+                  <span class="tb-changes-popover__new">30 мин</span>
                 </div>
               </div>
             </div>
