@@ -295,11 +295,15 @@
   <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
   </symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+  </symbol>
 </svg>
 
 <nav class="wf-nav" aria-label="State switcher">
   <span class="wf-nav-title">prd7 — Drawer:</span>
   <button class="wf-btn active" type="button" onclick="showState(this, 's-default')">s-default</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-default-adaptive')">s-default-adaptive</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-dirty')">s-dirty</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-error')">s-error</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-saving')">s-saving</button>
@@ -407,6 +411,112 @@
       <footer class="ou-drawer__foot">
         <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
         <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true">Сохранить</button><span class="wf-annot">FR-25a</span></span>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ═══════════ STATE: s-default-adaptive ═══════════
+     Adaptive-вариант вкладки «Состав» (FR-36): draw_count input заменён
+     на read-only tag «Адаптивный» + link «Настроить уровни →»; сверху
+     body — info-banner про адаптивный режим. ═══════════════════════════ -->
+<div id="s-default-adaptive" class="wf-state shell">
+  <div class="wf-tpl-slot" data-template="tpl-bg-page"></div>
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-default-adaptive">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="dt-default-adaptive" class="ou-drawer__title">Основы информационной безопасности</h1></div>
+        <span class="ou-tag ou-tag--success ou-tag--outline">Опубликован</span>
+        <span class="ou-tag ou-tag--accent ou-tag--outline">Адаптивный</span>
+        <span class="ou-tag ou-tag--neutral ou-tag--outline">v7</span>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+        <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Состав</button>
+        <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+        <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+        <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+      </div></nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+          <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info"/></svg></div>
+          <div class="ou-banner__body">
+            <div class="ou-banner__title">Адаптивный режим теста</div>
+            <div class="ou-banner__desc">Количество вопросов из темы определяется уровнем сложности учащегося. Уровни задаются во вкладке «Настройки → Адаптивность».</div>
+          </div>
+        </div>
+        <div class="tb-section-label">Темы и выборка вопросов</div>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header">
+            <span class="tb-topic-row__name">Основы ИБ</span>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Тема обязательная — задаётся в Настройках">Обязательная</span>
+            <span class="tb-topic-row__count">45 вопросов</span>
+          </div>
+          <div class="tb-topic-row__body">
+            <div class="tb-draw-count-row tb-draw-count-row--adaptive">
+              <span class="tb-draw-count-row__label">Подбор вопросов</span>
+              <span class="ou-tag ou-tag--accent ou-tag--outline">Адаптивный</span>
+              <a href="#" class="tb-link-text">Настроить уровни →</a>
+            </div>
+            <div class="tb-card-desc">Обратная связь по теме</div>
+            <div class="tb-feedback-preview" aria-label="Обратная связь по теме Основы ИБ">
+              <div class="tb-feedback-preview__text">
+                <span class="tb-feedback-preview__snippet">Поздравляем с прохождением базового модуля!</span>
+                <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать обратную связь">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-pencil"/></svg>
+                </button>
+              </div>
+              <div class="tb-feedback-preview__meta">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-link"/></svg>
+                1 ссылка <span class="tb-feedback-preview__sep">·</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-paperclip"/></svg>
+                1 файл
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header">
+            <span class="tb-topic-row__name">Сетевая безопасность</span>
+            <span class="tb-topic-row__count">30 вопросов</span>
+          </div>
+          <div class="tb-topic-row__body">
+            <div class="tb-draw-count-row tb-draw-count-row--adaptive">
+              <span class="tb-draw-count-row__label">Подбор вопросов</span>
+              <span class="ou-tag ou-tag--accent ou-tag--outline">Адаптивный</span>
+              <a href="#" class="tb-link-text">Настроить уровни →</a>
+            </div>
+            <div class="tb-card-desc">Обратная связь по теме</div>
+            <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
+              Не задано — нажмите для редактирования
+            </div>
+          </div>
+        </div>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header">
+            <span class="tb-topic-row__name">Практика</span>
+            <span class="tb-topic-row__count">20 вопросов</span>
+          </div>
+          <div class="tb-topic-row__body">
+            <div class="tb-draw-count-row tb-draw-count-row--adaptive">
+              <span class="tb-draw-count-row__label">Подбор вопросов</span>
+              <span class="ou-tag ou-tag--accent ou-tag--outline">Адаптивный</span>
+              <a href="#" class="tb-link-text">Настроить уровни →</a>
+            </div>
+            <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
+              Не задано — нажмите для редактирования
+            </div>
+          </div>
+        </div>
+        <button type="button" class="ou-btn ou-btn--secondary ou-btn--m ou-btn--full">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-plus"/></svg>
+          Добавить тему
+        </button>
+      </div>
+      <footer class="ou-drawer__foot">
+        <button type="button" class="ou-btn ou-btn--ghost">Закрыть</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true">Сохранить</button>
       </footer>
     </aside>
   </div>
