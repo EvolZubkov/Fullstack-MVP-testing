@@ -295,22 +295,30 @@ Generic-состояния drawer'а (`s-loading`, `s-error`, `s-saved`) опи�
 
 ### Дополнения для variant.kind (PRD-1 §4.3)
 
-- [ ] **Questions-row как `page-row--system page-row--questions`** (вместо
-  упрощённого монолитного `.questions-row`): в каждой теме своя запись с
-  локальным per-topic variant'ом из `kind: questions`. Контент строки:
-  variant badge, `…` row-menu, chevron + expand при непустой schema варианта.
-  CSS-стиль `.questions-row` уже унифицирован визуально (border-left accent),
-  полная замена разметки на page-row — отдельным коммитом
-- [ ] **`…` row-menu** на каждой `page-row` (не только iconbtn Eye / Trash):
-  пункты «Сменить вариант», «Предпросмотр», «Удалить» (для info; для системных
-  kind — только «Сменить вариант»)
-- [ ] **Хинт «Доступно N вариантов»** возле бейджа системных row при N > 1
-  вариантах нужного `kind` в шаблоне (PRD-1 §4.3.2)
-- [ ] **Warning fallback** «Используется вариант из стандартного шаблона» при
-  0 вариантах нужного `kind` в текущем шаблоне (PRD-1 §4.3.2)
-- [ ] **Валидация required-параметров** (PRD-1 §4.3.6): `page-row--warn` +
-  inline-banner со списком полей в expand'е + `.status-dot--error` на табе
-  «Структура» + Save disabled
+- [x] **Questions-row как `page-row--system page-row--questions`**: в каждой
+  теме своя запись с локальным per-topic variant'ом из `kind: questions`.
+  Контент строки: variant badge, `…` row-menu, иконка `i-question` слева.
+  Разметка приведена к финальному виду во всех state'ах
+- [x] **`…` row-menu** на каждой `page-row` (info / системные kind): единая
+  `.ou-iconbtn` с `i-dots` вместо отдельных Eye / Trash. Меню (открытое) —
+  см. `prd7-structure-router.html` state `s-row-menu-open`. Исключение:
+  `s-readonly` сохраняет одиночный Eye-iconbtn (read-only preview, нечего
+  «удалять / редактировать»)
+- [x] **Хинт «Доступно N вариантов»** возле бейджа системных row при N > 1:
+  реализован через `ou-tag--info` в `.page-row__meta` (вторая строка
+  page-row). В `s-main` подключён на обе questions-row тем («Основы ИБ»,
+  «Угрозы и атаки») — паттерн распространяется на все системные kind по
+  правилу PRD-1 §4.3.2
+- [x] **Warning fallback** «Используется вариант из стандартного шаблона» при
+  0 вариантах нужного `kind`: паттерн реализован в router (`s-main-fallback`)
+  через `ou-tag--warning` в `.page-row__meta`. Инфраструктура `page-row__meta`
+  подключена и в `linear_by_topics`; специфичных fallback-состояний нет, так
+  как поведение полностью derived из §11 PRD-1 §4.3.2
+- [x] **Валидация required-параметров** (PRD-1 §4.3.6): паттерн реализован
+  в router (`s-validation`) через `page-row--warn` + inline-banner +
+  `.status-dot--error` на табе + Save disabled. CSS-инфраструктура
+  (`page-row--warn`, `.status-dot--error`) применима в `linear_by_topics`
+  без дополнительных правок при появлении dedicated validation state
 
 ---
 
@@ -349,10 +357,15 @@ inline-expand редактирование, `s-dirty-form` / `s-validation` / `s
 - [x] **Questions-row как `page-row--system page-row--questions`** — одна на тест
   с `topicId: null` между зонами «До теста» и «После теста». В демо: variant badge
   «Минимальный», `…` row-menu, иконка `i-question` слева
-- [ ] **`…` row-menu** на каждой `page-row` (вместо отдельных Eye / Trash iconbtn):
-  пункты «Сменить вариант», «Предпросмотр», «Удалить» (для info)
-- [ ] **Хинт «Доступно N вариантов»**, **warning fallback**, **валидация
-  required-параметров** — те же правила, что в §8 (см. дополнения там)
+- [x] **`…` row-menu** на каждой `page-row` (включая info-row): единая
+  `.ou-iconbtn` с `i-dots` вместо отдельных Eye / Trash. Меню (открытое) —
+  см. `prd7-structure-router.html` state `s-row-menu-open`
+- [x] **Хинт «Доступно N вариантов»** реализован: возле questions-row в `s-main`
+  висит `ou-tag--info` «Доступно 2 варианта» как `.page-row__meta` (вторая
+  строка page-row). **Warning fallback** и **валидация required-параметров** —
+  паттерны реализованы в router (`s-main-fallback` / `s-validation`); специфичных
+  состояний в `linear_flat` нет, так как поведение полностью derived из §8
+  и инфраструктура `.page-row__meta` уже подключена
 
 ---
 
@@ -579,6 +592,8 @@ inline-expand редактирование, `s-dirty-form` / `s-sanitize`,
 - [ ] Нет файлов с маркером `STATES_INSERT_POINT`
 - [ ] Все состояния из `design-tab.html` присутствуют в `prd7-design-tab.html`
 - [ ] Все состояния из `pages-tab.html` присутствуют в `prd7-structure-linear-by-topics.html`
-- [ ] Проверено на ширине 1440px и < 960px
+- [ ] Проверено на ширине 1440px (desktop). **Мобильная адаптивность
+      (< 960px) вынесена за scope текущего PRD** — будет покрыта отдельным
+      PRD; временный fallback оформлен в `prd7-editor-mobile.html` (§21)
 - [ ] Дизайнер / PM подтвердил каждый файл
 - [ ] Файлы перенесены в `docs/wireframes/approved/`
