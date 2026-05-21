@@ -202,10 +202,11 @@
   width: var(--ou-space-3); height: var(--ou-space-3); border-radius: 50%;
   flex-shrink: 0; background: var(--ou-fg-muted);
 }
-.tb-status-dot--ok   { background: var(--ou-success-default); }
-.tb-status-dot--warn { background: var(--ou-warning-default); }
-.tb-status-dot--err  { background: var(--ou-error-default); }
-.tb-status-dot--off  { background: var(--ou-border-default); }
+.tb-status-dot--ok    { background: var(--ou-success-default); }
+.tb-status-dot--warn  { background: var(--ou-warning-default); }
+.tb-status-dot--err   { background: var(--ou-error-default); }
+.tb-status-dot--off   { background: var(--ou-border-default); }
+.tb-status-dot--dirty { background: var(--ou-accent-default); }
 
 /* ── Adaptive block (адаптивность по темам) ──────────────────────────── */
 .tb-adaptive-topics { margin-bottom: var(--ou-space-3); }
@@ -286,6 +287,70 @@
 .tb-level-card .ou-card__body .ou-chip-group { gap: var(--ou-space-1); margin-bottom: var(--ou-space-1); }
 .tb-level-card .ou-card__body .ou-textarea__input { padding: var(--ou-space-2); }
 .tb-level-card .ou-card__body .ou-formfield > .ou-btn { margin-top: var(--ou-space-1); align-self: flex-start; }
+
+/* ── Topic row composite (вкладка «Состав» Drawer-а) ───────────────────
+   Карточка темы: header (название · бейдж · счётчик) + body (draw_count + feedback).
+   Используется во вкладке «Состав» редактора теста.
+   В client/ это будущий React-компонент <TopicRow topic drawCount mode /> с
+   фиксированной композицией внутри. */
+.tb-topic-row {
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-l);
+  background: var(--ou-bg-elevated);
+  box-shadow: var(--ou-shadow-sm);
+  margin-bottom: var(--ou-space-2);
+  overflow: hidden;
+}
+.tb-topic-row__header {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-4);
+  background: var(--ou-bg-subtle);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+}
+.tb-topic-row__name { font: var(--ou-text-heading-s); flex: 1; min-width: 0; }
+.tb-topic-row__count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-topic-row__body { padding: var(--ou-space-3) var(--ou-space-4); }
+
+/* Draw-count row: «Вопросов в тест [ N ] из M» — standard mode. */
+.tb-draw-count-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+}
+.tb-draw-count-row__label {
+  font: var(--ou-text-body-s);
+  width: var(--wf-size-150); flex-shrink: 0;
+}
+.tb-draw-count-row__max { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* Adaptive mode: draw_count заменяется bag-таггом + ссылкой на уровни (FR-36).
+   `--adaptive` modifier добавляет flex-wrap, поскольку link-tail длиннее number-input. */
+.tb-draw-count-row--adaptive { flex-wrap: wrap; }
+
+/* Feedback preview (read-only) — clickable card со snippet'ом и meta-row.
+   Edit-форма — отдельный паттерн `.tb-feedback-block` (см. выше).
+   `.is-empty` — placeholder-вариант («Не задано — нажмите для редактирования»).
+   В client/ будущий React-компонент <FeedbackPreview snippet links files />. */
+.tb-feedback-preview {
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  font: var(--ou-text-body-s);
+  background: var(--ou-bg-elevated);
+  cursor: pointer;
+}
+.tb-feedback-preview:hover { border-color: var(--ou-accent-default); }
+.tb-feedback-preview.is-empty {
+  color: var(--ou-fg-muted); font-style: italic;
+}
+.tb-feedback-preview__text {
+  display: flex; align-items: baseline; gap: var(--ou-space-2);
+}
+.tb-feedback-preview__snippet { flex: 1; }
+.tb-feedback-preview__meta {
+  display: flex; gap: var(--ou-space-2); margin-top: var(--ou-space-1);
+  font: var(--ou-text-caption); color: var(--ou-fg-muted); align-items: center;
+}
+.tb-feedback-preview__meta svg { width: var(--wf-space-10); height: var(--wf-space-10); flex-shrink: 0; }
+.tb-feedback-preview__sep { color: var(--ou-border-soft); }
 
 /* ── Адаптив по ширине drawer-а Настроек ─────────────────────────────────
    Используем @container на .tb-settings-content (container-type: inline-size
