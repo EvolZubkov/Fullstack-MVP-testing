@@ -55,9 +55,12 @@
     .zone-block { margin-bottom: var(--ou-space-3); border: var(--wf-border-w) dashed var(--ou-border-default); border-radius: var(--ou-radius-m); overflow: hidden; }
     .zone-header { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--wf-space-14); color: var(--ou-fg-muted); font: var(--ou-text-caption); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; border-bottom: var(--wf-border-w) dashed var(--ou-border-default); }
 
-    /* Inside-test container — содержит router-row + tree-branches тем */
-    .inside-test { margin-bottom: var(--ou-space-3); }
-    .inside-test__label { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--wf-space-14); color: var(--ou-fg-muted); font: var(--ou-text-caption); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    /* Inside-test container — визуально единая «зона» (тот же dashed контур,
+       что у .zone-block для «До теста» / «После теста»), содержит router-row
+       + tree-branches тем. Контур замыкает иерархию внутри теста. */
+    .inside-test { margin-bottom: var(--ou-space-3); border: var(--wf-border-w) dashed var(--ou-border-default); border-radius: var(--ou-radius-m); }
+    .inside-test__label { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--wf-space-14); color: var(--ou-fg-muted); font: var(--ou-text-caption); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; border-bottom: var(--wf-border-w) dashed var(--ou-border-default); }
+    .inside-test__body { padding: var(--ou-space-3) var(--wf-space-14); }
 
     /* Page row базовая — общая для info и системных kind */
     .page-row { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-6) var(--wf-space-10) var(--wf-space-6) var(--wf-space-14); position: relative; background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s); margin-bottom: var(--wf-space-6); }
@@ -327,7 +330,8 @@
         <!-- Зона «Внутри теста» — router-row + темы как ветки иерархии -->
         <span class="wf-annot-wrap--block">
           <div class="inside-test">
-            <div class="inside-test__label"><svg width="14" height="14"><use href="#i-router"/></svg> Внутри теста</div>
+            <div class="inside-test__label"><svg width="14" height="14"><use href="#i-chevron-down"/></svg> Внутри теста</div>
+            <div class="inside-test__body">
 
             <!-- Router-row: системная page-row, единственная, без insert/delete/drag.
                  Variant select виден в самой строке (бейдж + название);
@@ -425,6 +429,7 @@
                 </div>
               </div>
             </div>
+            </div>
           </div>
           <span class="wf-annot">PRD-7 §2.3b</span>
         </span>
@@ -480,7 +485,8 @@
         </div>
 
         <div class="inside-test">
-          <div class="inside-test__label"><svg width="14" height="14"><use href="#i-router"/></svg> Внутри теста</div>
+          <div class="inside-test__label"><svg width="14" height="14"><use href="#i-chevron-down"/></svg> Внутри теста</div>
+            <div class="inside-test__body">
           <!-- Router-row с хинтом «Доступно 3 варианта» возле бейджа -->
           <div class="page-row page-row--system" data-kind="router">
             <svg class="page-icon"><use href="#i-router"/></svg>
@@ -535,6 +541,7 @@
             </div>
           </div>
         </div>
+        </div>
       </div>
       <footer class="ou-drawer__foot">
         <button class="ou-btn ou-btn--ghost ou-btn--m" type="button" disabled aria-disabled="true">Показать изменения</button>
@@ -571,7 +578,8 @@
         </div>
 
         <div class="inside-test">
-          <div class="inside-test__label"><svg width="14" height="14"><use href="#i-router"/></svg> Внутри теста</div>
+          <div class="inside-test__label"><svg width="14" height="14"><use href="#i-chevron-down"/></svg> Внутри теста</div>
+            <div class="inside-test__body">
           <!-- Router-row с warning fallback — нет router-варианта в текущем шаблоне -->
           <div class="page-row page-row--system" data-kind="router">
             <svg class="page-icon"><use href="#i-router"/></svg>
@@ -605,6 +613,7 @@
               </div>
             </div>
           </div>
+        </div>
         </div>
       </div>
       <footer class="ou-drawer__foot">
@@ -642,7 +651,8 @@
         </div>
 
         <div class="inside-test">
-          <div class="inside-test__label"><svg width="14" height="14"><use href="#i-router"/></svg> Внутри теста</div>
+          <div class="inside-test__label"><svg width="14" height="14"><use href="#i-chevron-down"/></svg> Внутри теста</div>
+            <div class="inside-test__body">
           <!-- Router-row есть (тихая привязка), но веток-тем нет -->
           <div class="page-row page-row--system" data-kind="router">
             <svg class="page-icon"><use href="#i-router"/></svg>
@@ -673,6 +683,7 @@
               </div>
             </div>
           </div>
+        </div>
         </div>
       </div>
       <footer class="ou-drawer__foot">
@@ -770,7 +781,8 @@
         </div>
 
         <div class="inside-test">
-          <div class="inside-test__label"><svg width="14" height="14"><use href="#i-router"/></svg> Внутри теста</div>
+          <div class="inside-test__label"><svg width="14" height="14"><use href="#i-chevron-down"/></svg> Внутри теста</div>
+            <div class="inside-test__body">
 
           <!-- Router-row с warn-цветом заголовка (незаполнено обязательное поле) -->
           <div class="page-row page-row--system page-row--warn is-expanded" data-kind="router">
@@ -828,6 +840,7 @@
             </div>
           </div>
         </div>
+        </div>
       </div>
       <footer class="ou-drawer__foot">
         <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Показать изменения</button>
@@ -865,7 +878,8 @@
         </div>
 
         <div class="inside-test">
-          <div class="inside-test__label"><svg width="14" height="14"><use href="#i-router"/></svg> Внутри теста</div>
+          <div class="inside-test__label"><svg width="14" height="14"><use href="#i-chevron-down"/></svg> Внутри теста</div>
+            <div class="inside-test__body">
 
           <!-- Router-row: иллюстрирует меню для системного kind (без «Удалить») -->
           <div class="page-row page-row--system" data-kind="router">
@@ -907,6 +921,7 @@
               </div>
             </div>
           </div>
+            </div>
         </div>
 
         <!-- Зона «После теста» — пример меню для info-row (с «Удалить») -->
