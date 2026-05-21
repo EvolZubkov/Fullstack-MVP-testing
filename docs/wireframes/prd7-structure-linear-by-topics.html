@@ -51,7 +51,25 @@
     .topic-body { padding: var(--ou-space-1) 0; }
 
     /* Page row */
-    .page-row { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-6) var(--wf-space-10) var(--wf-space-6) var(--wf-space-14); position: relative; }
+    .page-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2); padding: var(--wf-space-6) var(--wf-space-10) var(--wf-space-6) var(--wf-space-14); position: relative; }
+    /* Meta-строка под page-row — отдельная строка для info/warning DS-тегов
+       (хинт «Доступно N вариантов», warning «Из стандартного шаблона»).
+       flex-basis: 100% переносит блок на новую строку. */
+    .page-row__meta {
+      flex-basis: 100%;
+      display: flex; flex-wrap: wrap; gap: var(--wf-space-6);
+      padding-top: var(--wf-space-tiny);
+      margin-left: calc(var(--ou-space-4) + var(--ou-space-2));
+    }
+    .page-row--system .page-row__meta { margin-left: var(--ou-space-4); }
+    .page-row__meta .ou-tag { display: inline-flex; align-items: center; gap: var(--wf-space-tiny); }
+
+    /* Inset для дочерних карточек внутри любой `.zone-block` (До/После/Внутри
+       теста) — горизонтальный padding не даёт карточкам прижиматься вплотную
+       к dashed-границе зоны. Применяется к `.topic-body`, который служит
+       контейнером тела зоны. У тем (`.topic-block > .topic-body`) padding
+       остаётся как был — селектор `>` ограничивает действие первой вложенностью. */
+    .zone-block > .topic-body { padding: var(--ou-space-2) var(--ou-space-4); }
     .page-row:hover { background: var(--ou-bg-hover); }
     .page-row.is-selected { border-left: var(--wf-space-1q) solid var(--ou-accent-default); background: var(--ou-accent-soft); padding-left: var(--wf-space-11); }
     .page-row.dragging { opacity: 0.5; border: var(--wf-border-w) dashed var(--ou-border-default); background: var(--ou-bg-surface-3); }
@@ -541,6 +559,9 @@
               <div class="page-actions">
                 <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
               </div>
+              <div class="page-row__meta">
+                <span class="ou-tag ou-tag--info ou-tag--s"><svg width="11" height="11"><use href="#i-info"/></svg> Доступно 2 варианта</span>
+              </div>
             </div>
             <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить страницу</button><div class="insert-row-line"></div></div>
           </div>
@@ -559,6 +580,9 @@
               <span class="page-title">8 вопросов из темы «Угрозы и атаки»</span>
               <div class="page-actions">
                 <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
+              </div>
+              <div class="page-row__meta">
+                <span class="ou-tag ou-tag--info ou-tag--s"><svg width="11" height="11"><use href="#i-info"/></svg> Доступно 2 варианта</span>
               </div>
             </div>
             <div class="insert-row"><div class="insert-row-line"></div><button class="insert-btn" type="button"><svg width="11" height="11"><use href="#i-plus"/></svg> Добавить страницу</button><div class="insert-row-line"></div></div>
