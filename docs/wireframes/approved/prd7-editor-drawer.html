@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
   <script defer src="/docs/wireframes/prd7-shared.js"></script>
   <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
   <style>
     /* ── Legacy WF alias → ou-* token bridge (on .ou where DS tokens are defined) ── */
     .ou {
@@ -58,49 +59,9 @@
     }
     .bg-card-title { flex: 1; font: var(--ou-text-body-s); font-weight: 600; }
 
-    /* ── Topic content (Состав tab) ── */
-    .topic-section-label {
-      font: var(--ou-text-caption); font-weight: 600; text-transform: uppercase;
-      letter-spacing: .06em; color: var(--muted-fg); margin-bottom: var(--ou-space-3);
-    }
-    .topic-row {
-      border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-l);
-      background: var(--ou-bg-elevated); box-shadow: var(--ou-shadow-sm);
-      margin-bottom: var(--ou-space-2); overflow: hidden;
-    }
-    .topic-row-header {
-      display: flex; align-items: center; gap: var(--ou-space-2);
-      padding: var(--ou-space-2) var(--ou-space-4); background: var(--ou-bg-subtle); border-bottom: var(--wf-border-w) solid var(--ou-border-default);
-    }
-    .topic-name { font: var(--ou-text-heading-s); flex: 1; min-width: 0; }
-    /* Mobile: 2-line clamp; desktop keeps single line (overridden in .mobile-canvas below) */
-    .mobile-canvas .topic-name {
-      display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
-    }
-    .mobile-canvas .topic-name.is-expanded {
-      display: block; overflow: visible; -webkit-line-clamp: unset; line-clamp: unset;
-    }
-    .topic-count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
-    .topic-row-body { padding: var(--ou-space-3) var(--ou-space-4); }
-    .draw-count-row { display: flex; align-items: center; gap: var(--ou-space-2); margin-bottom: var(--ou-space-2); }
-    .draw-count-label { font: var(--ou-text-body-s); width: var(--wf-size-150); flex-shrink: 0; }
-    .draw-count-max { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
-    .feedback-label { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-1); }
-    .feedback-preview {
-      border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-m);
-      padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); cursor: pointer;
-    }
-    .feedback-preview:hover { border-color: var(--ou-accent-default); }
-    .feedback-preview.empty { color: var(--muted-fg); font-style: italic; }
-    .feedback-text { display: flex; align-items: baseline; gap: var(--ou-space-2); }
-    .feedback-snippet { flex: 1; }
-    .feedback-meta {
-      display: flex; gap: var(--ou-space-2); margin-top: var(--ou-space-1);
-      font: var(--ou-text-body-s); color: var(--muted-fg); align-items: center;
-    }
-    .feedback-meta svg { width: var(--wf-space-10); height: var(--wf-space-10); }
-    .feedback-meta-sep { color: var(--border); }
-    .form-hint-small { font: var(--ou-text-body-s); color: var(--muted-fg); margin-top: var(--ou-space-3); }
+    /* Topic content (Состав tab) — компоненты в tb-components.css:
+       tb-section-label, tb-topic-row + BEM children, tb-draw-count-row + BEM,
+       tb-feedback-preview + BEM children, tb-card-desc для muted-label. */
 
     /* ── Changed chips in footer ── */
     .changed-area { display: inline-flex; align-items: center; gap: var(--ou-space-1); flex-wrap: wrap; }
@@ -429,66 +390,65 @@
         <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
       </div></nav></div>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="topic-section-label">Темы и выборка вопросов</div>
-        <div class="topic-row">
-          <div class="topic-row-header">
-            <span class="topic-name">Основы ИБ</span>
+        <div class="tb-section-label">Темы и выборка вопросов</div>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header">
+            <span class="tb-topic-row__name">Основы ИБ</span>
             <span class="ou-tag ou-tag--neutral ou-tag--outline" aria-label="Тема обязательная — задаётся в Настройках">Обязательная</span>
-            <span class="topic-count">45 вопросов</span>
+            <span class="tb-topic-row__count">45 вопросов</span>
           </div>
-          <div class="topic-row-body">
-            <div class="draw-count-row">
-              <span class="draw-count-label">Вопросов в тест</span>
+          <div class="tb-topic-row__body">
+            <div class="tb-draw-count-row">
+              <span class="tb-draw-count-row__label">Вопросов в тест</span>
               <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" min="1" max="45" aria-label="Количество вопросов из темы Основы ИБ"></div></div>
-              <span class="draw-count-max">из 45</span>
+              <span class="tb-draw-count-row__max">из 45</span>
             </div>
-            <div class="feedback-label">Обратная связь по теме</div>
-            <div class="feedback-preview" aria-label="Обратная связь по теме Основы ИБ">
-              <div class="feedback-text">
-                <span class="feedback-snippet">Поздравляем с прохождением базового модуля!</span>
+            <div class="tb-card-desc">Обратная связь по теме</div>
+            <div class="tb-feedback-preview" aria-label="Обратная связь по теме Основы ИБ">
+              <div class="tb-feedback-preview__text">
+                <span class="tb-feedback-preview__snippet">Поздравляем с прохождением базового модуля!</span>
                 <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать обратную связь">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-pencil"/></svg>
                 </button>
               </div>
-              <div class="feedback-meta">
+              <div class="tb-feedback-preview__meta">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-link"/></svg>
-                1 ссылка <span class="feedback-meta-sep">·</span>
+                1 ссылка <span class="tb-feedback-preview__sep">·</span>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-paperclip"/></svg>
                 1 файл
               </div>
             </div>
           </div>
         </div>
-        <div class="topic-row">
-          <div class="topic-row-header">
-            <span class="topic-name">Сетевая безопасность</span>
-            <span class="topic-count">30 вопросов</span>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header">
+            <span class="tb-topic-row__name">Сетевая безопасность</span>
+            <span class="tb-topic-row__count">30 вопросов</span>
           </div>
-          <div class="topic-row-body">
-            <div class="draw-count-row">
-              <span class="draw-count-label">Вопросов в тест</span>
+          <div class="tb-topic-row__body">
+            <div class="tb-draw-count-row">
+              <span class="tb-draw-count-row__label">Вопросов в тест</span>
               <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" min="1" max="30" aria-label="Количество вопросов из темы Сетевая безопасность"></div></div>
-              <span class="draw-count-max">из 30</span>
+              <span class="tb-draw-count-row__max">из 30</span>
             </div>
-            <div class="feedback-label">Обратная связь по теме</div>
-            <div class="feedback-preview empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
+            <div class="tb-card-desc">Обратная связь по теме</div>
+            <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
               Не задано — нажмите для редактирования
             </div>
           </div>
         </div>
-        <div class="topic-row">
-          <div class="topic-row-header">
-            <span class="topic-name">Практика</span>
-            <span class="topic-count">20 вопросов</span>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header">
+            <span class="tb-topic-row__name">Практика</span>
+            <span class="tb-topic-row__count">20 вопросов</span>
           </div>
-          <div class="topic-row-body">
-            <div class="draw-count-row">
-              <span class="draw-count-label">Вопросов в тест</span>
+          <div class="tb-topic-row__body">
+            <div class="tb-draw-count-row">
+              <span class="tb-draw-count-row__label">Вопросов в тест</span>
               <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="10" min="1" max="20" aria-label="Количество вопросов из темы Практика"></div></div>
-              <span class="draw-count-max">из 20</span>
+              <span class="tb-draw-count-row__max">из 20</span>
             </div>
-            <div class="feedback-label">Обратная связь по теме</div>
-            <div class="feedback-preview empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
+            <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
               Не задано — нажмите для редактирования
             </div>
           </div>
@@ -531,23 +491,23 @@
         <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
       </div></nav></div>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="topic-section-label">Темы и выборка вопросов</div>
-        <div class="topic-row">
-          <div class="topic-row-header">
-            <span class="topic-name">Основы ИБ</span>
+        <div class="tb-section-label">Темы и выборка вопросов</div>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header">
+            <span class="tb-topic-row__name">Основы ИБ</span>
             <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязательная</span>
-            <span class="topic-count">45 вопросов</span>
+            <span class="tb-topic-row__count">45 вопросов</span>
           </div>
-          <div class="topic-row-body">
-            <div class="draw-count-row">
-              <span class="draw-count-label">Вопросов в тест</span>
+          <div class="tb-topic-row__body">
+            <div class="tb-draw-count-row">
+              <span class="tb-draw-count-row__label">Вопросов в тест</span>
               <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" min="1" max="45" aria-label="Количество вопросов из темы Основы ИБ"></div></div>
-              <span class="draw-count-max">из 45</span>
+              <span class="tb-draw-count-row__max">из 45</span>
             </div>
-            <div class="feedback-label">Обратная связь по теме</div>
-            <div class="feedback-preview" aria-label="Обратная связь">
-              <div class="feedback-text">
-                <span class="feedback-snippet">Поздравляем с прохождением базового модуля!</span>
+            <div class="tb-card-desc">Обратная связь по теме</div>
+            <div class="tb-feedback-preview" aria-label="Обратная связь">
+              <div class="tb-feedback-preview__text">
+                <span class="tb-feedback-preview__snippet">Поздравляем с прохождением базового модуля!</span>
                 <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать обратную связь">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-pencil"/></svg>
                 </button>
@@ -555,16 +515,16 @@
             </div>
           </div>
         </div>
-        <div class="topic-row">
-          <div class="topic-row-header"><span class="topic-name">Сетевая безопасность</span><span class="topic-count">30 вопросов</span></div>
-          <div class="topic-row-body">
-            <div class="draw-count-row">
-              <span class="draw-count-label">Вопросов в тест</span>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header"><span class="tb-topic-row__name">Сетевая безопасность</span><span class="tb-topic-row__count">30 вопросов</span></div>
+          <div class="tb-topic-row__body">
+            <div class="tb-draw-count-row">
+              <span class="tb-draw-count-row__label">Вопросов в тест</span>
               <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" min="1" max="30" aria-label="Вопросов из Сетевая безопасность"></div></div>
-              <span class="draw-count-max">из 30</span>
+              <span class="tb-draw-count-row__max">из 30</span>
             </div>
-            <div class="feedback-label">Обратная связь по теме</div>
-            <div class="feedback-preview empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
+            <div class="tb-card-desc">Обратная связь по теме</div>
+            <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
               Не задано — нажмите для редактирования
             </div>
           </div>
@@ -627,23 +587,23 @@
             <div class="ou-banner__actions"><button type="button" class="ou-banner__link">Перейти к ошибкам</button></div>
           </div>
         </div>
-        <div class="topic-section-label">Темы и выборка вопросов</div>
-        <div class="topic-row">
-          <div class="topic-row-header">
-            <span class="topic-name">Основы ИБ</span>
+        <div class="tb-section-label">Темы и выборка вопросов</div>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header">
+            <span class="tb-topic-row__name">Основы ИБ</span>
             <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязательная</span>
-            <span class="topic-count">45 вопросов</span>
+            <span class="tb-topic-row__count">45 вопросов</span>
           </div>
-          <div class="topic-row-body">
-            <div class="draw-count-row">
-              <span class="draw-count-label">Вопросов в тест</span>
+          <div class="tb-topic-row__body">
+            <div class="tb-draw-count-row">
+              <span class="tb-draw-count-row__label">Вопросов в тест</span>
               <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" min="1" max="45" aria-label="Количество вопросов из темы Основы ИБ"></div></div>
-              <span class="draw-count-max">из 45</span>
+              <span class="tb-draw-count-row__max">из 45</span>
             </div>
-            <div class="feedback-label">Обратная связь по теме</div>
-            <div class="feedback-preview" aria-label="Обратная связь">
-              <div class="feedback-text">
-                <span class="feedback-snippet">Поздравляем с прохождением базового модуля!</span>
+            <div class="tb-card-desc">Обратная связь по теме</div>
+            <div class="tb-feedback-preview" aria-label="Обратная связь">
+              <div class="tb-feedback-preview__text">
+                <span class="tb-feedback-preview__snippet">Поздравляем с прохождением базового модуля!</span>
                 <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать обратную связь">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-pencil"/></svg>
                 </button>
@@ -651,16 +611,16 @@
             </div>
           </div>
         </div>
-        <div class="topic-row">
-          <div class="topic-row-header"><span class="topic-name">Сетевая безопасность</span><span class="topic-count">30 вопросов</span></div>
-          <div class="topic-row-body">
-            <div class="draw-count-row">
-              <span class="draw-count-label">Вопросов в тест</span>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header"><span class="tb-topic-row__name">Сетевая безопасность</span><span class="tb-topic-row__count">30 вопросов</span></div>
+          <div class="tb-topic-row__body">
+            <div class="tb-draw-count-row">
+              <span class="tb-draw-count-row__label">Вопросов в тест</span>
               <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" min="1" max="30" aria-label="Вопросов из Сетевая безопасность"></div></div>
-              <span class="draw-count-max">из 30</span>
+              <span class="tb-draw-count-row__max">из 30</span>
             </div>
-            <div class="feedback-label">Обратная связь по теме</div>
-            <div class="feedback-preview empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
+            <div class="tb-card-desc">Обратная связь по теме</div>
+            <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
               Не задано — нажмите для редактирования
             </div>
           </div>
@@ -703,37 +663,37 @@
       </div></nav>
       <div class="ou-drawer__body ou-drawer__body--saving" tabindex="-1">
         <div inert>
-          <div class="topic-section-label">Темы и выборка вопросов</div>
-          <div class="topic-row">
-            <div class="topic-row-header">
-              <span class="topic-name">Основы ИБ</span>
+          <div class="tb-section-label">Темы и выборка вопросов</div>
+          <div class="tb-topic-row">
+            <div class="tb-topic-row__header">
+              <span class="tb-topic-row__name">Основы ИБ</span>
               <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязательная</span>
-              <span class="topic-count">45 вопросов</span>
+              <span class="tb-topic-row__count">45 вопросов</span>
             </div>
-            <div class="topic-row-body">
-              <div class="draw-count-row">
-                <span class="draw-count-label">Вопросов в тест</span>
+            <div class="tb-topic-row__body">
+              <div class="tb-draw-count-row">
+                <span class="tb-draw-count-row__label">Вопросов в тест</span>
                 <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" min="1" max="45" aria-label="Количество вопросов из темы Основы ИБ"></div></div>
-                <span class="draw-count-max">из 45</span>
+                <span class="tb-draw-count-row__max">из 45</span>
               </div>
-              <div class="feedback-label">Обратная связь по теме</div>
-              <div class="feedback-preview" aria-label="Обратная связь">
-                <div class="feedback-text">
-                  <span class="feedback-snippet">Поздравляем с прохождением базового модуля!</span>
+              <div class="tb-card-desc">Обратная связь по теме</div>
+              <div class="tb-feedback-preview" aria-label="Обратная связь">
+                <div class="tb-feedback-preview__text">
+                  <span class="tb-feedback-preview__snippet">Поздравляем с прохождением базового модуля!</span>
                 </div>
               </div>
             </div>
           </div>
-          <div class="topic-row">
-            <div class="topic-row-header"><span class="topic-name">Сетевая безопасность</span><span class="topic-count">30 вопросов</span></div>
-            <div class="topic-row-body">
-              <div class="draw-count-row">
-                <span class="draw-count-label">Вопросов в тест</span>
+          <div class="tb-topic-row">
+            <div class="tb-topic-row__header"><span class="tb-topic-row__name">Сетевая безопасность</span><span class="tb-topic-row__count">30 вопросов</span></div>
+            <div class="tb-topic-row__body">
+              <div class="tb-draw-count-row">
+                <span class="tb-draw-count-row__label">Вопросов в тест</span>
                 <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" min="1" max="30" aria-label="Вопросов из Сетевая безопасность"></div></div>
-                <span class="draw-count-max">из 30</span>
+                <span class="tb-draw-count-row__max">из 30</span>
               </div>
-              <div class="feedback-label">Обратная связь по теме</div>
-              <div class="feedback-preview empty">Не задано — нажмите для редактирования</div>
+              <div class="tb-card-desc">Обратная связь по теме</div>
+              <div class="tb-feedback-preview is-empty">Не задано — нажмите для редактирования</div>
             </div>
           </div>
         </div>
@@ -797,31 +757,31 @@
         </div></nav>
       </div>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="topic-section-label">Темы и выборка вопросов</div>
-        <div class="topic-row">
-          <div class="topic-row-header">
-            <span class="topic-name">Основы ИБ</span>
+        <div class="tb-section-label">Темы и выборка вопросов</div>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header">
+            <span class="tb-topic-row__name">Основы ИБ</span>
             <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязательная</span>
-            <span class="topic-count">45 вопросов</span>
+            <span class="tb-topic-row__count">45 вопросов</span>
           </div>
-          <div class="topic-row-body">
-            <div class="draw-count-row">
-              <span class="draw-count-label">Вопросов в тест</span>
+          <div class="tb-topic-row__body">
+            <div class="tb-draw-count-row">
+              <span class="tb-draw-count-row__label">Вопросов в тест</span>
               <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" min="1" max="45" aria-label="Количество вопросов из темы Основы ИБ"></div></div>
-              <span class="draw-count-max">из 45</span>
+              <span class="tb-draw-count-row__max">из 45</span>
             </div>
           </div>
         </div>
-        <div class="topic-row">
-          <div class="topic-row-header"><span class="topic-name">Сетевая безопасность</span><span class="topic-count">30 вопросов</span></div>
-          <div class="topic-row-body">
-            <div class="draw-count-row">
-              <span class="draw-count-label">Вопросов в тест</span>
+        <div class="tb-topic-row">
+          <div class="tb-topic-row__header"><span class="tb-topic-row__name">Сетевая безопасность</span><span class="tb-topic-row__count">30 вопросов</span></div>
+          <div class="tb-topic-row__body">
+            <div class="tb-draw-count-row">
+              <span class="tb-draw-count-row__label">Вопросов в тест</span>
               <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" min="1" max="30" aria-label="Вопросов из Сетевая безопасность"></div></div>
-              <span class="draw-count-max">из 30</span>
+              <span class="tb-draw-count-row__max">из 30</span>
             </div>
-            <div class="feedback-label">Обратная связь по теме</div>
-            <div class="feedback-preview empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
+            <div class="tb-card-desc">Обратная связь по теме</div>
+            <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
               Не задано — нажмите для редактирования
             </div>
           </div>
@@ -1005,28 +965,28 @@
             </button>
           </div>
           <div class="ou-drawer__body" tabindex="0">
-            <div class="topic-section-label">Темы и выборка вопросов</div>
-            <div class="topic-row">
-              <div class="topic-row-header">
-                <span class="topic-name">Основы ИБ</span>
+            <div class="tb-section-label">Темы и выборка вопросов</div>
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">Основы ИБ</span>
                 <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязат.</span>
-                <span class="topic-count">45</span>
+                <span class="tb-topic-row__count">45</span>
               </div>
-              <div class="topic-row-body">
-                <div class="draw-count-row">
-                  <span class="draw-count-label">Вопросов в тест</span>
+              <div class="tb-topic-row__body">
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
                   <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" min="1" max="45" aria-label="Вопросов из Основы ИБ"></div></div>
-                  <span class="draw-count-max">/ 45</span>
+                  <span class="tb-draw-count-row__max">/ 45</span>
                 </div>
               </div>
             </div>
-            <div class="topic-row">
-              <div class="topic-row-header"><span class="topic-name">Сетевая безопасность</span><span class="topic-count">30</span></div>
-              <div class="topic-row-body">
-                <div class="draw-count-row">
-                  <span class="draw-count-label">Вопросов в тест</span>
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header"><span class="tb-topic-row__name">Сетевая безопасность</span><span class="tb-topic-row__count">30</span></div>
+              <div class="tb-topic-row__body">
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
                   <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" min="1" max="30" aria-label="Вопросов из Сетевая безопасность"></div></div>
-                  <span class="draw-count-max">/ 30</span>
+                  <span class="tb-draw-count-row__max">/ 30</span>
                 </div>
               </div>
             </div>
@@ -1115,31 +1075,31 @@
             </button>
           </div>
           <div class="ou-drawer__body" tabindex="0">
-            <div class="topic-section-label">Темы и выборка вопросов</div>
-            <div class="topic-row">
-              <div class="topic-row-header">
-                <span class="topic-name" title="Защита персональных данных и конфиденциальной информации">Защита персональных данных и конфиденциальной информации</span>
+            <div class="tb-section-label">Темы и выборка вопросов</div>
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name" title="Защита персональных данных и конфиденциальной информации">Защита персональных данных и конфиденциальной информации</span>
                 <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязат.</span>
-                <span class="topic-count">45</span>
+                <span class="tb-topic-row__count">45</span>
               </div>
-              <div class="topic-row-body">
-                <div class="draw-count-row">
-                  <span class="draw-count-label">Вопросов в тест</span>
+              <div class="tb-topic-row__body">
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
                   <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" min="1" max="45" aria-label="Вопросов из темы"></div></div>
-                  <span class="draw-count-max">/ 45</span>
+                  <span class="tb-draw-count-row__max">/ 45</span>
                 </div>
               </div>
             </div>
-            <div class="topic-row">
-              <div class="topic-row-header">
-                <span class="topic-name" title="Правовое регулирование информационной безопасности в РФ">Правовое регулирование информационной безопасности в РФ</span>
-                <span class="topic-count">30</span>
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name" title="Правовое регулирование информационной безопасности в РФ">Правовое регулирование информационной безопасности в РФ</span>
+                <span class="tb-topic-row__count">30</span>
               </div>
-              <div class="topic-row-body">
-                <div class="draw-count-row">
-                  <span class="draw-count-label">Вопросов в тест</span>
+              <div class="tb-topic-row__body">
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
                   <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" min="1" max="30" aria-label="Вопросов из темы"></div></div>
-                  <span class="draw-count-max">/ 30</span>
+                  <span class="tb-draw-count-row__max">/ 30</span>
                 </div>
               </div>
             </div>
@@ -1180,31 +1140,31 @@
             </button>
           </div>
           <div class="ou-drawer__body" tabindex="0">
-            <div class="topic-section-label">Темы и выборка вопросов</div>
-            <div class="topic-row">
-              <div class="topic-row-header">
+            <div class="tb-section-label">Темы и выборка вопросов</div>
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
                 <span class="topic-name is-expanded">Защита персональных данных и конфиденциальной информации</span>
                 <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязат.</span>
-                <span class="topic-count">45</span>
+                <span class="tb-topic-row__count">45</span>
               </div>
-              <div class="topic-row-body">
-                <div class="draw-count-row">
-                  <span class="draw-count-label">Вопросов в тест</span>
+              <div class="tb-topic-row__body">
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
                   <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" min="1" max="45" aria-label="Вопросов из темы"></div></div>
-                  <span class="draw-count-max">/ 45</span>
+                  <span class="tb-draw-count-row__max">/ 45</span>
                 </div>
               </div>
             </div>
-            <div class="topic-row">
-              <div class="topic-row-header">
-                <span class="topic-name" title="Правовое регулирование информационной безопасности в РФ">Правовое регулирование информационной безопасности в РФ</span>
-                <span class="topic-count">30</span>
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name" title="Правовое регулирование информационной безопасности в РФ">Правовое регулирование информационной безопасности в РФ</span>
+                <span class="tb-topic-row__count">30</span>
               </div>
-              <div class="topic-row-body">
-                <div class="draw-count-row">
-                  <span class="draw-count-label">Вопросов в тест</span>
+              <div class="tb-topic-row__body">
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
                   <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" min="1" max="30" aria-label="Вопросов из темы"></div></div>
-                  <span class="draw-count-max">/ 30</span>
+                  <span class="tb-draw-count-row__max">/ 30</span>
                 </div>
               </div>
             </div>
@@ -1247,12 +1207,12 @@
             </button>
           </div>
           <div class="ou-drawer__body" tabindex="-1" aria-hidden="true">
-            <div class="topic-section-label">Темы и выборка вопросов</div>
-            <div class="topic-row">
-              <div class="topic-row-header">
-                <span class="topic-name">Основы ИБ</span>
+            <div class="tb-section-label">Темы и выборка вопросов</div>
+            <div class="tb-topic-row">
+              <div class="tb-topic-row__header">
+                <span class="tb-topic-row__name">Основы ИБ</span>
                 <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязат.</span>
-                <span class="topic-count">45</span>
+                <span class="tb-topic-row__count">45</span>
               </div>
             </div>
           </div>

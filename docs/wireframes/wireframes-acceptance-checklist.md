@@ -58,13 +58,25 @@ Drawer-контейнер), затем точки входа пользоват�
 - [ ] **Feedback edit form** (FR-36, FR-37): модал/inline-редактор с richtext +
   ссылки на материалы + PDF-assets. Сейчас в editor-drawer есть только
   read-only `tb-feedback-preview`, edit-открывает модал без эскиза
-- [ ] **DS+tb-* рефакторинг editor-drawer** — файл сам содержит ~700 строк
-  inline CSS под `.topic-row*`, `.feedback-preview*`, `.bg-*` etc. По правилу
-  [feedback_wf_only_skeleton_frame](../../C%3A/Users/%D0%92%D0%BB%D0%B0%D0%B4/.claude/projects/c--Repositories-test-builder/memory/feedback_wf_only_skeleton_frame.md)
-  это запрещено в `<style>` блоке. Уже подготовленные `tb-*` классы
-  ([tb-components.css](tb-components.css): `tb-topic-row`, `tb-draw-count-row`,
-  `tb-feedback-preview`, `tb-status-dot--dirty`) можно использовать; нужно
-  заменить inline `.topic-row*` → `tb-topic-row*` etc. в editor-drawer
+- [x] **DS+tb-* частичный рефакторинг editor-drawer** (2026-05-21):
+  компонентные классы вкладки «Состав» во всех state'ах мигрированы на tb-*
+  (`tb-topic-row` + BEM, `tb-draw-count-row` + BEM + `--adaptive` modifier,
+  `tb-feedback-preview` + BEM + `.is-empty`, `tb-section-label`, `tb-card-desc`).
+  Подключён `tb-components.css` в head. Удалено ~43 строки dead inline CSS под
+  `.topic-row*` / `.draw-count-row*` / `.feedback-*` / `.topic-section-label`.
+  Линтер не получил новых violations.
+- [ ] **Остаточный inline CSS** в editor-drawer (~550 строк): `.changes-popover*`,
+  `.changes-anchor`, `.saving-overlay*`, `.settings-content`, `.changed-area`,
+  `.spin`, mobile-state CSS (`.mobile-state*`, `.mobile-canvas*`, `.mobile-tabs-nav*`,
+  `.mobile-*`, `.notes-page`, `.notes-box`, `.notes-table`), `.form-hint-small`,
+  bg-page slot CSS (`.bg-page`, `.bg-sidebar`, `.bg-logo`, `.bg-nav-item`, `.bg-main`,
+  `.bg-topbar`, `.bg-content`, `.bg-card`). Эти паттерны либо специфичны для
+  одного state (saving-overlay, settings-content), либо относятся к out-of-scope
+  mobile / эскизной декорации (bg-page slot). Решение о выносе или удалении —
+  следующая итерация
+- [ ] **s-mobile state** — формально out-of-scope PRD-7 (mobile вынесен за рамки
+  2026-05-21). Решение об удалении state из editor-drawer — за пользователем
+  (требует согласования)
 
 ---
 
@@ -587,18 +599,21 @@ prod-ready BEM-классы для будущего рефакторинга edi
   _(s-mode-warn: «Раздел Адаптивность станет доступен», «поле draw_count заменяется»,_
   _«несовместимые настройки сохраняются»; s-flow-warn: реорганизация «Вопросы будут сгруппированы_
   _по темам», «авторские страницы распределены по темам».)_
-- [ ] Для каждой настройки указан режим, при котором она снова становится доступной
-  _(2026-05-21: формулировка эскиза общая — «появятся снова при возврате к совместимому режиму»,_
-  _без явного per-setting списка целевого режима. Требует доработки эскиза для full [x]._
-  _Альтернатива — переформулировка чек-листа в PRD-7 §FR-25g термине: «при возврате режима_
-  _скрытые настройки снова отображаются».)_
-- [ ] Кнопки: подтвердить смену и отмена
-  _(2026-05-21: пункт **противоречит** PRD-7 §FR-25e — «Переключение критичных режимов не требует_
-  _modal confirmation, если данные не удаляются; предупреждение показывается inline»._
-  _Текущий эскиз корректно показывает inline-warning без Apply/Cancel (s-mode-warn / s-flow-warn);_
-  _смена применяется к draft, фиксируется общим Save Drawer (FR-25a). Требует переформулировки_
-  _пункта чек-листа на «inline warning без Apply/Cancel; смена применяется к draft»._
-  _По PRD-7 §2.3b auto-удаление router-page при router→linear* — тоже молча без диалога.)_
+- [x] Скрытые несовместимые настройки восстанавливаются при возврате режима (FR-25g)
+  _(переформулировано 2026-05-21: исходный пункт «для каждой настройки указан режим,_
+  _при котором она снова становится доступной» требовал per-setting label целевого_
+  _режима. По PRD-7 §FR-25g восстановление настроек — это **поведение** «при возврате_
+  _режима скрытые настройки снова отображаются», не UI-метка. Эскиз корректно_
+  _передаёт это в inline-warning: «Несовместимые настройки сохраняются и появятся_
+  _снова при возврате к совместимому режиму».)_
+- [x] Inline warning без Apply/Cancel; смена применяется к draft сразу (FR-25d/e)
+  _(переформулировано 2026-05-21: исходный пункт «Кнопки: подтвердить смену и отмена»_
+  _противоречил PRD-7 §FR-25e — «Переключение критичных режимов не требует modal_
+  _confirmation, если данные не удаляются; предупреждение показывается inline»._
+  _Текущий эскиз правильно показывает inline-warning без Apply/Cancel в обоих_
+  _state'ах (s-mode-warn / s-flow-warn); смена применяется к draft, фиксируется_
+  _общим Save Drawer (FR-25a). По PRD-7 §2.3b auto-удаление router-page при_
+  _router→linear* — тоже молча без диалога.)_
 
 ---
 
