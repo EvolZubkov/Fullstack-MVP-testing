@@ -110,16 +110,33 @@
       display: flex; justify-content: flex-end; gap: var(--ou-space-2);
       margin-top: var(--ou-space-3);
     }
-    .page-row--warn .page-title { color: var(--ou-warning-on-soft); }
+    .page-row--warn .page-title { color: var(--ou-error-on-soft); }
 
-    /* page-row--system — модификатор для системных kind (router/summary/intro/questions):
-       accent-border слева, без insert-row до/после, без delete (PRD-1 §4.3).
-       page-row--questions — особый случай: иконка вопроса вместо drag-handle,
-       title в muted-цвете (это не контентная страница, а индикатор блока вопросов).
-       Расположено внутри .topic-body, поэтому padding согласован с обычной page-row. */
-    .page-row--system { border-left: var(--wf-space-1q) solid var(--ou-accent-default); }
+    /* `.page-row--system` — семантический маркер «системный kind»
+       (router/summary/intro/questions, см. PRD-1 §4.3). CSS-правил не имеет —
+       визуальные отличия выводятся из severity-индикации (см. ниже) и из
+       наличия meta-тегов; класс используется JS-логикой и читателем разметки.
+       `.page-row--questions` — особый случай: иконка вопроса, title в muted-цвете. */
     .page-row--questions .page-title { color: var(--ou-fg-muted); }
     .page-icon { color: var(--ou-fg-muted); flex-shrink: 0; }
+
+    /* Severity-border (auto-derived): error > warning > info. Цвета — DS-токены.
+       Приоритет: красный (error) > жёлтый (warning) > синий (info).
+       Где нет meta-тегов и нет .page-row--warn — border не показывается
+       (norma — не засоряем эфир). */
+    .page-row:has(> .page-row__meta .ou-tag--info):not(:has(> .page-row__meta .ou-tag--warning)):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn) {
+      border-left: var(--wf-space-1q) solid var(--ou-accent-default);
+      padding-left: var(--wf-space-11);
+    }
+    .page-row:has(> .page-row__meta .ou-tag--warning):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn) {
+      border-left: var(--wf-space-1q) solid var(--ou-warning-default);
+      padding-left: var(--wf-space-11);
+    }
+    .page-row:has(> .page-row__meta .ou-tag--error),
+    .page-row.page-row--warn {
+      border-left: var(--wf-space-1q) solid var(--ou-error-default);
+      padding-left: var(--wf-space-11);
+    }
 
     /* Drop zone */
     .drop-zone { height: var(--wf-space-1q); background: var(--ou-accent-default); border-radius: var(--wf-space-half); margin: 0 var(--wf-space-14); box-shadow: 0 0 0 var(--wf-space-1q) color-mix(in srgb, var(--ou-accent-default) 20%, transparent); }

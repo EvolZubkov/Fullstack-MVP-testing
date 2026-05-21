@@ -112,13 +112,29 @@
       display: flex; justify-content: flex-end; gap: var(--ou-space-2);
       margin-top: var(--ou-space-3);
     }
-    .page-row--warn .page-title { color: var(--ou-warning-on-soft); }
+    .page-row--warn .page-title { color: var(--ou-error-on-soft); }
 
-    /* page-row--system — системные kind (router/summary/intro/questions):
-       accent-border слева, без insert-row до/после, без delete (см. PRD-1 §4.3). */
-    .page-row--system { border-left: var(--wf-space-1q) solid var(--ou-accent-default); }
+    /* `.page-row--system` — семантический маркер «системный kind»
+       (router/summary/intro/questions, см. PRD-1 §4.3). CSS-правил не имеет —
+       визуальные отличия выводятся из severity-индикации (см. ниже) и из
+       наличия meta-тегов; класс используется JS-логикой и читателем разметки. */
     .page-row--questions .page-title { color: var(--ou-fg-muted); }
     .page-icon { color: var(--ou-fg-muted); flex-shrink: 0; }
+
+    /* Severity-border (auto-derived): error > warning > info. */
+    .page-row:has(> .page-row__meta .ou-tag--info):not(:has(> .page-row__meta .ou-tag--warning)):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn) {
+      border-left: var(--wf-space-1q) solid var(--ou-accent-default);
+      padding-left: var(--wf-space-11);
+    }
+    .page-row:has(> .page-row__meta .ou-tag--warning):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn) {
+      border-left: var(--wf-space-1q) solid var(--ou-warning-default);
+      padding-left: var(--wf-space-11);
+    }
+    .page-row:has(> .page-row__meta .ou-tag--error),
+    .page-row.page-row--warn {
+      border-left: var(--wf-space-1q) solid var(--ou-error-default);
+      padding-left: var(--wf-space-11);
+    }
 
 
     /* Drop zone */

@@ -77,10 +77,29 @@
     .page-actions { display: flex; gap: var(--ou-space-1); flex-shrink: 0; }
     .page-icon { width: var(--ou-space-4); height: var(--ou-space-4); color: var(--ou-fg-muted); flex-shrink: 0; }
 
-    /* Modifier — системная page-row (router/summary/intro/questions):
-       без insert-row до/после, без drag-handle, без delete; визуально —
-       лёгкий accent-border слева для отличия от пользовательских info-row. */
-    .page-row--system { border-left: var(--wf-space-1q) solid var(--ou-accent-default); padding-left: var(--wf-space-11); }
+    /* `.page-row--system` — семантический маркер «системный kind»
+       (router/summary/intro/questions, см. PRD-1 §4.3). CSS-правил не имеет —
+       визуальные отличия выводятся из severity-индикации (см. ниже) и из
+       наличия meta-тегов; класс используется JS-логикой и читателем разметки. */
+
+    /* Severity-border на page-row — автоматически выводится из наивысшего
+       уровня тега в `.page-row__meta` (или из модификатора .page-row--warn
+       для backwards-compat с s-validation). Приоритет: error > warning > info.
+       Цвета — DS-токены. Компенсирующий padding-left сохраняет выравнивание
+       контента при появлении border. */
+    .page-row:has(> .page-row__meta .ou-tag--info):not(:has(> .page-row__meta .ou-tag--warning)):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn) {
+      border-left: var(--wf-space-1q) solid var(--ou-accent-default);
+      padding-left: var(--wf-space-11);
+    }
+    .page-row:has(> .page-row__meta .ou-tag--warning):not(:has(> .page-row__meta .ou-tag--error)):not(.page-row--warn) {
+      border-left: var(--wf-space-1q) solid var(--ou-warning-default);
+      padding-left: var(--wf-space-11);
+    }
+    .page-row:has(> .page-row__meta .ou-tag--error),
+    .page-row.page-row--warn {
+      border-left: var(--wf-space-1q) solid var(--ou-error-default);
+      padding-left: var(--wf-space-11);
+    }
 
     /* Modifier — questions-row (особый случай page-row--system): иконка вопроса
        вместо drag-handle; контент описывает, какие вопросы здесь будут. */
@@ -145,9 +164,10 @@
     .insert-row:has(+ .page-row:hover) .insert-btn,
     .insert-row:hover .insert-btn { opacity: 1; color: var(--ou-accent-default); border-color: var(--ou-accent-container-hover); }
 
-    /* Validation — required-params not filled (PRD-1 §4.3.6) */
-    .page-row--warn { border-color: var(--ou-warning-default); }
-    .page-row--warn .page-title { color: var(--ou-warning-on-soft); }
+    /* Validation — required-params not filled (PRD-1 §4.3.6).
+       Border-left и border-color row задаются severity-логикой выше
+       (.page-row.page-row--warn → red border-left). Здесь только цвет title. */
+    .page-row--warn .page-title { color: var(--ou-error-on-soft); }
     .validation-banner { background: var(--ou-error-soft); border: var(--wf-border-w) solid var(--ou-error-default); border-radius: var(--ou-radius-s); padding: var(--wf-space-10) var(--ou-space-3); margin-bottom: var(--ou-space-3); display: flex; align-items: flex-start; gap: var(--ou-space-2); }
     .validation-banner__ico { color: var(--ou-error-default); flex-shrink: 0; margin-top: var(--wf-space-half); }
     .validation-banner__body { font: var(--ou-text-body-s); color: var(--ou-error-on-soft); }
