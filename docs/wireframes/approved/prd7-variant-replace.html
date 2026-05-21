@@ -41,7 +41,7 @@
     .variant-search__input { width: 100%; height: var(--ou-size-control-m); padding: 0 var(--ou-space-3) 0 var(--ou-space-7); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-s); background: var(--ou-bg-input); font: var(--ou-text-body-m); color: var(--ou-fg-default); outline: none; }
     .variant-search__input:focus { border-color: var(--ou-accent-default); box-shadow: var(--ou-shadow-focus); }
 
-    .variant-list { list-style: none; padding: var(--ou-space-1); margin: 0 0 var(--ou-space-4); max-height: var(--wf-size-280, 280px); overflow-y: auto; border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s); background: var(--ou-bg-elevated); }
+    .variant-list { list-style: none; padding: var(--ou-space-1); margin: 0 0 var(--ou-space-4); max-height: var(--wf-size-280); overflow-y: auto; border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s); background: var(--ou-bg-elevated); }
     .variant-list__item { display: flex; align-items: flex-start; gap: var(--ou-space-3); padding: var(--ou-space-2) var(--ou-space-3); border-radius: var(--ou-radius-xs); cursor: pointer; }
     .variant-list__item:hover { background: var(--ou-bg-hover); }
     .variant-list__item.is-current { background: var(--ou-bg-surface-3); cursor: default; opacity: 0.7; }
@@ -55,17 +55,14 @@
     .variant-list__check { color: var(--ou-accent-default); flex-shrink: 0; margin-left: auto; opacity: 0; }
     .variant-list__item.is-selected .variant-list__check { opacity: 1; }
 
-    /* Diff block — потери и сохранения параметров */
+    /* Warning-блок: то, что теряется при смене варианта.
+       Положительная информация ("что переносится") намеренно не показывается —
+       пользователь увидит перенесённые значения в page-row-expand. */
     .diff-block { margin-top: var(--ou-space-3); border-radius: var(--ou-radius-s); overflow: hidden; }
-    .diff-block__group { padding: var(--wf-space-10) var(--wf-space-14); border: var(--wf-border-w) solid var(--ou-border-soft); border-bottom: 0; }
-    .diff-block__group:last-child { border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
-    .diff-block__group--lost { background: var(--ou-warning-soft); border-color: var(--ou-warning-default); }
-    .diff-block__group--kept { background: var(--ou-success-soft); border-color: var(--ou-success-default); }
-    .diff-block__group--empty { background: var(--ou-bg-surface-2); }
+    .diff-block__group { padding: var(--wf-space-10) var(--wf-space-14); border: var(--wf-border-w) solid var(--ou-warning-default); border-radius: var(--ou-radius-s); }
+    .diff-block__group--lost { background: var(--ou-warning-soft); }
     .diff-block__title { display: flex; align-items: center; gap: var(--ou-space-2); font: var(--ou-text-body-s); font-weight: 600; margin-bottom: var(--wf-space-6); }
     .diff-block__title--lost { color: var(--ou-warning-on-soft); }
-    .diff-block__title--kept { color: var(--ou-success-on-soft); }
-    .diff-block__title--empty { color: var(--ou-fg-muted); }
     .diff-block__list { list-style: none; padding: 0; margin: 0; }
     .diff-block__item { display: flex; align-items: baseline; gap: var(--ou-space-2); padding: var(--wf-space-tiny) 0; font: var(--ou-text-body-s); }
     .diff-block__field-name { font-weight: 600; color: var(--ou-fg-default); }
@@ -74,11 +71,6 @@
 
     /* Modal intro paragraph spacing */
     .modal-intro { margin-bottom: var(--ou-space-3); }
-
-    /* Confirm note */
-    .confirm-note { background: var(--ou-info-soft); border: var(--wf-border-w) solid var(--ou-info-default); border-radius: var(--ou-radius-s); padding: var(--wf-space-10) var(--ou-space-3); margin-top: var(--ou-space-3); display: flex; align-items: flex-start; gap: var(--ou-space-2); }
-    .confirm-note__ico { color: var(--ou-info-default); flex-shrink: 0; margin-top: var(--wf-space-half); }
-    .confirm-note__body { font: var(--ou-text-body-s); color: var(--ou-info-on-soft); }
 
     /* Utility */
     .wf-icon-muted { color: var(--ou-fg-muted); }
@@ -89,7 +81,7 @@
     /* FR annot */
     .wf-annot-wrap { position: relative; display: inline-flex; }
     .wf-annot-wrap--block { position: relative; }
-    .wf-annot { display: none; position: absolute; top: calc(-1 * var(--ou-space-2)); right: calc(-1 * var(--ou-space-1)); z-index: 200; background: var(--ou-warning-default); color: var(--ou-fg-default); border-radius: var(--ou-radius-s); padding: 0 var(--ou-space-1); font-weight: 700; font-size: 10px; line-height: var(--ou-space-5); pointer-events: none; white-space: nowrap; box-shadow: var(--ou-shadow-sm); }
+    .wf-annot { display: none; position: absolute; top: calc(-1 * var(--ou-space-2)); right: calc(-1 * var(--ou-space-1)); z-index: 200; background: var(--ou-warning-default); color: var(--ou-fg-default); border-radius: var(--ou-radius-s); padding: 0 var(--ou-space-1); font-weight: 700; font-size: var(--wf-space-10); line-height: var(--ou-space-5); pointer-events: none; white-space: nowrap; box-shadow: var(--ou-shadow-sm); }
     body.wf-annots-on .wf-annot { display: block; }
 
     /* Notes table */
@@ -121,15 +113,13 @@
   <symbol id="i-search"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
   <symbol id="i-check"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></symbol>
   <symbol id="i-warn"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
-  <symbol id="i-info"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
-  <symbol id="i-trash"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/></symbol>
 </svg>
 
 <nav class="wf-nav" aria-label="Wireframe state switcher">
   <span class="wf-nav-title">Сменить вариант:</span>
   <button class="wf-btn active" type="button" onclick="showState(this, 's-replace-modal')">Основное (потери)</button>
   <button class="wf-btn"        type="button" onclick="showState(this, 's-replace-empty-diff')">Без потерь</button>
-  <button class="wf-btn"        type="button" onclick="showState(this, 's-replace-no-fields')">Пустая schema</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-replace-no-fields')">Шаблонный вариант</button>
 
   <div class="wf-nav-sep"></div>
   <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleTheme(this)">Dark</button>
@@ -145,14 +135,15 @@
     <div class="ou-modal__backdrop"></div>
     <div class="ou-modal ou-modal--m">
       <header class="ou-modal__head">
-        <h2 id="rm-title" class="ou-modal__title">Сменить вариант страницы</h2>
+        <div class="ou-modal__head-text">
+          <h2 id="rm-title" class="ou-modal__title">Сменить вариант страницы</h2>
+        </div>
         <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-modal__body">
         <p class="wf-notes-intro modal-intro">
           Текущий вариант: <strong>Информация</strong>. Выберите новый вариант
-          из текущего шаблона. Параметры с совпадающими именами полей
-          сохранятся, остальные будут удалены.
+          представления страницы.
         </p>
 
         <div class="variant-search">
@@ -171,34 +162,31 @@
           <li class="variant-list__item is-selected" role="option" aria-selected="true">
             <div>
               <div class="variant-list__name">Контентная страница</div>
-              <div class="variant-list__desc">Заголовок + markdown + опциональный hero-image + кнопка «Далее»</div>
-              <div class="variant-list__meta"><span class="variant-list__meta-tag">5 параметров</span></div>
+              <div class="variant-list__desc">Заголовок, текст с форматированием, картинка-обложка, кнопка «Далее»</div>
             </div>
             <svg width="16" height="16" class="variant-list__check"><use href="#i-check"/></svg>
           </li>
           <li class="variant-list__item" role="option" aria-selected="false">
             <div>
               <div class="variant-list__name">Видео-страница</div>
-              <div class="variant-list__desc">Заголовок + видео-плеер + транскрипт</div>
-              <div class="variant-list__meta"><span class="variant-list__meta-tag">3 параметра</span></div>
+              <div class="variant-list__desc">Заголовок, видео и текст-транскрипт</div>
             </div>
           </li>
           <li class="variant-list__item" role="option" aria-selected="false">
             <div>
               <div class="variant-list__name">Двухколоночная</div>
-              <div class="variant-list__desc">Параллельный текст + изображение справа</div>
-              <div class="variant-list__meta"><span class="variant-list__meta-tag">4 параметра</span></div>
+              <div class="variant-list__desc">Текст слева, изображение справа</div>
             </div>
           </li>
         </ul>
 
-        <!-- Diff блок: потери и сохранения параметров -->
+        <!-- Warning: только то, что теряется. Совпадающие настройки переносятся тихо. -->
         <span class="wf-annot-wrap--block">
           <div class="diff-block">
             <div class="diff-block__group diff-block__group--lost">
               <div class="diff-block__title diff-block__title--lost">
-                <svg width="14" height="14"><use href="#i-trash"/></svg>
-                Будут удалены 2 параметра
+                <svg width="14" height="14"><use href="#i-warn"/></svg>
+                Часть настроек не переносится
               </div>
               <ul class="diff-block__list">
                 <li class="diff-block__item">
@@ -210,28 +198,7 @@
                   <span class="diff-block__field-value">«Продолжить»</span>
                 </li>
               </ul>
-              <p class="diff-block__meta">Эти поля отсутствуют в schema нового варианта.</p>
-            </div>
-            <div class="diff-block__group diff-block__group--kept">
-              <div class="diff-block__title diff-block__title--kept">
-                <svg width="14" height="14"><use href="#i-check"/></svg>
-                Будут сохранены 3 параметра
-              </div>
-              <ul class="diff-block__list">
-                <li class="diff-block__item">
-                  <span class="diff-block__field-name">Заголовок:</span>
-                  <span class="diff-block__field-value">«Введение в раздел»</span>
-                </li>
-                <li class="diff-block__item">
-                  <span class="diff-block__field-name">Содержимое (markdown):</span>
-                  <span class="diff-block__field-value">«Защита информации от…»</span>
-                </li>
-                <li class="diff-block__item">
-                  <span class="diff-block__field-name">Автопереход:</span>
-                  <span class="diff-block__field-value">отключён</span>
-                </li>
-              </ul>
-              <p class="diff-block__meta">Имена полей совпадают между вариантами одного <code>kind</code>.</p>
+              <p class="diff-block__meta">У нового варианта таких полей нет.</p>
             </div>
           </div>
           <span class="wf-annot">PRD-1 §4.3.3</span>
@@ -253,7 +220,9 @@
     <div class="ou-modal__backdrop"></div>
     <div class="ou-modal ou-modal--m">
       <header class="ou-modal__head">
-        <h2 id="re-title" class="ou-modal__title">Сменить вариант страницы</h2>
+        <div class="ou-modal__head-text">
+          <h2 id="re-title" class="ou-modal__title">Сменить вариант страницы</h2>
+        </div>
         <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-modal__body">
@@ -274,32 +243,11 @@
             <div>
               <div class="variant-list__name">Расширенный</div>
               <div class="variant-list__desc">Двухколоночный макет с медиа-полем</div>
-              <div class="variant-list__meta"><span class="variant-list__meta-tag">2 параметра</span></div>
             </div>
             <svg width="16" height="16" class="variant-list__check"><use href="#i-check"/></svg>
           </li>
         </ul>
-
-        <!-- Diff блок: только «сохранено», ничего не теряется -->
-        <div class="diff-block">
-          <div class="diff-block__group diff-block__group--kept">
-            <div class="diff-block__title diff-block__title--kept">
-              <svg width="14" height="14"><use href="#i-check"/></svg>
-              Все параметры будут сохранены
-            </div>
-            <ul class="diff-block__list">
-              <li class="diff-block__item">
-                <span class="diff-block__field-name">Показывать номер вопроса:</span>
-                <span class="diff-block__field-value">включено</span>
-              </li>
-              <li class="diff-block__item">
-                <span class="diff-block__field-name">Подсказка после ответа:</span>
-                <span class="diff-block__field-value">показывать</span>
-              </li>
-            </ul>
-            <p class="diff-block__meta">Schema нового варианта содержит все те же поля, что и текущий.</p>
-          </div>
-        </div>
+        <!-- Спокойный случай: всё переносится без потерь — ничего не показываем. -->
       </div>
       <footer class="ou-modal__foot">
         <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Отменить</button>
@@ -317,7 +265,9 @@
     <div class="ou-modal__backdrop"></div>
     <div class="ou-modal ou-modal--m">
       <header class="ou-modal__head">
-        <h2 id="rn-title" class="ou-modal__title">Сменить вариант страницы</h2>
+        <div class="ou-modal__head-text">
+          <h2 id="rn-title" class="ou-modal__title">Сменить вариант страницы</h2>
+        </div>
         <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-modal__body">
@@ -336,34 +286,25 @@
           <li class="variant-list__item is-selected" role="option" aria-selected="true">
             <div>
               <div class="variant-list__name">Готовая инструкция</div>
-              <div class="variant-list__desc">Шаблонная статичная страница без редактируемых полей</div>
-              <div class="variant-list__meta"><span class="variant-list__meta-tag">Без параметров</span></div>
+              <div class="variant-list__desc">Статичная страница без редактируемых полей — содержимое задано шаблоном</div>
             </div>
             <svg width="16" height="16" class="variant-list__check"><use href="#i-check"/></svg>
           </li>
         </ul>
 
-        <!-- Все 3 параметра текущего варианта будут потеряны -->
+        <!-- Все настройки текущего варианта будут потеряны -->
         <div class="diff-block">
           <div class="diff-block__group diff-block__group--lost">
             <div class="diff-block__title diff-block__title--lost">
-              <svg width="14" height="14"><use href="#i-trash"/></svg>
-              Будут удалены 3 параметра
+              <svg width="14" height="14"><use href="#i-warn"/></svg>
+              Текущие настройки страницы будут потеряны
             </div>
             <ul class="diff-block__list">
               <li class="diff-block__item"><span class="diff-block__field-name">Заголовок:</span><span class="diff-block__field-value">«Введение в раздел»</span></li>
               <li class="diff-block__item"><span class="diff-block__field-name">Содержимое:</span><span class="diff-block__field-value">«Защита информации от…»</span></li>
               <li class="diff-block__item"><span class="diff-block__field-name">Текст кнопки:</span><span class="diff-block__field-value">«Продолжить»</span></li>
             </ul>
-          </div>
-        </div>
-
-        <div class="confirm-note">
-          <span class="confirm-note__ico"><svg width="14" height="14"><use href="#i-info"/></svg></span>
-          <div class="confirm-note__body">
-            У выбранного варианта пустая schema — после смены страница станет
-            шаблонной (без редактируемых полей). Контент задаётся целиком в
-            шаблоне.
+            <p class="diff-block__meta">У нового варианта нет редактируемых полей — содержимое страницы будет полностью задано шаблоном.</p>
           </div>
         </div>
       </div>
@@ -394,28 +335,30 @@
         <td><code>s-replace-modal</code></td>
         <td>Основное: список вариантов того же <code>kind</code> из текущего
           шаблона. Текущий вариант помечен меткой «Текущий» и disabled. Под
-          списком — <code>diff-block</code> с двумя группами: «Будут удалены»
-          (warning-фон) и «Будут сохранены» (success-фон). При выборе другого
-          варианта diff пересчитывается по правилу «имя поля = контракт между
-          вариантами одного <code>kind</code>».</td>
+          списком — warning-блок «Часть настроек не переносится» с перечнем
+          теряемых полей. Совпадающие поля переносятся тихо — отдельного блока
+          «сохранится» нет, чтобы не нагружать модал положительной информацией
+          (пользователь увидит сохранённые значения позже в page-row-expand
+          при редактировании). Контракт совместимости: «имя поля = совместимый
+          тип» — поля сравниваются между вариантами одного <code>kind</code>.</td>
         <td>PRD-1 §4.3.3</td>
       </tr>
       <tr>
         <td><code>s-replace-empty-diff</code></td>
-        <td>Спокойный случай: schema нового варианта содержит все те же поля,
-          что и текущий (имена и совместимые типы). Показывается только группа
-          «Все параметры будут сохранены» (без warning-блока). Используется,
-          когда варианты структурно симметричны (например, «Минимальный» и
-          «Расширенный» комплекты вопросов с одинаковыми флагами).</td>
+        <td>Спокойный случай: у нового варианта есть все те же поля, что у
+          текущего (имена и совместимые типы). Модал содержит только список
+          вариантов — никаких warning-блоков. Кнопка «Сменить вариант»
+          доступна. Используется, когда варианты структурно симметричны
+          (например, «Минимальный» и «Расширенный» комплекты вопросов).</td>
         <td>PRD-1 §4.3.3</td>
       </tr>
       <tr>
         <td><code>s-replace-no-fields</code></td>
-        <td>У нового варианта пустая schema (нет редактируемых полей).
-          Показывается diff-блок «Будут удалены» (все параметры текущего
-          варианта) + info-note «У выбранного варианта пустая schema —
-          страница станет шаблонной». В page-row после смены не отрисовывается
-          chevron (нечего редактировать).</td>
+        <td>У нового варианта нет редактируемых полей — содержимое полностью
+          задано шаблоном. Warning-блок «Текущие настройки страницы будут
+          потеряны» содержит перечень текущих значений и пояснение, что после
+          смены страница становится шаблонной. В page-row после смены не
+          отрисовывается chevron — раскрывать нечего.</td>
         <td>PRD-1 §4.3.3</td>
       </tr>
     </tbody>
