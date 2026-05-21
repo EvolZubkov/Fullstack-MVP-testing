@@ -953,12 +953,12 @@
             <span class="page-title">Страница-маршрутизатор</span>
             <div class="page-actions">
               <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" type="button" aria-label="Действия" aria-expanded="true"><svg width="13" height="13"><use href="#i-dots"/></svg></button>
-              <!-- Открытый dropdown для системной row: только «Сменить вариант» + «Предпросмотр» (без «Удалить» — системную page нельзя удалить вручную) -->
+              <!-- Открытый dropdown для системной row: «Сменить вариант» + «Предпросмотр».
+                   Пункт «Удалить» НЕ показывается — системную страницу нельзя удалить
+                   вручную (PRD-1 §4.3.5: kind: router живёт пока активен flowMode). -->
               <div class="row-menu" role="menu" aria-label="Действия со страницей маршрутизатора">
                 <button class="row-menu__item" type="button" role="menuitem"><svg class="row-menu__icon"><use href="#i-chevron-right"/></svg>Сменить вариант…</button>
                 <button class="row-menu__item" type="button" role="menuitem"><svg class="row-menu__icon"><use href="#i-eye"/></svg>Предпросмотр</button>
-                <div class="row-menu__sep"></div>
-                <button class="row-menu__item is-disabled" type="button" role="menuitem" aria-disabled="true" title="Системную страницу нельзя удалить"><svg class="row-menu__icon"><use href="#i-trash"/></svg>Удалить</button>
               </div>
             </div>
             <div class="page-row__meta">
@@ -1105,12 +1105,12 @@
         <td>Иллюстрирует открытый <code>…</code> row-menu (<code>.row-menu</code>)
           для системной router-row. Состав меню для системных kind
           (<code>router</code> / <code>summary</code> / <code>intro</code> /
-          <code>questions</code>):
-          «Сменить вариант…» (открывает модал <code>prd7-variant-replace.html</code>),
-          «Предпросмотр», разделитель, «Удалить» — disabled с tooltip
-          «Системную страницу нельзя удалить». Для пользовательских
-          <code>info</code>-row пункт «Удалить» активен (демонстрируется в
-          секции «После теста» — info-row без `--system` модификатора
+          <code>questions</code>): «Сменить вариант…» (открывает модал
+          <code>prd7-variant-replace.html</code>) и «Предпросмотр». Пункт
+          «Удалить» <strong>не показывается</strong> — системную page-row
+          нельзя удалить вручную (PRD-1 §4.3.5). Для пользовательских
+          <code>info</code>-row пункт «Удалить» доступен (демонстрируется в
+          секции «После теста» — info-row без <code>--system</code> модификатора
           получает полный набор действий, включая destructive «Удалить»).
           В финальной реализации dropdown управляется JS, позиционирование
           через <code>position: absolute</code> от <code>.page-actions</code>.</td>
