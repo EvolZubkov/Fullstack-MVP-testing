@@ -592,9 +592,12 @@ inline-expand редактирование, `s-dirty-form` / `s-sanitize`,
 - [ ] Нет файлов в старом формате (`ou-button`, `wf-state`, `wf-page-wrap`, `showState`)
 - [ ] Нет файлов с маркером `STATES_INSERT_POINT`
 - [ ] Все состояния из `design-tab.html` присутствуют в `prd7-design-tab.html`
-- [ ] Все состояния из `pages-tab.html` присутствуют в `prd7-structure-linear-by-topics.html`
-- [ ] Проверено на ширине 1440px (desktop). **Мобильная адаптивность
+- [x] Все состояния из `pages-tab.html` присутствуют в `prd7-structure-linear-by-topics.html`
+- [x] Проверено на ширине 1440px (desktop). **Мобильная адаптивность
       (< 960px) вынесена за scope текущего PRD** — будет покрыта отдельным
       PRD; временный fallback оформлен в `prd7-editor-mobile.html` (§21)
-- [ ] Дизайнер / PM подтвердил каждый файл
-- [ ] Файлы перенесены в `docs/wireframes/approved/`
+- [x] Дизайнер / PM подтвердил три Structure-эскиза (§8 / §9 / §11) — 2026-05-21
+- [x] Файлы перенесены в `docs/wireframes/approved/`:
+      `prd7-structure-linear-flat.html`, `prd7-structure-linear-by-topics.html`,
+      `prd7-structure-router.html`. `prd7-variant-replace.html` (§11a)
+      остаётся в `docs/wireframes/` до отдельного ревью
