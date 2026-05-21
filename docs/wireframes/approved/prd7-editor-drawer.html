@@ -6,6 +6,7 @@
   <title>Wireframe PRD-7: Editor Drawer</title>
   <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
   <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
   <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
   <style>
     /* ── Legacy WF alias → ou-* token bridge (on .ou where DS tokens are defined) ── */
@@ -36,18 +37,18 @@
       width: var(--wf-size-28); height: var(--wf-size-28); border-radius: var(--radius-md);
       background: var(--primary); color: var(--ou-neutral-0);
       display: flex; align-items: center; justify-content: center;
-      font-size: var(--wf-space-11); font-weight: 700; margin-bottom: var(--wf-space-14);
+      font: var(--ou-text-caption); font-weight: 700; margin-bottom: var(--wf-space-14);
     }
     .bg-nav-item {
       padding: var(--wf-space-7) var(--wf-space-10); border-radius: var(--radius-sm);
-      font-size: var(--wf-space-13); color: var(--muted-fg); margin-bottom: var(--wf-space-half);
+      font: var(--ou-text-body-s); color: var(--muted-fg); margin-bottom: var(--wf-space-half);
     }
     .bg-nav-item.active { background: var(--accent); color: var(--fg); font-weight: 600; }
     .bg-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
     .bg-topbar {
       display: flex; align-items: center; justify-content: space-between;
       padding: var(--wf-space-11) var(--ou-space-5); border-bottom: var(--wf-border-w) solid var(--border);
-      font-size: var(--wf-space-14); font-weight: 600;
+      font: var(--ou-text-body-m); font-weight: 600;
     }
     .bg-content { padding: var(--ou-space-4) var(--ou-space-5); display: flex; flex-direction: column; gap: var(--wf-space-10); }
     .bg-card {
@@ -55,11 +56,11 @@
       padding: var(--ou-space-3) var(--ou-space-4); border: var(--wf-border-w) solid var(--card-border);
       border-radius: var(--radius); background: var(--card);
     }
-    .bg-card-title { flex: 1; font-size: var(--wf-space-13); font-weight: 600; }
+    .bg-card-title { flex: 1; font: var(--ou-text-body-s); font-weight: 600; }
 
     /* ── Topic content (Состав tab) ── */
     .topic-section-label {
-      font-size: var(--wf-space-11); font-weight: 600; text-transform: uppercase;
+      font: var(--ou-text-caption); font-weight: 600; text-transform: uppercase;
       letter-spacing: .06em; color: var(--muted-fg); margin-bottom: var(--ou-space-3);
     }
     .topic-row {
@@ -95,11 +96,11 @@
     .feedback-snippet { flex: 1; }
     .feedback-meta {
       display: flex; gap: var(--ou-space-2); margin-top: var(--ou-space-1);
-      font-size: var(--ou-space-3); color: var(--muted-fg); align-items: center;
+      font: var(--ou-text-body-s); color: var(--muted-fg); align-items: center;
     }
     .feedback-meta svg { width: var(--wf-space-10); height: var(--wf-space-10); }
     .feedback-meta-sep { color: var(--border); }
-    .form-hint-small { font-size: var(--ou-space-3); color: var(--muted-fg); margin-top: var(--ou-space-3); }
+    .form-hint-small { font: var(--ou-text-body-s); color: var(--muted-fg); margin-top: var(--ou-space-3); }
 
     /* ── Changed chips in footer ── */
     .changed-area { display: inline-flex; align-items: center; gap: var(--ou-space-1); flex-wrap: wrap; }
@@ -136,18 +137,18 @@
       display: flex; align-items: center; justify-content: space-between;
       padding: var(--ou-space-3) var(--ou-space-4); border-bottom: var(--wf-border-w) solid var(--border); flex-shrink: 0;
     }
-    .changes-popover-title { font-size: var(--wf-space-13); font-weight: 600; }
-    .changes-popover-count { font-size: var(--ou-space-3); color: var(--muted-fg); }
+    .changes-popover-title { font: var(--ou-text-body-s); font-weight: 600; }
+    .changes-popover-count { font: var(--ou-text-body-s); color: var(--muted-fg); }
     .changes-popover-body { flex: 1; overflow-y: auto; }
     .changes-group { padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-3); }
     .changes-group + .changes-group { border-top: var(--wf-border-w) solid var(--border); }
     .changes-group-title {
-      font-size: var(--wf-space-11); font-weight: 700; text-transform: uppercase;
+      font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase;
       letter-spacing: .06em; color: var(--muted-fg); padding: var(--ou-space-2) 0;
     }
     .change-item {
       display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ou-space-2);
-      padding: var(--ou-space-2) 0; font-size: var(--ou-space-3); border-top: var(--wf-border-w) dashed var(--border);
+      padding: var(--ou-space-2) 0; font: var(--ou-text-body-s); border-top: var(--wf-border-w) dashed var(--border);
     }
     .change-item:first-of-type { border-top: none; }
     .change-label { font-weight: 500; flex-basis: 100%; }
@@ -178,14 +179,14 @@
       padding: var(--ou-space-8) var(--ou-space-6) var(--wf-size-60);
     }
     .notes-heading {
-      font-size: var(--ou-space-4); font-weight: 600; margin: 0 0 var(--ou-space-4);
+      font: var(--ou-text-heading-s); font-weight: 600; margin: 0 0 var(--ou-space-4);
       color: var(--fg);
     }
     .notes-box {
       border: var(--wf-border-w) solid var(--border); border-radius: var(--radius);
       overflow: hidden;
     }
-    .notes-table { width: 100%; border-collapse: collapse; font-size: var(--wf-space-13); }
+    .notes-table { width: 100%; border-collapse: collapse; font: var(--ou-text-body-s); }
     .notes-table th {
       padding: var(--ou-space-2) var(--ou-space-3); text-align: left; border-bottom: var(--wf-border-w) solid var(--border);
       background: var(--card); font-weight: 600; color: var(--muted-fg);
@@ -204,7 +205,7 @@
       gap: var(--ou-space-7); background: var(--card);
     }
     .mobile-state-title {
-      font-size: var(--wf-space-11); font-weight: 700; color: var(--muted-fg);
+      font: var(--ou-text-caption); font-weight: 700; color: var(--muted-fg);
       text-transform: uppercase; letter-spacing: .05em;
     }
     .mobile-row {
@@ -212,27 +213,41 @@
       justify-content: center; align-items: flex-start;
     }
     .mobile-sample { display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-2); }
-    .mobile-sample-title { font-size: var(--wf-space-13); font-weight: 600; }
+    .mobile-sample-title { font: var(--ou-text-body-s); font-weight: 600; }
     .mobile-canvas {
       width: var(--wf-size-380); height: var(--wf-size-720);
       border: var(--wf-border-w) solid var(--border); border-radius: var(--wf-size-18);
       overflow: hidden; background: var(--bg);
       box-shadow: var(--ou-shadow-xl); display: flex; flex-direction: column;
     }
-    .mobile-tabs-nav { display: flex; align-items: stretch; }
+    /* Single border source — prevents double/misaligned lines from ou-tabs__list + arrow elements */
+    .mobile-tabs-nav { display: flex; align-items: stretch; border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
     .mobile-tabs-nav__arrow {
       flex-shrink: 0; width: var(--ou-space-7); display: flex; align-items: center; justify-content: center;
-      background: none; border: none; border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+      background: none; border: none;
       color: var(--ou-fg-muted); cursor: pointer; padding: 0;
     }
     .mobile-tabs-nav__arrow:disabled { opacity: 0.3; cursor: default; }
     .mobile-tabs-nav .ou-tabs--underline { flex: 1; min-width: 0; }
-    .mobile-canvas .ou-tabs__list { overflow: hidden; padding: 0 var(--ou-space-1); }
+    .mobile-canvas .ou-tabs__list { overflow: hidden; padding: 0 var(--ou-space-1); border-bottom: none; }
     .mobile-canvas .ou-drawer__foot { flex-direction: column; align-items: stretch; gap: var(--ou-space-2); }
+    /* wf-annot-wrap is inline-flex by default; must be flex so child ou-btn stretches */
+    .mobile-canvas .ou-drawer__foot .wf-annot-wrap { display: flex; }
+    .mobile-canvas .ou-drawer__foot .wf-annot-wrap > .ou-btn { flex: 1; }
     .mobile-canvas .settings-accordion { display: flex; }
     .mobile-canvas .settings-pane { display: none; }
+    /* Changes bottom sheet — replaces body area, footer stays accessible */
+    .mobile-canvas--changes-open .ou-drawer__body {
+      flex: 0 0 var(--ou-space-10); overflow: hidden; opacity: 0.35; pointer-events: none;
+    }
+    .mobile-canvas .changes-sheet {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden;
+      background: var(--bg);
+      border-top: var(--wf-border-w) solid var(--border);
+      border-radius: var(--ou-radius-m) var(--ou-radius-m) 0 0;
+    }
     .mobile-label {
-      font-size: var(--wf-space-11); color: var(--muted-fg); text-align: center; max-width: var(--wf-size-380);
+      font: var(--ou-text-caption); color: var(--muted-fg); text-align: center; max-width: var(--wf-size-380);
     }
 
     /* Template injection slot — renders children as direct flex children of .shell */
@@ -244,7 +259,7 @@
       top: calc(-1 * var(--ou-space-2)); right: calc(-1 * var(--ou-space-1));
       z-index: 200; background: var(--ou-warning-default); color: var(--ou-fg-default);
       border-radius: var(--ou-radius-s); padding: 0 var(--ou-space-1);
-      font-weight: 700; font-size: var(--wf-space-11); line-height: var(--ou-space-5);
+      font-weight: 700; font: var(--ou-text-caption); line-height: var(--ou-space-5);
       pointer-events: none; white-space: nowrap; box-shadow: var(--ou-shadow-sm);
     }
     body.wf-annots-on .wf-annot { display: block; }
@@ -345,27 +360,27 @@
 </template>
 
 <svg class="wf-svg-sprite" xmlns="http://www.w3.org/2000/svg">
-  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
   </symbol>
-  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
     <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
   </symbol>
-  <symbol id="i-loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <symbol id="i-loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
   </symbol>
-  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
   </symbol>
-  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
   </symbol>
-  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
     <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
   </symbol>
-  <symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
     <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
   </symbol>
   <symbol id="i-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -603,15 +618,15 @@
           </button>
         </nav>
       </div>
-      <div class="wf-annot-wrap--block">
-        <span class="wf-annot">FR-05a</span>
-        <div class="ou-banner ou-banner--subtle ou-banner--error ou-banner--full" role="alert">
-        <svg class="ou-banner__ico" width="16" height="16" aria-hidden="true"><use href="#i-warn"/></svg>
-        <div class="ou-banner__body"><div class="ou-banner__title">Сохранение заблокировано: 2 поля во вкладке «Настройки» содержат ошибки.</div></div>
-        <div class="ou-banner__actions"><button type="button" class="ou-banner__link">Перейти к ошибкам</button></div>
-      </div>
-      </div>
       <div class="ou-drawer__body" tabindex="0">
+        <div class="wf-annot-wrap--block">
+          <span class="wf-annot">FR-05a</span>
+          <div class="ou-banner ou-banner--subtle ou-banner--error" role="alert">
+            <svg class="ou-banner__ico" width="16" height="16" aria-hidden="true"><use href="#i-warn"/></svg>
+            <div class="ou-banner__body"><div class="ou-banner__title">Сохранение заблокировано: 2 поля во вкладке «Настройки» содержат ошибки.</div></div>
+            <div class="ou-banner__actions"><button type="button" class="ou-banner__link">Перейти к ошибкам</button></div>
+          </div>
+        </div>
         <div class="topic-section-label">Темы и выборка вопросов</div>
         <div class="topic-row">
           <div class="topic-row-header">
@@ -1021,9 +1036,10 @@
             </button>
           </div>
           <footer class="ou-drawer__foot">
-        <button type="button" class="ou-btn ou-btn--ghost">Изменения</button>
-        <button type="button" class="ou-btn ou-btn--primary ou-btn--s">Сохранить</button>
-      </footer>
+            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--ghost">Изменения</button><span class="wf-annot">FR-25c</span></span>
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
+            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button><span class="wf-annot">FR-25a</span></span>
+          </footer>
         </div>
         <div class="mobile-label">Drawer 100 vw, табы с навигацией &lt; / &gt;, footer вертикальный</div>
       </div>
@@ -1064,9 +1080,10 @@
             </div>
           </div>
           <footer class="ou-drawer__foot">
-        <button type="button" class="ou-btn ou-btn--ghost">Изменения</button>
-        <button type="button" class="ou-btn ou-btn--primary ou-btn--s">Сохранить</button>
-      </footer>
+            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--ghost">Изменения</button><span class="wf-annot">FR-25c</span></span>
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
+            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button><span class="wf-annot">FR-25a</span></span>
+          </footer>
         </div>
         <div class="mobile-label">Side-nav «Настройки» заменяется аккордеоном (&lt;details&gt;)</div>
       </div>
@@ -1086,7 +1103,9 @@
               <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-left"/></svg>
             </button>
             <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
-              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Состав</button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true" aria-label="Состав, есть изменения">
+                Состав <span class="status-dot dirty" aria-hidden="true"></span>
+              </button>
               <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
               <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
               <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
@@ -1126,8 +1145,9 @@
             </div>
           </div>
           <footer class="ou-drawer__foot">
-            <button type="button" class="ou-btn ou-btn--ghost">Изменения</button>
-            <button type="button" class="ou-btn ou-btn--primary ou-btn--s">Сохранить</button>
+            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--ghost">Изменения</button><span class="wf-annot">FR-25c</span></span>
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
+            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button><span class="wf-annot">FR-25a</span></span>
           </footer>
         </div>
         <div class="mobile-label">Длинное имя — 2-строчный clamp, тег и счётчик остаются видны</div>
@@ -1148,7 +1168,9 @@
               <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-left"/></svg>
             </button>
             <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
-              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Состав</button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true" aria-label="Состав, есть изменения">
+                Состав <span class="status-dot dirty" aria-hidden="true"></span>
+              </button>
               <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
               <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
               <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
@@ -1188,11 +1210,107 @@
             </div>
           </div>
           <footer class="ou-drawer__foot">
-            <button type="button" class="ou-btn ou-btn--ghost">Изменения</button>
-            <button type="button" class="ou-btn ou-btn--primary ou-btn--s">Сохранить</button>
+            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--ghost">Изменения</button><span class="wf-annot">FR-25c</span></span>
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
+            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button><span class="wf-annot">FR-25a</span></span>
           </footer>
         </div>
         <div class="mobile-label">После тапа по имени: clamp снимается, строка разворачивается до полного текста</div>
+      </div>
+
+      <div class="mobile-sample">
+        <div class="mobile-sample-title">Нижний лист изменений (FR-25c)</div>
+        <div class="mobile-canvas mobile-canvas--changes-open">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text"><h2 class="ou-drawer__title">Основы ИБ</h2></div>
+            <span class="ou-tag ou-tag--warning ou-tag--outline">Изменено</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
+              <svg width="16" height="16"><use href="#i-x"/></svg>
+            </button>
+          </header>
+          <div class="mobile-tabs-nav">
+            <button type="button" class="mobile-tabs-nav__arrow" aria-label="Предыдущая вкладка" disabled>
+              <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+            </button>
+            <nav class="ou-tabs ou-tabs--underline ou-tabs--m"><div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true" aria-label="Состав, есть изменения">
+                Состав <span class="status-dot dirty" aria-hidden="true"></span>
+              </button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false" aria-label="Настройки, есть изменения">
+                Настройки <span class="status-dot dirty" aria-hidden="true"></span>
+              </button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+            </div></nav>
+            <button type="button" class="mobile-tabs-nav__arrow" aria-label="Следующая вкладка">
+              <svg width="16" height="16" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+            </button>
+          </div>
+          <div class="ou-drawer__body" tabindex="-1" aria-hidden="true">
+            <div class="topic-section-label">Темы и выборка вопросов</div>
+            <div class="topic-row">
+              <div class="topic-row-header">
+                <span class="topic-name">Основы ИБ</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--outline">Обязат.</span>
+                <span class="topic-count">45</span>
+              </div>
+            </div>
+          </div>
+          <div class="changes-sheet" role="dialog" aria-modal="false" aria-labelledby="mcs-title">
+            <div class="changes-popover-header">
+              <span>
+                <span class="changes-popover-title" id="mcs-title">Изменения в черновике</span>
+                <span class="changes-popover-count">&nbsp;(5)</span>
+              </span>
+              <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Закрыть список изменений">
+                <svg width="14" height="14"><use href="#i-x"/></svg>
+              </button>
+            </div>
+            <div class="changes-popover-body">
+              <div class="changes-group" aria-label="Изменения во вкладке Состав">
+                <div class="changes-group-title">Состав · 2 изменения</div>
+                <div class="change-item">
+                  <span class="change-label">Добавлена тема</span>
+                  <span class="change-new">Криптография</span>
+                  <span class="change-context">3 вопроса, минимум 3</span>
+                </div>
+                <div class="change-item">
+                  <span class="change-label">Минимум темы «Сетевая безопасность»</span>
+                  <span class="change-old">5</span>
+                  <span class="change-arrow">→</span>
+                  <span class="change-new">8</span>
+                </div>
+              </div>
+              <div class="changes-group" aria-label="Изменения во вкладке Настройки">
+                <div class="changes-group-title">Настройки · 3 изменения</div>
+                <div class="change-item">
+                  <span class="change-label">Порог успеха</span>
+                  <span class="change-old">60 %</span>
+                  <span class="change-arrow">→</span>
+                  <span class="change-new">75 %</span>
+                </div>
+                <div class="change-item">
+                  <span class="change-label">Перемешать вопросы</span>
+                  <span class="change-old">Нет</span>
+                  <span class="change-arrow">→</span>
+                  <span class="change-new">Да</span>
+                </div>
+                <div class="change-item">
+                  <span class="change-label">Лимит времени</span>
+                  <span class="change-old">не задан</span>
+                  <span class="change-arrow">→</span>
+                  <span class="change-new">30 мин</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--ghost" aria-expanded="true" aria-controls="mcs-title">Изменения</button><span class="wf-annot">FR-25c</span></span>
+            <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отменить</button>
+            <span class="wf-annot-wrap"><button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button><span class="wf-annot">FR-25a</span></span>
+          </footer>
+        </div>
+        <div class="mobile-label">Нижний лист перекрывает тело; header, tabs и footer остаются доступны</div>
       </div>
 
     </div>
