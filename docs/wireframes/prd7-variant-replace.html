@@ -72,6 +72,9 @@
     .diff-block__field-value { color: var(--ou-fg-muted); font: var(--ou-text-caption); }
     .diff-block__meta { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-6); }
 
+    /* Modal intro paragraph spacing */
+    .modal-intro { margin-bottom: var(--ou-space-3); }
+
     /* Confirm note */
     .confirm-note { background: var(--ou-info-soft); border: var(--wf-border-w) solid var(--ou-info-default); border-radius: var(--ou-radius-s); padding: var(--wf-space-10) var(--ou-space-3); margin-top: var(--ou-space-3); display: flex; align-items: flex-start; gap: var(--ou-space-2); }
     .confirm-note__ico { color: var(--ou-info-default); flex-shrink: 0; margin-top: var(--wf-space-half); }
@@ -146,7 +149,7 @@
         <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-modal__body">
-        <p class="wf-notes-intro" style="margin-bottom: var(--ou-space-3);">
+        <p class="wf-notes-intro modal-intro">
           Текущий вариант: <strong>Информация</strong>. Выберите новый вариант
           из текущего шаблона. Параметры с совпадающими именами полей
           сохранятся, остальные будут удалены.
@@ -254,7 +257,7 @@
         <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-modal__body">
-        <p class="wf-notes-intro" style="margin-bottom: var(--ou-space-3);">
+        <p class="wf-notes-intro modal-intro">
           Текущий вариант: <strong>Минимальный</strong>. Выберите новый вариант
           представления вопросов.
         </p>
@@ -318,7 +321,7 @@
         <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
       <div class="ou-modal__body">
-        <p class="wf-notes-intro" style="margin-bottom: var(--ou-space-3);">
+        <p class="wf-notes-intro modal-intro">
           Текущий вариант: <strong>Контентная страница</strong>.
         </p>
 
@@ -418,6 +421,59 @@
     </tbody>
   </table>
 </section>
+
+<script>
+/**
+ * Wireframe state-switcher + theme / annotation toggles for the variant-replace
+ * modal demo. Density toggle omitted (modal layout has no compact variant).
+ */
+(function () {
+  function resolveState(id) {
+    return document.getElementById('wf-' + id) || document.getElementById(id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state, .shell').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      button.classList.toggle('active', button === btn);
+    });
+    document.body.classList.toggle('has-active-shell', !!target && target.classList.contains('shell'));
+    updateWireframeNavOffset();
+  };
+
+  window.toggleTheme = function toggleTheme(btn) {
+    var body = document.body;
+    var isDark = body.classList.contains('ou--dark');
+    body.classList.toggle('ou--dark', !isDark);
+    body.classList.toggle('ou--light', isDark);
+    if (btn) {
+      btn.textContent = isDark ? 'Dark' : 'Light';
+      btn.classList.toggle('active', !isDark);
+    }
+  };
+
+  window.toggleAnnots = function toggleAnnots(btn) {
+    var on = document.body.classList.toggle('wf-annots-on');
+    if (btn) btn.classList.toggle('active', on);
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) new ResizeObserver(updateWireframeNavOffset).observe(nav);
+  }
+}());
+</script>
 
 </body>
 </html>
