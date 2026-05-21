@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!--
+    Wireframe: prd7 — Variant Replace Modal
+    Этап 3 — Wireframes
+    Файл: docs/wireframes/prd7-variant-replace.html
+
+    Модал смены варианта на существующей page-row (PRD-1 §4.3.3).
+    Триггер: `…` row-menu → «Сменить вариант».
+    Контракт совместимости: «имя поля = контракт между вариантами одного `kind`
+    в одном шаблоне» — поля с тем же именем и совместимым типом переносятся,
+    остальные удаляются с явным предупреждением.
+
+    Состояния:
+      s-replace-modal       — основное: список вариантов нового шаблона + diff
+                              потерь параметров (поля будут удалены / сохранены)
+      s-replace-empty-diff  — спокойный случай: все поля совместимы, потерь нет
+      s-replace-no-fields   — у нового варианта пустая schema (просто confirm)
+
+    Применим ко всем kind: info / intro / summary / router / questions.
+    Покрывает: PRD-1 §4.3.3 (механика смены варианта).
+  -->
+  <title>prd7 — Сменить вариант</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    /* Background drawer (visible underneath modal) */
+    .wf-tests-list { opacity: 0.6; pointer-events: none; }
+    .test-card-stub { border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-m); background: var(--ou-bg-surface-2); padding: var(--wf-space-14) var(--ou-space-4); margin-bottom: var(--wf-space-10); display: flex; align-items: center; gap: var(--ou-space-3); }
+    .test-card-stub .test-card-title { font: var(--ou-text-body-m); font-weight: 600; flex: 1; }
+
+    /* Variant picker */
+    .variant-search { position: relative; margin-bottom: var(--ou-space-3); }
+    .variant-search__icon { position: absolute; left: var(--ou-space-3); top: 50%; transform: translateY(-50%); color: var(--ou-fg-muted); pointer-events: none; }
+    .variant-search__input { width: 100%; height: var(--ou-size-control-m); padding: 0 var(--ou-space-3) 0 var(--ou-space-7); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-s); background: var(--ou-bg-input); font: var(--ou-text-body-m); color: var(--ou-fg-default); outline: none; }
+    .variant-search__input:focus { border-color: var(--ou-accent-default); box-shadow: var(--ou-shadow-focus); }
+
+    .variant-list { list-style: none; padding: var(--ou-space-1); margin: 0 0 var(--ou-space-4); max-height: var(--wf-size-280, 280px); overflow-y: auto; border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-s); background: var(--ou-bg-elevated); }
+    .variant-list__item { display: flex; align-items: flex-start; gap: var(--ou-space-3); padding: var(--ou-space-2) var(--ou-space-3); border-radius: var(--ou-radius-xs); cursor: pointer; }
+    .variant-list__item:hover { background: var(--ou-bg-hover); }
+    .variant-list__item.is-current { background: var(--ou-bg-surface-3); cursor: default; opacity: 0.7; }
+    .variant-list__item.is-selected { background: var(--ou-accent-soft); }
+    .variant-list__item.is-selected .variant-list__name { color: var(--ou-accent-on-soft); font-weight: 600; }
+    .variant-list__name { font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+    .variant-list__desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: var(--wf-space-half); }
+    .variant-list__meta { display: flex; align-items: center; gap: var(--ou-space-1); margin-top: var(--wf-space-tiny); }
+    .variant-list__meta-tag { font: var(--ou-text-caption); padding: var(--wf-space-half) var(--wf-space-6); border-radius: var(--wf-space-1q); background: var(--ou-bg-surface-3); color: var(--ou-fg-muted); }
+    .variant-list__meta-tag--current { background: var(--ou-info-soft); color: var(--ou-info-on-soft); }
+    .variant-list__check { color: var(--ou-accent-default); flex-shrink: 0; margin-left: auto; opacity: 0; }
+    .variant-list__item.is-selected .variant-list__check { opacity: 1; }
+
+    /* Diff block — потери и сохранения параметров */
+    .diff-block { margin-top: var(--ou-space-3); border-radius: var(--ou-radius-s); overflow: hidden; }
+    .diff-block__group { padding: var(--wf-space-10) var(--wf-space-14); border: var(--wf-border-w) solid var(--ou-border-soft); border-bottom: 0; }
+    .diff-block__group:last-child { border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
+    .diff-block__group--lost { background: var(--ou-warning-soft); border-color: var(--ou-warning-default); }
+    .diff-block__group--kept { background: var(--ou-success-soft); border-color: var(--ou-success-default); }
+    .diff-block__group--empty { background: var(--ou-bg-surface-2); }
+    .diff-block__title { display: flex; align-items: center; gap: var(--ou-space-2); font: var(--ou-text-body-s); font-weight: 600; margin-bottom: var(--wf-space-6); }
+    .diff-block__title--lost { color: var(--ou-warning-on-soft); }
+    .diff-block__title--kept { color: var(--ou-success-on-soft); }
+    .diff-block__title--empty { color: var(--ou-fg-muted); }
+    .diff-block__list { list-style: none; padding: 0; margin: 0; }
+    .diff-block__item { display: flex; align-items: baseline; gap: var(--ou-space-2); padding: var(--wf-space-tiny) 0; font: var(--ou-text-body-s); }
+    .diff-block__field-name { font-weight: 600; color: var(--ou-fg-default); }
+    .diff-block__field-value { color: var(--ou-fg-muted); font: var(--ou-text-caption); }
+    .diff-block__meta { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-6); }
+
+    /* Confirm note */
+    .confirm-note { background: var(--ou-info-soft); border: var(--wf-border-w) solid var(--ou-info-default); border-radius: var(--ou-radius-s); padding: var(--wf-space-10) var(--ou-space-3); margin-top: var(--ou-space-3); display: flex; align-items: flex-start; gap: var(--ou-space-2); }
+    .confirm-note__ico { color: var(--ou-info-default); flex-shrink: 0; margin-top: var(--wf-space-half); }
+    .confirm-note__body { font: var(--ou-text-body-s); color: var(--ou-info-on-soft); }
+
+    /* Utility */
+    .wf-icon-muted { color: var(--ou-fg-muted); }
+    .wf-icon-baseline { vertical-align: middle; }
+    .wf-tpl-slot { display: contents; }
+    .wf-sprite { display: none; }
+
+    /* FR annot */
+    .wf-annot-wrap { position: relative; display: inline-flex; }
+    .wf-annot-wrap--block { position: relative; }
+    .wf-annot { display: none; position: absolute; top: calc(-1 * var(--ou-space-2)); right: calc(-1 * var(--ou-space-1)); z-index: 200; background: var(--ou-warning-default); color: var(--ou-fg-default); border-radius: var(--ou-radius-s); padding: 0 var(--ou-space-1); font-weight: 700; font-size: 10px; line-height: var(--ou-space-5); pointer-events: none; white-space: nowrap; box-shadow: var(--ou-shadow-sm); }
+    body.wf-annots-on .wf-annot { display: block; }
+
+    /* Notes table */
+    .wf-notes { max-width: var(--wf-size-900); margin: var(--ou-space-9) auto var(--ou-space-10); padding: 0 var(--ou-space-6); font: var(--ou-text-body-s); color: var(--ou-fg-default); }
+    .wf-notes-title { font: var(--ou-text-body-s); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--ou-fg-muted); margin-bottom: var(--wf-space-10); padding-bottom: var(--wf-space-6); border-bottom: var(--wf-space-half) solid var(--ou-border-soft); }
+    .wf-notes-intro { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-3); }
+    .wf-notes-table { width: 100%; border-collapse: collapse; margin-bottom: var(--ou-space-7); }
+    .wf-notes-table th, .wf-notes-table td { text-align: left; padding: var(--wf-space-7) var(--ou-space-3); border: var(--wf-border-w) solid var(--ou-border-soft); vertical-align: top; }
+    .wf-notes-table th { background: var(--ou-bg-surface-3); font-weight: 600; font: var(--ou-text-caption); text-transform: uppercase; letter-spacing: .05em; }
+    .wf-notes-table tr:nth-child(even) td { background: var(--ou-bg-elevated); }
+    .wf-notes-table code { font: var(--ou-text-caption); background: var(--ou-bg-surface-3); border-radius: var(--wf-space-1q); padding: var(--wf-border-w) var(--wf-space-tiny); }
+  </style>
+
+  <style data-wf-template-overrides>
+    .wf-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 9999; display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-4); background: var(--ou-bg-elevated); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap; }
+    .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+    .wf-nav .wf-btn { padding: var(--ou-space-1) var(--ou-space-3); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-s); background: transparent; color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer; }
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav .wf-btn.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+    .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x"        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-search"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-check"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-warn"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-info"     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+  <symbol id="i-trash"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/></symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Сменить вариант:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this, 's-replace-modal')">Основное (потери)</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-replace-empty-diff')">Без потерь</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-replace-no-fields')">Пустая schema</button>
+
+  <div class="wf-nav-sep"></div>
+  <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" class="ou-btn ou-btn--secondary" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-replace-modal — основное состояние с diff-блоком потерь
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-replace-modal" class="wf-state active" data-state="replace-modal">
+  <!-- Background context: drawer Structure с раскрытой info-page-row -->
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="rm-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <h2 id="rm-title" class="ou-modal__title">Сменить вариант страницы</h2>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <p class="wf-notes-intro" style="margin-bottom: var(--ou-space-3);">
+          Текущий вариант: <strong>Информация</strong>. Выберите новый вариант
+          из текущего шаблона. Параметры с совпадающими именами полей
+          сохранятся, остальные будут удалены.
+        </p>
+
+        <div class="variant-search">
+          <svg width="14" height="14" class="variant-search__icon"><use href="#i-search"/></svg>
+          <input class="variant-search__input" type="search" placeholder="Поиск по названию варианта…" aria-label="Поиск вариантов">
+        </div>
+
+        <ul class="variant-list" role="listbox" aria-label="Варианты страницы">
+          <li class="variant-list__item is-current" role="option" aria-disabled="true">
+            <div>
+              <div class="variant-list__name">Информация</div>
+              <div class="variant-list__desc">Простая контентная страница с заголовком и markdown-блоком</div>
+              <div class="variant-list__meta"><span class="variant-list__meta-tag variant-list__meta-tag--current">Текущий</span></div>
+            </div>
+          </li>
+          <li class="variant-list__item is-selected" role="option" aria-selected="true">
+            <div>
+              <div class="variant-list__name">Контентная страница</div>
+              <div class="variant-list__desc">Заголовок + markdown + опциональный hero-image + кнопка «Далее»</div>
+              <div class="variant-list__meta"><span class="variant-list__meta-tag">5 параметров</span></div>
+            </div>
+            <svg width="16" height="16" class="variant-list__check"><use href="#i-check"/></svg>
+          </li>
+          <li class="variant-list__item" role="option" aria-selected="false">
+            <div>
+              <div class="variant-list__name">Видео-страница</div>
+              <div class="variant-list__desc">Заголовок + видео-плеер + транскрипт</div>
+              <div class="variant-list__meta"><span class="variant-list__meta-tag">3 параметра</span></div>
+            </div>
+          </li>
+          <li class="variant-list__item" role="option" aria-selected="false">
+            <div>
+              <div class="variant-list__name">Двухколоночная</div>
+              <div class="variant-list__desc">Параллельный текст + изображение справа</div>
+              <div class="variant-list__meta"><span class="variant-list__meta-tag">4 параметра</span></div>
+            </div>
+          </li>
+        </ul>
+
+        <!-- Diff блок: потери и сохранения параметров -->
+        <span class="wf-annot-wrap--block">
+          <div class="diff-block">
+            <div class="diff-block__group diff-block__group--lost">
+              <div class="diff-block__title diff-block__title--lost">
+                <svg width="14" height="14"><use href="#i-trash"/></svg>
+                Будут удалены 2 параметра
+              </div>
+              <ul class="diff-block__list">
+                <li class="diff-block__item">
+                  <span class="diff-block__field-name">Цвет фона блока:</span>
+                  <span class="diff-block__field-value">«#0066cc»</span>
+                </li>
+                <li class="diff-block__item">
+                  <span class="diff-block__field-name">Текст кнопки «Далее»:</span>
+                  <span class="diff-block__field-value">«Продолжить»</span>
+                </li>
+              </ul>
+              <p class="diff-block__meta">Эти поля отсутствуют в schema нового варианта.</p>
+            </div>
+            <div class="diff-block__group diff-block__group--kept">
+              <div class="diff-block__title diff-block__title--kept">
+                <svg width="14" height="14"><use href="#i-check"/></svg>
+                Будут сохранены 3 параметра
+              </div>
+              <ul class="diff-block__list">
+                <li class="diff-block__item">
+                  <span class="diff-block__field-name">Заголовок:</span>
+                  <span class="diff-block__field-value">«Введение в раздел»</span>
+                </li>
+                <li class="diff-block__item">
+                  <span class="diff-block__field-name">Содержимое (markdown):</span>
+                  <span class="diff-block__field-value">«Защита информации от…»</span>
+                </li>
+                <li class="diff-block__item">
+                  <span class="diff-block__field-name">Автопереход:</span>
+                  <span class="diff-block__field-value">отключён</span>
+                </li>
+              </ul>
+              <p class="diff-block__meta">Имена полей совпадают между вариантами одного <code>kind</code>.</p>
+            </div>
+          </div>
+          <span class="wf-annot">PRD-1 §4.3.3</span>
+        </span>
+      </div>
+      <footer class="ou-modal__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Отменить</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сменить вариант</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-replace-empty-diff — спокойный случай: все поля совместимы
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-replace-empty-diff" class="wf-state" data-state="replace-empty-diff">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="re-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <h2 id="re-title" class="ou-modal__title">Сменить вариант страницы</h2>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <p class="wf-notes-intro" style="margin-bottom: var(--ou-space-3);">
+          Текущий вариант: <strong>Минимальный</strong>. Выберите новый вариант
+          представления вопросов.
+        </p>
+
+        <ul class="variant-list" role="listbox" aria-label="Варианты вопросов">
+          <li class="variant-list__item is-current" role="option" aria-disabled="true">
+            <div>
+              <div class="variant-list__name">Минимальный</div>
+              <div class="variant-list__desc">Компактный макет для коротких тестов</div>
+              <div class="variant-list__meta"><span class="variant-list__meta-tag variant-list__meta-tag--current">Текущий</span></div>
+            </div>
+          </li>
+          <li class="variant-list__item is-selected" role="option" aria-selected="true">
+            <div>
+              <div class="variant-list__name">Расширенный</div>
+              <div class="variant-list__desc">Двухколоночный макет с медиа-полем</div>
+              <div class="variant-list__meta"><span class="variant-list__meta-tag">2 параметра</span></div>
+            </div>
+            <svg width="16" height="16" class="variant-list__check"><use href="#i-check"/></svg>
+          </li>
+        </ul>
+
+        <!-- Diff блок: только «сохранено», ничего не теряется -->
+        <div class="diff-block">
+          <div class="diff-block__group diff-block__group--kept">
+            <div class="diff-block__title diff-block__title--kept">
+              <svg width="14" height="14"><use href="#i-check"/></svg>
+              Все параметры будут сохранены
+            </div>
+            <ul class="diff-block__list">
+              <li class="diff-block__item">
+                <span class="diff-block__field-name">Показывать номер вопроса:</span>
+                <span class="diff-block__field-value">включено</span>
+              </li>
+              <li class="diff-block__item">
+                <span class="diff-block__field-name">Подсказка после ответа:</span>
+                <span class="diff-block__field-value">показывать</span>
+              </li>
+            </ul>
+            <p class="diff-block__meta">Schema нового варианта содержит все те же поля, что и текущий.</p>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Отменить</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сменить вариант</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-replace-no-fields — у нового варианта пустая schema
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="s-replace-no-fields" class="wf-state" data-state="replace-no-fields">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="rn-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <h2 id="rn-title" class="ou-modal__title">Сменить вариант страницы</h2>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <p class="wf-notes-intro" style="margin-bottom: var(--ou-space-3);">
+          Текущий вариант: <strong>Контентная страница</strong>.
+        </p>
+
+        <ul class="variant-list" role="listbox" aria-label="Варианты">
+          <li class="variant-list__item is-current" role="option" aria-disabled="true">
+            <div>
+              <div class="variant-list__name">Контентная страница</div>
+              <div class="variant-list__desc">Заголовок + markdown + кнопка «Далее»</div>
+              <div class="variant-list__meta"><span class="variant-list__meta-tag variant-list__meta-tag--current">Текущий</span></div>
+            </div>
+          </li>
+          <li class="variant-list__item is-selected" role="option" aria-selected="true">
+            <div>
+              <div class="variant-list__name">Готовая инструкция</div>
+              <div class="variant-list__desc">Шаблонная статичная страница без редактируемых полей</div>
+              <div class="variant-list__meta"><span class="variant-list__meta-tag">Без параметров</span></div>
+            </div>
+            <svg width="16" height="16" class="variant-list__check"><use href="#i-check"/></svg>
+          </li>
+        </ul>
+
+        <!-- Все 3 параметра текущего варианта будут потеряны -->
+        <div class="diff-block">
+          <div class="diff-block__group diff-block__group--lost">
+            <div class="diff-block__title diff-block__title--lost">
+              <svg width="14" height="14"><use href="#i-trash"/></svg>
+              Будут удалены 3 параметра
+            </div>
+            <ul class="diff-block__list">
+              <li class="diff-block__item"><span class="diff-block__field-name">Заголовок:</span><span class="diff-block__field-value">«Введение в раздел»</span></li>
+              <li class="diff-block__item"><span class="diff-block__field-name">Содержимое:</span><span class="diff-block__field-value">«Защита информации от…»</span></li>
+              <li class="diff-block__item"><span class="diff-block__field-name">Текст кнопки:</span><span class="diff-block__field-value">«Продолжить»</span></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="confirm-note">
+          <span class="confirm-note__ico"><svg width="14" height="14"><use href="#i-info"/></svg></span>
+          <div class="confirm-note__body">
+            У выбранного варианта пустая schema — после смены страница станет
+            шаблонной (без редактируемых полей). Контент задаётся целиком в
+            шаблоне.
+          </div>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Отменить</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button">Сменить вариант</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     Notes table
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<section class="wf-notes" aria-label="State annotations">
+  <h2 class="wf-notes-title">Аннотации состояний</h2>
+  <p class="wf-notes-intro">Модал смены варианта на существующей <code>page-row</code>.
+    Триггер — <code>…</code> row-menu → «Сменить вариант». Применим ко всем
+    <code>kind</code> (<code>info</code> / <code>intro</code> / <code>summary</code> /
+    <code>router</code> / <code>questions</code>). Контракт совместимости параметров
+    описан в PRD-1 §4.3.3.</p>
+  <table class="wf-notes-table">
+    <thead>
+      <tr><th>State</th><th>Назначение</th><th>FR / решение</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>s-replace-modal</code></td>
+        <td>Основное: список вариантов того же <code>kind</code> из текущего
+          шаблона. Текущий вариант помечен меткой «Текущий» и disabled. Под
+          списком — <code>diff-block</code> с двумя группами: «Будут удалены»
+          (warning-фон) и «Будут сохранены» (success-фон). При выборе другого
+          варианта diff пересчитывается по правилу «имя поля = контракт между
+          вариантами одного <code>kind</code>».</td>
+        <td>PRD-1 §4.3.3</td>
+      </tr>
+      <tr>
+        <td><code>s-replace-empty-diff</code></td>
+        <td>Спокойный случай: schema нового варианта содержит все те же поля,
+          что и текущий (имена и совместимые типы). Показывается только группа
+          «Все параметры будут сохранены» (без warning-блока). Используется,
+          когда варианты структурно симметричны (например, «Минимальный» и
+          «Расширенный» комплекты вопросов с одинаковыми флагами).</td>
+        <td>PRD-1 §4.3.3</td>
+      </tr>
+      <tr>
+        <td><code>s-replace-no-fields</code></td>
+        <td>У нового варианта пустая schema (нет редактируемых полей).
+          Показывается diff-блок «Будут удалены» (все параметры текущего
+          варианта) + info-note «У выбранного варианта пустая schema —
+          страница станет шаблонной». В page-row после смены не отрисовывается
+          chevron (нечего редактировать).</td>
+        <td>PRD-1 §4.3.3</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+</body>
+</html>

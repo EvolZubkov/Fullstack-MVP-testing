@@ -1,0 +1,579 @@
+# Wireframes Acceptance Checklist (PRD-7 Drawer)
+
+Файлы расположены в рекомендуемом порядке приёмки: сначала основание (shared CSS,
+Drawer-контейнер), затем точки входа пользователя, затем каждая вкладка Drawer,
+затем диалоги и вспомогательные файлы.
+
+---
+
+## 1. `docs/wireframes/prd7-shared.css`
+
+Общий CSS — фундамент для всех остальных файлов. Принимается первым.
+
+- [x] Файл подключается во всех wireframe-файлах одной и той же `<link>`-строкой
+- [x] Импортирует `ds/university-rt.css` — Drawer (`ou-drawer-root`,
+  `ou-drawer__backdrop`, `ou-drawer`, `ou-drawer__head`, `ou-drawer__body`,
+  `ou-drawer__foot`), кнопки (`ou-btn`, `ou-iconbtn`) и компоненты
+  предоставлены DS, не дублируются в `prd7-shared.css`
+- [x] Содержит wireframe-инфраструктуру: `wf-nav`, `wf-btn`, `wf-label`,
+  `wf-link`, `shell`, `shell.active`, `notes-page`
+- [x] Размер файла ≤ 200 строк product-CSS (блок `gate-skip-start … gate-skip-end`
+  с токенами `--wf-size-*` / `--wf-space-*` / `--wf-border-w-*` в счёт не идёт —
+  это вынужденный мост для значений, отсутствующих в DS)
+- [x] Нет дублирования классов из `ds/university-rt.css` и других CSS-файлов проекта
+
+---
+
+## 2. `docs/wireframes/prd7-editor-drawer.html`
+
+Эталон контейнера Drawer. Все вкладочные файлы должны повторять эту структуру.
+
+- [x] Корень: `<div class="ou-drawer-root">` с `role="dialog" aria-modal="true"`
+- [x] Backdrop: `<div class="ou-drawer__backdrop">`, размеры через токены DS
+- [x] Drawer: `<aside class="ou-drawer ou-drawer--xl ou-drawer--right">`
+- [x] Header: `<header class="ou-drawer__head">` — заголовок (`ou-drawer__title`),
+  бейдж статуса `ou-tag ou-tag--*` (`Черновик / Опубликован / В архиве`),
+  крестик `ou-drawer__close` с `aria-label="Закрыть"` (`ou-drawer__close` —
+  самостоятельный DS-класс; рефакторинг на базе `ou-iconbtn` отложен в DS-бэклог)
+- [x] Вкладки: `<div class="ou-tabs__list">` со списком `ou-tabs__tab` —
+  `Состав | Настройки | Оформление | Структура`; активная вкладка имеет
+  `is-active`
+- [x] Footer: `<footer class="ou-drawer__foot">` — кнопки-действия прямые дочерние
+  элементы (`ou-btn--primary` Сохранить, `ou-btn--secondary` Отменить,
+  `ou-btn--ghost` Показать изменения); `justify-content: flex-end` из DS
+  (`ou-drawer__foot-meta` / `ou-drawer__foot-actions` в DS отсутствуют —
+  добавление отложено в DS-бэклог до появления реальной потребности в
+  left/right-зонировании footer)
+- [x] `data-template="tpl-bg-page"` присутствует в каждом `.shell`
+- [x] `show(id)` и `injectBgPage()` работают без JS-ошибок
+- [x] State-switcher `.wf-nav` переключает состояния корректно
+
+---
+
+## 3. `docs/wireframes/prd7-tests-list.html`
+
+Точка входа пользователя — список тестов. Принимается до редактора, т.к. из него открывается Drawer.
+
+- [x] 16 состояний в `.wf-nav`; каждое переключается без ошибок: `default`, `collapsed`,
+  `search`, `menu-open`, `menu-open-pub`, `folder-menu`, `folder-delete-a`,
+  `folder-delete-b`, `preview`, `lazy`, `loading`, `empty`, `error`,
+  `fab-folder-pick`, `fab-restricted`, `fab-open`
+- [x] Отображаются статусы тестов: `Черновик`, `Опубликован`. Архивные тесты вынесены
+  на отдельную страницу `prd7-tests-archive.html`; доступ — sub-ссылка «Архив»
+  в сайдбаре под пунктом «Тесты»
+- [ ] Дополнительная статус-метка «Требует обновления» на карточке/строке теста, если
+  его варианты страниц несовместимы с актуальным snapshot'ом шаблона (дрейф версий
+  шаблона). Метка `ou-tag ou-tag--warning` рядом со стандартным статусом; при открытии
+  такого теста автор-владелец видит принудительный диалог `s-mapping` (см. §8),
+  read-only пользователь — только метку
+- [x] Кнопки действий на тесте: открыть редактор (`action-btn` на строке),
+  удалить / архивировать (`dropdown-item` в row-меню)
+- [x] Пустое состояние: заглушка «Тестов пока нет» + кнопки `Создать папку` и `Новый тест`
+- [x] Состояние загрузки: `s-loading` (skeleton), `s-lazy` (спиннер пагинации).
+  Состояние ошибки загрузки списка: `s-error` (state-level banner: alert-иконка,
+  заголовок «Не удалось загрузить тесты», описание + retry-кнопка `Повторить`).
+  Action errors (delete/archive/publish failed) — toast'ом, не state-level
+
+---
+
+## 4. `docs/wireframes/prd7-tests-delete-confirm.html`
+
+Диалог удаления теста. Принимается вместе со списком тестов.
+
+- [x] Текст предупреждения содержит название теста inline в тексте
+  (`Тест «Основы информационной безопасности» будет удалён…`)
+- [x] Кнопки: `Удалить навсегда` (DS-класс `ou-btn--destructive`) и `Отмена`
+  (`ou-btn--secondary`)
+- [x] Кнопка `Удалить` визуально выделена как опасное действие — красный
+  `--ou-error-default` через `ou-btn--destructive`. Дополнительно FR-30:
+  активна только при точном совпадении введённого названия (3 состояния:
+  `s-empty`, `s-mismatch`, `s-match`)
+
+---
+
+## 5. `docs/wireframes/prd7-tests-archive.html`
+
+Страница «Архив тестов» — список архивированных тестов с действиями восстановить /
+удалить навсегда (FR-31). Архивация инициируется из `prd7-tests-list.html` через
+dropdown «Архивировать» в row-меню и не имеет отдельной confirmation-модалки
+(action reversible через эту страницу).
+
+- [x] 6 состояний в `.wf-nav`: `s-list`, `s-preview`, `s-restore`,
+  `s-restore-orphan`, `s-delete`, `s-empty`; каждое переключается без ошибок
+- [x] DS-shell: `ou-shell` + `ou-shell__side` + `ou-shell__header` +
+  `ou-shell__main`; модалки через `ou-modal-root` + `ou-modal--m`
+- [x] Sidebar: «Архив» как `ou-side__item--sub is-active` под пунктом «Тесты»;
+  header содержит back-link `← Тесты` + page-title «Архив тестов»
+- [x] Таблица: колонки `Название / Статус / Режим / Сценарий / Тем / Вопросов /
+  Архивирован / Назначений / [preview-toggle]`. Preview-toggle в последней
+  колонке заголовка таблицы (как в `prd7-tests-list.html`), не в shell-header
+- [x] Row-actions: `Восстановить` (`ou-iconbtn` с DS-токенами accent на hover)
+  и `Удалить навсегда` (`ou-iconbtn` с error-токенами на hover)
+- [x] `s-preview` — preview-panel справа с DS-типографикой (12px body-s для row,
+  не caption); кнопки «Восстановить» / «Удалить навсегда» в панели убраны —
+  действия только через row-iconbtn
+- [x] `s-restore` / `s-restore-orphan` — модалка подтверждения восстановления;
+  orphan дополнительно показывает warning-callout «папка удалена»
+  (`ou-warning-soft` фон + `ou-warning-default` border, body-s текст)
+- [x] `s-delete` — модалка с warning «Тест будет удалён безвозвратно»,
+  кнопка `Удалить навсегда` с DS-классом `ou-btn--destructive`
+- [x] `s-empty` — empty-state «Архив пуст», без баннеров и кнопок (архив
+  пополняется только через архивирование из основного списка)
+
+---
+
+## 6. `docs/wireframes/prd7-editor-settings-tab.html`
+
+Вкладка "Настройки" Drawer.
+
+- [x] Drawer-контейнер соответствует эталону `prd7-editor-drawer.html` (п. 2):
+  `ou-drawer-root` + `ou-drawer__backdrop` + `ou-drawer ou-drawer--xl ou-drawer--right`,
+  `ou-drawer__head` (+ `__head-text` + `__title` + `__close`), `ou-tabs ou-tabs--underline`,
+  `ou-drawer__body` (`tabindex="0"`), `ou-drawer__split` + `ou-drawer__rail` для
+  sidenav, `ou-drawer__foot`. Кнопки `ou-btn` (а не legacy `ou-button`)
+- [x] Вкладка `Настройки` активна (`ou-tabs__tab is-active aria-selected="true"`
+  и `wf-status-dot--dirty` индикатор где применимо)
+- [x] Поля: `f-title` (Название*, required), `f-desc` (Описание), `f-status`,
+  `f-flow-mode`, `f-pass-val` (Порог), `f-time` (Лимит времени), `f-attempts`
+  (Максимум попыток) — DS `ou-field`/`ou-textarea`
+- [x] Поле `flowMode` — select с вариантами `linear_flat` (selected),
+  `linear_by_topics`, `router_by_topics`
+- [x] **Section-states** (контентная декомпозиция): `s-basic`, `s-mode`,
+  `s-pass-rules`, `s-limits`, `s-feedback`, `s-integration`, `s-adaptive`
+  (по подразделам sidenav). **Editor-states** (sample на `s-basic`):
+  `s-basic-loading` (skeleton), `s-basic-error` (centered alert + retry),
+  `s-basic-readonly` (info banner + disabled fields), `s-basic-saved` (success
+  banner + clean state), `s-basic-dirty` (chip + dot, baseline `s-basic`),
+  `s-basic-validation` (error summary + field-level errors)
+- [x] В `s-basic-validation` — error-banner с summary (`wf-state-banner--error`,
+  список «Исправьте N ошибок» со ссылками на поля), inline `wf-field-error`
+  под полем, `ou-field--error` border, Save disabled
+- [x] В `s-basic-readonly` — info-banner с `i-lock` ("Тест опубликован, доступно
+  только для просмотра"), все `input`/`textarea`/`select` с атрибутом `disabled`,
+  кнопка Save заменена на «Закрыть»
+
+---
+
+## 7. `docs/wireframes/prd7-design-tab.html`
+
+Вкладка "Оформление" Drawer. Референс содержания: `docs/wireframes/design-tab.html`.
+
+- [x] Drawer-контейнер соответствует эталону `prd7-editor-drawer.html` (п. 2) — теги статуса унифицированы (`--outline`)
+- [x] Вкладка `Оформление` активна
+
+### Состояния (сверить с state-switcher в `design-tab.html`)
+
+Generic-состояния drawer'а (`s-loading`, `s-saving`, `s-dirty`, `s-error`,
+`s-validation`, `s-saved`) описаны в [approved/prd7-editor-drawer.html](approved/prd7-editor-drawer.html)
+и не дублируются здесь — поведение единообразно для всех вкладок.
+
+- [x] `wf-template` — активен rail-пункт «Шаблон» (миниатюра, описание, диагностика)
+- [x] `wf-branding` — активен rail-пункт «Брендирование», показаны параметры всех типов
+- [x] `wf-template-empty` — новый тест, дефолтный шаблон «Стандартный»
+- [x] `wf-template-incompatible` — сохранённый шаблон недоступен; баннер ошибки
+  с действиями «Выбрать шаблон» / «Применить «Стандартный»»
+- [x] `wf-template-preview` — предпросмотр шаблона (overlay)
+- [x] `wf-branding-color-picker` — открытый color-picker (popover)
+- [x] `wf-template-gallery` — галерея шаблонов
+- [x] `wf-template-gallery-search` — галерея с поиском
+- [x] `wf-template-gallery-empty` — галерея без результатов
+- [x] `wf-template-gallery-confirm` — подтверждение замены шаблона
+
+### Содержание
+
+- [x] Секция "Шаблон": миниатюра, название, бейдж "Встроенный", версия, описание, `Предпросмотр`, `Заменить шаблон`
+- [x] Действие "Сбросить до умолчаний" — ghost-кнопка в действиях карточки
+  шаблона рядом с "Предпросмотр"/"Заменить шаблон" (не footer, не отдельное
+  состояние; PRD-1 §3.1). При клике предполагается стандартный
+  confirm-dialog DS, т.к. действие очищает `design_settings_json`
+- [x] `templateVersion` и `templateApiVersion` — системные read-only поля, в UI
+  не выводятся (FR-41). Версия видна как тег `v1.2.0` рядом с названием шаблона.
+  Несовместимые шаблоны фильтруются на бэкенде; при невалидном сохранённом
+  `templateId` открывается `wf-template-incompatible`
+- [x] Секции `Брендирование`, `Макет`, `Прогресс и шапка` перенесены без потерь из `design-tab.html`
+- [x] В `wf-branding` показаны все типы параметров: `text`, `multiselect`, `url`,
+  `asset`, `file`, `downloadLink`, `color`, `select`
+- [x] Технический ярлык типа в UI не выводится — типы описаны в Acceptance-таблице (FR-31a)
+- [x] Нет кнопок `Сохранить оформление` / `Сбросить до умолчаний` в footer вкладки
+- [x] FR-аннотации (`wf-annot`) на ключевых элементах: NFR-19 на close-button,
+  FR-31 на rail, FR-32 на `...`-меню шаблона, FR-30 на блоке шаблона,
+  FR-33 на toolbar галереи; включаются кнопкой `Аннотации` в state-switcher
+
+---
+
+## 8. `docs/wireframes/prd7-structure-linear-by-topics.html`
+
+Вкладка "Структура", режим `linear_by_topics`. Референс: `docs/legacy/pages-tab.html`.
+
+- [x] Drawer-контейнер соответствует эталону (п. 2); вкладка `Структура` активна
+- [x] Индикатор текущего `flowMode` read-only вверху рабочей области
+- [x] Нет ссылок на "Вопросы" — ссылка "Нет тем" ведёт на вкладку `Состав`
+
+### Состояния из `pages-tab.html` (все должны быть перенесены)
+
+ID состояний сохранены из исходного `legacy/pages-tab.html` без переименования.
+
+Generic-состояния drawer'а (`s-loading`, `s-error`, `s-saved`) описаны
+в [approved/prd7-editor-drawer.html](approved/prd7-editor-drawer.html) и
+не дублируются здесь — поведение единообразно для всех вкладок.
+
+- [x] `s-main` — список тем с вопросами
+- [x] `s-empty-pages` — нет страниц до/после
+- [x] `s-empty-topics` — нет тем; ссылка на `Состав`
+- [x] `s-readonly` — баннер, кнопки задизаблены
+- [x] `s-mapping` — модальный диалог замены варианта. Триггеры запуска:
+  (1) ручная смена шаблона во вкладке «Оформление»;
+  (2) автозапуск при загрузке теста, если шаблон был обновлён и какие-то варианты
+  страниц теста отсутствуют в новой версии (дрейф `templateVersion`).
+  В обоих сценариях «Сохранить» drawer disabled до полного разрешения всех
+  несовместимостей. Read-only пользователь диалог не видит — для него тест
+  отображается со статус-меткой «Требует обновления» (см. §3)
+- [x] `s-add-step1` — модальный диалог `ou-modal --m` с поиском и компактным списком
+  вариантов из текущего шаблона. Имя варианта — контракт; имена и состав приходят
+  из определения шаблона, а не enum'а системы. Поиск нужен для масштабирования
+  на большие наборы вариантов в кастомных шаблонах
+- [x] Отдельного шага «ввод названия / позиции» **нет**: после выбора варианта
+  страница добавляется в позицию, из которой был открыт диалог (нажатый
+  `insert-row`), и автоматически разворачивается. Название и остальные поля
+  автор заполняет inline в `page-row-expand`
+- [x] Редактирование содержимого страницы — **inline-expand самой строки**:
+  у каждой `page-row` слева `page-expand-toggle` (chevron), при раскрытии
+  под строкой появляется блок `page-row-expand` с полями формы по schema
+  варианта шаблона. Если schema варианта пуста (контент задан шаблоном) —
+  chevron не отрисовывается, строка не разворачивается. Отдельного state
+  редактора нет — это не модальный экран, а аккордеон-разворот внутри списка
+- [x] `s-page-preview` / `s-page-preview-aa` — большой модальный диалог
+  `ou-modal --xl` с явно обозначенной областью `.preview-frame` (лейбл сверху,
+  viewport со светлым фоном). В `-aa` варианте сверху viewport — countdown-bar
+  и строка «Автопереход через N с.»
+- [x] `s-dirty-form` — раскрытая страница с несохранёнными изменениями;
+  индикация dirty — только на табе «Структура» (`.status-dot.dirty`), на самой
+  странице меток нет; footer в dirty-triplet режиме
+- [x] `s-validation` — раскрытая страница с error-banner в `page-row-expand`
+  и inline-ошибками под полями
+- [x] `s-sanitize` — раскрытая HTML-страница после санитайзера: warning-banner
+  внутри `page-row-expand` со списком удалённых небезопасных элементов
+- [x] `s-delete` — подтверждение удаления через ModalDialog `ou-modal --s` с
+  danger-иконкой (`ou-modal__icon--danger`) и кнопкой `ou-btn--destructive`
+- [x] `s-dnd` (страницы) / `s-dnd-topics`
+
+### Дополнения PRD-7
+
+- [x] `s-mode-change` — warning-блок «Есть настройки, не применимые к текущему
+  режиму» с раскрываемым списком несовместимых элементов. Footer drawer
+  в стандартном dirty-triplet (`Показать изменения / Отменить / Сохранить`),
+  отдельной кнопки «Применить изменения» нет — смена режима фиксируется
+  общим Save вкладки. На табе «Структура» — `.status-dot.dirty`
+- [x] Несовместимость вариантов при смене шаблона решается **только через
+  `s-mapping`** (модальный диалог явной замены варианта на ближайший из нового
+  шаблона или удаления страницы). Авторский UI **не** показывает «fallback-
+  варианты» с warning-пиктограммой — такой паттерн устарел вместе с
+  enum-типами страниц
+- [x] Footer Drawer: кнопки — прямые дочерние `ou-drawer__foot` (без обёрток
+  `__foot-meta` / `__foot-actions`, которых нет в DS); единый размер `ou-btn--m`
+- [x] Кнопки-иконки в строках: `ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s` +
+  `aria-label` (один размерный модификатор, не комбинация `--m --s`)
+- [x] Баннеры: `ou-banner` + variant-модификатор `ou-banner--subtle` + BEM
+  (`__ico`, `__body`, `__title`/`__desc`/`__actions`)
+- [x] Empty-states: `ou-empty` с BEM-обёртками `__art` / `__content` /
+  `__actions` и семантическими `<h3 class="ou-empty__title">` /
+  `<p class="ou-empty__desc">`
+- [x] Select в `s-mapping` — DS-компонент `ou-select` с BEM (`__trigger`,
+  `__value`, `__chev`, `__menu`, `__opt`) и мини-popper JS для меню с
+  `position: fixed`, чтобы выходить за `overflow` drawer-контейнера
+- [x] Модальные диалоги для preview и delete используют DS-структуру
+  `ou-modal` + `__head/--icon`, `__body`, `__foot`, `__close`, `__backdrop`
+- [x] Бейдж имени варианта — единый `.page-variant-badge` (нейтральный стиль);
+  enum-классов `.type-intro/.type-info/.type-summary/.type-html` нет.
+  Цветовая палитра — собственность определения варианта в шаблоне, не системы
+- [x] Шаблонные строки `page-row--template` без `page-expand-toggle`
+  (schema варианта пуста — редактировать нечего)
+- [x] FR-аннотации: FR-40 на `.flow-mode-bar`, FR-25a на «Сохранить» в footer,
+  FR-25c на «Показать изменения»; включаются кнопкой «Аннотации» в state-switcher
+- [x] Полная поддержка dark-темы: только адаптивные DS-токены, никаких
+  hardcoded HSL/HEX/RGB, без константного `--ou-neutral-0` в фонах
+
+### Дополнения для variant.kind (PRD-1 §4.3)
+
+- [ ] **Questions-row как `page-row--system page-row--questions`** (вместо
+  упрощённого монолитного `.questions-row`): в каждой теме своя запись с
+  локальным per-topic variant'ом из `kind: questions`. Контент строки:
+  variant badge, `…` row-menu, chevron + expand при непустой schema варианта.
+  CSS-стиль `.questions-row` уже унифицирован визуально (border-left accent),
+  полная замена разметки на page-row — отдельным коммитом
+- [ ] **`…` row-menu** на каждой `page-row` (не только iconbtn Eye / Trash):
+  пункты «Сменить вариант», «Предпросмотр», «Удалить» (для info; для системных
+  kind — только «Сменить вариант»)
+- [ ] **Хинт «Доступно N вариантов»** возле бейджа системных row при N > 1
+  вариантах нужного `kind` в шаблоне (PRD-1 §4.3.2)
+- [ ] **Warning fallback** «Используется вариант из стандартного шаблона» при
+  0 вариантах нужного `kind` в текущем шаблоне (PRD-1 §4.3.2)
+- [ ] **Валидация required-параметров** (PRD-1 §4.3.6): `page-row--warn` +
+  inline-banner со списком полей в expand'е + `.status-dot--error` на табе
+  «Структура» + Save disabled
+
+---
+
+## 9. `docs/wireframes/prd7-structure-linear-flat.html`
+
+Вкладка "Структура", режим `linear_flat` («Последовательный»).
+
+Файл показывает **только уникальные** для flat состояния. Общие паттерны
+(read-only drawer, `s-mapping` модал, `s-add-step1` модал, `s-page-preview/-aa`,
+inline-expand редактирование, `s-dirty-form` / `s-validation` / `s-sanitize`,
+`s-delete` модал, `s-dnd` страниц) описаны в §8 и здесь не дублируются.
+
+- [x] Drawer-контейнер соответствует эталону (п. 2); вкладка `Структура` активна
+- [x] Индикатор `flowMode` read-only вверху рабочей области (`flow-mode-label` = «Последовательный»)
+- [x] Нет группировки по темам — все вопросы единым потоком в одном блоке
+- [x] `s-main` — между зонами «До теста» и «После теста» расположена единая
+  `.questions-block-card` (вместо набора `.topic-block`):
+  заголовок «Вопросы — N шт. (распределение по темам в скобках)» и описание
+  «Идут единым потоком, порядок задаётся вкладкой Настройки». В зонах
+  «До теста»/«После теста» — обычные шаблонные и авторские `page-row`
+  с inline-expand
+- [x] `s-empty-questions` — EmptyState «Нет вопросов» (в составе теста не назначены
+  вопросы → плоский поток показывать нечего). Кнопка ведёт на вкладку «Состав».
+  Отличается от `s-empty-topics` в §8: там темы есть, но без вопросов;
+  здесь сам список вопросов пуст
+- [x] `s-mode-change` — обратное направление: **Последовательный → По темам**.
+  Warning-banner «Режим изменён на По темам. Структура будет реорганизована».
+  Два пункта преобразования в раскрываемом callout'е: «Вопросы будут сгруппированы
+  по темам» и «Авторские страницы распределены по темам (если возможно)».
+  Footer drawer — стандартный dirty-triplet; на табе «Структура» — `.status-dot.dirty`
+- [x] Общие state'ы (read-only, mapping, add-page, preview, dirty/validation/
+  sanitize, delete, DnD) **не дублируются** — поведение задокументировано в §8
+
+### Дополнения для variant.kind (PRD-1 §4.3)
+
+- [x] **Questions-row как `page-row--system page-row--questions`** — одна на тест
+  с `topicId: null` между зонами «До теста» и «После теста». В демо: variant badge
+  «Минимальный», `…` row-menu, иконка `i-question` слева
+- [ ] **`…` row-menu** на каждой `page-row` (вместо отдельных Eye / Trash iconbtn):
+  пункты «Сменить вариант», «Предпросмотр», «Удалить» (для info)
+- [ ] **Хинт «Доступно N вариантов»**, **warning fallback**, **валидация
+  required-параметров** — те же правила, что в §8 (см. дополнения там)
+
+---
+
+<!-- §10 удалён: режим `mixed` исключён из `FlowMode` enum как функциональный дубль
+     `linear_flat` после переопределения последнего (зоны «До теста» / «После теста»
+     теперь входят в `linear_flat`). См. prd-7-decisions.md §2.3a. -->
+
+---
+
+## 11. `docs/wireframes/prd7-structure-router.html`
+
+Вкладка "Структура", режим `router_by_topics` («Через страницу-маршрутизатор»).
+
+Архитектура: **зоны «До теста» / «После теста»** как в `linear_flat` + **системная
+page-row `kind: router`** в зоне «Внутри теста» + **темы как ветки** под router-row
+через **tree-connectors** (тонкие DS-линии `├─` `└─`, `--ou-border-soft`).
+См. [prd-7-decisions.md §2.3b](../prd-7-decisions.md). Старая «сценарная карта»
+(`Router → Раздел → Возврат → Итог` с `.connector-wrap`, `.final-result-block`,
+`.compact-router`, `.sdp`) — устаревшая модель, не применяется.
+
+Файл показывает **только уникальные** для router состояния. Общие паттерны
+(read-only drawer, `s-mapping` модал, `s-add-step1` модал, `s-page-preview`,
+inline-expand редактирование, `s-dirty-form` / `s-sanitize`,
+`s-delete` модал, `s-dnd`) описаны в §8. Generic-состояния drawer'а
+(`s-loading` / `s-error` / `s-saved`) — см.
+[approved/prd7-editor-drawer.html](approved/prd7-editor-drawer.html).
+
+- [x] Drawer-контейнер соответствует эталону (п. 2); вкладка `Структура` активна
+- [x] Индикатор `flowMode` read-only вверху рабочей области
+  (`flow-mode-label` = «Через страницу-маршрутизатор»)
+- [x] `s-main` — основное состояние: зоны «До теста» / «После теста» (как
+  `linear_flat`); внутри теста — `.page-row.page-row--system[data-kind="router"]`
+  (единственная, неудаляемая, без insert-row до/после), под ней через
+  `.tree-branches` подвешены 3 темы как `.topic-block` с собственными
+  questions-row (`.page-row.page-row--system.page-row--questions
+  [data-kind="questions"]`). В демо: Тема 1 и 2 — variant «Минимальный»,
+  Тема 3 — variant «Расширенный» (демонстрирует **локальность per-topic**)
+- [x] `s-main-multi-variant` — иллюстрирует ветку «N > 1 вариантов в шаблоне»
+  из тихой логики связывания (PRD-1 §4.3.2): возле бейджа системных row —
+  caption-метка «Доступно N вариантов» (italic, `--ou-fg-muted`). Смена
+  варианта — через `…` row-menu → «Сменить вариант» (см. §11a)
+- [x] `s-main-fallback` — иллюстрирует ветку «0 вариантов нужного `kind` в
+  шаблоне» (PRD-1 §4.3.2): возле бейджа — warning-метка «Из стандартного
+  шаблона» с `--ou-warning-soft` фоном и иконкой `i-warn`
+- [x] `s-empty-topics` — router-row есть (тихая привязка), но в составе теста
+  нет тем: внутри `.tree-branches` — `ou-empty` «В тесте нет тем» с CTA на
+  вкладку «Состав». Empty-state для самой router-row отсутствует
+- [x] `s-mode-change` — обратное направление: **router_by_topics → По темам**
+  (или → Последовательный). Warning-banner + раскрываемый callout с пунктами
+  преобразования. Ключевой: **«Маршрутизатор будет удалён»** —
+  страница `kind: router` удаляется молча без диалога `s-mapping`,
+  параметры маршрутизатора теряются. Локальные variant'ы questions-row
+  сохраняются per-topic. Footer — стандартный dirty-triplet; на табе
+  «Структура» — `.status-dot.dirty`
+- [x] `s-validation` — незаполненные `required: true` поля в schema варианта
+  (PRD-1 §4.3.6): `.page-row--warn` модификатор (warning-цвет границы и
+  заголовка), `.validation-banner` в `page-row-expand` со списком конкретных
+  полей, на табе «Структура» — `.status-dot.status-dot--error` (агрегированный
+  error-индикатор согласно FR-25b / NFR-21), кнопка «Сохранить» disabled с
+  tooltip. Серверный API возвращает структурированную ошибку
+- [x] Общие state'ы (read-only, mapping, add-page, preview, dirty / sanitize-html,
+  delete, DnD) **не дублируются** — поведение задокументировано в §8
+- [x] **`completionPolicy` и `sectionUnlockRules` НЕ отображаются в Структуре** —
+  они живут во вкладке «Настройки → Сценарий», условно при `router_by_topics`
+  (см. PRD-8 §3.2.1)
+- [x] **Темы как ветки** через `.tree-branches` + `.tree-branch`: тонкие
+  DS-линии (`--ou-border-soft`, `1px`), угловые `├─` (вертикальный guide и
+  горизонтальный коннектор) и `└─` (последняя ветка, guide останавливается
+  на её высоте). Никакого акцентного цвета, никаких теней, никаких толстых
+  SVG-стрелок
+- [x] **Page-row `kind: router`** = page-row--system + chevron при непустой
+  schema + variant badge + `…` row-menu + без insert-row до/после + без delete
+- [x] **Page-row `kind: questions`** внутри каждой темы-ветки = page-row--system
+  page-row--questions; variant локальный per-topic (разные темы могут иметь
+  разные variant'ы); те же возможности: variant badge + хинт N + warning
+  fallback + `…` row-menu + expand при непустой schema
+- [x] Footer Drawer: триплет `Показать изменения` (ghost) / `Отменить`
+  (secondary) / `Сохранить` (primary), все `ou-btn--m`, прямые дочерние
+  `ou-drawer__foot`
+- [x] FR-аннотации: FR-40 на `.flow-mode-bar`, PRD-7 §2.3b на `.inside-test`;
+  включаются кнопкой «Аннотации»
+- [x] Полная поддержка dark-темы: только адаптивные DS-токены, никаких
+  hardcoded HSL/HEX/RGB
+
+---
+
+## 11a. `docs/wireframes/prd7-variant-replace.html`
+
+Модал смены варианта на существующей `page-row` (PRD-1 §4.3.3).
+Триггер — `…` row-menu → «Сменить вариант». Применим **ко всем `kind`**
+(`info` / `intro` / `summary` / `router` / `questions`).
+
+- [x] `ou-modal --m` с поиском вариантов того же `kind` из текущего шаблона;
+  текущий вариант помечен меткой «Текущий» и disabled (нельзя «сменить» на тот же)
+- [x] **Diff-блок потерь параметров** под списком вариантов: две группы —
+  «Будут удалены» (`--ou-warning-soft` фон) и «Будут сохранены»
+  (`--ou-success-soft` фон). Каждое поле показано с именем + текущим
+  значением. Меняется при выборе другого варианта по правилу «имя поля =
+  контракт между вариантами одного `kind`»
+- [x] `s-replace-modal` — основное: list + diff (есть потери, есть сохранения)
+- [x] `s-replace-empty-diff` — schema нового варианта симметрична текущей;
+  показывается только группа «Будут сохранены», без warning-блока
+- [x] `s-replace-no-fields` — у нового варианта пустая schema; все параметры
+  текущего варианта будут удалены + info-note «У выбранного варианта пустая
+  schema — страница станет шаблонной»
+- [x] Footer: «Отменить» (secondary) / «Сменить вариант» (primary)
+- [x] FR-аннотации: PRD-1 §4.3.3 на diff-блоке
+- [x] Полная поддержка dark-темы: только DS-токены
+
+---
+
+## 12. `docs/wireframes/prd7-section-basic.html`
+
+Вкладка "Состав" — базовая секция.
+
+- [ ] Список вопросов с типами: single, multiple, matching, ranking
+- [ ] Кнопка добавления вопроса с выбором типа
+- [ ] Состояния: `s-main`, `s-empty`, `s-loading`, `s-error`, `s-readonly`
+
+---
+
+## 13. `docs/wireframes/prd7-section-basic-states.html`
+
+Все состояния базовой секции.
+
+- [ ] Состояния формы добавления / редактирования вопроса
+- [ ] `s-dirty-form`, `s-validation`, `s-delete`
+- [ ] `s-dnd` — drag-and-drop вопросов
+- [ ] `s-saved`
+
+---
+
+## 14. `docs/wireframes/prd7-section-adaptive.html`
+
+Адаптивный режим секции.
+
+- [ ] Показаны специфичные для adaptive поля (пороги, ветвление)
+- [ ] Визуально отличается от базовой секции
+
+---
+
+## 15. `docs/wireframes/prd7-section-start-pages.html`
+
+Страницы до/после в секции.
+
+- [ ] Редакторы intro / summary / html страниц внутри секции
+- [ ] Состояние без страниц — кнопка добавления
+
+---
+
+## 16. `docs/wireframes/prd7-section-basic-feedback-editor.html`
+
+Редактор обратной связи.
+
+- [ ] Редактор feedback для correct / incorrect / partial ответов
+- [ ] Предпросмотр feedback
+
+---
+
+## 17. `docs/wireframes/prd7-editor-close-confirm.html`
+
+Диалог подтверждения закрытия Drawer с несохранёнными изменениями.
+
+- [ ] Три кнопки: `Сохранить`, `Выйти без сохранения`, `Отмена`
+- [ ] Кнопка `Сохранить` disabled при наличии блокирующих ошибок
+- [ ] При disabled `Сохранить` — краткая причина и ссылка на первую ошибку
+
+---
+
+## 18. `docs/wireframes/prd7-editor-conflict.html`
+
+Диалог конфликта версий (concurrent edit).
+
+- [ ] Два действия: `Обновить данные` (recommended, default) и `Сохранить поверх`
+- [ ] `Обновить данные` визуально выделена как рекомендуемое действие
+
+---
+
+## 19. `docs/wireframes/prd7-mode-switch-warning.html`
+
+Предупреждение при смене `flowMode`.
+
+- [ ] Список настроек, несовместимых с новым режимом
+- [ ] Для каждой настройки указан режим, при котором она снова становится доступной
+- [ ] Кнопки: подтвердить смену и отмена
+
+---
+
+## 20. `docs/wireframes/prd7-editor-status-indicators.html`
+
+Агрегированные индикаторы вкладок Drawer.
+
+- [ ] Индикатор `изменено` на вкладке при наличии изменений
+- [ ] Индикатор `warning` на вкладке при наличии предупреждений
+- [ ] Индикатор `error` на вкладке при наличии ошибок
+- [ ] Кнопка `Сохранить` disabled при наличии ошибок; при наличии только warning — активна
+
+---
+
+## 21. `docs/wireframes/prd7-editor-mobile.html`
+
+Мобильный fallback при ширине < 960px.
+
+- [ ] Drawer не обрезается по горизонтали
+- [ ] Fallback-контент понятен пользователю
+- [ ] Проверено на ширине 375px и 768px
+
+---
+
+## Final Sign-off
+
+После приёмки всех файлов:
+
+- [ ] Нет файлов с legacy-классами (`btn`, `btn-*`, `drawer-*`, `dialog-*`,
+  `sidebar`, `nav-item`, `form-group`, `form-label`, `badge`, `card-*`,
+  `banner` с прямыми модификаторами и т.д.) — `npm run check:wireframes:ds`
+  проходит на базовом профиле
+- [ ] Нет файлов в старом формате (`ou-button`, `wf-state`, `wf-page-wrap`, `showState`)
+- [ ] Нет файлов с маркером `STATES_INSERT_POINT`
+- [ ] Все состояния из `design-tab.html` присутствуют в `prd7-design-tab.html`
+- [ ] Все состояния из `pages-tab.html` присутствуют в `prd7-structure-linear-by-topics.html`
+- [ ] Проверено на ширине 1440px и < 960px
+- [ ] Дизайнер / PM подтвердил каждый файл
+- [ ] Файлы перенесены в `docs/wireframes/approved/`
