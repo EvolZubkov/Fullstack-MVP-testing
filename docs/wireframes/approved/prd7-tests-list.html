@@ -772,15 +772,18 @@
         </div>
       </div>
 
-      <!-- Test 3 (no folder — root level): standard, router_by_topics -->
+      <!-- Test 3 (no folder — root level): standard, router_by_topics; template drift -->
       <div class="tree-test" role="treeitem" aria-level="2"
-           aria-label="Аудит логов SCORM, Черновик, стандартный, роутер по темам, 1 тема, 20 вопросов, 3 назначения, без папки">
+           aria-label="Аудит логов SCORM, Черновик, требует обновления (шаблон обновлён), стандартный, роутер по темам, 1 тема, 20 вопросов, 3 назначения, без папки">
         <div class="tree-test-name">
           <div class="test-info">
             <div class="test-name">Аудит логов SCORM</div>
           </div>
         </div>
-        <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+        <div style="display:flex;flex-direction:column;gap:var(--ou-space-1);align-items:flex-start">
+          <span class="ou-tag ou-tag--neutral">Черновик</span>
+          <span class="ou-tag ou-tag--warning" title="Шаблон обновлён: при открытии будет показан диалог сопоставления вариантов (§8, s-mapping)">Требует обновления</span>
+        </div>
         <div><span class="mode-badge standard" title="Стандартный режим">Стандарт</span></div>
         <div>
           <span class="flow-chip" title="Роутер по темам — переход по результатам каждой темы">
