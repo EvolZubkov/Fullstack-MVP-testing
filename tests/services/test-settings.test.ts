@@ -11,6 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { VersionConflictError, TestSettingsService } from "../../server/services/test-settings";
 import { templates, contentPages, testSections, tests as testsTable } from "../../shared/schema";
+import { RequiredFieldsMissingError } from "../../server/services/required-fields-validator";
 
 // ─── DB mock ─────────────────────────────────────────────────────────────────
 
@@ -579,5 +580,138 @@ describe("TestSettingsService._reconcileSystemPages — via save()", () => {
 
     const cpInserts = inserts.filter((i) => i.table === contentPages);
     expect(cpInserts).toHaveLength(0);
+  });
+});
+
+// ─── Required fields validation (PRD-1 §4.3.6, PRD-7 §1.4) ────────────────────
+
+const manifestWithRequired = {
+  id: "default",
+  name: "Default",
+  version: "1.0.0",
+  templateApiVersion: "1.0",
+  contentTemplates: [
+    { key: "q.std", label: "Q", kind: "questions", isDefault: true, placeholders: [] },
+    {
+      key: "i.std", label: "I", kind: "intro",
+      placeholders: [
+        { key: "title", type: "text", required: true },
+        { key: "subtitle", type: "text", required: false },
+      ],
+    },
+    {
+      key: "s.std", label: "S", kind: "summary",
+      placeholders: [
+        { key: "title", type: "text", required: true },
+        { key: "result", type: "resultField", required: true },
+      ],
+    },
+  ],
+};
+
+describe("TestSettingsService — required fields validation on save", () => {
+  let svc: TestSettingsService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetTx();
+    svc = new TestSettingsService();
+  });
+
+  it("does NOT validate when status remains draft, even with missing required values", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: manifestWithRequired }]],
+      [contentPages, [
+        { id: "p-intro",   templateKey: "i.std", valuesJson: { values: {} } },
+        { id: "p-summary", templateKey: "s.std", valuesJson: { values: {} } },
+      ]],
+    ]);
+    tx.update.mockReturnValue(makeChain([{ ...dbTest, status: "draft" }]));
+    captureInserts();
+
+    await expect(svc.save("t1", { test: { status: "draft" } })).resolves.toBeTruthy();
+  });
+
+  it("validates and throws RequiredFieldsMissingError when transitioning to published with missing values", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: manifestWithRequired }]],
+      [contentPages, [
+        { id: "p-intro",   templateKey: "i.std", valuesJson: { values: { title: "Hello" } } },
+        { id: "p-summary", templateKey: "s.std", valuesJson: { values: { title: "Done" } } }, // missing `result`
+      ]],
+    ]);
+    tx.update.mockReturnValue(makeChain([{ ...dbTest, status: "published" }]));
+    captureInserts();
+
+    await expect(svc.save("t1", { test: { status: "published" } }))
+      .rejects.toBeInstanceOf(RequiredFieldsMissingError);
+  });
+
+  it("RequiredFieldsMissingError exposes per-page violations with templateKey and missing fields", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: manifestWithRequired }]],
+      [contentPages, [
+        { id: "p-intro",   templateKey: "i.std", valuesJson: { values: { /* title missing */ } } },
+        { id: "p-summary", templateKey: "s.std", valuesJson: { values: { title: "x" /* result missing */ } } },
+      ]],
+    ]);
+    tx.update.mockReturnValue(makeChain([{ ...dbTest, status: "published" }]));
+    captureInserts();
+
+    try {
+      await svc.save("t1", { test: { status: "published" } });
+      throw new Error("expected RequiredFieldsMissingError");
+    } catch (err) {
+      expect(err).toBeInstanceOf(RequiredFieldsMissingError);
+      const e = err as RequiredFieldsMissingError;
+      const byPage = new Map(e.violations.map((v) => [v.pageId, v]));
+      expect(byPage.get("p-intro")?.missingFields).toEqual(["title"]);
+      expect(byPage.get("p-intro")?.templateKey).toBe("i.std");
+      expect(byPage.get("p-summary")?.missingFields).toEqual(["result"]);
+    }
+  });
+
+  it("passes when publishing with all required fields filled", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: manifestWithRequired }]],
+      [contentPages, [
+        { id: "p-intro",   templateKey: "i.std", valuesJson: { values: { title: "Hello" } } },
+        { id: "p-summary", templateKey: "s.std", valuesJson: {
+          values: { title: "Done", result: { path: "result.scorePercent" } },
+        } },
+      ]],
+    ]);
+    tx.update.mockReturnValue(makeChain([{ ...dbTest, status: "published" }]));
+    captureInserts();
+
+    await expect(svc.save("t1", { test: { status: "published" } })).resolves.toBeTruthy();
+  });
+
+  it("silently no-ops validation when template manifest cannot be loaded", async () => {
+    setupSelectDispatch([
+      [templates, []], // no manifest available
+      [contentPages, []],
+    ]);
+    tx.update.mockReturnValue(makeChain([{ ...dbTest, status: "published" }]));
+    captureInserts();
+
+    // No throw — fail-soft on missing manifest (same behaviour as reconciliation).
+    await expect(svc.save("t1", { test: { status: "published" } })).resolves.toBeTruthy();
+  });
+
+  it("skips rows whose templateKey is no longer in the manifest", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: manifestWithRequired }]],
+      [contentPages, [
+        // Stale templateKey — variant was removed from the manifest. The
+        // validator can't check unknown variants; the row is skipped (the
+        // upcoming template-change rebind will pick up the orphan).
+        { id: "p-stale", templateKey: "unknown.key", valuesJson: { values: {} } },
+      ]],
+    ]);
+    tx.update.mockReturnValue(makeChain([{ ...dbTest, status: "published" }]));
+    captureInserts();
+
+    await expect(svc.save("t1", { test: { status: "published" } })).resolves.toBeTruthy();
   });
 });

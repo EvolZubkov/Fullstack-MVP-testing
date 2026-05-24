@@ -25,6 +25,11 @@ import {
   type SystemKind,
   type ExistingSystemPage,
 } from "./content-pages-lifecycle";
+import {
+  findMissingRequiredFields,
+  RequiredFieldsMissingError,
+  type RequiredFieldsViolation,
+} from "./required-fields-validator";
 
 const DEFAULT_TEMPLATE_ID = "default";
 
@@ -278,6 +283,19 @@ export class TestSettingsService {
         );
       }
 
+      // Required-fields validation runs only on transition to `published`.
+      // Draft saves intentionally allow incomplete state so authors can save
+      // mid-edit without filling every required placeholder (PRD-1 §4.3.6
+      // applies the hard rule at the publish boundary; the in-editor save
+      // button is gated by frontend indicators).
+      if (status === "published") {
+        await this._validateAllRequiredFields(
+          tx,
+          testId,
+          extractTemplateId(payload.test.designSettingsJson ?? updated.designSettingsJson),
+        );
+      }
+
       return updated;
     });
   }
@@ -365,6 +383,70 @@ export class TestSettingsService {
         autoAdvance: false,
         autoAdvanceDelayMs: null,
       });
+    }
+  }
+
+  /**
+   * Loads every content_pages row of the test plus the active template's
+   * manifest, then checks each row against its variant's `required: true`
+   * placeholders. Throws {@link RequiredFieldsMissingError} on violations
+   * so the transaction rolls back and the route layer can surface a 422.
+   *
+   * Silently no-ops when the template manifest cannot be loaded — same
+   * fail-soft behaviour as {@link _reconcileSystemPages}.
+   */
+  private async _validateAllRequiredFields(
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+    testId: string,
+    templateId: string,
+  ): Promise<void> {
+    const wantedIds = templateId === DEFAULT_TEMPLATE_ID
+      ? [DEFAULT_TEMPLATE_ID]
+      : [templateId, DEFAULT_TEMPLATE_ID];
+
+    const manifestRows = await tx
+      .select({ id: templates.id, manifest: templates.manifest })
+      .from(templates)
+      .where(sql`${templates.id} = ANY(${wantedIds})`);
+
+    const byId = new Map(manifestRows.map((r) => [r.id, r.manifest as TemplateManifest]));
+    const template = byId.get(templateId) ?? byId.get(DEFAULT_TEMPLATE_ID);
+    if (!template) return;
+
+    const variants = (template.contentTemplates ?? []) as Array<{
+      key: string;
+      placeholders?: Array<{ key: string; required?: boolean }>;
+    }>;
+    const variantByKey = new Map(variants.map((v) => [v.key, v]));
+
+    const rows = await tx
+      .select({
+        id: contentPages.id,
+        templateKey: contentPages.templateKey,
+        valuesJson: contentPages.valuesJson,
+      })
+      .from(contentPages)
+      .where(eq(contentPages.testId, testId));
+
+    const violations: RequiredFieldsViolation[] = [];
+    for (const row of rows) {
+      if (!row.templateKey) continue;
+      const variant = variantByKey.get(row.templateKey);
+      if (!variant?.placeholders?.length) continue;
+
+      const values = ((row.valuesJson ?? {}) as { values?: Record<string, unknown> }).values;
+      const missing = findMissingRequiredFields(variant.placeholders, values);
+      if (missing.length > 0) {
+        violations.push({
+          pageId: row.id,
+          templateKey: row.templateKey,
+          missingFields: missing,
+        });
+      }
+    }
+
+    if (violations.length > 0) {
+      throw new RequiredFieldsMissingError(violations);
     }
   }
 

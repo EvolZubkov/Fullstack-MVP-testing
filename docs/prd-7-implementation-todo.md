@@ -534,7 +534,13 @@ Reference для всех секций после S4: `basic-settings-section.ts
 ### 1.10 Backend: API и сервис (S2 / Фаза 1B, Sonnet)
 
 - [x] Создать сервисный слой `TestSettingsService` (`server/services/test-settings.ts`).
-- [x] Вынести orchestration сохранения test + sections + adaptive settings из route handler в сервис.
+- [~] Вынести orchestration сохранения test + sections + adaptive settings из route handler в сервис.
+      _(2026-05-22: сервис реализован — `create()`, `save()`, `_reconcileSystemPages()`,_
+      _`_validateAllRequiredFields()`. Production-роутер_
+      _`PUT /api/tests/:id` в `server/routes/tests.ts:363` пока вызывает_
+      _`storage.updateTest()` напрямую; миграция роутера на_
+      _`testSettingsService.save()` остаётся открытым пунктом — без неё_
+      _reconciliation/required-fields validation на проде не срабатывают.)_
 - [x] Реализовать атомарное сохранение через transaction для standard-теста (FR-21).
 - [x] Реализовать атомарное сохранение через transaction для adaptive-теста (FR-22).
 - [x] При ошибке сохранения возвращать структурированную ошибку без частичного состояния (FR-23, BR-08-07).
