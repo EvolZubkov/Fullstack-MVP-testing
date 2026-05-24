@@ -1,12 +1,44 @@
 # PRD-7: Стратегия реализации с переключением моделей
 
-**Версия:** 1.0
+**Версия:** 1.1
+**Последняя актуализация:** 2026-05-22 (закрыты S0+S1+S2+S3 + route-gap; backend
+блоки 1A-1E variant.kind contract внесены пост-S2; UI стек переписан под
+UniversityRT DS вместо shadcn/ui — фактический wireframes-каркас на `ou-*`/`tb-*`)
 **Назначение:** Пошаговая инструкция по реализации PRD-7 разными моделями Claude Code.
 **Связанные документы:**
 
 - [PRD-7](prd-7-test-settings-editor-refactor.md) - источник требований
 - [decisions.md](prd-7-decisions.md) - контракты, enum, JSON-shapes (читать перед кодом)
 - [implementation-todo.md](prd-7-implementation-todo.md) - детальный список задач
+- [PRD-1 §4.3](prd-1-templates-content-pages.md) - variant.kind модель (внесена 2026-05-21)
+
+---
+
+## 0. Текущий статус (на 2026-05-22)
+
+| Сессия | Фаза | Статус | Артефакты |
+| --- | --- | --- | --- |
+| S0 | Контракты + skeleton | Закрыта | `decisions.md`, `client/src/features/tests/editor/` skeleton |
+| S1 | Wireframes 153/153 | Закрыта 2026-05-21 | `docs/wireframes/approved/*.html`, `wireframes-acceptance-checklist.md` |
+| S2 | Backend foundation | Закрыта | migration 003 + 004, `TestSettingsService`, `PATCH /status`, `DELETE`, `restore` endpoints |
+| S2+ | Block 1A — variant.kind contract | Закрыта 2026-05-22 | zod-схемы манифеста, `validateManifest()`, `kind` field в default/corporate/minimal manifests |
+| S2+ | Block 1B — silent variant binding | Закрыта 2026-05-22 | `server/services/variant-binding.ts` (pure functions) |
+| S2+ | Block 1C — content_pages lifecycle | Закрыта 2026-05-22 | `server/services/content-pages-lifecycle.ts` + reconciliation в `TestSettingsService.save()` |
+| S2+ | Block 1D — replace-variant endpoint | Закрыта 2026-05-22 | `POST /api/tests/:id/content-pages/:pageId/replace-variant` (FR-46) |
+| S2+ | Block 1E — required-fields validation | Закрыта 2026-05-22 | `required-fields-validator.ts` + hook в `save()` при `status=published` |
+| S2+ | Route-gap closure | Закрыта 2026-05-22 | `POST /api/tests` и `PUT /api/tests/:id` переведены на `testSettingsService.create()/save()` |
+| S3 | Mappers + validation | Закрыта | 46 unit-тестов покрывают `apiToEditorModel`, `editorModelToPayload`, `validateTestEditor` |
+| S4 | Фаза 4A Drawer caркас | Не начата | Следующий шаг |
+| S4 | Фаза 4B Reference basic-settings | Не начата | Зависит от 4A |
+| S5-S8 | Доменные секции | Не начата | Зависят от 4A+4B |
+| S9 | Component + API тесты | Не начата | Зависит от 5 |
+| S10 | Удаление legacy | Не начата | Зависит от 9 |
+| S11 | Acceptance pass | Не начата | Финал |
+
+Полный регрессионный набор на 2026-05-22: **17 файлов × 435 тестов, npm run check 0 errors**.
+
+Контракты, внесённые после S0 и НЕ описанные оригинальной стратегией (Block 1A-1E),
+зафиксированы в новой Фазе 1C-E ниже (§ «Сессия S2-расширения»).
 
 ---
 
@@ -69,20 +101,21 @@
 
 Рекомендованная нарезка на сессии (12 сессий вместо 19-21):
 
-| Сессия | Содержимое | Модели в сессии | Граница после |
-| --- | --- | --- | --- |
-| S0 | Фаза 0 (готово) | Opus | `/clear` |
-| S1 | Фаза W.3A + W.3B | Opus -> Sonnet | согласование (внешнее) |
-| S2 | Фаза 1A + 1B | Opus -> Sonnet | `/clear` |
-| S3 | Фаза 2A + 2B + 3A + 3B | Opus -> Sonnet -> Haiku | `/clear` |
-| S4 | Фаза 4A + 4B | Opus -> Sonnet | `/clear` |
-| S5 | Фаза 5A | Haiku | `/clear` |
-| S6 | Фаза 5B | Haiku | `/clear` |
-| S7 | Фаза 5C | Haiku | `/clear` |
-| S8 | Фаза 5D + 5E | Haiku -> Sonnet | `/clear` |
-| S9 | Фаза 6A + 6B | Haiku | `/clear` |
-| S10 | Фаза 7A | Sonnet | `/clear` |
-| S11 | Фаза 7B + W.3C | Opus -> Sonnet | финал |
+| Сессия | Содержимое | Модели в сессии | Граница после | Статус |
+| --- | --- | --- | --- | --- |
+| S0 | Фаза 0 | Opus | `/clear` | ✓ Закрыта |
+| S1 | Фаза W.3A + W.3B | Opus -> Sonnet | согласование (внешнее) | ✓ Закрыта 2026-05-21 |
+| S2 | Фаза 1A + 1B | Opus -> Sonnet | `/clear` | ✓ Закрыта |
+| S2+ | Block 1A-1E + route-gap | Opus -> Sonnet | `/clear` | ✓ Закрыта 2026-05-22 |
+| S3 | Фаза 2A + 2B + 3A + 3B | Opus -> Sonnet -> Haiku | `/clear` | ✓ Закрыта |
+| S4 | Фаза 4A + 4B | Opus -> Sonnet | `/clear` | Не начата (следующая) |
+| S5 | Фаза 5A | Haiku | `/clear` | Не начата |
+| S6 | Фаза 5B | Haiku | `/clear` | Не начата |
+| S7 | Фаза 5C | Haiku | `/clear` | Не начата |
+| S8 | Фаза 5D + 5E | Haiku -> Sonnet | `/clear` | Не начата |
+| S9 | Фаза 6A + 6B | Haiku | `/clear` | Не начата |
+| S10 | Фаза 7A | Sonnet | `/clear` | Не начата |
+| S11 | Фаза 7B + W.3C | Opus -> Sonnet | финал | Не начата |
 
 Группировки выбраны так, чтобы:
 
@@ -179,98 +212,94 @@ Sonnet для остальных экранов).
 
 #### W.0 Источники дизайн-системы (обязательно для модели)
 
-Перед созданием любого нового wireframe модель ОБЯЗАНА прочитать:
+> **Обновление 2026-05-22:** wireframes S1 утверждены и реализованы на DS
+> UniversityRT, а НЕ на shadcn/ui. Дальнейшая UI-разработка обязана использовать
+> ту же DS, иначе расхождение с утверждёнными эскизами = блокер
+> (`feedback_wireframes_first_ui`). Старая инструкция «Tailwind + shadcn/ui»
+> относилась к до-S1 этапу и более не действует.
 
-- `docs/wireframes/design-tab.html` - актуальный стиль wireframes, дизайн-токены
-  (CSS variables `--bg`, `--fg`, `--primary` и т.д.), радиусы, типографика, layout.
-- `docs/wireframes/pages-tab.html` - тот же стиль для второго экрана,
-  паттерн "tabs + content + footer".
-- `client/src/index.css` - источник дизайн-токенов (HSL палитра, radius, typography).
-- `client/src/components/ui/` - реальная shadcn-библиотека сервиса:
-  `dialog.tsx`, `drawer.tsx`, `sheet.tsx`, `tabs.tsx`, `select.tsx`, `input.tsx`,
-  `button.tsx`, `card.tsx`, `badge.tsx`, `alert.tsx`, `form.tsx`. Wireframe
-  должен показывать только те элементы, которые реально существуют в библиотеке.
-- `client/src/components/design-settings-dialog.tsx` -
-  пример сложного dialog'а с tabs/sections, который близок по сложности к
-  будущему `TestEditor` Drawer.
-- `client/src/components/content-pages-dialog.tsx` -
-  пример CRUD dialog для content pages.
-- `client/src/pages/author/tests.tsx` - текущий wizard, чтобы понять, что именно
-  заменяется и какие паттерны переиспользуются.
+Перед созданием/реализацией любого UI модель ОБЯЗАНА прочитать:
 
-Принципы дизайна сервиса (выводятся из источников выше):
+- `ENGINERING_HANDBOOK/design-system/AI-AGENT.md` — обязательный гайд для AI-агента
+  по DS UniversityRT (порядок проверок, запреты, токены).
+- `ENGINERING_HANDBOOK/design-system/DESIGN_SYSTEM_RT.md` — каталог DS-классов
+  (`ou-drawer`, `ou-tabs`, `ou-btn`, `ou-iconbtn`, `ou-tag`, `ou-banner`,
+  `ou-field`, `ou-modal`, `ou-seg` и т.д.) с правилами BEM-композиции.
+- `ENGINERING_HANDBOOK/design-system/DESIGN_SYSTEM_RT_API.md` — токены
+  (`--ou-bg-*`, `--ou-fg-*`, `--ou-accent-*`, `--ou-warning-*`, `--ou-space-*`,
+  `--ou-radius-*` и т.д.), типографика, breakpoints.
+- `docs/wireframes/approved/*.html` — утверждённые эскизы (153/153 закрыты
+  2026-05-21). `prd7-editor-drawer.html` — эталонный контейнер; вкладочные
+  файлы повторяют его структуру.
+- `docs/wireframes/approved/prd7-shared.css` — общий wireframe-каркас
+  (`wf-nav`, `wf-state`, `shell`); импортирует `ds/university-rt.css`.
+- `client/src/styles/tb-components.css` — DS-расширения уровня проекта
+  (`tb-topic-row`, `tb-draw-count-row`, `tb-feedback-preview`,
+  `tb-saving-overlay`, `tb-changes-popover` и т.д.).
+- `client/src/components/design-settings-dialog.tsx`,
+  `client/src/components/content-pages-dialog.tsx` — существующие диалоги
+  PRD-1 как пример интеграции в текущий проект (но они НЕ являются
+  визуальным reference для PRD-7 Drawer — reference это approved wireframes).
+- `client/src/pages/author/tests.tsx` — текущий wizard как источник legacy-кода,
+  подлежащего удалению в Фазе 7A.
 
-- Tailwind + shadcn/ui, без сторонних UI-китов.
-- HSL дизайн-токены через CSS variables, dark/light не в скоупе PRD-7.
-- Layout: card-based, mid-radius (`--radius: 9px`).
-- Status communication: badge + цвет + иконка + `aria-label` (NFR-21).
-- Inline-валидация под полем красным текстом + иконкой; section warning - alert-блок.
-- Single primary action per dialog/drawer footer.
-- Эмоджи и иконки-картинки НЕ используются в wireframes (markdown-проверка).
+Принципы дизайна (выводятся из источников выше):
 
-#### W.1 Артефакты
+- **DS-only:** UI собирается из `ou-*` (UniversityRT) и `tb-*` (расширения).
+  Локальные классы (`wf-dialog*`, `wf-overlay`, `wf-bg-*`) — запрещены
+  (`feedback_wf_only_skeleton_frame`).
+- **Токены-only:** цвета/spacing/radius через `var(--ou-*)`. Hex/HSL/RGB,
+  именованные цвета, прямые `px` — запрещены (проверка `npm run check:wireframes:ds`).
+- **Scope desktop ≥ 960px.** Mobile (< 960px) вынесен за scope PRD-7 — отдельный PRD
+  (см. § «Out-of-scope: mobile» ниже).
+- **Severity-rail и row-menu** — единые правила из PRD-1 §4.3.7 и §4.3.3
+  (приоритет `error > warning > info`; row-menu без disabled-пунктов для
+  системных kind).
+- Status communication: `ou-tag` + цвет + `aria-label` (NFR-21).
+- Single primary action per drawer footer.
+- Эмоджи и иконки-картинки НЕ используются (только sprite через `<use href="#i-*">`).
 
-Целевая директория: `docs/wireframes/`. Имя файла: `prd7-<scenario>.html`
-(например `prd7-editor-drawer.html`, `prd7-tests-list.html`).
-Существующие файлы `design-tab.html` и `pages-tab.html` требуют ревизии
-(см. блокер из §7 PRD-7).
+#### W.1 Артефакты — ЗАКРЫТО 2026-05-21
 
-Полный чек-лист 17 wireframes-пунктов: §1.3 [implementation-todo.md](prd-7-implementation-todo.md).
+Целевая директория: `docs/wireframes/approved/`. Согласовано
+дизайнером / PM 2026-05-21; полный приёмочный чек-лист (153/153 пункта) —
+`docs/wireframes/wireframes-acceptance-checklist.md`.
 
-Минимальный набор для разблокировки Фазы 4A (Drawer-каркас):
+**Утверждённые файлы (вместо до-S1 минимального набора):**
 
-- [ ] `prd7-tests-list.html`: список тестов с компактными actions и меню
-      расширенных действий (FR-30, FR-31, FR-08 BRD).
-- [ ] `prd7-editor-drawer.html`: wide Drawer редактора - header, footer,
-      агрегированные статусы вкладок (FR-43, FR-25b).
-- [ ] `prd7-editor-settings-tab.html`: вкладка **"Настройки"** с двухпанельным
-      side nav (>= 960px) и selector (< 960px) (FR-43, NFR-19, NFR-20).
-- [ ] `prd7-editor-close-confirm.html`: confirmation dialog при закрытии
-      с несохранёнными изменениями + блокирующие ошибки (FR-05, FR-05a, FR-05b).
-- [ ] `prd7-editor-conflict.html`: optimistic conflict dialog
-      "Обновить данные" / "Сохранить поверх" (FR-25k).
-- [ ] `prd7-editor-status-indicators.html`: индикаторы `изменено` / `warning` /
-      `error` на вкладках и секциях с `aria-label` (FR-25b, NFR-21).
+- [x] `prd7-shared.css` (общий wireframe-каркас, импортирует DS)
+- [x] `prd7-editor-drawer.html` — эталон контейнера Drawer + все вкладочные
+      состояния (`s-default`, `s-default-adaptive` (FR-36), `s-dirty`, `s-error`,
+      `s-saving`, `s-changes`, `s-settings`, `s-feedback-edit` (FR-36 + FR-37 + FR-37a))
+- [x] `prd7-tests-list.html` (FR-30, FR-31, FR-08 BRD)
+- [x] `prd7-tests-delete-confirm.html` (FR-30)
+- [x] `prd7-tests-archive.html` (FR-31)
+- [x] `prd7-editor-settings-tab.html` (FR-43, NFR-19, NFR-20; desktop-only)
+- [x] `prd7-design-tab.html` (FR-26, FR-41, FR-42)
+- [x] `prd7-structure-linear-flat.html` (FR-29, FR-33, FR-40, info-banner для смены режима)
+- [x] `prd7-structure-linear-by-topics.html`
+- [x] `prd7-structure-router.html` — **новая модель** (см. [decisions.md §2.3b](prd-7-decisions.md)):
+      зоны «До теста»/«После теста» + системная router-row + темы как ветки
+      иерархии через tree-connectors. Сценарная карта `Router → Раздел → Возврат → Итог`
+      из до-S1 модели НЕ актуальна — она была заменена на иерархию веток.
+- [x] `prd7-variant-replace.html` (FR-46, модал смены варианта с diff потерь)
+- [x] `prd7-editor-close-confirm.html` (FR-05, FR-05a, FR-05b)
+- [x] `prd7-editor-conflict.html` (FR-25k)
+- [x] `prd7-mode-switch-warning.html` (FR-25d, FR-25e, FR-25f — переформулирован
+      под info-banner модель FR-40 v2)
+- [x] `prd7-editor-status-indicators.html` (FR-25b, NFR-21)
 
-Минимальный набор для разблокировки Фазы 4B (reference-секция basic):
+**Out-of-scope PRD-7 (вынесено явным решением 2026-05-21):**
 
-- [ ] `prd7-section-basic.html`: вкладка **"Состав"** + секция "Основные":
-      title, description, status, feedback, telemetry, webhook (FR-35, FR-36).
-- [ ] `prd7-section-basic-feedback-editor.html`: feedback-редактор с базовым
-      форматированием bold/italic/links/lists (FR-36).
-- [ ] `prd7-section-basic-states.html`: empty/loading/error state базовой секции.
+- ~~`prd7-editor-mobile.html` (< 960px)~~ — отдельный PRD, временный fallback
+  удалён (§21 acceptance-checklist).
+- ~~`prd7-section-*.html`~~ — состояния всех секций интегрированы в
+  `prd7-editor-drawer.html` как state'ы single-page wireframe; отдельные файлы
+  удалены как дубликаты (§12-16 acceptance-checklist).
 
-Минимальный набор для разблокировки Фазы 5 (доменные секции):
-
-- [ ] `prd7-structure-linear-flat.html`: вкладка **"Структура"** для `linear_flat`
-      (зоны «До теста» / «После теста» + единый блок вопросов из всех тем,
-      без группировки по темам).
-- [ ] `prd7-structure-linear-by-topics.html`: для `linear_by_topics`
-      (темы со страницами до/после внутри каждой темы).
-- [ ] `prd7-structure-router.html`: для `router_by_topics` как сценарная карта
-      `Router → Раздел → Возврат → Итог` (FR-29, FR-33, FR-40, блокер §7).
-- [ ] `prd7-section-adaptive.html`: adaptive-секция с уровнями теста
-      и темы (FR-38).
-- [ ] `prd7-tests-delete-confirm.html`: confirmation dialog удаления теста
-      с вводом точного названия (FR-30).
-- [ ] `prd7-tests-archive.html`: раздел **"Архив"** и восстановление (FR-31).
-- [ ] `prd7-section-start-pages.html`: стартовая страница как content page
-      типа `intro` без `topic_id` (FR-44).
-- [ ] `prd7-mode-switch-warning.html`: inline warning при переключении
-      `mode` / `flowMode` без удаления данных (FR-25d, FR-25e, FR-25f).
-- [ ] `prd7-editor-mobile.html`: mobile/narrow viewport для всех секций.
-
-Полный набор edge-states (для финального acceptance pass в Фазе 7B,
-выполняется в Сессии S11 через W.3C):
-
-- [ ] `prd7-tests-list-states.html`: empty list, loading list, error API.
-- [ ] `prd7-editor-many-topics.html`: 20+ тем в редакторе.
-- [ ] `prd7-editor-empty-topic.html`: тема без вопросов.
-- [ ] `prd7-editor-distribution-error.html`: ошибка загрузки difficulty distribution.
-- [ ] `prd7-editor-readonly.html`: read-only состояние (archived test).
-- [ ] `prd7-editor-save-error.html`: ошибка сохранения с anchor к первой
-      ошибочной секции (FR-05a).
-- [ ] `prd7-editor-show-changes.html`: grouped summary "Показать изменения" (FR-25c1).
+**Edge-states для финального acceptance pass (Фаза 7B / W.3C):** перенесены
+в общий чек-лист, не требуют отдельных файлов. Состояния empty/loading/error
+покрыты state-switcher'ом в `prd7-editor-drawer.html`.
 
 #### W.2 Definition of Done для Фазы W
 
@@ -509,6 +538,54 @@ Anti-goals: НЕ менять контракт существующих POST /ap
 
 ---
 
+### Сессия S2-расширения — Фаза 1C-1E: variant.kind контракт и lifecycle
+
+**Модель:** Opus 4.7 + Sonnet 4.6 (последовательно, без `/clear` между блоками)
+**Длительность:** Закрыта 2026-05-22 (1 сессия)
+**Источник требований:** [PRD-1 §4.3](prd-1-templates-content-pages.md) (внесён 2026-05-21
+параллельно с приёмкой S1 wireframes) + PRD-7 FR-46, §1.4.
+
+Этот блок появился ПОСЛЕ оригинальной стратегии: контрактные дополнения PRD-1 §4.3
+(`variant.kind` enum, row-menu, severity-rail, required-params validation) были
+добавлены 2026-05-21 в спецификацию и требовали отдельной backend-имплементации.
+Зафиксирован для согласованности с реальным графом коммитов и для будущих PRD,
+где может встретиться аналогичный паттерн «контракт пришёл вместе с эскизами».
+
+**Подфазы (выполнены последовательно):**
+
+| Block | Что | Артефакты | Состояние |
+| --- | --- | --- | --- |
+| 1A | `VariantKind` enum + zod-схемы манифеста + `kind` поле в `manifest.json` встроенных шаблонов | `shared/schema.ts`, `server/template-registry.ts`, `tests/manifest-variant-kind.test.ts`, migration 004 | ✓ |
+| 1B | Silent variant binding (pure functions, 1/N/0 правила из PRD-1 §4.3.2) | `server/services/variant-binding.ts` | ✓ |
+| 1C | Content_pages lifecycle planner + интеграция в `TestSettingsService.create()/save()` | `server/services/content-pages-lifecycle.ts`, `_reconcileSystemPages()` | ✓ |
+| 1D | `POST /api/tests/:id/content-pages/:pageId/replace-variant` endpoint (FR-46) | `server/routes/content-pages.ts` | ✓ |
+| 1E | Required-fields validation на publish-transition (PRD-1 §4.3.6) | `server/services/required-fields-validator.ts`, `_validateAllRequiredFields()` | ✓ |
+| — | Route-gap closure: `POST/PUT /api/tests` мигрированы на `testSettingsService` | `server/routes/tests.ts`, `tests/routes.tests.test.ts` | ✓ |
+
+**Что зафиксировано как контракт для следующих PRD:**
+
+- Default-шаблон ОБЯЗАН содержать минимум один `kind: "questions"` вариант
+  (системный fallback). Проверяется `defaultTemplateManifestSchema.refine()`.
+- Системные `content_pages` (intro/summary/router/questions) живут в общей
+  таблице с пользовательскими (kind: info); жизненный цикл управляется
+  `planSystemPages()` — pure-функция, вызывается из транзакции при
+  изменениях `sections` / `flowPolicyJson` / `designSettingsJson`.
+- Параметры варианта при смене `templateKey` переносятся по правилу
+  «имя поля = контракт между вариантами одного `kind`» (PRD-1 §4.3.3).
+- Required-fields валидация — soft на draft-saves, hard на transition
+  в `status: "published"`. Frontend блокирует Save при незаполненных
+  required-полях; server — defense in depth (422 со структурированным
+  `fields: [{ pageId, templateKey, fieldName }]`).
+
+**Урок для следующих сессий:** если внутри сессии S2 (или любой backend-сессии)
+обнаруживается, что эскизы вносят НОВЫЙ контракт сверх PRD-7 — НЕ
+имплементировать сразу. Сначала зафиксировать в [decisions.md](prd-7-decisions.md)
+и в [PRD-1 §4.3](prd-1-templates-content-pages.md) (или соответствующем PRD),
+получить согласование. Только после этого — реализация. Иначе backend и UI
+разойдутся.
+
+---
+
 ### Сессия S3 (часть 1) - Фаза 2: Типы, DTO, mappers (frontend foundation)
 
 **Модель:** Opus 4.7 (reference) -> Sonnet 4.6 (наполнение)
@@ -649,39 +726,78 @@ Anti-goals: не менять reference-валидации, не менять ф
 ```text
 Реализуй wide Drawer контейнер для редактора теста PRD-7 без доменных секций.
 
-Контракт: docs/prd-7-decisions.md §8 (UI), PRD-7 FR-04, FR-05, FR-05a, FR-05b,
-FR-25a..k, FR-43, NFR-17..NFR-21.
+Контракт:
+- docs/prd-7-decisions.md §8 (UI)
+- docs/prd-7-test-settings-editor-refactor.md FR-04, FR-05, FR-05a, FR-05b,
+  FR-25a..k, FR-43, NFR-17..NFR-21
+- ENGINERING_HANDBOOK/design-system/{AI-AGENT,DESIGN_SYSTEM_RT,DESIGN_SYSTEM_RT_API}.md —
+  обязательное чтение ДО кода (см. §W.0)
+- docs/wireframes/approved/prd7-editor-drawer.html — VISUAL CONTRACT,
+  любое расхождение = блокер (`feedback_wireframes_first_ui`)
+
+Стек UI:
+- DS UniversityRT (ou-* классы): ou-drawer-root, ou-drawer__backdrop,
+  ou-drawer (ou-drawer--xl ou-drawer--right), ou-drawer__head/__body/__foot,
+  ou-drawer__close, ou-tabs (ou-tabs--underline ou-tabs--m), ou-tabs__list,
+  ou-tabs__tab, ou-btn (ou-btn--primary/--secondary/--ghost), ou-tag,
+  ou-banner. Локальные классы (wf-dialog*, wf-overlay) — ЗАПРЕЩЕНЫ.
+- DS-расширения проекта (tb-* в client/src/styles/tb-components.css):
+  tb-saving-overlay, tb-changes-popover, status-dot (агрегированные индикаторы).
+- НЕ использовать shadcn/ui компоненты (Dialog, Sheet, Drawer, Tabs из
+  client/src/components/ui/*) — это устаревший стек, не соответствует
+  утверждённым эскизам.
 
 Задачи:
 1. client/src/features/tests/editor/test-editor.tsx:
-   - Wide Drawer (используй shadcn/ui Sheet или Drawer): width
-     min(1120px, calc(100vw - 48px))
-   - Tabs: "Состав", "Настройки", "Оформление", "Структура" (заглушки, кроме каркаса)
-   - Side nav второго уровня для вкладки "Настройки" (>= 960px) или selector сверху
-   - Footer: единая кнопка "Сохранить" (active при dirty + нет error),
-     кнопка "Показать изменения" (visible при dirty), строка изменённых областей
-   - Confirmation dialog при закрытии с dirty: "Сохранить" / "Выйти без сохранения" / "Отмена"
-   - При блокирующих ошибках "Сохранить" в dialog disabled с anchor к первой ошибке
-   - Focus on open: первый интерактивный элемент
-   - Optimistic conflict dialog "Обновить данные" / "Сохранить поверх"
+   - Структура DOM ОДИН-В-ОДИН с эскизом prd7-editor-drawer.html (state s-default):
+     ou-drawer-root[role=dialog,aria-modal=true,aria-labelledby] →
+     ou-drawer__backdrop + aside.ou-drawer.ou-drawer--xl.ou-drawer--right →
+     header.ou-drawer__head (title + status-tag + version-tag + close-button) +
+     nav.ou-tabs.ou-tabs--underline.ou-tabs--m → div.ou-tabs__list[role=tablist] +
+     div.ou-drawer__body[tabindex=0] (заглушка per tab) +
+     footer.ou-drawer__foot (Закрыть + Сохранить).
+   - Tabs: "Состав", "Настройки", "Оформление", "Структура" (заглушки тел).
+   - Агрегированные индикаторы dirty/warning/error на табах: status-dot
+     с классами .dirty/--warn/--error + aria-label (FR-25b, NFR-21).
+   - Footer: единая кнопка "Сохранить" (ou-btn--primary, disabled при !dirty
+     || error), "Показать изменения" popover (visible при dirty) — открывает
+     state s-changes по эскизу.
+   - Close button (×) с FR-05 confirmation dialog по эскизу
+     prd7-editor-close-confirm.html: ou-modal--m, 3 кнопки
+     "Сохранить и выйти" / "Выйти без сохранения" / "Отмена". При блокирующих
+     ошибках "Сохранить и выйти" disabled.
+   - Optimistic conflict dialog по эскизу prd7-editor-conflict.html
+     (ou-modal--m, ou-modal__icon--warning, "Обновить данные" / "Сохранить поверх").
+   - Focus on open: первый интерактивный элемент (NFR-19).
+   - Tab/Shift-Tab не выходят за пределы Drawer (NFR-20).
 2. client/src/features/tests/editor/use-test-editor.ts:
-   - Hook: загружает test через React Query, держит draft-state в memory
-   - Tracks dirty per section + aggregated dirty
-   - Tracks errors/warnings per section + aggregated
-   - save(): отправляет payload с expectedVersion, обрабатывает 409
-   - reset(): сбрасывает draft к снапшоту от API
+   - Hook на @tanstack/react-query: загружает test через GET /api/tests/:id,
+     держит draft-state в React state в памяти (FR-25j — НЕ писать в
+     localStorage/sessionStorage).
+   - Tracks dirty per tab/section + агрегированный dirty.
+   - Tracks errors/warnings per tab/section через validateTestEditor (debounced
+     300ms, FR-20a, NFR-18).
+   - save(): PUT /api/tests/:id с expectedVersion, обрабатывает 409 (показ
+     conflict dialog), 422 RequiredFieldsMissingError (anchor к первому
+     missing field в нужной секции).
+   - reset(): сбрасывает draft к снапшоту от API.
 3. client/src/features/tests/editor/__tests__/test-editor.test.tsx:
-   - Component-тесты: открытие, закрытие с dirty (confirmation), focus management,
-     conflict dialog.
+   - Component-тесты: открытие, close-confirmation при dirty, focus management,
+     409 conflict dialog, 422 anchor.
 
-Reference UI components: посмотри
-client/src/components/design-settings-dialog.tsx и
-client/src/components/content-pages-dialog.tsx как примеры существующих dialog'ов.
+DoD:
+- npm run check, vitest run для editor зелёные.
+- Drawer открывается из TestsPage (временный onClick на карточке).
+- Скриншот в Playwright совпадает с эскизом prd7-editor-drawer.html
+  s-default (см. README по запуску storybook/dev в проекте).
+- Линтер DS: npm run check:wireframes:ds зелёный для UI-кода тоже.
 
-DoD: npm run check, vitest run этого теста зелёный, Drawer открывается из
-существующей TestsPage (заглушечный onClick), все индикаторы dirty/error работают.
-Anti-goals: НЕ удалять старый wizard в этой фазе. НЕ реализовывать секции -
-только заглушки <div>Coming soon</div>.
+Anti-goals:
+- НЕ использовать shadcn Dialog/Sheet/Drawer (старый стек, не утверждён).
+- НЕ изобретать локальные классы (wf-*, custom-*) — только ou-* и tb-*.
+- НЕ удалять старый wizard в этой фазе.
+- НЕ реализовывать секции — только заглушки.
+- НЕ писать draft в localStorage/sessionStorage (FR-25j).
 ```
 
 #### Фаза 4B (Sonnet): Reference-секция
@@ -982,37 +1098,37 @@ Anti-goals: НЕ начинать новые фичи. Только провер
 
 ## 3. Сводная таблица
 
-| Сессия | Фаза | Что | Исполнитель | Блокирует |
-| --- | --- | --- | --- | --- |
-| S0 | 0 | Контракты, decisions.md, skeleton | Opus | все |
-| S1 | W.3A | Wireframes: дизайн-система + reference | Opus | W.3B, 4 |
-| S1 | W.3B | Wireframes: остальные экраны минимального набора | Sonnet | 4, 5 |
-| - | W.согл. | Согласование wireframes (внешнее) | Продакт | 4, 5 |
-| S2 | 1A | SQL-миграция | Opus | 1B, 7B |
-| S2 | 1B | Storage и endpoints | Sonnet | 4A, 7B |
-| S3 | 2A | Типы и reference-mapper | Opus | 2B, 4 |
-| S3 | 2B | Дополнить mappers | Sonnet | 4 |
-| S3 | 3A | Reference-валидация | Sonnet | 3B, 4 |
-| S3 | 3B | Расширение валидации | Haiku | 4 |
-| S4 | 4A | Drawer-каркас (требует W согласования) | Opus | 4B, 5 |
-| S4 | 4B | Reference-секция (требует W согласования) | Sonnet | 5 |
-| S5 | 5A | Секция topics-structure | Haiku | 6 |
-| S6 | 5B | Секция pass-rules | Haiku | 6 |
-| S7 | 5C | Секция adaptive-settings | Haiku | 6 |
-| S8 | 5D | Секция start-pages | Haiku | 6 |
-| S8 | 5E | Секция design | Sonnet | 6 |
-| S9 | 6A | Component-тесты | Haiku | 7 |
-| S9 | 6B | API и regression тесты | Haiku | 7 |
-| S10 | 7A | Удаление legacy | Sonnet | 7B |
-| S11 | 7B | Acceptance pass | Opus | - |
-| S11 | W.3C | Wireframes: edge-states | Sonnet | - |
+| Сессия | Фаза | Что | Исполнитель | Блокирует | Статус |
+| --- | --- | --- | --- | --- | --- |
+| S0 | 0 | Контракты, decisions.md, skeleton | Opus | все | ✓ |
+| S1 | W.3A | Wireframes: дизайн-система + reference | Opus | W.3B, 4 | ✓ 2026-05-21 |
+| S1 | W.3B | Wireframes: остальные экраны минимального набора | Sonnet | 4, 5 | ✓ 2026-05-21 |
+| - | W.согл. | Согласование wireframes (внешнее) | Продакт | 4, 5 | ✓ 2026-05-21 |
+| S2 | 1A | SQL-миграция | Opus | 1B, 7B | ✓ |
+| S2 | 1B | Storage и endpoints | Sonnet | 4A, 7B | ✓ |
+| S2+ | 1A-1E + route-gap | variant.kind contract + lifecycle + replace-variant + required-fields + route migration | Opus → Sonnet | 4, 5 | ✓ 2026-05-22 |
+| S3 | 2A | Типы и reference-mapper | Opus | 2B, 4 | ✓ |
+| S3 | 2B | Дополнить mappers | Sonnet | 4 | ✓ |
+| S3 | 3A | Reference-валидация | Sonnet | 3B, 4 | ✓ |
+| S3 | 3B | Расширение валидации | Haiku | 4 | ✓ |
+| S4 | 4A | Drawer-каркас (DS UniversityRT, не shadcn) | Opus | 4B, 5 | Следующая |
+| S4 | 4B | Reference-секция basic-settings + s-feedback-edit | Sonnet | 5 | Не начата |
+| S5 | 5A | Секция topics-structure | Haiku | 6 | Не начата |
+| S6 | 5B | Секция pass-rules | Haiku | 6 | Не начата |
+| S7 | 5C | Секция adaptive-settings | Haiku | 6 | Не начата |
+| S8 | 5D | Секция start-pages | Haiku | 6 | Не начата |
+| S8 | 5E | Секция design | Sonnet | 6 | Не начата |
+| S9 | 6A | Component-тесты | Haiku | 7 | Не начата |
+| S9 | 6B | API и regression тесты | Haiku | 7 | Не начата |
+| S10 | 7A | Удаление legacy | Sonnet | 7B | Не начата |
+| S11 | 7B | Acceptance pass | Opus | - | Не начата |
+| ~~S11~~ | ~~W.3C~~ | ~~Wireframes: edge-states~~ | — | — | Снято со scope — edge-states интегрированы как state'ы единого `prd7-editor-drawer.html` |
 
-**Итого: 12 сессий моделей** (S0...S11) против ~19-21 фазы. Экономия за счёт
-группировки через `/model`-переключение внутри сессии (см. §1.4).
-Распределение моделей: Opus ~6, Sonnet ~8-9, Haiku ~5-6, плюс 1-2 итерации
-согласования продактом между S1 и S4.
+**Итого: 12 сессий моделей** (S0...S11) + 1 расширенная S2 для контрактов PRD-1 §4.3.
+Закрыто 8 сессий (S0, S1, S2 + S2-расширения, S3). Осталось 4 сессии (S4-S11).
+Экономия за счёт группировки через `/model`-переключение внутри сессии (см. §1.4).
 
-**Параллельно:** S1 (генерация wireframes моделью) идёт одновременно с S2/S3
+**Параллельно:** S1 (генерация wireframes моделью) шла одновременно с S2/S3
 (backend и доменные слои не зависят от UI).
 
 ---
