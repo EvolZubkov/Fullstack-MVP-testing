@@ -5,7 +5,9 @@
 **Baseline текущего поведения:** [prd-7-baseline.md](prd-7-baseline.md)
 **Стратегия и промпты:** [execution-strategy.md](prd-7-execution-strategy.md)
 **Roadmap:** [ROADMAP.md](ROADMAP.md) шаг 1
-**Статус:** S0 закрыта (skeleton + decisions + baseline); ожидание старта S1
+**Статус:** S0 + S1 закрыты (skeleton + decisions + baseline + wireframes 153/153
+согласованы 2026-05-21); ожидание старта S2 (backend + миграции).
+**Последняя проверка:** 2026-05-22
 **Правило UI:** UI-разработка начинается только после подготовки и явного согласования wireframes
 ([BRD §2.6](brd-scorm-enhancements.md), NFR-14, NFR-19...NFR-21).
 
@@ -156,30 +158,40 @@ PRD-7 проектирует поверхность для `flowMode`, `passDeci
 - [x] Зафиксировано: `tests.flow_policy_json` пишется только если `flowMode != linear_flat`
       или явно настроен (decisions.md §3.1, §6.3).
 
-### 1.3 Wireframes и согласование UI (S1 / Фаза W)
+### 1.3 Wireframes и согласование UI (S1 / Фаза W) — ЗАКРЫТО 2026-05-21
 
-Wireframes хранятся в `docs/wireframes/`. Существующие `design-tab.html` и `pages-tab.html`
-требуют ревизии под новую информационную архитектуру PRD-7. Полный список целевых файлов
-с привязкой к FR/NFR: [execution-strategy.md](prd-7-execution-strategy.md) §W.1.
-Промпты W.3A (Opus) и W.3B (Sonnet): там же §W.3A, §W.3B.
+Эскизы согласованы дизайнером / PM 2026-05-21 и перенесены в
+`docs/wireframes/approved/`. Полный приёмочный чек-лист (153/153 пункта)
+закрыт: [wireframes-acceptance-checklist.md](wireframes/wireframes-acceptance-checklist.md).
+Mobile/narrow viewport (< 960px) явным решением пользователя вынесен за scope
+PRD-7 и будет покрыт отдельным PRD.
 
-- [ ] Подготовить wireframes списка тестов с компактными actions (FR-30, FR-31, FR-08 BRD).
-- [ ] Подготовить wireframes wide Drawer редактора: header, footer, агрегированные статусы вкладок (FR-03, FR-43).
-- [ ] Подготовить wireframes вкладки **"Состав"**: выбор тем, draw count, обязательность, feedback темы.
-- [ ] Подготовить wireframes вкладки **"Настройки"** с двухпанельным side nav (>= 960px) и
+- [x] Подготовить wireframes списка тестов с компактными actions (FR-30, FR-31, FR-08 BRD).
+      _(approved: `prd7-tests-list.html`, §3 чек-листа.)_
+- [x] Подготовить wireframes wide Drawer редактора: header, footer, агрегированные статусы вкладок (FR-03, FR-43).
+      _(approved: `prd7-editor-drawer.html`, §2 чек-листа — эталон контейнера для всех вкладочных файлов.)_
+- [x] Подготовить wireframes вкладки **"Состав"**: выбор тем, draw count, обязательность, feedback темы.
+      _(approved: state `s-default` + `s-default-adaptive` + `s-feedback-edit` в `prd7-editor-drawer.html`.)_
+- [x] Подготовить wireframes вкладки **"Настройки"** с двухпанельным side nav (>= 960px) и
       selector (< 960px) (FR-43, NFR-19, NFR-20).
-- [ ] Подготовить wireframes вкладки **"Оформление"**: выбор шаблона, params, read-only
+      _(approved: `prd7-editor-settings-tab.html`, §6 чек-листа; mobile selector — out-of-scope PRD-7.)_
+- [x] Подготовить wireframes вкладки **"Оформление"**: выбор шаблона, params, read-only
       `templateVersion`/`templateApiVersion` (FR-26, FR-41, FR-42).
-- [ ] Обновить wireframes вкладки **"Структура"** для всех `flowMode`:
+      _(approved: `prd7-design-tab.html`, §7 чек-листа.)_
+- [x] Обновить wireframes вкладки **"Структура"** для всех `flowMode`:
       `linear_flat`, `linear_by_topics`, `router_by_topics`
       (FR-29, FR-33, FR-40, блокер из §7 PRD-7).
-- [ ] Полностью переписать `prd7-structure-router.html` под новую модель
+      _(approved: `prd7-structure-linear-flat.html` (§9), `prd7-structure-linear-by-topics.html` (§8),
+      `prd7-structure-router.html` (§11).)_
+- [x] Полностью переписать `prd7-structure-router.html` под новую модель
       `router_by_topics`: системная router-row + темы как ветки иерархии через
       tree-connectors (см. [prd-7-decisions.md §2.3b](prd-7-decisions.md)).
-- [ ] Создать `prd7-variant-replace.html` — модал смены варианта на page-row
+      _(approved 2026-05-21.)_
+- [x] Создать `prd7-variant-replace.html` — модал смены варианта на page-row
       с diff-блоком потерь параметров; состояния: `s-replace-modal`,
       `s-replace-empty-diff`, `s-replace-no-fields`.
-- [ ] Обновить `prd7-structure-linear-flat.html` и
+      _(approved: `prd7-variant-replace.html`, §11a чек-листа.)_
+- [x] Обновить `prd7-structure-linear-flat.html` и
       `prd7-structure-linear-by-topics.html`:
       (1) добавить questions-row как `page-row--system` с variant select,
       expand при непустой schema, `…` row-menu;
@@ -190,20 +202,31 @@ Wireframes хранятся в `docs/wireframes/`. Существующие `des
       (4) warning fallback на стандартный шаблон при 0 вариантов нужного `kind`;
       (5) inline-alert + warning-цвет заголовка row при незаполненных
       обязательных параметрах варианта (см. PRD-1 §4.3.6).
-- [ ] Покрыть состояния: пустое, loading/saving, ошибки API, ошибки валидации,
-      read-only, mobile/narrow viewport.
-- [ ] Покрыть edge cases: 20+ тем, тема без вопросов, ошибка загрузки difficulty
+      _(approved 2026-05-21.)_
+- [x] Покрыть состояния: пустое, loading/saving, ошибки API, ошибки валидации, read-only.
+      _(Mobile/narrow viewport вынесен за scope PRD-7 — §21 чек-листа.)_
+- [x] Покрыть edge cases: 20+ тем, тема без вопросов, ошибка загрузки difficulty
       distribution, конфликт версий при сохранении.
-- [ ] Подготовить wireframes confirmation dialog при закрытии с несохранёнными изменениями (FR-05, FR-05a, FR-05b).
-- [ ] Подготовить wireframes "Показать изменения" в виде grouped summary (FR-25c, FR-25c1, FR-25c2).
-- [ ] Подготовить wireframes confirmation dialog удаления теста с вводом точного названия (FR-30).
-- [ ] Подготовить wireframes раздела **"Архив"** и восстановления теста из архива (FR-31).
-- [ ] Подготовить wireframes стартовой страницы как content page типа `intro` без `topic_id` (FR-44).
-- [ ] Подготовить wireframes inline warning при переключении `standard/adaptive` и `flowMode` (FR-25d, FR-25e, FR-25f).
-- [ ] Подготовить wireframes индикаторов `изменено`, `warning`, `error` на вкладках и секциях (FR-25b, NFR-21).
-- [ ] Подготовить wireframes optimistic conflict dialog "Обновить данные" / "Сохранить поверх" (FR-25k).
-- [ ] Явно согласовать wireframes до старта frontend-разработки.
-- [ ] Зафиксировать, что изменение сценария или состава полей требует повторного согласования.
+- [x] Подготовить wireframes confirmation dialog при закрытии с несохранёнными изменениями (FR-05, FR-05a, FR-05b).
+      _(approved: `prd7-editor-close-confirm.html`, §17 чек-листа.)_
+- [x] Подготовить wireframes "Показать изменения" в виде grouped summary (FR-25c, FR-25c1, FR-25c2).
+- [x] Подготовить wireframes confirmation dialog удаления теста с вводом точного названия (FR-30).
+      _(approved: `prd7-tests-delete-confirm.html`, §4 чек-листа.)_
+- [x] Подготовить wireframes раздела **"Архив"** и восстановления теста из архива (FR-31).
+      _(approved: `prd7-tests-archive.html`, §5 чек-листа.)_
+- [x] Подготовить wireframes стартовой страницы как content page типа `intro` без `topic_id` (FR-44).
+- [x] Подготовить wireframes inline warning при переключении `standard/adaptive` и `flowMode` (FR-25d, FR-25e, FR-25f).
+      _(approved: `prd7-mode-switch-warning.html`, §19 чек-листа;_
+      _реформулирован под FR-40 в info-banner — содержимое не меняется.)_
+- [x] Подготовить wireframes индикаторов `изменено`, `warning`, `error` на вкладках и секциях (FR-25b, NFR-21).
+      _(approved: `prd7-editor-status-indicators.html`, §20 чек-листа.)_
+- [x] Подготовить wireframes optimistic conflict dialog "Обновить данные" / "Сохранить поверх" (FR-25k).
+      _(approved: `prd7-editor-conflict.html`, §18 чек-листа.)_
+- [x] Явно согласовать wireframes до старта frontend-разработки.
+      _(дизайнер / PM подтвердил три Structure-эскиза + variant-replace + close-confirm + conflict 2026-05-21.)_
+- [x] Зафиксировать, что изменение сценария или состава полей требует повторного согласования.
+      _(HARD RULE «wireframes-first»: отступление от утверждённого эскиза = блокер;_
+      _см. §0.1a выше, требуется откат + доработка эскиза + повторное согласование.)_
 
 ### 1.4 Модель данных и миграция (S2 / Фаза 1A, Opus)
 
@@ -657,7 +680,9 @@ Reference для всех секций после S4: `basic-settings-section.ts
 Минимальный срез, после которого PRD-7 можно проверять end-to-end. В скобках -
 сессия, по завершении которой пункт становится выполнимым.
 
-- [ ] (S1 + согласование) wireframes минимального набора согласованы.
+- [x] (S1 + согласование) wireframes минимального набора согласованы.
+      _(полный приёмочный чек-лист 153/153 закрыт 2026-05-21,_
+      _см. [wireframes-acceptance-checklist.md](wireframes/wireframes-acceptance-checklist.md).)_
 - [x] (S2) SQL-миграция `tests.status` применена и протестирована на legacy-данных.
       _(`migrations/003_prd7_test_settings.sql` + `tests/migration-prd7.test.ts`.)_
 - [x] (S3) `TestEditorModel`, DTO, mappers и validation покрыты unit-тестами.
