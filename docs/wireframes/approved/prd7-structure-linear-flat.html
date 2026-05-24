@@ -697,25 +697,11 @@
         <button class="ou-tabs__tab is-active" role="tab" aria-selected="true" type="button">Структура <span class="status-dot dirty" aria-label="Несохранённые изменения" style="margin-left:var(--ou-space-1);display:inline-block;vertical-align:middle;width:8px;height:8px;border-radius:50%;background:var(--ou-accent-default);"></span></button>
       </div></nav>
       <div class="ou-drawer__body" tabindex="0">
-        <div class="ou-banner ou-banner--subtle ou-banner--warning" role="alert">
-          <span class="ou-banner__ico"><svg width="14" height="14"><use href="#i-warn"/></svg></span>
-          <div class="ou-banner__body"><div class="ou-banner__title">Режим изменён на <strong>По темам</strong>. Структура будет реорганизована.</div></div>
-        </div>
-        <div class="mode-change-warn">
-          <div class="mode-change-warn-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'':'none';">
-            <svg width="14" height="14"><use href="#i-warn"/></svg>
-            2 элемента будут преобразованы — нажмите для просмотра
-            <svg width="14" height="14" style="margin-left:auto;"><use href="#i-chevron-down"/></svg>
-          </div>
-          <div class="mode-change-warn-body">
-            <div class="mode-change-item">
-              <span>Страница «Итоги раздела»</span>
-              <span class="mode-change-when">→ переедет в общую зону «До теста» (групповая итоговая страница не нужна в «По темам»)</span>
-            </div>
-            <div class="mode-change-item">
-              <span>Позиции вводных страниц по темам</span>
-              <span class="mode-change-when">→ распределены по темам (если возможно)</span>
-            </div>
+        <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+          <span class="ou-banner__ico"><svg width="14" height="14"><use href="#i-info"/></svg></span>
+          <div class="ou-banner__body">
+            <div class="ou-banner__title">Режим изменён на <strong>По темам</strong></div>
+            <div class="ou-banner__desc">Содержимое Состава и Структуры сохранено. Меняется только вид выдачи: вопросы из тем будут показаны как сгруппированные блоки. Авторские страницы остаются в зонах «До теста» и «После теста».</div>
           </div>
         </div>
         <div class="flow-mode-bar" style="margin-top:var(--ou-space-2);"><svg width="14" height="14"><use href="#i-layout"/></svg><span>Новый режим:</span><span class="flow-mode-label">По темам</span></div>
