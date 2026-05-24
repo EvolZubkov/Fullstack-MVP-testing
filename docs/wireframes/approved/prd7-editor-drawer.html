@@ -428,7 +428,6 @@
       <header class="ou-drawer__head">
         <div class="ou-drawer__head-text"><h1 id="dt-default-adaptive" class="ou-drawer__title">Основы информационной безопасности</h1></div>
         <span class="ou-tag ou-tag--success ou-tag--outline">Опубликован</span>
-        <span class="ou-tag ou-tag--accent ou-tag--outline">Адаптивный</span>
         <span class="ou-tag ou-tag--neutral ou-tag--outline">v7</span>
         <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор"><svg width="16" height="16"><use href="#i-x"/></svg></button>
       </header>
@@ -442,8 +441,7 @@
         <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
           <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info"/></svg></div>
           <div class="ou-banner__body">
-            <div class="ou-banner__title">Адаптивный режим теста</div>
-            <div class="ou-banner__desc">Количество вопросов из темы определяется уровнем сложности учащегося. Уровни задаются во вкладке «Настройки → Адаптивность».</div>
+            <div class="ou-banner__desc">Тест в адаптивном режиме. Настройки уровней сложности — в <a href="#" class="ou-banner__link">«Настройки → Адаптивный режим»</a>.</div>
           </div>
         </div>
         <div class="tb-section-label">Темы и выборка вопросов</div>
@@ -454,10 +452,10 @@
             <span class="tb-topic-row__count">45 вопросов</span>
           </div>
           <div class="tb-topic-row__body">
-            <div class="tb-draw-count-row tb-draw-count-row--adaptive">
-              <span class="tb-draw-count-row__label">Подбор вопросов</span>
-              <span class="ou-tag ou-tag--accent ou-tag--outline">Адаптивный</span>
-              <a href="#" class="tb-link-text">Настроить уровни →</a>
+            <div class="tb-draw-count-row">
+              <span class="tb-draw-count-row__label">Вопросов в тест</span>
+              <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="15" min="1" max="45" aria-label="Количество вопросов из темы Основы ИБ"></div></div>
+              <span class="tb-draw-count-row__max">из 45</span>
             </div>
             <div class="tb-card-desc">Обратная связь по теме</div>
             <div class="tb-feedback-preview" aria-label="Обратная связь по теме Основы ИБ">
@@ -482,10 +480,10 @@
             <span class="tb-topic-row__count">30 вопросов</span>
           </div>
           <div class="tb-topic-row__body">
-            <div class="tb-draw-count-row tb-draw-count-row--adaptive">
-              <span class="tb-draw-count-row__label">Подбор вопросов</span>
-              <span class="ou-tag ou-tag--accent ou-tag--outline">Адаптивный</span>
-              <a href="#" class="tb-link-text">Настроить уровни →</a>
+            <div class="tb-draw-count-row">
+              <span class="tb-draw-count-row__label">Вопросов в тест</span>
+              <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="20" min="1" max="30" aria-label="Количество вопросов из темы Сетевая безопасность"></div></div>
+              <span class="tb-draw-count-row__max">из 30</span>
             </div>
             <div class="tb-card-desc">Обратная связь по теме</div>
             <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
@@ -499,10 +497,10 @@
             <span class="tb-topic-row__count">20 вопросов</span>
           </div>
           <div class="tb-topic-row__body">
-            <div class="tb-draw-count-row tb-draw-count-row--adaptive">
-              <span class="tb-draw-count-row__label">Подбор вопросов</span>
-              <span class="ou-tag ou-tag--accent ou-tag--outline">Адаптивный</span>
-              <a href="#" class="tb-link-text">Настроить уровни →</a>
+            <div class="tb-draw-count-row">
+              <span class="tb-draw-count-row__label">Вопросов в тест</span>
+              <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="number" value="10" min="1" max="20" aria-label="Количество вопросов из темы Практика"></div></div>
+              <span class="tb-draw-count-row__max">из 20</span>
             </div>
             <div class="tb-feedback-preview is-empty" role="button" tabindex="0" aria-label="Добавить обратную связь">
               Не задано — нажмите для редактирования
@@ -946,12 +944,10 @@
         <div class="settings-pane" aria-label="Настройки теста">
           <nav class="settings-side-nav" aria-label="Подразделы настроек">
             <button type="button" class="settings-nav-item active" aria-current="page">Основное</button>
-            <button type="button" class="settings-nav-item">Режим и сценарий</button>
             <button type="button" class="settings-nav-item">Правила прохождения</button>
             <button type="button" class="settings-nav-item">Ограничения</button>
-            <button type="button" class="settings-nav-item">Обратная связь</button>
             <button type="button" class="settings-nav-item">Интеграция</button>
-            <button type="button" class="settings-nav-item">Адаптивность</button>
+            <button type="button" class="settings-nav-item">Адаптивный режим</button>
           </nav>
           <div class="settings-content">
             <div class="ou-empty ou-empty--inline ou-empty--well">
@@ -964,12 +960,10 @@
         </div>
         <div class="settings-accordion" role="group" aria-label="Подразделы настроек">
           <details class="settings-accordion-item" open><summary>Основное</summary><div class="settings-accordion-body"></div></details>
-          <details class="settings-accordion-item"><summary>Режим и сценарий</summary><div class="settings-accordion-body"></div></details>
           <details class="settings-accordion-item"><summary>Правила прохождения</summary><div class="settings-accordion-body"></div></details>
           <details class="settings-accordion-item"><summary>Ограничения</summary><div class="settings-accordion-body"></div></details>
-          <details class="settings-accordion-item"><summary>Обратная связь</summary><div class="settings-accordion-body"></div></details>
           <details class="settings-accordion-item"><summary>Интеграция</summary><div class="settings-accordion-body"></div></details>
-          <details class="settings-accordion-item"><summary>Адаптивность</summary><div class="settings-accordion-body"></div></details>
+          <details class="settings-accordion-item"><summary>Адаптивный режим</summary><div class="settings-accordion-body"></div></details>
         </div>
       </div>
       <footer class="ou-drawer__foot">
