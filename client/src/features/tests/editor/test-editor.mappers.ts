@@ -73,6 +73,7 @@ export type ApiTestResponse = {
   maxAttempts?: number | null;
   showCorrectAnswers?: boolean | null;
   startPageContent?: string | null;
+  folderId?: string | null;
   sections?: unknown[];
   adaptiveSettings?: unknown;
 };
@@ -448,6 +449,55 @@ function emptyToNull(value: string): string | null {
 // ─── Public entry points (phase 2A reference) ─────────────────────────────────
 
 /**
+ * Build an empty editor model for the create flow (FAB → «Новый тест»).
+ *
+ * The model carries:
+ *   - `id: undefined` and `version: 0` — distinguishes a fresh draft from one
+ *     loaded via {@link apiToEditorModel}; the save mutation branches on this.
+ *   - `folderId` from the FAB folder-pick modal.
+ *   - All other fields use the same defaults as PRD-7 §4.4 (apiToEditorModel
+ *     reuses these via `apiToEditorModel({ id: '<new>' })` semantics).
+ *
+ * The model is intentionally invalid for `save()` until the author fills in
+ * `basic.title` and adds at least one section (FR-11, FR-12).
+ */
+export function emptyEditorModel(args: { folderId: string | null }): TestEditorModel {
+  return {
+    version: 0,
+    mode: "standard",
+    flowMode: "linear_flat",
+    flowSettings: {},
+    folderId: args.folderId,
+    basic: {
+      title: "",
+      description: "",
+      status: "draft",
+      feedback: { format: "plain", text: "" },
+      feedbackLinks: [],
+      feedbackAssets: [],
+      webhookUrl: "",
+      telemetryEnabled: false,
+    },
+    runtime: {
+      timeLimitMinutes: null,
+      maxAttempts: null,
+      showCorrectAnswers: false,
+    },
+    passRules: {
+      decisionPolicy: "overall_only",
+      overall: { type: "percent", value: 70 },
+      byTopic: {},
+    },
+    sections: [],
+    adaptive: {
+      showDifficultyLevel: true,
+      testSettings: { showDifficultyLevel: true },
+      topics: [],
+    },
+  };
+}
+
+/**
  * Convert an API test response (legacy or new shape) into the normalized
  * editor model. Applies all defaults from decisions §4.4 and legacy mappings
  * from §4.1, §4.3. Now fully populates `sections`, `adaptive` and
@@ -480,6 +530,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     mode,
     flowMode,
     flowSettings,
+    folderId: typeof src.folderId === "string" ? src.folderId : null,
     basic: {
       title: typeof src.title === "string" ? src.title : "",
       description: typeof src.description === "string" ? src.description : "",
@@ -549,6 +600,7 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     webhookUrl: emptyToNull(model.basic.webhookUrl),
     telemetryEnabled: model.basic.telemetryEnabled,
     expectedVersion: model.version,
+    folderId: model.folderId,
   };
 
   if (flowPolicyJson !== undefined) {

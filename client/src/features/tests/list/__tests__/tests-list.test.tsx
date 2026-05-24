@@ -1,0 +1,272 @@
+/**
+ * @module features/tests/list/__tests__/tests-list.test
+ * @description Component tests for the explorer-tree tests list page.
+ *
+ * Coverage:
+ *   - Tree renders root row + test row from API list (s-default).
+ *   - Search switches to flat list with banner (s-search) and "Сбросить" clears it.
+ *   - Test more-menu opens with the expected items.
+ *   - FR-30: typed-confirm — Delete button stays disabled until the input
+ *     matches the test title exactly.
+ *   - FAB speed-dial toggles + sub-actions render.
+ *   - Empty state shown when there are no tests and no folders.
+ */
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { TestsListPage } from "../tests-list";
+
+// ─── Test fixtures ────────────────────────────────────────────────────────────
+
+function buildApiTestRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "t-1",
+    title: "Основы информационной безопасности",
+    description: null,
+    status: "draft",
+    mode: "standard",
+    folderId: null,
+    overallPassRuleJson: { type: "percent", value: 70 },
+    flowPolicyJson: null,
+    feedbackJson: null,
+    webhookUrl: null,
+    telemetryEnabled: false,
+    timeLimitMinutes: null,
+    maxAttempts: null,
+    showCorrectAnswers: false,
+    showDifficultyLevel: true,
+    version: 1,
+    createdAt: "2026-05-01T10:00:00Z",
+    updatedAt: "2026-05-01T10:00:00Z",
+    designSettingsJson: {},
+    sections: [
+      { id: "s-1", testId: "t-1", topicId: "t1", drawCount: 5, required: true, topicName: "Topic", maxQuestions: 10 },
+    ],
+    ...overrides,
+  };
+}
+
+function buildApiFolder(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "f-1",
+    name: "Информационная безопасность",
+    parentId: null,
+    createdAt: "2026-05-01T10:00:00Z",
+    ...overrides,
+  };
+}
+
+// ─── Setup ────────────────────────────────────────────────────────────────────
+
+type FetchMock = ReturnType<typeof vi.fn>;
+let fetchMock: FetchMock;
+
+beforeEach(() => {
+  fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  // jsdom doesn't ship localStorage with persistence across tests; reset.
+  window.localStorage.clear();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+function mockGet(url: string, body: unknown) {
+  fetchMock.mockImplementation(async (input: RequestInfo) => {
+    const u = typeof input === "string" ? input : input.url;
+    if (u.startsWith(url) || u === url) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => body,
+        text: async () => JSON.stringify(body),
+      } as Response;
+    }
+    return { ok: false, status: 404, json: async () => ({}), text: async () => "" } as Response;
+  });
+}
+
+function mockMany(routes: Record<string, unknown>) {
+  fetchMock.mockImplementation(async (input: RequestInfo) => {
+    const u = typeof input === "string" ? input : input.url;
+    for (const [path, body] of Object.entries(routes)) {
+      if (u === path || u.startsWith(path + "?")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => body,
+          text: async () => JSON.stringify(body),
+        } as Response;
+      }
+    }
+    return { ok: false, status: 404, json: async () => ({}), text: async () => "" } as Response;
+  });
+}
+
+function renderPage() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <TestsListPage />
+    </QueryClientProvider>,
+  );
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+describe("<TestsListPage /> — default tree", () => {
+  it("renders root + test row from the API list", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow()],
+      "/api/test-folders": [],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("tests-list-tree")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("Основы информационной безопасности")).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/ВСЕ ТЕСТЫ/i)).toBeInTheDocument();
+    expect(screen.getByTestId("test-row-t-1")).toBeInTheDocument();
+  });
+
+  it("renders folder row when folders exist", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow({ folderId: "f-1" })],
+      "/api/test-folders": [buildApiFolder()],
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("folder-row-f-1")).toBeInTheDocument());
+  });
+});
+
+describe("<TestsListPage /> — search", () => {
+  it("switches to flat list with banner when query is entered", async () => {
+    mockMany({
+      "/api/tests": [
+        buildApiTestRow({ id: "t-1", title: "Основы информационной безопасности" }),
+        buildApiTestRow({ id: "t-2", title: "GDPR для разработчиков" }),
+      ],
+      "/api/test-folders": [],
+    });
+
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Основы информационной безопасности")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByTestId("tests-list-search-input"), { target: { value: "GDPR" } });
+
+    await waitFor(() => expect(screen.getByTestId("tests-list-search")).toBeInTheDocument());
+    expect(screen.getByText(/Результаты поиска по/i)).toBeInTheDocument();
+    expect(screen.queryByText("Основы информационной безопасности")).toBeNull();
+    expect(screen.getByText("GDPR для разработчиков")).toBeInTheDocument();
+  });
+
+  it("Сбросить clears the search", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow()],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    fireEvent.change(screen.getByTestId("tests-list-search-input"), { target: { value: "anything" } });
+    await waitFor(() => screen.getByTestId("tests-list-search-clear"));
+    fireEvent.click(screen.getByTestId("tests-list-search-clear"));
+
+    await waitFor(() => expect(screen.getByTestId("tests-list-tree")).toBeInTheDocument());
+  });
+});
+
+describe("<TestsListPage /> — test more-menu", () => {
+  it("opens with all required items", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow()],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+
+    expect(screen.getByTestId("menu-edit-t-1")).toBeInTheDocument();
+    expect(screen.getByTestId("menu-export-t-1")).toBeInTheDocument();
+    expect(screen.getByTestId("menu-toggle-publish-t-1")).toBeInTheDocument();
+    expect(screen.getByTestId("menu-move-t-1")).toBeInTheDocument();
+    expect(screen.getByTestId("menu-archive-t-1")).toBeInTheDocument();
+    expect(screen.getByTestId("menu-delete-t-1")).toBeInTheDocument();
+  });
+
+  it("publish menu item label depends on status", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow({ status: "published" })],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+    expect(screen.getByText("Снять с публикации")).toBeInTheDocument();
+  });
+});
+
+describe("<TestsListPage /> — delete confirm (FR-30)", () => {
+  it("blocks Delete until input matches the title exactly", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow()],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+    fireEvent.click(screen.getByTestId("menu-delete-t-1"));
+
+    const confirmBtn = screen.getByTestId("delete-test-confirm") as HTMLButtonElement;
+    expect(confirmBtn).toBeDisabled();
+
+    fireEvent.change(screen.getByTestId("delete-test-input"), { target: { value: "wrong" } });
+    expect(confirmBtn).toBeDisabled();
+
+    fireEvent.change(screen.getByTestId("delete-test-input"), {
+      target: { value: "Основы информационной безопасности" },
+    });
+    expect(confirmBtn).not.toBeDisabled();
+  });
+});
+
+describe("<TestsListPage /> — FAB", () => {
+  it("toggles speed-dial and shows new-test / new-folder actions", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow()],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    expect(screen.queryByTestId("fab-new-test")).toBeNull();
+    expect(screen.queryByTestId("fab-new-folder")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("fab-toggle"));
+    expect(screen.getByTestId("fab-new-test")).toBeInTheDocument();
+    expect(screen.getByTestId("fab-new-folder")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("fab-toggle"));
+    expect(screen.queryByTestId("fab-new-test")).toBeNull();
+  });
+});
+
+describe("<TestsListPage /> — empty state", () => {
+  it("shows empty pane with two CTAs when no data", async () => {
+    mockMany({
+      "/api/tests": [],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("tests-list-empty")).toBeInTheDocument());
+    expect(screen.getByTestId("tests-list-empty-new-folder")).toBeInTheDocument();
+    expect(screen.getByTestId("tests-list-empty-new-test")).toBeInTheDocument();
+  });
+});

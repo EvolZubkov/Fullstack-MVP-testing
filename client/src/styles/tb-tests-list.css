@@ -1,0 +1,416 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Tests list — explorer-tree page styles
+ *
+ * Project DS-extension (`tb-*` namespace) ported from the approved wireframe
+ * `docs/wireframes/approved/prd7-tests-list.html`. We re-declare the small
+ * `--wf-*` length tokens locally so the markup remains byte-identical to the
+ * wireframe; all colors / typography come from `var(--ou-*)` (UniversityRT DS).
+ *
+ * Scope covered by these rules (s-default / s-collapsed / s-search /
+ * s-menu-open / s-menu-open-pub / s-folder-menu / s-folder-delete-* /
+ * s-fab-* / s-empty / s-loading / s-error). The s-preview side-panel and
+ * s-lazy spinner are deferred to a separate ticket; their CSS is intentionally
+ * left out.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/* ─── Local length tokens (1:1 with prd7-shared.css `--wf-*`) ─────────────── */
+.tb-tests-list {
+  --wf-border-w: 1px;
+  --wf-space-half: 2px;
+  --wf-space-1q: 3px;
+  --wf-space-tiny: 5px;
+  --wf-space-6: 6px;
+  --wf-space-7: 7px;
+  --wf-space-9: 9px;
+  --wf-space-10: 10px;
+  --wf-space-11: 11px;
+  --wf-space-13: 13px;
+  --wf-space-14: 14px;
+  --wf-size-22: 22px;
+  --wf-size-28: 28px;
+  --wf-size-34: 34px;
+  --wf-size-43: 43px;
+  --wf-size-44: 44px;
+  --wf-size-56: 56px;
+  --wf-size-60: 60px;
+  --wf-size-65: 65px;
+  --wf-size-90: 90px;
+  --wf-size-95: 95px;
+  --wf-size-110: 110px;
+  --wf-size-130: 130px;
+  --wf-size-150: 150px;
+  --wf-size-180: 180px;
+  --wf-size-200: 200px;
+  --wf-size-210: 210px;
+  --wf-size-280: 280px;
+  --wf-size-340: 340px;
+}
+
+/* ─── Page title ─────────────────────────────────────────────────────────── */
+.tb-tests-list .page-title { font: var(--ou-text-heading-s); font-weight: 700; }
+
+/* ─── Toolbar (search + sort) ────────────────────────────────────────────── */
+.tb-tests-list .toolbar {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-2) var(--ou-space-6);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+  flex-shrink: 0;
+}
+.tb-tests-list .search-input-wrap {
+  position: relative; flex: 1; max-width: var(--wf-size-340);
+}
+.tb-tests-list .search-input-wrap input { height: var(--wf-size-34); padding-left: var(--ou-space-7); width: 100%; }
+.tb-tests-list .search-icon {
+  position: absolute; left: var(--wf-space-9); top: 50%; transform: translateY(-50%);
+  width: var(--wf-space-14); height: var(--wf-space-14); color: var(--ou-fg-muted); pointer-events: none;
+}
+.tb-tests-list .search-clear {
+  font: var(--ou-text-body-s); color: var(--ou-accent-default);
+  background: none; border: none; cursor: pointer; padding: 0 var(--ou-space-1);
+  font-family: inherit; white-space: nowrap; flex-shrink: 0; text-decoration: underline;
+}
+.tb-tests-list .toolbar-sort {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-left: auto; flex-shrink: 0;
+}
+.tb-tests-list .toolbar-sort__label {
+  font: var(--ou-text-body-s); color: var(--ou-fg-muted); white-space: nowrap;
+}
+.tb-tests-list .toolbar-sort select {
+  height: var(--wf-size-34); padding: 0 var(--ou-space-3);
+  font: var(--ou-text-body-s); color: var(--ou-fg-default);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s); background: var(--ou-bg-elevated);
+}
+
+/* ─── Tree container + 8-column grid ─────────────────────────────────────── */
+.tb-tests-list .tree-area { flex: 1; overflow-y: auto; }
+
+.tb-tests-list .tree-header,
+.tb-tests-list .tree-root,
+.tb-tests-list .tree-folder,
+.tb-tests-list .tree-test {
+  display: grid;
+  grid-template-columns:
+    1fr
+    var(--wf-size-110)
+    var(--wf-size-90)
+    var(--wf-size-130)
+    var(--wf-size-65)
+    var(--wf-size-95)
+    var(--wf-size-110)
+    var(--wf-size-150);
+}
+
+.tb-tests-list .tree-header {
+  padding: var(--wf-space-7) 0;
+  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+  font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
+  text-transform: uppercase; letter-spacing: .05em;
+  position: sticky; top: 0; background: var(--ou-bg-elevated); z-index: 1;
+}
+.tb-tests-list .tree-header > div:first-child { padding-left: var(--ou-space-6); }
+.tb-tests-list .tree-header > :nth-child(2),
+.tb-tests-list .tree-header > :nth-child(3),
+.tb-tests-list .tree-header > :nth-child(4),
+.tb-tests-list .tree-header > :nth-child(5),
+.tb-tests-list .tree-header > :nth-child(6),
+.tb-tests-list .tree-header > :nth-child(7) { text-align: center; }
+
+.tb-tests-list .tree-root {
+  align-items: center;
+  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+  background: var(--ou-bg-elevated); user-select: none;
+}
+.tb-tests-list .tree-root-label {
+  grid-column: 1 / -1;
+  display: flex; align-items: center;
+  padding: var(--wf-space-7) 0 var(--wf-space-7) var(--ou-space-6);
+  font: var(--ou-text-body-s); font-weight: 700; color: var(--ou-fg-muted);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.tb-tests-list .tree-root-label .folder-icon {
+  margin-right: var(--wf-space-6); color: var(--ou-warning-default);
+}
+
+/* ─── Folder rows ────────────────────────────────────────────────────────── */
+.tb-tests-list .tree-folder {
+  align-items: center;
+  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+  cursor: pointer; user-select: none;
+}
+.tb-tests-list .tree-folder:hover { background: var(--ou-bg-hover); }
+.tb-tests-list .tree-folder-name {
+  display: flex; align-items: center;
+  padding: var(--wf-space-9) 0 var(--wf-space-9) var(--ou-space-6);
+  font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default);
+}
+.tb-tests-list .chevron {
+  width: var(--ou-space-5); height: var(--ou-space-5);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; color: var(--ou-fg-muted);
+  transition: transform 0.15s;
+}
+.tb-tests-list .chevron.open { transform: rotate(90deg); }
+.tb-tests-list .folder-icon {
+  flex-shrink: 0; color: var(--ou-warning-on-soft);
+  margin-right: var(--wf-space-6);
+}
+.tb-tests-list .folder-count {
+  font: var(--ou-text-caption); font-weight: 400;
+  color: var(--ou-fg-muted); margin-left: var(--wf-space-6);
+}
+.tb-tests-list .tree-folder-actions {
+  display: flex; align-items: center; gap: var(--ou-space-1);
+  justify-content: flex-end; padding-right: var(--ou-space-2);
+  opacity: 0;
+}
+.tb-tests-list .tree-folder:hover .tree-folder-actions,
+.tb-tests-list .tree-folder-actions.is-open { opacity: 1; }
+
+/* ─── Test rows ──────────────────────────────────────────────────────────── */
+.tb-tests-list .tree-test {
+  align-items: center;
+  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+  cursor: pointer;
+}
+.tb-tests-list .tree-test:hover,
+.tb-tests-list .tree-test.is-selected { background: var(--ou-accent-soft); }
+.tb-tests-list .tree-test-name {
+  display: flex; align-items: flex-start;
+  padding: var(--wf-space-9) 0 var(--wf-space-9) var(--ou-space-6);
+}
+.tb-tests-list .tree-test.indent-1 .tree-test-name { padding-left: var(--wf-size-43); }
+.tb-tests-list .indent-line {
+  display: inline-block; width: var(--ou-space-3); flex-shrink: 0;
+  border-left: var(--wf-border-w) solid var(--ou-border-soft);
+  margin-left: var(--ou-space-1); margin-right: var(--wf-space-6);
+  align-self: stretch; position: relative;
+}
+.tb-tests-list .indent-line::before {
+  content: ''; position: absolute;
+  top: 50%; left: 0; width: var(--ou-space-2); height: var(--wf-border-w);
+  background: var(--ou-border-soft);
+}
+.tb-tests-list .test-info { flex: 1; min-width: 0; }
+.tb-tests-list .test-name { font: var(--ou-text-body-s); font-weight: 500; }
+.tb-tests-list .tree-test-path {
+  font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-half);
+  display: flex; align-items: center; gap: var(--ou-space-1);
+}
+.tb-tests-list .tree-test > :nth-child(2),
+.tb-tests-list .tree-test > :nth-child(3),
+.tb-tests-list .tree-test > :nth-child(4),
+.tb-tests-list .tree-test > :nth-child(5),
+.tb-tests-list .tree-test > :nth-child(6),
+.tb-tests-list .tree-test > :nth-child(7),
+.tb-tests-list .tree-folder > :nth-child(2),
+.tb-tests-list .tree-folder > :nth-child(3),
+.tb-tests-list .tree-folder > :nth-child(4),
+.tb-tests-list .tree-folder > :nth-child(5),
+.tb-tests-list .tree-folder > :nth-child(6),
+.tb-tests-list .tree-folder > :nth-child(7) {
+  display: flex; align-items: center; justify-content: center;
+}
+.tb-tests-list .tree-test-actions {
+  display: flex; align-items: center; gap: var(--wf-space-1q);
+  justify-content: flex-end; padding-right: var(--ou-space-2);
+  opacity: 0;
+}
+.tb-tests-list .tree-test:hover .tree-test-actions,
+.tb-tests-list .tree-test.is-selected .tree-test-actions,
+.tb-tests-list .tree-test-actions.is-open { opacity: 1; }
+.tb-tests-list .tree-num { font: var(--ou-text-body-s); }
+
+/* ─── Action button (inline icons) ───────────────────────────────────────── */
+.tb-tests-list .action-btn {
+  width: var(--wf-size-28); height: var(--wf-size-28);
+  border-radius: var(--ou-radius-xs);
+  border: var(--wf-border-w) solid transparent;
+  background: transparent;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--ou-fg-muted); flex-shrink: 0;
+  position: relative;
+}
+.tb-tests-list .action-btn:hover {
+  background: var(--ou-bg-hover);
+  border-color: var(--ou-border-default);
+  color: var(--ou-fg-default);
+}
+.tb-tests-list .action-btn.danger:hover {
+  color: var(--ou-error-default);
+  border-color: var(--ou-error-default);
+  background: var(--ou-error-soft);
+}
+.tb-tests-list .more-btn-wrap { position: relative; }
+
+/* ─── Dropdown menu (more-menu для тестов и папок) ───────────────────────── */
+.tb-tests-list .dropdown-menu {
+  position: absolute; right: 0; top: 100%;
+  background: var(--ou-bg-elevated);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s); box-shadow: var(--ou-shadow-md);
+  z-index: 20; min-width: var(--wf-size-210);
+  padding: var(--ou-space-1) 0;
+}
+.tb-tests-list .dropdown-item {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--wf-space-14);
+  font: var(--ou-text-body-s); cursor: pointer; color: var(--ou-fg-default);
+  background: transparent; border: 0; width: 100%; text-align: left;
+}
+.tb-tests-list .dropdown-item:hover { background: var(--ou-bg-hover); }
+.tb-tests-list .dropdown-item.danger { color: var(--ou-error-default); }
+.tb-tests-list .dropdown-item.danger:hover { background: var(--ou-error-soft); }
+.tb-tests-list .dropdown-sep {
+  border: 0; border-top: var(--wf-border-w) solid var(--ou-border-soft);
+  margin: var(--ou-space-1) 0;
+}
+
+/* ─── Search banner (s-search) ───────────────────────────────────────────── */
+.tb-tests-list .search-banner {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-6);
+  background: var(--ou-info-soft);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+  font: var(--ou-text-body-s); color: var(--ou-info-default);
+  flex-shrink: 0;
+}
+
+/* ─── Mode badge (Стандарт / Адаптив) ────────────────────────────────────── */
+.tb-tests-list .mode-badge {
+  display: inline-flex; align-items: center; gap: var(--ou-space-1);
+  font: var(--ou-text-caption); font-weight: 500;
+  padding: var(--wf-space-half) var(--ou-space-2);
+  border-radius: var(--wf-space-10); white-space: nowrap;
+}
+.tb-tests-list .mode-badge.standard {
+  background: var(--ou-bg-hover); color: var(--ou-fg-muted);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+}
+.tb-tests-list .mode-badge.adaptive {
+  background: var(--ou-accent-soft); color: var(--ou-accent-active);
+  border: var(--wf-border-w) solid var(--ou-accent-container-hover);
+}
+
+/* ─── Flow chip (Сценарий) ───────────────────────────────────────────────── */
+.tb-tests-list .flow-chip {
+  display: inline-flex; align-items: center; gap: var(--wf-space-tiny);
+  font: var(--ou-text-caption); font-weight: 500; color: var(--ou-fg-default);
+  padding: var(--wf-space-half) var(--ou-space-2);
+  border-radius: var(--ou-radius-xs);
+  background: var(--ou-accent-soft);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  white-space: nowrap; cursor: default;
+}
+.tb-tests-list .flow-chip svg { flex-shrink: 0; color: var(--ou-fg-muted); }
+
+/* ─── Empty / loading / error pseudo-states inside tree ──────────────────── */
+.tb-tests-list .empty-tree {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: var(--wf-size-60) var(--ou-space-6);
+  text-align: center;
+}
+.tb-tests-list .empty-tree__icon {
+  width: var(--ou-space-9); height: var(--ou-space-9);
+  border-radius: var(--ou-radius-s);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  background: var(--ou-bg-hover);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ou-fg-muted);
+  margin-bottom: var(--wf-space-14);
+}
+.tb-tests-list .empty-tree__icon.is-error {
+  color: var(--ou-error-default);
+  background: var(--ou-error-soft);
+  border-color: var(--ou-error-default);
+}
+.tb-tests-list .empty-tree__title {
+  font: var(--ou-text-body-m); font-weight: 600;
+  margin-bottom: var(--wf-space-6);
+}
+.tb-tests-list .empty-tree__desc {
+  font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+  max-width: var(--wf-size-280); line-height: 1.6;
+  margin-bottom: var(--ou-space-4);
+}
+.tb-tests-list .empty-tree__actions {
+  display: flex; gap: var(--ou-space-2);
+}
+
+/* ─── FAB speed-dial (s-fab-open) ────────────────────────────────────────── */
+.tb-tests-list .fab-wrap {
+  position: fixed; bottom: var(--ou-space-6); right: var(--ou-space-6);
+  z-index: 20;
+  width: var(--wf-size-56); height: var(--wf-size-56);
+}
+.tb-tests-list .ou-fab--open { transform: rotate(45deg); }
+.tb-tests-list .fab-actions {
+  position: absolute;
+  bottom: calc(100% + var(--ou-space-3));
+  right: calc((var(--wf-size-56) - var(--wf-size-44)) / 2);
+  display: flex; flex-direction: column; gap: var(--ou-space-2);
+  align-items: flex-end; width: max-content;
+}
+.tb-tests-list .fab-action { display: flex; align-items: center; gap: var(--ou-space-2); }
+.tb-tests-list .fab-action-label {
+  font: var(--ou-text-body-s); font-weight: 500;
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  padding: var(--ou-space-1) var(--ou-space-3);
+  box-shadow: var(--ou-shadow-xs); white-space: nowrap;
+}
+.tb-tests-list .fab-action-btn {
+  width: var(--wf-size-44); height: var(--wf-size-44);
+  border-radius: var(--ou-radius-pill);
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; box-shadow: var(--ou-shadow-sm); flex-shrink: 0;
+}
+.tb-tests-list .fab-action-btn:hover { background: var(--ou-bg-hover); }
+
+/* ─── FAB folder picker modal (s-fab-folder-pick / s-fab-restricted) ─────── */
+.tb-tests-list .fab-folder-list {
+  display: flex; flex-direction: column; gap: var(--ou-space-1);
+  margin-top: var(--ou-space-3);
+}
+.tb-tests-list .fab-folder-item {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  border-radius: var(--ou-radius-xs);
+  cursor: pointer; font: var(--ou-text-body-s); user-select: none;
+  border: var(--wf-border-w) solid transparent;
+}
+.tb-tests-list .fab-folder-item:hover { background: var(--ou-bg-hover); }
+.tb-tests-list .fab-folder-item:has(input:checked) {
+  background: var(--ou-accent-soft);
+  border-color: var(--ou-accent-default);
+}
+.tb-tests-list .fab-folder-item input[type="radio"] {
+  margin: 0; flex-shrink: 0; accent-color: var(--ou-accent-default);
+}
+.tb-tests-list .fab-folder-item__ico { flex-shrink: 0; color: var(--ou-warning-on-soft); }
+.tb-tests-list .fab-folder-note {
+  display: flex; align-items: flex-start; gap: var(--ou-space-2);
+  font: var(--ou-text-body-s); color: var(--ou-info-default);
+  background: var(--ou-info-soft); border-radius: var(--ou-radius-xs);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  margin-bottom: var(--ou-space-2);
+}
+
+/* ─── Typed-confirm (FR-30, prd7-tests-delete-confirm) ───────────────────── */
+.tb-tests-list .typed-confirm__label {
+  display: block; font: var(--ou-text-body-s); margin-bottom: var(--ou-space-2);
+  color: var(--ou-fg-default);
+}
+.tb-tests-list .typed-confirm__hint {
+  display: block; font: var(--ou-text-body-xs);
+  color: var(--ou-fg-muted); margin-top: var(--ou-space-1);
+}
+.tb-tests-list .typed-confirm__hint strong { color: var(--ou-fg-default); }
+.tb-tests-list .typed-confirm__error {
+  display: block; font: var(--ou-text-body-xs);
+  color: var(--ou-error-default); margin-top: var(--ou-space-1);
+}

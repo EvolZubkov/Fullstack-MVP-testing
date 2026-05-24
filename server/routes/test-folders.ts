@@ -46,14 +46,49 @@ router.put("/:id", requireAuthor, async (req, res) => {
   }
 });
 
-// DELETE /api/test-folders/:id
+/**
+ * DELETE /api/test-folders/:id
+ *
+ * Два варианта удаления по эскизу prd7-tests-list.html
+ * (s-folder-delete-a / s-folder-delete-b):
+ *
+ *   { mode: "folder-only", moveTestsTo: string | null }
+ *     — удалить только папку; все тесты и вложенные папки переносятся в
+ *       указанное место (`null` означает корень).
+ *
+ *   { mode: "folder-and-tests", confirmName: string }
+ *     — удалить папку вместе со всеми тестами в ней (включая транзитивно
+ *       через вложенные папки). Требует точное совпадение `confirmName` с
+ *       именем папки (FR-30 для папок).
+ *
+ * Backward compatibility: пустое body — старое поведение «folder-only» с
+ * переносом в корень (для legacy-клиентов, оставшихся на старом UI).
+ */
 router.delete("/:id", requireAuthor, async (req, res) => {
   try {
-    const success = await storage.deleteTestFolder(req.params.id);
-    if (!success) {
-      return res.status(404).json({ error: "Folder not found" });
+    const folder = await storage.getTestFolders().then((all) => all.find((f) => f.id === req.params.id));
+    if (!folder) return res.status(404).json({ error: "Folder not found" });
+
+    const body = (req.body ?? {}) as {
+      mode?: string;
+      moveTestsTo?: string | null;
+      confirmName?: string;
+    };
+
+    if (body.mode === "folder-and-tests") {
+      if (!body.confirmName || body.confirmName !== folder.name) {
+        return res.status(400).json({ error: "name_mismatch", field: "confirmName" });
+      }
+      const success = await storage.deleteTestFolderCascade(req.params.id);
+      if (!success) return res.status(404).json({ error: "Folder not found" });
+      return res.status(204).end();
     }
-    res.json({ success: true });
+
+    // Default "folder-only": move tests/sub-folders to the requested destination.
+    const moveTo = body.moveTestsTo === undefined ? null : body.moveTestsTo;
+    const success = await storage.deleteTestFolder(req.params.id, moveTo);
+    if (!success) return res.status(404).json({ error: "Folder not found" });
+    res.status(204).end();
   } catch (error) {
     logger.error("Delete test folder error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to delete test folder" });

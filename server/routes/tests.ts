@@ -48,6 +48,8 @@ const testBodyBaseSchema = z.object({
   telemetryEnabled: z.boolean().optional(),
   feedbackJson: feedbackContentSchema.nullable().optional(),
   flowPolicyJson: z.unknown().optional(),
+  /** Destination folder for create (PRD-7 §5.5 — FAB folder-pick modal). */
+  folderId: z.string().nullable().optional(),
 });
 
 const createTestBodySchema = testBodyBaseSchema.refine(
@@ -141,6 +143,62 @@ router.get("/migration-health", requireAuthor, async (req, res) => {
   }
 });
 
+// GET /api/tests/:id - Полный single-test response (PRD-7 §5.2)
+// Возвращает тот же shape, что и единичная карточка из списка `GET /api/tests`:
+// все поля `tests` (включая `version`, `flowPolicyJson`, `designSettingsJson`,
+// `feedbackJson`), `sections[]` с `topicName`/`maxQuestions`, плюс
+// `adaptiveSettings` для adaptive-режима. Используется редактором PRD-7.
+router.get("/:id", requireAuthor, async (req, res) => {
+  try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+
+    const sections = await storage.getTestSections(test.id);
+    const topics = await storage.getTopics();
+    const topicMap = new Map(topics.map((t) => [t.id, t]));
+
+    const sectionsWithDetails = await Promise.all(
+      sections.map(async (s) => {
+        const topic = topicMap.get(s.topicId);
+        const questions = await storage.getQuestionsByTopic(s.topicId);
+        return {
+          ...s,
+          topicName: topic?.name || "Unknown",
+          maxQuestions: questions.length,
+        };
+      }),
+    );
+
+    let adaptiveSettings: unknown = null;
+    if (test.mode === "adaptive") {
+      const topicSettings = await storage.getAdaptiveTopicSettingsByTest(test.id);
+      const levels = await storage.getAdaptiveLevelsByTest(test.id);
+
+      adaptiveSettings = await Promise.all(
+        topicSettings.map(async (ts) => {
+          const topicLevels = levels.filter((l) => l.topicId === ts.topicId);
+          const levelsWithLinks = await Promise.all(
+            topicLevels.map(async (level) => {
+              const links = await storage.getAdaptiveLevelLinks(level.id);
+              return { ...level, links };
+            }),
+          );
+          return {
+            ...ts,
+            topicName: topicMap.get(ts.topicId)?.name || "Unknown",
+            levels: levelsWithLinks,
+          };
+        }),
+      );
+    }
+
+    res.json({ ...test, sections: sectionsWithDetails, adaptiveSettings });
+  } catch (error) {
+    logger.error("Get test error: " + (error as Error).message, "tests");
+    res.status(500).json({ error: "Failed to fetch test" });
+  }
+});
+
 // POST /api/tests - Создать тест
 router.post("/", requireAuthor, async (req, res) => {
   try {
@@ -168,6 +226,7 @@ router.post("/", requireAuthor, async (req, res) => {
       telemetryEnabled,
       feedbackJson,
       flowPolicyJson,
+      folderId,
     } = parsed.data;
 
     // For standard mode, sections are required
@@ -193,6 +252,7 @@ router.post("/", requireAuthor, async (req, res) => {
         telemetryEnabled,
         feedbackJson: feedbackJson ?? null,
         flowPolicyJson: flowPolicyJson ?? null,
+        folderId: folderId ?? null,
       },
       sections: (sections ?? []) as SectionPayload[],
       adaptiveSettings: mode === "adaptive"

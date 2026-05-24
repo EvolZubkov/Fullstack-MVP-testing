@@ -102,7 +102,19 @@ export interface IStorage {
   getTestFolders(): Promise<TestFolder[]>;
   createTestFolder(folder: InsertTestFolder): Promise<TestFolder>;
   updateTestFolder(id: string, updates: Partial<InsertTestFolder>): Promise<TestFolder | undefined>;
-  deleteTestFolder(id: string): Promise<boolean>;
+  /**
+   * Удаляет папку, предварительно переместив все тесты и вложенные папки
+   * в указанное место (`moveTo`, по умолчанию `null` = корень). Это вариант
+   * "Только папку" из эскиза prd7-tests-list.html (s-folder-delete-a).
+   */
+  deleteTestFolder(id: string, moveTo?: string | null): Promise<boolean>;
+  /**
+   * Удаляет папку вместе со всеми тестами внутри неё (включая транзитивно
+   * через вложенные папки) и сами вложенные папки. Используется для варианта
+   * "Папку и все тесты" (s-folder-delete-b), требующего ввода точного имени
+   * для подтверждения на уровне route handler.
+   */
+  deleteTestFolderCascade(id: string): Promise<boolean>;
   moveTestToFolder(testId: string, folderId: string | null): Promise<boolean>;
 
   getTopics(): Promise<Topic[]>;
@@ -601,13 +613,47 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
-  async deleteTestFolder(id: string): Promise<boolean> {
-    // Move tests in this folder to root
-    await db.update(tests).set({ folderId: null }).where(eq(tests.folderId, id));
-    // Move child folders to root
-    await db.update(testFolders).set({ parentId: null }).where(eq(testFolders.parentId, id));
+  async deleteTestFolder(id: string, moveTo: string | null = null): Promise<boolean> {
+    // Move direct tests to the requested destination (root by default).
+    await db.update(tests).set({ folderId: moveTo }).where(eq(tests.folderId, id));
+    // Reparent child folders to the requested destination.
+    await db.update(testFolders).set({ parentId: moveTo }).where(eq(testFolders.parentId, id));
     const result = await db.delete(testFolders).where(eq(testFolders.id, id)).returning();
     return result.length > 0;
+  }
+
+  /**
+   * Recursively delete a folder, its sub-folders and every test inside them.
+   * Test-side soft cleanup (adaptive levels/links/topic-settings) is the
+   * caller's responsibility (route handler), keeping this method focused on
+   * the folder/test row deletion.
+   */
+  async deleteTestFolderCascade(id: string): Promise<boolean> {
+    // Collect all descendant folder ids breadth-first.
+    const allFolders = await db.select().from(testFolders);
+    const childrenByParent = new Map<string | null, string[]>();
+    for (const f of allFolders) {
+      const key = f.parentId ?? null;
+      if (!childrenByParent.has(key)) childrenByParent.set(key, []);
+      childrenByParent.get(key)!.push(f.id);
+    }
+    const descendantIds: string[] = [];
+    const queue: string[] = [id];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      descendantIds.push(current);
+      const children = childrenByParent.get(current) ?? [];
+      queue.push(...children);
+    }
+
+    // Delete every test in any of those folders. Adaptive children rows are
+    // assumed cleaned up by the route handler before this call.
+    if (descendantIds.length > 0) {
+      await db.delete(tests).where(inArray(tests.folderId, descendantIds));
+      const result = await db.delete(testFolders).where(inArray(testFolders.id, descendantIds)).returning();
+      return result.length > 0;
+    }
+    return false;
   }
 
   async moveTestToFolder(testId: string, folderId: string | null): Promise<boolean> {

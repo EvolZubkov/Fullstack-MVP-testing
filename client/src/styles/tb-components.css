@@ -223,7 +223,8 @@
 
 /* ── Adaptive block (адаптивность по темам) ──────────────────────────── */
 .tb-adaptive-topics { margin-bottom: var(--ou-space-3); }
-.tb-adaptive-topics .ou-acc__trigger { padding: var(--ou-space-3) var(--ou-space-4); gap: var(--ou-space-3); }
+.tb-adaptive-topics__head { display: flex; align-items: center; gap: var(--ou-space-3); padding-right: var(--ou-space-3); }
+.tb-adaptive-topics__trigger { flex: 1; min-width: 0; padding: var(--ou-space-3) var(--ou-space-4); gap: var(--ou-space-3); }
 /* DS .ou-acc__body has padding-top: 0 — добавляем зазор, иначе hover-фон триггера
    визуально упирается в кнопку «Добавить уровень». */
 .tb-adaptive-topics .ou-acc__body { padding-top: var(--ou-space-3); }
@@ -457,3 +458,216 @@
   .tb-adaptive-topics__toggle-lbl { display: none; }
 }
 /* gate-skip-end */
+
+/* ─── Topic picker modal (Состав вкладка → «+ Добавить тему») ──────────────
+ * Defined here because tb-* extensions live in this file. Used by
+ * features/tests/editor/sections/topics-structure-section.tsx.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+.tb-topic-picker__search { margin-bottom: var(--ou-space-3); }
+
+.tb-topic-picker__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-1);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.tb-topic-picker__empty {
+  padding: var(--ou-space-3);
+  text-align: center;
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-body-s);
+}
+
+.tb-topic-picker__item {
+  width: 100%;
+  padding: var(--ou-space-2) var(--ou-space-3);
+  background: var(--ou-bg-elevated);
+  border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-default);
+}
+
+.tb-topic-picker__item:hover { background: var(--ou-bg-hover); }
+.tb-topic-picker__item-count { color: var(--ou-fg-muted); }
+
+/* ─── Structure tab — section list ───────────────────────────────────────── */
+
+.tb-structure-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--ou-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+
+.tb-structure-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  background: var(--ou-bg-elevated);
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  font: var(--ou-text-body-s);
+}
+
+.tb-structure-list__num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--ou-accent-soft);
+  color: var(--ou-accent-on-soft);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.tb-structure-list__name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+  color: var(--ou-fg-default);
+}
+
+.tb-structure-list__meta {
+  color: var(--ou-fg-muted);
+  white-space: nowrap;
+}
+
+/* ── Structure tab — zones + page rows ─────────────────────────────────
+   Used in features/tests/editor/sections/start-pages-section.tsx. */
+.tb-structure-zones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-3);
+  margin-bottom: var(--ou-space-3);
+}
+.tb-structure-zone {
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-l);
+  background: var(--ou-bg-elevated);
+  overflow: hidden;
+}
+.tb-structure-zone--topic { background: var(--ou-bg-default); }
+.tb-structure-zone__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  background: var(--ou-bg-subtle);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+}
+.tb-structure-zone__title {
+  font: var(--ou-text-body-m);
+  font-weight: 600;
+  margin: 0;
+}
+.tb-structure-zone__meta {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+.tb-structure-zone__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-3);
+}
+.tb-structure-zone__empty {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  padding: var(--ou-space-1) 0;
+}
+.tb-structure-zone__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-1);
+}
+.tb-structure-zone__group-title {
+  font: var(--ou-text-caption);
+  color: var(--ou-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tb-page-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-default);
+}
+.tb-page-row--system { background: var(--ou-bg-subtle); }
+.tb-page-row--missing-template { border-color: var(--ou-warning-default); }
+.tb-page-row__badge {
+  font: var(--ou-text-caption);
+  background: var(--ou-bg-subtle);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  padding: 0 var(--ou-space-2);
+  color: var(--ou-fg-muted);
+  flex-shrink: 0;
+}
+.tb-page-row__title {
+  flex: 1;
+  min-width: 0;
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-default);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tb-page-row__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+  flex-shrink: 0;
+}
+.tb-page-row__confirm {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+
+/* ── Design tab — template card + savebar ──────────────────────────────
+   Used in features/tests/editor/sections/design-section.tsx. */
+.tb-template-card__desc {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  margin: 0 0 var(--ou-space-3);
+}
+.tb-template-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  flex-wrap: wrap;
+}
+.tb-design-savebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+  margin-top: var(--ou-space-4);
+  padding-top: var(--ou-space-3);
+  border-top: var(--wf-border-w) solid var(--ou-border-default);
+}
+.tb-design-savebar__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ou-space-2);
+}

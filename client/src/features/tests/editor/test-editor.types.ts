@@ -179,6 +179,8 @@ export type TestEditorModel = {
   mode: TestMode;
   flowMode: FlowMode;
   flowSettings: FlowSettings;
+  /** Parent folder; `null` means root (no folder). */
+  folderId: string | null;
   basic: {
     title: string;
     description: string;
@@ -239,6 +241,9 @@ export type TestSettingsPayload = {
   webhookUrl: string | null;
   telemetryEnabled: boolean;
   expectedVersion: number;
+  /** Only sent on create (FAB folder-pick). PUT path leaves it undefined and
+   *  uses the dedicated `/api/test-folders/move/:id` endpoint instead. */
+  folderId?: string | null;
 };
 
 export type TestSectionPayload = {

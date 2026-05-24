@@ -48,7 +48,7 @@
     "@types/archiver": "^7.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/multer": "^2.1.0",
-    "@universityrt/ui-kit": "file:../../ENGINERING_HANDBOOK/ui-kit",
+    "@universityrt/ui-kit": "file:../ENGINERING_HANDBOOK/ui-kit",
     "@vvlad1973/crypto": "^2.3.0",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
