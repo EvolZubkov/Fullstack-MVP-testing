@@ -1,8 +1,13 @@
 # TODO: Реализация PRD-1 - шаблоны и контентные страницы
 
 **Связанный PRD:** [PRD-1](prd-1-templates-content-pages.md)  
-**Статус:** Актуализировано по коду: частичная реализация; backend/API/export/frontend частично готовы, runtime template loader и navigation flow не завершены.  
-**Последняя проверка по коду:** 2026-05-09  
+**Статус:** Актуализировано по коду: основная MVP-функциональность готова (модель данных,
+API, SCORM export, runtime loader, navigation, frontend dialogs). Незакрыто: предпросмотр
+шаблона в Drawer «Оформление», text-overflow preview/diagnostics в content-pages, ручной
+acceptance pass. Контрактные дополнения PRD-1 §4.3 (variant.kind model, row-menu,
+severity-rail, required-params validation), внесённые 2026-05-21, в коде ещё не реализованы —
+см. §1.12 ниже.  
+**Последняя проверка по коду:** 2026-05-22  
 **Правило UI:** UI-разработка начинается только после подготовки и явного согласования wireframes.
 
 ---
@@ -23,7 +28,8 @@ Wireframes подготовлены: [docs/wireframes-prd1-design-pages.md](wire
 - [x] Подготовить wireframes вкладки **"Оформление"**.
 - [x] Подготовить wireframes вкладки **"Структура"**.
 - [x] Покрыть основные, пустые, loading/saving, ошибочные и read-only состояния.
-- [x] Покрыть edge cases: нет page templates, шаблон невалиден, ошибка сохранения, placeholder невалиден, HTML отклонён санитайзером.
+- [x] Покрыть edge cases: нет page templates, шаблон невалиден, ошибка сохранения,
+      placeholder невалиден, HTML отклонён санитайзером.
 - [x] Явно согласовать wireframes до frontend-разработки.
 - [x] Зафиксировать, что изменение сценария или состава полей требует повторного согласования.
 
@@ -117,7 +123,11 @@ Wireframes подготовлены: [docs/wireframes-prd1-design-pages.md](wire
 - [x] Реализовать вкладку **"Оформление"** по согласованным wireframes.
 - [x] Реализовать галерею шаблонов.
 - [x] Реализовать форму параметров из `manifest.params`.
-- [ ] Реализовать предпросмотр/сброс.
+- [x] Реализовать сброс параметров шаблона до умолчаний.
+      _(reset mutation + кнопка «Сбросить до умолчаний» в design-settings-dialog.tsx:356-361.)_
+- [ ] Реализовать предпросмотр выбранного шаблона.
+      _(в design-settings-dialog.tsx предпросмотр не реализован: grep по `preview` —_
+      _0 совпадений; есть только манифестное поле `template.preview` для галереи.)_
 - [x] Реализовать вкладку **"Структура"** по согласованным wireframes.
 - [x] Реализовать создание/редактирование/удаление `intro`, `info`, `summary`, `html`.
 - [x] Реализовать выбор режима страницы: `template`, `standard`, `html`.
@@ -147,6 +157,42 @@ Wireframes подготовлены: [docs/wireframes-prd1-design-pages.md](wire
 - [x] Regression: старый тест без дизайна работает через `default`.
 - [ ] Проверить все acceptance criteria из PRD-1.
 
+### 1.12 Контрактные дополнения PRD-1 §4.3 (внесены 2026-05-21)
+
+После последнего code-walk PRD-1 спецификация получила раздел §4.3 «Типы вариантов
+(`variant.kind`)» с новой моделью variant'ов и сопутствующими UI-правилами. На
+2026-05-22 в коде это **не реализовано**: `VariantKind`/`kind: "questions"` отсутствует
+в zod-схемах, манифестах встроенных шаблонов и runtime. Часть пунктов будет закрыта
+в рамках PRD-7 §1.4 (тихая привязка, серверная пересборка `kind: questions` при
+смене `flowMode`), но контракт обязан жить в PRD-1.
+
+- [ ] Добавить enum `VariantKind = "questions" | "router" | "summary" | "intro" | "info"`
+      в zod-схему манифеста шаблона.
+- [ ] Валидация манифеста: каждый `variant` обязан иметь `kind`; default-шаблон
+      обязан содержать минимум один `variant` с `kind: questions`.
+- [ ] Добавить `kind` поле в `manifest.json` встроенных шаблонов (`default`,
+      `corporate`, `minimal`).
+- [ ] Реализовать «тихую привязку» системных вариантов (типы 1-4) при сохранении/
+      смене `flowMode` или `templateId`: 1 → молча, N → default + dirty flag,
+      0 → fallback на стандартный шаблон + warning (PRD-1 §4.3.2 / PRD-7 §1.4).
+- [ ] Реализовать unified row-menu композицию (PRD-1 §4.3.3): состав пунктов
+      зависит от `variant.kind` (info-row vs системные `intro`/`summary`/`questions`/
+      `router`); destructive-действия отделены `row-menu__sep`.
+- [ ] Реализовать визуальную индикацию состояния `page-row` (PRD-1 §4.3.7,
+      severity-rail): приоритет `error > warning > info`, нет border в норме.
+- [ ] Реализовать серверную валидацию обязательных параметров варианта
+      (PRD-1 §4.3.6): при незаполненных `required: true` полях — структурированная
+      ошибка с `pageId` + именами полей; Save не выполняется.
+- [ ] Frontend: для каждой `content_pages` запись сравнивать `values_json.values`
+      с `variant.schema.fields` (только `required: true`); незаполненные поля →
+      `page-row--warn` + warning-баннер в expand + агрегат в `status-dot--error`
+      на табе «Структура».
+- [ ] API endpoint `POST /api/tests/:id/pages/:pageId/replace-variant`:
+      смена варианта существующей страницы с возвратом diff потерь параметров.
+- [ ] Auto-create записи `kind: questions` при добавлении темы в `test_sections`
+      (режимы `linear_by_topics` / `router_by_topics`); каскадное удаление при
+      удалении темы.
+
 ---
 
 ## 2. MVP-срез
@@ -165,24 +211,64 @@ Wireframes подготовлены: [docs/wireframes-prd1-design-pages.md](wire
 
 ---
 
-## 3. Проверка по коду от 2026-05-09
+## 3. Проверка по коду от 2026-05-22
+
+После предыдущего code-walk (2026-05-09) PRD-1 зоны кода затронули 5 коммитов
+2026-05-11 (большой merge: schema, storage, API, SCORM, client). После 2026-05-11
+коммитов в PRD-1 зоны нет. Спецификация PRD-1 получила раздел §4.3 (variant.kind,
+row-menu, severity-rail) 2026-05-21 — в коде не реализовано (см. §1.12).
 
 ### 3.1 Подтверждённые зоны реализации
 
-- Backend/API: `server/routes/templates.ts`, `server/routes/tests.ts`, `server/routes/content-pages.ts`.
+Все 14 файлов на месте (sanity-check).
+
+- Backend/API: `server/routes/templates.ts`, `server/routes/tests.ts`,
+  `server/routes/content-pages.ts`.
 - Модель данных/storage: `shared/schema.ts`, `server/storage.ts`.
-- Registry встроенных шаблонов: `server/template-registry.ts`, вызов `syncBuiltinTemplates()` в `server/index.ts`.
-- SCORM export: `server/scorm/builders/test-json.ts`, `server/scorm/builders/template-copy.ts`, `server/scorm/index.ts`.
-- Runtime helpers/renderers: `server/scorm/template/app/templateCore.js`, `server/scorm/template/app/render/renderers.js`, `server/scorm/template/app/render/contentPage.js`.
-- Frontend dialogs: `client/src/components/design-settings-dialog.tsx`, `client/src/components/content-pages-dialog.tsx`, подключение из `client/src/pages/author/tests.tsx`.
+- Registry встроенных шаблонов: `server/template-registry.ts`, вызов
+  `syncBuiltinTemplates()` в `server/index.ts`.
+- SCORM export: `server/scorm/builders/test-json.ts`,
+  `server/scorm/builders/template-copy.ts`, `server/scorm/index.ts`.
+- Runtime helpers/renderers: `server/scorm/template/app/templateCore.js`,
+  `server/scorm/template/app/render/renderers.js`,
+  `server/scorm/template/app/render/contentPage.js`.
+- Frontend dialogs: `client/src/components/design-settings-dialog.tsx`,
+  `client/src/components/content-pages-dialog.tsx`, подключение из
+  `client/src/pages/author/tests.tsx`.
 
 ### 3.2 Главные незакрытые блокеры
 
-- Frontend preview/diagnostics для text overflow остаётся базовым, без полноценного визуального предпросмотра всех layout-состояний.
-- Полный acceptance pass по PRD-1 ещё требует ручного end-to-end просмотра экспортированного SCORM в браузере/LMS.
+- **Контрактные дополнения PRD-1 §4.3 не реализованы** (см. §1.12):
+  `variant.kind` enum, row-menu композиция, severity-rail, required-params
+  валидация. В коде поиск по `VariantKind`/`variant.kind`/`kind: "questions"`
+  даёт 0 совпадений вне `docs/`.
+- Предпросмотр выбранного шаблона в Drawer «Оформление» не реализован
+  (есть только сброс параметров).
+- Frontend preview/diagnostics для text overflow остаётся базовым, без
+  полноценного визуального предпросмотра всех layout-состояний.
+- Полный acceptance pass по PRD-1 ещё требует ручного end-to-end просмотра
+  экспортированного SCORM в браузере/LMS.
 
-### 3.3 Последняя проверка команд
+### 3.3 Последняя проверка команд (2026-05-22)
 
-- `npm run check`: прошёл.
-- `npx vitest run --coverage.enabled false tests/schema-prd1.test.ts tests/routes.templates.test.ts tests/routes.design-settings.test.ts tests/routes.content-pages.test.ts tests/scorm-export.test.ts tests/runtime.template-core.test.ts tests/runtime.renderers.test.ts tests/runtime.content-flow.test.ts client/src/components/design-settings-dialog.test.tsx client/src/components/content-pages-dialog.test.tsx`: прошёл, 10 файлов / 254 теста.
-- Smoke генерации SCORM ZIP через `generateScormPackage()` с `default` template и content page: пакет собран, размер 491610 байт.
+- `npm run check`: прошёл (0 errors).
+- `npx vitest run --coverage.enabled false` по 10 файлам §3.3
+  (`tests/schema-prd1.test.ts`, `tests/routes.templates.test.ts`,
+  `tests/routes.design-settings.test.ts`, `tests/routes.content-pages.test.ts`,
+  `tests/scorm-export.test.ts`, `tests/runtime.template-core.test.ts`,
+  `tests/runtime.renderers.test.ts`, `tests/runtime.content-flow.test.ts`,
+  `client/src/components/design-settings-dialog.test.tsx`,
+  `client/src/components/content-pages-dialog.test.tsx`): прошёл,
+  10 файлов / 254 теста.
+- Smoke-генерация SCORM ZIP с 2026-05-09 не повторялась; ранее зафиксирован
+  размер пакета 491 610 байт.
+
+### 3.4 Коммиты в PRD-1 зонах после 2026-05-09
+
+- `be8fad9` 2026-05-11 — schema: PRD-7 test settings + PRD-1 content pages schema.
+- `0b269fd` 2026-05-11 — storage layer для PRD-7 settings, content pages, registry.
+- `7191d0f` 2026-05-11 — API endpoints PRD-7 + content pages + template registry.
+- `f573f93` 2026-05-11 — SCORM content pages, design settings, external templates.
+- `20e6bcb` 2026-05-11 — client: PRD-7 test settings editor (затронул PRD-1 dialogs).
+
+После 2026-05-11 — коммитов в PRD-1 зонах нет.
