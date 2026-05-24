@@ -9,6 +9,13 @@ import { requireAuth, requireAuthor } from "../middleware/auth";
 import { generateScormPackage } from "../scorm-exporter";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { logger } from "../logger";
+import {
+  testSettingsService,
+  VersionConflictError,
+  type SectionPayload,
+  type AdaptiveTopicPayload,
+} from "../services/test-settings";
+import { RequiredFieldsMissingError } from "../services/required-fields-validator";
 
 // ─── Validation schemas (PRD-7 §5.4) ─────────────────────────────────────────
 
@@ -168,11 +175,8 @@ router.post("/", requireAuthor, async (req, res) => {
       return res.status(400).json({ error: "Sections are required for standard tests" });
     }
 
-    // Zod validates the shape at runtime; cast to any at the Zod→Drizzle boundary
-    // because drizzle's Json type is recursive and incompatible with `unknown`.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const test = await storage.createTest(
-      {
+    const test = await testSettingsService.create({
+      test: {
         title: title!,
         description,
         overallPassRuleJson: overallPassRuleJson ?? { type: "percent" as const, value: 70 },
@@ -189,45 +193,12 @@ router.post("/", requireAuthor, async (req, res) => {
         telemetryEnabled,
         feedbackJson: feedbackJson ?? null,
         flowPolicyJson: flowPolicyJson ?? null,
-      } as any,
-      (sections ?? []) as any,
-    );
-
-    if (mode === "adaptive" && adaptiveSettings) {
-      for (const topicSettings of adaptiveSettings as any[]) {
-        // Create topic settings (failure feedback)
-        await storage.createAdaptiveTopicSettings({
-          testId: test.id,
-          topicId: topicSettings.topicId,
-          failureFeedback: topicSettings.failureFeedback || null,
-        });
-
-        // Create levels for this topic
-        for (const level of topicSettings.levels || []) {
-          const createdLevel = await storage.createAdaptiveLevel({
-            testId: test.id,
-            topicId: topicSettings.topicId,
-            levelIndex: level.levelIndex,
-            levelName: level.levelName,
-            minDifficulty: level.minDifficulty,
-            maxDifficulty: level.maxDifficulty,
-            questionsCount: level.questionsCount,
-            passThreshold: level.passThreshold,
-            passThresholdType: level.passThresholdType || "percent",
-            feedback: level.feedback || null,
-          });
-
-          // Create links for this level
-          for (const link of level.links || []) {
-            await storage.createAdaptiveLevelLink({
-              levelId: createdLevel.id,
-              title: link.title,
-              url: link.url,
-            });
-          }
-        }
-      }
-    }
+      },
+      sections: (sections ?? []) as SectionPayload[],
+      adaptiveSettings: mode === "adaptive"
+        ? (adaptiveSettings as AdaptiveTopicPayload[] | undefined)
+        : undefined,
+    });
 
     res.status(201).json(test);
   } catch (error) {
@@ -360,6 +331,12 @@ router.put("/:id/design", requireAuthor, async (req, res) => {
 });
 
 // PUT /api/tests/:id - Обновить тест
+// PUT /api/tests/:id — Atomic save via TestSettingsService.
+//
+// Goes through the service so a single transaction covers: test row update,
+// sections replace, adaptive settings replace, system content_pages
+// reconciliation (PRD-7 §1.4), and required-fields validation when the
+// status transitions to "published" (PRD-1 §4.3.6).
 router.put("/:id", requireAuthor, async (req, res) => {
   try {
     const parsed = updateTestBodySchema.safeParse(req.body);
@@ -388,11 +365,12 @@ router.put("/:id", requireAuthor, async (req, res) => {
       flowPolicyJson,
     } = parsed.data;
 
-    // Update test basic info (cast to any at Zod→Drizzle boundary for jsonb fields)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const test = await storage.updateTest(
-      req.params.id,
-      {
+    const expectedVersion = typeof (req.body as { expectedVersion?: unknown })?.expectedVersion === "number"
+      ? (req.body as { expectedVersion: number }).expectedVersion
+      : undefined;
+
+    const test = await testSettingsService.save(req.params.id, {
+      test: {
         title,
         description,
         overallPassRuleJson,
@@ -409,54 +387,42 @@ router.put("/:id", requireAuthor, async (req, res) => {
         telemetryEnabled,
         feedbackJson: feedbackJson ?? undefined,
         flowPolicyJson: flowPolicyJson ?? undefined,
-      } as any,
-      mode === "standard" ? (sections as any) : undefined,
-    );
-
-    if (!test) {
-      return res.status(404).json({ error: "Test not found" });
-    }
-
-    if (mode === "adaptive" && adaptiveSettings) {
-      await storage.deleteAdaptiveLevelLinksByTest(test.id);
-      await storage.deleteAdaptiveLevelsByTest(test.id);
-      await storage.deleteAdaptiveTopicSettingsByTest(test.id);
-
-      for (const topicSettings of adaptiveSettings as any[]) {
-        await storage.createAdaptiveTopicSettings({
-          testId: test.id,
-          topicId: topicSettings.topicId,
-          failureFeedback: topicSettings.failureFeedback || null,
-        });
-
-        for (const level of topicSettings.levels || []) {
-          const createdLevel = await storage.createAdaptiveLevel({
-            testId: test.id,
-            topicId: topicSettings.topicId,
-            levelIndex: level.levelIndex,
-            levelName: level.levelName,
-            minDifficulty: level.minDifficulty,
-            maxDifficulty: level.maxDifficulty,
-            questionsCount: level.questionsCount,
-            passThreshold: level.passThreshold,
-            passThresholdType: level.passThresholdType || "percent",
-            feedback: level.feedback || null,
-          });
-
-          for (const link of level.links || []) {
-            await storage.createAdaptiveLevelLink({
-              levelId: createdLevel.id,
-              title: link.title,
-              url: link.url,
-            });
-          }
-        }
-      }
-    }
+      },
+      // PRD-7 §6.3: sections live with the standard mode only. For adaptive,
+      // sections come from the adaptive levels instead.
+      sections: mode === "standard" ? (sections as SectionPayload[] | undefined) : undefined,
+      adaptiveSettings: mode === "adaptive" ? (adaptiveSettings as AdaptiveTopicPayload[] | undefined) : undefined,
+      expectedVersion,
+    });
 
     res.json(test);
   } catch (error) {
-    logger.error("Update test error: " + (error as Error).message, "tests");
+    if (error instanceof VersionConflictError) {
+      return res.status(409).json({
+        error: "version_conflict",
+        currentVersion: error.currentVersion,
+        expectedVersion: error.expectedVersion,
+      });
+    }
+    if (error instanceof RequiredFieldsMissingError) {
+      // PRD-1 §4.3.6 / PRD-7 §1.4: structured payload listing the missing
+      // required placeholder keys per content_pages row.
+      return res.status(422).json({
+        error: "required_fields_missing",
+        fields: error.violations.flatMap((v) =>
+          v.missingFields.map((fieldName) => ({
+            pageId: v.pageId,
+            templateKey: v.templateKey,
+            fieldName,
+          })),
+        ),
+      });
+    }
+    const e = error as Error & { status?: number };
+    if (e.status === 404) {
+      return res.status(404).json({ error: "Test not found" });
+    }
+    logger.error("Update test error: " + e.message, "tests");
     res.status(500).json({ error: "Failed to update test" });
   }
 });

@@ -14,7 +14,7 @@ import express from "express";
 import session from "express-session";
 
 // ─── Hoist mocks ──────────────────────────────────────────────────────────────
-const { storageMock } = vi.hoisted(() => ({
+const { storageMock, serviceMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(),
     getTests: vi.fn(),
@@ -37,12 +37,22 @@ const { storageMock } = vi.hoisted(() => ({
     createAdaptiveLevelLink: vi.fn(),
     getUser: vi.fn(),
   },
+  serviceMock: {
+    create: vi.fn(),
+    save: vi.fn(),
+  },
 }));
 
 vi.mock("../server/storage", () => ({ storage: storageMock }));
 vi.mock("../server/db", () => ({ db: {} }));
 vi.mock("../server/scorm-exporter", () => ({ generateScormPackage: vi.fn() }));
 vi.mock("../server/template-registry", () => ({ isSupportedTemplateApiVersion: vi.fn().mockReturnValue(true) }));
+// Mock the TestSettingsService singleton at the route boundary. Keep the
+// real error classes so the route's instanceof checks still work end-to-end.
+vi.mock("../server/services/test-settings", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../server/services/test-settings")>();
+  return { ...actual, testSettingsService: serviceMock };
+});
 
 import testsRouter from "../server/routes/tests";
 
@@ -297,7 +307,7 @@ describe("Backward compat — POST / and PUT /:id", () => {
   });
 
   it("POST / — creates test with legacy published field (no status in body)", async () => {
-    storageMock.createTest.mockResolvedValue(dbTest);
+    serviceMock.create.mockResolvedValue(dbTest);
     const res = await asAuthor(request(app).post("/api/tests").send({
       title: "Legacy Test",
       sections: [{ topicId: "t1", drawCount: 3 }],
@@ -305,23 +315,54 @@ describe("Backward compat — POST / and PUT /:id", () => {
       published: true,
     }));
     expect(res.status).toBe(201);
-    expect(storageMock.createTest).toHaveBeenCalled();
+    expect(serviceMock.create).toHaveBeenCalled();
   });
 
   it("PUT /:id — updates test without status field (legacy client)", async () => {
-    storageMock.updateTest.mockResolvedValue(dbTest);
+    serviceMock.save.mockResolvedValue(dbTest);
     const res = await asAuthor(request(app).put("/api/tests/test1").send({
       title: "Updated",
       overallPassRuleJson: { type: "percent", value: 70 },
     }));
     expect(res.status).toBe(200);
-    expect(storageMock.updateTest).toHaveBeenCalled();
+    expect(serviceMock.save).toHaveBeenCalled();
   });
 
-  it("PUT /:id — returns 404 when not found", async () => {
-    storageMock.updateTest.mockResolvedValue(undefined);
+  it("PUT /:id — returns 404 when service throws status=404", async () => {
+    serviceMock.save.mockRejectedValue(Object.assign(new Error("Test not found"), { status: 404 }));
     const res = await asAuthor(request(app).put("/api/tests/x").send({ title: "X" }));
     expect(res.status).toBe(404);
+  });
+
+  it("PUT /:id — returns 409 on VersionConflictError", async () => {
+    const { VersionConflictError } = await import("../server/services/test-settings");
+    serviceMock.save.mockRejectedValue(new VersionConflictError(7, 3));
+    const res = await asAuthor(request(app).put("/api/tests/test1").send({
+      title: "X",
+      expectedVersion: 3,
+    }));
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("version_conflict");
+    expect(res.body.currentVersion).toBe(7);
+    expect(res.body.expectedVersion).toBe(3);
+  });
+
+  it("PUT /:id — returns 422 on RequiredFieldsMissingError with structured fields", async () => {
+    const { RequiredFieldsMissingError } = await import("../server/services/required-fields-validator");
+    serviceMock.save.mockRejectedValue(new RequiredFieldsMissingError([
+      { pageId: "p-intro", templateKey: "intro.hero", missingFields: ["title"] },
+      { pageId: "p-summary", templateKey: "summary.text", missingFields: ["result"] },
+    ]));
+    const res = await asAuthor(request(app).put("/api/tests/test1").send({
+      title: "X",
+      status: "published",
+    }));
+    expect(res.status).toBe(422);
+    expect(res.body.error).toBe("required_fields_missing");
+    expect(res.body.fields).toEqual([
+      { pageId: "p-intro", templateKey: "intro.hero", fieldName: "title" },
+      { pageId: "p-summary", templateKey: "summary.text", fieldName: "result" },
+    ]);
   });
 });
 
@@ -367,8 +408,8 @@ describe("POST /api/tests — Zod validation", () => {
     expect(res.body.fields.some((f: { field: string }) => f.field === "webhookUrl")).toBe(true);
   });
 
-  it("201 — passes PRD-7 fields (feedbackJson, telemetryEnabled, status) to storage", async () => {
-    storageMock.createTest.mockResolvedValue(dbTest);
+  it("201 — passes PRD-7 fields (feedbackJson, telemetryEnabled, status) to service", async () => {
+    serviceMock.create.mockResolvedValue(dbTest);
     await asAuthor(request(app).post("/api/tests").send({
       title: "PRD-7 Test",
       sections: [{ topicId: "t1", drawCount: 3 }],
@@ -376,10 +417,10 @@ describe("POST /api/tests — Zod validation", () => {
       telemetryEnabled: true,
       feedbackJson: { format: "plain", text: "Well done", links: [], assets: [] },
     }));
-    const [callArgs] = storageMock.createTest.mock.calls[0] as [Record<string, unknown>, unknown[]];
-    expect(callArgs.status).toBe("published");
-    expect(callArgs.telemetryEnabled).toBe(true);
-    expect(callArgs.feedbackJson).toMatchObject({ format: "plain", text: "Well done" });
+    const [payload] = serviceMock.create.mock.calls[0] as [{ test: Record<string, unknown> }];
+    expect(payload.test.status).toBe("published");
+    expect(payload.test.telemetryEnabled).toBe(true);
+    expect(payload.test.feedbackJson).toMatchObject({ format: "plain", text: "Well done" });
   });
 });
 
@@ -414,16 +455,17 @@ describe("PUT /api/tests/:id — Zod validation", () => {
     expect(res.body.fields.length).toBeGreaterThan(0);
   });
 
-  it("200 — passes PRD-7 status/feedbackJson to updateTest", async () => {
-    storageMock.updateTest.mockResolvedValue(dbTest);
+  it("200 — passes PRD-7 status/feedbackJson to service.save", async () => {
+    serviceMock.save.mockResolvedValue(dbTest);
     await asAuthor(request(app).put("/api/tests/test1").send({
       title: "Updated",
       status: "archived",
       feedbackJson: { format: "html", text: "<p>done</p>", links: [], assets: [] },
     }));
-    const [, callPatch] = storageMock.updateTest.mock.calls[0] as [string, Record<string, unknown>];
-    expect(callPatch.status).toBe("archived");
-    expect(callPatch.feedbackJson).toMatchObject({ format: "html" });
+    const [testId, payload] = serviceMock.save.mock.calls[0] as [string, { test: Record<string, unknown> }];
+    expect(testId).toBe("test1");
+    expect(payload.test.status).toBe("archived");
+    expect(payload.test.feedbackJson).toMatchObject({ format: "html" });
   });
 });
 
