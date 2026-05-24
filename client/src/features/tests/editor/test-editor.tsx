@@ -312,34 +312,46 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
         </div>
 
         <footer className="ou-drawer__foot">
-          <Button
-            variant="secondary"
-            size="m"
-            onClick={requestClose}
-            disabled={editor.isSaving}
-            data-testid="test-editor-cancel"
-          >
-            Закрыть
-          </Button>
-          {editor.isDirty && (
-            <div className="tb-changes-anchor">
+          {editor.isDirty ? (
+            <>
+              <div className="tb-changes-anchor">
+                <Button
+                  variant="ghost"
+                  size="m"
+                  aria-expanded={changesOpen ? "true" : "false"}
+                  aria-controls="test-editor-changes-popover"
+                  onClick={() => setChangesOpen((v) => !v)}
+                  data-testid="test-editor-show-changes"
+                >
+                  Показать изменения
+                </Button>
+                {changesOpen && (
+                  <ChangesPopover
+                    tabStatuses={editor.tabStatuses}
+                    onClose={() => setChangesOpen(false)}
+                  />
+                )}
+              </div>
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="m"
-                aria-expanded={changesOpen ? "true" : "false"}
-                aria-controls="test-editor-changes-popover"
-                onClick={() => setChangesOpen((v) => !v)}
-                data-testid="test-editor-show-changes"
+                onClick={requestClose}
+                disabled={editor.isSaving}
+                data-testid="test-editor-cancel"
               >
-                Показать изменения
+                Отменить
               </Button>
-              {changesOpen && (
-                <ChangesPopover
-                  tabStatuses={editor.tabStatuses}
-                  onClose={() => setChangesOpen(false)}
-                />
-              )}
-            </div>
+            </>
+          ) : (
+            <Button
+              variant="ghost"
+              size="m"
+              onClick={requestClose}
+              disabled={editor.isSaving}
+              data-testid="test-editor-cancel"
+            >
+              Закрыть
+            </Button>
           )}
           <Button
             variant="primary"

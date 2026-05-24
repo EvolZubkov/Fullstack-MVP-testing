@@ -21,6 +21,7 @@
  * section just renders inputs and reports changes.
  */
 import { useState } from "react";
+import { Trash2 } from "lucide-react";
 import {
   Accordion,
   AccordionItem,
@@ -200,24 +201,6 @@ function LimitsPane({ model, updateModel }: SettingsSectionProps) {
     <>
       <div className="ou-formfield">
         <NumberInput
-          id="settings-time-limit"
-          size="m"
-          label="Ограничение времени, минут"
-          hint="Оставьте 0 для запуска без ограничения."
-          value={model.runtime.timeLimitMinutes ?? 0}
-          min={0}
-          data-testid="settings-time-limit-input"
-          onChange={(next) =>
-            updateModel((m) => ({
-              ...m,
-              runtime: { ...m.runtime, timeLimitMinutes: next === 0 ? null : next },
-            }))
-          }
-        />
-      </div>
-
-      <div className="ou-formfield">
-        <NumberInput
           id="settings-max-attempts"
           size="m"
           label="Максимум попыток"
@@ -229,6 +212,25 @@ function LimitsPane({ model, updateModel }: SettingsSectionProps) {
             updateModel((m) => ({
               ...m,
               runtime: { ...m.runtime, maxAttempts: next === 0 ? null : next },
+            }))
+          }
+        />
+      </div>
+
+      <div className="ou-formfield">
+        <NumberInput
+          id="settings-time-limit"
+          size="m"
+          label="Лимит времени теста"
+          hint="Оставьте 0, чтобы не ограничивать."
+          value={model.runtime.timeLimitMinutes ?? 0}
+          min={0}
+          suffix="минут"
+          data-testid="settings-time-limit-input"
+          onChange={(next) =>
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, timeLimitMinutes: next === 0 ? null : next },
             }))
           }
         />
@@ -531,18 +533,15 @@ function PassTopicRow(props: {
           />
         </td>
         <td className="tb-pass-table__req-col">
-          <label>
-            <input
-              type="checkbox"
-              checked={props.required}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                props.onRequiredToggle(checked);
-              }}
-              aria-label={`Тема обязательная: ${props.topicName}`}
-              data-testid={`pass-topic-required-${props.topicId}`}
-            />
-          </label>
+          <Switch
+            checked={props.required}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              props.onRequiredToggle(checked);
+            }}
+            aria-label={`Тема обязательная: ${props.topicName}`}
+            data-testid={`pass-topic-required-${props.topicId}`}
+          />
         </td>
       </tr>
       {isCustom && props.rule.source === "custom" && (
@@ -900,12 +899,11 @@ function AdaptiveLevelCard(props: {
           <Button
             variant="ghost"
             size="s"
+            leadingIcon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
             onClick={props.onRemove}
             aria-label={`Удалить уровень ${level.levelName}`}
             data-testid={`${testIdBase}-remove`}
-          >
-            ×
-          </Button>
+          />
         }
       />
       <CardBody className="tb-level-card__body">

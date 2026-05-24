@@ -22,6 +22,7 @@
  *     settings as in the rest of the editor.
  */
 import { useState } from "react";
+import { Layout } from "lucide-react";
 import {
   Banner,
   Button,
@@ -172,6 +173,7 @@ function TemplatePane({ design }: { design: ReturnType<typeof useDesignSettings>
             <Button
               variant="secondary"
               size="s"
+              leadingIcon={<Layout className="h-3 w-3" aria-hidden="true" />}
               data-testid="design-template-replace"
               onClick={() =>
                 window.alert(
