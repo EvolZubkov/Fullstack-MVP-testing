@@ -484,3 +484,165 @@ describe("template change does not affect stored content pages", () => {
     expect(res.body[0].templateKeyMissing).toBe(true);
   });
 });
+
+// ─── POST /api/tests/:id/content-pages/:pageId/replace-variant ───────────────
+//
+// PRD-7 FR-46 / PRD-1 §4.3.3: switching a content page to another variant
+// of the same `kind`. Values for placeholders that exist in both variants
+// must survive; placeholders only present in the old variant are dropped.
+describe("POST /api/tests/:id/content-pages/:pageId/replace-variant", () => {
+  const multiVariantTemplate = {
+    id: "default",
+    name: "Default",
+    version: "1.0.0",
+    templateApiVersion: "1.0",
+    isActive: true,
+    manifest: {
+      params: [],
+      contentTemplates: [
+        {
+          key: "intro.hero",
+          label: "Hero",
+          kind: "intro",
+          placeholders: [
+            { key: "title", type: "text", label: "Заголовок", required: true },
+            { key: "subtitle", type: "text", label: "Подзаголовок", required: false },
+            { key: "heroImage", type: "image", label: "Изображение", required: false },
+          ],
+        },
+        {
+          key: "intro.simple",
+          label: "Simple",
+          kind: "intro",
+          placeholders: [
+            { key: "title", type: "text", label: "Заголовок", required: true },
+            { key: "body", type: "richText", label: "Текст", required: false },
+          ],
+        },
+        {
+          key: "info.text",
+          label: "Info",
+          kind: "info",
+          placeholders: [{ key: "title", type: "text", label: "Заголовок", required: true }],
+        },
+      ],
+    },
+  };
+
+  const introPage = {
+    id: "page-1",
+    testId: "test-1",
+    topicId: null,
+    position: "before",
+    mode: "template",
+    type: "intro",
+    kind: "intro",
+    templateKey: "intro.hero",
+    sortOrder: 0,
+    valuesJson: {
+      values: { title: "Hello", subtitle: "World", heroImage: "img.png" },
+      placeholderStyles: { subtitle: { fontSize: 18 } },
+    },
+    autoAdvance: false,
+    autoAdvanceDelayMs: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getTest.mockResolvedValue({ ...baseTest, designSettingsJson: { templateId: "default" } });
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getContentPage.mockResolvedValue(introPage);
+    storageMock.updateContentPage.mockImplementation(async (_id: string, patch: unknown) => ({
+      ...introPage,
+      ...(patch as object),
+    }));
+    dbMock.select.mockReturnValue(dbMock._makeChain([multiVariantTemplate]));
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    const res = await request(makeApp(null))
+      .post("/api/tests/test-1/content-pages/page-1/replace-variant")
+      .send({ newTemplateKey: "intro.simple" });
+    expect(res.status).toBe(401);
+  });
+
+  it("returns 403 for non-author role", async () => {
+    storageMock.getUser.mockResolvedValue(learnerUser);
+    const res = await request(makeApp("learner"))
+      .post("/api/tests/test-1/content-pages/page-1/replace-variant")
+      .send({ newTemplateKey: "intro.simple" });
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects missing newTemplateKey with 422", async () => {
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages/page-1/replace-variant")
+      .send({});
+    expect(res.status).toBe(422);
+  });
+
+  it("returns 404 when test not found", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await request(makeApp())
+      .post("/api/tests/missing/content-pages/page-1/replace-variant")
+      .send({ newTemplateKey: "intro.simple" });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when content page not found", async () => {
+    storageMock.getContentPage.mockResolvedValue(undefined);
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages/missing/replace-variant")
+      .send({ newTemplateKey: "intro.simple" });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 404 when newTemplateKey is not in the test's template", async () => {
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages/page-1/replace-variant")
+      .send({ newTemplateKey: "intro.nonexistent" });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 422 on variant kind mismatch (intro → info)", async () => {
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages/page-1/replace-variant")
+      .send({ newTemplateKey: "info.text" });
+    expect(res.status).toBe(422);
+    expect(res.body.error).toMatch(/kind mismatch/);
+    expect(res.body.currentKind).toBe("intro");
+    expect(res.body.newKind).toBe("info");
+  });
+
+  it("returns 422 when newTemplateKey equals current templateKey", async () => {
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages/page-1/replace-variant")
+      .send({ newTemplateKey: "intro.hero" });
+    expect(res.status).toBe(422);
+  });
+
+  it("happy path: preserves shared placeholder (title), removes others, marks added", async () => {
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages/page-1/replace-variant")
+      .send({ newTemplateKey: "intro.simple" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.applied).toBe(true);
+    expect(res.body.diff.preserved).toEqual(["title"]);
+    expect(res.body.diff.removed.sort()).toEqual(["heroImage", "subtitle"]);
+    expect(res.body.diff.added).toEqual(["body"]);
+
+    // updateContentPage must have been called with templateKey + filtered values
+    expect(storageMock.updateContentPage).toHaveBeenCalledOnce();
+    const patch = (storageMock.updateContentPage.mock.calls[0] as unknown[])[1] as {
+      templateKey: string;
+      valuesJson: { values: Record<string, unknown>; placeholderStyles?: Record<string, unknown> };
+    };
+    expect(patch.templateKey).toBe("intro.simple");
+    expect(patch.valuesJson.values.title).toBe("Hello");
+    expect(patch.valuesJson.values).not.toHaveProperty("subtitle");
+    expect(patch.valuesJson.values).not.toHaveProperty("heroImage");
+    // Styles for dropped keys also gone
+    expect(patch.valuesJson.placeholderStyles).not.toHaveProperty("subtitle");
+  });
+});

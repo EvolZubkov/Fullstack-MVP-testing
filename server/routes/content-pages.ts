@@ -42,7 +42,12 @@ type PlaceholderDefinition = {
   defaultRenderer?: string;
 };
 
-type ContentTemplateEntry = { key: string; placeholders?: PlaceholderDefinition[] };
+type ContentTemplateEntry = {
+  key: string;
+  label?: string;
+  kind?: "questions" | "router" | "summary" | "intro" | "info";
+  placeholders?: PlaceholderDefinition[];
+};
 
 /**
  * Returns the contentTemplates array for the template currently selected in a test.
@@ -313,6 +318,118 @@ router.put("/:id/content-pages/:pageId", requireAuthor, async (req, res) => {
     }
     logger.error("Update content page error: " + (error as Error).message, "content-pages");
     res.status(500).json({ error: "Failed to update content page" });
+  }
+});
+
+// ─── POST /api/tests/:id/content-pages/:pageId/replace-variant ──────────────
+//
+// PRD-7 FR-46 / PRD-1 §4.3.3: switch a content page to a different variant
+// of the same `kind`. Computes the diff of placeholder names (per the
+// "name = contract between variants of the same kind" rule) and applies it:
+// values for placeholders that exist in both variants are preserved, values
+// for placeholders that disappear are dropped. Rejects with 422 when the
+// requested variant has a different kind.
+router.post("/:id/content-pages/:pageId/replace-variant", requireAuthor, async (req, res) => {
+  try {
+    const testId = req.params.id;
+    const pageId = req.params.pageId;
+    const newTemplateKey = (req.body as { newTemplateKey?: unknown })?.newTemplateKey;
+
+    if (typeof newTemplateKey !== "string" || newTemplateKey.length === 0) {
+      return res.status(422).json({ error: "newTemplateKey is required", field: "newTemplateKey" });
+    }
+
+    const test = await storage.getTest(testId);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+
+    const existing = await storage.getContentPage(pageId);
+    if (!existing || existing.testId !== testId) {
+      return res.status(404).json({ error: "Content page not found" });
+    }
+
+    const contentTemplates = await getTestContentTemplates(test);
+    if (!contentTemplates) {
+      return res.status(422).json({ error: "Test has no resolvable template" });
+    }
+
+    const currentVariant = contentTemplates.find((ct) => ct.key === existing.templateKey);
+    const newVariant = contentTemplates.find((ct) => ct.key === newTemplateKey);
+
+    if (!newVariant) {
+      return res.status(404).json({
+        error: "newTemplateKey not found in current template",
+        field: "newTemplateKey",
+      });
+    }
+
+    // Same-kind invariant: variants are only interchangeable within one kind.
+    if (newVariant.kind !== existing.kind) {
+      return res.status(422).json({
+        error: "variant kind mismatch",
+        currentKind: existing.kind,
+        newKind: newVariant.kind,
+      });
+    }
+
+    if (existing.templateKey === newTemplateKey) {
+      return res.status(422).json({ error: "newTemplateKey equals current templateKey" });
+    }
+
+    // Compute the diff using placeholder names.
+    const currentKeys = new Set((currentVariant?.placeholders ?? []).map((p) => p.key));
+    const newKeys = new Set((newVariant.placeholders ?? []).map((p) => p.key));
+    const preserved: string[] = [];
+    const removed: string[] = [];
+    const added: string[] = [];
+    for (const k of currentKeys) {
+      if (newKeys.has(k)) preserved.push(k);
+      else removed.push(k);
+    }
+    for (const k of newKeys) {
+      if (!currentKeys.has(k)) added.push(k);
+    }
+    preserved.sort();
+    removed.sort();
+    added.sort();
+
+    // Filter valuesJson down to preserved keys only. Sanitize against the
+    // new placeholder set so renderers/paths are revalidated.
+    const existingValues = (existing.valuesJson ?? {}) as {
+      values?: Record<string, unknown>;
+      placeholderStyles?: Record<string, unknown>;
+    };
+    const filteredValues: Record<string, unknown> = {};
+    for (const k of preserved) {
+      if (existingValues.values && k in existingValues.values) {
+        filteredValues[k] = existingValues.values[k];
+      }
+    }
+    const filteredStyles: Record<string, unknown> = {};
+    for (const k of preserved) {
+      const style = existingValues.placeholderStyles?.[k];
+      if (style != null) filteredStyles[k] = style;
+    }
+    const normalized = normalizeValuesForTemplate(
+      { values: filteredValues, placeholderStyles: filteredStyles },
+      newVariant.placeholders ?? [],
+    );
+
+    await storage.updateContentPage(pageId, {
+      templateKey: newTemplateKey,
+      valuesJson: normalized,
+    });
+
+    res.json({
+      diff: { preserved, removed, added },
+      applied: true,
+    });
+  } catch (error) {
+    const e = error as Error & { status?: number; field?: string };
+    if (e.status === 422) {
+      return res.status(422).json({ error: e.message, field: e.field });
+    }
+    logger.error("Replace variant error: " + e.message, "content-pages");
+    res.status(500).json({ error: "Failed to replace variant" });
   }
 });
 
