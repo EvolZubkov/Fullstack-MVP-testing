@@ -14,8 +14,64 @@ import {
   adaptiveTopicSettings,
   adaptiveLevels,
   adaptiveLevelLinks,
+  contentPages,
+  templates,
 } from "@shared/schema";
-import type { Test } from "@shared/schema";
+import type { Test, TemplateManifest } from "@shared/schema";
+import {
+  planSystemPages,
+  SYSTEM_KINDS,
+  type FlowMode,
+  type SystemKind,
+  type ExistingSystemPage,
+} from "./content-pages-lifecycle";
+
+const DEFAULT_TEMPLATE_ID = "default";
+
+/** Extracts `flowMode` from `tests.flow_policy_json`, defaulting per FR-40. */
+function extractFlowMode(flowPolicyJson: unknown): FlowMode {
+  if (typeof flowPolicyJson === "object" && flowPolicyJson !== null) {
+    const mode = (flowPolicyJson as { mode?: unknown }).mode;
+    if (mode === "linear_by_topics" || mode === "router_by_topics") return mode;
+  }
+  return "linear_flat";
+}
+
+/** Extracts `templateId` from `tests.design_settings_json`, defaulting per NFR-01. */
+function extractTemplateId(designSettingsJson: unknown): string {
+  if (typeof designSettingsJson === "object" && designSettingsJson !== null) {
+    const id = (designSettingsJson as { templateId?: unknown }).templateId;
+    if (typeof id === "string" && id.length > 0) return id;
+  }
+  return DEFAULT_TEMPLATE_ID;
+}
+
+/** Legacy `type` value for a freshly-created system row. `questions`/`router`
+ *  have no native legacy mapping — we pick `info` since the column will be
+ *  dropped in a future release (PRD-7 §1.12). */
+function legacyTypeForKind(kind: SystemKind): "intro" | "info" | "summary" | "html" {
+  switch (kind) {
+    case "intro":   return "intro";
+    case "summary": return "summary";
+    case "router":
+    case "questions":
+    default:        return "info";
+  }
+}
+
+/** Position value for a system row. The position column was designed for
+ *  content-page placement before/after a topic; system kinds reuse it on a
+ *  best-fit basis (intro → "before", summary → "after_topic",
+ *  router/questions → "before_topic"). */
+function positionForKind(kind: SystemKind): "before" | "before_topic" | "after_topic" {
+  switch (kind) {
+    case "intro":   return "before";
+    case "summary": return "after_topic";
+    case "router":
+    case "questions":
+    default:        return "before_topic";
+  }
+}
 
 // ─── Error types ─────────────────────────────────────────────────────────────
 
@@ -145,6 +201,14 @@ export class TestSettingsService {
         await this._replaceAdaptiveSettings(tx, id, payload.adaptiveSettings);
       }
 
+      await this._reconcileSystemPages(
+        tx,
+        id,
+        extractFlowMode(payload.test.flowPolicyJson),
+        payload.sections.map((s) => s.topicId),
+        extractTemplateId(payload.test.designSettingsJson),
+      );
+
       return newTest;
     });
   }
@@ -190,11 +254,119 @@ export class TestSettingsService {
         await this._replaceAdaptiveSettings(tx, testId, payload.adaptiveSettings);
       }
 
+      // System content_pages reconciliation triggers when any of these change:
+      //   - sections list (topic add/remove drives per-topic questions rows)
+      //   - flowPolicyJson (flowMode change rebuilds router + questions layout)
+      //   - designSettingsJson (templateId change rebinds variants by kind)
+      const needsReconcile =
+        payload.sections !== undefined ||
+        payload.test.flowPolicyJson !== undefined ||
+        payload.test.designSettingsJson !== undefined;
+
+      if (needsReconcile) {
+        const sectionRows = payload.sections
+          ?? (await tx
+            .select({ topicId: testSections.topicId })
+            .from(testSections)
+            .where(eq(testSections.testId, testId)));
+        await this._reconcileSystemPages(
+          tx,
+          testId,
+          extractFlowMode(payload.test.flowPolicyJson ?? updated.flowPolicyJson),
+          sectionRows.map((s) => s.topicId),
+          extractTemplateId(payload.test.designSettingsJson ?? updated.designSettingsJson),
+        );
+      }
+
       return updated;
     });
   }
 
   // ── private helpers ──────────────────────────────────────────────────────
+
+  /**
+   * Reconciles system `content_pages` rows for a test against the desired
+   * (flowMode, topics, templateId) tuple. Implements PRD-1 §4.3.5 lifecycle
+   * via the pure {@link planSystemPages} planner: deletes obsolete system
+   * rows and creates missing ones inside the active transaction. User `info`
+   * pages are untouched (FR-40).
+   *
+   * Silently no-ops when the test's template or the built-in `default`
+   * template cannot be loaded — the planner needs both manifests to compute
+   * variant bindings, and a missing template usually means the test was
+   * created in an unsupported state that a higher layer should surface.
+   */
+  private async _reconcileSystemPages(
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+    testId: string,
+    flowMode: FlowMode,
+    topicIds: string[],
+    templateId: string,
+  ): Promise<void> {
+    const wantedIds = templateId === DEFAULT_TEMPLATE_ID
+      ? [DEFAULT_TEMPLATE_ID]
+      : [templateId, DEFAULT_TEMPLATE_ID];
+
+    const manifestRows = await tx
+      .select({ id: templates.id, manifest: templates.manifest })
+      .from(templates)
+      .where(sql`${templates.id} = ANY(${wantedIds})`);
+
+    const byId = new Map(manifestRows.map((r) => [r.id, r.manifest as TemplateManifest]));
+    const template = byId.get(templateId) ?? byId.get(DEFAULT_TEMPLATE_ID);
+    const defaultTemplate = byId.get(DEFAULT_TEMPLATE_ID);
+    if (!template || !defaultTemplate) return;
+
+    const allRows = await tx
+      .select({
+        id: contentPages.id,
+        kind: contentPages.kind,
+        topicId: contentPages.topicId,
+        templateKey: contentPages.templateKey,
+        valuesJson: contentPages.valuesJson,
+      })
+      .from(contentPages)
+      .where(eq(contentPages.testId, testId));
+
+    const systemKindSet = new Set<string>(SYSTEM_KINDS);
+    const existing: ExistingSystemPage[] = allRows
+      .filter((r) => systemKindSet.has(r.kind))
+      .map((r) => ({
+        id: r.id,
+        kind: r.kind as SystemKind,
+        topicId: r.topicId,
+        templateKey: r.templateKey,
+        valuesJson: (r.valuesJson ?? {}) as Record<string, unknown>,
+      }));
+
+    const plan = planSystemPages(existing, {
+      flowMode,
+      topicIds,
+      template,
+      defaultTemplate,
+    });
+
+    for (const del of plan.delete) {
+      await tx.delete(contentPages).where(eq(contentPages.id, del.id));
+    }
+
+    for (const ins of plan.create) {
+      await tx.insert(contentPages).values({
+        id: randomUUID(),
+        testId,
+        topicId: ins.topicId,
+        position: positionForKind(ins.kind),
+        mode: "template",
+        type: legacyTypeForKind(ins.kind),
+        kind: ins.kind,
+        templateKey: ins.templateKey,
+        sortOrder: 0,
+        valuesJson: ins.valuesJson,
+        autoAdvance: false,
+        autoAdvanceDelayMs: null,
+      });
+    }
+  }
 
   private async _insertSections(
     tx: Parameters<Parameters<typeof db.transaction>[0]>[0],

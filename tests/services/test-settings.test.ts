@@ -10,6 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { VersionConflictError, TestSettingsService } from "../../server/services/test-settings";
+import { templates, contentPages, testSections, tests as testsTable } from "../../shared/schema";
 
 // ─── DB mock ─────────────────────────────────────────────────────────────────
 
@@ -280,5 +281,303 @@ describe("TestSettingsService.save()", () => {
 
     expect(tx.delete).not.toHaveBeenCalled();
     expect(tx.insert).not.toHaveBeenCalled();
+  });
+});
+
+// ─── System pages reconciliation (PRD-1 §4.3.5, PRD-7 §1.4) ───────────────────
+
+/** Built-in default template manifest sufficient for reconciliation. */
+const defaultManifest = {
+  id: "default",
+  name: "Default",
+  version: "1.0.0",
+  templateApiVersion: "1.0",
+  contentTemplates: [
+    { key: "q.std", label: "Q", kind: "questions", isDefault: true },
+    { key: "i.std", label: "I", kind: "intro" },
+    { key: "s.std", label: "S", kind: "summary" },
+    { key: "r.std", label: "R", kind: "router" },
+  ],
+};
+
+/**
+ * Configures `tx.select(...).from(table).where(...)` to return table-specific
+ * rows. `tx.select` itself returns a thin proxy whose `.from(table)` dispatches
+ * to the matching pre-built chain.
+ */
+function setupSelectDispatch(entries: Array<[unknown, unknown[]]>) {
+  const rowsByTable = new Map<unknown, unknown[]>(entries);
+  tx.select.mockImplementation(() => {
+    const outer: Record<string, unknown> = {};
+    outer.from = vi.fn().mockImplementation((table: unknown) => {
+      const rows = rowsByTable.get(table) ?? [];
+      return makeChain(rows);
+    });
+    return outer;
+  });
+}
+
+function captureInserts(): Array<{ table: unknown; values: unknown }> {
+  const captured: Array<{ table: unknown; values: unknown }> = [];
+  tx.insert.mockImplementation((table: unknown) => {
+    const c = makeChain([{ ...dbTest }]);
+    (c as any).values = vi.fn().mockImplementation((v: unknown) => {
+      captured.push({ table, values: v });
+      return c;
+    });
+    return c;
+  });
+  return captured;
+}
+
+function captureDeletes(): unknown[] {
+  const captured: unknown[] = [];
+  tx.delete.mockImplementation((table: unknown) => {
+    captured.push(table);
+    return makeChain([]);
+  });
+  return captured;
+}
+
+describe("TestSettingsService._reconcileSystemPages — via create()", () => {
+  let svc: TestSettingsService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetTx();
+    svc = new TestSettingsService();
+  });
+
+  it("creates intro + summary + flat questions on linear_flat create()", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, []],
+    ]);
+    const inserts = captureInserts();
+
+    await svc.create({
+      test: {
+        title: "T",
+        flowPolicyJson: { mode: "linear_flat" },
+        designSettingsJson: { templateId: "default" },
+      },
+      sections: [{ topicId: "tp1", drawCount: 5 }],
+    });
+
+    const cpInserts = inserts.filter((i) => i.table === contentPages);
+    const kinds = cpInserts.map((i) => (i.values as { kind: string }).kind).sort();
+    expect(kinds).toEqual(["intro", "questions", "summary"]);
+
+    const questionsRow = cpInserts.find((i) => (i.values as { kind: string }).kind === "questions");
+    expect((questionsRow!.values as { topicId: string | null }).topicId).toBeNull();
+  });
+
+  it("creates per-topic questions rows on linear_by_topics create()", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, []],
+    ]);
+    const inserts = captureInserts();
+
+    await svc.create({
+      test: {
+        title: "T",
+        flowPolicyJson: { mode: "linear_by_topics" },
+        designSettingsJson: { templateId: "default" },
+      },
+      sections: [
+        { topicId: "tp1", drawCount: 5 },
+        { topicId: "tp2", drawCount: 3 },
+      ],
+    });
+
+    const cpInserts = inserts.filter((i) => i.table === contentPages);
+    const questionsRows = cpInserts.filter((i) => (i.values as { kind: string }).kind === "questions");
+    expect(questionsRows).toHaveLength(2);
+    expect(questionsRows.map((r) => (r.values as { topicId: string | null }).topicId).sort()).toEqual(["tp1", "tp2"]);
+  });
+
+  it("creates router + per-topic questions on router_by_topics create()", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, []],
+    ]);
+    const inserts = captureInserts();
+
+    await svc.create({
+      test: {
+        title: "T",
+        flowPolicyJson: { mode: "router_by_topics" },
+        designSettingsJson: { templateId: "default" },
+      },
+      sections: [{ topicId: "tp1", drawCount: 5 }],
+    });
+
+    const cpInserts = inserts.filter((i) => i.table === contentPages);
+    const kinds = cpInserts.map((i) => (i.values as { kind: string }).kind).sort();
+    expect(kinds).toEqual(["intro", "questions", "router", "summary"]);
+  });
+
+  it("silently no-ops reconciliation when default template manifest is missing", async () => {
+    setupSelectDispatch([
+      [templates, []], // no manifests
+      [contentPages, []],
+    ]);
+    const inserts = captureInserts();
+
+    await svc.create({
+      test: { title: "T", flowPolicyJson: { mode: "linear_flat" } },
+      sections: [],
+    });
+
+    // Only the test row gets inserted; no content_pages inserts since
+    // reconciliation aborts on missing manifest.
+    const cpInserts = inserts.filter((i) => i.table === contentPages);
+    expect(cpInserts).toHaveLength(0);
+  });
+});
+
+describe("TestSettingsService._reconcileSystemPages — via save()", () => {
+  let svc: TestSettingsService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetTx();
+    svc = new TestSettingsService();
+  });
+
+  it("flowMode change linear_flat → linear_by_topics: deletes flat questions, creates per-topic", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, [
+        { id: "p-intro",   kind: "intro",     topicId: null, templateKey: "i.std", valuesJson: {} },
+        { id: "p-summary", kind: "summary",   topicId: null, templateKey: "s.std", valuesJson: {} },
+        { id: "p-qflat",   kind: "questions", topicId: null, templateKey: "q.std", valuesJson: { color: "blue" } },
+      ]],
+    ]);
+    tx.update.mockReturnValue(makeChain([{
+      ...dbTest,
+      flowPolicyJson: { mode: "linear_by_topics" },
+      designSettingsJson: { templateId: "default" },
+    }]));
+    const inserts = captureInserts();
+    const deletes = captureDeletes();
+
+    await svc.save("t1", {
+      test: {
+        flowPolicyJson: { mode: "linear_by_topics" },
+        designSettingsJson: { templateId: "default" },
+      },
+      sections: [
+        { topicId: "tp1", drawCount: 5 },
+        { topicId: "tp2", drawCount: 3 },
+      ],
+    });
+
+    // Flat questions row deleted
+    expect(deletes.filter((t) => t === contentPages).length).toBeGreaterThan(0);
+    // Per-topic questions rows created, values carried from flat row
+    const cpInserts = inserts.filter((i) => i.table === contentPages);
+    const newQ = cpInserts.filter((i) => (i.values as { kind: string }).kind === "questions");
+    expect(newQ).toHaveLength(2);
+    expect(newQ.every((i) => ((i.values as { valuesJson: { color?: string } }).valuesJson.color) === "blue")).toBe(true);
+  });
+
+  it("flowMode change → router_by_topics: adds router row, keeps existing", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, [
+        { id: "p-intro",   kind: "intro",     topicId: null, templateKey: "i.std", valuesJson: {} },
+        { id: "p-summary", kind: "summary",   topicId: null, templateKey: "s.std", valuesJson: {} },
+        { id: "p-q-tp1",   kind: "questions", topicId: "tp1", templateKey: "q.std", valuesJson: {} },
+      ]],
+    ]);
+    tx.update.mockReturnValue(makeChain([{
+      ...dbTest,
+      flowPolicyJson: { mode: "router_by_topics" },
+      designSettingsJson: { templateId: "default" },
+    }]));
+    const inserts = captureInserts();
+
+    await svc.save("t1", {
+      test: {
+        flowPolicyJson: { mode: "router_by_topics" },
+        designSettingsJson: { templateId: "default" },
+      },
+      sections: [{ topicId: "tp1", drawCount: 5 }],
+    });
+
+    const cpInserts = inserts.filter((i) => i.table === contentPages);
+    const kinds = cpInserts.map((i) => (i.values as { kind: string }).kind);
+    expect(kinds).toContain("router");
+    expect(kinds.filter((k) => k === "questions")).toHaveLength(0); // existing tp1 questions kept
+  });
+
+  it("flowMode change router_by_topics → linear_*: deletes router row", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, [
+        { id: "p-intro",   kind: "intro",     topicId: null, templateKey: "i.std", valuesJson: {} },
+        { id: "p-summary", kind: "summary",   topicId: null, templateKey: "s.std", valuesJson: {} },
+        { id: "p-router",  kind: "router",    topicId: null, templateKey: "r.std", valuesJson: {} },
+        { id: "p-q-tp1",   kind: "questions", topicId: "tp1", templateKey: "q.std", valuesJson: {} },
+      ]],
+    ]);
+    tx.update.mockReturnValue(makeChain([{
+      ...dbTest,
+      flowPolicyJson: { mode: "linear_by_topics" },
+      designSettingsJson: { templateId: "default" },
+    }]));
+    captureInserts();
+    const deletes = captureDeletes();
+
+    await svc.save("t1", {
+      test: {
+        flowPolicyJson: { mode: "linear_by_topics" },
+        designSettingsJson: { templateId: "default" },
+      },
+      sections: [{ topicId: "tp1", drawCount: 5 }],
+    });
+
+    // The router row should be deleted; other system rows kept.
+    expect(deletes.filter((t) => t === contentPages).length).toBeGreaterThan(0);
+  });
+
+  it("triggers reconciliation when flowPolicyJson changes (no sections in payload)", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, []],
+      [testSections, [{ topicId: "tp-existing" }]],
+    ]);
+    tx.update.mockReturnValue(makeChain([{
+      ...dbTest,
+      flowPolicyJson: { mode: "router_by_topics" },
+      designSettingsJson: { templateId: "default" },
+    }]));
+    const inserts = captureInserts();
+
+    await svc.save("t1", {
+      test: {
+        flowPolicyJson: { mode: "router_by_topics" },
+        designSettingsJson: { templateId: "default" },
+      },
+    });
+
+    const cpInserts = inserts.filter((i) => i.table === contentPages);
+    expect(cpInserts.length).toBeGreaterThan(0);
+  });
+
+  it("does NOT trigger reconciliation when only basic fields change", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, []],
+    ]);
+    tx.update.mockReturnValue(makeChain([dbTest]));
+    const inserts = captureInserts();
+
+    await svc.save("t1", { test: { title: "New title only" } });
+
+    const cpInserts = inserts.filter((i) => i.table === contentPages);
+    expect(cpInserts).toHaveLength(0);
   });
 });
