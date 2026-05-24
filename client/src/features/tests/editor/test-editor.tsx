@@ -3,21 +3,20 @@
  * @description Wide Drawer container for the test settings editor (PRD-7
  * §1.10, FR-04, FR-05, FR-25a..k, FR-43, NFR-17..21).
  *
- * The DOM matches the approved wireframe
- * `docs/wireframes/approved/prd7-editor-drawer.html` (state `s-default`)
- * one-to-one: `ou-drawer-root` with backdrop, `ou-drawer--xl --right`,
- * `ou-drawer__head` with title + status / version tags + close button,
- * `ou-tabs--underline --m` with four tabs (Состав / Настройки / Оформление /
- * Структура), scrollable `ou-drawer__body` and `ou-drawer__foot` with a
- * single `Сохранить` primary action plus `Показать изменения` popover (FR-25a,
- * FR-25c) and the close confirmation modal (FR-05 / FR-05a).
+ * Layout matches `docs/wireframes/approved/prd7-editor-drawer.html`:
+ * `ou-drawer-root` with backdrop, `ou-drawer--xl --right`, header with
+ * title + status / version tags + close button, `Tabs` row (4 sections),
+ * scrollable body and footer with `Сохранить` + `Показать изменения` popover
+ * (FR-25a / FR-25c) and the close confirmation modal (FR-05 / FR-05a).
  *
- * Section bodies are intentionally rendered as DS `ou-empty--inline` stubs in
- * this phase — domain section components ship separately.
+ * Components: leans on `@universityrt/ui-kit` for `Tabs`, `Tag`, `IconButton`,
+ * `Button`, `EmptyState` and the two `ModalDialog`s (close confirm / version
+ * conflict). The Drawer shell itself stays as manual `.ou-drawer*` markup
+ * because the ui-kit `Drawer` does not support a tabs row between the head
+ * and the body.
  *
  * Anti-goals (per task contract):
- *   - No shadcn/ui components (Dialog/Sheet/Tabs) — they do not match the DS.
- *   - No local `wf-*` classes — those are wireframe-only meta.
+ *   - No shadcn/ui components.
  *   - No persistence of the draft to `localStorage` / `sessionStorage`
  *     (FR-25j); the in-memory draft lives in {@link useTestEditor}.
  */
@@ -28,6 +27,16 @@ import {
   useRef,
   useState,
 } from "react";
+import { AlertTriangle, X, XCircle } from "lucide-react";
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  ModalDialog,
+  Tag,
+  Tabs,
+  type TabItem,
+} from "@universityrt/ui-kit";
 import {
   useTestEditor,
   type EditorTabKey,
@@ -85,9 +94,7 @@ const TAB_LABELS: Record<EditorTabKey, string> = {
 /**
  * Wide Drawer hosting the test editor. Thin wrapper that owns the
  * {@link useTestEditor} hook and delegates rendering to
- * {@link TestEditorView}. The split lets tests drive a shared hook instance.
- *
- * Edit vs create mode is derived from props: `createMode` wins over `testId`.
+ * {@link TestEditorView}.
  */
 export function TestEditor(props: TestEditorProps): JSX.Element | null {
   const { testId, createMode, open, onClose } = props;
@@ -99,8 +106,6 @@ export function TestEditor(props: TestEditorProps): JSX.Element | null {
   }, [open, createMode, testId]);
   const editor = useTestEditor(options);
 
-  // Auto-close the Drawer once a create POST succeeds. The list refetches
-  // automatically (mutation already invalidates `/api/tests`).
   useEffect(() => {
     if (editor.createdId !== null) {
       editor.consumeCreatedId();
@@ -123,15 +128,15 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
   const [changesOpen, setChangesOpen] = useState(false);
 
   const drawerRef = useRef<HTMLElement | null>(null);
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const firstTabRef = useRef<HTMLButtonElement | null>(null);
 
-  // NFR-19: focus the first interactive element on open.
+  // NFR-19: focus the first interactive element (the first tab) on open.
   useEffect(() => {
     if (!open) return;
     const handle = window.setTimeout(() => {
-      // Tabs are the canonical first interactive node in the Drawer header.
-      firstTabRef.current?.focus();
+      const firstTab = drawerRef.current?.querySelector<HTMLButtonElement>(
+        '[role="tab"]',
+      );
+      firstTab?.focus();
     }, 0);
     return () => window.clearTimeout(handle);
   }, [open]);
@@ -194,6 +199,16 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
 
   const statusTag = useMemo(() => deriveStatusTag(editor), [editor]);
 
+  const tabItems = useMemo<TabItem<EditorTabKey>[]>(
+    () =>
+      TAB_ORDER.map((tab) => ({
+        id: tab,
+        label: TAB_LABELS[tab],
+        badge: <StatusBadge status={editor.tabStatuses[tab]} />,
+      })),
+    [editor.tabStatuses],
+  );
+
   if (!open) return null;
 
   const title =
@@ -228,53 +243,42 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
               {title}
             </h1>
           </div>
-          <span className={statusTag.className} aria-label={statusTag.ariaLabel}>
+          <Tag
+            tone={statusTag.tone}
+            variant="outline"
+            aria-label={statusTag.ariaLabel}
+            data-testid="test-editor-status-tag"
+          >
             {statusTag.label}
-          </span>
-          <span className="ou-tag ou-tag--neutral ou-tag--outline">v{version}</span>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            className="ou-drawer__close"
-            onClick={requestClose}
-            disabled={editor.isSaving}
+          </Tag>
+          <Tag tone="neutral" variant="outline" data-testid="test-editor-version-tag">
+            v{version}
+          </Tag>
+          <IconButton
+            icon={<X size={16} aria-hidden="true" />}
             aria-label={
               editor.isSaving
                 ? "Закрыть редактор (недоступно при сохранении)"
                 : "Закрыть редактор"
             }
+            size="s"
+            variant="ghost"
+            disabled={editor.isSaving}
+            onClick={requestClose}
+            className="ou-drawer__close"
             data-testid="test-editor-close"
-          >
-            <CloseIcon />
-          </button>
+          />
         </header>
 
-        <nav className="ou-tabs ou-tabs--underline ou-tabs--m">
-          <div
-            className="ou-tabs__list"
-            role="tablist"
-            aria-label="Разделы редактора"
-          >
-            {TAB_ORDER.map((tab, index) => (
-              <button
-                key={tab}
-                ref={index === 0 ? firstTabRef : undefined}
-                type="button"
-                className={
-                  "ou-tabs__tab" + (tab === activeTab ? " is-active" : "")
-                }
-                role="tab"
-                aria-selected={tab === activeTab}
-                aria-label={ariaLabelForTab(tab, editor.tabStatuses[tab])}
-                onClick={() => setActiveTab(tab)}
-                data-testid={`test-editor-tab-${tab}`}
-              >
-                {TAB_LABELS[tab]}
-                <StatusDot status={editor.tabStatuses[tab]} />
-              </button>
-            ))}
-          </div>
-        </nav>
+        <Tabs<EditorTabKey>
+          variant="underline"
+          size="m"
+          items={tabItems}
+          value={activeTab}
+          onChange={setActiveTab}
+          hidePanel
+          aria-label="Разделы редактора"
+        />
 
         <div
           className={
@@ -308,27 +312,27 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
         </div>
 
         <footer className="ou-drawer__foot">
-          <button
-            type="button"
-            className="ou-btn ou-btn--secondary ou-btn--m"
+          <Button
+            variant="secondary"
+            size="m"
             onClick={requestClose}
             disabled={editor.isSaving}
             data-testid="test-editor-cancel"
           >
             Закрыть
-          </button>
+          </Button>
           {editor.isDirty && (
             <div className="tb-changes-anchor">
-              <button
-                type="button"
-                className="ou-btn ou-btn--ghost ou-btn--m"
-                aria-expanded={changesOpen}
+              <Button
+                variant="ghost"
+                size="m"
+                aria-expanded={changesOpen ? "true" : "false"}
                 aria-controls="test-editor-changes-popover"
                 onClick={() => setChangesOpen((v) => !v)}
                 data-testid="test-editor-show-changes"
               >
                 Показать изменения
-              </button>
+              </Button>
               {changesOpen && (
                 <ChangesPopover
                   tabStatuses={editor.tabStatuses}
@@ -337,60 +341,60 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
               )}
             </div>
           )}
-          <button
-            type="button"
-            className="ou-btn ou-btn--primary ou-btn--m"
+          <Button
+            variant="primary"
+            size="m"
             disabled={saveDisabled}
-            aria-disabled={saveDisabled}
+            aria-disabled={saveDisabled ? "true" : "false"}
             onClick={handleSave}
+            loading={editor.isSaving}
             data-testid="test-editor-save"
           >
             {editor.isSaving ? "Сохранение…" : "Сохранить"}
-          </button>
+          </Button>
         </footer>
       </aside>
 
-      {closeDialogOpen && (
-        <CloseConfirmDialog
-          hasErrors={hasErrors}
-          onCancel={() => setCloseDialogOpen(false)}
-          onExitWithoutSave={handleExitWithoutSave}
-          onSaveAndExit={handleSaveAndExit}
-        />
-      )}
+      <CloseConfirmDialog
+        open={closeDialogOpen}
+        hasErrors={hasErrors}
+        onCancel={() => setCloseDialogOpen(false)}
+        onExitWithoutSave={handleExitWithoutSave}
+        onSaveAndExit={handleSaveAndExit}
+      />
 
-      {editor.conflict !== null && (
-        <ConflictDialog
-          onCancel={editor.dismissConflict}
-          onReload={editor.resolveConflictReload}
-          onOverwrite={editor.resolveConflictOverwrite}
-        />
-      )}
+      <ConflictDialog
+        open={editor.conflict !== null}
+        onCancel={editor.dismissConflict}
+        onReload={editor.resolveConflictReload}
+        onOverwrite={editor.resolveConflictOverwrite}
+      />
     </div>
   );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function StatusDot({ status }: { status: TabStatus }) {
-  if (status.error) {
-    return <span className="status-dot error" aria-hidden="true" />;
-  }
-  if (status.warning) {
-    return <span className="status-dot warn" aria-hidden="true" />;
-  }
-  if (status.dirty) {
-    return <span className="status-dot dirty" aria-hidden="true" />;
-  }
-  return null;
-}
-
-function ariaLabelForTab(tab: EditorTabKey, status: TabStatus): string {
-  const base = TAB_LABELS[tab];
-  if (status.error) return `${base}, есть блокирующие ошибки`;
-  if (status.warning) return `${base}, есть предупреждения`;
-  if (status.dirty) return `${base}, есть изменения`;
-  return base;
+/**
+ * Small coloured dot rendered as a tab badge. Returns a non-empty React node
+ * even when the status is clean (uses `aria-hidden`) so the tabs row keeps
+ * stable layout (badge slot reserved).
+ */
+function StatusBadge({ status }: { status: TabStatus }) {
+  const cls = status.error
+    ? "status-dot error"
+    : status.warning
+      ? "status-dot warn"
+      : status.dirty
+        ? "status-dot dirty"
+        : null;
+  if (!cls) return null;
+  const aria = status.error
+    ? "есть блокирующие ошибки"
+    : status.warning
+      ? "есть предупреждения"
+      : "есть изменения";
+  return <span className={cls} aria-label={aria} />;
 }
 
 function TabPlaceholder({ tab }: { tab: EditorTabKey }) {
@@ -401,15 +405,13 @@ function TabPlaceholder({ tab }: { tab: EditorTabKey }) {
     structure: "Порядок вопросов, страницы и секции.",
   };
   return (
-    <div
-      className="ou-empty ou-empty--inline ou-empty--well"
+    <EmptyState
+      layout="inline"
+      well
+      title={TAB_LABELS[tab]}
+      description={desc[tab]}
       data-testid={`test-editor-tab-body-${tab}`}
-    >
-      <div className="ou-empty__content">
-        <div className="ou-empty__title">{TAB_LABELS[tab]}</div>
-        <div className="ou-empty__desc">{desc[tab]}</div>
-      </div>
-    </div>
+    />
   );
 }
 
@@ -439,14 +441,13 @@ function ChangesPopover(props: {
             &nbsp;({dirtyTabs.length})
           </span>
         </span>
-        <button
-          type="button"
-          className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s"
+        <IconButton
+          icon={<X size={14} aria-hidden="true" />}
           aria-label="Закрыть список изменений"
+          variant="ghost"
+          size="s"
           onClick={props.onClose}
-        >
-          <CloseIcon size={14} />
-        </button>
+        />
       </div>
       <div className="tb-changes-popover__body">
         {dirtyTabs.length === 0 ? (
@@ -472,71 +473,46 @@ function ChangesPopover(props: {
 }
 
 function CloseConfirmDialog(props: {
+  open: boolean;
   hasErrors: boolean;
   onCancel: () => void;
   onExitWithoutSave: () => void;
   onSaveAndExit: () => Promise<void>;
 }) {
-  const titleId = "tb-close-confirm-title";
   return (
-    <div
-      className="ou-modal-root"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-      data-testid="test-editor-close-confirm"
-    >
-      <div className="ou-modal__backdrop" onClick={props.onCancel} />
-      <div className="ou-modal ou-modal--m">
-        <div className="ou-modal__head ou-modal__head--icon">
-          <span
-            className={
-              "ou-modal__icon " +
-              (props.hasErrors
-                ? "ou-modal__icon--danger"
-                : "ou-modal__icon--warning")
-            }
-            aria-hidden="true"
-          >
-            {props.hasErrors ? <XCircleIcon /> : <WarnIcon />}
-          </span>
-          <div className="ou-modal__head-text">
-            <h2 id={titleId} className="ou-modal__title">
-              {props.hasErrors
-                ? "Есть несохранённые изменения и ошибки"
-                : "Есть несохранённые изменения"}
-            </h2>
-          </div>
-        </div>
-        <div className="ou-modal__body">
-          <p>
-            {props.hasErrors
-              ? "Вы внесли изменения, но некоторые поля содержат ошибки. Сохранение сейчас невозможно."
-              : "Вы внесли изменения в тест. Что хотите сделать перед закрытием?"}
-          </p>
-        </div>
-        <div className="ou-modal__foot">
-          <button
-            type="button"
-            className="ou-btn ou-btn--ghost ou-btn--m"
+    <ModalDialog
+      open={props.open}
+      onClose={props.onCancel}
+      size="m"
+      icon={props.hasErrors ? <XCircle size={20} /> : <AlertTriangle size={20} />}
+      iconTone={props.hasErrors ? "danger" : "warning"}
+      title={
+        props.hasErrors
+          ? "Есть несохранённые изменения и ошибки"
+          : "Есть несохранённые изменения"
+      }
+      footer={
+        <>
+          <Button
+            variant="ghost"
+            size="m"
             onClick={props.onCancel}
             data-testid="test-editor-close-confirm-cancel"
           >
             Отмена
-          </button>
-          <button
-            type="button"
-            className="ou-btn ou-btn--secondary ou-btn--m"
+          </Button>
+          <Button
+            variant="secondary"
+            size="m"
             onClick={props.onExitWithoutSave}
             data-testid="test-editor-close-confirm-discard"
           >
             Выйти без сохранения
-          </button>
-          <button
-            type="button"
-            className="ou-btn ou-btn--primary ou-btn--m"
+          </Button>
+          <Button
+            variant="primary"
+            size="m"
             disabled={props.hasErrors}
-            aria-disabled={props.hasErrors}
             title={
               props.hasErrors ? "Исправьте ошибки перед сохранением" : undefined
             }
@@ -546,60 +522,48 @@ function CloseConfirmDialog(props: {
             data-testid="test-editor-close-confirm-save"
           >
             Сохранить
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+      data-testid="test-editor-close-confirm"
+    >
+      <p>
+        {props.hasErrors
+          ? "Вы внесли изменения, но некоторые поля содержат ошибки. Сохранение сейчас невозможно."
+          : "Вы внесли изменения в тест. Что хотите сделать перед закрытием?"}
+      </p>
+    </ModalDialog>
   );
 }
 
 function ConflictDialog(props: {
+  open: boolean;
   onCancel: () => void;
   onReload: () => Promise<void>;
   onOverwrite: () => Promise<void>;
 }) {
-  const titleId = "tb-conflict-title";
   return (
-    <div
-      className="ou-modal-root"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-      data-testid="test-editor-conflict"
-    >
-      <div className="ou-modal__backdrop" onClick={props.onCancel} />
-      <div className="ou-modal ou-modal--m">
-        <div className="ou-modal__head ou-modal__head--icon">
-          <span
-            className="ou-modal__icon ou-modal__icon--warning"
-            aria-hidden="true"
-          >
-            <WarnIcon />
-          </span>
-          <div className="ou-modal__head-text">
-            <p className="ou-modal__title" id={titleId}>
-              Конфликт версий
-            </p>
-            <p className="ou-modal__desc">
-              Тест был изменён другим пользователем пока вы редактировали
-            </p>
-          </div>
-        </div>
-        <div className="ou-modal__body">
-          <p>Кто-то сохранил свои правки раньше вас. Выберите, как разрешить конфликт:</p>
-        </div>
-        <div className="ou-modal__foot">
-          <button
-            type="button"
-            className="ou-btn ou-btn--ghost ou-btn--m"
+    <ModalDialog
+      open={props.open}
+      onClose={props.onCancel}
+      size="m"
+      icon={<AlertTriangle size={20} />}
+      iconTone="warning"
+      title="Конфликт версий"
+      description="Тест был изменён другим пользователем пока вы редактировали"
+      footer={
+        <>
+          <Button
+            variant="ghost"
+            size="m"
             onClick={props.onCancel}
             data-testid="test-editor-conflict-cancel"
           >
             Отмена
-          </button>
-          <button
-            type="button"
-            className="ou-btn ou-btn--destructive ou-btn--m"
+          </Button>
+          <Button
+            variant="destructive"
+            size="m"
             title="Записать ваши изменения поверх серверной версии."
             onClick={() => {
               void props.onOverwrite();
@@ -607,10 +571,10 @@ function ConflictDialog(props: {
             data-testid="test-editor-conflict-overwrite"
           >
             Сохранить поверх
-          </button>
-          <button
-            type="button"
-            className="ou-btn ou-btn--primary ou-btn--m"
+          </Button>
+          <Button
+            variant="primary"
+            size="m"
             autoFocus
             title="Загрузить серверную версию."
             onClick={() => {
@@ -619,31 +583,38 @@ function ConflictDialog(props: {
             data-testid="test-editor-conflict-reload"
           >
             Обновить данные
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+      data-testid="test-editor-conflict"
+    >
+      <p>
+        Кто-то сохранил свои правки раньше вас. Выберите, как разрешить конфликт:
+      </p>
+    </ModalDialog>
   );
 }
 
 // ─── Status tag derivation ────────────────────────────────────────────────────
 
+import type { TagProps } from "@universityrt/ui-kit";
+
 function deriveStatusTag(editor: ReturnType<typeof useTestEditor>): {
-  className: string;
+  tone: TagProps["tone"];
   label: string;
   ariaLabel: string;
 } {
   const hasErrors = editor.validation.errors.length > 0;
   if (hasErrors) {
     return {
-      className: "ou-tag ou-tag--error ou-tag--outline",
+      tone: "error",
       label: "Есть ошибки",
       ariaLabel: "Статус: есть блокирующие ошибки",
     };
   }
   if (editor.isDirty) {
     return {
-      className: "ou-tag ou-tag--warning ou-tag--outline",
+      tone: "warning",
       label: "Изменено",
       ariaLabel: "Статус: есть несохранённые изменения",
     };
@@ -651,82 +622,21 @@ function deriveStatusTag(editor: ReturnType<typeof useTestEditor>): {
   const status = editor.model?.basic.status;
   if (status === "published") {
     return {
-      className: "ou-tag ou-tag--success ou-tag--outline",
+      tone: "success",
       label: "Опубликован",
       ariaLabel: "Статус: опубликован",
     };
   }
   if (status === "archived") {
     return {
-      className: "ou-tag ou-tag--neutral ou-tag--outline",
+      tone: "neutral",
       label: "Архив",
       ariaLabel: "Статус: архив",
     };
   }
   return {
-    className: "ou-tag ou-tag--neutral ou-tag--outline",
+    tone: "neutral",
     label: "Черновик",
     ariaLabel: "Статус: черновик",
   };
-}
-
-// ─── Inline icons (Lucide-style stroke SVGs) ──────────────────────────────────
-
-function CloseIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
-function WarnIcon() {
-  return (
-    <svg
-      width={20}
-      height={20}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-      <line x1="12" y1="9" x2="12" y2="13" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  );
-}
-
-function XCircleIcon() {
-  return (
-    <svg
-      width={20}
-      height={20}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <line x1="15" y1="9" x2="9" y2="15" />
-      <line x1="9" y1="9" x2="15" y2="15" />
-    </svg>
-  );
 }

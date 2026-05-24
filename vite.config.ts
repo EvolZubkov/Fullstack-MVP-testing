@@ -24,7 +24,14 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "client", "src"),
       "@shared": path.resolve(import.meta.dirname, "shared"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      // Force `@universityrt/ui-kit` and any nested deps to resolve `react` /
+      // `react-dom` from this project's node_modules — otherwise the linked
+      // ui-kit (file:..) pulls in its own React copy and hooks fail with
+      // «Cannot read properties of null (reading 'useId')».
+      react: path.resolve(import.meta.dirname, "node_modules", "react"),
+      "react-dom": path.resolve(import.meta.dirname, "node_modules", "react-dom"),
     },
+    dedupe: ["react", "react-dom"],
   },
   root: path.resolve(import.meta.dirname, "client"),
   build: {

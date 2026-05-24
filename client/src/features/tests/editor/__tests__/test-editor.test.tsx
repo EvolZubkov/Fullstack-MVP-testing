@@ -120,8 +120,8 @@ describe("<TestEditor /> DOM and focus", () => {
     expect(root.querySelector(".ou-tabs.ou-tabs--underline.ou-tabs--m")).not.toBeNull();
     expect(root.querySelector(".ou-drawer__foot")).not.toBeNull();
 
-    for (const key of ["composition", "settings", "design", "structure"]) {
-      expect(screen.getByTestId(`test-editor-tab-${key}`)).toBeInTheDocument();
+    for (const label of ["Состав", "Настройки", "Оформление", "Структура"]) {
+      expect(screen.getByRole("tab", { name: new RegExp(label, "i") })).toBeInTheDocument();
     }
 
     await waitFor(() => expect(screen.getByText("Sample Test")).toBeInTheDocument());
@@ -140,7 +140,7 @@ describe("<TestEditor /> DOM and focus", () => {
       ),
     );
 
-    const firstTab = await screen.findByTestId("test-editor-tab-composition");
+    const firstTab = await screen.findByRole("tab", { name: /Состав/i });
     await waitFor(() => expect(document.activeElement).toBe(firstTab));
   });
 
@@ -156,7 +156,7 @@ describe("<TestEditor /> DOM and focus", () => {
     fireEvent.click(screen.getByTestId("test-editor-close"));
 
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(screen.queryByTestId("test-editor-close-confirm")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: /Есть несохранённые изменения/i })).toBeNull();
   });
 
   it("opens the FR-05 confirmation dialog when closing with dirty changes", async () => {
@@ -203,7 +203,7 @@ describe("<TestEditor /> DOM and focus", () => {
 
     fireEvent.click(screen.getByTestId("test-editor-close"));
 
-    expect(screen.getByTestId("test-editor-close-confirm")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: /Есть несохранённые изменения/i })).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId("test-editor-close-confirm-discard"));

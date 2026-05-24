@@ -48,8 +48,15 @@ import {
   Trash2,
   Users,
   ArrowRight,
-  X,
 } from "lucide-react";
+import {
+  Button,
+  Input,
+  ModalDialog,
+  Select,
+  Skeleton,
+  Tag,
+} from "@universityrt/ui-kit";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { TestEditor } from "@/features/tests/editor/test-editor";
@@ -1015,12 +1022,12 @@ function TestRow(props: {
 
 function StatusTag({ status }: { status: TestListEntry["status"] }) {
   if (status === "published") {
-    return <span className="ou-tag ou-tag--success" aria-label="Статус: опубликован">Опубликован</span>;
+    return <Tag tone="success" aria-label="Статус: опубликован">Опубликован</Tag>;
   }
   if (status === "archived") {
-    return <span className="ou-tag ou-tag--neutral" aria-label="Статус: архив">Архив</span>;
+    return <Tag tone="neutral" aria-label="Статус: архив">Архив</Tag>;
   }
-  return <span className="ou-tag ou-tag--neutral" aria-label="Статус: черновик">Черновик</span>;
+  return <Tag tone="neutral" aria-label="Статус: черновик">Черновик</Tag>;
 }
 
 function FlowChip({ flowMode }: { flowMode: TestListFlowMode }) {
@@ -1064,9 +1071,8 @@ function LoadingPane() {
       <TreeHeader />
       <div style={{ padding: "var(--ou-space-6)" }}>
         {[0, 1, 2].map((i) => (
-          <div
+          <Skeleton
             key={i}
-            className="ou-skel"
             style={{
               height: "32px",
               marginBottom: "var(--ou-space-2)",
@@ -1091,24 +1097,24 @@ function EmptyPane(props: { onCreateFolder: () => void; onCreateTest: () => void
           Создайте первый тест или сначала добавьте папку для организации.
         </div>
         <div className="empty-tree__actions">
-          <button
-            type="button"
-            className="ou-btn ou-btn--secondary ou-btn--s"
+          <Button
+            variant="secondary"
+            size="s"
+            leadingIcon={<FolderPlus width={13} height={13} />}
             onClick={props.onCreateFolder}
             data-testid="tests-list-empty-new-folder"
           >
-            <FolderPlus width={13} height={13} />
             Создать папку
-          </button>
-          <button
-            type="button"
-            className="ou-btn ou-btn--primary ou-btn--s"
+          </Button>
+          <Button
+            variant="primary"
+            size="s"
+            leadingIcon={<Plus width={13} height={13} />}
             onClick={props.onCreateTest}
             data-testid="tests-list-empty-new-test"
           >
-            <Plus width={13} height={13} />
             Новый тест
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -1127,15 +1133,15 @@ function ErrorPane(props: { onRetry: () => void }) {
           Проверьте подключение к сети и попробуйте ещё раз.
         </div>
         <div className="empty-tree__actions">
-          <button
-            type="button"
-            className="ou-btn ou-btn--primary ou-btn--s"
+          <Button
+            variant="primary"
+            size="s"
+            leadingIcon={<RotateCw width={13} height={13} />}
             onClick={props.onRetry}
             data-testid="tests-list-error-retry"
           >
-            <RotateCw width={13} height={13} />
             Повторить
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -1206,71 +1212,51 @@ function DeleteTestModal(props: {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => inputRef.current?.focus(), []);
   return (
-    <div className="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-del-test-title">
-      <div className="ou-modal__backdrop" onClick={props.onCancel} />
-      <div className="ou-modal ou-modal--m">
-        <div className="ou-modal__head">
-          <div className="ou-modal__head-text">
-            <p className="ou-modal__title" id="dlg-del-test-title">Удалить тест навсегда?</p>
-          </div>
-          <button type="button" className="ou-modal__close" aria-label="Закрыть" onClick={props.onCancel}>
-            <X width={16} height={16} />
-          </button>
-        </div>
-        <div className="ou-modal__body">
-          <label className="typed-confirm__label" htmlFor="del-test-input">
-            Введите название теста <strong>«{props.state.title}»</strong> для подтверждения:
-          </label>
-          <div
-            className={
-              "ou-field ou-field--m" +
-              (props.state.error
-                ? " ou-field--error"
-                : match
-                ? " ou-field--success"
-                : "")
-            }
-          >
-            <div className="ou-field__box">
-              <input
-                ref={inputRef}
-                className="ou-field__input"
-                type="text"
-                id="del-test-input"
-                placeholder="Введите название…"
-                value={props.state.input}
-                onChange={(e) => props.onChange(e.target.value)}
-                autoComplete="off"
-                data-testid="delete-test-input"
-              />
-            </div>
-          </div>
-          {props.state.error && (
-            <span className="typed-confirm__error">{props.state.error}</span>
-          )}
-        </div>
-        <div className="ou-modal__foot">
-          <button
-            type="button"
-            className="ou-btn ou-btn--ghost ou-btn--s"
+    <ModalDialog
+      open
+      onClose={props.onCancel}
+      size="m"
+      title="Удалить тест навсегда?"
+      footer={
+        <>
+          <Button
+            variant="ghost"
+            size="s"
             onClick={props.onCancel}
             data-testid="delete-test-cancel"
           >
             Отмена
-          </button>
-          <button
-            type="button"
-            className="ou-btn ou-btn--destructive ou-btn--s"
+          </Button>
+          <Button
+            variant="destructive"
+            size="s"
             disabled={!match}
-            aria-disabled={!match}
             onClick={() => void props.onDelete()}
             data-testid="delete-test-confirm"
           >
             Удалить навсегда
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      <label className="typed-confirm__label" htmlFor="del-test-input">
+        Введите название теста <strong>«{props.state.title}»</strong> для подтверждения:
+      </label>
+      <Input
+        ref={inputRef}
+        id="del-test-input"
+        size="m"
+        fullWidth
+        type="text"
+        placeholder="Введите название…"
+        value={props.state.input}
+        onChange={(e) => props.onChange(e.target.value)}
+        autoComplete="off"
+        tone={props.state.error ? "error" : match ? "success" : undefined}
+        error={props.state.error ?? undefined}
+        data-testid="delete-test-input"
+      />
+    </ModalDialog>
   );
 }
 
@@ -1283,49 +1269,40 @@ function RenameFolderModal(props: {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => inputRef.current?.focus(), []);
   return (
-    <div className="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-rename-folder-title">
-      <div className="ou-modal__backdrop" onClick={props.onCancel} />
-      <div className="ou-modal ou-modal--s">
-        <div className="ou-modal__head">
-          <div className="ou-modal__head-text">
-            <p className="ou-modal__title" id="dlg-rename-folder-title">Переименовать папку</p>
-          </div>
-          <button type="button" className="ou-modal__close" aria-label="Закрыть" onClick={props.onCancel}>
-            <X width={16} height={16} />
-          </button>
-        </div>
-        <div className="ou-modal__body">
-          <div className="ou-field ou-field--m">
-            <div className="ou-field__box">
-              <input
-                ref={inputRef}
-                className="ou-field__input"
-                type="text"
-                value={props.value}
-                onChange={(e) => props.onChange(e.target.value)}
-                placeholder="Новое название…"
-                autoComplete="off"
-                data-testid="rename-folder-input"
-              />
-            </div>
-          </div>
-        </div>
-        <div className="ou-modal__foot">
-          <button type="button" className="ou-btn ou-btn--ghost ou-btn--s" onClick={props.onCancel}>
+    <ModalDialog
+      open
+      onClose={props.onCancel}
+      size="s"
+      title="Переименовать папку"
+      footer={
+        <>
+          <Button variant="ghost" size="s" onClick={props.onCancel}>
             Отмена
-          </button>
-          <button
-            type="button"
-            className="ou-btn ou-btn--primary ou-btn--s"
+          </Button>
+          <Button
+            variant="primary"
+            size="s"
             disabled={props.value.trim() === ""}
             onClick={() => void props.onSubmit()}
             data-testid="rename-folder-submit"
           >
             Сохранить
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      <Input
+        ref={inputRef}
+        size="m"
+        fullWidth
+        type="text"
+        value={props.value}
+        onChange={(e) => props.onChange(e.target.value)}
+        placeholder="Новое название…"
+        autoComplete="off"
+        data-testid="rename-folder-input"
+      />
+    </ModalDialog>
   );
 }
 
@@ -1338,49 +1315,40 @@ function NewFolderModal(props: {
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => inputRef.current?.focus(), []);
   return (
-    <div className="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-new-folder-title">
-      <div className="ou-modal__backdrop" onClick={props.onCancel} />
-      <div className="ou-modal ou-modal--s">
-        <div className="ou-modal__head">
-          <div className="ou-modal__head-text">
-            <p className="ou-modal__title" id="dlg-new-folder-title">Новая папка</p>
-          </div>
-          <button type="button" className="ou-modal__close" aria-label="Закрыть" onClick={props.onCancel}>
-            <X width={16} height={16} />
-          </button>
-        </div>
-        <div className="ou-modal__body">
-          <div className="ou-field ou-field--m">
-            <div className="ou-field__box">
-              <input
-                ref={inputRef}
-                className="ou-field__input"
-                type="text"
-                value={props.value}
-                onChange={(e) => props.onChange(e.target.value)}
-                placeholder="Название папки"
-                autoComplete="off"
-                data-testid="new-folder-input"
-              />
-            </div>
-          </div>
-        </div>
-        <div className="ou-modal__foot">
-          <button type="button" className="ou-btn ou-btn--ghost ou-btn--s" onClick={props.onCancel}>
+    <ModalDialog
+      open
+      onClose={props.onCancel}
+      size="s"
+      title="Новая папка"
+      footer={
+        <>
+          <Button variant="ghost" size="s" onClick={props.onCancel}>
             Отмена
-          </button>
-          <button
-            type="button"
-            className="ou-btn ou-btn--primary ou-btn--s"
+          </Button>
+          <Button
+            variant="primary"
+            size="s"
             disabled={props.value.trim() === ""}
             onClick={() => void props.onSubmit()}
             data-testid="new-folder-submit"
           >
             Создать
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      <Input
+        ref={inputRef}
+        size="m"
+        fullWidth
+        type="text"
+        value={props.value}
+        onChange={(e) => props.onChange(e.target.value)}
+        placeholder="Название папки"
+        autoComplete="off"
+        data-testid="new-folder-input"
+      />
+    </ModalDialog>
   );
 }
 
@@ -1411,24 +1379,30 @@ function DeleteFolderModal(props: {
   const canDestructive = !isDestructive || props.state.input === props.state.name;
 
   return (
-    <div className="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-del-folder-title">
-      <div className="ou-modal__backdrop" onClick={props.onCancel} />
-      <div className="ou-modal ou-modal--m">
-        <div className="ou-modal__head">
-          <div className="ou-modal__head-text">
-            <p className="ou-modal__title" id="dlg-del-folder-title">
-              Удалить папку «{props.state.name}»?
-            </p>
-            <p className="ou-modal__desc">
-              Папка содержит {props.testsInFolder} тест(ов). Выберите, что сделать с тестами.
-            </p>
-          </div>
-          <button type="button" className="ou-modal__close" aria-label="Закрыть" onClick={props.onCancel}>
-            <X width={16} height={16} />
-          </button>
-        </div>
-        <div className="ou-modal__body">
-          <fieldset className="ou-choice-card-group">
+    <ModalDialog
+      open
+      onClose={props.onCancel}
+      size="m"
+      title={`Удалить папку «${props.state.name}»?`}
+      description={`Папка содержит ${props.testsInFolder} тест(ов). Выберите, что сделать с тестами.`}
+      footer={
+        <>
+          <Button variant="ghost" size="s" onClick={props.onCancel}>
+            Отмена
+          </Button>
+          <Button
+            variant="destructive"
+            size="s"
+            disabled={!canDestructive}
+            onClick={() => void props.onDelete()}
+            data-testid="delete-folder-confirm"
+          >
+            {isDestructive ? "Удалить всё" : "Удалить папку"}
+          </Button>
+        </>
+      }
+    >
+      <fieldset className="ou-choice-card-group">
             <div className="ou-choice-card-group__items">
               <label
                 className={
@@ -1454,29 +1428,26 @@ function DeleteFolderModal(props: {
                   </span>
                   {!isDestructive && (
                     <span className="ou-choice-card__inset">
-                      <label htmlFor="del-folder-dest">Переместить тесты в:</label>
-                      <div className="ou-field ou-field--m">
-                        <div className="ou-field__box">
-                          <select
-                            id="del-folder-dest"
-                            className="ou-field__input"
-                            value={props.state.moveTo ?? ""}
-                            onChange={(e) =>
-                              props.onChange({
-                                moveTo: e.target.value === "" ? null : e.target.value,
-                              })
-                            }
-                            data-testid="delete-folder-dest"
-                          >
-                            <option value="">Корень (Все тесты)</option>
-                            {otherFolders.map((f) => (
-                              <option key={f.id} value={f.id}>
-                                {f.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
+                      <Select<string>
+                        id="del-folder-dest"
+                        size="m"
+                        fullWidth
+                        label="Переместить тесты в:"
+                        value={props.state.moveTo ?? ""}
+                        options={[
+                          { value: "", label: "Корень (Все тесты)" },
+                          ...otherFolders.map((f) => ({
+                            value: f.id,
+                            label: f.name,
+                          })),
+                        ]}
+                        onChange={(value) =>
+                          props.onChange({
+                            moveTo: value === "" ? null : value,
+                          })
+                        }
+                        data-testid="delete-folder-dest"
+                      />
                     </span>
                   )}
                 </span>
@@ -1506,35 +1477,28 @@ function DeleteFolderModal(props: {
                   </span>
                   {isDestructive && (
                     <span className="ou-choice-card__inset">
-                      <label htmlFor="del-folder-confirm">
-                        Введите название папки для подтверждения:
-                      </label>
-                      <div
-                        className={
-                          "ou-field ou-field--m" + (props.state.error ? " ou-field--error" : "")
+                      <Input
+                        id="del-folder-confirm"
+                        size="m"
+                        fullWidth
+                        label="Введите название папки для подтверждения:"
+                        type="text"
+                        placeholder={props.state.name}
+                        value={props.state.input}
+                        onChange={(e) =>
+                          props.onChange({
+                            input: e.target.value,
+                            error:
+                              e.target.value === "" || e.target.value === props.state.name
+                                ? null
+                                : "Название не совпадает",
+                          })
                         }
-                      >
-                        <div className="ou-field__box">
-                          <input
-                            id="del-folder-confirm"
-                            className="ou-field__input"
-                            type="text"
-                            placeholder={props.state.name}
-                            value={props.state.input}
-                            onChange={(e) =>
-                              props.onChange({
-                                input: e.target.value,
-                                error:
-                                  e.target.value === "" || e.target.value === props.state.name
-                                    ? null
-                                    : "Название не совпадает",
-                              })
-                            }
-                            autoComplete="off"
-                            data-testid="delete-folder-confirm-input"
-                          />
-                        </div>
-                      </div>
+                        autoComplete="off"
+                        tone={props.state.error ? "error" : undefined}
+                        error={props.state.error ?? undefined}
+                        data-testid="delete-folder-confirm-input"
+                      />
                       <span className="typed-confirm__hint">
                         Введите точно: <strong>{props.state.name}</strong>
                       </span>
@@ -1544,24 +1508,7 @@ function DeleteFolderModal(props: {
               </label>
             </div>
           </fieldset>
-        </div>
-        <div className="ou-modal__foot">
-          <button type="button" className="ou-btn ou-btn--ghost ou-btn--s" onClick={props.onCancel}>
-            Отмена
-          </button>
-          <button
-            type="button"
-            className="ou-btn ou-btn--destructive ou-btn--s"
-            disabled={!canDestructive}
-            aria-disabled={!canDestructive}
-            onClick={() => void props.onDelete()}
-            data-testid="delete-folder-confirm"
-          >
-            {isDestructive ? "Удалить всё" : "Удалить папку"}
-          </button>
-        </div>
-      </div>
-    </div>
+    </ModalDialog>
   );
 }
 
@@ -1573,60 +1520,54 @@ function FabFolderPickModal(props: {
   onCreate: () => void;
 }) {
   return (
-    <div className="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-fab-pick-title">
-      <div className="ou-modal__backdrop" onClick={props.onCancel} />
-      <div className="ou-modal ou-modal--s">
-        <div className="ou-modal__head">
-          <div className="ou-modal__head-text">
-            <p className="ou-modal__title" id="dlg-fab-pick-title">Новый тест</p>
-            <p className="ou-modal__desc">Выберите папку для размещения теста</p>
-          </div>
-          <button type="button" className="ou-modal__close" aria-label="Закрыть" onClick={props.onCancel}>
-            <X width={16} height={16} />
-          </button>
-        </div>
-        <div className="ou-modal__body">
-          <div className="fab-folder-list">
-            <label className="fab-folder-item">
-              <input
-                type="radio"
-                name="fab-pick"
-                checked={props.selected === null}
-                onChange={() => props.onSelect(null)}
-                data-testid="fab-pick-root"
-              />
-              <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
-              Корень (без папки)
-            </label>
-            {props.folders.map((f) => (
-              <label key={f.id} className="fab-folder-item">
-                <input
-                  type="radio"
-                  name="fab-pick"
-                  checked={props.selected === f.id}
-                  onChange={() => props.onSelect(f.id)}
-                  data-testid={`fab-pick-folder-${f.id}`}
-                />
-                <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
-                {f.name}
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="ou-modal__foot">
-          <button type="button" className="ou-btn ou-btn--ghost ou-btn--s" onClick={props.onCancel}>
+    <ModalDialog
+      open
+      onClose={props.onCancel}
+      size="s"
+      title="Новый тест"
+      description="Выберите папку для размещения теста"
+      footer={
+        <>
+          <Button variant="ghost" size="s" onClick={props.onCancel}>
             Отмена
-          </button>
-          <button
-            type="button"
-            className="ou-btn ou-btn--primary ou-btn--s"
+          </Button>
+          <Button
+            variant="primary"
+            size="s"
             onClick={props.onCreate}
             data-testid="fab-pick-create"
           >
             Создать тест
-          </button>
-        </div>
+          </Button>
+        </>
+      }
+    >
+      <div className="fab-folder-list">
+        <label className="fab-folder-item">
+          <input
+            type="radio"
+            name="fab-pick"
+            checked={props.selected === null}
+            onChange={() => props.onSelect(null)}
+            data-testid="fab-pick-root"
+          />
+          <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
+          Корень (без папки)
+        </label>
+        {props.folders.map((f) => (
+          <label key={f.id} className="fab-folder-item">
+            <input
+              type="radio"
+              name="fab-pick"
+              checked={props.selected === f.id}
+              onChange={() => props.onSelect(f.id)}
+              data-testid={`fab-pick-folder-${f.id}`}
+            />
+            <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
+            {f.name}
+          </label>
+        ))}
       </div>
-    </div>
+    </ModalDialog>
   );
 }

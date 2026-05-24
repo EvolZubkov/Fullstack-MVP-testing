@@ -22,6 +22,15 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Pencil, Plus, X, Link as LinkIcon, Paperclip } from "lucide-react";
 import type { Topic } from "@shared/schema";
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  Input,
+  ModalDialog,
+  NumberInput,
+  Tag,
+} from "@universityrt/ui-kit";
 import type {
   EditorSection,
   TestEditorModel,
@@ -116,18 +125,13 @@ export function CompositionSection({ model, updateModel }: CompositionSectionPro
       <div className="tb-section-label">Темы и выборка вопросов</div>
 
       {model.sections.length === 0 && (
-        <div
-          className="ou-empty ou-empty--inline ou-empty--well"
+        <EmptyState
+          layout="inline"
+          well
+          title="Пока нет ни одной темы"
+          description="Добавьте темы, из которых будут отбираться вопросы. Минимум одна тема обязательна для сохранения теста (FR-12)."
           data-testid="composition-empty"
-        >
-          <div className="ou-empty__content">
-            <div className="ou-empty__title">Пока нет ни одной темы</div>
-            <div className="ou-empty__desc">
-              Добавьте темы, из которых будут отбираться вопросы. Минимум одна
-              тема обязательна для сохранения теста (FR-12).
-            </div>
-          </div>
-        </div>
+        />
       )}
 
       {model.sections.map((section) => (
@@ -139,23 +143,23 @@ export function CompositionSection({ model, updateModel }: CompositionSectionPro
         />
       ))}
 
-      <button
-        type="button"
-        className="ou-btn ou-btn--secondary ou-btn--m ou-btn--full"
+      <Button
+        variant="secondary"
+        size="m"
+        fullWidth
+        leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
         onClick={() => setPickerOpen(true)}
         data-testid="composition-add-topic"
       >
-        <Plus className="h-4 w-4" aria-hidden="true" />
         Добавить тему
-      </button>
+      </Button>
 
-      {pickerOpen && (
-        <TopicPickerModal
-          topics={availableTopics}
-          onPick={addTopic}
-          onCancel={() => setPickerOpen(false)}
-        />
-      )}
+      <TopicPickerModal
+        open={pickerOpen}
+        topics={availableTopics}
+        onPick={addTopic}
+        onCancel={() => setPickerOpen(false)}
+      />
     </>
   );
 }
@@ -178,46 +182,38 @@ function TopicRow(props: {
       <div className="tb-topic-row__header">
         <span className="tb-topic-row__name">{section.topicName}</span>
         {section.required && (
-          <span
-            className="ou-tag ou-tag--neutral ou-tag--outline"
+          <Tag
+            tone="neutral"
+            variant="outline"
             aria-label="Тема обязательная — задаётся в Настройках"
           >
             Обязательная
-          </span>
+          </Tag>
         )}
         <span className="tb-topic-row__count">
           {section.maxQuestions} вопрос{plural(section.maxQuestions)}
         </span>
-        <button
-          type="button"
-          className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s"
+        <IconButton
+          icon={<X className="h-3.5 w-3.5" aria-hidden="true" />}
           aria-label={`Убрать тему «${section.topicName}»`}
+          variant="ghost"
+          size="s"
           onClick={props.onRemove}
           data-testid={`topic-remove-${section.topicId}`}
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+        />
       </div>
       <div className="tb-topic-row__body">
         <div className="tb-draw-count-row">
           <span className="tb-draw-count-row__label">Вопросов в тест</span>
-          <div className="ou-field ou-field--s">
-            <div className="ou-field__box">
-              <input
-                className="ou-field__input"
-                type="number"
-                min={1}
-                max={maxQ}
-                value={section.drawCount}
-                onChange={(e) => {
-                  const next = Math.max(1, Math.min(maxQ, Number(e.target.value) || 1));
-                  props.onChangeDrawCount(next);
-                }}
-                aria-label={`Количество вопросов из темы ${section.topicName}`}
-                data-testid={`topic-drawcount-${section.topicId}`}
-              />
-            </div>
-          </div>
+          <NumberInput
+            size="s"
+            value={section.drawCount}
+            min={1}
+            max={maxQ}
+            aria-label={`Количество вопросов из темы ${section.topicName}`}
+            data-testid={`topic-drawcount-${section.topicId}`}
+            onChange={(next) => props.onChangeDrawCount(next)}
+          />
           <span className="tb-draw-count-row__max">из {section.maxQuestions}</span>
         </div>
         <div className="tb-card-desc">Обратная связь по теме</div>
@@ -254,15 +250,14 @@ function FeedbackPreview({ section }: { section: EditorSection }) {
     >
       <div className="tb-feedback-preview__text">
         <span className="tb-feedback-preview__snippet">{snippet}</span>
-        <button
-          type="button"
-          className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s"
+        <IconButton
+          icon={<Pencil className="h-3.5 w-3.5" aria-hidden="true" />}
           aria-label="Редактировать обратную связь"
+          variant="ghost"
+          size="s"
           disabled
           title="Редактирование feedback — FR-36, отдельный шаг"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
+        />
       </div>
       {(linkCount > 0 || assetCount > 0) && (
         <div className="tb-feedback-preview__meta">
@@ -288,6 +283,7 @@ function FeedbackPreview({ section }: { section: EditorSection }) {
 }
 
 function TopicPickerModal(props: {
+  open: boolean;
   topics: TopicWithQuestionCount[];
   onPick: (topic: TopicWithQuestionCount) => void;
   onCancel: () => void;
@@ -298,82 +294,60 @@ function TopicPickerModal(props: {
   );
 
   return (
-    <div
-      className="ou-modal-root"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="topic-picker-title"
+    <ModalDialog
+      open={props.open}
+      onClose={props.onCancel}
+      size="m"
+      title="Добавить тему"
+      description="Выберите тему, вопросы из которой попадут в тест."
+      footer={
+        <Button
+          variant="ghost"
+          size="s"
+          onClick={props.onCancel}
+          data-testid="topic-picker-cancel"
+        >
+          Отмена
+        </Button>
+      }
       data-testid="topic-picker-modal"
     >
-      <div className="ou-modal__backdrop" onClick={props.onCancel} />
-      <div className="ou-modal ou-modal--m">
-        <div className="ou-modal__head">
-          <div className="ou-modal__head-text">
-            <p className="ou-modal__title" id="topic-picker-title">Добавить тему</p>
-            <p className="ou-modal__desc">
-              Выберите тему, вопросы из которой попадут в тест.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="ou-modal__close"
-            aria-label="Закрыть"
-            onClick={props.onCancel}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="ou-modal__body">
-          <div className="ou-field ou-field--m tb-topic-picker__search">
-            <div className="ou-field__box">
-              <input
-                className="ou-field__input"
-                type="text"
-                placeholder="Поиск по названию..."
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                autoFocus
-                data-testid="topic-picker-search"
-              />
-            </div>
-          </div>
-          <ul className="tb-topic-picker__list">
-            {filtered.length === 0 && (
-              <li className="tb-topic-picker__empty">
-                {props.topics.length === 0
-                  ? "Все темы уже добавлены в тест"
-                  : "Ничего не найдено"}
-              </li>
-            )}
-            {filtered.map((topic) => (
-              <li key={topic.id}>
-                <button
-                  type="button"
-                  className="tb-topic-picker__item"
-                  onClick={() => props.onPick(topic)}
-                  data-testid={`topic-picker-item-${topic.id}`}
-                >
-                  <span>{topic.name}</span>
-                  <span className="tb-topic-picker__item-count">
-                    {topic.questionCount} вопрос{plural(topic.questionCount)}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="ou-modal__foot">
-          <button
-            type="button"
-            className="ou-btn ou-btn--ghost ou-btn--s"
-            onClick={props.onCancel}
-            data-testid="topic-picker-cancel"
-          >
-            Отмена
-          </button>
-        </div>
-      </div>
-    </div>
+      <Input
+        size="m"
+        fullWidth
+        placeholder="Поиск по названию..."
+        aria-label="Поиск темы"
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        autoFocus
+        className="tb-topic-picker__search"
+        data-testid="topic-picker-search"
+      />
+      <ul className="tb-topic-picker__list">
+        {filtered.length === 0 && (
+          <li className="tb-topic-picker__empty">
+            {props.topics.length === 0
+              ? "Все темы уже добавлены в тест"
+              : "Ничего не найдено"}
+          </li>
+        )}
+        {filtered.map((topic) => (
+          <li key={topic.id}>
+            <button
+              type="button"
+              className="tb-topic-picker__item"
+              onClick={() => props.onPick(topic)}
+              data-testid={`topic-picker-item-${topic.id}`}
+            >
+              <span>{topic.name}</span>
+              <span className="tb-topic-picker__item-count">
+                {topic.questionCount} вопрос{plural(topic.questionCount)}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </ModalDialog>
   );
 }
 

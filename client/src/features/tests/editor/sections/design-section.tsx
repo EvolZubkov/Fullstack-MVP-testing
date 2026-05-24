@@ -22,7 +22,18 @@
  *     settings as in the rest of the editor.
  */
 import { useState } from "react";
-import { useDesignSettings, type TemplateParam, type TemplateRow } from "../use-design-settings";
+import {
+  Banner,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Input,
+  Select,
+  Switch,
+  Tag,
+} from "@universityrt/ui-kit";
+import { useDesignSettings, type TemplateParam } from "../use-design-settings";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -87,49 +98,33 @@ export function DesignSection({ testId }: DesignSectionProps) {
 
 function CreateModeNotice() {
   return (
-    <div
-      className="ou-banner ou-banner--info"
-      role="status"
+    <Banner
+      tone="info"
+      title="Сначала сохраните черновик"
+      description="Настройки оформления привязаны к существующему тесту. Заполните обязательные поля во вкладке «Настройки», сохраните черновик — после этого вкладка «Оформление» станет доступна для редактирования."
       data-testid="design-create-notice"
-    >
-      <div className="ou-banner__body">
-        <div className="ou-banner__title">Сначала сохраните черновик</div>
-        <div className="ou-banner__desc">
-          Настройки оформления привязаны к существующему тесту. Заполните
-          обязательные поля во вкладке «Настройки», сохраните черновик — после
-          этого вкладка «Оформление» станет доступна для редактирования.
-        </div>
-      </div>
-    </div>
+    />
   );
 }
 
 function LoadingNotice() {
   return (
-    <div
-      className="ou-banner ou-banner--info"
-      role="status"
+    <Banner
+      tone="info"
+      title="Загружаем настройки оформления…"
       data-testid="design-loading"
-    >
-      <div className="ou-banner__body">
-        <div className="ou-banner__title">Загружаем настройки оформления…</div>
-      </div>
-    </div>
+    />
   );
 }
 
 function ErrorNotice({ message }: { message: string }) {
   return (
-    <div
-      className="ou-banner ou-banner--error"
-      role="alert"
+    <Banner
+      tone="error"
+      title="Не удалось загрузить оформление"
+      description={message}
       data-testid="design-error"
-    >
-      <div className="ou-banner__body">
-        <div className="ou-banner__title">Не удалось загрузить оформление</div>
-        <div className="ou-banner__desc">{message}</div>
-      </div>
-    </div>
+    />
   );
 }
 
@@ -138,31 +133,35 @@ function TemplatePane({ design }: { design: ReturnType<typeof useDesignSettings>
   if (!tpl) return null;
   return (
     <div data-testid="design-template-pane">
-      <section className="ou-card ou-card--outlined" data-testid="design-template-card">
-        <header className="ou-card__header">
-          <div className="ou-card__heading">
-            <h3 className="ou-card__title" data-testid="design-template-name">
+      <Card variant="outlined" data-testid="design-template-card">
+        <CardHeader
+          title={
+            <span data-testid="design-template-name">
               {tpl.manifest.name ?? tpl.name}
-            </h3>
-            <p className="ou-card__subtitle">
+            </span>
+          }
+          subtitle={
+            <>
               {tpl.isBuiltin && (
-                <span
-                  className="ou-tag ou-tag--neutral ou-tag--outline"
+                <Tag
+                  tone="neutral"
+                  variant="outline"
                   data-testid="design-template-builtin"
                 >
                   Встроенный
-                </span>
+                </Tag>
               )}{" "}
-              <span
-                className="ou-tag ou-tag--info ou-tag--outline"
+              <Tag
+                tone="info"
+                variant="outline"
                 data-testid="design-template-version"
               >
                 v{tpl.manifest.version ?? tpl.version}
-              </span>
-            </p>
-          </div>
-        </header>
-        <div className="ou-card__body">
+              </Tag>
+            </>
+          }
+        />
+        <CardBody>
           <p
             className="tb-template-card__desc"
             data-testid="design-template-desc"
@@ -170,9 +169,9 @@ function TemplatePane({ design }: { design: ReturnType<typeof useDesignSettings>
             {tpl.manifest.description ?? tpl.description ?? "Описание не указано."}
           </p>
           <div className="tb-template-card__actions">
-            <button
-              type="button"
-              className="ou-btn ou-btn--secondary ou-btn--s"
+            <Button
+              variant="secondary"
+              size="s"
               data-testid="design-template-replace"
               onClick={() =>
                 window.alert(
@@ -181,18 +180,18 @@ function TemplatePane({ design }: { design: ReturnType<typeof useDesignSettings>
               }
             >
               Заменить шаблон
-            </button>
-            <button
-              type="button"
-              className="ou-btn ou-btn--ghost ou-btn--s"
+            </Button>
+            <Button
+              variant="ghost"
+              size="s"
               data-testid="design-template-reset"
               onClick={design.resetToDefaults}
             >
               Сбросить до умолчаний
-            </button>
+            </Button>
           </div>
-        </div>
-      </section>
+        </CardBody>
+      </Card>
       <DesignSaveBar design={design} />
     </div>
   );
@@ -205,21 +204,12 @@ function BrandingPane({ design }: { design: ReturnType<typeof useDesignSettings>
   if (params.length === 0) {
     return (
       <div data-testid="design-branding-pane">
-        <div
-          className="ou-banner ou-banner--info"
-          role="status"
+        <Banner
+          tone="info"
+          title="У шаблона нет настраиваемых параметров"
+          description={`Шаблон «${tpl.manifest.name}» не объявляет блок params в манифесте. Перейдите во вкладку «Шаблон», чтобы выбрать другой шаблон.`}
           data-testid="design-branding-empty"
-        >
-          <div className="ou-banner__body">
-            <div className="ou-banner__title">
-              У шаблона нет настраиваемых параметров
-            </div>
-            <div className="ou-banner__desc">
-              Шаблон «{tpl.manifest.name}» не объявляет блок params в манифесте.
-              Перейдите во вкладку «Шаблон», чтобы выбрать другой шаблон.
-            </div>
-          </div>
-        </div>
+        />
         <DesignSaveBar design={design} />
       </div>
     );
@@ -253,19 +243,15 @@ function ParamRow({
     const v = typeof value === "string" ? value : "";
     return (
       <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
-        <label className="ou-formfield__lbl" htmlFor={fieldId}>{param.label}</label>
-        <div className="ou-field ou-field--m">
-          <div className="ou-field__box">
-            <input
-              id={fieldId}
-              className="ou-field__input"
-              type="text"
-              value={v}
-              onChange={(e) => onChange(e.target.value)}
-              data-testid={`design-param-input-${param.key}`}
-            />
-          </div>
-        </div>
+        <Input
+          id={fieldId}
+          size="m"
+          fullWidth
+          label={param.label}
+          value={v}
+          onChange={(e) => onChange(e.target.value)}
+          data-testid={`design-param-input-${param.key}`}
+        />
       </div>
     );
   }
@@ -273,20 +259,16 @@ function ParamRow({
     const v = typeof value === "string" ? value : "";
     return (
       <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
-        <label className="ou-formfield__lbl" htmlFor={fieldId}>{param.label}</label>
-        <div className="ou-field ou-field--m">
-          <div className="ou-field__box">
-            <input
-              id={fieldId}
-              className="ou-field__input"
-              type="text"
-              value={v}
-              placeholder="221 83% 53%"
-              onChange={(e) => onChange(e.target.value)}
-              data-testid={`design-param-input-${param.key}`}
-            />
-          </div>
-        </div>
+        <Input
+          id={fieldId}
+          size="m"
+          fullWidth
+          label={param.label}
+          value={v}
+          placeholder="221 83% 53%"
+          onChange={(e) => onChange(e.target.value)}
+          data-testid={`design-param-input-${param.key}`}
+        />
       </div>
     );
   }
@@ -294,15 +276,13 @@ function ParamRow({
     const v = typeof value === "boolean" ? value : Boolean(param.default ?? false);
     return (
       <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
-        <label className="ou-switch-field">
-          <input
-            type="checkbox"
-            checked={v}
-            onChange={(e) => onChange(e.target.checked)}
-            data-testid={`design-param-input-${param.key}`}
-          />{" "}
-          {param.label}
-        </label>
+        <Switch
+          id={fieldId}
+          label={param.label}
+          checked={v}
+          onChange={(e) => onChange(e.target.checked)}
+          data-testid={`design-param-input-${param.key}`}
+        />
       </div>
     );
   }
@@ -311,35 +291,28 @@ function ParamRow({
     const v = typeof value === "string" ? value : (param.default as string) ?? opts[0] ?? "";
     return (
       <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
-        <label className="ou-formfield__lbl" htmlFor={fieldId}>{param.label}</label>
-        <select
+        <Select<string>
           id={fieldId}
-          className="ou-field__input"
+          size="m"
+          fullWidth
+          label={param.label}
           value={v}
-          onChange={(e) => onChange(e.target.value)}
+          options={opts.map((o) => ({ value: o, label: o }))}
+          onChange={(next) => onChange(next)}
           data-testid={`design-param-input-${param.key}`}
-        >
-          {opts.map((o) => (
-            <option key={o} value={o}>{o}</option>
-          ))}
-        </select>
+        />
       </div>
     );
   }
   return (
     <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
       <label className="ou-formfield__lbl">{param.label}</label>
-      <div
-        className="ou-banner ou-banner--info ou-banner--sm"
-        role="status"
+      <Banner
+        tone="info"
+        size="sm"
+        description={`Тип «${param.type}» поддерживается в следующем шаге (медиатека).`}
         data-testid={`design-param-unsupported-${param.key}`}
-      >
-        <div className="ou-banner__body">
-          <div className="ou-banner__desc">
-            Тип «{param.type}» поддерживается в следующем шаге (медиатека).
-          </div>
-        </div>
-      </div>
+      />
     </div>
   );
 }
@@ -348,39 +321,36 @@ function DesignSaveBar({ design }: { design: ReturnType<typeof useDesignSettings
   return (
     <div className="tb-design-savebar" data-testid="design-savebar">
       {design.saveError && (
-        <div
-          className="ou-banner ou-banner--error"
-          role="alert"
+        <Banner
+          tone="error"
+          description={design.saveError.message}
           data-testid="design-save-error"
-        >
-          <div className="ou-banner__body">
-            <div className="ou-banner__desc">{design.saveError.message}</div>
-          </div>
-        </div>
+        />
       )}
       <div className="tb-design-savebar__actions">
-        <button
-          type="button"
-          className="ou-btn ou-btn--ghost ou-btn--s"
+        <Button
+          variant="ghost"
+          size="s"
           onClick={design.revert}
           disabled={!design.isDirty || design.isSaving}
           data-testid="design-revert"
         >
           Отменить
-        </button>
-        <button
-          type="button"
-          className="ou-btn ou-btn--primary ou-btn--s"
+        </Button>
+        <Button
+          variant="primary"
+          size="s"
           onClick={() => {
             design.save().catch(() => {
               // surfaced via saveError state above
             });
           }}
           disabled={!design.isDirty || design.isSaving}
+          loading={design.isSaving}
           data-testid="design-save"
         >
           {design.isSaving ? "Сохранение…" : "Сохранить оформление"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -409,15 +379,11 @@ function StubPane({ railKey }: { railKey: DesignRailKey }) {
   };
   const { title, desc } = text[railKey];
   return (
-    <div
-      className="ou-banner ou-banner--info"
-      role="status"
+    <Banner
+      tone="info"
+      title={title}
+      description={desc || undefined}
       data-testid={`design-stub-${railKey}`}
-    >
-      <div className="ou-banner__body">
-        <div className="ou-banner__title">{title}</div>
-        <div className="ou-banner__desc">{desc}</div>
-      </div>
-    </div>
+    />
   );
 }

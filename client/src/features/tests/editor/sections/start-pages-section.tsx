@@ -20,6 +20,7 @@
  * the next step (see banner at the bottom of the pane).
  */
 import { useState } from "react";
+import { Banner, Button, EmptyState, Tag } from "@universityrt/ui-kit";
 import { useContentPages, type ContentPage } from "../use-content-pages";
 import type { TestEditorModel } from "../test-editor.types";
 
@@ -84,87 +85,55 @@ export const StartPagesSection = StructureSection;
 
 function FlowModeBanner({ mode }: { mode: TestEditorModel["flowMode"] }) {
   return (
-    <div
-      className="ou-banner ou-banner--info"
-      role="status"
+    <Banner
+      tone="info"
+      title={`Сценарий: ${FLOW_LABEL[mode]}`}
+      description="Сценарий задаётся во вкладке «Настройки → Основное»."
       data-testid="structure-mode-banner"
-    >
-      <div className="ou-banner__body">
-        <div className="ou-banner__title">Сценарий: {FLOW_LABEL[mode]}</div>
-        <div className="ou-banner__desc">
-          Сценарий задаётся во вкладке «Настройки → Основное».
-        </div>
-      </div>
-    </div>
+    />
   );
 }
 
 function CreateModeNotice() {
   return (
-    <div
-      className="ou-banner ou-banner--info"
-      role="status"
+    <Banner
+      tone="info"
+      title="Сначала сохраните черновик"
+      description="Структура страниц «до / после» привязана к существующему тесту. Сохраните черновик во вкладке «Настройки», после этого здесь появится возможность редактировать страницы."
       data-testid="structure-create-notice"
-    >
-      <div className="ou-banner__body">
-        <div className="ou-banner__title">Сначала сохраните черновик</div>
-        <div className="ou-banner__desc">
-          Структура страниц «до / после» привязана к существующему тесту.
-          Сохраните черновик во вкладке «Настройки», после этого здесь
-          появится возможность редактировать страницы.
-        </div>
-      </div>
-    </div>
+    />
   );
 }
 
 function LoadingNotice() {
   return (
-    <div
-      className="ou-banner ou-banner--info"
-      role="status"
+    <Banner
+      tone="info"
+      title="Загружаем структуру…"
       data-testid="structure-loading"
-    >
-      <div className="ou-banner__body">
-        <div className="ou-banner__title">Загружаем структуру…</div>
-      </div>
-    </div>
+    />
   );
 }
 
 function ErrorNotice({ message }: { message: string }) {
   return (
-    <div
-      className="ou-banner ou-banner--error"
-      role="alert"
+    <Banner
+      tone="error"
+      title="Не удалось загрузить структуру"
+      description={message}
       data-testid="structure-error"
-    >
-      <div className="ou-banner__body">
-        <div className="ou-banner__title">Не удалось загрузить структуру</div>
-        <div className="ou-banner__desc">{message}</div>
-      </div>
-    </div>
+    />
   );
 }
 
 function NextStepBanner() {
   return (
-    <div
-      className="ou-banner ou-banner--info"
-      role="status"
+    <Banner
+      tone="info"
+      title="Создание и редактирование страниц — следующий шаг"
+      description="Добавление страниц «до / после», встроенный rich-text редактор, drag-reorder и выбор шаблона страницы реализуются отдельным шагом PRD-7 интеграции с PRD-1 §4."
       data-testid="structure-content-pages-stub"
-    >
-      <div className="ou-banner__body">
-        <div className="ou-banner__title">
-          Создание и редактирование страниц — следующий шаг
-        </div>
-        <div className="ou-banner__desc">
-          Добавление страниц «до / после», встроенный rich-text редактор,
-          drag-reorder и выбор шаблона страницы реализуются отдельным шагом
-          PRD-7 интеграции с PRD-1 §4.
-        </div>
-      </div>
-    </div>
+    />
   );
 }
 
@@ -180,18 +149,13 @@ function ZonesBlock(props: {
 
   if (model.sections.length === 0) {
     return (
-      <div
-        className="ou-empty ou-empty--inline ou-empty--well"
+      <EmptyState
+        layout="inline"
+        well
+        title="Тем пока нет"
+        description="Добавьте темы во вкладке «Состав» — здесь они появятся в порядке прохождения."
         data-testid="structure-empty"
-      >
-        <div className="ou-empty__content">
-          <div className="ou-empty__title">Тем пока нет</div>
-          <div className="ou-empty__desc">
-            Добавьте темы во вкладке «Состав» — здесь они появятся в порядке
-            прохождения.
-          </div>
-        </div>
-      </div>
+      />
     );
   }
 
@@ -375,35 +339,35 @@ function PageRow(props: {
       <span className="tb-page-row__badge">{badge}</span>
       <span className="tb-page-row__title">{title}</span>
       {page.templateKeyMissing && (
-        <span className="ou-tag ou-tag--warning ou-tag--s" data-testid={`structure-page-missing-${page.id}`}>
+        <Tag tone="warning" size="s" data-testid={`structure-page-missing-${page.id}`}>
           Шаблон страницы недоступен
-        </span>
+        </Tag>
       )}
       <div className="tb-page-row__actions">
         {!confirming ? (
-          <button
-            type="button"
-            className="ou-btn ou-btn--ghost ou-btn--s"
+          <Button
+            variant="ghost"
+            size="s"
             onClick={() => setConfirming(true)}
             data-testid={`structure-page-delete-${page.id}`}
             aria-label={`Удалить страницу ${title}`}
           >
             Удалить
-          </button>
+          </Button>
         ) : (
           <>
             <span className="tb-page-row__confirm">Удалить?</span>
-            <button
-              type="button"
-              className="ou-btn ou-btn--secondary ou-btn--s"
+            <Button
+              variant="secondary"
+              size="s"
               onClick={() => setConfirming(false)}
               data-testid={`structure-page-delete-cancel-${page.id}`}
             >
               Отмена
-            </button>
-            <button
-              type="button"
-              className="ou-btn ou-btn--primary ou-btn--s"
+            </Button>
+            <Button
+              variant="primary"
+              size="s"
               onClick={() => {
                 props.onRemove(page.id).then(() => setConfirming(false)).catch(() => {
                   // surface left to react-query; just exit confirm mode.
@@ -411,10 +375,11 @@ function PageRow(props: {
                 });
               }}
               disabled={props.isRemoving}
+              loading={props.isRemoving}
               data-testid={`structure-page-delete-confirm-${page.id}`}
             >
               {props.isRemoving ? "Удаляем…" : "Удалить"}
-            </button>
+            </Button>
           </>
         )}
       </div>

@@ -15,7 +15,7 @@
  *     level CRUD (add / edit / remove) + level links CRUD.
  */
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { SettingsSection } from "../basic-settings-section";
 import type { TestEditorModel } from "../../test-editor.types";
 
@@ -57,6 +57,18 @@ function runUpdater(
     m: TestEditorModel,
   ) => TestEditorModel;
   return updater(model);
+}
+
+/**
+ * Open a ui-kit Select identified by its testid wrapper, then click the option
+ * whose visible text matches `optionLabel`. The DS Select renders the testid on
+ * the wrapper `<div>` (via `...rest`) while the actual click target is the
+ * inner `<button>`.
+ */
+function selectOption(selectTestId: string, optionLabel: string | RegExp) {
+  const wrap = screen.getByTestId(selectTestId);
+  fireEvent.click(within(wrap).getByRole("button"));
+  fireEvent.click(screen.getByRole("option", { name: optionLabel }));
 }
 
 // ─── Side-rail navigation ─────────────────────────────────────────────────────
@@ -110,7 +122,7 @@ describe("<SettingsSection /> — Основное pane", () => {
     const updateModel = vi.fn();
     const model = baseModel();
     render(<SettingsSection model={model} updateModel={updateModel} />);
-    fireEvent.click(screen.getByTestId("settings-mode-adaptive"));
+    fireEvent.click(screen.getByRole("button", { name: "Адаптивный" }));
     expect(runUpdater(updateModel, model).mode).toBe("adaptive");
   });
 
@@ -118,9 +130,7 @@ describe("<SettingsSection /> — Основное pane", () => {
     const updateModel = vi.fn();
     const model = baseModel();
     render(<SettingsSection model={model} updateModel={updateModel} />);
-    fireEvent.change(screen.getByTestId("settings-flow-mode"), {
-      target: { value: "router_by_topics" },
-    });
+    selectOption("settings-flow-mode", "Маршрутизатор по темам");
     expect(runUpdater(updateModel, model).flowMode).toBe("router_by_topics");
   });
 });
@@ -207,12 +217,20 @@ describe("<SettingsSection /> — Правила прохождения pane", (
   it("renders all 4 decision-policy radio options", () => {
     render(<SettingsSection model={baseModel()} updateModel={() => {}} />);
     fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
-    expect(screen.getByTestId("pass-policy-overall_only")).toBeInTheDocument();
     expect(
-      screen.getByTestId("pass-policy-overall_and_required_topics"),
+      screen.getByRole("radio", { name: /достигнут общий проходной порог теста/i }),
     ).toBeInTheDocument();
-    expect(screen.getByTestId("pass-policy-required_topics_only")).toBeInTheDocument();
-    expect(screen.getByTestId("pass-policy-all_topics_passed")).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", {
+        name: /достигнут общий проходной порог и пройдены все обязательные темы/i,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: /^пройдены все обязательные темы$/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: /пройдена каждая выбранная тема/i }),
+    ).toBeInTheDocument();
   });
 
   it("changes decisionPolicy when a radio is selected", () => {
@@ -220,7 +238,9 @@ describe("<SettingsSection /> — Правила прохождения pane", (
     const model = baseModel();
     render(<SettingsSection model={model} updateModel={updateModel} />);
     fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
-    fireEvent.click(screen.getByTestId("pass-policy-all_topics_passed"));
+    fireEvent.click(
+      screen.getByRole("radio", { name: /пройдена каждая выбранная тема/i }),
+    );
     expect(runUpdater(updateModel, model).passRules.decisionPolicy).toBe(
       "all_topics_passed",
     );
@@ -231,9 +251,7 @@ describe("<SettingsSection /> — Правила прохождения pane", (
     const model = baseModel();
     render(<SettingsSection model={model} updateModel={updateModel} />);
     fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
-    fireEvent.change(screen.getByTestId("pass-overall-type"), {
-      target: { value: "absolute" },
-    });
+    selectOption("pass-overall-type", "Сумма баллов");
     const next = runUpdater(updateModel, model).passRules.overall;
     expect(next.type).toBe("absolute");
     expect(next.value).toBe(70);
@@ -316,9 +334,7 @@ describe("<SettingsSection /> — Правила прохождения pane", (
     });
     render(<SettingsSection model={model} updateModel={updateModel} />);
     fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
-    fireEvent.change(screen.getByTestId("pass-topic-source-top-1"), {
-      target: { value: "custom" },
-    });
+    selectOption("pass-topic-source-top-1", "Индивидуальное правило");
     const rule = runUpdater(updateModel, model).passRules.byTopic["top-1"];
     expect(rule).toEqual({ source: "custom", type: "percent", value: 70 });
   });

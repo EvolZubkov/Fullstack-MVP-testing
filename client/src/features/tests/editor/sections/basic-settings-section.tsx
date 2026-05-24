@@ -21,6 +21,22 @@
  * section just renders inputs and reports changes.
  */
 import { useState } from "react";
+import {
+  Accordion,
+  AccordionItem,
+  Banner,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Input,
+  NumberInput,
+  RadioGroup,
+  SegmentedControl,
+  Select,
+  Switch,
+  Textarea,
+} from "@universityrt/ui-kit";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
@@ -102,101 +118,76 @@ function BasicPane({ model, updateModel }: SettingsSectionProps) {
   return (
     <>
       <div className="ou-formfield">
-        <label className="ou-formfield__lbl" htmlFor="settings-title">
-          Название
-          <span className="ou-formfield__lbl-req" aria-hidden="true">*</span>
-        </label>
-        <div className="ou-field ou-field--m">
-          <div className="ou-field__box">
-            <input
-              className="ou-field__input"
-              id="settings-title"
-              type="text"
-              value={model.basic.title}
-              placeholder="Введите название теста"
-              required
-              onChange={(e) => {
-                const value = e.target.value;
-                updateModel((m) => ({
-                  ...m,
-                  basic: { ...m.basic, title: value },
-                }));
-              }}
-              data-testid="settings-title-input"
-            />
-          </div>
-        </div>
+        <Input
+          id="settings-title"
+          size="m"
+          fullWidth
+          label="Название *"
+          value={model.basic.title}
+          placeholder="Введите название теста"
+          required
+          onChange={(e) => {
+            const value = e.target.value;
+            updateModel((m) => ({
+              ...m,
+              basic: { ...m.basic, title: value },
+            }));
+          }}
+          data-testid="settings-title-input"
+        />
       </div>
 
       <div className="ou-formfield">
-        <label className="ou-formfield__lbl" htmlFor="settings-description">
-          Описание
-        </label>
-        <div className="ou-textarea ou-textarea--m">
-          <div className="ou-textarea__box">
-            <textarea
-              className="ou-textarea__input"
-              id="settings-description"
-              rows={3}
-              value={model.basic.description}
-              placeholder="Опишите цели теста и аудиторию"
-              onChange={(e) => {
-                const value = e.target.value;
-                updateModel((m) => ({
-                  ...m,
-                  basic: { ...m.basic, description: value },
-                }));
-              }}
-              data-testid="settings-description-input"
-            />
-          </div>
-        </div>
+        <Textarea
+          id="settings-description"
+          size="m"
+          fullWidth
+          rows={3}
+          label="Описание"
+          value={model.basic.description}
+          placeholder="Опишите цели теста и аудиторию"
+          onChange={(e) => {
+            const value = e.target.value;
+            updateModel((m) => ({
+              ...m,
+              basic: { ...m.basic, description: value },
+            }));
+          }}
+          data-testid="settings-description-input"
+        />
       </div>
 
       <hr className="wf-sep" />
 
-      <div className="ou-formfield">
+      <div className="ou-formfield" data-testid="settings-mode-group">
         <label className="ou-formfield__lbl">Режим теста</label>
-        <div className="ou-seg" role="group" aria-label="Режим теста">
-          <button
-            type="button"
-            className={"ou-seg__item" + (model.mode === "standard" ? " is-active" : "")}
-            aria-pressed={model.mode === "standard" ? "true" : "false"}
-            onClick={() => updateModel((m) => ({ ...m, mode: "standard" }))}
-            data-testid="settings-mode-standard"
-          >
-            Стандартный
-          </button>
-          <button
-            type="button"
-            className={"ou-seg__item" + (model.mode === "adaptive" ? " is-active" : "")}
-            aria-pressed={model.mode === "adaptive" ? "true" : "false"}
-            onClick={() => updateModel((m) => ({ ...m, mode: "adaptive" }))}
-            data-testid="settings-mode-adaptive"
-          >
-            Адаптивный
-          </button>
-        </div>
+        <SegmentedControl<"standard" | "adaptive">
+          size="m"
+          value={model.mode}
+          aria-label="Режим теста"
+          items={[
+            { value: "standard", label: "Стандартный" },
+            { value: "adaptive", label: "Адаптивный" },
+          ]}
+          onChange={(value) => updateModel((m) => ({ ...m, mode: value }))}
+        />
       </div>
 
       <div className="ou-formfield">
-        <label className="ou-formfield__lbl" htmlFor="settings-flow-mode">
-          Сценарий прохождения
-        </label>
-        <select
+        <Select<FlowMode>
           id="settings-flow-mode"
-          className="ou-field__input"
+          size="m"
+          fullWidth
+          label="Сценарий прохождения"
           value={model.flowMode}
-          onChange={(e) => {
-            const value = e.target.value as FlowMode;
-            updateModel((m) => ({ ...m, flowMode: value }));
-          }}
+          options={[
+            { value: "linear_flat", label: "Линейный" },
+            { value: "linear_by_topics", label: "Линейный по темам" },
+            { value: "router_by_topics", label: "Маршрутизатор по темам" },
+          ]}
+          onChange={(value) => updateModel((m) => ({ ...m, flowMode: value }))}
           data-testid="settings-flow-mode"
-        >
-          <option value="linear_flat">Линейный</option>
-          <option value="linear_by_topics">Линейный по темам</option>
-          <option value="router_by_topics">Маршрутизатор по темам</option>
-        </select>
+        />
       </div>
     </>
   );
@@ -208,75 +199,54 @@ function LimitsPane({ model, updateModel }: SettingsSectionProps) {
   return (
     <>
       <div className="ou-formfield">
-        <label className="ou-formfield__lbl" htmlFor="settings-time-limit">
-          Ограничение времени, минут
-        </label>
-        <div className="ou-field ou-field--m">
-          <div className="ou-field__box">
-            <input
-              className="ou-field__input"
-              id="settings-time-limit"
-              type="number"
-              min={1}
-              value={model.runtime.timeLimitMinutes ?? ""}
-              placeholder="Без ограничения"
-              onChange={(e) => {
-                const raw = e.target.value;
-                const next = raw === "" ? null : Math.max(1, Number(raw) || 1);
-                updateModel((m) => ({
-                  ...m,
-                  runtime: { ...m.runtime, timeLimitMinutes: next },
-                }));
-              }}
-              data-testid="settings-time-limit-input"
-            />
-          </div>
-        </div>
+        <NumberInput
+          id="settings-time-limit"
+          size="m"
+          label="Ограничение времени, минут"
+          hint="Оставьте 0 для запуска без ограничения."
+          value={model.runtime.timeLimitMinutes ?? 0}
+          min={0}
+          data-testid="settings-time-limit-input"
+          onChange={(next) =>
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, timeLimitMinutes: next === 0 ? null : next },
+            }))
+          }
+        />
       </div>
 
       <div className="ou-formfield">
-        <label className="ou-formfield__lbl" htmlFor="settings-max-attempts">
-          Максимум попыток
-        </label>
-        <div className="ou-field ou-field--m">
-          <div className="ou-field__box">
-            <input
-              className="ou-field__input"
-              id="settings-max-attempts"
-              type="number"
-              min={1}
-              value={model.runtime.maxAttempts ?? ""}
-              placeholder="Не ограничено"
-              onChange={(e) => {
-                const raw = e.target.value;
-                const next = raw === "" ? null : Math.max(1, Number(raw) || 1);
-                updateModel((m) => ({
-                  ...m,
-                  runtime: { ...m.runtime, maxAttempts: next },
-                }));
-              }}
-              data-testid="settings-max-attempts-input"
-            />
-          </div>
-        </div>
+        <NumberInput
+          id="settings-max-attempts"
+          size="m"
+          label="Максимум попыток"
+          hint="Оставьте 0 для неограниченного числа попыток."
+          value={model.runtime.maxAttempts ?? 0}
+          min={0}
+          data-testid="settings-max-attempts-input"
+          onChange={(next) =>
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, maxAttempts: next === 0 ? null : next },
+            }))
+          }
+        />
       </div>
 
       <div className="ou-formfield">
-        <label className="ou-formfield__lbl">
-          <input
-            type="checkbox"
-            checked={model.runtime.showCorrectAnswers}
-            onChange={(e) => {
-              const checked = e.target.checked;
-              updateModel((m) => ({
-                ...m,
-                runtime: { ...m.runtime, showCorrectAnswers: checked },
-              }));
-            }}
-            data-testid="settings-show-correct-checkbox"
-          />{" "}
-          Показывать правильные ответы после прохождения
-        </label>
+        <Switch
+          label="Показывать правильные ответы после прохождения"
+          checked={model.runtime.showCorrectAnswers}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, showCorrectAnswers: checked },
+            }));
+          }}
+          data-testid="settings-show-correct-checkbox"
+        />
       </div>
     </>
   );
@@ -288,46 +258,38 @@ function IntegrationPane({ model, updateModel }: SettingsSectionProps) {
   return (
     <>
       <div className="ou-formfield">
-        <label className="ou-formfield__lbl" htmlFor="settings-webhook">
-          Webhook URL
-        </label>
-        <div className="ou-field ou-field--m">
-          <div className="ou-field__box">
-            <input
-              className="ou-field__input"
-              id="settings-webhook"
-              type="url"
-              value={model.basic.webhookUrl}
-              placeholder="https://example.com/webhook"
-              onChange={(e) => {
-                const value = e.target.value;
-                updateModel((m) => ({
-                  ...m,
-                  basic: { ...m.basic, webhookUrl: value },
-                }));
-              }}
-              data-testid="settings-webhook-input"
-            />
-          </div>
-        </div>
+        <Input
+          id="settings-webhook"
+          size="m"
+          fullWidth
+          label="Webhook URL"
+          type="url"
+          value={model.basic.webhookUrl}
+          placeholder="https://example.com/webhook"
+          onChange={(e) => {
+            const value = e.target.value;
+            updateModel((m) => ({
+              ...m,
+              basic: { ...m.basic, webhookUrl: value },
+            }));
+          }}
+          data-testid="settings-webhook-input"
+        />
       </div>
 
       <div className="ou-formfield">
-        <label className="ou-formfield__lbl">
-          <input
-            type="checkbox"
-            checked={model.basic.telemetryEnabled}
-            onChange={(e) => {
-              const checked = e.target.checked;
-              updateModel((m) => ({
-                ...m,
-                basic: { ...m.basic, telemetryEnabled: checked },
-              }));
-            }}
-            data-testid="settings-telemetry-checkbox"
-          />{" "}
-          Отправлять телеметрию о прохождении
-        </label>
+        <Switch
+          label="Отправлять телеметрию о прохождении"
+          checked={model.basic.telemetryEnabled}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              basic: { ...m.basic, telemetryEnabled: checked },
+            }));
+          }}
+          data-testid="settings-telemetry-checkbox"
+        />
       </div>
     </>
   );
@@ -351,113 +313,83 @@ const DECISION_POLICIES: { value: PassDecisionPolicy; label: string }[] = [
 function PassRulesPane({ model, updateModel }: SettingsSectionProps) {
   return (
     <>
-      <section
-        className="ou-card ou-card--outlined ou-card--sm tb-pass-card"
+      <Card
+        variant="outlined"
+        size="sm"
+        className="tb-pass-card"
         data-testid="settings-pass-rules-card"
       >
-        <header className="ou-card__header">
-          <h3 className="ou-card__title">Тест пройден, если:</h3>
-        </header>
-        <div className="ou-card__body">
-          <fieldset className="ou-radio-group ou-radio-group--vertical">
-            <div className="ou-radio-group__items">
-              {DECISION_POLICIES.map((policy) => {
-                const checked = model.passRules.decisionPolicy === policy.value;
-                return (
-                  <label key={policy.value} className="ou-radio-field">
-                    <span className={"ou-radio ou-radio--m" + (checked ? " is-on" : "")}>
-                      <input
-                        type="radio"
-                        name="pass-decision-policy"
-                        className="ou-radio__input"
-                        checked={checked}
-                        onChange={() =>
-                          updateModel((m) => ({
-                            ...m,
-                            passRules: {
-                              ...m.passRules,
-                              decisionPolicy: policy.value,
-                            },
-                          }))
-                        }
-                        data-testid={`pass-policy-${policy.value}`}
-                      />
-                      <span className="ou-radio__ring">
-                        <span className="ou-radio__dot" />
-                      </span>
-                    </span>
-                    <span className="ou-radio-field__text">
-                      <span className="ou-radio-field__label">{policy.label}</span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
+        <CardHeader title="Тест пройден, если:" />
+        <CardBody>
+          <RadioGroup<PassDecisionPolicy>
+            name="pass-decision-policy"
+            value={model.passRules.decisionPolicy}
+            options={DECISION_POLICIES}
+            onChange={(value) =>
+              updateModel((m) => ({
+                ...m,
+                passRules: { ...m.passRules, decisionPolicy: value },
+              }))
+            }
+          />
 
           <hr className="wf-sep" />
 
           <div className="tb-pass-overall">
             <div className="ou-formfield">
-              <label className="ou-formfield__lbl" htmlFor="pass-overall-type">
-                Тип общего правила
-              </label>
-              <select
+              <Select<OverallPassType>
                 id="pass-overall-type"
-                className="ou-field__input"
+                size="m"
+                fullWidth
+                label="Тип общего правила"
                 value={model.passRules.overall.type}
-                onChange={(e) => {
-                  const value = e.target.value as OverallPassType;
+                options={[
+                  { value: "percent", label: "Процент правильных ответов" },
+                  { value: "absolute", label: "Сумма баллов" },
+                  { value: "none", label: "Не задано" },
+                ]}
+                onChange={(value) =>
                   updateModel((m) => ({
                     ...m,
                     passRules: {
                       ...m.passRules,
                       overall: buildOverallByType(value, m.passRules.overall),
                     },
-                  }));
-                }}
+                  }))
+                }
                 data-testid="pass-overall-type"
-              >
-                <option value="percent">Процент правильных ответов</option>
-                <option value="absolute">Сумма баллов</option>
-                <option value="none">Не задано</option>
-              </select>
+              />
             </div>
             {model.passRules.overall.type !== "none" && (
               <div className="ou-formfield">
-                <label className="ou-formfield__lbl" htmlFor="pass-overall-value">
-                  Порог
-                  {model.passRules.overall.type === "percent" ? " (%)" : " (баллы)"}
-                </label>
-                <div className="ou-field ou-field--m">
-                  <div className="ou-field__box">
-                    <input
-                      id="pass-overall-value"
-                      className="ou-field__input"
-                      type="number"
-                      min={0}
-                      max={model.passRules.overall.type === "percent" ? 100 : undefined}
-                      value={model.passRules.overall.value}
-                      onChange={(e) => {
-                        const raw = Number(e.target.value);
-                        const next = Number.isFinite(raw) ? Math.max(0, raw) : 0;
-                        updateModel((m) => ({
-                          ...m,
-                          passRules: {
-                            ...m.passRules,
-                            overall: { ...m.passRules.overall, value: next },
-                          },
-                        }));
-                      }}
-                      data-testid="pass-overall-value"
-                    />
-                  </div>
-                </div>
+                <NumberInput
+                  id="pass-overall-value"
+                  size="m"
+                  label={
+                    model.passRules.overall.type === "percent"
+                      ? "Порог (%)"
+                      : "Порог (баллы)"
+                  }
+                  value={model.passRules.overall.value}
+                  min={0}
+                  max={model.passRules.overall.type === "percent" ? 100 : undefined}
+                  suffix={model.passRules.overall.type === "percent" ? "%" : undefined}
+                  data-testid="pass-overall-value"
+                  onChange={(next) =>
+                    updateModel((m) => ({
+                      ...m,
+                      passRules: {
+                        ...m.passRules,
+                        overall: { ...m.passRules.overall, value: next },
+                      },
+                    }))
+                  }
+                />
               </div>
             )}
           </div>
-        </div>
-      </section>
+        </CardBody>
+      </Card>
 
       {model.sections.length > 0 && (
         <>
@@ -584,20 +516,19 @@ function PassTopicRow(props: {
       <tr data-testid={`pass-topic-row-${props.topicId}`}>
         <td>{props.topicName}</td>
         <td>
-          <select
-            className="ou-field__input"
+          <Select<TopicPassRule["source"]>
+            size="s"
+            fullWidth
             value={props.rule.source}
-            onChange={(e) => {
-              const value = e.target.value as TopicPassRule["source"];
-              props.onSourceChange(value);
-            }}
             aria-label={`Правило прохождения темы ${props.topicName}`}
+            options={[
+              { value: "inherit_overall", label: "Как у теста" },
+              { value: "custom", label: "Индивидуальное правило" },
+              { value: "none", label: "Не проверять отдельно" },
+            ]}
+            onChange={(value) => props.onSourceChange(value)}
             data-testid={`pass-topic-source-${props.topicId}`}
-          >
-            <option value="inherit_overall">Как у теста</option>
-            <option value="custom">Индивидуальное правило</option>
-            <option value="none">Не проверять отдельно</option>
-          </select>
+          />
         </td>
         <td className="tb-pass-table__req-col">
           <label>
@@ -623,41 +554,31 @@ function PassTopicRow(props: {
           <td>
             <div className="tb-pass-table__detail-inner">
               <div className="ou-formfield">
-                <label className="ou-formfield__lbl">Тип</label>
-                <select
-                  className="ou-field__input"
+                <Select<"percent" | "absolute">
+                  size="s"
+                  label="Тип"
                   value={props.rule.type}
-                  onChange={(e) => {
-                    const value = e.target.value as "percent" | "absolute";
-                    props.onCustomTypeChange(value);
-                  }}
                   aria-label={`Тип индивидуального правила темы ${props.topicName}`}
+                  options={[
+                    { value: "percent", label: "Процент" },
+                    { value: "absolute", label: "Сумма баллов" },
+                  ]}
+                  onChange={(value) => props.onCustomTypeChange(value)}
                   data-testid={`pass-topic-custom-type-${props.topicId}`}
-                >
-                  <option value="percent">Процент</option>
-                  <option value="absolute">Сумма баллов</option>
-                </select>
+                />
               </div>
               <div className="ou-formfield">
-                <label className="ou-formfield__lbl">Порог</label>
-                <div className="ou-field ou-field--s">
-                  <div className="ou-field__box">
-                    <input
-                      className="ou-field__input"
-                      type="number"
-                      min={0}
-                      max={props.rule.type === "percent" ? 100 : undefined}
-                      value={props.rule.value}
-                      onChange={(e) => {
-                        const raw = Number(e.target.value);
-                        const next = Number.isFinite(raw) ? Math.max(0, raw) : 0;
-                        props.onCustomValueChange(next);
-                      }}
-                      aria-label={`Значение порога темы ${props.topicName}`}
-                      data-testid={`pass-topic-custom-value-${props.topicId}`}
-                    />
-                  </div>
-                </div>
+                <NumberInput
+                  size="s"
+                  label="Порог"
+                  value={props.rule.value}
+                  min={0}
+                  max={props.rule.type === "percent" ? 100 : undefined}
+                  suffix={props.rule.type === "percent" ? "%" : undefined}
+                  aria-label={`Значение порога темы ${props.topicName}`}
+                  data-testid={`pass-topic-custom-value-${props.topicId}`}
+                  onChange={(next) => props.onCustomValueChange(next)}
+                />
               </div>
             </div>
           </td>
@@ -758,44 +679,31 @@ function AdaptivePane({ model, updateModel }: SettingsSectionProps) {
   return (
     <>
       {!isAdaptive && (
-        <div
-          className="ou-banner ou-banner--warning"
-          role="status"
+        <Banner
+          tone="warning"
+          title="Сейчас режим теста — стандартный"
+          description="Настройки ниже будут применены только если в подразделе «Основное» переключить режим теста на «Адаптивный». Сейчас они сохраняются как draft, но не используются runtime'ом (FR-25h, FR-25i)."
           data-testid="adaptive-mode-warning"
-        >
-          <div className="ou-banner__body">
-            <div className="ou-banner__title">
-              Сейчас режим теста — стандартный
-            </div>
-            <div className="ou-banner__desc">
-              Настройки ниже будут применены только если в подразделе «Основное»
-              переключить режим теста на «Адаптивный». Сейчас они сохраняются
-              как draft, но не используются runtime'ом (FR-25h, FR-25i).
-            </div>
-          </div>
-        </div>
+        />
       )}
 
       <div className="ou-formfield">
-        <label className="ou-switch-field">
-          <input
-            type="checkbox"
-            checked={model.adaptive.showDifficultyLevel}
-            onChange={(e) => {
-              const checked = e.target.checked;
-              updateModel((m) => ({
-                ...m,
-                adaptive: {
-                  ...m.adaptive,
-                  showDifficultyLevel: checked,
-                  testSettings: { ...m.adaptive.testSettings, showDifficultyLevel: checked },
-                },
-              }));
-            }}
-            data-testid="adaptive-show-difficulty"
-          />{" "}
-          Показывать уровень сложности при прохождении
-        </label>
+        <Switch
+          label="Показывать уровень сложности при прохождении"
+          checked={model.adaptive.showDifficultyLevel}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              adaptive: {
+                ...m.adaptive,
+                showDifficultyLevel: checked,
+                testSettings: { ...m.adaptive.testSettings, showDifficultyLevel: checked },
+              },
+            }));
+          }}
+          data-testid="adaptive-show-difficulty"
+        />
       </div>
 
       <hr className="wf-sep" />
@@ -803,20 +711,12 @@ function AdaptivePane({ model, updateModel }: SettingsSectionProps) {
       <h3 className="tb-topics-title">Адаптивность по темам</h3>
 
       {model.sections.length === 0 ? (
-        <div
-          className="ou-banner ou-banner--info"
-          role="status"
+        <Banner
+          tone="info"
+          title="Сначала добавьте темы"
+          description="Адаптивность настраивается по темам теста. Перейдите во вкладку «Состав» и добавьте темы — после этого здесь появится список для настройки уровней."
           data-testid="adaptive-no-topics"
-        >
-          <div className="ou-banner__body">
-            <div className="ou-banner__title">Сначала добавьте темы</div>
-            <div className="ou-banner__desc">
-              Адаптивность настраивается по темам теста. Перейдите во вкладку
-              «Состав» и добавьте темы — после этого здесь появится список для
-              настройки уровней.
-            </div>
-          </div>
-        </div>
+        />
       ) : (
         <div className="tb-adaptive-topics" data-testid="adaptive-topics-list">
           {model.sections.map((section) => {
@@ -893,7 +793,7 @@ function AdaptiveTopicAccordion(props: {
           type="button"
           className="ou-acc__trigger tb-adaptive-topics__trigger"
           onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
+          aria-expanded={open ? "true" : "false"}
           data-testid={`adaptive-topic-toggle-${topic.topicId}`}
         >
           <span className="ou-acc__trigger-text">
@@ -901,9 +801,8 @@ function AdaptiveTopicAccordion(props: {
             <span className="ou-acc__subtitle">{subtitle}</span>
           </span>
         </button>
-        <label className="tb-adaptive-topics__toggle">
-          <input
-            type="checkbox"
+        <span className="tb-adaptive-topics__toggle">
+          <Switch
             checked={topic.enabled}
             onChange={(e) => {
               const checked = e.target.checked;
@@ -912,46 +811,38 @@ function AdaptiveTopicAccordion(props: {
             aria-label={`Адаптивность включена для темы ${topic.topicName}`}
             data-testid={`adaptive-topic-enabled-${topic.topicId}`}
           />
-        </label>
+        </span>
       </div>
       {open && (
         <div className="ou-acc__body" data-testid={`adaptive-topic-body-${topic.topicId}`}>
           <div className="ou-formfield">
-            <label
-              className="ou-formfield__lbl"
-              htmlFor={`adaptive-topic-failure-${topic.topicId}`}
-            >
-              Обратная связь при не пройденном уровне
-            </label>
-            <div className="ou-textarea ou-textarea--s">
-              <div className="ou-textarea__box">
-                <textarea
-                  id={`adaptive-topic-failure-${topic.topicId}`}
-                  className="ou-textarea__input"
-                  rows={2}
-                  value={topic.failureFeedback ?? ""}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    props.onFailureFeedbackChange(value);
-                  }}
-                  data-testid={`adaptive-topic-failure-${topic.topicId}`}
-                />
-              </div>
-            </div>
+            <Textarea
+              id={`adaptive-topic-failure-${topic.topicId}`}
+              size="s"
+              fullWidth
+              rows={2}
+              label="Обратная связь при не пройденном уровне"
+              value={topic.failureFeedback ?? ""}
+              onChange={(e) => {
+                const value = e.target.value;
+                props.onFailureFeedbackChange(value);
+              }}
+              data-testid={`adaptive-topic-failure-${topic.topicId}`}
+            />
           </div>
 
           <div className="tb-adaptive-section">
             <div className="tb-adaptive-section__head">
               <h4 className="tb-adaptive-section__title">Уровни сложности</h4>
               <div className="tb-adaptive-section__actions">
-                <button
-                  type="button"
-                  className="ou-btn ou-btn--secondary ou-btn--s"
+                <Button
+                  variant="secondary"
+                  size="s"
                   onClick={props.onAddLevel}
                   data-testid={`adaptive-add-level-${topic.topicId}`}
                 >
                   + Добавить уровень
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -990,192 +881,134 @@ function AdaptiveLevelCard(props: {
   const testIdBase = `adaptive-level-${props.topicId}-${level.levelIndex}`;
 
   return (
-    <section
-      className="ou-card ou-card--outlined ou-card--sm tb-level-card"
+    <Card
+      variant="outlined"
+      size="sm"
+      className="tb-level-card"
       data-testid={testIdBase}
     >
-      <header className="ou-card__header tb-level-card__head">
-        <div className="ou-card__heading tb-level-card__heading">
-          <h5 className="ou-card__title tb-level-card__title">{level.levelName}</h5>
-          <p className="ou-card__subtitle tb-level-card__summary">
+      <CardHeader
+        className="tb-level-card__head"
+        title={level.levelName}
+        subtitle={
+          <>
             {level.minDifficulty}–{level.maxDifficulty} · {level.questionsCount} вопросов · {level.passThreshold}
             {level.passThresholdType === "percent" ? " %" : " б."}
-          </p>
-        </div>
-        <div className="ou-card__trail tb-level-card__trail">
-          <button
-            type="button"
-            className="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del"
+          </>
+        }
+        trail={
+          <Button
+            variant="ghost"
+            size="s"
             onClick={props.onRemove}
             aria-label={`Удалить уровень ${level.levelName}`}
             data-testid={`${testIdBase}-remove`}
           >
             ×
-          </button>
-        </div>
-      </header>
-      <div className="ou-card__body tb-level-card__body">
+          </Button>
+        }
+      />
+      <CardBody className="tb-level-card__body">
         <div className="tb-level-grid">
           <div className="ou-formfield">
-            <label className="ou-formfield__lbl" htmlFor={`${testIdBase}-name`}>
-              Название
-            </label>
-            <div className="ou-field ou-field--s ou-field--full">
-              <div className="ou-field__box">
-                <input
-                  id={`${testIdBase}-name`}
-                  className="ou-field__input"
-                  type="text"
-                  value={level.levelName}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    props.onChange({ levelName: value });
-                  }}
-                  data-testid={`${testIdBase}-name`}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="ou-formfield">
-            <label className="ou-formfield__lbl" htmlFor={`${testIdBase}-min`}>
-              Сложность от
-            </label>
-            <div className="ou-field ou-field--s">
-              <div className="ou-field__box">
-                <input
-                  id={`${testIdBase}-min`}
-                  className="ou-field__input"
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={level.minDifficulty}
-                  onChange={(e) => {
-                    const raw = Number(e.target.value);
-                    const value = Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) : 0;
-                    props.onChange({ minDifficulty: value });
-                  }}
-                  data-testid={`${testIdBase}-min`}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="ou-formfield">
-            <label className="ou-formfield__lbl" htmlFor={`${testIdBase}-max`}>
-              до
-            </label>
-            <div className="ou-field ou-field--s">
-              <div className="ou-field__box">
-                <input
-                  id={`${testIdBase}-max`}
-                  className="ou-field__input"
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={level.maxDifficulty}
-                  onChange={(e) => {
-                    const raw = Number(e.target.value);
-                    const value = Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) : 0;
-                    props.onChange({ maxDifficulty: value });
-                  }}
-                  data-testid={`${testIdBase}-max`}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="ou-formfield">
-            <label className="ou-formfield__lbl" htmlFor={`${testIdBase}-questions`}>
-              Вопросов
-            </label>
-            <div className="ou-field ou-field--s">
-              <div className="ou-field__box">
-                <input
-                  id={`${testIdBase}-questions`}
-                  className="ou-field__input"
-                  type="number"
-                  min={1}
-                  value={level.questionsCount}
-                  onChange={(e) => {
-                    const raw = Number(e.target.value);
-                    const value = Number.isFinite(raw) ? Math.max(1, raw) : 1;
-                    props.onChange({ questionsCount: value });
-                  }}
-                  data-testid={`${testIdBase}-questions`}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="ou-formfield">
-            <label
-              className="ou-formfield__lbl"
-              htmlFor={`${testIdBase}-threshold-type`}
-            >
-              Тип порога
-            </label>
-            <select
-              id={`${testIdBase}-threshold-type`}
-              className="ou-field__input"
-              value={level.passThresholdType}
+            <Input
+              id={`${testIdBase}-name`}
+              size="s"
+              fullWidth
+              label="Название"
+              value={level.levelName}
               onChange={(e) => {
-                const value = e.target.value as "percent" | "absolute";
-                props.onChange({ passThresholdType: value });
+                const value = e.target.value;
+                props.onChange({ levelName: value });
               }}
-              data-testid={`${testIdBase}-threshold-type`}
-            >
-              <option value="percent">Процент</option>
-              <option value="absolute">Сумма баллов</option>
-            </select>
+              data-testid={`${testIdBase}-name`}
+            />
           </div>
           <div className="ou-formfield">
-            <label className="ou-formfield__lbl" htmlFor={`${testIdBase}-threshold`}>
-              Порог
-            </label>
-            <div className="ou-field ou-field--s">
-              <div className="ou-field__box">
-                <input
-                  id={`${testIdBase}-threshold`}
-                  className="ou-field__input"
-                  type="number"
-                  min={0}
-                  max={level.passThresholdType === "percent" ? 100 : level.questionsCount}
-                  value={level.passThreshold}
-                  onChange={(e) => {
-                    const raw = Number(e.target.value);
-                    const value = Number.isFinite(raw) ? Math.max(0, raw) : 0;
-                    props.onChange({ passThreshold: value });
-                  }}
-                  data-testid={`${testIdBase}-threshold`}
-                />
-              </div>
-            </div>
+            <NumberInput
+              id={`${testIdBase}-min`}
+              size="s"
+              label="Сложность от"
+              value={level.minDifficulty}
+              min={0}
+              max={100}
+              data-testid={`${testIdBase}-min`}
+              onChange={(next) => props.onChange({ minDifficulty: next })}
+            />
+          </div>
+          <div className="ou-formfield">
+            <NumberInput
+              id={`${testIdBase}-max`}
+              size="s"
+              label="до"
+              value={level.maxDifficulty}
+              min={0}
+              max={100}
+              data-testid={`${testIdBase}-max`}
+              onChange={(next) => props.onChange({ maxDifficulty: next })}
+            />
+          </div>
+          <div className="ou-formfield">
+            <NumberInput
+              id={`${testIdBase}-questions`}
+              size="s"
+              label="Вопросов"
+              value={level.questionsCount}
+              min={1}
+              data-testid={`${testIdBase}-questions`}
+              onChange={(next) => props.onChange({ questionsCount: next })}
+            />
+          </div>
+          <div className="ou-formfield">
+            <Select<"percent" | "absolute">
+              id={`${testIdBase}-threshold-type`}
+              size="s"
+              label="Тип порога"
+              value={level.passThresholdType}
+              options={[
+                { value: "percent", label: "Процент" },
+                { value: "absolute", label: "Сумма баллов" },
+              ]}
+              onChange={(value) => props.onChange({ passThresholdType: value })}
+              data-testid={`${testIdBase}-threshold-type`}
+            />
+          </div>
+          <div className="ou-formfield">
+            <NumberInput
+              id={`${testIdBase}-threshold`}
+              size="s"
+              label="Порог"
+              value={level.passThreshold}
+              min={0}
+              max={level.passThresholdType === "percent" ? 100 : level.questionsCount}
+              suffix={level.passThresholdType === "percent" ? "%" : "б."}
+              data-testid={`${testIdBase}-threshold`}
+              onChange={(next) => props.onChange({ passThreshold: next })}
+            />
           </div>
         </div>
         <div className="ou-formfield">
-          <label className="ou-formfield__lbl" htmlFor={`${testIdBase}-feedback`}>
-            Обратная связь для уровня
-          </label>
-          <div className="ou-textarea ou-textarea--s">
-            <div className="ou-textarea__box">
-              <textarea
-                id={`${testIdBase}-feedback`}
-                className="ou-textarea__input"
-                rows={2}
-                value={level.feedback ?? ""}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  props.onChange({ feedback: value === "" ? null : value });
-                }}
-                data-testid={`${testIdBase}-feedback`}
-              />
-            </div>
-          </div>
+          <Textarea
+            id={`${testIdBase}-feedback`}
+            size="s"
+            fullWidth
+            rows={2}
+            label="Обратная связь для уровня"
+            value={level.feedback ?? ""}
+            onChange={(e) => {
+              const value = e.target.value;
+              props.onChange({ feedback: value === "" ? null : value });
+            }}
+            data-testid={`${testIdBase}-feedback`}
+          />
         </div>
         <AdaptiveLevelLinks
           testIdBase={testIdBase}
           links={level.links}
           onChange={(links) => props.onChange({ links })}
         />
-      </div>
-    </section>
+      </CardBody>
+    </Card>
   );
 }
 

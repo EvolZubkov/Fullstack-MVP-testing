@@ -173,7 +173,7 @@ describe("<CompositionSection />", () => {
     );
 
     fireEvent.click(screen.getByTestId("composition-add-topic"));
-    await waitFor(() => expect(screen.getByTestId("topic-picker-modal")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("dialog", { name: /Добавить тему/i })).toBeInTheDocument());
     await waitFor(() => expect(screen.getByTestId("topic-picker-item-top-1")).toBeInTheDocument());
 
     fireEvent.click(screen.getByTestId("topic-picker-item-top-1"));

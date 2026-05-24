@@ -15,7 +15,7 @@
  *   - Layout / Progress panes still show «следующий шаг» stubs
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DesignSection } from "../design-section";
 
@@ -225,9 +225,9 @@ describe("<DesignSection /> — Брендирование pane", () => {
       expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
     );
     fireEvent.click(screen.getByTestId("design-rail-branding"));
-    fireEvent.change(screen.getByTestId("design-param-input-fontFamily"), {
-      target: { value: "Roboto" },
-    });
+    const wrap = screen.getByTestId("design-param-input-fontFamily");
+    fireEvent.click(within(wrap).getByRole("button"));
+    fireEvent.click(screen.getByRole("option", { name: "Roboto" }));
     await waitFor(() =>
       expect(screen.getByTestId("design-save")).not.toBeDisabled(),
     );
