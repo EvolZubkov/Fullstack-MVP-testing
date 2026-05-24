@@ -818,7 +818,10 @@ export const contentPages = pgTable("content_pages", {
   topicId: varchar("topic_id", { length: 36 }).references(() => topics.id),
   position: text("position", { enum: ["before", "before_topic", "after_topic"] }).notNull(),
   mode: text("mode", { enum: ["template", "standard", "html"] }).notNull().default("template"),
+  /** @deprecated Use `kind` instead. Kept for backward compat in this release. */
   type: text("type", { enum: ["intro", "info", "summary", "html"] }).notNull(),
+  /** PRD-1 §4.3: variant-binding kind. Drives lifecycle of system pages. */
+  kind: text("kind", { enum: ["questions", "router", "summary", "intro", "info"] }).notNull(),
   templateKey: text("template_key"),
   sortOrder: integer("sort_order").notNull().default(0),
   valuesJson: jsonb("values_json").notNull().default({}),
@@ -844,6 +847,56 @@ export type InsertScormAnswer = z.infer<typeof insertScormAnswerSchema>;
 export type ScormAnswer = typeof scormAnswers.$inferSelect;
 
 // Templates & Content Pages types (PRD-1)
+
+/**
+ * PRD-1 §4.3: variant.kind — functional role of a template variant.
+ * Drives variant binding rules in PRD-7 §1.4 (silent binding for system kinds).
+ */
+export const variantKindSchema = z.enum(["questions", "router", "summary", "intro", "info"]);
+export type VariantKind = z.infer<typeof variantKindSchema>;
+
+/**
+ * Single entry in `manifest.contentTemplates[]`. Schema is intentionally narrow:
+ * it locks the variant-binding contract (key/label/kind) and lets template-specific
+ * shape (placeholders, pageKind, textFit, etc.) pass through unchanged.
+ */
+export const contentTemplateEntrySchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  kind: variantKindSchema,
+  pageKind: z.string().optional(),
+  isDefault: z.boolean().optional(),
+  placeholders: z.array(z.unknown()).optional(),
+}).passthrough();
+
+/**
+ * Top-level SCORM template manifest contract relevant to the variant-binding system.
+ * Other fields (params, layouts, capabilities, preview, etc.) pass through and
+ * are validated by adjacent specs (spec-template-platform.md).
+ */
+export const templateManifestSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  templateApiVersion: z.string().min(1),
+  contentTemplates: z.array(contentTemplateEntrySchema).min(1),
+}).passthrough();
+
+/**
+ * PRD-1 §4.3.2: the built-in `default` template must declare at least one
+ * variant with `kind: "questions"` — it is the system-wide fallback used when
+ * other templates omit a `questions` variant.
+ */
+export const defaultTemplateManifestSchema = templateManifestSchema.refine(
+  (m) => m.contentTemplates.some((ct) => ct.kind === "questions"),
+  {
+    message: "Default template must declare at least one contentTemplate with kind: \"questions\"",
+    path: ["contentTemplates"],
+  },
+);
+
+export type TemplateManifest = z.infer<typeof templateManifestSchema>;
+
 export const designSettingsSchema = z.object({
   templateId: z.string(),
   templateVersion: z.string(),

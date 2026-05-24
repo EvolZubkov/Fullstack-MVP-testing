@@ -22,6 +22,7 @@
     {
       "key": "intro.hero",
       "label": "Введение: заголовок и изображение",
+      "kind": "intro",
       "pageKind": "content.intro",
       "placeholders": [
         {
@@ -51,6 +52,7 @@
     {
       "key": "info.text",
       "label": "Информация: текст",
+      "kind": "info",
       "pageKind": "content.info",
       "placeholders": [
         {
@@ -75,6 +77,7 @@
     {
       "key": "summary.result",
       "label": "Итог: результат",
+      "kind": "summary",
       "pageKind": "content.summary",
       "placeholders": [
         {
@@ -96,6 +99,13 @@
           "defaultRenderer": "core.textMetric"
         }
       ]
+    },
+    {
+      "key": "question.standard",
+      "label": "Стандартный макет вопроса",
+      "kind": "questions",
+      "isDefault": true,
+      "placeholders": []
     }
   ],
   "rendererPlugins": [],

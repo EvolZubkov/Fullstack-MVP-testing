@@ -6,7 +6,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { db } from "./db";
-import { templates } from "@shared/schema";
+import {
+  templates,
+  templateManifestSchema,
+  defaultTemplateManifestSchema,
+} from "@shared/schema";
 import { logger } from "./logger";
 
 /** API versions this server accepts. Reject templates with any other version. */
@@ -14,10 +18,29 @@ export const SUPPORTED_TEMPLATE_API_VERSIONS = ["1.0"] as const;
 
 const TEMPLATES_DIR = path.resolve(process.cwd(), "server", "scorm", "templates");
 const BUILTIN_IDS = ["default", "corporate", "minimal"] as const;
+const DEFAULT_TEMPLATE_ID = "default";
 
 /** Returns true when the given templateApiVersion is accepted by this server. */
 export function isSupportedTemplateApiVersion(version: string): boolean {
   return (SUPPORTED_TEMPLATE_API_VERSIONS as readonly string[]).includes(version);
+}
+
+/**
+ * Validates a parsed manifest object against the variant-binding contract
+ * (PRD-1 §4.3). The `default` built-in is held to the stricter
+ * `defaultTemplateManifestSchema` because it is the system-wide fallback for
+ * the `questions` variant kind. Returns `null` on success or a human-readable
+ * reason string on failure.
+ */
+export function validateManifest(manifest: unknown, templateId: string): string | null {
+  const schema = templateId === DEFAULT_TEMPLATE_ID
+    ? defaultTemplateManifestSchema
+    : templateManifestSchema;
+  const result = schema.safeParse(manifest);
+  if (result.success) return null;
+  return result.error.issues
+    .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+    .join("; ");
 }
 
 /**
@@ -44,6 +67,12 @@ export async function syncBuiltinTemplates(): Promise<void> {
     const apiVersion = String(manifest.templateApiVersion ?? "");
     if (!isSupportedTemplateApiVersion(apiVersion)) {
       logger.warn(`Skipping template "${id}": unsupported templateApiVersion "${apiVersion}"`);
+      continue;
+    }
+
+    const validationError = validateManifest(manifest, id);
+    if (validationError) {
+      logger.error(`Skipping template "${id}": manifest validation failed — ${validationError}`);
       continue;
     }
 

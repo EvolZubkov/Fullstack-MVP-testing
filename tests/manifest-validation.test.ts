@@ -70,12 +70,21 @@ for (const templateId of BUILTIN_IDS) {
       expect((m.contentTemplates as unknown[]).length).toBeGreaterThan(0);
     });
 
-    it("every contentTemplate has key, label, pageKind, placeholders", () => {
+    it("every contentTemplate has key, label, kind, placeholders", () => {
       for (const ct of m.contentTemplates as Record<string, unknown>[]) {
-        expect(typeof ct.key,      `ct.key in ${templateId}`).toBe("string");
-        expect(typeof ct.label,    `ct.label in ${templateId}`).toBe("string");
-        expect(typeof ct.pageKind, `ct.pageKind in ${templateId}`).toBe("string");
+        expect(typeof ct.key,   `ct.key in ${templateId}`).toBe("string");
+        expect(typeof ct.label, `ct.label in ${templateId}`).toBe("string");
+        expect(typeof ct.kind,  `ct.kind in ${templateId}`).toBe("string");
         expect(Array.isArray(ct.placeholders), `ct.placeholders in ${templateId}`).toBe(true);
+      }
+    });
+
+    it("contentTemplate.pageKind is present for content kinds (intro/info/summary)", () => {
+      const contentKinds = new Set(["intro", "info", "summary"]);
+      for (const ct of m.contentTemplates as Record<string, unknown>[]) {
+        if (contentKinds.has(ct.kind as string)) {
+          expect(typeof ct.pageKind, `pageKind for content kind in ${templateId} → ${ct.key}`).toBe("string");
+        }
       }
     });
 

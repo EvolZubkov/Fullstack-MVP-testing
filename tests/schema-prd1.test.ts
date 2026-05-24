@@ -166,6 +166,7 @@ describe("insertContentPageSchema", () => {
     position: "before_topic" as const,
     mode: "template" as const,
     type: "intro" as const,
+    kind: "intro" as const,
     sortOrder: 0,
     valuesJson: { values: { title: "Intro" } },
     autoAdvance: false,

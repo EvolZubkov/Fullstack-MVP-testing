@@ -913,6 +913,7 @@ export class DatabaseStorage implements IStorage {
           position: "before",
           mode: "html",
           type: "intro",
+          kind: "intro",
           templateKey: null,
           sortOrder: 0,
           valuesJson: { values: { html: test.startPageContent } },

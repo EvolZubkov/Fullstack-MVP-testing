@@ -184,12 +184,18 @@ router.post("/:id/content-pages", requireAuthor, async (req, res) => {
       }
     }
 
+    // PRD-1 §4.3: derive `kind` from legacy `type`. `html` is a render mode,
+    // not a kind — author-created HTML pages take kind: "info".
+    const pageType = type as "intro" | "info" | "summary" | "html";
+    const kind = pageType === "html" ? "info" : pageType;
+
     const page = await storage.createContentPage({
       testId,
       topicId,
       position: position as "before_topic" | "after_topic",
       mode: (mode as "template" | "standard" | "html") ?? "template",
-      type: type as "intro" | "info" | "summary" | "html",
+      type: pageType,
+      kind,
       templateKey: templateKey ?? null,
       sortOrder: sortOrder ?? 0,
       valuesJson: normalizedValues,

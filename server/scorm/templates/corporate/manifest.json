@@ -25,6 +25,7 @@
     {
       "key": "intro.hero",
       "label": "Введение: заголовок и изображение",
+      "kind": "intro",
       "pageKind": "content.intro",
       "placeholders": [
         {
@@ -54,6 +55,7 @@
     {
       "key": "info.textWithImage",
       "label": "Информация: текст и изображение",
+      "kind": "info",
       "pageKind": "content.info",
       "placeholders": [
         {
@@ -92,6 +94,7 @@
     {
       "key": "summary.progressRing",
       "label": "Итог: кольцевая диаграмма прогресса",
+      "kind": "summary",
       "pageKind": "content.summary",
       "placeholders": [
         {

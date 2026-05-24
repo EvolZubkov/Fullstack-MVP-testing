@@ -185,7 +185,10 @@ describe("syncBuiltinTemplates", () => {
     version: "1.0.0",
     templateApiVersion: "1.0",
     description: "Test",
-    contentTemplates: [],
+    contentTemplates: [
+      { key: "question.standard", label: "Стандартный вопрос", kind: "questions", isDefault: true, placeholders: [] },
+      { key: "intro.simple", label: "Введение", kind: "intro", pageKind: "content.intro", placeholders: [] },
+    ],
     params: [],
   };
 
