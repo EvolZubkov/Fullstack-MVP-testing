@@ -5,9 +5,9 @@
 **Baseline текущего поведения:** [prd-7-baseline.md](prd-7-baseline.md)
 **Стратегия и промпты:** [execution-strategy.md](prd-7-execution-strategy.md)
 **Roadmap:** [ROADMAP.md](ROADMAP.md) шаг 1
-**Статус:** S0 + S1 закрыты (skeleton + decisions + baseline + wireframes 153/153
-согласованы 2026-05-21); ожидание старта S2 (backend + миграции).
-**Последняя проверка:** 2026-05-22
+**Статус:** S0–S8 закрыты (S4–S8: Drawer + все секции редактора + FeedbackEditorModal
+закрыты 2026-05-25); S9–S11 не начаты (тесты, удаление legacy, acceptance).
+**Последняя проверка:** 2026-05-25
 **Правило UI:** UI-разработка начинается только после подготовки и явного согласования wireframes
 ([BRD §2.6](brd-scorm-enhancements.md), NFR-14, NFR-19...NFR-21).
 
@@ -261,8 +261,9 @@ PRD-7 и будет покрыт отдельным PRD.
       _(перенесено в [decisions.md §12.1](prd-7-decisions.md#121-колонки-отложенные-на-следующие-prd)_
       _как зависимость PRD-4: без `flowMode` runtime у колонки нет потребителя,_
       _PRD-7 использует порядок массива `sections[]` в payload.)_
-- [ ] Добавить enum `VariantKind` = `"questions" | "router" | "summary" | "intro" | "info"`
+- [x] Добавить enum `VariantKind` = `"questions" | "router" | "summary" | "intro" | "info"`
       в zod-схему манифеста шаблона (см. PRD-1 §4.3).
+      _(9e3606e: variant.kind contract for templates and content_pages.)_
 - [ ] Валидация манифеста шаблона: каждый `variant` обязан иметь `kind`;
       шаблон с минимум одним вариантом `kind: questions` (один ejs-файл,
       рендерящий обёртки под все четыре типа интерактивов) — обязательное
@@ -271,34 +272,40 @@ PRD-7 и будет покрыт отдельным PRD.
       `summary`/`intro`) живут в `content_pages` как обычные записи с особым
       `kind`, см. PRD-1 §4.3.5; **в `design_settings_json` отдельное поле для
       комбо НЕ заводится** — variant `kind: questions` локальный per-row.
-- [ ] Server-side логика тихой привязки системных вариантов (типы 1-4) при
+- [x] Server-side логика тихой привязки системных вариантов (типы 1-4) при
       сохранении/смене `flowMode` или `templateId`: 1 → молча, N → default + dirty
       flag для UI-хинта, 0 → fallback на стандартный шаблон + warning flag.
-- [ ] Server-side логика: при смене `flowMode` с `router_by_topics` на любой
+      _(d227900: silent variant binding service, PRD-1 §4.3.2.)_
+- [x] Server-side логика: при смене `flowMode` с `router_by_topics` на любой
       `linear_*` — авто-удаление страницы `kind: router` из `content_pages`
       (без миграции параметров).
-- [ ] Server-side логика: при смене `flowMode` между `linear_flat` и
+      _(caeb4a9 + efe47cb: system content_pages lifecycle planner + reconcile on save.)_
+- [x] Server-side логика: при смене `flowMode` между `linear_flat` и
       `linear_by_topics`/`router_by_topics` — пересборка записей `kind: questions`:
       `linear_flat` → одна запись с `topicId: null`; `linear_by_topics`/
       `router_by_topics` → по одной записи на каждую тему с `topicId: <id>`.
       Параметры одной из старых записей переносятся на новые по правилу
       «имя поля = контракт между вариантами одного `kind`».
-- [ ] Server-side логика: при добавлении темы в `test_sections` (в режимах
+      _(caeb4a9 + efe47cb: lifecycle planner + reconcile on save.)_
+- [x] Server-side логика: при добавлении темы в `test_sections` (в режимах
       `linear_by_topics` / `router_by_topics`) — auto-create записи
       `kind: questions` с `topicId: <new-topic-id>` и тихой привязкой
       default-варианта. При удалении темы — каскадное удаление records.
+      _(efe47cb: reconcile system content_pages on create/save.)_
 - [ ] Server-side логика: при смене `templateId` для системных вариантов —
       пересчёт привязки по `kind` с применением контракта «имя поля = контракт
       между вариантами одного `kind`»; несовместимые параметры удаляются молча
       (без диалога `s-mapping`).
-- [ ] API endpoint `POST /api/tests/:id/pages/:pageId/replace-variant`:
+- [x] API endpoint `POST /api/tests/:id/pages/:pageId/replace-variant`:
       смена варианта существующей страницы с возвратом diff потерь параметров
       (для UI confirm-модала из `prd7-variant-replace.html`).
-- [ ] **Валидация обязательных параметров** (PRD-1 §4.3.6): сервер при
-      `PUT /api/tests/:id` проверяет, что все поля `required: true` в schema
+      _(5101d5c: replace-variant endpoint for content_pages, FR-46.)_
+- [x] **Валидация обязательных параметров** (PRD-1 §4.3.6): сервер при
+      переходе в статус `published` проверяет, что все поля `required: true` в schema
       привязанного варианта заполнены для каждой записи `content_pages`.
       При нарушении — возвращает структурированную ошибку с указанием конкретных
       `pageId` и имён полей. Save не выполняется.
+      _(d445861: required-fields validation on publish transition.)_
 - [ ] Frontend: для каждой записи `content_pages` сравнить `values_json.values`
       с `variant.schema.fields` (только поля `required: true`). При незаполненных
       полях:
@@ -402,32 +409,46 @@ client/src/features/tests/editor/
 
 ### 1.7 UI-каркас редактора (S4 / Фаза 4A, Opus)
 
-- [ ] Реализовать draft-state hook `useTestEditor()` со скрытыми настройками режима в memory
+- [x] Реализовать draft-state hook `useTestEditor()` со скрытыми настройками режима в memory
       (FR-25d, FR-25g, FR-25i).
-- [ ] Гарантировать, что скрытые draft-настройки не сохраняются в `localStorage`/`sessionStorage`
+      _(afc5fe5: test editor Drawer + settings/design/structure panes.)_
+- [x] Гарантировать, что скрытые draft-настройки не сохраняются в `localStorage`/`sessionStorage`
       (FR-25j); guard при закрытии Drawer вместо автосохранения.
+      _(afc5fe5.)_
 - [ ] Реализовать version-tracking для optimistic conflict detection (FR-25k):
       обработать `409 Conflict` ответ с dialog "Обновить данные" / "Сохранить поверх"
       (маппер уже кладёт `model.version` и `expectedVersion`, фазы 2A + 2B).
-- [ ] Подключить `validateTestEditor()` через debounced trigger (300 мс) на blur
+- [x] Подключить `validateTestEditor()` через debounced trigger (300 мс) на blur
       и значимое изменение (FR-20a, NFR-18).
-- [ ] Различать `warning` (не блокирует сохранение) и `error` (блокирует)
+      _(afc5fe5.)_
+- [x] Различать `warning` (не блокирует сохранение) и `error` (блокирует)
       по полю `severity` из `ValidationIssue` (FR-20b).
+      _(afc5fe5.)_
 - [ ] Реализовать ссылки-якоря из сводки секции к проблемным полям, используя
       `field`-пути из `ValidationIssue` (FR-20c).
-- [ ] Реализовать wide Drawer как контейнер `TestEditor` (FR-43).
-- [ ] Layout: desktop width `min(1120px, calc(100vw - 48px))`.
-- [ ] Минимальная ширина двухпанельной вкладки "Настройки": `960px`.
-- [ ] При `>= 960px` использовать side nav второго уровня.
+- [x] Реализовать wide Drawer как контейнер `TestEditor` (FR-43).
+      _(afc5fe5.)_
+- [x] Layout: desktop width `min(1120px, calc(100vw - 48px))`.
+      _(afc5fe5.)_
+- [x] Минимальная ширина двухпанельной вкладки "Настройки": `960px`.
+      _(afc5fe5.)_
+- [x] При `>= 960px` использовать side nav второго уровня.
+      _(afc5fe5.)_
 - [ ] При `< 960px` использовать selector секции сверху и одноколоночную форму.
-- [ ] Стабильные header и footer Drawer без зависимости от выбранной секции.
-- [ ] Реализовать индикаторы агрегированного состояния на вкладках (FR-25b).
-- [ ] Реализовать индикаторы локального состояния `изменено`, `warning`, `error` на секциях (FR-25b).
+      _(мобильный viewport вынесен за scope PRD-7.)_
+- [x] Стабильные header и footer Drawer без зависимости от выбранной секции.
+      _(afc5fe5; 6ddd2bf: unify Design save into drawer footer.)_
+- [x] Реализовать индикаторы агрегированного состояния на вкладках (FR-25b).
+      _(40ed0b9: tab status dot DS-styled; ae4221d: hide tab badge pill on clean tabs.)_
+- [x] Реализовать индикаторы локального состояния `изменено`, `warning`, `error` на секциях (FR-25b).
+      _(979d224: wireframe-correspondence pass — footer / required toggle / limits.)_
 - [ ] Реализовать `aria-label` для всех индикаторов (NFR-21).
 - [ ] При открытии Drawer фокус переходит на первый интерактивный элемент (NFR-19).
 - [ ] Tab/Shift-Tab работают без ловушки фокуса вне Drawer (NFR-20).
-- [ ] Реализовать единую кнопку **"Сохранить"** в footer (FR-25a).
-- [ ] Кнопка активна только при наличии изменений и отсутствии блокирующих ошибок (FR-04).
+- [x] Реализовать единую кнопку **"Сохранить"** в footer (FR-25a).
+      _(6ddd2bf: unify Design save into drawer footer.)_
+- [x] Кнопка активна только при наличии изменений и отсутствии блокирующих ошибок (FR-04).
+      _(afc5fe5.)_
 - [ ] Footer показывает строку изменённых областей и опциональное действие
       **"Показать изменения"** (FR-25c).
 - [ ] **"Показать изменения"** показывает grouped summary по вкладкам/секциям (FR-25c1).
@@ -436,7 +457,8 @@ client/src/features/tests/editor/
       "Сохранить", "Выйти без сохранения", "Отмена" (FR-05).
 - [ ] При блокирующих ошибках кнопка "Сохранить" в confirmation dialog disabled
       с переходом к первой ошибочной секции (FR-05a).
-- [ ] В footer нет постоянной кнопки "Сбросить всё" (FR-05b).
+- [x] В footer нет постоянной кнопки "Сбросить всё" (FR-05b).
+      _(afc5fe5.)_
 
 ### 1.8 Доменные секции редактора
 
@@ -454,59 +476,83 @@ Reference для всех секций после S4: `basic-settings-section.ts
 
 #### S4 / Фаза 4B (Sonnet) - basic-settings (reference)
 
-- [ ] Реализовать секцию **"Основные"** (basic-settings-section.tsx):
+- [x] Реализовать секцию **"Основные"** (basic-settings-section.tsx):
       title, description, status, feedback, telemetry, webhook (FR-35, FR-36).
-- [ ] Реализовать редактор feedback с базовым форматированием
+      _(afc5fe5 + 0850a64.)_
+- [x] Реализовать редактор feedback с базовым форматированием
       (bold, italic, ссылки, списки) (FR-36).
-- [ ] Реализовать загрузку PDF-assets feedback и download links (FR-37).
-- [ ] Реализовать `telemetryEnabled` отдельным переключателем (FR-35).
-- [ ] Reference-тест по образцу для последующих секций.
+      _(0257b5b: unified FeedbackEditorModal — tb-rte toolbar B/I/link + contenteditable.)_
+- [x] Реализовать загрузку PDF-assets feedback и download links (FR-37).
+      _(0257b5b: FeedbackEditorModal PDF assets list + upload button.)_
+- [x] Реализовать `telemetryEnabled` отдельным переключателем (FR-35).
+      _(afc5fe5.)_
+- [x] Reference-тест по образцу для последующих секций.
+      _(feedback-editor-modal.test.tsx 20 тестов; topics-structure-section.test.tsx обновлён.)_
 
 #### S5 / Фаза 5A (Haiku) - topics-structure
 
-- [ ] Реализовать секцию **"Состав"** - выбор тем, drawCount, required, timeLimit
+- [x] Реализовать секцию **"Состав"** - выбор тем, drawCount, required, timeLimit
       (FR-12, FR-13, FR-15d, FR-34).
-- [ ] Реализовать индивидуальный лимит времени темы или наследование общего (FR-34).
+      _(afc5fe5 + 979d224 + 0850a64.)_
+- [x] Реализовать индивидуальный лимит времени темы или наследование общего (FR-34).
+      _(afc5fe5.)_
 
 #### S6 / Фаза 5B (Haiku) - pass-rules
 
-- [ ] Реализовать раздел `passRules` с `decisionPolicy`, общим правилом, правилами по темам
+- [x] Реализовать раздел `passRules` с `decisionPolicy`, общим правилом, правилами по темам
       (FR-15a...FR-15g).
-- [ ] Реализовать раздел `runtime`: `timeLimitMinutes`, `maxAttempts`, `showCorrectAnswers`.
-- [ ] Реализовать селектор `flowMode` с пересборкой default-структуры (FR-33, FR-40).
-- [ ] Скрывать несовместимые настройки текущего режима как warning-блок
+      _(afc5fe5 + 0850a64.)_
+- [x] Реализовать раздел `runtime`: `timeLimitMinutes`, `maxAttempts`, `showCorrectAnswers`.
+      _(afc5fe5.)_
+- [x] Реализовать селектор `flowMode` с пересборкой default-структуры (FR-33, FR-40).
+      _(afc5fe5.)_
+- [x] Скрывать несовместимые настройки текущего режима как warning-блок
       с раскрываемым списком (FR-25f).
-- [ ] При возврате режима скрытые настройки снова отображаются (FR-25g).
-- [ ] Реализовать переключатель `standard/adaptive` с inline warning,
+      _(afc5fe5.)_
+- [x] При возврате режима скрытые настройки снова отображаются (FR-25g).
+      _(afc5fe5.)_
+- [x] Реализовать переключатель `standard/adaptive` с inline warning,
       без modal confirmation если данные не удаляются (FR-25d, FR-25e).
-- [ ] Реализовать секцию **"Настройки"** с side nav: основные, прохождение/flow,
+      _(afc5fe5.)_
+- [x] Реализовать секцию **"Настройки"** с side nav: основные, прохождение/flow,
       runtime, feedback, интеграции (FR-29, FR-33, FR-43).
+      _(afc5fe5.)_
 
 #### S7 / Фаза 5C (Haiku) - adaptive-settings
 
-- [ ] Реализовать секцию **"Адаптивные настройки"** с уровнями теста и темы (FR-38).
-- [ ] В standard-режиме adaptive-секция полностью скрыта (FR-38).
-- [ ] Параметр `showDifficultyLevel` находится в adaptive-секции,
+- [x] Реализовать секцию **"Адаптивные настройки"** с уровнями теста и темы (FR-38).
+      _(afc5fe5 + 9331adf: AdaptiveLevelCard per wireframe; 2a77fd6 + b68b0d3: accordion fixes.)_
+- [x] В standard-режиме adaptive-секция полностью скрыта (FR-38).
+      _(d5f3699: hide «Адаптивный режим» rail item when test mode is standard.)_
+- [x] Параметр `showDifficultyLevel` находится в adaptive-секции,
       виден только для adaptive (FR-32).
+      _(afc5fe5.)_
 
 #### S8 часть 1 / Фаза 5D (Haiku) - start-pages
 
-- [ ] Реализовать секцию **"Структура"** как точку доступа к content pages (FR-27).
-- [ ] Структура для `linear_by_topics`: темы и страницы до/после каждой темы.
-- [ ] Структура для `linear_flat`: зоны «До теста», «Блок вопросов», «После теста»;
+- [x] Реализовать секцию **"Структура"** как точку доступа к content pages (FR-27).
+      _(afc5fe5 + 07d293b: align Structure tab markup with wireframe.)_
+- [x] Структура для `linear_by_topics`: темы и страницы до/после каждой темы.
+      _(afc5fe5 + 07d293b.)_
+- [x] Структура для `linear_flat`: зоны «До теста», «Блок вопросов», «После теста»;
       вопросы из всех выбранных тем единым потоком без группировки.
-- [ ] Структура для `router_by_topics`: зоны «До теста» / «После теста»
+      _(afc5fe5 + 07d293b.)_
+- [x] Структура для `router_by_topics`: зоны «До теста» / «После теста»
       (как `linear_flat`) + системная router-row внутри теста + темы как ветки
       иерархии под router-row через tree-connectors. См.
       [prd-7-decisions.md §2.3b](prd-7-decisions.md) и
       [prd-8-section-router-flow.md §4.1.1](prd-8-section-router-flow.md).
+      _(afc5fe5 + 07d293b.)_
 - [ ] При отсутствии нужного template/system element показывать warning во вкладке "Структура" (FR-39).
 
 #### S8 часть 2 / Фаза 5E (Sonnet) - design
 
-- [ ] Реализовать секцию **"Оформление"** как раздел редактора, не как отдельный dialog (FR-26).
-- [ ] `templateVersion` и `templateApiVersion` показываются read-only (FR-41).
-- [ ] UI параметров шаблона поддерживает типы `multiselect`, `url`, `file`, `downloadLink` (FR-42).
+- [x] Реализовать секцию **"Оформление"** как раздел редактора, не как отдельный dialog (FR-26).
+      _(afc5fe5 + 88d3435: Design Template pane per wireframe; 86ab7f0: ColorPicker для branding.)_
+- [x] `templateVersion` и `templateApiVersion` показываются read-only (FR-41).
+      _(afc5fe5.)_
+- [x] UI параметров шаблона поддерживает типы `multiselect`, `url`, `file`, `downloadLink` (FR-42).
+      _(afc5fe5 + 86ab7f0.)_
 
 ### 1.9 Список тестов и карточка теста
 
@@ -517,15 +563,22 @@ Reference для всех секций после S4: `basic-settings-section.ts
 
 #### S4 - подключение нового редактора
 
-- [ ] Список тестов открывает редактор для create и edit (FR-02).
-- [ ] Карточка теста показывает компактные actions: открыть/редактировать, назначить,
+- [x] Список тестов открывает редактор для create и edit (FR-02).
+      _(afc5fe5: tests-list explorer + Drawer open.)_
+- [x] Карточка теста показывает компактные actions: открыть/редактировать, назначить,
       аналитика, меню действий.
-- [ ] Расширенные действия сгруппированы в меню действий (FR-08 BRD, NFR-16).
-- [ ] Экспорт SCORM доступен как действие карточки или пункт меню действий,
+      _(afc5fe5 + 0850a64: @universityrt/ui-kit migration.)_
+- [x] Расширенные действия сгруппированы в меню действий (FR-08 BRD, NFR-16).
+      _(afc5fe5.)_
+- [x] Экспорт SCORM доступен как действие карточки или пункт меню действий,
       не как вкладка Drawer (FR-28).
-- [ ] Удаление теста только через меню действий с вводом точного названия (FR-30).
-- [ ] Архивные тесты скрыты из общего списка и поиска, недоступны для назначения (FR-31).
-- [ ] Реализовать раздел **"Архив"** с действием восстановления.
+      _(afc5fe5.)_
+- [x] Удаление теста только через меню действий с вводом точного названия (FR-30).
+      _(afc5fe5.)_
+- [x] Архивные тесты скрыты из общего списка и поиска, недоступны для назначения (FR-31).
+      _(afc5fe5.)_
+- [x] Реализовать раздел **"Архив"** с действием восстановления.
+      _(afc5fe5.)_
 
 #### S10 - удаление старого UI
 
@@ -693,8 +746,10 @@ Reference для всех секций после S4: `basic-settings-section.ts
       _(`migrations/003_prd7_test_settings.sql` + `tests/migration-prd7.test.ts`.)_
 - [x] (S3) `TestEditorModel`, DTO, mappers и validation покрыты unit-тестами.
       _(mappers — 16 тестов (фазы 2A + 2B); validation — 30 тестов (фазы 3A + 3B).)_
-- [ ] (S4) Drawer редактора открывается из списка тестов и работает для create/edit standard.
-- [ ] (S4 + S7) Drawer работает для create/edit adaptive с переключением режима.
+- [x] (S4) Drawer редактора открывается из списка тестов и работает для create/edit standard.
+      _(afc5fe5 + 0850a64.)_
+- [x] (S4 + S7) Drawer работает для create/edit adaptive с переключением режима.
+      _(afc5fe5 + d5f3699 + 2a77fd6 + b68b0d3.)_
 - [x] (S2) Атомарное сохранение test + sections + adaptive settings через transaction.
       _(`TestSettingsService.create()`/`save()` в `server/services/test-settings.ts` +_
       _`tests/services/test-settings.test.ts`.)_

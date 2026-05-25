@@ -5,9 +5,10 @@
 API, SCORM export, runtime loader, navigation, frontend dialogs). Незакрыто: предпросмотр
 шаблона в Drawer «Оформление», text-overflow preview/diagnostics в content-pages, ручной
 acceptance pass. Контрактные дополнения PRD-1 §4.3 (variant.kind model, row-menu,
-severity-rail, required-params validation), внесённые 2026-05-21, в коде ещё не реализованы —
-см. §1.12 ниже.  
-**Последняя проверка по коду:** 2026-05-22  
+severity-rail, required-params validation), внесённые 2026-05-21: variant.kind schema,
+тихая привязка, replace-variant endpoint и required-fields validation (server) — закрыты
+2026-05-25; остальные — в коде не реализованы, см. §1.12 ниже.  
+**Последняя проверка по коду:** 2026-05-25  
 **Правило UI:** UI-разработка начинается только после подготовки и явного согласования wireframes.
 
 ---
@@ -166,32 +167,37 @@ Wireframes подготовлены: [docs/wireframes-prd1-design-pages.md](wire
 в рамках PRD-7 §1.4 (тихая привязка, серверная пересборка `kind: questions` при
 смене `flowMode`), но контракт обязан жить в PRD-1.
 
-- [ ] Добавить enum `VariantKind = "questions" | "router" | "summary" | "intro" | "info"`
+- [x] Добавить enum `VariantKind = "questions" | "router" | "summary" | "intro" | "info"`
       в zod-схему манифеста шаблона.
+      _(9e3606e: variant.kind contract for templates and content_pages.)_
 - [ ] Валидация манифеста: каждый `variant` обязан иметь `kind`; default-шаблон
       обязан содержать минимум один `variant` с `kind: questions`.
 - [ ] Добавить `kind` поле в `manifest.json` встроенных шаблонов (`default`,
       `corporate`, `minimal`).
-- [ ] Реализовать «тихую привязку» системных вариантов (типы 1-4) при сохранении/
+- [x] Реализовать «тихую привязку» системных вариантов (типы 1-4) при сохранении/
       смене `flowMode` или `templateId`: 1 → молча, N → default + dirty flag,
       0 → fallback на стандартный шаблон + warning (PRD-1 §4.3.2 / PRD-7 §1.4).
+      _(d227900: silent variant binding service; caeb4a9 + efe47cb: lifecycle planner + reconcile.)_
 - [ ] Реализовать unified row-menu композицию (PRD-1 §4.3.3): состав пунктов
       зависит от `variant.kind` (info-row vs системные `intro`/`summary`/`questions`/
       `router`); destructive-действия отделены `row-menu__sep`.
 - [ ] Реализовать визуальную индикацию состояния `page-row` (PRD-1 §4.3.7,
       severity-rail): приоритет `error > warning > info`, нет border в норме.
-- [ ] Реализовать серверную валидацию обязательных параметров варианта
+- [x] Реализовать серверную валидацию обязательных параметров варианта
       (PRD-1 §4.3.6): при незаполненных `required: true` полях — структурированная
       ошибка с `pageId` + именами полей; Save не выполняется.
+      _(d445861: required-fields validation on publish transition.)_
 - [ ] Frontend: для каждой `content_pages` запись сравнивать `values_json.values`
       с `variant.schema.fields` (только `required: true`); незаполненные поля →
       `page-row--warn` + warning-баннер в expand + агрегат в `status-dot--error`
       на табе «Структура».
-- [ ] API endpoint `POST /api/tests/:id/pages/:pageId/replace-variant`:
+- [x] API endpoint `POST /api/tests/:id/pages/:pageId/replace-variant`:
       смена варианта существующей страницы с возвратом diff потерь параметров.
-- [ ] Auto-create записи `kind: questions` при добавлении темы в `test_sections`
+      _(5101d5c: replace-variant endpoint for content_pages, FR-46.)_
+- [x] Auto-create записи `kind: questions` при добавлении темы в `test_sections`
       (режимы `linear_by_topics` / `router_by_topics`); каскадное удаление при
       удалении темы.
+      _(efe47cb: reconcile system content_pages on create/save.)_
 
 ---
 

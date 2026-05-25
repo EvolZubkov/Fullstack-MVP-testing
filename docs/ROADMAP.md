@@ -3,11 +3,11 @@
 **Версия:** 1.1
 **Статус:** Утверждено
 **Источник:** [BRD](brd-scorm-enhancements.md), PRD-1...PRD-8
-**Последняя актуализация:** 2026-05-22
+**Последняя актуализация:** 2026-05-25
 
 ---
 
-## 0. Текущий статус (на 2026-05-22)
+## 0. Текущий статус (на 2026-05-25)
 
 | Шаг | PRD | Фаза | Статус | Блокер для старта следующей фазы |
 | --- | --- | --- | --- | --- |
@@ -15,7 +15,7 @@
 | 1 | PRD-7 | S1 — wireframes 153/153 + согласование | Закрыта 2026-05-21 | — |
 | 1 | PRD-7 | S2 — backend, миграции, API | Частично (миграции, сервис, endpoints закрыты) | Acceptance pass §1.13.3 |
 | 1 | PRD-7 | S3 — frontend mappers + validation | Закрыта (unit-тесты 46 шт.) | — |
-| 1 | PRD-7 | S4-S8 — UI Drawer + секции | Не начата | Старт S4 после acceptance S2 |
+| 1 | PRD-7 | S4-S8 — UI Drawer + секции | Закрыта (2026-05-25; UI реализован, FeedbackEditorModal закрыт) | — |
 | 1 | PRD-7 | S9-S11 — тесты, удаление legacy, acceptance | Не начата | S4-S8 |
 | 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | Не начата | Завершение PRD-7 |
 | 3 | PRD-6 | Retake gate, eligibility plugins | Не начата | PRD-4 |
@@ -23,7 +23,7 @@
 | 5 | PRD-2 | `result.*` показатели результата | Не начата | PRD-4 |
 | 6 | PRD-5 | Шкалы и многомерные измерения | Не начата | PRD-2, PRD-4 |
 | 7 | PRD-3 | Жизненный цикл шаблонов | Не начата | PRD-1 closeout (отдельный трек) |
-| — | PRD-1 | Шаблоны и контентные страницы | Частично (последняя проверка по коду 2026-05-09) | Code-walk + closeout вне PRD-7 |
+| — | PRD-1 | Шаблоны и контентные страницы | Частично (§4.3: variant.kind, тихая привязка, replace-variant, required-fields validation — закрыты 2026-05-25) | Code-walk + closeout вне PRD-7 |
 
 Детальный прогресс по PRD-7 — см. [prd-7-implementation-todo.md](prd-7-implementation-todo.md).
 Детальный прогресс по PRD-1 — см. [prd-1-implementation-todo.md](prd-1-implementation-todo.md).
