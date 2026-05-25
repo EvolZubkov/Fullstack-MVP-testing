@@ -26,6 +26,7 @@ import { Eye, Layout } from "lucide-react";
 import {
   Banner,
   Button,
+  ColorPicker,
   Input,
   Select,
   Switch,
@@ -36,6 +37,7 @@ import {
   type TemplateParam,
   type UseDesignSettingsResult,
 } from "../use-design-settings";
+import { fromHex, toHex } from "./color-format";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -298,17 +300,25 @@ function ParamRow({
     );
   }
   if (param.type === "color") {
-    const v = typeof value === "string" ? value : "";
+    const stored =
+      typeof value === "string" && value
+        ? value
+        : (param.default as string | undefined) ?? "";
+    const hexValue = toHex(stored, "#000000");
     return (
       <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
-        <Input
+        <label
+          className="ou-formfield__lbl"
+          htmlFor={fieldId}
+          id={`${fieldId}-label`}
+        >
+          {param.label}
+        </label>
+        <ColorPicker
           id={fieldId}
-          size="m"
-          fullWidth
-          label={param.label}
-          value={v}
-          placeholder="221 83% 53%"
-          onChange={(e) => onChange(e.target.value)}
+          value={hexValue}
+          aria-labelledby={`${fieldId}-label`}
+          onChange={(hex) => onChange(fromHex(hex, stored))}
           data-testid={`design-param-input-${param.key}`}
         />
       </div>
