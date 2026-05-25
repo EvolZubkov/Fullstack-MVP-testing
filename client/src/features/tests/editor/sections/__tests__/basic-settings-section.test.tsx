@@ -506,7 +506,7 @@ describe("<SettingsSection /> — Адаптивный режим pane (mode = a
     expect(next.adaptive.topics[0].levels[0].levelIndex).toBe(0);
   });
 
-  it("adds and removes per-level material links", () => {
+  it("removes a per-level material link via the unified Feedback editor modal", () => {
     const updateModel = vi.fn();
     const model = adaptiveModel({
       sections: [buildSection({ topicId: "t1", topicName: "Тема А" })],
@@ -529,7 +529,12 @@ describe("<SettingsSection /> — Адаптивный режим pane (mode = a
     render(<SettingsSection model={model} updateModel={updateModel} />);
     fireEvent.click(screen.getByTestId("settings-rail-adaptive"));
     fireEvent.click(screen.getByTestId("adaptive-topic-toggle-t1"));
-    fireEvent.click(screen.getByTestId("adaptive-level-t1-0-link-0-remove"));
+    // Open the feedback editor modal for level 0
+    fireEvent.click(screen.getByTestId("adaptive-level-t1-0-feedback"));
+    // Remove the only link inside the modal
+    fireEvent.click(screen.getByTestId("feedback-editor-link-remove-0"));
+    // Save closes the modal and propagates the new links array via onSave
+    fireEvent.click(screen.getByTestId("feedback-editor-save"));
     const next = runUpdater(updateModel, model);
     expect(next.adaptive.topics[0].levels[0].links).toHaveLength(0);
   });

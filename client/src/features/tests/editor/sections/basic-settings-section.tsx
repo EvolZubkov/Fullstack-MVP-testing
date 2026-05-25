@@ -21,7 +21,7 @@
  * section just renders inputs and reports changes.
  */
 import { useState } from "react";
-import { ChevronDown, Trash2 } from "lucide-react";
+import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import {
   Accordion,
   AccordionItem,
@@ -38,6 +38,10 @@ import {
   Switch,
   Textarea,
 } from "@universityrt/ui-kit";
+import {
+  FeedbackEditorModal,
+  type FeedbackEditorValue,
+} from "./feedback-editor-modal";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
@@ -858,18 +862,11 @@ function AdaptiveTopicAccordion(props: {
       {open && (
         <div className="ou-acc__body" data-testid={`adaptive-topic-body-${topic.topicId}`}>
           <div className="ou-formfield">
-            <Textarea
-              id={`adaptive-topic-failure-${topic.topicId}`}
-              size="s"
-              fullWidth
-              rows={2}
-              label="Обратная связь при не пройденном уровне"
+            <FailureFeedbackEditor
+              topicName={topic.topicName}
+              topicId={topic.topicId}
               value={topic.failureFeedback ?? ""}
-              onChange={(e) => {
-                const value = e.target.value;
-                props.onFailureFeedbackChange(value);
-              }}
-              data-testid={`adaptive-topic-failure-${topic.topicId}`}
+              onChange={props.onFailureFeedbackChange}
             />
           </div>
 
@@ -1060,95 +1057,139 @@ function AdaptiveLevelCard(props: {
           </div>
         </div>
         <div className="ou-formfield">
-          <Textarea
-            id={`${testIdBase}-feedback`}
-            size="s"
-            fullWidth
-            rows={2}
-            label="Обратная связь для уровня"
-            value={level.feedback ?? ""}
-            onChange={(e) => {
-              const value = e.target.value;
-              props.onChange({ feedback: value === "" ? null : value });
-            }}
-            data-testid={`${testIdBase}-feedback`}
+          <LevelFeedbackEditor
+            topicId={props.topicId}
+            levelIndex={level.levelIndex}
+            levelName={level.levelName}
+            text={level.feedback ?? ""}
+            links={level.links}
+            onChange={({ text, links }) =>
+              props.onChange({
+                feedback: text === "" ? null : text,
+                links,
+              })
+            }
           />
         </div>
-        <AdaptiveLevelLinks
-          testIdBase={testIdBase}
-          links={level.links}
-          onChange={(links) => props.onChange({ links })}
-        />
       </CardBody>
     </Card>
   );
 }
 
-function AdaptiveLevelLinks(props: {
-  testIdBase: string;
+/**
+ * Inline trigger that opens the unified FeedbackEditorModal (FR-36 / FR-37).
+ * Shared base for «обратная связь при не пройденном уровне» (topic-level in
+ * adaptive mode) and «обратная связь для уровня» (per-level inside an
+ * adaptive level card). Only the modal title and stored value shape differ.
+ */
+function FeedbackEditTrigger(props: {
+  label: string;
+  buttonAriaLabel: string;
+  modalTitle: string;
+  modalDescription?: string;
+  text: string;
   links: AdaptiveLinkConfig[];
-  onChange: (links: AdaptiveLinkConfig[]) => void;
+  /** When true, hide the PDF section in the modal (e.g. for level feedback). */
+  hideAssets?: boolean;
+  onSave: (next: { text: string; links: AdaptiveLinkConfig[] }) => void;
+  testId: string;
 }) {
+  const [open, setOpen] = useState(false);
+  const preview =
+    props.text.trim() !== ""
+      ? props.text.replace(/<[^>]+>/g, "").slice(0, 80)
+      : "Не задано — нажмите для редактирования";
+  const isEmpty = props.text.trim() === "" && props.links.length === 0;
+
   return (
-    <div className="ou-formfield">
-      <label className="ou-formfield__lbl">Ссылки на материалы</label>
-      {props.links.map((link, i) => (
-        <div
-          key={i}
-          className="tb-link-row"
-          data-testid={`${props.testIdBase}-link-${i}`}
-        >
-          <input
-            className="ou-field__input tb-link-row__label"
-            type="text"
-            value={link.title}
-            placeholder="Название ссылки"
-            onChange={(e) => {
-              const value = e.target.value;
-              const next = [...props.links];
-              next[i] = { ...next[i], title: value };
-              props.onChange(next);
-            }}
-            aria-label={`Название ссылки ${i + 1}`}
-            data-testid={`${props.testIdBase}-link-${i}-title`}
-          />
-          <input
-            className="ou-field__input tb-link-row__url"
-            type="url"
-            value={link.url}
-            placeholder="https://…"
-            onChange={(e) => {
-              const value = e.target.value;
-              const next = [...props.links];
-              next[i] = { ...next[i], url: value };
-              props.onChange(next);
-            }}
-            aria-label={`URL ссылки ${i + 1}`}
-            data-testid={`${props.testIdBase}-link-${i}-url`}
-          />
-          <button
-            type="button"
-            className="ou-btn ou-btn--ghost ou-btn--s"
-            onClick={() => {
-              const next = [...props.links];
-              next.splice(i, 1);
-              props.onChange(next);
-            }}
-            aria-label={`Удалить ссылку ${i + 1}`}
-            data-testid={`${props.testIdBase}-link-${i}-remove`}
-          >
-            ×
-          </button>
-        </div>
-      ))}
+    <>
+      <label className="ou-formfield__lbl">{props.label}</label>
       <button
         type="button"
-        className="ou-btn ou-btn--secondary ou-btn--s"
-        onClick={() => props.onChange([...props.links, { title: "", url: "" }])}
-        data-testid={`${props.testIdBase}-add-link`}
+        className={
+          "tb-feedback-preview" + (isEmpty ? " is-empty" : "")
+        }
+        onClick={() => setOpen(true)}
+        aria-label={props.buttonAriaLabel}
+        data-testid={props.testId}
       >
-        + Добавить ссылку
+        <span className="tb-feedback-preview__text">
+          <span className="tb-feedback-preview__snippet">{preview}</span>
+          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+        </span>
+        {(props.links.length > 0) && (
+          <span className="tb-feedback-preview__meta">
+            {props.links.length} ссыл
+            {props.links.length === 1
+              ? "ка"
+              : props.links.length >= 2 && props.links.length <= 4
+                ? "ки"
+                : "ок"}
+          </span>
+        )}
       </button>
-    </div>
+      <FeedbackEditorModal
+        open={open}
+        title={props.modalTitle}
+        description={props.modalDescription}
+        value={{
+          format: "plain",
+          text: props.text,
+          links: props.links,
+        }}
+        hideAssets={props.hideAssets}
+        onCancel={() => setOpen(false)}
+        onSave={(v: FeedbackEditorValue) => {
+          props.onSave({ text: v.text, links: v.links });
+          setOpen(false);
+        }}
+        testId={`${props.testId}-modal`}
+      />
+    </>
+  );
+}
+
+function FailureFeedbackEditor(props: {
+  topicName: string;
+  topicId: string;
+  value: string;
+  onChange: (text: string) => void;
+}) {
+  return (
+    <FeedbackEditTrigger
+      label="Обратная связь при не пройденном уровне"
+      buttonAriaLabel={`Редактировать обратную связь темы ${props.topicName}`}
+      modalTitle={`Обратная связь по теме «${props.topicName}»`}
+      modalDescription="Показывается обучающемуся, если он не прошёл ни один уровень темы."
+      text={props.value}
+      links={[]}
+      hideAssets
+      onSave={({ text }) => props.onChange(text)}
+      testId={`adaptive-topic-failure-${props.topicId}`}
+    />
+  );
+}
+
+function LevelFeedbackEditor(props: {
+  topicId: string;
+  levelIndex: number;
+  levelName: string;
+  text: string;
+  links: AdaptiveLinkConfig[];
+  onChange: (patch: { text: string; links: AdaptiveLinkConfig[] }) => void;
+}) {
+  const testIdBase = `adaptive-level-${props.topicId}-${props.levelIndex}`;
+  return (
+    <FeedbackEditTrigger
+      label="Обратная связь для уровня"
+      buttonAriaLabel={`Редактировать обратную связь уровня ${props.levelName}`}
+      modalTitle={`Обратная связь уровня «${props.levelName}»`}
+      modalDescription="Показывается обучающемуся при достижении этого уровня сложности."
+      text={props.text}
+      links={props.links}
+      hideAssets
+      onSave={props.onChange}
+      testId={`${testIdBase}-feedback`}
+    />
   );
 }
