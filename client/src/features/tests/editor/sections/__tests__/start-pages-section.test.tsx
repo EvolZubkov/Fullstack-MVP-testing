@@ -228,11 +228,10 @@ describe("<StructureSection /> — linear_by_topics layout", () => {
       expect(screen.getByTestId("structure-zone-topic-t1")).toBeInTheDocument(),
     );
     expect(screen.getByTestId("structure-zone-topic-t2")).toBeInTheDocument();
-    expect(screen.getByTestId("structure-topic-before-t1")).toHaveTextContent("Вводная А");
-    expect(screen.getByTestId("structure-topic-after-t1")).toHaveTextContent("Итог А");
-    expect(screen.getByTestId("structure-topic-questions-t1")).toHaveTextContent(
-      "4 вопросов из 10",
-    );
+    const t1Block = screen.getByTestId("structure-zone-topic-t1");
+    expect(t1Block).toHaveTextContent("Вводная А");
+    expect(t1Block).toHaveTextContent("Итог А");
+    expect(t1Block).toHaveTextContent("4 вопросов из 10");
   });
 });
 
@@ -265,6 +264,7 @@ describe("<StructureSection /> — content_pages delete flow", () => {
     await waitFor(() =>
       expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument(),
     );
+    fireEvent.click(screen.getByTestId("structure-page-actions-pg-1"));
     fireEvent.click(screen.getByTestId("structure-page-delete-pg-1"));
     expect(screen.getByTestId("structure-page-delete-confirm-pg-1")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("structure-page-delete-confirm-pg-1"));
@@ -290,9 +290,10 @@ describe("<StructureSection /> — content_pages delete flow", () => {
     await waitFor(() =>
       expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument(),
     );
+    fireEvent.click(screen.getByTestId("structure-page-actions-pg-1"));
     fireEvent.click(screen.getByTestId("structure-page-delete-pg-1"));
     fireEvent.click(screen.getByTestId("structure-page-delete-cancel-pg-1"));
-    expect(screen.getByTestId("structure-page-delete-pg-1")).toBeInTheDocument();
+    expect(screen.getByTestId("structure-page-actions-pg-1")).toBeInTheDocument();
   });
 });
 

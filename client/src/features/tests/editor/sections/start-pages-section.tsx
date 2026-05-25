@@ -7,20 +7,36 @@
  * Renders a read-only zoned view of a test's `content_pages` (PRD-1 §4) plus
  * the questions-stream rows derived from `model.sections`. The layout adapts
  * to `model.flowMode`:
- *   - `linear_flat`        — single «До теста» zone (`position = before`,
- *                            `topicId = null`) → unified questions row →
- *                            after-test zone (currently empty — schema does
- *                            not have a `after_test` position).
+ *   - `linear_flat`        — «До теста» zone (`position = before`,
+ *                            `topicId = null`) → single questions row →
+ *                            «После теста» zone (currently empty in MVP).
  *   - `linear_by_topics`   — per-topic before/after pages around the topic's
  *                            questions row.
  *   - `router_by_topics`   — same per-topic layout plus a router-page banner.
  *
- * The delete action ships in this iteration so authors can clean up legacy
- * pages they no longer need. Create / reorder / rich-edit are deferred to
- * the next step (see banner at the bottom of the pane).
+ * Markup ports the wireframe-local classes (`flow-mode-bar`, `zone-block`,
+ * `zone-header`, `topic-block`, `topic-header`, `page-row`, `page-variant-badge`,
+ * `page-title`, `page-actions`) into the DS-extensions stylesheet. Per-page
+ * actions live in a dots-menu (ui-kit `MenuTrigger`); delete confirms via
+ * the existing inline confirm pattern. Create / edit / drag-reorder are
+ * deferred (see the «следующий шаг» banner at the bottom).
  */
 import { useState } from "react";
-import { Banner, Button, EmptyState, Tag } from "@universityrt/ui-kit";
+import {
+  ChevronDown,
+  HelpCircle,
+  Info,
+  Layout,
+  MoreHorizontal,
+} from "lucide-react";
+import {
+  Banner,
+  Button,
+  Menu,
+  MenuItem,
+  MenuTrigger,
+  Tag,
+} from "@universityrt/ui-kit";
 import { useContentPages, type ContentPage } from "../use-content-pages";
 import type { TestEditorModel } from "../test-editor.types";
 
@@ -36,7 +52,7 @@ export type StructureSectionProps = {
 export type StartPagesSectionProps = StructureSectionProps;
 
 const FLOW_LABEL: Record<TestEditorModel["flowMode"], string> = {
-  linear_flat: "Последовательный (плоский)",
+  linear_flat: "Последовательный",
   linear_by_topics: "Последовательный по темам",
   router_by_topics: "Маршрутизатор по темам",
   mixed: "Смешанный (устаревший)",
@@ -56,7 +72,7 @@ export function StructureSection({ model, testId }: StructureSectionProps) {
   const cp = useContentPages(testId);
   return (
     <div data-testid="structure-section">
-      <FlowModeBanner mode={model.flowMode} />
+      <FlowModeBar mode={model.flowMode} />
 
       {testId === undefined ? (
         <CreateModeNotice />
@@ -81,16 +97,18 @@ export function StructureSection({ model, testId }: StructureSectionProps) {
 /** Backwards-compatible re-export under the old skeleton name. */
 export const StartPagesSection = StructureSection;
 
-// ─── Banners ──────────────────────────────────────────────────────────────────
+// ─── Top banner ───────────────────────────────────────────────────────────────
 
-function FlowModeBanner({ mode }: { mode: TestEditorModel["flowMode"] }) {
+function FlowModeBar({ mode }: { mode: TestEditorModel["flowMode"] }) {
   return (
-    <Banner
-      tone="info"
-      title={`Сценарий: ${FLOW_LABEL[mode]}`}
-      description="Сценарий задаётся во вкладке «Настройки → Основное»."
-      data-testid="structure-mode-banner"
-    />
+    <div className="flow-mode-bar" data-testid="structure-mode-banner">
+      <Layout className="h-3.5 w-3.5" aria-hidden="true" />
+      <span>Режим:</span>
+      <span className="flow-mode-label">{FLOW_LABEL[mode]}</span>
+      <span className="flow-mode-hint">
+        — задаётся во вкладке Настройки › Сценарий прохождения
+      </span>
+    </div>
   );
 }
 
@@ -149,9 +167,8 @@ function ZonesBlock(props: {
 
   if (model.sections.length === 0) {
     return (
-      <EmptyState
-        layout="inline"
-        well
+      <Banner
+        tone="info"
         title="Тем пока нет"
         description="Добавьте темы во вкладке «Состав» — здесь они появятся в порядке прохождения."
         data-testid="structure-empty"
@@ -164,7 +181,7 @@ function ZonesBlock(props: {
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
   return (
-    <div className="tb-structure-zones" data-testid="structure-section-list">
+    <div data-testid="structure-section-list">
       <Zone
         title="До теста"
         testId="structure-zone-before-test"
@@ -224,13 +241,14 @@ function Zone(props: {
       ? true
       : !props.children;
   return (
-    <section className="tb-structure-zone" data-testid={props.testId}>
-      <header className="tb-structure-zone__head">
-        <h4 className="tb-structure-zone__title">{props.title}</h4>
-      </header>
-      <div className="tb-structure-zone__body">
+    <section className="zone-block" data-testid={props.testId}>
+      <div className="zone-header">
+        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+        {props.title}
+      </div>
+      <div className="topic-body">
         {empty && props.emptyMessage ? (
-          <div className="tb-structure-zone__empty">{props.emptyMessage}</div>
+          <div className="page-row page-row--empty">{props.emptyMessage}</div>
         ) : (
           props.children
         )}
@@ -249,68 +267,67 @@ function TopicBlock(props: {
 }) {
   return (
     <section
-      className="tb-structure-zone tb-structure-zone--topic"
+      className="topic-block"
       data-testid={`structure-zone-topic-${props.section.topicId}`}
     >
-      <header className="tb-structure-zone__head">
-        <h4 className="tb-structure-zone__title">
+      <div className="topic-header">
+        <span className="topic-name">
           {props.index}. {props.section.topicName}
-        </h4>
-        <span className="tb-structure-zone__meta">
+        </span>
+        <span className="topic-count">
           {props.section.drawCount} из {props.section.maxQuestions} вопросов
         </span>
-      </header>
-      <div className="tb-structure-zone__body">
-        {props.before.length > 0 && (
-          <div className="tb-structure-zone__group" data-testid={`structure-topic-before-${props.section.topicId}`}>
-            <div className="tb-structure-zone__group-title">До темы</div>
-            {props.before.map((p) => (
-              <PageRow
-                key={p.id}
-                page={p}
-                onRemove={props.onRemove}
-                isRemoving={props.isRemoving}
-              />
-            ))}
-          </div>
-        )}
-        <div className="tb-structure-zone__group" data-testid={`structure-topic-questions-${props.section.topicId}`}>
-          <div className="tb-structure-zone__group-title">Вопросы темы</div>
-          <div className="tb-page-row tb-page-row--system">
-            <span className="tb-page-row__badge">Вопросы</span>
-            <span className="tb-page-row__title">
-              {props.section.drawCount} вопросов из {props.section.maxQuestions}
-            </span>
-          </div>
-        </div>
-        {props.after.length > 0 && (
-          <div className="tb-structure-zone__group" data-testid={`structure-topic-after-${props.section.topicId}`}>
-            <div className="tb-structure-zone__group-title">После темы</div>
-            {props.after.map((p) => (
-              <PageRow
-                key={p.id}
-                page={p}
-                onRemove={props.onRemove}
-                isRemoving={props.isRemoving}
-              />
-            ))}
-          </div>
-        )}
+      </div>
+      <div className="topic-body">
+        {props.before.map((p) => (
+          <PageRow
+            key={p.id}
+            page={p}
+            onRemove={props.onRemove}
+            isRemoving={props.isRemoving}
+          />
+        ))}
+        <FlatQuestionsRow model={null} sectionDrawCount={props.section.drawCount} sectionMax={props.section.maxQuestions} />
+        {props.after.map((p) => (
+          <PageRow
+            key={p.id}
+            page={p}
+            onRemove={props.onRemove}
+            isRemoving={props.isRemoving}
+          />
+        ))}
       </div>
     </section>
   );
 }
 
-function FlatQuestionsRow({ model }: { model: TestEditorModel }) {
-  const total = model.sections.reduce((s, x) => s + x.drawCount, 0);
-  const max = model.sections.reduce((s, x) => s + x.maxQuestions, 0);
+function FlatQuestionsRow({
+  model,
+  sectionDrawCount,
+  sectionMax,
+}: {
+  model: TestEditorModel | null;
+  sectionDrawCount?: number;
+  sectionMax?: number;
+}) {
+  const total = model
+    ? model.sections.reduce((s, x) => s + x.drawCount, 0)
+    : (sectionDrawCount ?? 0);
+  const max = model
+    ? model.sections.reduce((s, x) => s + x.maxQuestions, 0)
+    : (sectionMax ?? 0);
+  const subtitle = model
+    ? `Единый поток: ${total} вопросов из ${max} (${model.sections.length} ${model.sections.length === 1 ? "тема" : "тем"})`
+    : `${total} вопросов из ${max}`;
   return (
-    <div className="tb-page-row tb-page-row--system" data-testid="structure-flat-questions-row">
-      <span className="tb-page-row__badge">Вопросы</span>
-      <span className="tb-page-row__title">
-        Единый поток: {total} вопросов из {max} (
-        {model.sections.length} {model.sections.length === 1 ? "тема" : "тем"})
-      </span>
+    <div
+      className="page-row page-row--system page-row--questions"
+      data-testid={model ? "structure-flat-questions-row" : undefined}
+      data-kind="questions"
+    >
+      <HelpCircle className="page-icon h-3.5 w-3.5" aria-hidden="true" />
+      <span className="page-variant-badge">Вопросы</span>
+      <span className="page-title">{subtitle}</span>
     </div>
   );
 }
@@ -331,32 +348,41 @@ function PageRow(props: {
   return (
     <div
       className={
-        "tb-page-row" +
-        (page.templateKeyMissing ? " tb-page-row--missing-template" : "")
+        "page-row" +
+        (page.templateKeyMissing ? " page-row--warn" : "")
       }
       data-testid={`structure-page-row-${page.id}`}
     >
-      <span className="tb-page-row__badge">{badge}</span>
-      <span className="tb-page-row__title">{title}</span>
-      {page.templateKeyMissing && (
-        <Tag tone="warning" size="s" data-testid={`structure-page-missing-${page.id}`}>
-          Шаблон страницы недоступен
-        </Tag>
-      )}
-      <div className="tb-page-row__actions">
+      <span className="page-variant-badge">{badge}</span>
+      <span className="page-title">{title}</span>
+      <div className="page-actions">
         {!confirming ? (
-          <Button
-            variant="ghost"
-            size="s"
-            onClick={() => setConfirming(true)}
-            data-testid={`structure-page-delete-${page.id}`}
-            aria-label={`Удалить страницу ${title}`}
+          <MenuTrigger
+            placement="bottom-end"
+            trigger={
+              <button
+                type="button"
+                className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s"
+                aria-label={`Действия для страницы ${title}`}
+                data-testid={`structure-page-actions-${page.id}`}
+              >
+                <MoreHorizontal className="h-3 w-3" aria-hidden="true" />
+              </button>
+            }
           >
-            Удалить
-          </Button>
+            <Menu size="sm">
+              <MenuItem
+                danger
+                onClick={() => setConfirming(true)}
+                data-testid={`structure-page-delete-${page.id}`}
+              >
+                Удалить
+              </MenuItem>
+            </Menu>
+          </MenuTrigger>
         ) : (
           <>
-            <span className="tb-page-row__confirm">Удалить?</span>
+            <span className="page-row__delete-confirm-label">Удалить?</span>
             <Button
               variant="secondary"
               size="s"
@@ -366,11 +392,10 @@ function PageRow(props: {
               Отмена
             </Button>
             <Button
-              variant="primary"
+              variant="destructive"
               size="s"
               onClick={() => {
                 props.onRemove(page.id).then(() => setConfirming(false)).catch(() => {
-                  // surface left to react-query; just exit confirm mode.
                   setConfirming(false);
                 });
               }}
@@ -383,6 +408,14 @@ function PageRow(props: {
           </>
         )}
       </div>
+      {page.templateKeyMissing && (
+        <div className="page-row__meta">
+          <Tag tone="warning" size="s" data-testid={`structure-page-missing-${page.id}`}>
+            <Info className="h-3 w-3" aria-hidden="true" />
+            Шаблон страницы недоступен
+          </Tag>
+        </div>
+      )}
     </div>
   );
 }

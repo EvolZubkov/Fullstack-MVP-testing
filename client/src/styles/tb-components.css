@@ -585,70 +585,163 @@
   white-space: nowrap;
 }
 
-/* ── Structure tab — zones + page rows ─────────────────────────────────
-   Used in features/tests/editor/sections/start-pages-section.tsx. */
-.tb-structure-zones {
+/* ── Structure tab — flow-mode-bar / zone-block / topic-block / page-row
+   Ported from prd7-structure-linear-flat.html / prd7-structure-linear-by-topics.html
+   (wireframe-local CSS); now lives in DS-extensions for use in
+   features/tests/editor/sections/start-pages-section.tsx. */
+
+/* Inline flow-mode summary at the top of the Structure tab. */
+.flow-mode-bar {
   display: flex;
-  flex-direction: column;
-  gap: var(--ou-space-3);
-  margin-bottom: var(--ou-space-3);
+  align-items: center;
+  gap: var(--ou-space-2);
+  padding: var(--wf-space-7, 6px) 0 var(--ou-space-3);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+  margin-bottom: var(--ou-space-4);
 }
-.tb-structure-zone {
-  border: var(--wf-border-w) solid var(--ou-border-default);
-  border-radius: var(--ou-radius-l);
-  background: var(--ou-bg-elevated);
+.flow-mode-label { font-weight: 600; color: var(--ou-fg-default); }
+.flow-mode-hint { font: var(--ou-text-caption); }
+
+/* Zone blocks — outer container for «До теста» / «Внутри теста» / «После теста». */
+.zone-block {
+  margin-bottom: var(--ou-space-3);
+  border: var(--wf-border-w) dashed var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
   overflow: hidden;
 }
-.tb-structure-zone--topic { background: var(--ou-bg-default); }
-.tb-structure-zone__head {
+.zone-block:has(.ou-select.is-open) { overflow: visible; }
+.zone-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--ou-space-2);
-  padding: var(--ou-space-2) var(--ou-space-3);
-  background: var(--ou-bg-subtle);
-  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
-}
-.tb-structure-zone__title {
-  font: var(--ou-text-body-m);
+  padding: var(--ou-space-2) var(--wf-space-14, 14px);
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-caption);
   font-weight: 600;
-  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: var(--wf-border-w) dashed var(--ou-border-default);
 }
-.tb-structure-zone__meta {
-  font: var(--ou-text-body-s);
-  color: var(--ou-fg-muted);
+
+/* Topic-blocks (cards) for linear_by_topics + router_by_topics layouts. */
+.topic-block {
+  margin-bottom: var(--ou-space-3);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-elevated);
+  box-shadow: var(--ou-shadow-xs);
+  overflow: hidden;
 }
-.tb-structure-zone__body {
+.topic-block:has(.ou-select.is-open) { overflow: visible; }
+.topic-header {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: var(--wf-space-10, 10px);
+  padding: var(--wf-space-10, 10px) var(--wf-space-14, 14px);
+  background: var(--ou-bg-surface-3);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+}
+.topic-grip {
+  color: var(--ou-fg-muted);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.topic-name { font: var(--ou-text-body-s); font-weight: 600; flex: 1; }
+.topic-count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.topic-body { padding: var(--ou-space-1) 0; }
+.zone-block > .topic-body { padding: var(--ou-space-2) var(--ou-space-4); }
+
+/* Page row — flexible list item for content pages and the questions stream. */
+.page-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--ou-space-2);
-  padding: var(--ou-space-2) var(--ou-space-3);
+  padding: var(--wf-space-6, 6px) var(--wf-space-10, 10px) var(--wf-space-6, 6px) var(--wf-space-14, 14px);
+  position: relative;
 }
-.tb-structure-zone__empty {
-  font: var(--ou-text-body-s);
-  color: var(--ou-fg-muted);
-  padding: var(--ou-space-1) 0;
+.page-row:hover { background: var(--ou-bg-hover); }
+.page-row--template { background: var(--ou-bg-elevated); }
+.page-row--template .drag-handle {
+  opacity: 0.18;
+  cursor: default;
+  pointer-events: none;
 }
-.tb-structure-zone__group {
+.page-row--questions .page-title { color: var(--ou-fg-muted); }
+.page-row__meta {
+  flex-basis: 100%;
   display: flex;
-  flex-direction: column;
-  gap: var(--ou-space-1);
+  flex-wrap: wrap;
+  gap: var(--wf-space-6, 6px);
+  padding-top: var(--wf-space-tiny, 2px);
+  margin-left: calc(var(--ou-space-4) + var(--ou-space-2));
 }
-.tb-structure-zone__group-title {
+.page-row--system .page-row__meta { margin-left: var(--ou-space-4); }
+.page-row__meta .ou-tag { display: inline-flex; align-items: center; gap: var(--wf-space-tiny, 2px); }
+
+/* Drag handle (visual placeholder until DnD ships). */
+.drag-handle {
+  color: var(--ou-fg-muted);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Variant badge: neutral chip with the variant name (kind/template label). */
+.page-variant-badge {
+  font: var(--ou-text-caption);
+  font-weight: 600;
+  padding: var(--wf-space-half, 4px) var(--wf-space-6, 6px);
+  border-radius: var(--wf-space-1q, 3px);
+  flex-shrink: 0;
+  background: var(--ou-bg-surface-3);
+  color: var(--ou-fg-default);
+}
+.tpl-page-marker {
   font: var(--ou-text-caption);
   color: var(--ou-fg-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  background: var(--ou-bg-surface-3);
+  border-radius: var(--wf-space-1q, 3px);
+  padding: var(--wf-border-w) var(--wf-space-tiny, 2px);
+  margin-left: var(--ou-space-1);
 }
-.tb-page-row {
-  display: flex;
-  align-items: center;
-  gap: var(--ou-space-2);
-  padding: var(--ou-space-2) var(--ou-space-3);
-  border: var(--wf-border-w) solid var(--ou-border-default);
-  border-radius: var(--ou-radius-m);
-  background: var(--ou-bg-default);
+.page-title { font: var(--ou-text-body-s); flex: 1; min-width: 0; }
+.page-actions { display: flex; gap: var(--ou-space-1); flex-shrink: 0; }
+.page-icon { color: var(--ou-fg-muted); flex-shrink: 0; }
+
+/* Severity indicator on page-row: derived from meta tag tones. */
+.page-row:has(> .page-row__meta .ou-tag--info):not(:has(> .page-row__meta .ou-tag--warning)):not(:has(> .page-row__meta .ou-tag--error)) {
+  border-left: var(--wf-space-1q, 3px) solid var(--ou-info-default);
+  padding-left: var(--wf-space-11, 11px);
 }
+.page-row:has(> .page-row__meta .ou-tag--warning):not(:has(> .page-row__meta .ou-tag--error)),
+.page-row.page-row--warn {
+  border-left: var(--wf-space-1q, 3px) solid var(--ou-warning-default);
+  padding-left: var(--wf-space-11, 11px);
+}
+.page-row:has(> .page-row__meta .ou-tag--error),
+.page-row.page-row--error {
+  border-left: var(--wf-space-1q, 3px) solid var(--ou-error-default);
+  padding-left: var(--wf-space-11, 11px);
+}
+
+/* Empty-zone placeholder text inside a zone-block. */
+.page-row--empty {
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-body-s);
+}
+/* Inline delete confirm prompt next to a page-row's actions. */
+.page-row__delete-confirm-label {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+
+/* Legacy tb-page-row aliases kept temporarily for delete-confirm UI. */
 .tb-page-row--system { background: var(--ou-bg-subtle); }
 .tb-page-row--missing-template { border-color: var(--ou-warning-default); }
 .tb-page-row__badge {
