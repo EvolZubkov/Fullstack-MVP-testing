@@ -740,6 +740,7 @@ function AdaptivePane({ model, updateModel }: SettingsSectionProps) {
               <AdaptiveTopicAccordion
                 key={section.topicId}
                 topic={topic}
+                questionCount={section.maxQuestions}
                 onToggleEnabled={(enabled) =>
                   upsertTopic(section.topicId, (t) => ({ ...t, enabled }))
                 }
@@ -782,17 +783,29 @@ function AdaptivePane({ model, updateModel }: SettingsSectionProps) {
 
 function AdaptiveTopicAccordion(props: {
   topic: AdaptiveTopicConfig & { enabled: boolean };
+  questionCount: number;
   onToggleEnabled: (enabled: boolean) => void;
   onFailureFeedbackChange: (text: string) => void;
   onAddLevel: () => void;
   onLevelChange: (levelIndex: number, patch: Partial<AdaptiveLevelConfig>) => void;
   onLevelRemove: (levelIndex: number) => void;
 }) {
-  const { topic } = props;
+  const { topic, questionCount } = props;
   const [open, setOpen] = useState(false);
-  const subtitle = `${topic.levels.length} уровн${
-    topic.levels.length === 1 ? "ь" : topic.levels.length >= 2 && topic.levels.length <= 4 ? "я" : "ей"
-  } · ${topic.enabled ? "включено" : "выключено"}`;
+
+  // Validation per FR-17: an adaptive topic is "valid" when it has at least
+  // one level configured. Status-dot color reflects this; subtitle echoes
+  // «валидно» / «невалидно».
+  const isValid = topic.levels.length >= 1;
+  const statusTone: "ok" | "err" = isValid ? "ok" : "err";
+  const statusLabel = isValid ? "валидно" : "невалидно";
+  const levelsPlural =
+    topic.levels.length === 1
+      ? "уровень"
+      : topic.levels.length >= 2 && topic.levels.length <= 4
+        ? "уровня"
+        : "уровней";
+  const subtitle = `${questionCount} вопросов · ${topic.levels.length} ${levelsPlural} · ${statusLabel}`;
 
   return (
     <div
@@ -807,10 +820,20 @@ function AdaptiveTopicAccordion(props: {
           aria-expanded={open ? "true" : "false"}
           data-testid={`adaptive-topic-toggle-${topic.topicId}`}
         >
+          <span
+            className={`tb-status-dot tb-status-dot--${statusTone}`}
+            aria-hidden="true"
+          />
           <span className="ou-acc__trigger-text">
             <span className="ou-acc__title">{topic.topicName}</span>
             <span className="ou-acc__subtitle">{subtitle}</span>
           </span>
+          <ChevronDown
+            className="ou-acc__chev"
+            width={18}
+            height={18}
+            aria-hidden="true"
+          />
         </button>
         <span className="tb-adaptive-topics__toggle">
           <Switch
@@ -822,6 +845,9 @@ function AdaptiveTopicAccordion(props: {
             aria-label={`Адаптивность включена для темы ${topic.topicName}`}
             data-testid={`adaptive-topic-enabled-${topic.topicId}`}
           />
+          <span className="tb-adaptive-topics__toggle-lbl">
+            {topic.enabled ? "Включено" : "Выключено"}
+          </span>
         </span>
       </div>
       {open && (
