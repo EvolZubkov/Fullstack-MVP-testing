@@ -221,11 +221,19 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
 
   const tabItems = useMemo<TabItem<EditorTabKey>[]>(
     () =>
-      TAB_ORDER.map((tab) => ({
-        id: tab,
-        label: TAB_LABELS[tab],
-        badge: <StatusBadge status={editor.tabStatuses[tab]} />,
-      })),
+      TAB_ORDER.map((tab) => {
+        const status = editor.tabStatuses[tab];
+        // Only set `badge` when the tab actually has non-clean state — ui-kit
+        // Tabs renders an `<span class="ou-tabs__badge">` pill whenever
+        // `badge != null`, and the pill is visible (18×18 bg-page) even with
+        // an empty content node. So we pass `undefined` for clean tabs.
+        const showDot = status.error || status.warning || status.dirty;
+        return {
+          id: tab,
+          label: TAB_LABELS[tab],
+          badge: showDot ? <StatusBadge status={status} /> : undefined,
+        };
+      }),
     [editor.tabStatuses],
   );
 
