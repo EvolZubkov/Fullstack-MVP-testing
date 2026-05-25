@@ -812,30 +812,29 @@ function AdaptiveTopicAccordion(props: {
       className={"ou-acc__item" + (open ? " is-open" : "")}
       data-testid={`adaptive-topic-${topic.topicId}`}
     >
-      <div className="ou-acc__head tb-adaptive-topics__head">
-        <button
-          type="button"
-          className="ou-acc__trigger tb-adaptive-topics__trigger"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open ? "true" : "false"}
-          data-testid={`adaptive-topic-toggle-${topic.topicId}`}
+      <button
+        type="button"
+        className="ou-acc__trigger tb-adaptive-topics__trigger"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open ? "true" : "false"}
+        data-testid={`adaptive-topic-toggle-${topic.topicId}`}
+      >
+        <span
+          className={`tb-status-dot tb-status-dot--${statusTone}`}
+          aria-hidden="true"
+        />
+        <span className="ou-acc__trigger-text">
+          <span className="ou-acc__title">{topic.topicName}</span>
+          <span className="ou-acc__subtitle">{subtitle}</span>
+        </span>
+        {/* Toggle is rendered INSIDE the trigger (per wireframe wf-adaptive)
+           with stopPropagation so flipping the switch doesn't expand/collapse
+           the accordion. Chev follows the toggle and is the right-most element. */}
+        <span
+          className="tb-adaptive-topics__toggle"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
         >
-          <span
-            className={`tb-status-dot tb-status-dot--${statusTone}`}
-            aria-hidden="true"
-          />
-          <span className="ou-acc__trigger-text">
-            <span className="ou-acc__title">{topic.topicName}</span>
-            <span className="ou-acc__subtitle">{subtitle}</span>
-          </span>
-          <ChevronDown
-            className="ou-acc__chev"
-            width={18}
-            height={18}
-            aria-hidden="true"
-          />
-        </button>
-        <span className="tb-adaptive-topics__toggle">
           <Switch
             checked={topic.enabled}
             onChange={(e) => {
@@ -849,7 +848,13 @@ function AdaptiveTopicAccordion(props: {
             {topic.enabled ? "Включено" : "Выключено"}
           </span>
         </span>
-      </div>
+        <ChevronDown
+          className="ou-acc__chev"
+          width={18}
+          height={18}
+          aria-hidden="true"
+        />
+      </button>
       {open && (
         <div className="ou-acc__body" data-testid={`adaptive-topic-body-${topic.topicId}`}>
           <div className="ou-formfield">

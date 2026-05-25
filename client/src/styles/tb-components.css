@@ -275,8 +275,7 @@
 
 /* ── Adaptive block (адаптивность по темам) ──────────────────────────── */
 .tb-adaptive-topics { margin-bottom: var(--ou-space-3); }
-.tb-adaptive-topics__head { display: flex; align-items: center; gap: var(--ou-space-3); padding-right: var(--ou-space-3); }
-.tb-adaptive-topics__trigger { flex: 1; min-width: 0; padding: var(--ou-space-3) var(--ou-space-4); gap: var(--ou-space-3); }
+.tb-adaptive-topics__trigger { padding: var(--ou-space-3) var(--ou-space-4); gap: var(--ou-space-3); }
 /* DS .ou-acc__body has padding-top: 0 — добавляем зазор, иначе hover-фон триггера
    визуально упирается в кнопку «Добавить уровень». */
 .tb-adaptive-topics .ou-acc__body { padding-top: var(--ou-space-3); }
