@@ -1,9 +1,9 @@
 # PRD-7: Стратегия реализации с переключением моделей
 
-**Версия:** 1.1
-**Последняя актуализация:** 2026-05-22 (закрыты S0+S1+S2+S3 + route-gap; backend
-блоки 1A-1E variant.kind contract внесены пост-S2; UI стек переписан под
-UniversityRT DS вместо shadcn/ui — фактический wireframes-каркас на `ou-*`/`tb-*`)
+**Версия:** 1.2
+**Последняя актуализация:** 2026-05-25 (закрыты S0–S8; Drawer + все секции +
+FeedbackEditorModal реализованы; UI стек UniversityRT DS `ou-*`/`tb-*`;
+S9–S11 — тесты, удаление legacy, acceptance — не начаты)
 **Назначение:** Пошаговая инструкция по реализации PRD-7 разными моделями Claude Code.
 **Связанные документы:**
 
@@ -14,7 +14,7 @@ UniversityRT DS вместо shadcn/ui — фактический wireframes-к�
 
 ---
 
-## 0. Текущий статус (на 2026-05-22)
+## 0. Текущий статус (на 2026-05-25)
 
 | Сессия | Фаза | Статус | Артефакты |
 | --- | --- | --- | --- |
@@ -28,14 +28,25 @@ UniversityRT DS вместо shadcn/ui — фактический wireframes-к�
 | S2+ | Block 1E — required-fields validation | Закрыта 2026-05-22 | `required-fields-validator.ts` + hook в `save()` при `status=published` |
 | S2+ | Route-gap closure | Закрыта 2026-05-22 | `POST /api/tests` и `PUT /api/tests/:id` переведены на `testSettingsService.create()/save()` |
 | S3 | Mappers + validation | Закрыта | 46 unit-тестов покрывают `apiToEditorModel`, `editorModelToPayload`, `validateTestEditor` |
-| S4 | Фаза 4A Drawer caркас | Не начата | Следующий шаг |
-| S4 | Фаза 4B Reference basic-settings | Не начата | Зависит от 4A |
-| S5-S8 | Доменные секции | Не начата | Зависят от 4A+4B |
-| S9 | Component + API тесты | Не начата | Зависит от 5 |
-| S10 | Удаление legacy | Не начата | Зависит от 9 |
+| S4 | Фаза 4A Drawer каркас | Закрыта 2026-05-25 | `test-editor.tsx`, `use-test-editor.ts`, tests-list explorer (`afc5fe5` + `0850a64` + fix-commits) |
+| S4 | Фаза 4B Reference basic-settings | Закрыта 2026-05-25 | `basic-settings-section.tsx` + FeedbackEditorModal (tb-rte + PDF assets) (`afc5fe5`, `0257b5b`, `57d77c1`) |
+| S5 | Секция topics-structure | Закрыта 2026-05-25 | `topics-structure-section.tsx` + FeedbackPreview + TopicRow feedback integration (`afc5fe5`, `0257b5b`) |
+| S6 | Секция pass-rules | Закрыта 2026-05-25 | `pass-rules-section.tsx` внутри настроек Drawer (`afc5fe5`) |
+| S7 | Секция adaptive-settings | Закрыта 2026-05-25 | `adaptive-settings-section.tsx` + AdaptiveLevelCard + hide-in-standard (`afc5fe5`, `d5f3699`, `9331adf`, `2a77fd6`, `b68b0d3`) |
+| S8 | Секция start-pages + design | Закрыта 2026-05-25 | `start-pages-section.tsx` (Structure tab), `design-section.tsx` (Design tab + ColorPicker) (`afc5fe5`, `88d3435`, `86ab7f0`) |
+| S9 | Component + API тесты | Не начата | Следующая сессия |
+| S10 | Удаление legacy | Не начата | Зависит от S9 |
 | S11 | Acceptance pass | Не начата | Финал |
 
-Полный регрессионный набор на 2026-05-22: **17 файлов × 435 тестов, npm run check 0 errors**.
+Незакрытые пункты S4-S8 (переходят в S9 или отдельный fix):
+
+- FR-05 confirmation dialog при закрытии с несохранёнными изменениями
+- FR-25c «Показать изменения» grouped summary в footer
+- FR-25k optimistic conflict dialog (409 Conflict)
+- FR-39 warning в «Структуре» при отсутствии system element
+- NFR-19/20/21 focus trap + aria-label на индикаторах
+
+Полный регрессионный набор на 2026-05-25: **~19 файлов × ~457 тестов, npm run check 0 errors**.
 
 Контракты, внесённые после S0 и НЕ описанные оригинальной стратегией (Block 1A-1E),
 зафиксированы в новой Фазе 1C-E ниже (§ «Сессия S2-расширения»).
@@ -108,12 +119,12 @@ UniversityRT DS вместо shadcn/ui — фактический wireframes-к�
 | S2 | Фаза 1A + 1B | Opus -> Sonnet | `/clear` | ✓ Закрыта |
 | S2+ | Block 1A-1E + route-gap | Opus -> Sonnet | `/clear` | ✓ Закрыта 2026-05-22 |
 | S3 | Фаза 2A + 2B + 3A + 3B | Opus -> Sonnet -> Haiku | `/clear` | ✓ Закрыта |
-| S4 | Фаза 4A + 4B | Opus -> Sonnet | `/clear` | Не начата (следующая) |
-| S5 | Фаза 5A | Haiku | `/clear` | Не начата |
-| S6 | Фаза 5B | Haiku | `/clear` | Не начата |
-| S7 | Фаза 5C | Haiku | `/clear` | Не начата |
-| S8 | Фаза 5D + 5E | Haiku -> Sonnet | `/clear` | Не начата |
-| S9 | Фаза 6A + 6B | Haiku | `/clear` | Не начата |
+| S4 | Фаза 4A + 4B | Opus -> Sonnet | `/clear` | ✓ Закрыта 2026-05-25 |
+| S5 | Фаза 5A | Haiku | `/clear` | ✓ Закрыта 2026-05-25 |
+| S6 | Фаза 5B | Haiku | `/clear` | ✓ Закрыта 2026-05-25 |
+| S7 | Фаза 5C | Haiku | `/clear` | ✓ Закрыта 2026-05-25 |
+| S8 | Фаза 5D + 5E | Haiku -> Sonnet | `/clear` | ✓ Закрыта 2026-05-25 |
+| S9 | Фаза 6A + 6B | Haiku | `/clear` | Не начата (следующая) |
 | S10 | Фаза 7A | Sonnet | `/clear` | Не начата |
 | S11 | Фаза 7B + W.3C | Opus -> Sonnet | финал | Не начата |
 
@@ -1111,21 +1122,21 @@ Anti-goals: НЕ начинать новые фичи. Только провер
 | S3 | 2B | Дополнить mappers | Sonnet | 4 | ✓ |
 | S3 | 3A | Reference-валидация | Sonnet | 3B, 4 | ✓ |
 | S3 | 3B | Расширение валидации | Haiku | 4 | ✓ |
-| S4 | 4A | Drawer-каркас (DS UniversityRT, не shadcn) | Opus | 4B, 5 | Следующая |
-| S4 | 4B | Reference-секция basic-settings + s-feedback-edit | Sonnet | 5 | Не начата |
-| S5 | 5A | Секция topics-structure | Haiku | 6 | Не начата |
-| S6 | 5B | Секция pass-rules | Haiku | 6 | Не начата |
-| S7 | 5C | Секция adaptive-settings | Haiku | 6 | Не начата |
-| S8 | 5D | Секция start-pages | Haiku | 6 | Не начата |
-| S8 | 5E | Секция design | Sonnet | 6 | Не начата |
-| S9 | 6A | Component-тесты | Haiku | 7 | Не начата |
+| S4 | 4A | Drawer-каркас (DS UniversityRT, не shadcn) | Opus | 4B, 5 | ✓ 2026-05-25 |
+| S4 | 4B | Reference-секция basic-settings + s-feedback-edit | Sonnet | 5 | ✓ 2026-05-25 |
+| S5 | 5A | Секция topics-structure | Haiku | 6 | ✓ 2026-05-25 |
+| S6 | 5B | Секция pass-rules | Haiku | 6 | ✓ 2026-05-25 |
+| S7 | 5C | Секция adaptive-settings | Haiku | 6 | ✓ 2026-05-25 |
+| S8 | 5D | Секция start-pages | Haiku | 6 | ✓ 2026-05-25 |
+| S8 | 5E | Секция design | Sonnet | 6 | ✓ 2026-05-25 |
+| S9 | 6A | Component-тесты | Haiku | 7 | Не начата (следующая) |
 | S9 | 6B | API и regression тесты | Haiku | 7 | Не начата |
 | S10 | 7A | Удаление legacy | Sonnet | 7B | Не начата |
 | S11 | 7B | Acceptance pass | Opus | - | Не начата |
 | ~~S11~~ | ~~W.3C~~ | ~~Wireframes: edge-states~~ | — | — | Снято со scope — edge-states интегрированы как state'ы единого `prd7-editor-drawer.html` |
 
 **Итого: 12 сессий моделей** (S0...S11) + 1 расширенная S2 для контрактов PRD-1 §4.3.
-Закрыто 8 сессий (S0, S1, S2 + S2-расширения, S3). Осталось 4 сессии (S4-S11).
+Закрыто 12 сессий (S0–S8 + S2-расширения). Осталось 3 сессии (S9, S10, S11).
 Экономия за счёт группировки через `/model`-переключение внутри сессии (см. §1.4).
 
 **Параллельно:** S1 (генерация wireframes моделью) шла одновременно с S2/S3
