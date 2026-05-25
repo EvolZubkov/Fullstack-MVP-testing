@@ -1,13 +1,12 @@
 /**
  * @module features/tests/editor/sections/topics-structure-section
  * @description Editor section for the «Состав» tab (PRD-7 wireframe
- * `prd7-editor-drawer.html` state s-default).
+ * `prd7-editor-drawer.html` state s-default / s-feedback-edit).
  *
  * Renders the list of topics that make up the test as `tb-topic-row`s with:
  *   - header: topic name + «Обязательная» tag + total questions in the topic
  *   - body: draw-count number input (range 1..maxQuestions) and a feedback
- *     preview block (read-only for now; the edit modal — FR-36/FR-37 — lives
- *     in a separate ticket)
+ *     preview block; clicking the preview opens FeedbackEditorModal (FR-36/37)
  *   - per-row remove button (small ghost X) that drops the section from the
  *     draft
  *
@@ -31,6 +30,7 @@ import {
   NumberInput,
   Tag,
 } from "@universityrt/ui-kit";
+import { FeedbackEditorModal } from "./feedback-editor-modal";
 import type {
   EditorSection,
   TestEditorModel,
@@ -140,6 +140,7 @@ export function CompositionSection({ model, updateModel }: CompositionSectionPro
           section={section}
           onChangeDrawCount={(n) => updateSection(section.topicId, { drawCount: n })}
           onRemove={() => removeSection(section.topicId)}
+          onSaveFeedback={(patch) => updateSection(section.topicId, patch)}
         />
       ))}
 
@@ -173,67 +174,120 @@ function TopicRow(props: {
   section: EditorSection;
   onChangeDrawCount: (n: number) => void;
   onRemove: () => void;
+  /** Called with a partial EditorSection patch when feedback is saved. */
+  onSaveFeedback: (patch: Partial<EditorSection>) => void;
 }) {
   const { section } = props;
   const maxQ = Math.max(section.maxQuestions, 1);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   return (
-    <div className="tb-topic-row" data-testid={`topic-row-${section.topicId}`}>
-      <div className="tb-topic-row__header">
-        <span className="tb-topic-row__name">{section.topicName}</span>
-        {section.required && (
-          <Tag
-            tone="neutral"
-            variant="outline"
-            aria-label="Тема обязательная — задаётся в Настройках"
-          >
-            Обязательная
-          </Tag>
-        )}
-        <span className="tb-topic-row__count">
-          {section.maxQuestions} вопрос{plural(section.maxQuestions)}
-        </span>
-        <IconButton
-          icon={<X className="h-3.5 w-3.5" aria-hidden="true" />}
-          aria-label={`Убрать тему «${section.topicName}»`}
-          variant="ghost"
-          size="s"
-          onClick={props.onRemove}
-          data-testid={`topic-remove-${section.topicId}`}
-        />
-      </div>
-      <div className="tb-topic-row__body">
-        <div className="tb-draw-count-row">
-          <span className="tb-draw-count-row__label">Вопросов в тест</span>
-          <NumberInput
+    <>
+      <div className="tb-topic-row" data-testid={`topic-row-${section.topicId}`}>
+        <div className="tb-topic-row__header">
+          <span className="tb-topic-row__name">{section.topicName}</span>
+          {section.required && (
+            <Tag
+              tone="neutral"
+              variant="outline"
+              aria-label="Тема обязательная — задаётся в Настройках"
+            >
+              Обязательная
+            </Tag>
+          )}
+          <span className="tb-topic-row__count">
+            {section.maxQuestions} вопрос{plural(section.maxQuestions)}
+          </span>
+          <IconButton
+            icon={<X className="h-3.5 w-3.5" aria-hidden="true" />}
+            aria-label={`Убрать тему «${section.topicName}»`}
+            variant="ghost"
             size="s"
-            value={section.drawCount}
-            min={1}
-            max={maxQ}
-            aria-label={`Количество вопросов из темы ${section.topicName}`}
-            data-testid={`topic-drawcount-${section.topicId}`}
-            onChange={(next) => props.onChangeDrawCount(next)}
+            onClick={props.onRemove}
+            data-testid={`topic-remove-${section.topicId}`}
           />
-          <span className="tb-draw-count-row__max">из {section.maxQuestions}</span>
         </div>
-        <div className="tb-card-desc">Обратная связь по теме</div>
-        <FeedbackPreview section={section} />
+        <div className="tb-topic-row__body">
+          <div className="tb-draw-count-row">
+            <span className="tb-draw-count-row__label">Вопросов в тест</span>
+            <NumberInput
+              size="s"
+              value={section.drawCount}
+              min={1}
+              max={maxQ}
+              aria-label={`Количество вопросов из темы ${section.topicName}`}
+              data-testid={`topic-drawcount-${section.topicId}`}
+              onChange={(next) => props.onChangeDrawCount(next)}
+            />
+            <span className="tb-draw-count-row__max">из {section.maxQuestions}</span>
+          </div>
+          <div className="tb-card-desc">Обратная связь по теме</div>
+          {/* Clicking the preview opens FeedbackEditorModal (FR-36 / FR-37). */}
+          <FeedbackPreview
+            section={section}
+            onEdit={() => setFeedbackOpen(true)}
+          />
+        </div>
       </div>
-    </div>
+      <FeedbackEditorModal
+        open={feedbackOpen}
+        title={`Обратная связь по теме «${section.topicName}»`}
+        description="Показывается учащемуся после прохождения темы"
+        value={{
+          format: section.feedback.format,
+          text: section.feedback.text,
+          links: section.feedbackLinks,
+          assets: section.feedbackAssets,
+        }}
+        onCancel={() => setFeedbackOpen(false)}
+        onSave={(v) => {
+          props.onSaveFeedback({
+            feedback: { format: v.format, text: v.text },
+            feedbackLinks: v.links,
+            feedbackAssets: v.assets,
+          });
+          setFeedbackOpen(false);
+        }}
+        testId={`feedback-editor-topic-${section.topicId}`}
+      />
+    </>
   );
 }
 
-function FeedbackPreview({ section }: { section: EditorSection }) {
+/**
+ * Read-only preview of topic feedback content. When `onEdit` is provided,
+ * renders as a clickable `<button>` that opens FeedbackEditorModal. Otherwise
+ * stays a non-interactive `<div>` (backward-compatible with callers that don't
+ * supply a handler).
+ */
+function FeedbackPreview({
+  section,
+  onEdit,
+}: {
+  section: EditorSection;
+  onEdit?: () => void;
+}) {
   const hasText = section.feedback.text.trim() !== "";
   const linkCount = section.feedbackLinks.length;
   const assetCount = section.feedbackAssets.length;
 
   if (!hasText && linkCount === 0 && assetCount === 0) {
+    // Empty state.
+    if (onEdit) {
+      return (
+        <button
+          type="button"
+          className="tb-feedback-preview is-empty"
+          onClick={onEdit}
+          aria-label="Редактировать обратную связь по теме"
+          data-testid={`feedback-preview-${section.topicId}`}
+        >
+          Не задано — нажмите для редактирования
+        </button>
+      );
+    }
     return (
-      <div
-        className="tb-feedback-preview is-empty"
-        title="Редактирование feedback — FR-36, реализуется отдельным шагом"
-      >
+      <div className="tb-feedback-preview is-empty">
         Не задано — обратная связь по теме пока не настроена
       </div>
     );
@@ -243,21 +297,11 @@ function FeedbackPreview({ section }: { section: EditorSection }) {
     ? section.feedback.text.replace(/<[^>]+>/g, "").slice(0, 80)
     : "Без текста";
 
-  return (
-    <div
-      className="tb-feedback-preview"
-      title="Редактирование feedback — FR-36, реализуется отдельным шагом"
-    >
+  const inner = (
+    <>
       <div className="tb-feedback-preview__text">
         <span className="tb-feedback-preview__snippet">{snippet}</span>
-        <IconButton
-          icon={<Pencil className="h-3.5 w-3.5" aria-hidden="true" />}
-          aria-label="Редактировать обратную связь"
-          variant="ghost"
-          size="s"
-          disabled
-          title="Редактирование feedback — FR-36, отдельный шаг"
-        />
+        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
       </div>
       {(linkCount > 0 || assetCount > 0) && (
         <div className="tb-feedback-preview__meta">
@@ -278,8 +322,24 @@ function FeedbackPreview({ section }: { section: EditorSection }) {
           )}
         </div>
       )}
-    </div>
+    </>
   );
+
+  if (onEdit) {
+    return (
+      <button
+        type="button"
+        className="tb-feedback-preview"
+        onClick={onEdit}
+        aria-label="Редактировать обратную связь по теме"
+        data-testid={`feedback-preview-${section.topicId}`}
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return <div className="tb-feedback-preview">{inner}</div>;
 }
 
 function TopicPickerModal(props: {

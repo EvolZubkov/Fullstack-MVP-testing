@@ -1136,6 +1136,7 @@ function FeedbackEditTrigger(props: {
           format: "plain",
           text: props.text,
           links: props.links,
+          assets: [],
         }}
         hideAssets={props.hideAssets}
         onCancel={() => setOpen(false)}
