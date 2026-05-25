@@ -21,7 +21,7 @@
  * section just renders inputs and reports changes.
  */
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import {
   Accordion,
   AccordionItem,
@@ -877,33 +877,64 @@ function AdaptiveLevelCard(props: {
   onRemove: () => void;
 }) {
   const { level } = props;
+  const [collapsed, setCollapsed] = useState(false);
   const testIdBase = `adaptive-level-${props.topicId}-${level.levelIndex}`;
+
+  // Validation: a level is "valid" when min ≤ max, questions ≥ 1 and
+  // threshold is within bounds. Defer richer rules until validation
+  // pipeline is plugged in (FR-17 follow-up).
+  const isValid =
+    level.minDifficulty <= level.maxDifficulty &&
+    level.questionsCount >= 1 &&
+    level.passThreshold >= 0 &&
+    (level.passThresholdType !== "percent" || level.passThreshold <= 100);
+  const statusTone: "ok" | "err" = isValid ? "ok" : "err";
+  const statusLabel = isValid ? "валидно" : "невалидно";
 
   return (
     <Card
       variant="outlined"
       size="sm"
-      className="tb-level-card"
+      className={"tb-level-card" + (collapsed ? " is-collapsed" : "")}
       data-testid={testIdBase}
     >
       <CardHeader
         className="tb-level-card__head"
+        lead={
+          <span
+            className={`tb-status-dot tb-status-dot--${statusTone}`}
+            aria-label={`Состояние уровня: ${statusLabel}`}
+            data-testid={`${testIdBase}-status`}
+          />
+        }
         title={level.levelName}
         subtitle={
           <>
             {level.minDifficulty}–{level.maxDifficulty} · {level.questionsCount} вопросов · {level.passThreshold}
-            {level.passThresholdType === "percent" ? " %" : " б."}
+            {level.passThresholdType === "percent" ? " %" : " б."} · {statusLabel}
           </>
         }
         trail={
-          <Button
-            variant="ghost"
-            size="s"
-            leadingIcon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
-            onClick={props.onRemove}
-            aria-label={`Удалить уровень ${level.levelName}`}
-            data-testid={`${testIdBase}-remove`}
-          />
+          <>
+            <Button
+              variant="ghost"
+              size="s"
+              leadingIcon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+              onClick={props.onRemove}
+              aria-label={`Удалить уровень ${level.levelName}`}
+              data-testid={`${testIdBase}-remove`}
+            />
+            <button
+              type="button"
+              className="tb-level-card__chev"
+              aria-expanded={collapsed ? "false" : "true"}
+              aria-label={collapsed ? "Раскрыть уровень" : "Свернуть уровень"}
+              onClick={() => setCollapsed((v) => !v)}
+              data-testid={`${testIdBase}-toggle`}
+            >
+              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </>
         }
       />
       <CardBody className="tb-level-card__body">
