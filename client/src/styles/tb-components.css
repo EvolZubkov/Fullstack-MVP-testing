@@ -774,7 +774,120 @@
 }
 
 /* ── Design tab — template card + savebar ──────────────────────────────
-   Used in features/tests/editor/sections/design-section.tsx. */
+   Used in features/tests/editor/sections/design-section.tsx.
+   tpl-block / tpl-thumb / preview-sketch ported from prd7-design-tab.html. */
+.tpl-block {
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-elevated);
+  padding: var(--ou-space-3);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-3);
+  position: relative;
+}
+.tpl-preview-btn {
+  position: absolute;
+  top: var(--ou-space-1);
+  right: var(--ou-space-1);
+}
+.tpl-thumb {
+  width: 160px;
+  height: 90px;
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-muted);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.tpl-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+.tpl-info__head {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  flex-wrap: wrap;
+}
+.tpl-name { font: var(--ou-text-body-m); font-weight: 600; }
+.tpl-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tpl-actions { display: flex; gap: var(--ou-space-2); margin-top: var(--ou-space-1); }
+
+/* Preview sketch — schematic template thumbnail with header/progress/body. */
+.preview-sketch {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--ou-space-2);
+}
+.ps-header {
+  height: 18px;
+  background: var(--ou-accent-default);
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  gap: var(--ou-space-1);
+}
+.ps-logo {
+  width: 10px;
+  height: 10px;
+  background: var(--ou-neutral-0);
+  border-radius: 2px;
+  opacity: 0.8;
+}
+.ps-title {
+  color: color-mix(in srgb, var(--ou-neutral-0) 80%, transparent);
+  font-size: 7px;
+}
+.ps-progress {
+  height: 3px;
+  background: color-mix(in srgb, var(--ou-accent-default) 20%, transparent);
+}
+.ps-progress-bar {
+  height: 100%;
+  background: var(--ou-success-default);
+  width: 40%;
+}
+.ps-body { flex: 1; display: flex; }
+.ps-sidebar {
+  width: 28%;
+  background: var(--ou-bg-page);
+  border-right: var(--wf-border-w) solid var(--ou-border-soft);
+  padding: var(--ou-space-1);
+}
+.ps-nav-item {
+  height: 2px;
+  background: var(--ou-bg-surface-3);
+  border-radius: var(--wf-border-w);
+  margin-bottom: 4px;
+}
+.ps-nav-item.active {
+  background: color-mix(in srgb, var(--ou-accent-default) 30%, transparent);
+}
+.ps-content { flex: 1; padding: 2px 6px; }
+.ps-q {
+  font-size: 6px;
+  color: var(--ou-fg-default);
+  margin-bottom: var(--ou-space-1);
+  line-height: 1.3;
+}
+.ps-opt {
+  height: 2px;
+  background: var(--ou-bg-hover);
+  border-radius: var(--wf-border-w);
+  margin-bottom: 4px;
+}
+.ps-opt.sel {
+  background: color-mix(in srgb, var(--ou-accent-default) 20%, transparent);
+  border: var(--wf-border-w) solid color-mix(in srgb, var(--ou-accent-default) 40%, transparent);
+}
+
+/* Legacy tb-template-card classes (kept for tests that target them). */
 .tb-template-card__desc {
   font: var(--ou-text-body-s);
   color: var(--ou-fg-muted);

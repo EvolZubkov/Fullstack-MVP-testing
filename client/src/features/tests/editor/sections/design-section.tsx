@@ -22,13 +22,10 @@
  *     settings as in the rest of the editor.
  */
 import { useState } from "react";
-import { Layout } from "lucide-react";
+import { Eye, Layout } from "lucide-react";
 import {
   Banner,
   Button,
-  Card,
-  CardBody,
-  CardHeader,
   Input,
   Select,
   Switch,
@@ -134,42 +131,70 @@ function TemplatePane({ design }: { design: ReturnType<typeof useDesignSettings>
   if (!tpl) return null;
   return (
     <div data-testid="design-template-pane">
-      <Card variant="outlined" data-testid="design-template-card">
-        <CardHeader
-          title={
-            <span data-testid="design-template-name">
+      <div className="tpl-block" data-testid="design-template-card">
+        <button
+          type="button"
+          className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tpl-preview-btn"
+          aria-label="Предпросмотр шаблона"
+          onClick={() =>
+            window.alert("Предпросмотр шаблона будет доступен в следующем шаге.")
+          }
+          data-testid="design-template-preview"
+        >
+          <Eye className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <div className="tpl-thumb">
+          <div className="preview-sketch" data-wf-demo>
+            <div className="ps-header">
+              <div className="ps-logo" />
+              <div className="ps-title">
+                {(tpl.manifest.name ?? tpl.name).slice(0, 3).toUpperCase()}
+              </div>
+            </div>
+            <div className="ps-progress">
+              <div className="ps-progress-bar" />
+            </div>
+            <div className="ps-body">
+              <div className="ps-sidebar">
+                <div className="ps-nav-item active" />
+                <div className="ps-nav-item" />
+                <div className="ps-nav-item" />
+              </div>
+              <div className="ps-content">
+                <div className="ps-q">Вопрос…</div>
+                <div className="ps-opt sel" />
+                <div className="ps-opt" />
+                <div className="ps-opt" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="tpl-info">
+          <div className="tpl-info__head">
+            <div className="tpl-name" data-testid="design-template-name">
               {tpl.manifest.name ?? tpl.name}
-            </span>
-          }
-          subtitle={
-            <>
-              {tpl.isBuiltin && (
-                <Tag
-                  tone="neutral"
-                  variant="outline"
-                  data-testid="design-template-builtin"
-                >
-                  Встроенный
-                </Tag>
-              )}{" "}
+            </div>
+            {tpl.isBuiltin && (
               <Tag
-                tone="info"
+                tone="neutral"
                 variant="outline"
-                data-testid="design-template-version"
+                data-testid="design-template-builtin"
               >
-                v{tpl.manifest.version ?? tpl.version}
+                Встроенный
               </Tag>
-            </>
-          }
-        />
-        <CardBody>
-          <p
-            className="tb-template-card__desc"
-            data-testid="design-template-desc"
-          >
+            )}
+            <Tag
+              tone="info"
+              variant="outline"
+              data-testid="design-template-version"
+            >
+              v{tpl.manifest.version ?? tpl.version}
+            </Tag>
+          </div>
+          <div className="tpl-desc" data-testid="design-template-desc">
             {tpl.manifest.description ?? tpl.description ?? "Описание не указано."}
-          </p>
-          <div className="tb-template-card__actions">
+          </div>
+          <div className="tpl-actions">
             <Button
               variant="secondary"
               size="s"
@@ -192,8 +217,8 @@ function TemplatePane({ design }: { design: ReturnType<typeof useDesignSettings>
               Сбросить до умолчаний
             </Button>
           </div>
-        </CardBody>
-      </Card>
+        </div>
+      </div>
       <DesignSaveBar design={design} />
     </div>
   );
