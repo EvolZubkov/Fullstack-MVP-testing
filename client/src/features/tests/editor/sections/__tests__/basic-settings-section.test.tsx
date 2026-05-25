@@ -74,12 +74,22 @@ function selectOption(selectTestId: string, optionLabel: string | RegExp) {
 // ─── Side-rail navigation ─────────────────────────────────────────────────────
 
 describe("<SettingsSection /> — side rail", () => {
-  it("renders 5 sub-sections in the rail", () => {
+  it("renders 4 sub-sections in standard mode (adaptive is hidden)", () => {
     render(<SettingsSection model={baseModel()} updateModel={() => {}} />);
     expect(screen.getByTestId("settings-rail-basic")).toBeInTheDocument();
     expect(screen.getByTestId("settings-rail-pass-rules")).toBeInTheDocument();
     expect(screen.getByTestId("settings-rail-limits")).toBeInTheDocument();
     expect(screen.getByTestId("settings-rail-integration")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-rail-adaptive")).toBeNull();
+  });
+
+  it("reveals «Адаптивный режим» rail item only when mode === adaptive", () => {
+    render(
+      <SettingsSection
+        model={baseModel({ mode: "adaptive" })}
+        updateModel={() => {}}
+      />,
+    );
     expect(screen.getByTestId("settings-rail-adaptive")).toBeInTheDocument();
   });
 
@@ -342,7 +352,7 @@ describe("<SettingsSection /> — Правила прохождения pane", (
 
 // ─── Adaptive pane bindings ───────────────────────────────────────────────────
 
-describe("<SettingsSection /> — Адаптивный режим pane", () => {
+describe("<SettingsSection /> — Адаптивный режим pane (mode = adaptive)", () => {
   function buildSection(over: Partial<import("../../test-editor.types").EditorSection> = {}) {
     return {
       topicId: "top-1",
@@ -357,22 +367,14 @@ describe("<SettingsSection /> — Адаптивный режим pane", () => {
       ...over,
     };
   }
-
-  it("shows a warning banner when current mode is not adaptive", () => {
-    render(<SettingsSection model={baseModel({ mode: "standard" })} updateModel={() => {}} />);
-    fireEvent.click(screen.getByTestId("settings-rail-adaptive"));
-    expect(screen.getByTestId("adaptive-mode-warning")).toBeInTheDocument();
-  });
-
-  it("hides the mode warning banner when mode = adaptive", () => {
-    render(<SettingsSection model={baseModel({ mode: "adaptive" })} updateModel={() => {}} />);
-    fireEvent.click(screen.getByTestId("settings-rail-adaptive"));
-    expect(screen.queryByTestId("adaptive-mode-warning")).toBeNull();
-  });
+  /** Shorthand for `baseModel({ mode: "adaptive", ... })` used by every test. */
+  function adaptiveModel(over: Partial<TestEditorModel> = {}): TestEditorModel {
+    return baseModel({ mode: "adaptive", ...over });
+  }
 
   it("toggles adaptive.showDifficultyLevel via master checkbox", () => {
     const updateModel = vi.fn();
-    const model = baseModel({
+    const model = adaptiveModel({
       adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
     });
     render(<SettingsSection model={model} updateModel={updateModel} />);
@@ -384,14 +386,14 @@ describe("<SettingsSection /> — Адаптивный режим pane", () => {
   });
 
   it("shows the «нет тем» banner when there are no sections", () => {
-    render(<SettingsSection model={baseModel()} updateModel={() => {}} />);
+    render(<SettingsSection model={adaptiveModel()} updateModel={() => {}} />);
     fireEvent.click(screen.getByTestId("settings-rail-adaptive"));
     expect(screen.getByTestId("adaptive-no-topics")).toBeInTheDocument();
     expect(screen.queryByTestId("adaptive-topics-list")).toBeNull();
   });
 
   it("renders an accordion per topic", () => {
-    const model = baseModel({
+    const model = adaptiveModel({
       sections: [
         buildSection({ topicId: "t1", topicName: "Тема А" }),
         buildSection({ topicId: "t2", topicName: "Тема Б" }),
@@ -405,7 +407,7 @@ describe("<SettingsSection /> — Адаптивный режим pane", () => {
 
   it("toggles per-topic enabled flag without expanding the accordion", () => {
     const updateModel = vi.fn();
-    const model = baseModel({
+    const model = adaptiveModel({
       sections: [buildSection({ topicId: "t1", topicName: "Тема А" })],
     });
     render(<SettingsSection model={model} updateModel={updateModel} />);
@@ -418,7 +420,7 @@ describe("<SettingsSection /> — Адаптивный режим pane", () => {
 
   it("opens the topic body and adds a default level when «+ Добавить уровень» is clicked", () => {
     const updateModel = vi.fn();
-    const model = baseModel({
+    const model = adaptiveModel({
       sections: [buildSection({ topicId: "t1", topicName: "Тема А" })],
     });
     render(<SettingsSection model={model} updateModel={updateModel} />);
@@ -435,7 +437,7 @@ describe("<SettingsSection /> — Адаптивный режим pane", () => {
 
   it("updates a level field via the card input", () => {
     const updateModel = vi.fn();
-    const model = baseModel({
+    const model = adaptiveModel({
       sections: [buildSection({ topicId: "t1", topicName: "Тема А" })],
       adaptive: {
         showDifficultyLevel: true,
@@ -475,7 +477,7 @@ describe("<SettingsSection /> — Адаптивный режим pane", () => {
 
   it("removes a level when its «×» button is clicked and reindexes remaining levels", () => {
     const updateModel = vi.fn();
-    const model = baseModel({
+    const model = adaptiveModel({
       sections: [buildSection({ topicId: "t1", topicName: "Тема А" })],
       adaptive: {
         showDifficultyLevel: true,
@@ -506,7 +508,7 @@ describe("<SettingsSection /> — Адаптивный режим pane", () => {
 
   it("adds and removes per-level material links", () => {
     const updateModel = vi.fn();
-    const model = baseModel({
+    const model = adaptiveModel({
       sections: [buildSection({ topicId: "t1", topicName: "Тема А" })],
       adaptive: {
         showDifficultyLevel: true,

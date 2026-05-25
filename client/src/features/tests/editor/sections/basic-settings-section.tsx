@@ -74,18 +74,28 @@ const RAIL_ITEMS: { key: RailKey; label: string }[] = [
 
 export function SettingsSection({ model, updateModel }: SettingsSectionProps) {
   const [active, setActive] = useState<RailKey>("basic");
+  // Per requirements: «Адаптивный режим» sub-section is only relevant when
+  // the test itself runs in adaptive mode. Hide the rail item in standard
+  // mode; if it was active, fall back to the previous tab.
+  const isAdaptive = model.mode === "adaptive";
+  const visibleRailItems = isAdaptive
+    ? RAIL_ITEMS
+    : RAIL_ITEMS.filter((it) => it.key !== "adaptive");
+  const effectiveActive: RailKey =
+    active === "adaptive" && !isAdaptive ? "basic" : active;
 
   return (
     <div className="ou-drawer__split" data-testid="settings-split">
       <nav className="ou-drawer__rail" aria-label="Подразделы настроек">
-        {RAIL_ITEMS.map((item) => (
+        {visibleRailItems.map((item) => (
           <button
             key={item.key}
             type="button"
             className={
-              "ou-drawer__rail-item" + (active === item.key ? " is-active" : "")
+              "ou-drawer__rail-item" +
+              (effectiveActive === item.key ? " is-active" : "")
             }
-            aria-current={active === item.key ? "page" : undefined}
+            aria-current={effectiveActive === item.key ? "page" : undefined}
             onClick={() => setActive(item.key)}
             data-testid={`settings-rail-${item.key}`}
           >
@@ -93,16 +103,23 @@ export function SettingsSection({ model, updateModel }: SettingsSectionProps) {
           </button>
         ))}
       </nav>
-      <div className="tb-settings-content" data-testid={`settings-pane-${active}`}>
-        {active === "basic" && <BasicPane model={model} updateModel={updateModel} />}
-        {active === "pass-rules" && (
+      <div
+        className="tb-settings-content"
+        data-testid={`settings-pane-${effectiveActive}`}
+      >
+        {effectiveActive === "basic" && (
+          <BasicPane model={model} updateModel={updateModel} />
+        )}
+        {effectiveActive === "pass-rules" && (
           <PassRulesPane model={model} updateModel={updateModel} />
         )}
-        {active === "limits" && <LimitsPane model={model} updateModel={updateModel} />}
-        {active === "integration" && (
+        {effectiveActive === "limits" && (
+          <LimitsPane model={model} updateModel={updateModel} />
+        )}
+        {effectiveActive === "integration" && (
           <IntegrationPane model={model} updateModel={updateModel} />
         )}
-        {active === "adaptive" && (
+        {effectiveActive === "adaptive" && isAdaptive && (
           <AdaptivePane model={model} updateModel={updateModel} />
         )}
       </div>
@@ -646,7 +663,10 @@ function makeDefaultLevel(index: number): AdaptiveLevelConfig {
 }
 
 function AdaptivePane({ model, updateModel }: SettingsSectionProps) {
-  const isAdaptive = model.mode === "adaptive";
+  // Parent (SettingsSection) only renders this pane when mode === "adaptive",
+  // so the «mode=standard» fallback banner has been removed. If you need to
+  // re-introduce it (e.g., for a quick preview from standard mode), restore
+  // the rail-item visibility predicate in SettingsSection first.
 
   const upsertTopic = (
     topicId: string,
@@ -677,14 +697,6 @@ function AdaptivePane({ model, updateModel }: SettingsSectionProps) {
 
   return (
     <>
-      {!isAdaptive && (
-        <Banner
-          tone="warning"
-          title="Сейчас режим теста — стандартный"
-          description="Настройки ниже будут применены только если в подразделе «Основное» переключить режим теста на «Адаптивный». Сейчас они сохраняются как draft, но не используются runtime'ом (FR-25h, FR-25i)."
-          data-testid="adaptive-mode-warning"
-        />
-      )}
 
       <div className="ou-formfield">
         <Switch
