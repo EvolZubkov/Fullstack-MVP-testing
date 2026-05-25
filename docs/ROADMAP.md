@@ -15,7 +15,7 @@
 | 1 | PRD-7 | S1 — wireframes 153/153 + согласование | Закрыта 2026-05-21 | — |
 | 1 | PRD-7 | S2 — backend, миграции, API | Частично (миграции, сервис, endpoints закрыты) | Acceptance pass §1.13.3 |
 | 1 | PRD-7 | S3 — frontend mappers + validation | Закрыта (unit-тесты 46 шт.) | — |
-| 1 | PRD-7 | S4-S8 — UI Drawer + секции | Закрыта (2026-05-25; UI реализован, FeedbackEditorModal закрыт) | — |
+| 1 | PRD-7 | S4-S8 — UI Drawer + секции | Частично (секции S5-S8 + S4/basic-settings закрыты; S4/Drawer-каркас: FR-05/25c/25k, NFR-19-21 — не закрыты) | — |
 | 1 | PRD-7 | S9-S11 — тесты, удаление legacy, acceptance | Не начата | S4-S8 |
 | 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | Не начата | Завершение PRD-7 |
 | 3 | PRD-6 | Retake gate, eligibility plugins | Не начата | PRD-4 |

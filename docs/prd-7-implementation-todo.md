@@ -5,8 +5,9 @@
 **Baseline текущего поведения:** [prd-7-baseline.md](prd-7-baseline.md)
 **Стратегия и промпты:** [execution-strategy.md](prd-7-execution-strategy.md)
 **Roadmap:** [ROADMAP.md](ROADMAP.md) шаг 1
-**Статус:** S0–S8 закрыты (S4–S8: Drawer + все секции редактора + FeedbackEditorModal
-закрыты 2026-05-25); S9–S11 не начаты (тесты, удаление legacy, acceptance).
+**Статус:** S0–S3 закрыты; S4 Drawer-каркас (§1.7) — частично (FR-05, FR-25c,
+FR-25k, FR-20c, NFR-19-21 не закрыты); S4 basic-settings (§1.8) + S5-S8 (секции)
+— закрыты 2026-05-25; S9–S11 не начаты.
 **Последняя проверка:** 2026-05-25
 **Правило UI:** UI-разработка начинается только после подготовки и явного согласования wireframes
 ([BRD §2.6](brd-scorm-enhancements.md), NFR-14, NFR-19...NFR-21).
