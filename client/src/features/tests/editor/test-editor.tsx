@@ -44,6 +44,7 @@ import {
   type UseTestEditorOptions,
   type UseTestEditorResult,
 } from "./use-test-editor";
+import { useDesignSettings } from "./use-design-settings";
 import { CompositionSection } from "./sections/topics-structure-section";
 import { SettingsSection } from "./sections/basic-settings-section";
 import { DesignSection } from "./sections/design-section";
@@ -127,6 +128,11 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
 
+  // Hoist design hook here so the unified drawer footer «Сохранить» drives
+  // both the test-settings PUT and the design-settings PUT in a single
+  // action (per wireframe prd7-design-tab.html — single footer save).
+  const design = useDesignSettings(editor.model?.id);
+
   const drawerRef = useRef<HTMLElement | null>(null);
 
   // NFR-19: focus the first interactive element (the first tab) on open.
@@ -167,35 +173,49 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
     return () => drawer.removeEventListener("keydown", handleKey);
   }, [open]);
 
+  // Combined dirty / saving flags spanning the test-settings draft and the
+  // design-settings draft.
+  const combinedDirty = editor.isDirty || design.isDirty;
+  const combinedSaving = editor.isSaving || design.isSaving;
+
   const requestClose = useCallback(() => {
-    if (editor.isSaving) return;
-    if (editor.isDirty) {
+    if (combinedSaving) return;
+    if (combinedDirty) {
       setCloseDialogOpen(true);
       return;
     }
     onClose();
-  }, [editor.isDirty, editor.isSaving, onClose]);
+  }, [combinedDirty, combinedSaving, onClose]);
 
   const hasErrors = editor.validation.errors.length > 0;
-  const saveDisabled = !editor.isDirty || hasErrors || editor.isSaving;
+  const saveDisabled = !combinedDirty || hasErrors || combinedSaving;
+
+  // Unified save: persist whichever drafts are dirty. Test-settings first
+  // (its PUT controls `expectedVersion` ordering); design after, since its
+  // endpoint is independent.
+  const saveAll = useCallback(async () => {
+    if (editor.isDirty) await editor.save();
+    if (design.isDirty) await design.save();
+  }, [design, editor]);
 
   const handleSave = useCallback(async () => {
     if (saveDisabled) return;
-    await editor.save();
-  }, [editor, saveDisabled]);
+    await saveAll();
+  }, [saveAll, saveDisabled]);
 
   const handleSaveAndExit = useCallback(async () => {
     if (hasErrors) return;
-    await editor.save();
+    await saveAll();
     setCloseDialogOpen(false);
     onClose();
-  }, [editor, hasErrors, onClose]);
+  }, [hasErrors, onClose, saveAll]);
 
   const handleExitWithoutSave = useCallback(() => {
     setCloseDialogOpen(false);
     editor.reset();
+    design.revert();
     onClose();
-  }, [editor, onClose]);
+  }, [design, editor, onClose]);
 
   const statusTag = useMemo(() => deriveStatusTag(editor), [editor]);
 
@@ -257,13 +277,13 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
           <IconButton
             icon={<X size={16} aria-hidden="true" />}
             aria-label={
-              editor.isSaving
+              combinedSaving
                 ? "Закрыть редактор (недоступно при сохранении)"
                 : "Закрыть редактор"
             }
             size="s"
             variant="ghost"
-            disabled={editor.isSaving}
+            disabled={combinedSaving}
             onClick={requestClose}
             className="ou-drawer__close"
             data-testid="test-editor-close"
@@ -303,7 +323,7 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
             />
           )}
           {editor.model && activeTab === "design" && (
-            <DesignSection testId={editor.model.id} />
+            <DesignSection testId={editor.model.id} design={design} />
           )}
           {editor.model && activeTab === "structure" && (
             <StructureSection model={editor.model} testId={editor.model.id} />
@@ -312,7 +332,7 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
         </div>
 
         <footer className="ou-drawer__foot">
-          {editor.isDirty ? (
+          {combinedDirty ? (
             <>
               <div className="tb-changes-anchor">
                 <Button
@@ -336,7 +356,7 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
                 variant="secondary"
                 size="m"
                 onClick={requestClose}
-                disabled={editor.isSaving}
+                disabled={combinedSaving}
                 data-testid="test-editor-cancel"
               >
                 Отменить
@@ -347,7 +367,7 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
               variant="ghost"
               size="m"
               onClick={requestClose}
-              disabled={editor.isSaving}
+              disabled={combinedSaving}
               data-testid="test-editor-cancel"
             >
               Закрыть
@@ -359,10 +379,10 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
             disabled={saveDisabled}
             aria-disabled={saveDisabled ? "true" : "false"}
             onClick={handleSave}
-            loading={editor.isSaving}
+            loading={combinedSaving}
             data-testid="test-editor-save"
           >
-            {editor.isSaving ? "Сохранение…" : "Сохранить"}
+            {combinedSaving ? "Сохранение…" : "Сохранить"}
           </Button>
         </footer>
       </aside>

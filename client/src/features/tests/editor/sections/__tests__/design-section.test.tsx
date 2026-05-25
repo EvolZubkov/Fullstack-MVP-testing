@@ -18,6 +18,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { DesignSection } from "../design-section";
+import { useDesignSettings } from "../../use-design-settings";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -152,7 +153,7 @@ describe("<DesignSection /> — Шаблон pane", () => {
     );
   });
 
-  it("«Сбросить до умолчаний» enables the save button (dirty draft)", async () => {
+  it("«Сбросить до умолчаний» clears params in the draft (verified via Branding inputs)", async () => {
     mockFetch((url) => {
       if (url === `/api/tests/${TEST_ID}/design`)
         return jsonResponse({ templateId: "corporate", params: { companyName: "Acme" } });
@@ -163,10 +164,21 @@ describe("<DesignSection /> — Шаблон pane", () => {
     await waitFor(() =>
       expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
     );
-    expect(screen.getByTestId("design-save")).toBeDisabled();
-    fireEvent.click(screen.getByTestId("design-template-reset"));
+    // Confirm preloaded param shows in Branding
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
     await waitFor(() =>
-      expect(screen.getByTestId("design-save")).not.toBeDisabled(),
+      expect(
+        (screen.getByTestId("design-param-input-companyName") as HTMLInputElement).value,
+      ).toBe("Acme"),
+    );
+    // Reset clears params → companyName input becomes empty
+    fireEvent.click(screen.getByTestId("design-rail-template"));
+    fireEvent.click(screen.getByTestId("design-template-reset"));
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
+    await waitFor(() =>
+      expect(
+        (screen.getByTestId("design-param-input-companyName") as HTMLInputElement).value,
+      ).toBe(""),
     );
   });
 });
@@ -190,7 +202,7 @@ describe("<DesignSection /> — Брендирование pane", () => {
     ).toBeInTheDocument();
   });
 
-  it("editing a text param marks the draft dirty and enables save", async () => {
+  it("editing a text param updates the draft (input value)", async () => {
     renderWithClient(<DesignSection testId={TEST_ID} />);
     await waitFor(() =>
       expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
@@ -199,27 +211,24 @@ describe("<DesignSection /> — Брендирование pane", () => {
     fireEvent.change(screen.getByTestId("design-param-input-companyName"), {
       target: { value: "Acme" },
     });
-    await waitFor(() =>
-      expect(screen.getByTestId("design-save")).not.toBeDisabled(),
-    );
     expect(
       (screen.getByTestId("design-param-input-companyName") as HTMLInputElement).value,
     ).toBe("Acme");
   });
 
-  it("toggling a boolean param marks the draft dirty", async () => {
+  it("toggling a boolean param flips the switch state", async () => {
     renderWithClient(<DesignSection testId={TEST_ID} />);
     await waitFor(() =>
       expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
     );
     fireEvent.click(screen.getByTestId("design-rail-branding"));
-    fireEvent.click(screen.getByTestId("design-param-input-showProgressBar"));
-    await waitFor(() =>
-      expect(screen.getByTestId("design-save")).not.toBeDisabled(),
-    );
+    const input = screen.getByTestId("design-param-input-showProgressBar") as HTMLInputElement;
+    const before = input.checked;
+    fireEvent.click(input);
+    await waitFor(() => expect(input.checked).toBe(!before));
   });
 
-  it("changing a select param marks the draft dirty", async () => {
+  it("changing a select param updates the trigger label", async () => {
     renderWithClient(<DesignSection testId={TEST_ID} />);
     await waitFor(() =>
       expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
@@ -228,14 +237,37 @@ describe("<DesignSection /> — Брендирование pane", () => {
     const wrap = screen.getByTestId("design-param-input-fontFamily");
     fireEvent.click(within(wrap).getByRole("button"));
     fireEvent.click(screen.getByRole("option", { name: "Roboto" }));
-    await waitFor(() =>
-      expect(screen.getByTestId("design-save")).not.toBeDisabled(),
-    );
+    await waitFor(() => expect(wrap).toHaveTextContent("Roboto"));
   });
 });
 
-describe("<DesignSection /> — save flow", () => {
-  it("PUTs the current draft to /api/tests/:id/design and clears the dirty state", async () => {
+describe("<DesignSection /> — save flow (via hoisted hook)", () => {
+  /**
+   * Test harness emulates the parent (TestEditorView) hoisting
+   * `useDesignSettings` and triggering its save from a unified footer.
+   * The DesignSection no longer renders a per-pane save button (per
+   * wireframe prd7-design-tab.html — single drawer footer save).
+   */
+  function Harness() {
+    const design = useDesignSettings(TEST_ID);
+    return (
+      <>
+        <DesignSection testId={TEST_ID} design={design} />
+        <button
+          type="button"
+          data-testid="harness-save"
+          disabled={!design.isDirty || design.isSaving}
+          onClick={() => {
+            design.save().catch(() => {});
+          }}
+        >
+          save
+        </button>
+      </>
+    );
+  }
+
+  it("PUTs the hoisted draft to /api/tests/:id/design and clears the dirty state", async () => {
     const calls: { url: string; body?: unknown }[] = [];
     mockFetch((url, init) => {
       calls.push({
@@ -252,7 +284,7 @@ describe("<DesignSection /> — save flow", () => {
       if (url === `/api/templates/corporate`) return jsonResponse(TEMPLATE);
       return jsonResponse({ error: "unexpected" }, 500);
     });
-    renderWithClient(<DesignSection testId={TEST_ID} />);
+    renderWithClient(<Harness />);
     await waitFor(() =>
       expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
     );
@@ -261,11 +293,11 @@ describe("<DesignSection /> — save flow", () => {
       target: { value: "Acme" },
     });
     await waitFor(() =>
-      expect(screen.getByTestId("design-save")).not.toBeDisabled(),
+      expect(screen.getByTestId("harness-save")).not.toBeDisabled(),
     );
-    fireEvent.click(screen.getByTestId("design-save"));
+    fireEvent.click(screen.getByTestId("harness-save"));
     await waitFor(() =>
-      expect(screen.getByTestId("design-save")).toBeDisabled(),
+      expect(screen.getByTestId("harness-save")).toBeDisabled(),
     );
     const putCall = calls.find(
       (c) => c.url === `/api/tests/${TEST_ID}/design` && c.body !== undefined,

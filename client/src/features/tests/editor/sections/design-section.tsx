@@ -31,13 +31,25 @@ import {
   Switch,
   Tag,
 } from "@universityrt/ui-kit";
-import { useDesignSettings, type TemplateParam } from "../use-design-settings";
+import {
+  useDesignSettings,
+  type TemplateParam,
+  type UseDesignSettingsResult,
+} from "../use-design-settings";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export type DesignSectionProps = {
   /** Test id is required to fetch design settings; `undefined` in create mode. */
   testId: string | undefined;
+  /**
+   * Optional pre-hoisted design hook instance. When provided, the section
+   * does NOT call `useDesignSettings` internally — caller owns the lifecycle.
+   * This lets the editor's drawer footer drive design save as part of the
+   * unified «Сохранить» flow (per wireframe prd7-design-tab.html — single
+   * footer save, no per-pane save button).
+   */
+  design?: UseDesignSettingsResult;
 };
 
 type DesignRailKey = "template" | "branding" | "layout" | "progress";
@@ -51,9 +63,12 @@ const RAIL_ITEMS: { key: DesignRailKey; label: string }[] = [
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function DesignSection({ testId }: DesignSectionProps) {
+export function DesignSection({ testId, design: designProp }: DesignSectionProps) {
   const [active, setActive] = useState<DesignRailKey>("template");
-  const design = useDesignSettings(testId);
+  // Fallback hook usage kept so the section still works as a standalone unit
+  // (e.g., in component tests) when the parent hasn't hoisted the hook.
+  const fallback = useDesignSettings(designProp ? undefined : testId);
+  const design = designProp ?? fallback;
 
   return (
     <div className="ou-drawer__split" data-testid="design-split">
@@ -126,7 +141,7 @@ function ErrorNotice({ message }: { message: string }) {
   );
 }
 
-function TemplatePane({ design }: { design: ReturnType<typeof useDesignSettings> }) {
+function TemplatePane({ design }: { design: UseDesignSettingsResult }) {
   const tpl = design.template;
   if (!tpl) return null;
   return (
@@ -219,12 +234,12 @@ function TemplatePane({ design }: { design: ReturnType<typeof useDesignSettings>
           </div>
         </div>
       </div>
-      <DesignSaveBar design={design} />
+      <DesignSaveError design={design} />
     </div>
   );
 }
 
-function BrandingPane({ design }: { design: ReturnType<typeof useDesignSettings> }) {
+function BrandingPane({ design }: { design: UseDesignSettingsResult }) {
   const tpl = design.template;
   if (!tpl) return null;
   const params = tpl.manifest.params ?? [];
@@ -237,7 +252,7 @@ function BrandingPane({ design }: { design: ReturnType<typeof useDesignSettings>
           description={`Шаблон «${tpl.manifest.name}» не объявляет блок params в манифесте. Перейдите во вкладку «Шаблон», чтобы выбрать другой шаблон.`}
           data-testid="design-branding-empty"
         />
-        <DesignSaveBar design={design} />
+        <DesignSaveError design={design} />
       </div>
     );
   }
@@ -251,7 +266,7 @@ function BrandingPane({ design }: { design: ReturnType<typeof useDesignSettings>
           onChange={(v) => design.setParam(p.key, v)}
         />
       ))}
-      <DesignSaveBar design={design} />
+      <DesignSaveError design={design} />
     </div>
   );
 }
@@ -344,42 +359,20 @@ function ParamRow({
   );
 }
 
-function DesignSaveBar({ design }: { design: ReturnType<typeof useDesignSettings> }) {
+/**
+ * Inline-only error display for design save failures. The action controls
+ * (Save / Revert) live in the shared drawer footer per wireframe — there
+ * is no per-pane save button. We only surface the error so the user can
+ * see why the unified save failed.
+ */
+function DesignSaveError({ design }: { design: UseDesignSettingsResult }) {
+  if (!design.saveError) return null;
   return (
-    <div className="tb-design-savebar" data-testid="design-savebar">
-      {design.saveError && (
-        <Banner
-          tone="error"
-          description={design.saveError.message}
-          data-testid="design-save-error"
-        />
-      )}
-      <div className="tb-design-savebar__actions">
-        <Button
-          variant="ghost"
-          size="s"
-          onClick={design.revert}
-          disabled={!design.isDirty || design.isSaving}
-          data-testid="design-revert"
-        >
-          Отменить
-        </Button>
-        <Button
-          variant="primary"
-          size="s"
-          onClick={() => {
-            design.save().catch(() => {
-              // surfaced via saveError state above
-            });
-          }}
-          disabled={!design.isDirty || design.isSaving}
-          loading={design.isSaving}
-          data-testid="design-save"
-        >
-          {design.isSaving ? "Сохранение…" : "Сохранить оформление"}
-        </Button>
-      </div>
-    </div>
+    <Banner
+      tone="error"
+      description={design.saveError.message}
+      data-testid="design-save-error"
+    />
   );
 }
 
