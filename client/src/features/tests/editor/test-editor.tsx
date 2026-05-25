@@ -223,15 +223,19 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
     () =>
       TAB_ORDER.map((tab) => {
         const status = editor.tabStatuses[tab];
-        // Only set `badge` when the tab actually has non-clean state — ui-kit
-        // Tabs renders an `<span class="ou-tabs__badge">` pill whenever
-        // `badge != null`, and the pill is visible (18×18 bg-page) even with
-        // an empty content node. So we pass `undefined` for clean tabs.
-        const showDot = status.error || status.warning || status.dirty;
+        // Per prd7-editor-drawer.html the dirty/warn/error indicator is a
+        // small inline dot rendered INSIDE the tab label (not in the badge
+        // pill slot). Using the `badge` prop would wrap it in
+        // `.ou-tabs__badge` (an 18×18 chip designed for counts/labels) —
+        // that doesn't match the wireframe. So we compose label+dot here.
         return {
           id: tab,
-          label: TAB_LABELS[tab],
-          badge: showDot ? <StatusBadge status={status} /> : undefined,
+          label: (
+            <>
+              {TAB_LABELS[tab]}
+              <StatusBadge status={status} />
+            </>
+          ),
         };
       }),
     [editor.tabStatuses],

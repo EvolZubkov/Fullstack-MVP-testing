@@ -257,6 +257,22 @@
 .tb-status-dot--off   { background: var(--ou-border-default); }
 .tb-status-dot--dirty { background: var(--ou-accent-default); }
 
+/* Inline status dot for tabs / list rows (per prd7-editor-drawer.html
+   и prd7-structure-*.html wireframes). Smaller than .tb-status-dot —
+   renders next to text, not in a card lead slot. */
+.status-dot {
+  display: inline-block;
+  vertical-align: middle;
+  width: var(--ou-space-2);
+  height: var(--ou-space-2);
+  border-radius: 50%;
+  margin-left: var(--ou-space-1);
+  background: var(--ou-fg-muted);
+}
+.status-dot.dirty { background: var(--ou-accent-default); }
+.status-dot.warn  { background: var(--ou-warning-default); }
+.status-dot.error { background: var(--ou-error-default); }
+
 /* ── Adaptive block (адаптивность по темам) ──────────────────────────── */
 .tb-adaptive-topics { margin-bottom: var(--ou-space-3); }
 .tb-adaptive-topics__head { display: flex; align-items: center; gap: var(--ou-space-3); padding-right: var(--ou-space-3); }
