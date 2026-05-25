@@ -31,6 +31,7 @@
   --tb-input-w-sm: 140px;
   --tb-accent-rail-w: 2px;
   --tb-space-half:   2px;
+  --wf-border-w: 1px;   /* fallback for portal-rendered components outside .tb-tests-list */
   /* gate-skip-end */
 }
 
@@ -363,6 +364,127 @@
 }
 .tb-feedback-preview__meta svg { width: var(--wf-space-10); height: var(--wf-space-10); flex-shrink: 0; }
 .tb-feedback-preview__sep { color: var(--ou-border-soft); }
+
+/* ── Feedback editor modal (per prd7-editor-drawer.html s-feedback-edit) ──
+   Composite: format selector + (optional) RTE / Textarea + links + PDFs.
+   Used by features/tests/editor/sections/feedback-editor-modal.tsx. */
+.tb-feedback-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-5);
+}
+.tb-feedback-editor__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+.tb-feedback-editor__section--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--ou-space-3);
+  flex-wrap: wrap;
+}
+.tb-feedback-editor__sec-title {
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  color: var(--ou-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+}
+.tb-feedback-editor__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+.tb-feedback-editor__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-2);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-elevated);
+}
+.tb-feedback-editor__item-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  gap: var(--ou-space-2);
+  min-width: 0;
+}
+.tb-feedback-editor__item-fields > .ou-field { flex: 1; min-width: 0; }
+
+/* PDF asset row inside feedback editor. */
+.tb-feedback-editor__asset {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+  flex: 1;
+  min-width: 0;
+}
+.tb-feedback-editor__asset-ico {
+  flex-shrink: 0;
+  color: var(--ou-fg-muted);
+  margin-top: var(--ou-space-1);
+}
+.tb-feedback-editor__asset-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-1);
+  flex: 1;
+  min-width: 0;
+}
+.tb-feedback-editor__asset-meta > .ou-field { width: 100%; }
+.tb-feedback-editor__asset-file { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+/* Upload row below asset list. */
+.tb-feedback-editor__upload {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-3);
+  flex-wrap: wrap;
+}
+.tb-feedback-editor__upload-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+/* ── RTE (Rich Text Editor, execCommand-based toolbar) ───────────────────
+   Used in FeedbackEditorModal when format === "richText". */
+.tb-rte {
+  border: var(--wf-border-w, 1px) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  overflow: hidden;
+  background: var(--ou-bg-elevated);
+}
+.tb-rte__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+  padding: var(--ou-space-1) var(--ou-space-2);
+  border-bottom: var(--wf-border-w, 1px) solid var(--ou-border-soft);
+  background: var(--ou-bg-subtle);
+}
+.tb-rte__sep {
+  width: 1px; height: var(--ou-space-4);
+  background: var(--ou-border-default);
+  margin: 0 var(--ou-space-1); flex-shrink: 0; display: inline-block;
+}
+.tb-rte__area {
+  min-height: 120px; padding: var(--ou-space-3);
+  font: var(--ou-text-body-m); color: var(--ou-fg-default);
+  line-height: 1.5; outline: none;
+}
+.tb-rte__area:focus { outline: none; }
+.tb-rte__area p { margin: 0 0 var(--ou-space-2); }
+.tb-rte__area p:last-child { margin-bottom: 0; }
+.tb-rte__area strong { font-weight: 700; }
+.tb-rte__area em { font-style: italic; }
+.tb-rte__area a { color: var(--ou-accent-default); text-decoration: underline; }
+.tb-rte__area ul, .tb-rte__area ol { margin: 0 0 var(--ou-space-2); padding-left: var(--ou-space-5); }
 
 /* ── Saving overlay (наложение со спиннером поверх Drawer body) ─────────
    Используется во время атомарного сохранения теста (PUT /api/tests/:id).

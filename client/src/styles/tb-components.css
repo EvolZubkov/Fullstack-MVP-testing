@@ -32,6 +32,7 @@
   --tb-input-w-sm: 140px;
   --tb-accent-rail-w: 2px;
   --tb-space-half:   2px;
+  --wf-border-w: 1px;   /* fallback for portal-rendered components outside .tb-tests-list */
   /* gate-skip-end */
 }
 
@@ -314,6 +315,86 @@
   flex: 1;
   min-width: 0;
 }
+
+/* PDF asset row inside feedback editor. */
+.tb-feedback-editor__asset {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+  flex: 1;
+  min-width: 0;
+}
+.tb-feedback-editor__asset-ico {
+  flex-shrink: 0;
+  color: var(--ou-fg-muted);
+  margin-top: var(--ou-space-1);
+}
+.tb-feedback-editor__asset-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-1);
+  flex: 1;
+  min-width: 0;
+}
+.tb-feedback-editor__asset-meta > .ou-field { width: 100%; }
+.tb-feedback-editor__asset-file {
+  font: var(--ou-text-caption);
+  color: var(--ou-fg-muted);
+}
+
+/* Upload row below asset list. */
+.tb-feedback-editor__upload {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-3);
+  flex-wrap: wrap;
+}
+.tb-feedback-editor__upload-hint {
+  font: var(--ou-text-caption);
+  color: var(--ou-fg-muted);
+}
+
+/* ── RTE (Rich Text Editor, execCommand-based toolbar) ───────────────────
+   Used in FeedbackEditorModal when format === "richText". No external RTE
+   library — only browser execCommand for bold/italic/link. */
+.tb-rte {
+  border: var(--wf-border-w, 1px) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  overflow: hidden;
+  background: var(--ou-bg-elevated);
+}
+.tb-rte__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+  padding: var(--ou-space-1) var(--ou-space-2);
+  border-bottom: var(--wf-border-w, 1px) solid var(--ou-border-soft);
+  background: var(--ou-bg-subtle);
+}
+.tb-rte__sep {
+  width: var(--wf-border-w, 1px);
+  height: var(--ou-space-4);
+  background: var(--ou-border-default);
+  margin: 0 var(--ou-space-1);
+  flex-shrink: 0;
+  display: inline-block;
+}
+.tb-rte__area {
+  min-height: 120px;
+  padding: var(--ou-space-3);
+  font: var(--ou-text-body-m);
+  color: var(--ou-fg-default);
+  line-height: 1.5;
+  outline: none;
+}
+.tb-rte__area:focus { outline: none; }
+.tb-rte__area p { margin: 0 0 var(--ou-space-2); }
+.tb-rte__area p:last-child { margin-bottom: 0; }
+.tb-rte__area strong { font-weight: 700; }
+.tb-rte__area em { font-style: italic; }
+.tb-rte__area a { color: var(--ou-accent-default); text-decoration: underline; }
+.tb-rte__area ul,
+.tb-rte__area ol { margin: 0 0 var(--ou-space-2); padding-left: var(--ou-space-5); }
 
 /* Inline status dot for tabs / list rows (per prd7-editor-drawer.html
    и prd7-structure-*.html wireframes). Smaller than .tb-status-dot —
