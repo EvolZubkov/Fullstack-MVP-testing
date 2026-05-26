@@ -88,6 +88,20 @@ export function SettingsSection({ model, updateModel }: SettingsSectionProps) {
   const effectiveActive: RailKey =
     active === "adaptive" && !isAdaptive ? "basic" : active;
 
+  // Error dot: no topic is enabled (stop-factor for adaptive mode).
+  const hasAdaptiveError =
+    isAdaptive &&
+    model.sections.length > 0 &&
+    !model.adaptive.topics.some((t) => t.enabled);
+  // Warning dot: at least one enabled topic has fewer than 2 levels.
+  const hasAdaptiveWarning =
+    isAdaptive &&
+    !hasAdaptiveError &&
+    model.sections.some((section) => {
+      const topic = model.adaptive.topics.find((t) => t.topicId === section.topicId);
+      return topic?.enabled && topic.levels.length < 2;
+    });
+
   return (
     <div className="ou-drawer__split" data-testid="settings-split">
       <nav className="ou-drawer__rail" aria-label="Подразделы настроек">
@@ -104,6 +118,18 @@ export function SettingsSection({ model, updateModel }: SettingsSectionProps) {
             data-testid={`settings-rail-${item.key}`}
           >
             {item.label}
+            {item.key === "adaptive" && hasAdaptiveError && (
+              <span
+                className="tb-status-dot tb-status-dot--err"
+                aria-label="Ошибка"
+              />
+            )}
+            {item.key === "adaptive" && hasAdaptiveWarning && (
+              <span
+                className="tb-status-dot tb-status-dot--warn"
+                aria-label="Требует внимания"
+              />
+            )}
           </button>
         ))}
       </nav>
@@ -191,7 +217,33 @@ function BasicPane({ model, updateModel }: SettingsSectionProps) {
             { value: "standard", label: "Стандартный" },
             { value: "adaptive", label: "Адаптивный" },
           ]}
-          onChange={(value) => updateModel((m) => ({ ...m, mode: value }))}
+          onChange={(value) => {
+              updateModel((m) => {
+                if (value === "adaptive" && m.mode !== "adaptive" && m.sections.length > 0) {
+                  const existingTopics = m.adaptive.topics;
+                  const updatedTopics = m.sections.map((section) => {
+                    const existing = existingTopics.find((t) => t.topicId === section.topicId);
+                    if (existing && existing.levels.length > 0) return existing;
+                    return {
+                      topicId: section.topicId,
+                      topicName: section.topicName,
+                      failureFeedback: existing?.failureFeedback ?? null,
+                      levels: [makeDefaultLevel(0)],
+                      enabled: existing?.enabled ?? false,
+                    };
+                  });
+                  const otherTopics = existingTopics.filter(
+                    (t) => !m.sections.some((s) => s.topicId === t.topicId),
+                  );
+                  return {
+                    ...m,
+                    mode: value,
+                    adaptive: { ...m.adaptive, topics: [...updatedTopics, ...otherTopics] },
+                  };
+                }
+                return { ...m, mode: value };
+              });
+            }}
         />
       </div>
 
@@ -426,13 +478,10 @@ function PassRulesPane({ model, updateModel }: SettingsSectionProps) {
               <tr>
                 <th scope="col" className="tb-pass-table__topic-col">Тема</th>
                 <th scope="col">Правило прохождения темы</th>
-                <th scope="col" className="tb-pass-table__req-col">
-                  Обязательная
-                </th>
               </tr>
             </thead>
             <tbody>
-              {model.sections.map((section, idx) => {
+              {model.sections.map((section) => {
                 const rule: TopicPassRule =
                   model.passRules.byTopic[section.topicId] ?? { source: "inherit_overall" };
                 return (
@@ -440,7 +489,6 @@ function PassRulesPane({ model, updateModel }: SettingsSectionProps) {
                     key={section.topicId}
                     topicId={section.topicId}
                     topicName={section.topicName}
-                    required={section.required}
                     rule={rule}
                     onSourceChange={(source) =>
                       updateModel((m) => ({
@@ -488,14 +536,6 @@ function PassRulesPane({ model, updateModel }: SettingsSectionProps) {
                         };
                       })
                     }
-                    onRequiredToggle={(required) =>
-                      updateModel((m) => ({
-                        ...m,
-                        sections: m.sections.map((s, i) =>
-                          i === idx ? { ...s, required } : s,
-                        ),
-                      }))
-                    }
                   />
                 );
               })}
@@ -526,12 +566,10 @@ function PassRulesPane({ model, updateModel }: SettingsSectionProps) {
 function PassTopicRow(props: {
   topicId: string;
   topicName: string;
-  required: boolean;
   rule: TopicPassRule;
   onSourceChange: (source: TopicPassRule["source"]) => void;
   onCustomTypeChange: (type: "percent" | "absolute") => void;
   onCustomValueChange: (value: number) => void;
-  onRequiredToggle: (required: boolean) => void;
 }) {
   const isCustom = props.rule.source === "custom";
   return (
@@ -551,17 +589,6 @@ function PassTopicRow(props: {
             ]}
             onChange={(value) => props.onSourceChange(value)}
             data-testid={`pass-topic-source-${props.topicId}`}
-          />
-        </td>
-        <td className="tb-pass-table__req-col">
-          <Switch
-            checked={props.required}
-            onChange={(e) => {
-              const checked = e.target.checked;
-              props.onRequiredToggle(checked);
-            }}
-            aria-label={`Тема обязательная: ${props.topicName}`}
-            data-testid={`pass-topic-required-${props.topicId}`}
           />
         </td>
       </tr>
@@ -602,7 +629,6 @@ function PassTopicRow(props: {
               </div>
             </div>
           </td>
-          <td className="tb-pass-table__req-col" />
         </tr>
       )}
     </>
@@ -734,6 +760,17 @@ function AdaptivePane({ model, updateModel }: SettingsSectionProps) {
         />
       ) : (
         <div className="tb-adaptive-topics" data-testid="adaptive-topics-list">
+          {model.sections.every((section) => {
+            const topic = model.adaptive.topics.find((t) => t.topicId === section.topicId);
+            return !topic || !topic.enabled;
+          }) && (
+            <Banner
+              tone="error"
+              title="Включите хотя бы одну тему"
+              description="Адаптивный режим не будет работать, пока ни одна тема не активирована."
+              data-testid="adaptive-no-enabled-topics"
+            />
+          )}
           {model.sections.map((section) => {
             const topic = findOrCreateAdaptiveTopic(
               model,
@@ -797,19 +834,20 @@ function AdaptiveTopicAccordion(props: {
   const { topic, questionCount } = props;
   const [open, setOpen] = useState(false);
 
-  // Validation per FR-17: an adaptive topic is "valid" when it has at least
-  // one level configured. Status-dot color reflects this; subtitle echoes
-  // «валидно» / «невалидно».
-  const isValid = topic.levels.length >= 1;
-  const statusTone: "ok" | "err" = isValid ? "ok" : "err";
-  const statusLabel = isValid ? "валидно" : "невалидно";
+  // Warning only applies to enabled topics: disabled topics are excluded from
+  // the adaptive test logic so missing levels are not a problem there.
+  const levelCount = topic.levels.length;
+  const statusTone: "ok" | "warn" =
+    !topic.enabled || levelCount >= 2 ? "ok" : "warn";
   const levelsPlural =
-    topic.levels.length === 1
-      ? "уровень"
-      : topic.levels.length >= 2 && topic.levels.length <= 4
-        ? "уровня"
-        : "уровней";
-  const subtitle = `${questionCount} вопросов · ${topic.levels.length} ${levelsPlural} · ${statusLabel}`;
+    levelCount === 1 ? "уровень" : levelCount >= 2 && levelCount <= 4 ? "уровня" : "уровней";
+  const subtitle = `${questionCount} вопросов · ${levelCount} ${levelsPlural}`;
+  const levelHint =
+    topic.enabled && levelCount === 0
+      ? "Добавьте уровни сложности"
+      : topic.enabled && levelCount === 1
+        ? "Добавьте ещё один уровень"
+        : null;
 
   return (
     <div
@@ -820,7 +858,7 @@ function AdaptiveTopicAccordion(props: {
         type="button"
         className="ou-acc__trigger tb-adaptive-topics__trigger"
         onClick={() => setOpen((v) => !v)}
-        aria-expanded={open ? "true" : "false"}
+        aria-expanded={open}
         data-testid={`adaptive-topic-toggle-${topic.topicId}`}
       >
         <span
@@ -859,6 +897,11 @@ function AdaptiveTopicAccordion(props: {
           aria-hidden="true"
         />
       </button>
+      {levelHint !== null && (
+        <div className="tb-adaptive-topics__level-banner">
+          <Banner tone="warning" title={levelHint} data-testid={`adaptive-topic-hint-${topic.topicId}`} />
+        </div>
+      )}
       {open && (
         <div className="ou-acc__body" data-testid={`adaptive-topic-body-${topic.topicId}`}>
           <div className="ou-formfield">
@@ -897,6 +940,7 @@ function AdaptiveTopicAccordion(props: {
                     key={level.levelIndex}
                     topicId={topic.topicId}
                     level={level}
+                    canRemove={topic.levels.length > 1}
                     onChange={(patch) => props.onLevelChange(level.levelIndex, patch)}
                     onRemove={() => props.onLevelRemove(level.levelIndex)}
                   />
@@ -913,6 +957,7 @@ function AdaptiveTopicAccordion(props: {
 function AdaptiveLevelCard(props: {
   topicId: string;
   level: AdaptiveLevelConfig;
+  canRemove: boolean;
   onChange: (patch: Partial<AdaptiveLevelConfig>) => void;
   onRemove: () => void;
 }) {
@@ -961,13 +1006,19 @@ function AdaptiveLevelCard(props: {
               size="s"
               leadingIcon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
               onClick={props.onRemove}
-              aria-label={`Удалить уровень ${level.levelName}`}
+              disabled={!props.canRemove}
+              aria-label={
+                props.canRemove
+                  ? `Удалить уровень ${level.levelName}`
+                  : "Нельзя удалить единственный уровень"
+              }
+              title={props.canRemove ? undefined : "Должен оставаться хотя бы один уровень"}
               data-testid={`${testIdBase}-remove`}
             />
             <button
               type="button"
               className="tb-level-card__chev"
-              aria-expanded={collapsed ? "false" : "true"}
+              aria-expanded={!collapsed}
               aria-label={collapsed ? "Раскрыть уровень" : "Свернуть уровень"}
               onClick={() => setCollapsed((v) => !v)}
               data-testid={`${testIdBase}-toggle`}

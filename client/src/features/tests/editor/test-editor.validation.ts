@@ -167,6 +167,40 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
     }
   }
 
+  // FR-17a: adaptive mode requires at least one enabled topic — stop-factor.
+  if (model.mode === "adaptive" && model.sections.length > 0) {
+    const hasEnabledTopic = model.adaptive.topics.some((t) => t.enabled);
+    if (!hasEnabledTopic) {
+      errors.push({
+        field: "adaptive.topics",
+        code: "no_enabled_topics",
+        message: "Adaptive mode requires at least one enabled topic.",
+        severity: "error",
+      });
+    }
+  }
+
+  // FR-17b: in adaptive mode every ENABLED section-topic should have >= 2 levels.
+  // Disabled topics are excluded from test logic so missing levels are not an issue.
+  if (model.mode === "adaptive") {
+    for (let i = 0; i < model.sections.length; i++) {
+      const section = model.sections[i];
+      const topicIdx = model.adaptive.topics.findIndex((t) => t.topicId === section.topicId);
+      const topic = topicIdx >= 0 ? model.adaptive.topics[topicIdx] : undefined;
+      if (!topic?.enabled) continue;
+      if (topic.levels.length < 2) {
+        warnings.push({
+          field: `adaptive.topics[${topicIdx}].levels`,
+          code: "missing_levels",
+          message: topic.levels.length === 1
+            ? `Topic "${section.topicName}" has only one adaptive level; at least two are recommended.`
+            : `Topic "${section.topicName}" has no adaptive levels configured.`,
+          severity: "warning",
+        });
+      }
+    }
+  }
+
   // FR-16: adaptive level difficulty range must be valid
   for (let i = 0; i < model.adaptive.topics.length; i++) {
     const topic = model.adaptive.topics[i];

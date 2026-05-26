@@ -14,8 +14,10 @@
  * topics not yet in the test; clicking one appends a new section with a
  * default `drawCount` of `min(maxQuestions, 5)` and `required: false`.
  *
- * The «Обязательная» flag is shown read-only here; its toggle lives in the
- * «Настройки» tab per the wireframe's aria-label hint.
+ * The «Обязательная» switch is rendered in the topic-row header (right side,
+ * before the remove button). Its previous location — the «Настройки → Правила
+ * прохождения» table column — has been retired; this is the single point of
+ * control for `sections[].required`.
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -28,7 +30,7 @@ import {
   Input,
   ModalDialog,
   NumberInput,
-  Tag,
+  Switch,
 } from "@universityrt/ui-kit";
 import { FeedbackEditorModal } from "./feedback-editor-modal";
 import type {
@@ -139,6 +141,9 @@ export function CompositionSection({ model, updateModel }: CompositionSectionPro
           key={section.topicId}
           section={section}
           onChangeDrawCount={(n) => updateSection(section.topicId, { drawCount: n })}
+          onToggleRequired={(required) =>
+            updateSection(section.topicId, { required })
+          }
           onRemove={() => removeSection(section.topicId)}
           onSaveFeedback={(patch) => updateSection(section.topicId, patch)}
         />
@@ -173,6 +178,7 @@ export const TopicsStructureSection = CompositionSection;
 function TopicRow(props: {
   section: EditorSection;
   onChangeDrawCount: (n: number) => void;
+  onToggleRequired: (required: boolean) => void;
   onRemove: () => void;
   /** Called with a partial EditorSection patch when feedback is saved. */
   onSaveFeedback: (patch: Partial<EditorSection>) => void;
@@ -186,18 +192,18 @@ function TopicRow(props: {
       <div className="tb-topic-row" data-testid={`topic-row-${section.topicId}`}>
         <div className="tb-topic-row__header">
           <span className="tb-topic-row__name">{section.topicName}</span>
-          {section.required && (
-            <Tag
-              tone="neutral"
-              variant="outline"
-              aria-label="Тема обязательная — задаётся в Настройках"
-            >
-              Обязательная
-            </Tag>
-          )}
           <span className="tb-topic-row__count">
             {section.maxQuestions} вопрос{plural(section.maxQuestions)}
           </span>
+          <label className="tb-topic-row__required">
+            <Switch
+              checked={section.required}
+              onChange={(e) => props.onToggleRequired(e.target.checked)}
+              aria-label={`Тема обязательная: ${section.topicName}`}
+              data-testid={`topic-required-${section.topicId}`}
+            />
+            <span className="tb-topic-row__required-lbl">Обязательная</span>
+          </label>
           <IconButton
             icon={<X className="h-3.5 w-3.5" aria-hidden="true" />}
             aria-label={`Убрать тему «${section.topicName}»`}
@@ -256,9 +262,9 @@ function TopicRow(props: {
 
 /**
  * Read-only preview of topic feedback content. When `onEdit` is provided,
- * renders as a clickable `<button>` that opens FeedbackEditorModal. Otherwise
- * stays a non-interactive `<div>` (backward-compatible with callers that don't
- * supply a handler).
+ * renders as a clickable `div[role="button"]` (not `<button>`) so that rich
+ * HTML content from the RTE — which includes block elements like `<p>` — is
+ * valid inside the container. A `<button>` cannot contain block-level children.
  */
 function FeedbackPreview({
   section,
@@ -270,72 +276,97 @@ function FeedbackPreview({
   const hasText = section.feedback.text.trim() !== "";
   const linkCount = section.feedbackLinks.length;
   const assetCount = section.feedbackAssets.length;
+  const isRich = section.feedback.format === "richText" || section.feedback.format === "html";
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onEdit?.();
+    }
+  };
 
   if (!hasText && linkCount === 0 && assetCount === 0) {
-    // Empty state.
+    const cls = "tb-feedback-preview is-empty";
+    const label = "Редактировать обратную связь по теме";
+    const empty = "Не задано — нажмите для редактирования";
+    const emptyReadonly = "Не задано — обратная связь по теме пока не настроена";
     if (onEdit) {
       return (
-        <button
-          type="button"
-          className="tb-feedback-preview is-empty"
+        <div
+          role="button"
+          tabIndex={0}
+          className={cls}
           onClick={onEdit}
-          aria-label="Редактировать обратную связь по теме"
+          onKeyDown={handleKeyDown}
+          aria-label={label}
           data-testid={`feedback-preview-${section.topicId}`}
         >
-          Не задано — нажмите для редактирования
-        </button>
+          {empty}
+        </div>
       );
     }
-    return (
-      <div className="tb-feedback-preview is-empty">
-        Не задано — обратная связь по теме пока не настроена
-      </div>
-    );
+    return <div className={cls}>{emptyReadonly}</div>;
   }
 
-  const snippet = hasText
-    ? section.feedback.text.replace(/<[^>]+>/g, "").slice(0, 80)
-    : "Без текста";
+  const meta = (linkCount > 0 || assetCount > 0) && (
+    <div className="tb-feedback-preview__meta">
+      {linkCount > 0 && (
+        <>
+          <LinkIcon aria-hidden="true" />
+          {linkCount} ссыл{plural(linkCount, "ка", "ки", "ок")}
+        </>
+      )}
+      {linkCount > 0 && assetCount > 0 && (
+        <span className="tb-feedback-preview__sep">·</span>
+      )}
+      {assetCount > 0 && (
+        <>
+          <Paperclip aria-hidden="true" />
+          {assetCount} файл{plural(assetCount)}
+        </>
+      )}
+    </div>
+  );
 
-  const inner = (
+  const inner = isRich && hasText ? (
     <>
-      <div className="tb-feedback-preview__text">
-        <span className="tb-feedback-preview__snippet">{snippet}</span>
+      <div
+        className="tb-feedback-preview__rich"
+        // Author-controlled RTE content — rendered in the author's editor UI only.
+        dangerouslySetInnerHTML={{ __html: section.feedback.text }}
+      />
+      {meta}
+      <div className="tb-feedback-preview__edit-hint">
         <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
       </div>
-      {(linkCount > 0 || assetCount > 0) && (
-        <div className="tb-feedback-preview__meta">
-          {linkCount > 0 && (
-            <>
-              <LinkIcon aria-hidden="true" />
-              {linkCount} ссыл{plural(linkCount, "ка", "ки", "ок")}
-            </>
-          )}
-          {linkCount > 0 && assetCount > 0 && (
-            <span className="tb-feedback-preview__sep">·</span>
-          )}
-          {assetCount > 0 && (
-            <>
-              <Paperclip aria-hidden="true" />
-              {assetCount} файл{plural(assetCount)}
-            </>
-          )}
-        </div>
-      )}
+    </>
+  ) : (
+    <>
+      <div className="tb-feedback-preview__text">
+        <span className="tb-feedback-preview__snippet">
+          {hasText
+            ? section.feedback.text.replace(/<[^>]+>/g, "").slice(0, 120)
+            : "Без текста"}
+        </span>
+        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+      </div>
+      {meta}
     </>
   );
 
   if (onEdit) {
     return (
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         className="tb-feedback-preview"
         onClick={onEdit}
+        onKeyDown={handleKeyDown}
         aria-label="Редактировать обратную связь по теме"
         data-testid={`feedback-preview-${section.topicId}`}
       >
         {inner}
-      </button>
+      </div>
     );
   }
 

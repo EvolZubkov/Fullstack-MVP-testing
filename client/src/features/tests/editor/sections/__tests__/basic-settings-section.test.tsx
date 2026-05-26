@@ -302,20 +302,19 @@ describe("<SettingsSection /> — Правила прохождения pane", (
     expect(screen.queryByTestId("pass-rules-topics-table")).toBeNull();
   });
 
-  it("renders a row per topic and toggles required via checkbox", () => {
-    const updateModel = vi.fn();
+  it("renders a row per topic", () => {
     const model = baseModel({
       sections: [
         buildSection({ topicId: "top-1", topicName: "Topic 1", required: false }),
         buildSection({ topicId: "top-2", topicName: "Topic 2", required: true }),
       ],
     });
-    render(<SettingsSection model={model} updateModel={updateModel} />);
+    render(<SettingsSection model={model} updateModel={() => {}} />);
     fireEvent.click(screen.getByTestId("settings-rail-pass-rules"));
     expect(screen.getByTestId("pass-topic-row-top-1")).toBeInTheDocument();
     expect(screen.getByTestId("pass-topic-row-top-2")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("pass-topic-required-top-1"));
-    expect(runUpdater(updateModel, model).sections[0].required).toBe(true);
+    // The «Обязательная» toggle lives in the «Состав» tab, not here.
+    expect(screen.queryByTestId("pass-topic-required-top-1")).toBeNull();
   });
 
   it("expands custom-rule detail row when source = custom", () => {

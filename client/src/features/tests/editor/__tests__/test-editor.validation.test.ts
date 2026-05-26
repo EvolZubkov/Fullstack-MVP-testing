@@ -758,3 +758,181 @@ describe("FR-19: adaptive link title and URL completeness", () => {
     );
   });
 });
+
+// ─── FR-17a: adaptive mode with no enabled topics → error ────────────────────
+
+describe("FR-17a: adaptive mode with no enabled topics is an error", () => {
+  it("sad path — adaptive mode, sections present, no enabled topic → no_enabled_topics error", () => {
+    const model = baseModel({
+      mode: "adaptive",
+      adaptive: {
+        showDifficultyLevel: false,
+        testSettings: { showDifficultyLevel: false },
+        topics: [
+          {
+            enabled: false,
+            topicId: "topic-1",
+            topicName: "Topic One",
+            failureFeedback: null,
+            levels: [],
+          },
+        ],
+      },
+    });
+    const result = validateTestEditor(model);
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ code: "no_enabled_topics", severity: "error" }),
+    );
+  });
+
+  it("happy path — at least one enabled topic → no no_enabled_topics error", () => {
+    const model = baseModel({
+      mode: "adaptive",
+      adaptive: {
+        showDifficultyLevel: false,
+        testSettings: { showDifficultyLevel: false },
+        topics: [
+          {
+            enabled: true,
+            topicId: "topic-1",
+            topicName: "Topic One",
+            failureFeedback: null,
+            levels: [],
+          },
+        ],
+      },
+    });
+    const result = validateTestEditor(model);
+    expect(result.errors.filter((e) => e.code === "no_enabled_topics")).toHaveLength(0);
+  });
+
+  it("standard mode — no no_enabled_topics error even with no enabled topics", () => {
+    const model = baseModel({ mode: "standard" });
+    const result = validateTestEditor(model);
+    expect(result.errors.filter((e) => e.code === "no_enabled_topics")).toHaveLength(0);
+  });
+});
+
+// ─── FR-17b: adaptive topic with 0 levels → warning ─────────────────────────
+
+describe("FR-17b: adaptive topic with fewer than 2 levels produces warning", () => {
+  it("happy path — adaptive topic with two levels produces no missing_levels warning", () => {
+    const makeLevel = (idx: number) => ({
+      levelIndex: idx,
+      levelName: `Level ${idx + 1}`,
+      minDifficulty: idx * 50,
+      maxDifficulty: idx * 50 + 50,
+      questionsCount: 1,
+      passThreshold: 50,
+      passThresholdType: "percent" as const,
+      feedback: null,
+      links: [],
+    });
+    const model = baseModel({
+      mode: "adaptive",
+      adaptive: {
+        showDifficultyLevel: false,
+        testSettings: { showDifficultyLevel: false },
+        topics: [
+          {
+            enabled: true,
+            topicId: "topic-1",
+            topicName: "Topic One",
+            failureFeedback: null,
+            levels: [makeLevel(0), makeLevel(1)],
+          },
+        ],
+      },
+    });
+    const result = validateTestEditor(model);
+    const missingWarnings = result.warnings.filter((w) => w.code === "missing_levels");
+    expect(missingWarnings).toHaveLength(0);
+  });
+
+  it("sad path — enabled adaptive topic with no levels produces missing_levels warning (not error)", () => {
+    const model = baseModel({
+      mode: "adaptive",
+      adaptive: {
+        showDifficultyLevel: false,
+        testSettings: { showDifficultyLevel: false },
+        topics: [
+          {
+            enabled: true,
+            topicId: "topic-1",
+            topicName: "Topic One",
+            failureFeedback: null,
+            levels: [],
+          },
+        ],
+      },
+    });
+    const result = validateTestEditor(model);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({ code: "missing_levels", severity: "warning" }),
+    );
+    expect(result.errors.filter((e) => e.code === "missing_levels")).toHaveLength(0);
+  });
+
+  it("disabled topic with no levels produces no missing_levels warning", () => {
+    const model = baseModel({
+      mode: "adaptive",
+      adaptive: {
+        showDifficultyLevel: false,
+        testSettings: { showDifficultyLevel: false },
+        topics: [
+          {
+            enabled: false,
+            topicId: "topic-1",
+            topicName: "Topic One",
+            failureFeedback: null,
+            levels: [],
+          },
+        ],
+      },
+    });
+    const result = validateTestEditor(model);
+    expect(result.warnings.filter((w) => w.code === "missing_levels")).toHaveLength(0);
+  });
+
+  it("sad path — adaptive topic with exactly one level produces missing_levels warning", () => {
+    const model = baseModel({
+      mode: "adaptive",
+      adaptive: {
+        showDifficultyLevel: false,
+        testSettings: { showDifficultyLevel: false },
+        topics: [
+          {
+            enabled: true,
+            topicId: "topic-1",
+            topicName: "Topic One",
+            failureFeedback: null,
+            levels: [
+              {
+                levelIndex: 0,
+                levelName: "Level 1",
+                minDifficulty: 0,
+                maxDifficulty: 100,
+                questionsCount: 1,
+                passThreshold: 50,
+                passThresholdType: "percent",
+                feedback: null,
+                links: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const result = validateTestEditor(model);
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({ code: "missing_levels", severity: "warning" }),
+    );
+    expect(result.errors.filter((e) => e.code === "missing_levels")).toHaveLength(0);
+  });
+
+  it("standard mode — no missing_levels warning even with empty adaptive.topics", () => {
+    const model = baseModel({ mode: "standard" });
+    const result = validateTestEditor(model);
+    expect(result.warnings.filter((w) => w.code === "missing_levels")).toHaveLength(0);
+  });
+});

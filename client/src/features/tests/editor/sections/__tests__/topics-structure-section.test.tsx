@@ -152,6 +152,23 @@ describe("<CompositionSection />", () => {
     expect(runUpdater(updateModel, model).sections[0].drawCount).toBe(4);
   });
 
+  it("toggles section.required via the Switch in the topic-row header", () => {
+    const updateModel = vi.fn();
+    const model = baseModel({
+      sections: [
+        buildSection({ topicId: "top-1", required: false }),
+        buildSection({ topicId: "top-2", topicName: "T2", required: true }),
+      ],
+    });
+    renderWithClient(
+      <CompositionSection model={model} updateModel={updateModel} />,
+    );
+    fireEvent.click(screen.getByTestId("topic-required-top-1"));
+    const result = runUpdater(updateModel, model);
+    expect(result.sections[0].required).toBe(true);
+    expect(result.sections[1].required).toBe(true);
+  });
+
   it("remove icon drops the section from the model", () => {
     const updateModel = vi.fn();
     const model = baseModel({
