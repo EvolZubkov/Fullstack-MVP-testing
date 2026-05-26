@@ -10,9 +10,8 @@
 @import './styles/tb-components.css';
 @import './styles/tb-tests-list.css';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
 
 /* LIGHT MODE */
 :root {
