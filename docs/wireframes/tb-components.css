@@ -160,6 +160,9 @@
   border-left: var(--tb-accent-rail-w) solid var(--ou-accent-default);
 }
 
+/* ── Section separator used in settings panes ────────────────────────── */
+.wf-sep { border: none; border-top: var(--wf-border-w) solid var(--ou-border-soft); margin: var(--ou-space-4) 0; }
+
 /* ── Pass-rules block (Тест пройден, если…) ──────────────────────────── */
 .tb-pass-card { margin-bottom: var(--ou-space-3); }
 .tb-pass-card > .ou-card__header { padding-bottom: var(--ou-space-2); }
@@ -230,6 +233,9 @@
 
 .tb-adaptive-topics__toggle { display: inline-flex; align-items: center; gap: var(--ou-space-2); flex-shrink: 0; }
 .tb-adaptive-topics__toggle-lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-adaptive-topics__level-banner { margin-top: var(--ou-space-3); }
+.tb-adaptive-topics__level-banner .ou-banner { align-items: center; }
+.tb-adaptive-topics__level-banner .ou-banner__title { font: var(--ou-text-body-xs); }
 
 /* Disabled topic visual. */
 .tb-topic--disabled .ou-acc__title { color: var(--ou-fg-muted); }
@@ -343,12 +349,14 @@
    `.is-empty` — placeholder-вариант («Не задано — нажмите для редактирования»).
    В client/ будущий React-компонент <FeedbackPreview snippet links files />. */
 .tb-feedback-preview {
+  display: block; width: 100%; box-sizing: border-box;
   border: var(--wf-border-w) solid var(--ou-border-default);
   border-radius: var(--ou-radius-m);
   padding: var(--ou-space-2) var(--ou-space-3);
   font: var(--ou-text-body-s);
   background: var(--ou-bg-elevated);
   cursor: pointer;
+  text-align: left;
 }
 .tb-feedback-preview:hover { border-color: var(--ou-accent-default); }
 .tb-feedback-preview.is-empty {
@@ -364,6 +372,20 @@
 }
 .tb-feedback-preview__meta svg { width: var(--wf-space-10); height: var(--wf-space-10); flex-shrink: 0; }
 .tb-feedback-preview__sep { color: var(--ou-border-soft); }
+/* Rich-text preview: rendered HTML from RTE, clipped to ~4 lines */
+.tb-feedback-preview__rich {
+  overflow: hidden; max-height: 5rem;
+  -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+}
+.tb-feedback-preview__rich p { margin: 0 0 var(--ou-space-1); }
+.tb-feedback-preview__rich p:last-child { margin-bottom: 0; }
+.tb-feedback-preview__rich ul,
+.tb-feedback-preview__rich ol { margin: 0; padding-left: 1.25em; }
+.tb-feedback-preview__edit-hint {
+  display: flex; justify-content: flex-end; margin-top: var(--ou-space-1);
+  color: var(--ou-fg-muted);
+}
 
 /* ── Feedback editor modal (per prd7-editor-drawer.html s-feedback-edit) ──
    Composite: format selector + (optional) RTE / Textarea + links + PDFs.
