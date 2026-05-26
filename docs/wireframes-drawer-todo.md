@@ -22,7 +22,7 @@ Inline-stиль cleanup (этап 4) отложен.
 | Источник | Роль |
 | --- | --- |
 | `docs/test-settings-parameter-structure.md` | Целевая структура параметров и поведения редактора |
-| `docs/prd-7-test-settings-editor-refactor.md` | PRD-7 описание Drawer редактора |
+| `docs/prd-7-s0-s8-closed.md`, `docs/prd-7-s9-s11-in-progress.md` | PRD-7 описание Drawer редактора (закрытые и активные фазы) |
 | `docs/wireframes/legacy/design-tab.html` | Референс по содержанию вкладки "Оформление" (page-level, не Drawer) |
 | `docs/wireframes/legacy/pages-tab.html` | Референс по содержанию вкладки "Структура" для линейного режима по темам (page-level, не Drawer) |
 | `docs/wireframes/prd7-editor-drawer.html` | Референс контейнера Drawer и footer-логики |

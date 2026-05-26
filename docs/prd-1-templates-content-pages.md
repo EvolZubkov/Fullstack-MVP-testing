@@ -1,11 +1,40 @@
 # PRD-1: Платформа макетов шаблонов и контентные страницы SCORM-пакетов
 
-**Версия:** 2.0  
-**Статус:** Черновик  
-**Связанные документы:** [BRD](brd-scorm-enhancements.md), [PRD-6](prd-6-retake-cooldown-gate.md), [Платформа SCORM-шаблонов](spec-template-platform.md)  
+**Версия:** 2.1  
+**Статус:** In Implementation (Backend 90%, Runtime 95%, Frontend 65%)  
+**Дата актуализации:** 2026-05-26  
+**Связанные документы:** [BRD](brd-scorm-enhancements.md), [PRD-6](prd-6-retake-cooldown-gate.md),
+[Платформа SCORM-шаблонов](spec-template-platform.md)  
 **Реализация:** [TODO](prd-1-implementation-todo.md), [Issues](issues/prd-1-issues.md)  
 **Этапы BRD:** BR-01, BR-02  
 **Зависимости:** технический контракт шаблонов определяется только в `spec-template-platform.md`
+
+## Статус реализации (на 2026-05-26)
+
+**Закрыто** (Backend 90%, Runtime 95%):
+
+- §4.1-4.2 контентные страницы, граница шаблона и контента
+- §4.3 модель `variant.kind` (commits 9e3606e, d227900, efe47cb, caeb4a9)
+- §4.3.1-4.3.2 тихая привязка системных вариантов
+- §4.3.4-4.3.5 lifecycle и дрейф системных вариантов при смене шаблона
+- §4.3.6 server-side `required-fields` валидация (commit d445861)
+- §4.4-4.7 page templates, placeholders, сценарий создания, summary, HTML escape hatch
+- §7 БД-схема (`templates`, `content_pages`, `designSettingsJson`)
+- §8 все 8 API endpoints (templates, content-pages, design-settings, replace-variant)
+- §9 UI Оформление + Структура (базовые диалоги)
+- §10 NFR-01...NFR-04
+- Runtime: template-loader, contentFlow, renderer plugins, system.blocked, autoAdvance
+
+**Pending** (Frontend UI 35%):
+
+- §4.3.3 row-menu «Сменить вариант» в UI (API готов, UI нет)
+- §4.3.6 frontend inline-alert и error-индикатор для required-fields
+- §4.3.7 severity-rail (border-left для error/warning/info)
+- §4.8 DnD перестановка тем (зависит от PRD-4 `sort_order`)
+- Template preview в Drawer «Оформление»
+- Text overflow preview/diagnostics для textFit modes
+
+**Блокеры**: §4.8 ждёт PRD-4 (`test_sections.sort_order`).
 
 ---
 
@@ -1052,7 +1081,8 @@ placeholders и разрешённые style overrides, а не HTML, сренд
 - [ ] Wireframes покрывают перестановку тем: grip-ручка, DnD, drop-zone, клавиатурная альтернатива
 - [ ] Wireframes покрывают основные, пустые, ошибочные и loading/saving состояния
 - [ ] Галерея показывает встроенные шаблоны `default`, `corporate`, `minimal`
-- [ ] Выбор шаблона сохраняет `templateId` и `params`; `templateVersion` и `templateApiVersion` отображаются как read-only диагностические значения выбранного шаблона
+- [ ] Выбор шаблона сохраняет `templateId` и `params`; `templateVersion` и
+  `templateApiVersion` отображаются как read-only диагностические значения выбранного шаблона
 - [ ] Форма параметров строится из `manifest.params`
 - [ ] Параметры с `cssVar` применяются в браузере как CSS-переменные
 - [ ] При смене шаблона несовместимости вариантов страниц `kind: info` разрешаются

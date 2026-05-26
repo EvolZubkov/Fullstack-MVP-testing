@@ -1,9 +1,11 @@
 # PRD-7: Baseline текущего поведения (S0)
 
+**Статус:** Archived snapshot (зафиксирован 2026-05-10)
 **Дата фиксации:** 2026-05-10
 **Назначение:** snapshot фактического поведения и usage до старта изменений PRD-7.
 Используется для regression-проверок в S2-S10 и финальной приёмки в S11.
-**Связанные документы:** [PRD-7](prd-7-test-settings-editor-refactor.md),
+**Связанные документы:** [PRD-7 S0-S8 closed](prd-7-s0-s8-closed.md),
+[PRD-7 S9-S11 in progress](prd-7-s9-s11-in-progress.md),
 [decisions.md](prd-7-decisions.md), [implementation-todo.md](prd-7-implementation-todo.md)
 
 ---

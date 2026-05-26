@@ -1,10 +1,25 @@
 # PRD-4: Гибкий поток прохождения, разделы и переходы SCORM-пакетов
 
 **Версия:** 1.0  
-**Статус:** Черновик  
-**Связанные документы:** [BRD](brd-scorm-enhancements.md), [PRD-1](prd-1-templates-content-pages.md), [PRD-2](prd-2-result-variables.md), [PRD-6](prd-6-retake-cooldown-gate.md), [PRD-8](prd-8-section-router-flow.md), [Платформа SCORM-шаблонов](spec-template-platform.md)  
+**Статус:** Backlog (queued, шаг 2 ROADMAP — следующий после PRD-7 S9-S11)  
+**Дата актуализации:** 2026-05-26  
+**Связанные документы:** [BRD](brd-scorm-enhancements.md),
+[PRD-1](prd-1-templates-content-pages.md), [PRD-2](prd-2-result-variables.md),
+[PRD-6](prd-6-retake-cooldown-gate.md), [PRD-8](prd-8-section-router-flow.md),
+[Платформа SCORM-шаблонов](spec-template-platform.md)  
 **Этап BRD:** BR-06, Этап 4  
-**Зависимости:** шаблонная платформа и контентные страницы из PRD-1, правила курса из технической спецификации; retake gate из PRD-6 использует границу внутреннего старта попытки
+**Зависимости:** шаблонная платформа и контентные страницы из PRD-1, правила курса
+из технической спецификации; retake gate из PRD-6 использует границу внутреннего
+старта попытки
+
+## Статус реализации (на 2026-05-26)
+
+**Не начато по runtime**. Схема `flowPolicyJson` и часть API готовы (через PRD-7
+backend foundation: commits be8fad9, 0b269fd, 7191d0f), но runtime-логика
+`section_linear` / `section_router` / `section_graph` НЕ реализована.
+
+**Блокер**: завершение PRD-7 S9-S11. Шаг 2 ROADMAP — следующий после PRD-7. Блокирует
+PRD-6, PRD-8, частично PRD-2 и PRD-5.
 
 ---
 

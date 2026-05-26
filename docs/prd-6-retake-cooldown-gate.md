@@ -1,10 +1,20 @@
 # PRD-6: Ограничение повторного прохождения и retake gate
 
 **Версия:** 1.0  
-**Статус:** Черновик  
-**Связанные документы:** [BRD](brd-scorm-enhancements.md), [PRD-1](prd-1-templates-content-pages.md), [PRD-4](prd-4-course-flow-sections.md), [Платформа SCORM-шаблонов](spec-template-platform.md)  
+**Статус:** Backlog (queued, шаг 3 ROADMAP)  
+**Дата актуализации:** 2026-05-26  
+**Связанные документы:** [BRD](brd-scorm-enhancements.md),
+[PRD-1](prd-1-templates-content-pages.md), [PRD-4](prd-4-course-flow-sections.md),
+[Платформа SCORM-шаблонов](spec-template-platform.md)  
 **Этап BRD:** BR-07, Этап 5  
-**Зависимости:** стартовая/системная страница из PRD-1, отложенный старт попытки из PRD-4, SCORM runtime
+**Зависимости:** стартовая/системная страница из PRD-1, отложенный старт попытки из
+PRD-4, SCORM runtime
+
+## Статус реализации (на 2026-05-26)
+
+**Не начато**. Стоит в очереди шагом 3 по [ROADMAP](ROADMAP.md). Блокируется PRD-4
+(граница «внутреннего старта попытки», отложенный SCORM `Initialize`). Без PRD-4
+возможно только flag-only без реального gate-runtime.
 
 ---
 

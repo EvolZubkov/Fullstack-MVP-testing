@@ -1,7 +1,9 @@
 # TODO: замечания к параметрам теста и структуре редактора
 
 **Статус:** закрыто документальными правками  
-**Связанные документы:** `test-settings-parameter-structure.md`, `prd-7-test-settings-editor-refactor.md`, `prd-8-section-router-flow.md`, `prd-4-course-flow-sections.md`
+**Связанные документы:** `test-settings-parameter-structure.md`,
+`prd-7-s0-s8-closed.md`, `prd-7-s9-s11-in-progress.md`,
+`prd-8-section-router-flow.md`, `prd-4-course-flow-sections.md`
 
 ## Checklist
 
