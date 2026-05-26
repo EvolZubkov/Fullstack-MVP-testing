@@ -224,11 +224,26 @@ export class TestSettingsService {
    */
   async save(testId: string, payload: SavePayload): Promise<Test> {
     return db.transaction(async (tx) => {
-      if (payload.expectedVersion !== undefined) {
-        const [current] = await tx
-          .select({ version: tests.version })
+      const { status, published } = resolveStatus(payload.test);
+
+      // Read the pre-update row when needed: the optimistic-concurrency check
+      // (expectedVersion) and the publish-transition gate below both depend on
+      // state captured before the row is mutated.
+      let current:
+        | { version: number; status: string | null; published: boolean | null }
+        | undefined;
+      if (payload.expectedVersion !== undefined || status === "published") {
+        [current] = await tx
+          .select({
+            version: tests.version,
+            status: tests.status,
+            published: tests.published,
+          })
           .from(tests)
           .where(eq(tests.id, testId));
+      }
+
+      if (payload.expectedVersion !== undefined) {
         if (!current) {
           throw Object.assign(new Error("Test not found"), { status: 404 });
         }
@@ -237,7 +252,6 @@ export class TestSettingsService {
         }
       }
 
-      const { status, published } = resolveStatus(payload.test);
       const patch: Record<string, unknown> = { ...payload.test, status, published };
 
       const [updated] = await tx
@@ -283,12 +297,16 @@ export class TestSettingsService {
         );
       }
 
-      // Required-fields validation runs only on transition to `published`.
-      // Draft saves intentionally allow incomplete state so authors can save
-      // mid-edit without filling every required placeholder (PRD-1 §4.3.6
-      // applies the hard rule at the publish boundary; the in-editor save
-      // button is gated by frontend indicators).
-      if (status === "published") {
+      // Required-fields validation runs ONLY on an actual transition into
+      // `published` (draft/archived -> published). Re-saving an already
+      // published test must stay possible: otherwise a test left published in
+      // an incomplete state (e.g. without a template) could never be edited or
+      // fixed, because every save would re-trip the gate and roll back. Draft
+      // saves likewise allow incomplete state mid-edit. The hard rule
+      // (PRD-1 §4.3.6) applies at the publish boundary; the in-editor save
+      // button is gated by frontend indicators.
+      const prevStatus = current?.status ?? (current?.published ? "published" : "draft");
+      if (prevStatus !== "published" && status === "published") {
         await this._validateAllRequiredFields(
           tx,
           testId,

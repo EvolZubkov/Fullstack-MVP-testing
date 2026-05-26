@@ -714,4 +714,22 @@ describe("TestSettingsService — required fields validation on save", () => {
 
     await expect(svc.save("t1", { test: { status: "published" } })).resolves.toBeTruthy();
   });
+
+  it("does NOT re-validate an already-published test (no draft->published transition)", async () => {
+    // Regression (te-3): a test left published in an incomplete state must stay
+    // editable. The pre-update row reports status "published", so re-saving with
+    // status "published" is not a transition and skips the gate even though a
+    // required field is missing — otherwise every save would roll back.
+    setupSelectDispatch([
+      [testsTable, [{ version: 1, status: "published", published: true }]],
+      [templates, [{ id: "default", manifest: manifestWithRequired }]],
+      [contentPages, [
+        { id: "p-summary", templateKey: "s.std", valuesJson: { values: { title: "Done" } } }, // missing `result`
+      ]],
+    ]);
+    tx.update.mockReturnValue(makeChain([{ ...dbTest, status: "published" }]));
+    captureInserts();
+
+    await expect(svc.save("t1", { test: { status: "published" } })).resolves.toBeTruthy();
+  });
 });
