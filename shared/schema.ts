@@ -901,14 +901,14 @@ export const designSettingsSchema = z.object({
   templateId: z.string(),
   templateVersion: z.string(),
   templateApiVersion: z.string(),
-  params: z.record(z.unknown()),
+  params: z.record(z.string(), z.unknown()),
 });
 
 export type DesignSettings = z.infer<typeof designSettingsSchema>;
 
 export const contentPageValuesSchema = z.object({
-  values: z.record(z.unknown()).default({}),
-  placeholderStyles: z.record(z.object({ fontSize: z.number() })).optional(),
+  values: z.record(z.string(), z.unknown()).default({}),
+  placeholderStyles: z.record(z.string(), z.object({ fontSize: z.number() })).optional(),
 });
 
 export type ContentPageValues = z.infer<typeof contentPageValuesSchema>;

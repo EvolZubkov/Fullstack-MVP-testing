@@ -10,7 +10,6 @@ import { rm, readFile, mkdir, cp } from "fs/promises";
 const allowlist = [
   "@google/generative-ai",
   "axios",
-  "connect-pg-simple",
   "cors",
   "date-fns",
   "drizzle-orm",
@@ -24,15 +23,11 @@ const allowlist = [
   "nanoid",
   "nodemailer",
   "openai",
-  "passport",
-  "passport-local",
   "pg",
   "stripe",
   "uuid",
-  "ws",
   "xlsx",
   "zod",
-  "zod-validation-error",
 ];
 
 // Force these to be external even if in allowlist (ESM/CJS issues)

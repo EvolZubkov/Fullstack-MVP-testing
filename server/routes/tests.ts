@@ -61,7 +61,7 @@ const updateTestBodySchema = testBodyBaseSchema;
 
 /** Converts a ZodError to the structured `fields` array per decisions.md §5.4. */
 function zodToFields(err: z.ZodError) {
-  return err.errors.map((e) => ({
+  return err.issues.map((e) => ({
     field: e.path.join(".") || "body",
     code: e.code,
     message: e.message,
