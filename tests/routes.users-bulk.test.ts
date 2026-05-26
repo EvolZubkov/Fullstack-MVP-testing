@@ -8,7 +8,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import express from "express";
 import session from "express-session";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import {
+  addAoaSheet,
+  readWorkbookFromBuffer,
+  sheetToArrays,
+  workbookToBuffer,
+} from "../server/utils/excel";
 
 // ─── Hoist mocks ──────────────────────────────────────────────────────────────
 const { storageMock, sendEmailMock } = vi.hoisted(() => ({
@@ -73,11 +79,10 @@ function asAuthor(req: request.Test) { return req.set("x-test-user", "author1");
 function asLearner(req: request.Test) { return req.set("x-test-user", "learner1"); }
 
 /** Build an XLSX buffer with the given rows (first row = header) */
-function makeXlsx(rows: string[][]): Buffer {
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Users");
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+async function makeXlsx(rows: string[][]): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  addAoaSheet(wb, "Users", rows);
+  return workbookToBuffer(wb);
 }
 
 beforeEach(() => {
@@ -119,9 +124,8 @@ describe("GET /api/users/bulk-template", () => {
       res.on("data", (c: Buffer) => chunks.push(c));
       res.on("end", () => cb(null, Buffer.concat(chunks)));
     }));
-    const wb = XLSX.read(res.body, { type: "buffer" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1 });
+    const wb = await readWorkbookFromBuffer(res.body);
+    const rows = sheetToArrays(wb.worksheets[0]);
     const header = rows[0] as string[];
     expect(header).toContain("email");
     expect(header).toContain("name");
@@ -140,7 +144,7 @@ describe("POST /api/users/bulk-preview", () => {
   });
 
   it("returns 403 for learner", async () => {
-    const buf = makeXlsx([["email", "name"], ["a@a.com", "Тест"]]);
+    const buf = await makeXlsx([["email", "name"], ["a@a.com", "Тест"]]);
     const res = await asLearner(request(makeApp()).post("/api/users/bulk-preview").attach("file", buf, "users.xlsx"));
     expect(res.status).toBe(403);
   });
@@ -154,7 +158,7 @@ describe("POST /api/users/bulk-preview", () => {
     storageMock.getGroups.mockResolvedValue([groupA]);
     storageMock.getUserByEmail.mockResolvedValue(undefined); // all new
 
-    const buf = makeXlsx([
+    const buf = await makeXlsx([
       ["email", "name", "role", "group"],
       ["alice@test.com", "Alice", "learner", "Группа А"],
       ["bob@test.com", "Bob", "learner", ""],
@@ -178,7 +182,7 @@ describe("POST /api/users/bulk-preview", () => {
     storageMock.getGroups.mockResolvedValue([]);
     storageMock.getUserByEmail.mockResolvedValue(learnerUser);
 
-    const buf = makeXlsx([["email", "name"], ["learner@test.com", "Learner"]]);
+    const buf = await makeXlsx([["email", "name"], ["learner@test.com", "Learner"]]);
     const res = await asAuthor(request(makeApp()).post("/api/users/bulk-preview").attach("file", buf, "users.xlsx"));
     expect(res.status).toBe(200);
     expect(res.body[0].status).toBe("duplicate");
@@ -187,7 +191,7 @@ describe("POST /api/users/bulk-preview", () => {
 
   it("marks invalid emails as error", async () => {
     storageMock.getGroups.mockResolvedValue([]);
-    const buf = makeXlsx([["email", "name"], ["not-an-email", "Test"]]);
+    const buf = await makeXlsx([["email", "name"], ["not-an-email", "Test"]]);
     const res = await asAuthor(request(makeApp()).post("/api/users/bulk-preview").attach("file", buf, "users.xlsx"));
     expect(res.status).toBe(200);
     expect(res.body[0].status).toBe("error");
@@ -197,7 +201,7 @@ describe("POST /api/users/bulk-preview", () => {
     storageMock.getGroups.mockResolvedValue([groupA]);
     storageMock.getUserByEmail.mockResolvedValue(undefined);
 
-    const buf = makeXlsx([["email", "name", "group"], ["x@test.com", "X", "Несуществующая группа"]]);
+    const buf = await makeXlsx([["email", "name", "group"], ["x@test.com", "X", "Несуществующая группа"]]);
     const res = await asAuthor(request(makeApp()).post("/api/users/bulk-preview").attach("file", buf, "users.xlsx"));
     expect(res.status).toBe(200);
     expect(res.body[0].groupFound).toBe(false);
@@ -206,7 +210,7 @@ describe("POST /api/users/bulk-preview", () => {
 
   it("returns 400 for empty file", async () => {
     storageMock.getGroups.mockResolvedValue([]);
-    const buf = makeXlsx([["email", "name"]]); // only header, no data rows
+    const buf = await makeXlsx([["email", "name"]]); // only header, no data rows
     const res = await asAuthor(request(makeApp()).post("/api/users/bulk-preview").attach("file", buf, "users.xlsx"));
     expect(res.status).toBe(400);
   });
@@ -215,7 +219,7 @@ describe("POST /api/users/bulk-preview", () => {
     storageMock.getGroups.mockResolvedValue([{ ...groupA, name: "Группа А" }]);
     storageMock.getUserByEmail.mockResolvedValue(undefined);
 
-    const buf = makeXlsx([["email", "name", "group"], ["y@test.com", "Y", "группа а"]]);
+    const buf = await makeXlsx([["email", "name", "group"], ["y@test.com", "Y", "группа а"]]);
     const res = await asAuthor(request(makeApp()).post("/api/users/bulk-preview").attach("file", buf, "users.xlsx"));
     expect(res.status).toBe(200);
     expect(res.body[0].groupFound).toBe(true);

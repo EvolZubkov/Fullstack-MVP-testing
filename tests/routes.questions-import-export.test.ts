@@ -26,7 +26,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import express from "express";
 import session from "express-session";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import {
+  addJsonSheet,
+  readWorkbookFromBuffer,
+  sheetToArrays,
+  sheetToObjects,
+  workbookToBuffer,
+} from "../server/utils/excel";
 
 // ─── Hoist mocks ──────────────────────────────────────────────────────────────
 // DATABASE_URL нужен чтобы db.ts не падал при загрузке модуля (storage замокан)
@@ -88,18 +95,16 @@ function asAuthor(req: request.Test) {
 }
 
 /** Строит XLSX-буфер из массива объектов (имитирует экспортированный файл) */
-function makeImportXlsx(rows: Record<string, unknown>[]): Buffer {
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Вопросы");
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+async function makeImportXlsx(rows: Record<string, unknown>[]): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  addJsonSheet(wb, "Вопросы", rows);
+  return workbookToBuffer(wb);
 }
 
 /** Читает XLSX-буфер из ответа и возвращает строки */
-function parseXlsxResponse(body: Buffer): Record<string, unknown>[] {
-  const wb = XLSX.read(body, { type: "buffer" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(ws);
+async function parseXlsxResponse(body: Buffer): Promise<Record<string, unknown>[]> {
+  const wb = await readWorkbookFromBuffer(body);
+  return sheetToObjects(wb.worksheets[0]);
 }
 
 /** Минимальная строка импорта с одиночным вопросом */
@@ -142,7 +147,7 @@ describe("GET /export — ID column", () => {
       })
     );
     expect(res.status).toBe(200);
-    const rows = parseXlsxResponse(res.body as Buffer);
+    const rows = await parseXlsxResponse(res.body as Buffer);
     expect(rows[0]).toHaveProperty("ID");
   });
 
@@ -154,7 +159,7 @@ describe("GET /export — ID column", () => {
         r.on("end", () => cb(null, Buffer.concat(chunks)));
       })
     );
-    const rows = parseXlsxResponse(res.body as Buffer);
+    const rows = await parseXlsxResponse(res.body as Buffer);
     expect(rows[0]["ID"]).toBe("q1");
   });
 
@@ -166,9 +171,8 @@ describe("GET /export — ID column", () => {
         r.on("end", () => cb(null, Buffer.concat(chunks)));
       })
     );
-    const wb = XLSX.read(res.body as Buffer, { type: "buffer" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const headers = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1 })[0];
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const headers = sheetToArrays(wb.worksheets[0])[0] as string[];
     expect(headers[0]).toBe("ID");
   });
 });
@@ -192,7 +196,7 @@ describe("POST /import — автосоздание темы", () => {
     storageMock.getTopics.mockResolvedValue([]);
     storageMock.createTopic.mockResolvedValue({ ...dbTopic, name: "Новая тема" });
 
-    const buf = makeImportXlsx([singleRow({ "Тема": "Новая тема" })]);
+    const buf = await makeImportXlsx([singleRow({ "Тема": "Новая тема" })]);
     const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(res.status).toBe(200);
@@ -202,7 +206,7 @@ describe("POST /import — автосоздание темы", () => {
   it("использует существующую тему (без учёта регистра)", async () => {
     storageMock.getTopics.mockResolvedValue([dbTopic]);
 
-    const buf = makeImportXlsx([singleRow({ "Тема": "JAVASCRIPT" })]);
+    const buf = await makeImportXlsx([singleRow({ "Тема": "JAVASCRIPT" })]);
     await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(storageMock.createTopic).not.toHaveBeenCalled();
@@ -215,7 +219,7 @@ describe("POST /import — автосоздание темы", () => {
     storageMock.getTopics.mockResolvedValue([]);
     storageMock.createTopic.mockResolvedValue({ ...dbTopic, id: "t-new", name: "Новая тема" });
 
-    const buf = makeImportXlsx([
+    const buf = await makeImportXlsx([
       singleRow({ "Тема": "Новая тема", "Текст вопроса": "Q1?" }),
       singleRow({ "Тема": "Новая тема", "Текст вопроса": "Q2?" }),
     ]);
@@ -227,7 +231,7 @@ describe("POST /import — автосоздание темы", () => {
   it("возвращает ошибку строки если поле Тема пустое", async () => {
     storageMock.getTopics.mockResolvedValue([dbTopic]);
 
-    const buf = makeImportXlsx([singleRow({ "Тема": "" })]);
+    const buf = await makeImportXlsx([singleRow({ "Тема": "" })]);
     const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(res.status).toBe(200);
@@ -240,7 +244,7 @@ describe("POST /import — автосоздание темы", () => {
     storageMock.getTopics.mockResolvedValue([]);
     storageMock.createTopic.mockResolvedValue({ ...dbTopic, name: "Базы Данных" });
 
-    const buf = makeImportXlsx([singleRow({ "Тема": "Базы Данных" })]);
+    const buf = await makeImportXlsx([singleRow({ "Тема": "Базы Данных" })]);
     await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(storageMock.createTopic).toHaveBeenCalledWith({ name: "Базы Данных" });
@@ -267,7 +271,7 @@ describe("POST /import — обновление по ID", () => {
   it("вызывает updateQuestion когда ID найден", async () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
-    const buf = makeImportXlsx([singleRow({ "ID": "q1", "Балл": 5 })]);
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Балл": 5 })]);
     const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(res.status).toBe(200);
@@ -282,7 +286,7 @@ describe("POST /import — обновление по ID", () => {
   it("ответ содержит updated=1 при обновлении", async () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
-    const buf = makeImportXlsx([singleRow({ "ID": "q1" })]);
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1" })]);
     const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(res.body.updated).toBe(1);
@@ -292,7 +296,7 @@ describe("POST /import — обновление по ID", () => {
   it("создаёт новый вопрос если ID не найден", async () => {
     storageMock.getQuestion.mockResolvedValue(undefined);
 
-    const buf = makeImportXlsx([singleRow({ "ID": "nonexistent-id" })]);
+    const buf = await makeImportXlsx([singleRow({ "ID": "nonexistent-id" })]);
     const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(res.status).toBe(200);
@@ -303,7 +307,7 @@ describe("POST /import — обновление по ID", () => {
   it("ответ содержит created=1 если ID не найден и создан новый", async () => {
     storageMock.getQuestion.mockResolvedValue(undefined);
 
-    const buf = makeImportXlsx([singleRow({ "ID": "nonexistent-id" })]);
+    const buf = await makeImportXlsx([singleRow({ "ID": "nonexistent-id" })]);
     const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(res.body.created).toBe(1);
@@ -317,7 +321,7 @@ describe("POST /import — обновление по ID", () => {
       .digest("hex");
     storageMock.getContentHashesByTopic.mockResolvedValue(new Set([existingHash]));
 
-    const buf = makeImportXlsx([singleRow()]);
+    const buf = await makeImportXlsx([singleRow()]);
     const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(res.body.skipped).toBe(1);
@@ -329,7 +333,7 @@ describe("POST /import — обновление по ID", () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
     storageMock.getTopics.mockResolvedValue([dbTopic]);
 
-    const buf = makeImportXlsx([singleRow({
+    const buf = await makeImportXlsx([singleRow({
       "ID": "q1",
       "Тип вопроса": "multiple_response",
       "Тексты вариантов ответа": "A#B#C",
@@ -345,7 +349,7 @@ describe("POST /import — обновление по ID", () => {
   it("смена темы через ID — переносит вопрос в новую тему", async () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
-    const buf = makeImportXlsx([singleRow({ "ID": "q1", "Тема": "TypeScript" })]);
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Тема": "TypeScript" })]);
     await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(storageMock.updateQuestion).toHaveBeenCalledWith("q1", expect.objectContaining({
@@ -356,7 +360,7 @@ describe("POST /import — обновление по ID", () => {
   it("дублирующийся ID в файле — обновляется дважды (последняя строка побеждает)", async () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
-    const buf = makeImportXlsx([
+    const buf = await makeImportXlsx([
       singleRow({ "ID": "q1", "Балл": 2, "Текст вопроса": "First version?" }),
       singleRow({ "ID": "q1", "Балл": 9, "Текст вопроса": "Second version?" }),
     ]);
@@ -370,7 +374,7 @@ describe("POST /import — обновление по ID", () => {
   it("contentHash пересчитывается при обновлении", async () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
-    const buf = makeImportXlsx([singleRow({ "ID": "q1", "Текст вопроса": "New question text?" })]);
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Текст вопроса": "New question text?" })]);
     await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     const updateCall = storageMock.updateQuestion.mock.calls[0];
@@ -382,7 +386,7 @@ describe("POST /import — обновление по ID", () => {
   it("ответ содержит поля created, updated, skipped, errors", async () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
-    const buf = makeImportXlsx([singleRow({ "ID": "q1" })]);
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1" })]);
     const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(res.body).toHaveProperty("created");
@@ -394,7 +398,7 @@ describe("POST /import — обновление по ID", () => {
   it("смешанный файл: часть с ID (update), часть без ID (create)", async () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
-    const buf = makeImportXlsx([
+    const buf = await makeImportXlsx([
       singleRow({ "ID": "q1", "Текст вопроса": "Updated?" }),
       singleRow({ "Текст вопроса": "Brand new question?" }),
     ]);
@@ -407,7 +411,7 @@ describe("POST /import — обновление по ID", () => {
   it("обновление балла и сложности без изменения контента", async () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
-    const buf = makeImportXlsx([singleRow({ "ID": "q1", "Балл": 3, "Сложность": 75 })]);
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Балл": 3, "Сложность": 75 })]);
     await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(storageMock.updateQuestion).toHaveBeenCalledWith("q1", expect.objectContaining({
@@ -419,7 +423,7 @@ describe("POST /import — обновление по ID", () => {
   it("обновление обратной связи", async () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
-    const buf = makeImportXlsx([singleRow({ "ID": "q1", "Обратная связь": "Правильно!" })]);
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Обратная связь": "Правильно!" })]);
     await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(storageMock.updateQuestion).toHaveBeenCalledWith("q1", expect.objectContaining({
@@ -430,7 +434,7 @@ describe("POST /import — обновление по ID", () => {
   it("ошибка строки если Тип вопроса неизвестен при обновлении по ID", async () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
-    const buf = makeImportXlsx([singleRow({ "ID": "q1", "Тип вопроса": "Неизвестный тип" })]);
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Тип вопроса": "Неизвестный тип" })]);
     const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(res.body.errors).toHaveLength(1);
