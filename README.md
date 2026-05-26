@@ -137,28 +137,27 @@
 | TypeScript | 5.6 | Типизация |
 | Vite | 5.4 | Сборщик и dev-сервер |
 | Wouter | 3.3 | Легковесный роутинг |
-| TanStack React Query | 5.60 | Управление серверным состоянием |
-| React Hook Form | 7.55 | Формы |
-| Zod | 3.24 | Валидация |
+| TanStack React Query | 5.100 | Управление серверным состоянием |
+| React Hook Form | 7.76 | Формы |
+| Zod | 4.4 | Валидация |
 | shadcn/ui (Radix UI) | -- | Компоненты UI |
-| Tailwind CSS | 3.4 | Стилизация |
-| Recharts | 2.15 | Графики и визуализации |
+| Tailwind CSS | 4.3 | Стилизация (новый движок, `@tailwindcss/postcss`) |
 | Lucide React | -- | Иконки |
-| html2canvas + jsPDF | -- | PDF-экспорт результатов |
+| html2canvas + jsPDF | CDN | PDF-экспорт внутри SCORM-runtime (не npm dep) |
 
 ### Backend
 
 | Технология | Версия | Назначение |
 |---|---|---|
-| Node.js | 18+ | Runtime |
-| Express | 4.21 | Веб-фреймворк |
+| Node.js | 20+ | Runtime |
+| Express | 5.2 | Веб-фреймворк |
 | TypeScript | 5.6 | Типизация |
-| Drizzle ORM | 0.39 | Работа с БД |
+| Drizzle ORM | 0.45 | Работа с БД |
 | PostgreSQL | 14+ | База данных |
-| express-session | 1.18 | Управление сессиями |
+| express-session | 1.19 | Управление сессиями |
 | bcryptjs | 3.0 | Хеширование паролей |
-| Nodemailer | 7.0 | Отправка email |
-| Multer | 2.0 | Загрузка файлов |
+| Nodemailer | 8.0 | Отправка email |
+| Multer | 2.1 | Загрузка файлов |
 | Archiver | 7.0 | Создание SCORM ZIP-пакетов |
 | XLSX | -- | Импорт/экспорт Excel |
 
@@ -1117,7 +1116,9 @@ npm run build
 ### Сессия сбрасывается
 
 - Проверьте `SESSION_SECRET` в `.env`
-- В production рассмотрите использование connect-pg-simple вместо MemoryStore
+- Текущая конфигурация использует `memorystore` (in-memory с TTL).
+- Для масштабирования на несколько инстансов используйте session-store с поддержкой PostgreSQL
+  (например, `connect-pg-simple`) и обновите конфиг сессии в `server/index.ts`.
 
 ---
 
