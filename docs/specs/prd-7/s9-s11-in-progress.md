@@ -4,17 +4,17 @@
 **Дата актуализации:** 2026-05-26
 **Связанные документы:**
 
-- [PRD-7 decisions](prd-7-decisions.md) — контракты, enum, JSON-shapes (читать ДО кода)
-- [PRD-7 baseline](prd-7-baseline.md) — снимок поведения до рефакторинга
-- [PRD-7 S0-S8 closed](prd-7-s0-s8-closed.md) — архив закрытых фаз (контракты, mappers,
+- [PRD-7 decisions](./decisions.md) — контракты, enum, JSON-shapes (читать ДО кода)
+- [PRD-7 baseline](./baseline.md) — снимок поведения до рефакторинга
+- [PRD-7 S0-S8 closed](./s0-s8-closed.md) — архив закрытых фаз (контракты, mappers,
   validation, Drawer, все секции)
-- [PRD-1 §4.3](prd-1-templates-content-pages.md) — variant.kind модель
+- [PRD-1 §4.3](../prd-1/templates-content-pages.md) — variant.kind модель
 
 ---
 
 ## 1. Текущее состояние
 
-**Готово (S0-S8 закрыты 2026-05-25).** См. [PRD-7 S0-S8 closed](prd-7-s0-s8-closed.md):
+**Готово (S0-S8 закрыты 2026-05-25).** См. [PRD-7 S0-S8 closed](./s0-s8-closed.md):
 
 - Контракты в `decisions.md`, skeleton-каркас редактора.
 - Wireframes 153/153 approved (DS UniversityRT `ou-*` + `tb-*`).
@@ -80,7 +80,7 @@ Reference: `__tests__/sections/basic-settings-section.test.tsx` и
 
 ```text
 Расширь component-тесты для всех секций редактора PRD-7 по чек-листу §2.2
-docs/prd-7-s9-s11-in-progress.md (он же §1.13.2 docs/prd-7-implementation-todo.md).
+docs/specs/prd-7/s9-s11-in-progress.md (он же §1.13.2 docs/specs/prd-7/implementation-todo.md).
 
 Reference: __tests__/sections/basic-settings-section.test.tsx и
 __tests__/test-editor.test.tsx как образец стиля.
@@ -130,8 +130,8 @@ Regression-чек-лист (из §1.13.4):
 #### Промпт для исполнителя (Haiku, S9 часть 2)
 
 ```text
-Расширь API и regression тесты по чек-листам §2.3 docs/prd-7-s9-s11-in-progress.md
-(они же §1.13.3 и §1.13.4 docs/prd-7-implementation-todo.md).
+Расширь API и regression тесты по чек-листам §2.3 docs/specs/prd-7/s9-s11-in-progress.md
+(они же §1.13.3 и §1.13.4 docs/specs/prd-7/implementation-todo.md).
 
 Reference: tests/routes.tests.test.ts существующий, tests/services/test-settings.test.ts
 от Фазы 1B.
@@ -191,7 +191,7 @@ Anti-goals: НЕ менять production routes/storage без острой не
 ```text
 Удали inline wizard и dialogs из client/src/pages/author/tests.tsx.
 
-Контракт: §3 docs/prd-7-s9-s11-in-progress.md (он же §1.12 docs/prd-7-implementation-todo.md),
+Контракт: §3 docs/specs/prd-7/s9-s11-in-progress.md (он же §1.12 docs/specs/prd-7/implementation-todo.md),
 anti-goals из decisions.md §1.
 
 Задачи:
@@ -240,7 +240,7 @@ issues для невыполненных.
 
 ### 4.2 Acceptance criteria (PRD-7 §10)
 
-Полный список — в исходном PRD-7 §10 (см. [PRD-7 S0-S8 closed](prd-7-s0-s8-closed.md)
+Полный список — в исходном PRD-7 §10 (см. [PRD-7 S0-S8 closed](./s0-s8-closed.md)
 для ссылок на код). Ключевые группы:
 
 - **Структура и контракт:** `TestsPage` без inline wizard; `TestEditor` покрывает
@@ -280,7 +280,7 @@ W.3C промпт (см. ниже).
 
 ```text
 Дополни wireframes полным набором edge-states из §W.1
-docs/prd-7-s0-s8-closed.md (S1 раздел).
+docs/specs/prd-7/s0-s8-closed.md (S1 раздел).
 
 Reference и принципы: те же, что в W.3B (см. PRD-7 S0-S8 closed §S1 артефакты).
 
@@ -317,7 +317,7 @@ Anti-goals и DoD: как в W.3B.
    как заявлено.
 3. Lighthouse/axe accessibility audit Drawer (NFR-19..NFR-21).
 4. Performance check: Drawer открывается за < 1.5s на тесте с 20 темами (NFR-17).
-5. Manual end-to-end smoke (см. §4.4 docs/prd-7-s9-s11-in-progress.md).
+5. Manual end-to-end smoke (см. §4.4 docs/specs/prd-7/s9-s11-in-progress.md).
 
 Выход: docs/prd-7-acceptance-report.md со списком пройденных/непройденных criteria
 и issues для невыполненных.

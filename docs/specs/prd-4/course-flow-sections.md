@@ -3,10 +3,10 @@
 **Версия:** 1.0  
 **Статус:** Backlog (queued, шаг 2 ROADMAP — следующий после PRD-7 S9-S11)  
 **Дата актуализации:** 2026-05-26  
-**Связанные документы:** [BRD](brd-scorm-enhancements.md),
-[PRD-1](prd-1-templates-content-pages.md), [PRD-2](prd-2-result-variables.md),
-[PRD-6](prd-6-retake-cooldown-gate.md), [PRD-8](prd-8-section-router-flow.md),
-[Платформа SCORM-шаблонов](spec-template-platform.md)  
+**Связанные документы:** [BRD](../brd-scorm-enhancements.md),
+[PRD-1](../prd-1/templates-content-pages.md), [PRD-2](../prd-2/result-variables.md),
+[PRD-6](../prd-6/retake-cooldown-gate.md), [PRD-8](../prd-8/section-router-flow.md),
+[Платформа SCORM-шаблонов](../spec-template-platform.md)  
 **Этап BRD:** BR-06, Этап 4  
 **Зависимости:** шаблонная платформа и контентные страницы из PRD-1, правила курса
 из технической спецификации; retake gate из PRD-6 использует границу внутреннего
@@ -192,7 +192,7 @@ system.*
 ### 4.1.1 Граница старта попытки
 
 Core должен различать загрузку SCO и старт полноценной попытки. В режимах, где требуется ранняя
-проверка допуска из [PRD-6](prd-6-retake-cooldown-gate.md), страница `start` может быть показана до
+проверка допуска из [PRD-6](../prd-6/retake-cooldown-gate.md), страница `start` может быть показана до
 SCORM `Initialize`, а попытка начинается только после внутреннего действия:
 
 ```text
@@ -483,7 +483,7 @@ Core может отменить переход, если:
 Существующая сущность остаётся основной привязкой теста к теме. Требуется расширение.
 
 > **Зависимость PRD-1:** поле `sort_order` является блокером для перестановки тем на вкладке
-> "Структура" ([PRD-1 §4.8](prd-1-templates-content-pages.md)). Без него порядок тем в тесте
+> "Структура" ([PRD-1 §4.8](../prd-1/templates-content-pages.md)). Без него порядок тем в тесте
 > недетерминирован. Реализация `sort_order` входит в скоуп PRD-4, но требуется раньше UI PRD-1.
 
 ```text

@@ -3,10 +3,10 @@
 **Версия:** 1.0  
 **Статус:** Backlog (queued, шаг 4 ROADMAP)  
 **Дата актуализации:** 2026-05-26  
-**Связанные документы:** [BRD](brd-scorm-enhancements.md),
-[PRD-1](prd-1-templates-content-pages.md), [PRD-2](prd-2-result-variables.md),
-[PRD-4](prd-4-course-flow-sections.md),
-[PRD-7 S9-S11 in progress](prd-7-s9-s11-in-progress.md)  
+**Связанные документы:** [BRD](../brd-scorm-enhancements.md),
+[PRD-1](../prd-1/templates-content-pages.md), [PRD-2](../prd-2/result-variables.md),
+[PRD-4](../prd-4/course-flow-sections.md),
+[PRD-7 S9-S11 in progress](../prd-7/s9-s11-in-progress.md)  
 **Этап BRD:** BR-06  
 **Зависимости:** `flowPolicy` и результаты разделов из PRD-4, content pages и
 системные страницы из PRD-1, редактор параметров теста из PRD-7  
@@ -14,7 +14,7 @@
 
 ## Статус реализации (на 2026-05-26)
 
-**Не начато**. Стоит в очереди шагом 4 по [ROADMAP](ROADMAP.md). Блокируется PRD-4
+**Не начато**. Стоит в очереди шагом 4 по [ROADMAP](../../ROADMAP.md). Блокируется PRD-4
 (runtime `flowPolicy`, section results) и завершением PRD-7 S9-S11.
 
 ---

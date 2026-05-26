@@ -1,7 +1,7 @@
 # PRD-7 wireframes revision TODO
 
 Status: Draft for execution
-Source of truth: `docs/test-settings-parameter-structure.md` (sections 1-8)
+Source of truth: `docs/architecture/test-settings-parameter-structure.md` (sections 1-8)
 Affected directory: `docs/wireframes/` (everything matching `prd7-*.html`)
 
 This file lists the concrete divergences between the spec and the current
@@ -9,7 +9,7 @@ This file lists the concrete divergences between the spec and the current
 execute literally to bring each wireframe back in line with the spec.
 
 Every prompt below is intended to be copy-pasted as a single instruction.
-Each one assumes the executor will re-read `docs/test-settings-parameter-structure.md`
+Each one assumes the executor will re-read `docs/architecture/test-settings-parameter-structure.md`
 and the file under repair before editing. Do not paraphrase the prompts; the
 exact wording is what makes them executable for a smaller model.
 
@@ -18,7 +18,7 @@ exact wording is what makes them executable for a smaller model.
 ## 0. Cross-cutting rules the smaller model must internalise first
 
 Before opening any wireframe file, the executor must read
-`docs/test-settings-parameter-structure.md` sections 1-8 in full and accept the
+`docs/architecture/test-settings-parameter-structure.md` sections 1-8 in full and accept the
 following invariants. These are NOT negotiable and override any prior wireframe
 content:
 
@@ -93,7 +93,7 @@ Prompt for executor:
 
 ```
 Open docs/wireframes/prd7-editor-drawer.html. Re-read sections 1, 3.1-3.8 of
-docs/test-settings-parameter-structure.md.
+docs/architecture/test-settings-parameter-structure.md.
 
 In the s-settings shell and in both mobile-canvas blocks (the two
 `<details class="settings-accordion-item">` lists and the `.settings-side-nav`
@@ -140,7 +140,7 @@ Prompt for executor:
 
 ```
 Open docs/wireframes/prd7-editor-settings-tab.html. Re-read sections 3.1-3.8
-of docs/test-settings-parameter-structure.md before editing.
+of docs/architecture/test-settings-parameter-structure.md before editing.
 
 Restructure the wireframe so it covers seven Настройки sections, one state
 per section. The side-nav order is always:
@@ -223,7 +223,7 @@ Prompt for executor:
 
 ```
 Open docs/wireframes/prd7-section-basic.html. Re-read sections 2 and 3.8 of
-docs/test-settings-parameter-structure.md.
+docs/architecture/test-settings-parameter-structure.md.
 
 Delete the entire `Обратная связь по тесту` block at the bottom of the
 `s-standard` state (the `.section-label` and following `.form-group .feedback-preview`).
@@ -278,7 +278,7 @@ Prompt for executor:
 
 ```
 Open docs/wireframes/prd7-section-adaptive.html. Re-read section 3.8 of
-docs/test-settings-parameter-structure.md.
+docs/architecture/test-settings-parameter-structure.md.
 
 Rewrite the file end-to-end so it represents Настройки -> Адаптивность with
 the side-nav from prd7-editor-settings-tab.html visible to the left.
@@ -338,7 +338,7 @@ Prompt for executor:
 
 ```
 Open docs/wireframes/prd7-section-start-pages.html. Re-read sections 5 and
-5.2 of docs/test-settings-parameter-structure.md.
+5.2 of docs/architecture/test-settings-parameter-structure.md.
 
 Move the entire wireframe under the Структура tab. In every state:
   * Set the active tab in `.tab-bar` / `.drawer-tabs` to Структура, not
@@ -386,7 +386,7 @@ Prompt for executor:
 ```
 Open docs/wireframes/prd7-mode-switch-warning.html. Re-read section 1
 ("Modal confirmation ... не показывается") and §3.2 of
-docs/test-settings-parameter-structure.md.
+docs/architecture/test-settings-parameter-structure.md.
 
 Delete the s-confirm state entirely (its overlay, dialog, and the wf-btn
 that selects it). Remove the corresponding nav button from the .wf-nav
@@ -433,7 +433,7 @@ Prompt for executor:
 
 ```
 Open docs/wireframes/prd7-structure-router.html. Re-read sections 5 and 5.1
-of docs/test-settings-parameter-structure.md.
+of docs/architecture/test-settings-parameter-structure.md.
 
 Replace the canvas-and-flow-chart layout with a router-page-centric layout:
 
@@ -515,7 +515,7 @@ visualisation of content_pages and zones, never a Состав-editor:
   docs/wireframes/prd7-structure-linear-by-topics.html
   docs/wireframes/prd7-structure-mixed.html
 
-Re-read sections 5, 5.1, 5.2 of docs/test-settings-parameter-structure.md.
+Re-read sections 5, 5.1, 5.2 of docs/architecture/test-settings-parameter-structure.md.
 
 Common changes (apply to all three):
 
@@ -680,7 +680,7 @@ Prompt for executor:
 
 ```
 For each file in docs/wireframes/approved/ run a one-pass review against
-sections 1 and 6 of docs/test-settings-parameter-structure.md. Only edit
+sections 1 and 6 of docs/architecture/test-settings-parameter-structure.md. Only edit
 when you find a direct contradiction (e.g. a label "Архивировать" instead
 of "В архив", or a delete dialog missing the name-typed confirmation per
 §1). Do not restructure these wireframes. Report findings as a short

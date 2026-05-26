@@ -1,6 +1,7 @@
 # Issues: PRD-1 - шаблоны и контентные страницы
 
-**Связанные документы:** [PRD-1](../prd-1-templates-content-pages.md), [TODO](../prd-1-implementation-todo.md)  
+**Связанные документы:** [PRD-1](../specs/prd-1/templates-content-pages.md),
+[TODO](../specs/prd-1/implementation-todo.md)  
 **Формат:** переносимые issue-карточки для трекера  
 **Общее правило:** issues с UI не берутся в frontend-разработку до согласования wireframes.
 

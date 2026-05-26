@@ -448,7 +448,7 @@ inline-expand редактирование, `s-dirty-form` / `s-validation` / `s
 
 <!-- §10 удалён: режим `mixed` исключён из `FlowMode` enum как функциональный дубль
      `linear_flat` после переопределения последнего (зоны «До теста» / «После теста»
-     теперь входят в `linear_flat`). См. prd-7-decisions.md §2.3a. -->
+     теперь входят в `linear_flat`). См. specs/prd-7/decisions.md §2.3a. -->
 
 ---
 
@@ -459,7 +459,7 @@ inline-expand редактирование, `s-dirty-form` / `s-validation` / `s
 Архитектура: **зоны «До теста» / «После теста»** как в `linear_flat` + **системная
 page-row `kind: router`** в зоне «Внутри теста» + **темы как ветки** под router-row
 через **tree-connectors** (тонкие DS-линии `├─` `└─`, `--ou-border-soft`).
-См. [prd-7-decisions.md §2.3b](../prd-7-decisions.md). Старая «сценарная карта»
+См. [specs/prd-7/decisions.md §2.3b](../specs/prd-7/decisions.md). Старая «сценарная карта»
 (`Router → Раздел → Возврат → Итог` с `.connector-wrap`, `.final-result-block`,
 `.compact-router`, `.sdp`) — устаревшая модель, не применяется.
 
@@ -625,7 +625,7 @@ prod-ready BEM-классы для будущего рефакторинга edi
   _(s-conflict: обе кнопки в footer + option-cards с описанием. «Обновить данные»_
   _имеет `autofocus` → default по Enter. State `s-status-conflict` удалён 2026-05-21:_
   _архитектурно невозможен — `PATCH /status` не инкрементирует `version`_
-  _([prd-7-implementation-todo §1.10](../prd-7-implementation-todo.md)),_
+  _([prd-7-implementation-todo §1.10](../specs/prd-7/implementation-todo.md)),_
   _поэтому параллельная смена статуса не вызывает 409 при save Drawer'а._
   _Это корректирует устаревшую формулировку FR-25k «включая внешнюю смену статуса».)_
 - [x] `Обновить данные` визуально выделена как рекомендуемое действие

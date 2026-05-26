@@ -1,16 +1,16 @@
 # TODO: Реализация PRD-7 — активные tasks S9-S11
 
-**Связанный PRD:** [PRD-7 S0-S8 closed](prd-7-s0-s8-closed.md) (архив) +
-[PRD-7 S9-S11 in-progress](prd-7-s9-s11-in-progress.md) (активные фазы)
-**Контракты и решения:** [decisions.md](prd-7-decisions.md) — читать ДО написания кода
-**Baseline текущего поведения:** [prd-7-baseline.md](prd-7-baseline.md)
-**Стратегия и промпты:** [execution-strategy.md](prd-7-execution-strategy.md)
-**Roadmap:** [ROADMAP.md](ROADMAP.md) шаг 1
+**Связанный PRD:** [PRD-7 S0-S8 closed](./s0-s8-closed.md) (архив) +
+[PRD-7 S9-S11 in-progress](./s9-s11-in-progress.md) (активные фазы)
+**Контракты и решения:** [decisions.md](./decisions.md) — читать ДО написания кода
+**Baseline текущего поведения:** [specs/prd-7/baseline.md](./baseline.md)
+**Стратегия и промпты:** [execution-strategy.md](./execution-strategy.md)
+**Roadmap:** [ROADMAP.md](../../ROADMAP.md) шаг 1
 **Статус:** S0-S8 закрыты 2026-05-25; S9 active (component + API тесты, FR-20c);
 S10-S11 не начаты.
 **Последняя актуализация:** 2026-05-26
 **Правило UI:** UI-разработка начинается только после подготовки и явного
-согласования wireframes ([BRD §2.6](brd-scorm-enhancements.md), NFR-14,
+согласования wireframes ([BRD §2.6](../brd-scorm-enhancements.md), NFR-14,
 NFR-19...NFR-21).
 
 ---
@@ -21,13 +21,13 @@ NFR-19...NFR-21).
 
 Чекбокс отмечается завершённым только если:
 
-1. Код написан в указанном файле (см. §11 [decisions.md](prd-7-decisions.md)).
+1. Код написан в указанном файле (см. §11 [decisions.md](./decisions.md)).
 2. `npm run check` проходит без ошибок.
 3. Затронутые тесты `vitest run <соответствующий файл>` зелёные.
 4. Нет `console.log`, `debugger`, `TODO` в коммитуемом коде.
 5. Все enum, JSON-shapes и default-значения соответствуют
-   [decisions.md](prd-7-decisions.md).
-6. Маппинг legacy-полей выполнен по §4 [decisions.md](prd-7-decisions.md).
+   [decisions.md](./decisions.md).
+6. Маппинг legacy-полей выполнен по §4 [decisions.md](./decisions.md).
 7. **Для UI-задач: полное соответствие утверждённому эскизу** (см. §0.1a).
 
 ### 0.1a Wireframes-first для UI (HARD RULE)
@@ -58,7 +58,7 @@ PRD-1 / PRD-7 / PRD-8 фиксируют **бизнес-контракты и п
 
 ### 0.2 Anti-goals
 
-См. §1 [decisions.md](prd-7-decisions.md). Категорически:
+См. §1 [decisions.md](./decisions.md). Категорически:
 
 - НЕ менять SCORM runtime, модель вопросов, аналитику, authentication.
 - НЕ удалять `tests.published` и `tests.start_page_content` колонки.
@@ -68,8 +68,8 @@ PRD-1 / PRD-7 / PRD-8 фиксируют **бизнес-контракты и п
 ### 0.3 Если задача неясна
 
 1. Перечитать соответствующий FR в исходном PRD-7 (источники через
-   [prd-7-s0-s8-closed.md](prd-7-s0-s8-closed.md) §3).
-2. Проверить контракт в [decisions.md](prd-7-decisions.md).
+   [specs/prd-7/s0-s8-closed.md](./s0-s8-closed.md) §3).
+2. Проверить контракт в [decisions.md](./decisions.md).
 3. Если решение требует нового enum/shape — НЕ изобретать, а эскалировать на
    Opus с описанием гэпа в decisions.md.
 
@@ -78,7 +78,7 @@ PRD-1 / PRD-7 / PRD-8 фиксируют **бизнес-контракты и п
 ## 1. Статус по сессиям
 
 **S0-S8 закрыты 2026-05-25.** Полный архив с коммитами, артефактами и DoD —
-см. [prd-7-s0-s8-closed.md](prd-7-s0-s8-closed.md).
+см. [specs/prd-7/s0-s8-closed.md](./s0-s8-closed.md).
 
 | Сессия | Фаза | Состояние |
 | --- | --- | --- |
@@ -178,7 +178,7 @@ Reference: `__tests__/sections/basic-settings-section.test.tsx`,
 ### 2.3 S11 — Acceptance pass (Opus)
 
 - [ ] Пройти все acceptance criteria PRD-7 §10 (всего ~50 пунктов; см.
-  `prd-7-s0-s8-closed.md` для ссылок на код и тесты).
+  `specs/prd-7/s0-s8-closed.md` для ссылок на код и тесты).
 - [ ] Manual end-to-end: create/edit standard, create/edit adaptive, переключение
   режимов, удаление, архив, восстановление.
 - [ ] Manual end-to-end: optimistic conflict при параллельной правке статуса.
@@ -191,7 +191,7 @@ Reference: `__tests__/sections/basic-settings-section.test.tsx`,
 ## 3. MVP-срез
 
 Минимальный срез для end-to-end-проверки PRD-7. Закрытые пункты S0-S8 — см.
-[prd-7-s0-s8-closed.md](prd-7-s0-s8-closed.md). Остались:
+[specs/prd-7/s0-s8-closed.md](./s0-s8-closed.md). Остались:
 
 - [ ] (S10) Старый inline wizard удалён из `TestsPage`.
 - [ ] (S9) Старые тесты без регрессии: `published`, `start_page_content`,

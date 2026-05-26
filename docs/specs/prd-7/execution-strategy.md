@@ -2,18 +2,18 @@
 
 **Версия:** 1.3
 **Последняя актуализация:** 2026-05-26 (S0-S8 закрыты; история перенесена в
-`prd-7-s0-s8-closed.md`; документ сокращён до активных фаз S9-S11)
+`specs/prd-7/s0-s8-closed.md`; документ сокращён до активных фаз S9-S11)
 **Назначение:** Пошаговая инструкция и промпты для оставшихся фаз PRD-7 (S9-S11).
 **Статус:** S9 active (component + API тесты, FR-20c)
 **Связанные документы:**
 
-- [PRD-7 S9-S11 in-progress](prd-7-s9-s11-in-progress.md) — детальный чек-лист
+- [PRD-7 S9-S11 in-progress](./s9-s11-in-progress.md) — детальный чек-лист
   активных фаз и DoD
-- [PRD-7 S0-S8 closed](prd-7-s0-s8-closed.md) — архив закрытых фаз с коммитами и
+- [PRD-7 S0-S8 closed](./s0-s8-closed.md) — архив закрытых фаз с коммитами и
   артефактами
-- [decisions.md](prd-7-decisions.md) — контракты, enum, JSON-shapes (читать перед кодом)
-- [implementation-todo.md](prd-7-implementation-todo.md) — активные tasks S9-S11
-- [PRD-1 §4.3](prd-1-templates-content-pages.md) — variant.kind модель
+- [decisions.md](./decisions.md) — контракты, enum, JSON-shapes (читать перед кодом)
+- [implementation-todo.md](./implementation-todo.md) — активные tasks S9-S11
+- [PRD-1 §4.3](../prd-1/templates-content-pages.md) — variant.kind модель
 
 ---
 
@@ -21,7 +21,7 @@
 
 | Сессия | Фаза | Статус | Артефакты |
 | --- | --- | --- | --- |
-| S0-S8 | Контракты, wireframes, backend, mappers/validation, UI | Закрыты 2026-05-25 | См. [prd-7-s0-s8-closed.md](prd-7-s0-s8-closed.md) |
+| S0-S8 | Контракты, wireframes, backend, mappers/validation, UI | Закрыты 2026-05-25 | См. [specs/prd-7/s0-s8-closed.md](./s0-s8-closed.md) |
 | S9 | Component + API тесты + FR-20c | Active (следующая) | TBD |
 | S10 | Удаление legacy | Не начата | Зависит от S9 |
 | S11 | Acceptance pass | Не начата | Финал |
@@ -86,15 +86,15 @@
 
 #### Фаза 6A (Haiku): Component-тесты
 
-См. чек-лист §2.2 [prd-7-s9-s11-in-progress.md](prd-7-s9-s11-in-progress.md) и
-§1.13.2 [implementation-todo.md](prd-7-implementation-todo.md).
+См. чек-лист §2.2 [specs/prd-7/s9-s11-in-progress.md](./s9-s11-in-progress.md) и
+§1.13.2 [implementation-todo.md](./implementation-todo.md).
 
 Промпт для Haiku:
 
 ```text
 Расширь component-тесты для всех секций редактора PRD-7 по чек-листу
-§1.13.2 docs/prd-7-implementation-todo.md (он же §2.2
-docs/prd-7-s9-s11-in-progress.md).
+§1.13.2 docs/specs/prd-7/implementation-todo.md (он же §2.2
+docs/specs/prd-7/s9-s11-in-progress.md).
 
 Reference: __tests__/sections/basic-settings-section.test.tsx и
 __tests__/test-editor.test.tsx как образец стиля.
@@ -116,17 +116,17 @@ Anti-goals: НЕ менять production-код секций (кроме anchor-
 
 #### Фаза 6B (Haiku): API и regression тесты
 
-См. чек-листы §2.3 [prd-7-s9-s11-in-progress.md](prd-7-s9-s11-in-progress.md) и
-§1.13.3, §1.13.4 [implementation-todo.md](prd-7-implementation-todo.md).
+См. чек-листы §2.3 [specs/prd-7/s9-s11-in-progress.md](./s9-s11-in-progress.md) и
+§1.13.3, §1.13.4 [implementation-todo.md](./implementation-todo.md).
 
 Промпт для Haiku:
 
 ```text
 Расширь API и regression тесты по чек-листам §1.13.3 и §1.13.4
-docs/prd-7-implementation-todo.md (они же §2.3 docs/prd-7-s9-s11-in-progress.md).
+docs/specs/prd-7/implementation-todo.md (они же §2.3 docs/specs/prd-7/s9-s11-in-progress.md).
 
 Reference: tests/routes.tests.test.ts существующий, tests/services/test-settings.test.ts
-от Фазы 1B (см. prd-7-s0-s8-closed.md S2).
+от Фазы 1B (см. specs/prd-7/s0-s8-closed.md S2).
 
 Задачи: для каждого пункта чек-листов §1.13.3 и §1.13.4 добавить тест-кейс.
 
@@ -139,7 +139,7 @@ Anti-goals: НЕ менять production routes/storage без острой не
 
 ### Сессия S10 — Удаление legacy (Фаза 7A, Sonnet)
 
-См. §3 [prd-7-s9-s11-in-progress.md](prd-7-s9-s11-in-progress.md) для детального
+См. §3 [specs/prd-7/s9-s11-in-progress.md](./s9-s11-in-progress.md) для детального
 scope и DoD.
 
 **Блокер:** S9 зелёный.
@@ -149,8 +149,8 @@ scope и DoD.
 ```text
 Удали inline wizard и dialogs из client/src/pages/author/tests.tsx.
 
-Контракт: §1.12 docs/prd-7-implementation-todo.md (он же §3
-docs/prd-7-s9-s11-in-progress.md), anti-goals из decisions.md §1.
+Контракт: §1.12 docs/specs/prd-7/implementation-todo.md (он же §3
+docs/specs/prd-7/s9-s11-in-progress.md), anti-goals из decisions.md §1.
 
 Задачи:
 1. Удалить inline wizard create/edit из TestsPage. Заменить на открытие нового TestEditor.
@@ -174,7 +174,7 @@ Anti-goals: НЕ удалять колонки tests.published и tests.start_pa
 
 ### Сессия S11 — Acceptance pass (Фаза 7B, Opus)
 
-См. §4 [prd-7-s9-s11-in-progress.md](prd-7-s9-s11-in-progress.md) для детального
+См. §4 [specs/prd-7/s9-s11-in-progress.md](./s9-s11-in-progress.md) для детального
 scope, criteria и DoD.
 
 **Блокер:** S10 завершена; полный набор UI работает в браузере.
@@ -188,14 +188,14 @@ scope, criteria и DoD.
 Финальный acceptance pass PRD-7.
 
 Задачи:
-1. Пройти все ~50 acceptance criteria PRD-7 §10 (см. prd-7-s0-s8-closed.md для
+1. Пройти все ~50 acceptance criteria PRD-7 §10 (см. specs/prd-7/s0-s8-closed.md для
    ссылок на код) - для каждого либо подтвердить реализацию ссылкой на код/тест,
    либо открыть issue.
 2. Проверить полноту покрытия decisions.md - все ли enum/shapes используются
    как заявлено.
 3. Lighthouse/axe accessibility audit Drawer (NFR-19..NFR-21).
 4. Performance check: Drawer открывается за < 1.5s на тесте с 20 темами (NFR-17).
-5. Manual end-to-end smoke (см. §4.4 docs/prd-7-s9-s11-in-progress.md):
+5. Manual end-to-end smoke (см. §4.4 docs/specs/prd-7/s9-s11-in-progress.md):
    - create standard, edit standard
    - create adaptive, edit adaptive
    - переключение standard <-> adaptive
@@ -222,7 +222,7 @@ Anti-goals: НЕ начинать новые фичи. Только провер
 ```text
 Дополни wireframes выявленным edge-state по образцу reference.
 
-Reference и принципы: те же, что в W.3B (см. docs/prd-7-s0-s8-closed.md §S1
+Reference и принципы: те же, что в W.3B (см. docs/specs/prd-7/s0-s8-closed.md §S1
 артефакты — prd7-editor-drawer.html и prd7-shared.css как образец).
 
 Задачи:
@@ -248,7 +248,7 @@ DoD: новый wireframe открывается в браузере без ош
 | S10 | 7A | Удаление legacy | Sonnet | 7B | Не начата |
 | S11 | 7B | Acceptance pass | Opus | релиз | Не начата |
 
-История по закрытым S0-S8 — см. [prd-7-s0-s8-closed.md](prd-7-s0-s8-closed.md).
+История по закрытым S0-S8 — см. [specs/prd-7/s0-s8-closed.md](./s0-s8-closed.md).
 
 ---
 
@@ -261,16 +261,16 @@ DoD: новый wireframe открывается в браузере без ош
 - [ ] Затронутые vitest-файлы зелёные.
 - [ ] Нет `console.log`, `debugger`, `TODO`, `FIXME`.
 - [ ] Все enum-значения и default-значения соответствуют
-  [decisions.md](prd-7-decisions.md).
+  [decisions.md](./decisions.md).
 - [ ] Если задача требует нового контракта — НЕ изобретён, а эскалирован на Opus.
 - [ ] Для UI-фаз: соответствующие wireframes из
-  [prd-7-s0-s8-closed.md](prd-7-s0-s8-closed.md) §S1 согласованы и доступны в
+  [specs/prd-7/s0-s8-closed.md](./s0-s8-closed.md) §S1 согласованы и доступны в
   `docs/wireframes/approved/`. Если wireframe для конкретного состояния
   отсутствует — работа возвращается в W.3C, состояние не изобретается.
 - [ ] **Передача знания между сессиями:** если в сессии принято решение сверх
   `decisions.md` (новый контракт, edge case, лучший паттерн) — зафиксировано в
   `decisions.md`, reference-коде или
-  [implementation-todo.md](prd-7-implementation-todo.md) ДО завершения сессии.
+  [implementation-todo.md](./implementation-todo.md) ДО завершения сессии.
 
 ---
 
@@ -278,7 +278,7 @@ DoD: новый wireframe открывается в браузере без ош
 
 Младшая модель должна остановиться и эскалировать на старшую, если:
 
-1. Задача требует enum/shape, не описанного в [decisions.md](prd-7-decisions.md).
+1. Задача требует enum/shape, не описанного в [decisions.md](./decisions.md).
 2. Reference-имплементация не покрывает паттерн, который требуется для текущей
    задачи.
 3. Тест требует изменения production-кода вне scope текущей задачи.

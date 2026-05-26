@@ -3,15 +3,15 @@
 **Версия:** 2.0  
 **Статус:** Backlog (queued, шаг 5 ROADMAP)  
 **Дата актуализации:** 2026-05-26  
-**Связанные документы:** [BRD](brd-scorm-enhancements.md),
-[PRD-1](prd-1-templates-content-pages.md),
-[Платформа SCORM-шаблонов](spec-template-platform.md)  
+**Связанные документы:** [BRD](../brd-scorm-enhancements.md),
+[PRD-1](../prd-1/templates-content-pages.md),
+[Платформа SCORM-шаблонов](../spec-template-platform.md)  
 **Этап BRD:** BR-04  
 **Зависимость:** результаты Core и runtime шаблона из PRD-1
 
 ## Статус реализации (на 2026-05-26)
 
-**Не начато**. Стоит в очереди шагом 5 по [ROADMAP](ROADMAP.md). Блокируется PRD-4
+**Не начато**. Стоит в очереди шагом 5 по [ROADMAP](../../ROADMAP.md). Блокируется PRD-4
 (`section.*` namespace) — формулы `result_variables` должны иметь доступ к section-результатам.
 
 ---

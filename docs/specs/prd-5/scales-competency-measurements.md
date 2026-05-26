@@ -3,16 +3,16 @@
 **Версия:** 1.0  
 **Статус:** Backlog (queued, шаг 6 ROADMAP)  
 **Дата актуализации:** 2026-05-26  
-**Связанные документы:** [BRD](brd-scorm-enhancements.md),
-[PRD-2](prd-2-result-variables.md), [PRD-4](prd-4-course-flow-sections.md),
-[Платформа SCORM-шаблонов](spec-template-platform.md)  
+**Связанные документы:** [BRD](../brd-scorm-enhancements.md),
+[PRD-2](../prd-2/result-variables.md), [PRD-4](../prd-4/course-flow-sections.md),
+[Платформа SCORM-шаблонов](../spec-template-platform.md)  
 **Этап BRD:** BR-06, Этап 6  
 **Зависимости:** стандартная оценка Core, результаты разделов из PRD-4,
 пользовательские показатели из PRD-2
 
 ## Статус реализации (на 2026-05-26)
 
-**Не начато**. Стоит в очереди шагом 6 по [ROADMAP](ROADMAP.md). Блокируется PRD-2
+**Не начато**. Стоит в очереди шагом 6 по [ROADMAP](../../ROADMAP.md). Блокируется PRD-2
 (`result.*`) и PRD-4 (`section.*`). Самая тяжёлая авторская UI; делается после
 стабилизации редактора и flow.
 

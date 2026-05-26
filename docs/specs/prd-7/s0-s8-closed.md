@@ -5,11 +5,11 @@
 **Дата актуализации:** 2026-05-26
 **Связанные документы:**
 
-- [PRD-7 baseline](prd-7-baseline.md) — снимок поведения до рефакторинга
-- [PRD-7 decisions](prd-7-decisions.md) — контракты, enum, JSON-shapes
-- [PRD-7 S9-S11 in-progress](prd-7-s9-s11-in-progress.md) — активные фазы (component/API
+- [PRD-7 baseline](./baseline.md) — снимок поведения до рефакторинга
+- [PRD-7 decisions](./decisions.md) — контракты, enum, JSON-shapes
+- [PRD-7 S9-S11 in-progress](./s9-s11-in-progress.md) — активные фазы (component/API
   тесты, удаление legacy, acceptance pass)
-- [PRD-1 §4.3](prd-1-templates-content-pages.md) — variant.kind модель (внесена 2026-05-21)
+- [PRD-1 §4.3](../prd-1/templates-content-pages.md) — variant.kind модель (внесена 2026-05-21)
 
 ---
 
@@ -50,7 +50,7 @@ mappers и validation с заглушками `throw new Error("not implemented"
 
 **Артефакты.**
 
-- `docs/prd-7-decisions.md`
+- `docs/specs/prd-7/decisions.md`
 - `client/src/features/tests/editor/{test-editor.types.ts, test-editor.mappers.ts,
   test-editor.validation.ts, use-test-editor.ts, test-editor.tsx, sections/*.tsx}`
 
@@ -326,7 +326,7 @@ read-only `templateVersion`/`templateApiVersion`, поддержка типов 
 
 ## 3. Контракты и сущности
 
-Источник истины: `docs/prd-7-decisions.md` (enum, JSON-shapes, default-значения,
+Источник истины: `docs/specs/prd-7/decisions.md` (enum, JSON-shapes, default-значения,
 legacy-маппинг). Реализованные артефакты:
 
 - **TestEditorModel** — `client/src/features/tests/editor/test-editor.types.ts`
@@ -352,7 +352,7 @@ legacy-маппинг). Реализованные артефакты:
 
 ## 4. Дальнейшие фазы
 
-Активная работа продолжается в [PRD-7 S9-S11 in-progress](prd-7-s9-s11-in-progress.md):
+Активная работа продолжается в [PRD-7 S9-S11 in-progress](./s9-s11-in-progress.md):
 
 - **S9** — Component + API + regression тесты (включая FR-20c anchor-navigation,
   единственный незакрытый пункт S4/4A).

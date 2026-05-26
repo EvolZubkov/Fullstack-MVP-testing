@@ -2,7 +2,10 @@
 
 **Статус:** Черновик  
 **Версия:** 0.1  
-**Связанные документы:** `brd-scorm-enhancements.md`, `prd-1-templates-content-pages.md`, `prd-2-result-variables.md`, `prd-3-external-templates.md`
+**Связанные документы:** [BRD](brd-scorm-enhancements.md),
+[PRD-1](prd-1/templates-content-pages.md),
+[PRD-2](prd-2/result-variables.md),
+[PRD-3](prd-3/external-templates.md)
 
 ## 1. Назначение
 

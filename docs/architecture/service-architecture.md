@@ -39,7 +39,7 @@
 
 ## 1. DatabaseStorage
 
-**Файл:** [storage.ts](server/storage.ts)
+**Файл:** [storage.ts](../../server/storage.ts)
 
 ### Интерфейс IStorage (строки 30--145)
 
@@ -90,7 +90,7 @@
 
 ## 2. Database Connection
 
-**Файл:** [db.ts](server/db.ts)
+**Файл:** [db.ts](../../server/db.ts)
 
 **Экспортируемые объекты:**
 
@@ -116,7 +116,7 @@ Graceful shutdown при SIGTERM/SIGINT.
 
 ## 3. Email Service
 
-**Файл:** [email.ts](server/email.ts)
+**Файл:** [email.ts](../../server/email.ts)
 
 **Функции:**
 
@@ -136,7 +136,7 @@ Graceful shutdown при SIGTERM/SIGINT.
 
 ## 4. Crypto Utilities
 
-**Файл:** [utils/crypto.ts](server/utils/crypto.ts)
+**Файл:** [utils/crypto.ts](../../server/utils/crypto.ts)
 
 | Функция | Алгоритм | Описание |
 | --- | --- | --- |
@@ -147,7 +147,7 @@ Graceful shutdown при SIGTERM/SIGINT.
 
 **Зависимости:** `@vvlad1973/crypto`, Node.js `crypto`.
 
-**Файл:** [utils/mask-email.ts](server/utils/mask-email.ts)
+**Файл:** [utils/mask-email.ts](../../server/utils/mask-email.ts)
 
 | Функция | Описание |
 | --- | --- |
@@ -159,11 +159,11 @@ Graceful shutdown при SIGTERM/SIGINT.
 
 ### 5.1 Точка входа
 
-**Файл:** [scorm-exporter.ts](server/scorm-exporter.ts) -- реэкспортирует `generateScormPackage`.
+**Файл:** [scorm-exporter.ts](../../server/scorm-exporter.ts) -- реэкспортирует `generateScormPackage`.
 
 ### 5.2 Оркестратор
 
-**Файл:** [scorm/index.ts](server/scorm/index.ts)
+**Файл:** [scorm/index.ts](../../server/scorm/index.ts)
 
 ```text
 generateScormPackage(data: ExportData): Promise<Buffer>
@@ -195,10 +195,10 @@ interface ExportData {
 
 | Файл | Функция | Описание |
 | --- | --- | --- |
-| [builders/test-json.ts](server/scorm/builders/test-json.ts) | `buildTestJson(data)` | Сериализация теста в JSON для runtime |
-| [builders/manifest.ts](server/scorm/builders/manifest.ts) | `buildManifest(test, data, extraFiles?)` | Генерация imsmanifest.xml (SCORM 2004 4th Ed.) |
-| [builders/metadata.ts](server/scorm/builders/metadata.ts) | `buildMetadataXml(test)` | Генерация LOM metadata.xml |
-| [builders/media-assets.ts](server/scorm/builders/media-assets.ts) | `extractEmbeddedMediaIntoAssets(testObj, opts?)` | Извлечение медиа (base64, uploads) в assets ZIP |
+| [builders/test-json.ts](../../server/scorm/builders/test-json.ts) | `buildTestJson(data)` | Сериализация теста в JSON для runtime |
+| [builders/manifest.ts](../../server/scorm/builders/manifest.ts) | `buildManifest(test, data, extraFiles?)` | Генерация imsmanifest.xml (SCORM 2004 4th Ed.) |
+| [builders/metadata.ts](../../server/scorm/builders/metadata.ts) | `buildMetadataXml(test)` | Генерация LOM metadata.xml |
+| [builders/media-assets.ts](../../server/scorm/builders/media-assets.ts) | `extractEmbeddedMediaIntoAssets(testObj, opts?)` | Извлечение медиа (base64, uploads) в assets ZIP |
 
 **Manifest -- дополнительные функции:**
 
@@ -211,15 +211,15 @@ interface ExportData {
 
 | Файл | Функция | Описание |
 | --- | --- | --- |
-| [scorm/zip.ts](server/scorm/zip.ts) | `buildZip(files)` | Создание ZIP (archiver, compression: 9) |
-| [scorm/assets/read-asset.ts](server/scorm/assets/read-asset.ts) | `readAsset(name)` | Чтение шаблонов из нескольких путей (dev/prod fallback) |
-| [scorm/utils/escape.ts](server/scorm/utils/escape.ts) | `escapeXml(str)` | Экранирование XML-спецсимволов |
+| [scorm/zip.ts](../../server/scorm/zip.ts) | `buildZip(files)` | Создание ZIP (archiver, compression: 9) |
+| [scorm/assets/read-asset.ts](../../server/scorm/assets/read-asset.ts) | `readAsset(name)` | Чтение шаблонов из нескольких путей (dev/prod fallback) |
+| [scorm/utils/escape.ts](../../server/scorm/utils/escape.ts) | `escapeXml(str)` | Экранирование XML-спецсимволов |
 
 ---
 
 ## 6. Routes (API Layer)
 
-**Файл:** [routes.ts](server/routes.ts) (~6055 строк, монолитный)
+**Файл:** [routes.ts](../../server/routes.ts) (~6055 строк, монолитный)
 
 **Экспортируемая функция:** `registerRoutes(httpServer, app)`.
 
@@ -265,7 +265,7 @@ interface ExportData {
 
 ## 7. Shared Schema
 
-**Файл:** [shared/schema.ts](shared/schema.ts)
+**Файл:** [shared/schema.ts](../../shared/schema.ts)
 
 Содержит определения всех таблиц (Drizzle ORM) и Zod-схемы валидации.
 

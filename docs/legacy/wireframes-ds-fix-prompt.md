@@ -134,7 +134,7 @@
   Эти команды не нужны для миграции wireframes.
 - Не трогай ничего вне `docs/wireframes/`, `scripts/check-wireframes-ds.mjs`,
   `docs/wireframes-ds-audit.md`, `docs/wireframes-acceptance-checklist.md`,
-  `docs/wireframes-ds-fix-plan.md`, `docs/wireframes-drawer-todo.md`.
+  `docs/wireframes-ds-fix-plan.md`, `docs/issues/wireframes-drawer-todo.md`.
 - Не правь handbook в `c:/Repositories/ENGINERING_HANDBOOK/`.
 - Не делай git push, не открывай PR.
 - Не используй emoji.

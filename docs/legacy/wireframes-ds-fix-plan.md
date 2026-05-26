@@ -347,7 +347,7 @@ Acceptance:
 2. `docs/wireframes-acceptance-checklist.md`: переписать пункты 1, 2, 8, 10
    так, чтобы они ссылались на `ou-drawer__*`, `ou-btn--*`, `ou-iconbtn`
    вместо `drawer-*`, `btn-*`, `btn-icon`.
-3. `docs/wireframes-drawer-todo.md`: пересмотреть актуальность, удалить пункты,
+3. `docs/issues/wireframes-drawer-todo.md`: пересмотреть актуальность, удалить пункты,
    закрытые Этапом 3.
 
 Acceptance:

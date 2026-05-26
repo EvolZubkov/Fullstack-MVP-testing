@@ -6,11 +6,11 @@
 работают с этим документом, а не с PRD-7 целиком, чтобы исключить ошибки от объёма контекста.
 **Связанные документы:**
 
-- [PRD-7 S0-S8 closed](prd-7-s0-s8-closed.md)
-- [PRD-7 S9-S11 in progress](prd-7-s9-s11-in-progress.md)
-- [PRD-4](prd-4-course-flow-sections.md)
-- [Стратегия реализации](prd-7-execution-strategy.md)
-- [TODO](prd-7-implementation-todo.md)
+- [PRD-7 S0-S8 closed](./s0-s8-closed.md)
+- [PRD-7 S9-S11 in progress](./s9-s11-in-progress.md)
+- [PRD-4](../prd-4/course-flow-sections.md)
+- [Стратегия реализации](./execution-strategy.md)
+- [TODO](./implementation-todo.md)
 
 ---
 
@@ -95,7 +95,7 @@ Default: `"linear_flat"`. Хранится в `tests.flow_policy_json.mode`, в 
   `router_by_topics`);
 - эскиз `docs/wireframes/prd7-structure-mixed.html` не создаётся; §10
   `wireframes-acceptance-checklist.md` удалён;
-- PRD-4, prd-7-s0-s8-closed.md, test-settings-parameter-structure.md
+- PRD-4, specs/prd-7/s0-s8-closed.md, architecture/test-settings-parameter-structure.md
   обновлены — везде убраны упоминания `mixed`;
 - миграции БД: ранее `tests.flow_policy_json.mode = 'mixed'` нигде не сохранялись
   (новый enum только в PRD-7, до релиза), миграции данных не требуется.

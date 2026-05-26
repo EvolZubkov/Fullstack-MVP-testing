@@ -1,6 +1,6 @@
 # TODO: Реализация PRD-1 - шаблоны и контентные страницы
 
-**Связанный PRD:** [PRD-1](prd-1-templates-content-pages.md)  
+**Связанный PRD:** [PRD-1](./templates-content-pages.md)  
 **Статус:** Актуализировано по коду: основная MVP-функциональность готова (модель данных,
 API, SCORM export, runtime loader, navigation, frontend dialogs). Незакрыто: предпросмотр
 шаблона в Drawer «Оформление», text-overflow preview/diagnostics в content-pages, ручной

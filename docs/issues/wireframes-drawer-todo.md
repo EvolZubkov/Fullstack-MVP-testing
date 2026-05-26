@@ -21,8 +21,8 @@ Inline-stиль cleanup (этап 4) отложен.
 
 | Источник | Роль |
 | --- | --- |
-| `docs/test-settings-parameter-structure.md` | Целевая структура параметров и поведения редактора |
-| `docs/prd-7-s0-s8-closed.md`, `docs/prd-7-s9-s11-in-progress.md` | PRD-7 описание Drawer редактора (закрытые и активные фазы) |
+| `docs/architecture/test-settings-parameter-structure.md` | Целевая структура параметров и поведения редактора |
+| `docs/specs/prd-7/s0-s8-closed.md`, `docs/specs/prd-7/s9-s11-in-progress.md` | PRD-7 описание Drawer редактора (закрытые и активные фазы) |
 | `docs/wireframes/legacy/design-tab.html` | Референс по содержанию вкладки "Оформление" (page-level, не Drawer) |
 | `docs/wireframes/legacy/pages-tab.html` | Референс по содержанию вкладки "Структура" для линейного режима по темам (page-level, не Drawer) |
 | `docs/wireframes/prd7-editor-drawer.html` | Референс контейнера Drawer и footer-логики |
@@ -227,8 +227,8 @@ deprecated-статус не получают до согласования Draw
 И есть готовый Drawer-контейнер: docs/wireframes/prd7-editor-drawer.html,
 общий CSS docs/wireframes/prd7-shared.css.
 
-Целевые требования: docs/test-settings-parameter-structure.md.
-План работ и критерии готовности: docs/wireframes-drawer-todo.md
+Целевые требования: docs/architecture/test-settings-parameter-structure.md.
+План работ и критерии готовности: docs/issues/wireframes-drawer-todo.md
 (этот файл; читай его целиком перед началом).
 
 Задача. Привести wireframes вкладок "Оформление" и "Структура" в формат
@@ -292,8 +292,8 @@ Workflow для каждого целевого HTML-файла.
 Что сделать (содержательно):
 
 1. Прочитай ровно один раз каждый из:
-   docs/wireframes-drawer-todo.md (этот файл, целиком),
-   docs/test-settings-parameter-structure.md (разделы 1, 4, 5),
+   docs/issues/wireframes-drawer-todo.md (этот файл, целиком),
+   docs/architecture/test-settings-parameter-structure.md (разделы 1, 4, 5),
    docs/wireframes/design-tab.html (список состояний по .wf-nav + одно
    "эталонное" состояние s-main для набора полей),
    docs/wireframes/pages-tab.html (список состояний + одно эталонное),
@@ -302,7 +302,7 @@ Workflow для каждого целевого HTML-файла.
    docs/wireframes/prd7-shared.css (только заголовки секций и список
    утилитарных классов — не читай весь файл подряд каждый раз).
 2. Обнови или создай файлы согласно таблице из раздела 7
-   docs/wireframes-drawer-todo.md.
+   docs/issues/wireframes-drawer-todo.md.
 3. Контейнер каждого файла — Drawer из prd7-editor-drawer.html: overlay,
    drawer min(1120px, calc(100vw - 48px)), вкладки
    Состав | Настройки | Оформление | Структура, общий footer
@@ -373,7 +373,7 @@ Workflow для каждого целевого HTML-файла.
   не связывал группы между скрытыми состояниями.
 
 Критерии готовности к согласованию см. раздел 6
-docs/wireframes-drawer-todo.md. Завершив работу, выведи краткий отчёт:
+docs/issues/wireframes-drawer-todo.md. Завершив работу, выведи краткий отчёт:
 какие файлы созданы/обновлены, какие пункты раздела 6 закрыты, какие
 остались открытыми и почему.
 ```

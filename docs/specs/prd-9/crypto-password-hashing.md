@@ -3,14 +3,14 @@
 **Версия:** 1.0
 **Статус:** Backlog (queued, шаг 8 ROADMAP — tech debt, low priority)
 **Дата актуализации:** 2026-05-26
-**Связанные документы:** [Service Architecture](service-architecture.md),
-[Deps audit 2026-05](reports/deps-audit-2026-05.md), [ROADMAP](ROADMAP.md)
+**Связанные документы:** [Service Architecture](../../architecture/service-architecture.md),
+[Deps audit 2026-05](../../reports/deps-audit-2026-05.md), [ROADMAP](../../ROADMAP.md)
 **Зависимости:** npm-пакет `@vvlad1973/crypto` (внешний, владелец — тот же автор),
 `server/storage.ts`, `server/utils/crypto.ts`, `script/create-admin.ts`
 
 ## Статус реализации (на 2026-05-26)
 
-**Не начато**. Tech debt, добавлен в [ROADMAP](ROADMAP.md) шагом 8. БД-миграция не
+**Не начато**. Tech debt, добавлен в [ROADMAP](../../ROADMAP.md) шагом 8. БД-миграция не
 требуется (колонка `passwordHash` имеет тип `text`). Legacy bcrypt-хеши поддерживаются
 через lazy rehash при логине. Не блокирует другие PRD; может выполняться параллельно
 с PRD-3 после стабилизации PRD-7 S9-S11.
@@ -233,7 +233,7 @@ Out of scope:
    пользователей).
 2. После того как ноль за стабильный период — удалить legacy-ветку проверки bcrypt из
    `storage.ts` и связанной утилиты.
-3. Обновить документацию (`docs/service-architecture.md`, `docs/reports/deps-audit-2026-05.md`,
+3. Обновить документацию (`docs/architecture/service-architecture.md`, `docs/reports/deps-audit-2026-05.md`,
    `README.md`) — убрать `bcryptjs` из списков зависимостей.
 
 ---

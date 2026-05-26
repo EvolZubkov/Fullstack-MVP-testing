@@ -2,7 +2,7 @@
 
 **Версия:** 1.2
 **Статус:** Утверждено
-**Источник:** [BRD](brd-scorm-enhancements.md), PRD-1...PRD-9
+**Источник:** [BRD](./specs/brd-scorm-enhancements.md), PRD-1...PRD-9
 **Последняя актуализация:** 2026-05-26
 
 ---
@@ -30,21 +30,21 @@
 
 Детальный прогресс по PRD-7:
 
-- Завершённые фазы S0-S8 — см. [prd-7-s0-s8-closed.md](prd-7-s0-s8-closed.md).
-- Активные фазы S9-S11 — см. [prd-7-s9-s11-in-progress.md](prd-7-s9-s11-in-progress.md).
+- Завершённые фазы S0-S8 — см. [specs/prd-7/s0-s8-closed.md](./specs/prd-7/s0-s8-closed.md).
+- Активные фазы S9-S11 — см. [specs/prd-7/s9-s11-in-progress.md](./specs/prd-7/s9-s11-in-progress.md).
 
-Детальный прогресс по PRD-1 — см. [prd-1-implementation-todo.md](prd-1-implementation-todo.md).
+Детальный прогресс по PRD-1 — см. [specs/prd-1/implementation-todo.md](./specs/prd-1/implementation-todo.md).
 
 ---
 
 ## 1. Контекст
 
 Документ фиксирует порядок реализации PRD-1...PRD-8. Порядок отличается от приоритизации
-этапов, перечисленной в [BRD §7](brd-scorm-enhancements.md), потому что учитывает фактические
+этапов, перечисленной в [BRD §7](./specs/brd-scorm-enhancements.md), потому что учитывает фактические
 зависимости контрактов, риск двойного рефакторинга UI и стоимость переделок при добавлении
 новых настроек теста.
 
-PRD-1 уже частично реализован (см. [prd-1-implementation-todo.md](prd-1-implementation-todo.md))
+PRD-1 уже частично реализован (см. [specs/prd-1/implementation-todo.md](./specs/prd-1/implementation-todo.md))
 и считается фундаментом для остальных PRD.
 
 ---
@@ -53,14 +53,14 @@ PRD-1 уже частично реализован (см. [prd-1-implementation-
 
 | Шаг | PRD | Этап BRD | Основная причина выбранного порядка |
 | --- | --- | --- | --- |
-| 1 | PRD-7 Рефакторинг редактора параметров теста: [S0-S8 closed](prd-7-s0-s8-closed.md), [S9-S11 in progress](prd-7-s9-s11-in-progress.md) | Этап 9 | Контракт `TestEditorModel`, DTO, `passDecisionPolicy` и `flowMode` нужны как поверхность для всех последующих PRD. Если сначала добавлять flow/retake/scales в текущий god-component `TestsPage`, потребуется повторный переписать UI. |
-| 2 | [PRD-4](prd-4-course-flow-sections.md) Гибкий поток прохождения и разделы | Этап 4 | Базовый runtime: `flowPolicy`, расчёт `section.*`, граница «внутреннего старта попытки», `sort_order` для `test_sections`. Без него PRD-6, PRD-8 и часть формул PRD-2/PRD-5 нечем питать. |
-| 3 | [PRD-6](prd-6-retake-cooldown-gate.md) Ограничение повторного прохождения и retake gate | Этап 5 | Использует только границу старта попытки из PRD-4 и системную страницу из PRD-1. Лёгкая интеграция, даёт compliance-ценность для корпоративных курсов. |
-| 4 | [PRD-8](prd-8-section-router-flow.md) Сценарий через страницу-маршрутизатор | Этап 4 расширение | Зависит от PRD-4 (`flowPolicy`, section results, completion policy), PRD-7 (вкладка «Структура» в новом редакторе) и PRD-1 (системная router-страница). Закрывает Storyline-сценарий полностью. |
-| 5 | [PRD-2](prd-2-result-variables.md) Пользовательские показатели результата | Этап 6 часть | Депендит на runtime PRD-1, реальную пользу даёт после PRD-4: формулы могут ссылаться на `section.*`. Нужен как фундамент для PRD-5 (`result.*` использует `scale.*`). |
-| 6 | [PRD-5](prd-5-scales-competency-measurements.md) Шкалы, компетенции и многомерные измерения | Этап 6 | Явно депендит на PRD-2 и PRD-4. Самая тяжёлая авторская UI (матрица вкладов на каждый вопрос); делается после стабилизации редактора и flow. |
-| 7 | [PRD-3](prd-3-external-templates.md) Администрирование жизненного цикла шаблонов | Этап 7 | Не блокирует runtime-возможности. Включается, когда команда готова открывать платформу подрядчикам или партнёрам. |
-| 8 | [PRD-9](prd-9-crypto-password-hashing.md) Миграция bcryptjs → `@vvlad1973/crypto` | Tech debt | Снижение количества криптографических SDK, упрощение audit security и build externals. Не блокирует runtime функциональности, может выполняться параллельно с PRD-3 после стабилизации PRD-7. |
+| 1 | PRD-7 Рефакторинг редактора параметров теста: [S0-S8 closed](./specs/prd-7/s0-s8-closed.md), [S9-S11 in progress](./specs/prd-7/s9-s11-in-progress.md) | Этап 9 | Контракт `TestEditorModel`, DTO, `passDecisionPolicy` и `flowMode` нужны как поверхность для всех последующих PRD. Если сначала добавлять flow/retake/scales в текущий god-component `TestsPage`, потребуется повторный переписать UI. |
+| 2 | [PRD-4](./specs/prd-4/course-flow-sections.md) Гибкий поток прохождения и разделы | Этап 4 | Базовый runtime: `flowPolicy`, расчёт `section.*`, граница «внутреннего старта попытки», `sort_order` для `test_sections`. Без него PRD-6, PRD-8 и часть формул PRD-2/PRD-5 нечем питать. |
+| 3 | [PRD-6](./specs/prd-6/retake-cooldown-gate.md) Ограничение повторного прохождения и retake gate | Этап 5 | Использует только границу старта попытки из PRD-4 и системную страницу из PRD-1. Лёгкая интеграция, даёт compliance-ценность для корпоративных курсов. |
+| 4 | [PRD-8](./specs/prd-8/section-router-flow.md) Сценарий через страницу-маршрутизатор | Этап 4 расширение | Зависит от PRD-4 (`flowPolicy`, section results, completion policy), PRD-7 (вкладка «Структура» в новом редакторе) и PRD-1 (системная router-страница). Закрывает Storyline-сценарий полностью. |
+| 5 | [PRD-2](./specs/prd-2/result-variables.md) Пользовательские показатели результата | Этап 6 часть | Депендит на runtime PRD-1, реальную пользу даёт после PRD-4: формулы могут ссылаться на `section.*`. Нужен как фундамент для PRD-5 (`result.*` использует `scale.*`). |
+| 6 | [PRD-5](./specs/prd-5/scales-competency-measurements.md) Шкалы, компетенции и многомерные измерения | Этап 6 | Явно депендит на PRD-2 и PRD-4. Самая тяжёлая авторская UI (матрица вкладов на каждый вопрос); делается после стабилизации редактора и flow. |
+| 7 | [PRD-3](./specs/prd-3/external-templates.md) Администрирование жизненного цикла шаблонов | Этап 7 | Не блокирует runtime-возможности. Включается, когда команда готова открывать платформу подрядчикам или партнёрам. |
+| 8 | [PRD-9](./specs/prd-9/crypto-password-hashing.md) Миграция bcryptjs → `@vvlad1973/crypto` | Tech debt | Снижение количества криптографических SDK, упрощение audit security и build externals. Не блокирует runtime функциональности, может выполняться параллельно с PRD-3 после стабилизации PRD-7. |
 
 ---
 
@@ -127,7 +127,7 @@ PRD-7 как первый шаг и PRD-4 как второй шаг не дви
 
 Перед стартом каждого шага должны быть выполнены:
 
-- wireframes согласованы (см. [BRD §2.6](brd-scorm-enhancements.md));
+- wireframes согласованы (см. [BRD §2.6](./specs/brd-scorm-enhancements.md));
 - доменные контракты соседних PRD зафиксированы;
 - backward compatibility со старыми тестами проверена golden/smoke-тестами;
 - регрессионный набор тестов покрывает поведение предыдущих шагов.
