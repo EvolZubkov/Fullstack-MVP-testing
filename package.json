@@ -4,7 +4,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development tsx watch ./server/index.ts",
+    "dev": "cross-env NODE_ENV=development tsx ./server/index.ts",
     "build": "tsx script/build.ts",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
-    "@jridgewell/trace-mapping": "^0.3.31",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-aspect-ratio": "^1.1.8",
@@ -98,7 +97,6 @@
     "@eslint/js": "^10.0.1",
     "@replit/vite-plugin-cartographer": "^0.5.5",
     "@replit/vite-plugin-dev-banner": "^0.1.2",
-    "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.3.0",
     "@testing-library/jest-dom": "^6.9.1",
@@ -127,7 +125,7 @@
     "tailwindcss": "^4.3.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "5.6.3",
-    "vite": "^6.4.2",
+    "vite": "^8.0.14",
     "vitest": "^4.1.7"
   },
   "optionalDependencies": {
