@@ -120,7 +120,8 @@
 .tb-tests-list .tree-root {
   align-items: center;
   border-bottom: var(--wf-border-w) solid var(--ou-border-default);
-  background: var(--ou-bg-elevated); user-select: none;
+  background: var(--ou-bg-elevated); 
+  user-select: none;
 }
 .tb-tests-list .tree-root-label {
   grid-column: 1 / -1;
@@ -137,7 +138,8 @@
 .tb-tests-list .tree-folder {
   align-items: center;
   border-bottom: var(--wf-border-w) solid var(--ou-border-default);
-  cursor: pointer; user-select: none;
+  cursor: pointer; 
+  user-select: none;
 }
 .tb-tests-list .tree-folder:hover { background: var(--ou-bg-hover); }
 .tb-tests-list .tree-folder-name {
@@ -381,7 +383,8 @@
   display: flex; align-items: center; gap: var(--ou-space-2);
   padding: var(--ou-space-2) var(--ou-space-3);
   border-radius: var(--ou-radius-xs);
-  cursor: pointer; font: var(--ou-text-body-s); user-select: none;
+  cursor: pointer; font: var(--ou-text-body-s); 
+  user-select: none;
   border: var(--wf-border-w) solid transparent;
 }
 .tb-tests-list .fab-folder-item:hover { background: var(--ou-bg-hover); }
