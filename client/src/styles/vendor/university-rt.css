@@ -3983,6 +3983,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 }
 
 .ou-field__box {
+  box-sizing: border-box;
   display: flex; align-items: center;
   background: var(--ou-bg-input);
   border: 1px solid var(--ou-border-default);
@@ -4797,6 +4798,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-number__hint--error { color: var(--ou-error-default); }
 
 .ou-number__box {
+  box-sizing: border-box;
   display: inline-flex; align-items: stretch;
   background: var(--ou-bg-input);
   border: 1px solid var(--ou-border-default);
@@ -5912,6 +5914,7 @@ span.ou-quiz__dot:hover { transform: none; }
 .ou-select.ou-field--full { display: flex; width: 100%; }
 
 .ou-select__trigger {
+  box-sizing: border-box;
   display: flex; align-items: center; justify-content: space-between;
   width: 100%; min-width: 180px; cursor: pointer; text-align: left;
   background: var(--ou-bg-input);

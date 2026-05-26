@@ -479,11 +479,23 @@
   grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
   gap: var(--ou-space-2);
   margin-bottom: var(--ou-space-2);
-  align-items: end;
+  /* `start` keeps each label+control pair top-aligned so boxes line up across a
+     row. With `end` the select cell did not reach the row track bottom while the
+     number cell did, leaving the «Тип порога» and «Порог» boxes ~8px apart. The
+     responsive 2-col variant below already uses `start` for the same reason. */
+  align-items: start;
 }
 .tb-level-grid .ou-formfield { margin-bottom: 0; }
+/* Stretch every control to its grid cell. Select renders `.ou-select` (without a
+   bare `.ou-field`), so it must be listed explicitly — otherwise its content-width
+   `inline-flex` trigger overflows the cell and overlaps the neighbouring field. */
 .tb-level-grid > .ou-formfield > .ou-number,
-.tb-level-grid > .ou-formfield > .ou-field { display: flex; width: 100%; }
+.tb-level-grid > .ou-formfield > .ou-field,
+.tb-level-grid > .ou-formfield > .ou-select { display: flex; width: 100%; }
+/* The select trigger has a 180px min-width in the DS; allow it to shrink to the
+   narrower grid cell instead of overflowing into the neighbouring field.
+   (Uniform box height is handled by the DS itself — control boxes are border-box.) */
+.tb-level-grid > .ou-formfield > .ou-select .ou-select__trigger { min-width: 0; }
 
 /* Compact density inside level-card. */
 .tb-level-card .ou-card__body .ou-formfield {
