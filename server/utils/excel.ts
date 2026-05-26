@@ -158,7 +158,11 @@ export function sheetToArrays(ws: ExcelJS.Worksheet): unknown[][] {
  */
 export async function readWorkbookFromBuffer(buf: Buffer): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buf);
+  // `exceljs/index.d.ts` declares `interface Buffer extends ArrayBuffer {}` in
+  // the global scope, which merges with Node's `Buffer<TArrayBuffer>` and makes
+  // the `load(buffer: Buffer)` parameter unmatchable from a real Node Buffer.
+  // Pass the Buffer through as `any` — at runtime exceljs accepts it fine.
+  await wb.xlsx.load(buf as any);
   return wb;
 }
 
