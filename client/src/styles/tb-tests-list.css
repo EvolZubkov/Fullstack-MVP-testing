@@ -193,7 +193,8 @@
   background: var(--ou-border-soft);
 }
 .tb-tests-list .test-info { flex: 1; min-width: 0; }
-.tb-tests-list .test-name { font: var(--ou-text-body-s); font-weight: 500; }
+.tb-tests-list .test-name { font: var(--ou-text-body-s); font-weight: 500; display: flex; align-items: center; gap: var(--ou-space-2); }
+.tb-tests-list .test-name-warn { color: var(--ou-warning-default); flex-shrink: 0; }
 .tb-tests-list .tree-test-path {
   font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-half);
   display: flex; align-items: center; gap: var(--ou-space-1);

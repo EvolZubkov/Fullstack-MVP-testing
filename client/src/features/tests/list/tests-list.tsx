@@ -24,7 +24,7 @@
  * content, modals and the FAB.
  */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   AlertCircle,
@@ -46,6 +46,7 @@ import {
   RotateCw,
   Search,
   Trash2,
+  TriangleAlert,
   Users,
   ArrowRight,
 } from "lucide-react";
@@ -931,6 +932,14 @@ function TestRow(props: {
   menu: JSX.Element | null;
 }) {
   const e = props.entry;
+  // Reactive subscription to warning state written by the editor after save.
+  // queryFn is never called (enabled: false); setQueryData in the editor triggers re-render.
+  const { data: hasWarnings = false } = useQuery<boolean>({
+    queryKey: ["test-warnings", e.id],
+    queryFn: () => false,
+    enabled: false,
+    staleTime: Infinity,
+  });
   return (
     <div
       className={"tree-test" + (props.indented ? " indent-1" : "")}
@@ -942,7 +951,17 @@ function TestRow(props: {
       <div className="tree-test-name">
         {props.indented && <span className="indent-line" aria-hidden="true" />}
         <div className="test-info">
-          <div className="test-name">{e.title}</div>
+          <div className="test-name">
+            {e.title}
+            {hasWarnings && (
+              <TriangleAlert
+                width={14}
+                height={14}
+                className="test-name-warn"
+                aria-label="Тест сохранён с предупреждениями"
+              />
+            )}
+          </div>
           {props.breadcrumb && (
             <div className="tree-test-path">
               <Folder width={11} height={11} aria-hidden="true" />
