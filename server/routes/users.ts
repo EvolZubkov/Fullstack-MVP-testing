@@ -4,7 +4,13 @@ import { storage } from "../storage";
 import { requireAuthor } from "../middleware/auth";
 import { sendInviteEmail } from "../email";
 import multer from "multer";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import {
+  addAoaSheet,
+  readWorkbookFromBuffer,
+  sheetToObjects,
+  workbookToBuffer,
+} from "../utils/excel";
 import { randomBytes, createHash } from "crypto";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -29,15 +35,14 @@ router.get("/", requireAuthor, async (req, res) => {
 });
 
 // GET /api/users/bulk-template — download CSV template (must be before /:id)
-router.get("/bulk-template", requireAuthor, (_req, res) => {
-  const ws = XLSX.utils.aoa_to_sheet([
+router.get("/bulk-template", requireAuthor, async (_req, res) => {
+  const wb = new ExcelJS.Workbook();
+  addAoaSheet(wb, "Users", [
     ["email", "name", "role", "group"],
     ["user@example.com", "Иван Иванов", "learner", "Группа А"],
     ["manager@example.com", "Анна Петрова", "learner", ""],
   ]);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Users");
-  const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  const buf = await workbookToBuffer(wb);
   res.setHeader("Content-Disposition", "attachment; filename=users-template.xlsx");
   res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   res.send(buf);
@@ -319,9 +324,10 @@ router.post("/bulk-preview", requireAuthor, upload.single("file"), async (req, r
   try {
     if (!req.file) return res.status(400).json({ error: "File required" });
 
-    const wb = XLSX.read(req.file.buffer, { type: "buffer" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+    const wb = await readWorkbookFromBuffer(req.file.buffer);
+    const ws = wb.worksheets[0];
+    if (!ws) return res.status(400).json({ error: "File is empty" });
+    const rows: any[] = sheetToObjects(ws, { defval: "" });
 
     if (rows.length === 0) return res.status(400).json({ error: "File is empty" });
     if (rows.length > 500) return res.status(400).json({ error: "Maximum 500 rows per upload" });

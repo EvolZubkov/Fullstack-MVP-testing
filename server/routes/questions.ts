@@ -1,7 +1,13 @@
 import { Router, Request, Response } from "express";
 import { createHash } from "crypto";
 import { logger } from "../logger";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import {
+  addJsonSheet,
+  readWorkbookFromBuffer,
+  sheetToObjects,
+  workbookToBuffer,
+} from "../utils/excel";
 import { storage } from "../storage";
 import { requireAuth, requireAuthor } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
@@ -362,16 +368,10 @@ router.get(
         };
       });
 
-      const ws = XLSX.utils.json_to_sheet(rows);
-      ws["!cols"] = [
-        { wch: 36 }, { wch: 25 }, { wch: 18 }, { wch: 50 }, { wch: 8 },
-        { wch: 12 }, { wch: 60 }, { wch: 25 }, { wch: 15 }, { wch: 40 },
-      ];
+      const wb = new ExcelJS.Workbook();
+      addJsonSheet(wb, "Вопросы", rows, [36, 25, 18, 50, 8, 12, 60, 25, 15, 40]);
 
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Вопросы");
-
-      const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      const buffer = await workbookToBuffer(wb);
 
       const timestamp = new Date().toISOString().slice(0, 10);
       let filename = `questions_${timestamp}.xlsx`;
@@ -406,10 +406,10 @@ router.post(
         return res.status(400).json({ error: "File required" });
       }
 
-      const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
+      const workbook = await readWorkbookFromBuffer(req.file.buffer);
+      const sheet = workbook.worksheets[0];
+      if (!sheet) return res.status(400).json({ error: "File is empty" });
+      const rows = sheetToObjects(sheet);
 
       const topics = await storage.getTopics();
       // Нормализуем ключ: убираем все виды пробелов (включая \u00a0, \r и т.д.)
