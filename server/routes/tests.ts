@@ -68,7 +68,74 @@ function zodToFields(err: z.ZodError) {
   }));
 }
 
+/**
+ * Log the structured zod field errors so the dev server output points at the
+ * actual offending field instead of a bare `400 in 7ms` line. Use for both
+ * create and update routes.
+ */
+function logZodValidationFailure(route: string, err: z.ZodError) {
+  const fields = zodToFields(err);
+  logger.warn(`${route} validation failed: ${JSON.stringify(fields)}`, "tests");
+}
+
 const router = Router();
+
+/**
+ * Load the complete editor-shaped representation of a test:
+ * `tests` row + `sections[]` (with `topicName`/`maxQuestions`) + `adaptiveSettings`
+ * for adaptive tests. Returns `null` if the test does not exist.
+ *
+ * Used by GET (single-test response) and after PUT/POST so the client
+ * receives the same shape it would get from a follow-up GET — without this
+ * the React-Query cache would store an incomplete row after save and the
+ * editor would re-open with `sections=[]` / `adaptiveSettings=[]` until the
+ * background refetch lands.
+ */
+async function loadFullTest(testId: string): Promise<Record<string, unknown> | null> {
+  const test = await storage.getTest(testId);
+  if (!test) return null;
+
+  const sections = await storage.getTestSections(test.id);
+  const topics = await storage.getTopics();
+  const topicMap = new Map(topics.map((t) => [t.id, t]));
+
+  const sectionsWithDetails = await Promise.all(
+    sections.map(async (s) => {
+      const topic = topicMap.get(s.topicId);
+      const questions = await storage.getQuestionsByTopic(s.topicId);
+      return {
+        ...s,
+        topicName: topic?.name || "Unknown",
+        maxQuestions: questions.length,
+      };
+    }),
+  );
+
+  let adaptiveSettings: unknown = null;
+  if (test.mode === "adaptive") {
+    const topicSettings = await storage.getAdaptiveTopicSettingsByTest(test.id);
+    const levels = await storage.getAdaptiveLevelsByTest(test.id);
+
+    adaptiveSettings = await Promise.all(
+      topicSettings.map(async (ts) => {
+        const topicLevels = levels.filter((l) => l.topicId === ts.topicId);
+        const levelsWithLinks = await Promise.all(
+          topicLevels.map(async (level) => {
+            const links = await storage.getAdaptiveLevelLinks(level.id);
+            return { ...level, links };
+          }),
+        );
+        return {
+          ...ts,
+          topicName: topicMap.get(ts.topicId)?.name || "Unknown",
+          levels: levelsWithLinks,
+        };
+      }),
+    );
+  }
+
+  return { ...test, sections: sectionsWithDetails, adaptiveSettings };
+}
 
 // GET /api/tests - Список тестов
 // Query param: ?status=archived shows only archived; default excludes archived.
@@ -150,49 +217,9 @@ router.get("/migration-health", requireAuthor, async (req, res) => {
 // `adaptiveSettings` для adaptive-режима. Используется редактором PRD-7.
 router.get("/:id", requireAuthor, async (req, res) => {
   try {
-    const test = await storage.getTest(req.params.id);
-    if (!test) return res.status(404).json({ error: "Test not found" });
-
-    const sections = await storage.getTestSections(test.id);
-    const topics = await storage.getTopics();
-    const topicMap = new Map(topics.map((t) => [t.id, t]));
-
-    const sectionsWithDetails = await Promise.all(
-      sections.map(async (s) => {
-        const topic = topicMap.get(s.topicId);
-        const questions = await storage.getQuestionsByTopic(s.topicId);
-        return {
-          ...s,
-          topicName: topic?.name || "Unknown",
-          maxQuestions: questions.length,
-        };
-      }),
-    );
-
-    let adaptiveSettings: unknown = null;
-    if (test.mode === "adaptive") {
-      const topicSettings = await storage.getAdaptiveTopicSettingsByTest(test.id);
-      const levels = await storage.getAdaptiveLevelsByTest(test.id);
-
-      adaptiveSettings = await Promise.all(
-        topicSettings.map(async (ts) => {
-          const topicLevels = levels.filter((l) => l.topicId === ts.topicId);
-          const levelsWithLinks = await Promise.all(
-            topicLevels.map(async (level) => {
-              const links = await storage.getAdaptiveLevelLinks(level.id);
-              return { ...level, links };
-            }),
-          );
-          return {
-            ...ts,
-            topicName: topicMap.get(ts.topicId)?.name || "Unknown",
-            levels: levelsWithLinks,
-          };
-        }),
-      );
-    }
-
-    res.json({ ...test, sections: sectionsWithDetails, adaptiveSettings });
+    const full = await loadFullTest(req.params.id);
+    if (!full) return res.status(404).json({ error: "Test not found" });
+    res.json(full);
   } catch (error) {
     logger.error("Get test error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to fetch test" });
@@ -204,6 +231,7 @@ router.post("/", requireAuthor, async (req, res) => {
   try {
     const parsed = createTestBodySchema.safeParse(req.body);
     if (!parsed.success) {
+      logZodValidationFailure("POST /api/tests", parsed.error);
       return res.status(400).json({ error: "Validation failed", fields: zodToFields(parsed.error) });
     }
 
@@ -260,7 +288,8 @@ router.post("/", requireAuthor, async (req, res) => {
         : undefined,
     });
 
-    res.status(201).json(test);
+    const full = await loadFullTest(test.id);
+    res.status(201).json(full ?? test);
   } catch (error) {
     logger.error("Create test error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to create test" });
@@ -401,6 +430,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
   try {
     const parsed = updateTestBodySchema.safeParse(req.body);
     if (!parsed.success) {
+      logZodValidationFailure(`PUT /api/tests/${req.params.id}`, parsed.error);
       return res.status(400).json({ error: "Validation failed", fields: zodToFields(parsed.error) });
     }
 
@@ -455,7 +485,8 @@ router.put("/:id", requireAuthor, async (req, res) => {
       expectedVersion,
     });
 
-    res.json(test);
+    const full = await loadFullTest(test.id);
+    res.json(full ?? test);
   } catch (error) {
     if (error instanceof VersionConflictError) {
       return res.status(409).json({

@@ -6,7 +6,7 @@
  * Implements version-conflict detection per PRD-7 §5.3 and §9.
  */
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   tests,
@@ -328,7 +328,7 @@ export class TestSettingsService {
     const manifestRows = await tx
       .select({ id: templates.id, manifest: templates.manifest })
       .from(templates)
-      .where(sql`${templates.id} = ANY(${wantedIds})`);
+      .where(inArray(templates.id, wantedIds));
 
     const byId = new Map(manifestRows.map((r) => [r.id, r.manifest as TemplateManifest]));
     const template = byId.get(templateId) ?? byId.get(DEFAULT_TEMPLATE_ID);
@@ -407,7 +407,7 @@ export class TestSettingsService {
     const manifestRows = await tx
       .select({ id: templates.id, manifest: templates.manifest })
       .from(templates)
-      .where(sql`${templates.id} = ANY(${wantedIds})`);
+      .where(inArray(templates.id, wantedIds));
 
     const byId = new Map(manifestRows.map((r) => [r.id, r.manifest as TemplateManifest]));
     const template = byId.get(templateId) ?? byId.get(DEFAULT_TEMPLATE_ID);

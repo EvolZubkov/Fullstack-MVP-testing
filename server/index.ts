@@ -80,7 +80,15 @@ app.use((req, res, next) => {
       if (reqPath.startsWith("/api") && !reqPath.startsWith("/api/logs")) {
         const ctx = requestContext.getStore();
         const userTag = ctx?.userId ? ` user:${ctx.userId}` : "";
-        log(`[req:${reqId}]${userTag} ${req.method} ${reqPath} ${res.statusCode} in ${duration}ms`);
+        const line = `[req:${reqId}]${userTag} ${req.method} ${reqPath} ${res.statusCode} in ${duration}ms`;
+        const code = res.statusCode;
+        if (code >= 500) {
+          logger.error(line, "express");
+        } else if (code >= 400) {
+          logger.warn(line, "express");
+        } else {
+          logger.info(line, "express");
+        }
 
         if (duration > SLOW_REQUEST_MS) {
           logger.warn(`SLOW REQUEST [req:${reqId}] ${req.method} ${reqPath} — ${duration}ms`, "express");
