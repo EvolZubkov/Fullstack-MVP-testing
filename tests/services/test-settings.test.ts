@@ -10,7 +10,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { VersionConflictError, TestSettingsService } from "../../server/services/test-settings";
-import { templates, contentPages, testSections, tests as testsTable } from "../../shared/schema";
+import {
+  templates,
+  contentPages,
+  testSections,
+  tests as testsTable,
+  adaptiveTopicSettings,
+  adaptiveLevels,
+  adaptiveLevelLinks,
+} from "../../shared/schema";
 import { RequiredFieldsMissingError } from "../../server/services/required-fields-validator";
 
 // ─── DB mock ─────────────────────────────────────────────────────────────────
@@ -731,5 +739,193 @@ describe("TestSettingsService — required fields validation on save", () => {
     captureInserts();
 
     await expect(svc.save("t1", { test: { status: "published" } })).resolves.toBeTruthy();
+  });
+});
+
+// ─── Adaptive settings persistence (PRD-7 §5.3, §6.3) ─────────────────────────
+//
+// Adaptive topic settings, levels, and per-level links are written by
+// `_replaceAdaptiveSettings` inside the same transaction as the test row.
+// These cases cover the API checklist items "POST adaptive creates test +
+// adaptive settings atomically" and "PUT adaptive rolls back on a level/link
+// error" (docs/specs/prd-7/s9-s11-in-progress.md §2.3).
+
+/** A topic with two difficulty levels; the first level carries a single link. */
+const adaptivePayload = [
+  {
+    topicId: "tp1",
+    failureFeedback: "Study more",
+    levels: [
+      {
+        levelIndex: 0, levelName: "Basic",
+        minDifficulty: 0, maxDifficulty: 33, questionsCount: 5,
+        passThreshold: 80, passThresholdType: "percent" as const,
+        feedback: "ok", links: [{ title: "Course 1", url: "https://example.com/1" }],
+      },
+      {
+        levelIndex: 1, levelName: "Advanced",
+        minDifficulty: 34, maxDifficulty: 100, questionsCount: 5,
+        passThreshold: 90, links: [], // passThresholdType omitted → defaults to "percent"
+      },
+    ],
+  },
+];
+
+describe("TestSettingsService — adaptive settings persistence", () => {
+  let svc: TestSettingsService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetTx();
+    svc = new TestSettingsService();
+  });
+
+  it("create() adaptive inserts topic settings + levels + links in one transaction", async () => {
+    setupSelectDispatch([
+      [adaptiveLevels, []], // no existing levels to delete
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, []],
+    ]);
+    const inserts = captureInserts();
+
+    await svc.create({
+      test: {
+        title: "Adaptive",
+        mode: "adaptive",
+        flowPolicyJson: { mode: "linear_flat" },
+        designSettingsJson: { templateId: "default" },
+        overallPassRuleJson: {},
+      },
+      sections: [],
+      adaptiveSettings: adaptivePayload,
+    });
+
+    expect(dbMock.transaction).toHaveBeenCalledOnce();
+    expect(inserts.filter((i) => i.table === adaptiveTopicSettings)).toHaveLength(1);
+    expect(inserts.filter((i) => i.table === adaptiveLevels)).toHaveLength(2);
+    expect(inserts.filter((i) => i.table === adaptiveLevelLinks)).toHaveLength(1);
+  });
+
+  it("create() adaptive persists topicId, level fields, and link title/url", async () => {
+    setupSelectDispatch([
+      [adaptiveLevels, []],
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, []],
+    ]);
+    const inserts = captureInserts();
+
+    await svc.create({
+      test: { title: "A", mode: "adaptive", designSettingsJson: { templateId: "default" }, overallPassRuleJson: {} },
+      sections: [],
+      adaptiveSettings: adaptivePayload,
+    });
+
+    const ts = inserts.find((i) => i.table === adaptiveTopicSettings)!.values as Record<string, unknown>;
+    expect(ts.topicId).toBe("tp1");
+    expect(ts.failureFeedback).toBe("Study more");
+
+    const levels = inserts
+      .filter((i) => i.table === adaptiveLevels)
+      .map((i) => i.values as Record<string, unknown>);
+    expect(levels.map((l) => l.levelName).sort()).toEqual(["Advanced", "Basic"]);
+    // passThresholdType defaults to "percent" when the payload omits it.
+    expect(levels.find((l) => l.levelName === "Advanced")!.passThresholdType).toBe("percent");
+
+    const link = inserts.find((i) => i.table === adaptiveLevelLinks)!.values as Record<string, unknown>;
+    expect(link.title).toBe("Course 1");
+    expect(link.url).toBe("https://example.com/1");
+  });
+
+  it("save() adaptive deletes existing adaptive rows then inserts the new set", async () => {
+    setupSelectDispatch([
+      [adaptiveLevels, [{ id: "old-level-1" }]], // one pre-existing level → its links are cleared first
+    ]);
+    tx.update.mockReturnValue(makeChain([{ ...dbTest, mode: "adaptive" }]));
+    const inserts = captureInserts();
+    const deletes = captureDeletes();
+
+    await svc.save("t1", { test: { mode: "adaptive" }, adaptiveSettings: adaptivePayload });
+
+    // Old rows are removed bottom-up to respect FK order…
+    expect(deletes).toContain(adaptiveLevelLinks);
+    expect(deletes).toContain(adaptiveLevels);
+    expect(deletes).toContain(adaptiveTopicSettings);
+    // …then the new payload is inserted.
+    expect(inserts.filter((i) => i.table === adaptiveLevels)).toHaveLength(2);
+    expect(inserts.filter((i) => i.table === adaptiveTopicSettings)).toHaveLength(1);
+  });
+
+  it("save() adaptive propagates a level-insert failure so the transaction rolls back", async () => {
+    // The mocked `db.transaction` cannot perform a real ROLLBACK, but the real
+    // Drizzle wrapper rolls back whenever the callback rejects. Asserting the
+    // error escapes `save()` is what guarantees that rollback fires in prod.
+    setupSelectDispatch([
+      [adaptiveLevels, []],
+    ]);
+    tx.update.mockReturnValue(makeChain([{ ...dbTest, mode: "adaptive" }]));
+    tx.insert.mockImplementation((table: unknown) => {
+      if (table === adaptiveLevels) {
+        const c = makeChain([]);
+        (c as any).then = (_resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
+          Promise.reject(new Error("adaptive level insert failed")).then(_resolve, reject);
+        return c;
+      }
+      return makeChain([{ ...dbTest }]);
+    });
+
+    await expect(
+      svc.save("t1", { test: { mode: "adaptive" }, adaptiveSettings: adaptivePayload }),
+    ).rejects.toThrow("adaptive level insert failed");
+  });
+});
+
+// ─── Legacy / backward-compat regression (PRD-7 §1.13.4) ──────────────────────
+
+describe("TestSettingsService — legacy regression", () => {
+  let svc: TestSettingsService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetTx();
+    svc = new TestSettingsService();
+  });
+
+  it("create() without designSettingsJson falls back to the default template for reconciliation", async () => {
+    // A legacy test carries no `designSettingsJson`; `extractTemplateId`
+    // resolves to "default" and reconciliation still provisions system pages.
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, []],
+    ]);
+    const inserts = captureInserts();
+
+    await svc.create({
+      test: { title: "Legacy", flowPolicyJson: { mode: "linear_flat" }, overallPassRuleJson: {} },
+      sections: [{ topicId: "tp1", drawCount: 5 }],
+    });
+
+    expect(inserts.filter((i) => i.table === contentPages).length).toBeGreaterThan(0);
+  });
+
+  it("create() without adaptiveSettings inserts no adaptive rows (standard test stays standard)", async () => {
+    setupSelectDispatch([
+      [templates, [{ id: "default", manifest: defaultManifest }]],
+      [contentPages, []],
+    ]);
+    const inserts = captureInserts();
+
+    await svc.create({
+      test: {
+        title: "Std",
+        flowPolicyJson: { mode: "linear_flat" },
+        designSettingsJson: { templateId: "default" },
+        overallPassRuleJson: {},
+      },
+      sections: [{ topicId: "tp1", drawCount: 5 }],
+    });
+
+    expect(inserts.filter((i) => i.table === adaptiveTopicSettings)).toHaveLength(0);
+    expect(inserts.filter((i) => i.table === adaptiveLevels)).toHaveLength(0);
+    expect(inserts.filter((i) => i.table === adaptiveLevelLinks)).toHaveLength(0);
   });
 });

@@ -491,3 +491,106 @@ describe("GET /api/tests/migration-health", () => {
     expect(res.status).toBe(401);
   });
 });
+
+// ─── Adaptive mode forwarding (PRD-7 §6.3) ────────────────────────────────────
+// The route delegates adaptive persistence to the service: `adaptiveSettings`
+// flows to the service only for `mode === "adaptive"`, and for adaptive PUT the
+// `sections` field is dropped (sections live with standard mode only).
+describe("POST/PUT /api/tests — adaptive mode forwarding", () => {
+  let app: express.Express;
+
+  const adaptiveSettings = [{
+    topicId: "t1",
+    failureFeedback: "Study more",
+    levels: [{
+      levelIndex: 0, levelName: "Basic",
+      minDifficulty: 0, maxDifficulty: 50, questionsCount: 5, passThreshold: 70,
+    }],
+  }];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([]);
+    app = makeApp();
+  });
+
+  it("POST adaptive — forwards adaptiveSettings to service.create and sets mode=adaptive", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive" });
+    serviceMock.create.mockResolvedValue({ ...dbTest, mode: "adaptive" });
+
+    const res = await asAuthor(request(app).post("/api/tests").send({
+      title: "Adaptive Test",
+      mode: "adaptive",
+      adaptiveSettings,
+    }));
+
+    expect(res.status).toBe(201);
+    const [payload] = serviceMock.create.mock.calls[0] as [{ test: { mode?: string }; adaptiveSettings?: unknown }];
+    expect(payload.test.mode).toBe("adaptive");
+    expect(payload.adaptiveSettings).toEqual(adaptiveSettings);
+  });
+
+  it("POST standard — does NOT forward adaptiveSettings to service.create", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    serviceMock.create.mockResolvedValue(dbTest);
+
+    const res = await asAuthor(request(app).post("/api/tests").send({
+      title: "Standard Test",
+      mode: "standard",
+      sections: [{ topicId: "t1", drawCount: 3 }],
+      adaptiveSettings, // present in body but must be ignored for standard mode
+    }));
+
+    expect(res.status).toBe(201);
+    const [payload] = serviceMock.create.mock.calls[0] as [{ adaptiveSettings?: unknown }];
+    expect(payload.adaptiveSettings).toBeUndefined();
+  });
+
+  it("PUT adaptive — forwards adaptiveSettings and drops sections (§6.3)", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, mode: "adaptive" });
+    serviceMock.save.mockResolvedValue({ ...dbTest, mode: "adaptive" });
+
+    const res = await asAuthor(request(app).put("/api/tests/test1").send({
+      title: "Adaptive Updated",
+      mode: "adaptive",
+      sections: [{ topicId: "t1", drawCount: 3 }], // should be ignored for adaptive
+      adaptiveSettings,
+    }));
+
+    expect(res.status).toBe(200);
+    const [testId, payload] = serviceMock.save.mock.calls[0] as [string, { sections?: unknown; adaptiveSettings?: unknown }];
+    expect(testId).toBe("test1");
+    expect(payload.adaptiveSettings).toEqual(adaptiveSettings);
+    expect(payload.sections).toBeUndefined();
+  });
+});
+
+// ─── Legacy read-path: a pre-PRD-7 test opens through the new single-test GET ──
+describe("GET /api/tests/:id — legacy test opens", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([]);
+    app = makeApp();
+  });
+
+  it("200 — legacy published test (published=true) loads with sections", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, status: "published", published: true });
+    storageMock.getTestSections.mockResolvedValue([dbSection]);
+
+    const res = await asAuthor(request(app).get("/api/tests/test1"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("published");
+    expect(Array.isArray(res.body.sections)).toBe(true);
+    expect(res.body.sections[0].topicName).toBe("JS");
+  });
+});
