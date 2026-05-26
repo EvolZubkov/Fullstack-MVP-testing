@@ -5,9 +5,9 @@
 **Baseline текущего поведения:** [prd-7-baseline.md](prd-7-baseline.md)
 **Стратегия и промпты:** [execution-strategy.md](prd-7-execution-strategy.md)
 **Roadmap:** [ROADMAP.md](ROADMAP.md) шаг 1
-**Статус:** S0–S3 закрыты; S4 Drawer-каркас (§1.7) — частично (FR-05, FR-25c,
-FR-25k, FR-20c, NFR-19-21 не закрыты); S4 basic-settings (§1.8) + S5-S8 (секции)
-— закрыты 2026-05-25; S9–S11 не начаты.
+**Статус:** S0–S8 закрыты (S4/4A: единственный незакрытый пункт — FR-20c
+якорная навигация к ошибочному полю; S4/4B + S5-S8 — полностью закрыты
+2026-05-25); S9–S11 не начаты.
 **Последняя проверка:** 2026-05-25
 **Правило UI:** UI-разработка начинается только после подготовки и явного согласования wireframes
 ([BRD §2.6](brd-scorm-enhancements.md), NFR-14, NFR-19...NFR-21).
@@ -416,17 +416,20 @@ client/src/features/tests/editor/
 - [x] Гарантировать, что скрытые draft-настройки не сохраняются в `localStorage`/`sessionStorage`
       (FR-25j); guard при закрытии Drawer вместо автосохранения.
       _(afc5fe5.)_
-- [ ] Реализовать version-tracking для optimistic conflict detection (FR-25k):
+- [x] Реализовать version-tracking для optimistic conflict detection (FR-25k):
       обработать `409 Conflict` ответ с dialog "Обновить данные" / "Сохранить поверх"
       (маппер уже кладёт `model.version` и `expectedVersion`, фазы 2A + 2B).
+      _(use-test-editor.ts: `conflict` state, `SaveHttpError` 409 branch, `resolveConflictReload/Overwrite`;_
+      _test-editor.tsx: `ConflictDialog` компонент.)_
 - [x] Подключить `validateTestEditor()` через debounced trigger (300 мс) на blur
       и значимое изменение (FR-20a, NFR-18).
-      _(afc5fe5.)_
+      _(use-test-editor.ts: `validationTimerRef` + `setTimeout 300`.)_
 - [x] Различать `warning` (не блокирует сохранение) и `error` (блокирует)
       по полю `severity` из `ValidationIssue` (FR-20b).
-      _(afc5fe5.)_
+      _(use-test-editor.ts: `buildTabStatuses`; test-editor.tsx: `saveDisabled = !dirty || hasErrors`.)_
 - [ ] Реализовать ссылки-якоря из сводки секции к проблемным полям, используя
       `field`-пути из `ValidationIssue` (FR-20c).
+      _(requiredFieldsMissing экспозирован из хука, но навигация к полю не реализована — единственный незакрытый пункт S4.)_
 - [x] Реализовать wide Drawer как контейнер `TestEditor` (FR-43).
       _(afc5fe5.)_
 - [x] Layout: desktop width `min(1120px, calc(100vw - 48px))`.
@@ -440,24 +443,32 @@ client/src/features/tests/editor/
 - [x] Стабильные header и footer Drawer без зависимости от выбранной секции.
       _(afc5fe5; 6ddd2bf: unify Design save into drawer footer.)_
 - [x] Реализовать индикаторы агрегированного состояния на вкладках (FR-25b).
-      _(40ed0b9: tab status dot DS-styled; ae4221d: hide tab badge pill on clean tabs.)_
+      _(use-test-editor.ts: `buildTabStatuses`; test-editor.tsx: `StatusBadge` с `aria-label`.)_
 - [x] Реализовать индикаторы локального состояния `изменено`, `warning`, `error` на секциях (FR-25b).
       _(979d224: wireframe-correspondence pass — footer / required toggle / limits.)_
-- [ ] Реализовать `aria-label` для всех индикаторов (NFR-21).
-- [ ] При открытии Drawer фокус переходит на первый интерактивный элемент (NFR-19).
-- [ ] Tab/Shift-Tab работают без ловушки фокуса вне Drawer (NFR-20).
+- [x] Реализовать `aria-label` для всех индикаторов (NFR-21).
+      _(test-editor.tsx: `StatusBadge` → `aria-label={aria}`, `Tag` со `aria-label`, `IconButton` close со `aria-label`.)_
+- [x] При открытии Drawer фокус переходит на первый интерактивный элемент (NFR-19).
+      _(test-editor.tsx: `useEffect` → `querySelector('[role="tab"]')?.focus()` при `open`.)_
+- [x] Tab/Shift-Tab работают без ловушки фокуса вне Drawer (NFR-20).
+      _(test-editor.tsx: `useEffect` keydown handler на `drawerRef` — wrap first↔last focusable.)_
 - [x] Реализовать единую кнопку **"Сохранить"** в footer (FR-25a).
       _(6ddd2bf: unify Design save into drawer footer.)_
 - [x] Кнопка активна только при наличии изменений и отсутствии блокирующих ошибок (FR-04).
-      _(afc5fe5.)_
-- [ ] Footer показывает строку изменённых областей и опциональное действие
+      _(test-editor.tsx: `saveDisabled = !combinedDirty || hasErrors || combinedSaving`.)_
+- [x] Footer показывает строку изменённых областей и опциональное действие
       **"Показать изменения"** (FR-25c).
-- [ ] **"Показать изменения"** показывает grouped summary по вкладкам/секциям (FR-25c1).
-- [ ] **"Показать изменения"** видна только в dirty-состоянии (FR-25c2).
-- [ ] Confirmation dialog при закрытии с несохранёнными изменениями:
+      _(test-editor.tsx: footer рендерит кнопку «Показать изменения» при `combinedDirty`.)_
+- [x] **"Показать изменения"** показывает grouped summary по вкладкам/секциям (FR-25c1).
+      _(test-editor.tsx: `ChangesPopover` — список dirty-вкладок по `tabStatuses`.)_
+- [x] **"Показать изменения"** видна только в dirty-состоянии (FR-25c2).
+      _(test-editor.tsx: кнопка и попover обёрнуты в `{combinedDirty ? ... : ...}`.)_
+- [x] Confirmation dialog при закрытии с несохранёнными изменениями:
       "Сохранить", "Выйти без сохранения", "Отмена" (FR-05).
-- [ ] При блокирующих ошибках кнопка "Сохранить" в confirmation dialog disabled
+      _(test-editor.tsx: `CloseConfirmDialog` + `requestClose` открывает при `combinedDirty`.)_
+- [x] При блокирующих ошибках кнопка "Сохранить" в confirmation dialog disabled
       с переходом к первой ошибочной секции (FR-05a).
+      _(test-editor.tsx: `CloseConfirmDialog` → `disabled={props.hasErrors}`.)_
 - [x] В footer нет постоянной кнопки "Сбросить всё" (FR-05b).
       _(afc5fe5.)_
 

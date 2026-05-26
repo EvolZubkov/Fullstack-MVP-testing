@@ -28,7 +28,7 @@ S9–S11 — тесты, удаление legacy, acceptance — не начат
 | S2+ | Block 1E — required-fields validation | Закрыта 2026-05-22 | `required-fields-validator.ts` + hook в `save()` при `status=published` |
 | S2+ | Route-gap closure | Закрыта 2026-05-22 | `POST /api/tests` и `PUT /api/tests/:id` переведены на `testSettingsService.create()/save()` |
 | S3 | Mappers + validation | Закрыта | 46 unit-тестов покрывают `apiToEditorModel`, `editorModelToPayload`, `validateTestEditor` |
-| S4 | Фаза 4A Drawer каркас | Частично (FR-05, FR-25c, FR-25k, FR-20c, NFR-19-21 не закрыты) | `test-editor.tsx`, `use-test-editor.ts`, tests-list explorer (`afc5fe5` + `0850a64` + fix-commits) |
+| S4 | Фаза 4A Drawer каркас | Закрыта (2026-05-25; FR-20c якорная навигация к полю — единственный незакрытый; переносится в S9) | `test-editor.tsx`, `use-test-editor.ts`, tests-list explorer (`afc5fe5` + `0850a64` + fix-commits) |
 | S4 | Фаза 4B Reference basic-settings | Закрыта 2026-05-25 | `basic-settings-section.tsx` + FeedbackEditorModal (tb-rte + PDF assets) (`afc5fe5`, `0257b5b`, `57d77c1`) |
 | S5 | Секция topics-structure | Закрыта 2026-05-25 | `topics-structure-section.tsx` + FeedbackPreview + TopicRow feedback integration (`afc5fe5`, `0257b5b`) |
 | S6 | Секция pass-rules | Закрыта 2026-05-25 | `pass-rules-section.tsx` внутри настроек Drawer (`afc5fe5`) |
@@ -40,11 +40,8 @@ S9–S11 — тесты, удаление legacy, acceptance — не начат
 
 Незакрытые пункты S4-S8 (переходят в S9 или отдельный fix):
 
-- FR-05 confirmation dialog при закрытии с несохранёнными изменениями
-- FR-25c «Показать изменения» grouped summary в footer
-- FR-25k optimistic conflict dialog (409 Conflict)
+- FR-20c якорная навигация из summary ошибки к проблемному полю (единственный незакрытый S4/4A пункт)
 - FR-39 warning в «Структуре» при отсутствии system element
-- NFR-19/20/21 focus trap + aria-label на индикаторах
 
 Полный регрессионный набор на 2026-05-25: **~19 файлов × ~457 тестов, npm run check 0 errors**.
 
@@ -1122,7 +1119,7 @@ Anti-goals: НЕ начинать новые фичи. Только провер
 | S3 | 2B | Дополнить mappers | Sonnet | 4 | ✓ |
 | S3 | 3A | Reference-валидация | Sonnet | 3B, 4 | ✓ |
 | S3 | 3B | Расширение валидации | Haiku | 4 | ✓ |
-| S4 | 4A | Drawer-каркас (DS UniversityRT, не shadcn) | Opus | 4B, 5 | Частично (FR-05/25c/25k/20c, NFR-19-21 не закрыты) |
+| S4 | 4A | Drawer-каркас (DS UniversityRT, не shadcn) | Opus | 4B, 5 | ✓ 2026-05-25 (FR-20c → S9) |
 | S4 | 4B | Reference-секция basic-settings + s-feedback-edit | Sonnet | 5 | ✓ 2026-05-25 |
 | S5 | 5A | Секция topics-structure | Haiku | 6 | ✓ 2026-05-25 |
 | S6 | 5B | Секция pass-rules | Haiku | 6 | ✓ 2026-05-25 |
@@ -1136,8 +1133,8 @@ Anti-goals: НЕ начинать новые фичи. Только провер
 | ~~S11~~ | ~~W.3C~~ | ~~Wireframes: edge-states~~ | — | — | Снято со scope — edge-states интегрированы как state'ы единого `prd7-editor-drawer.html` |
 
 **Итого: 12 сессий моделей** (S0...S11) + 1 расширенная S2 для контрактов PRD-1 §4.3.
-Закрыто полностью: S0–S3, S2+, S4/4B, S5–S8. S4/4A — частично (§1.7 пункты FR-05/25c/25k/20c, NFR-19-21).
-Остаток S4/4A + S9, S10, S11. Следующая: S9 (component + API тесты) + довыполнение S4/4A.
+Закрыто: S0–S8 + S2+. Один перенесённый пункт: FR-20c (якорная навигация к полю) → S9.
+Следующая: S9 (component + API тесты; FR-20c в составе).
 Экономия за счёт группировки через `/model`-переключение внутри сессии (см. §1.4).
 
 **Параллельно:** S1 (генерация wireframes моделью) шла одновременно с S2/S3
