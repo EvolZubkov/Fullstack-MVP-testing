@@ -91,13 +91,15 @@ describe("extractEmbeddedMediaIntoAssets — base64 data URLs", () => {
     expect(testObj.sections[0].questions[0].mediaUrl).toMatch(/^assets\/media\//);
   });
 
-  it("leaves non-mediaUrl fields untouched", () => {
+  it("embeds any data-URL field but leaves plain-text fields untouched", () => {
     const testObj = { title: "Test", imageUrl: PNG_DATA_URL, mediaUrl: PNG_DATA_URL };
     extractEmbeddedMediaIntoAssets(testObj);
-    // imageUrl is not a mediaUrl field — should be unchanged
-    expect(testObj.imageUrl).toBe(PNG_DATA_URL);
-    // mediaUrl is changed
-    expect(testObj.mediaUrl).not.toBe(PNG_DATA_URL);
+    // Plain text is not media — untouched.
+    expect(testObj.title).toBe("Test");
+    // Any data-URL value is embedded so the SCORM package stays self-contained,
+    // regardless of the field name (e.g. a logo/image stored outside mediaUrl).
+    expect(testObj.imageUrl).toMatch(/^assets\/media\//);
+    expect(testObj.mediaUrl).toMatch(/^assets\/media\//);
   });
 });
 

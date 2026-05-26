@@ -104,6 +104,9 @@ export function extractEmbeddedMediaIntoAssets(
     }
 
     for (const k of Object.keys(node)) {
+      // `mediaUrl` is already handled above; skip it here so a missing/blocked
+      // file is not reported twice (and a valid one is not packed twice).
+      if (k === "mediaUrl") continue;
       const v = node[k];
       if (Array.isArray(v)) v.forEach(visit);
       else if (v && typeof v === "object") visit(v);
