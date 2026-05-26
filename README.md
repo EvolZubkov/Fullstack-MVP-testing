@@ -337,12 +337,11 @@ Fullstack-MVP-testing/
 |   |-- migrate-emails.ts           # Миграция email
 |   +-- test-crypto.ts              # Тесты шифрования
 |
-|-- docs/                            # Документация
-|   |-- guides/
-|   |   +-- design_guidelines.md    # Гайдлайны дизайна
-|   +-- reports/
-|       |-- ANALYSIS_REPORT.md      # Отчет об анализе
-|       +-- CODE_REVIEW.md          # Отчет code review
+|-- docs/                            # Документация (PRD, ROADMAP, гайды, wireframes)
+|   |-- guides/                      # Гайды (DOCUMENTATION-GUIDELINES, design_guidelines, LOGGING)
+|   |-- prd-*.md                     # PRD-1..9
+|   |-- wireframes/                  # HTML-эскизы (PRD-7)
+|   +-- reports/                     # Аудиты зависимостей и LMS-анализы
 |
 |-- migrations/                      # Drizzle-миграции БД
 |-- uploads/                         # Загруженные файлы
