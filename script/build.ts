@@ -26,7 +26,6 @@ const allowlist = [
   "pg",
   "stripe",
   "uuid",
-  "xlsx",
   "zod",
 ];
 
