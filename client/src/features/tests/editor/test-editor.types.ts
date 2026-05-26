@@ -237,7 +237,12 @@ export type TestSettingsPayload = {
   timeLimitMinutes: number | null;
   maxAttempts: number | null;
   showCorrectAnswers: boolean;
-  feedback: FeedbackPayload;
+  /**
+   * Test-level feedback. Sent under the `feedbackJson` key because the legacy
+   * `feedback` server field is `string`-typed (zod-validated). The new structured
+   * form lives in `feedbackJson` (decisions §4.3, §6.5).
+   */
+  feedbackJson: FeedbackPayload;
   webhookUrl: string | null;
   telemetryEnabled: boolean;
   expectedVersion: number;

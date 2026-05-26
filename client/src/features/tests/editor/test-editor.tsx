@@ -29,6 +29,7 @@ import {
 } from "react";
 import { AlertTriangle, X, XCircle } from "lucide-react";
 import {
+  Banner,
   Button,
   EmptyState,
   IconButton,
@@ -37,6 +38,7 @@ import {
   Tabs,
   type TabItem,
 } from "@universityrt/ui-kit";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useTestEditor,
   type EditorTabKey,
@@ -133,6 +135,8 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
   // action (per wireframe prd7-design-tab.html — single footer save).
   const design = useDesignSettings(editor.model?.id);
 
+  const queryClient = useQueryClient();
+
   const drawerRef = useRef<HTMLElement | null>(null);
 
   // NFR-19: focus the first interactive element (the first tab) on open.
@@ -192,20 +196,39 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
 
   // Unified save: persist whichever drafts are dirty. Test-settings first
   // (its PUT controls `expectedVersion` ordering); design after, since its
-  // endpoint is independent.
-  const saveAll = useCallback(async () => {
-    if (editor.isDirty) await editor.save();
-    if (design.isDirty) await design.save();
+  // endpoint is independent. Returns `true` only when every dirty draft was
+  // actually persisted — the editor stays open otherwise (so a 400/5xx
+  // doesn't get masked by a friendly close + triangle-alert).
+  const saveAll = useCallback(async (): Promise<boolean> => {
+    if (editor.isDirty) {
+      const ok = await editor.save();
+      if (!ok) return false;
+    }
+    if (design.isDirty) {
+      await design.save();
+    }
+    return true;
   }, [design, editor]);
 
   const handleSave = useCallback(async () => {
     if (saveDisabled) return;
-    await saveAll();
-  }, [saveAll, saveDisabled]);
+    const ok = await saveAll();
+    if (!ok) return;
+    // Persist warning state so the test list can show the triangle-alert indicator.
+    const testId = editor.model?.id;
+    if (testId) {
+      queryClient.setQueryData(
+        ["test-warnings", testId],
+        editor.validation.warnings.length > 0,
+      );
+    }
+    onClose();
+  }, [saveAll, saveDisabled, onClose, editor.model?.id, editor.validation.warnings.length, queryClient]);
 
   const handleSaveAndExit = useCallback(async () => {
     if (hasErrors) return;
-    await saveAll();
+    const ok = await saveAll();
+    if (!ok) return;
     setCloseDialogOpen(false);
     onClose();
   }, [hasErrors, onClose, saveAll]);
@@ -322,6 +345,15 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
           tabIndex={0}
           data-testid="test-editor-body"
         >
+          {editor.saveError && (
+            <Banner
+              tone="error"
+              title="Не удалось сохранить тест"
+              description={editor.saveError.message}
+              onClose={editor.dismissSaveError}
+              data-testid="test-editor-save-error"
+            />
+          )}
           {editor.model && activeTab === "composition" && (
             <CompositionSection
               model={editor.model}

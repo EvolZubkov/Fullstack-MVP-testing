@@ -155,7 +155,9 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
 
   const isDirty = useMemo(() => {
     if (!persisted) return false;
-    return JSON.stringify(persisted) !== JSON.stringify(draft);
+    const norm = (s: DesignSettings) =>
+      JSON.stringify({ ...s, params: s.params ?? {} });
+    return norm(persisted) !== norm(draft);
   }, [draft, persisted]);
 
   const setParam = (key: string, value: unknown) => {

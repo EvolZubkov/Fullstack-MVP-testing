@@ -373,8 +373,8 @@ describe("7. editorModelToPayload — create standard", () => {
     expect(payload.expectedVersion).toBe(12);
 
     // §6.5: scormHref stripped from outgoing assets
-    expect(payload.feedback.assets[0]).not.toHaveProperty("scormHref");
-    expect(payload.feedback.assets[0]).toMatchObject({
+    expect(payload.feedbackJson.assets[0]).not.toHaveProperty("scormHref");
+    expect(payload.feedbackJson.assets[0]).toMatchObject({
       id: "asset-9",
       title: "Сертификат",
       fileName: "cert.pdf",

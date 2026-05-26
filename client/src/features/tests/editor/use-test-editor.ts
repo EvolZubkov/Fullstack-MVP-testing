@@ -35,6 +35,7 @@ import {
   apiToEditorModel,
   editorModelToPayload,
   emptyEditorModel,
+  mapEditorAdaptiveToPayload,
   mapEditorSectionsToPayload,
 } from "./test-editor.mappers";
 import { validateTestEditor } from "./test-editor.validation";
@@ -102,6 +103,12 @@ export type UseTestEditorResult = {
   /** Latest 422 violations if the previous save attempt failed validation. */
   requiredFieldsMissing: RequiredFieldsMissing[];
   /**
+   * Unexpected HTTP error from the last save attempt (e.g. 400 zod failure,
+   * 5xx). Lets the Drawer keep itself open and show a banner instead of
+   * silently closing — the previous "swallow" behaviour masked real bugs.
+   */
+  saveError: { status: number; message: string } | null;
+  /**
    * Set right after a successful create POST. The parent component watches
    * this to close the Drawer and (optionally) re-open it in edit mode.
    * Re-set to `null` by {@link consumeCreatedId} once handled.
@@ -109,8 +116,14 @@ export type UseTestEditorResult = {
   createdId: string | null;
   /** Apply a partial draft update; tracks dirty / validation reactively. */
   updateModel: (updater: (model: TestEditorModel) => TestEditorModel) => void;
-  /** Save the draft. PUT for edit (with expectedVersion), POST for create. */
-  save: () => Promise<void>;
+  /**
+   * Save the draft. PUT for edit (with expectedVersion), POST for create.
+   * Resolves with `true` when the network call succeeded and the snapshot has
+   * been refreshed; `false` when the call was skipped (invalid / no draft) or
+   * failed — in which case the relevant state (`conflict` /
+   * `requiredFieldsMissing` / `saveError`) is populated for the UI.
+   */
+  save: () => Promise<boolean>;
   /** Revert the draft to the last saved snapshot. */
   reset: () => void;
   /** Resolve the 409 conflict by reloading from server (drops draft). */
@@ -119,6 +132,8 @@ export type UseTestEditorResult = {
   resolveConflictOverwrite: () => Promise<void>;
   /** Dismiss the conflict dialog without retrying. */
   dismissConflict: () => void;
+  /** Dismiss the inline save-error banner. */
+  dismissSaveError: () => void;
   /** Acknowledge handling the post-create transition (resets `createdId`). */
   consumeCreatedId: () => void;
 };
@@ -172,16 +187,14 @@ function diffDirtyTabs(
   snapshot: TestEditorModel,
 ): Set<EditorTabKey> {
   const dirty = new Set<EditorTabKey>();
-  if (
-    !shallowEqualJson(draft.sections, snapshot.sections) ||
-    !shallowEqualJson(draft.adaptive, snapshot.adaptive)
-  ) {
+  if (!shallowEqualJson(draft.sections, snapshot.sections)) {
     dirty.add("composition");
   }
   if (
     !shallowEqualJson(draft.basic, snapshot.basic) ||
     !shallowEqualJson(draft.runtime, snapshot.runtime) ||
     !shallowEqualJson(draft.passRules, snapshot.passRules) ||
+    !shallowEqualJson(draft.adaptive, snapshot.adaptive) ||
     draft.mode !== snapshot.mode
   ) {
     dirty.add("settings");
@@ -238,6 +251,29 @@ async function putTest(testId: string, payload: unknown): Promise<unknown> {
     throw new SaveHttpError(res.status, body);
   }
   return res.json();
+}
+
+/**
+ * Build the full request body for save (PUT or POST).
+ *
+ * `editorModelToPayload` only covers the test-level scalar fields. The server
+ * routes for both create and update read `sections` and `adaptiveSettings` from
+ * the same flat body, so we attach them here. `showDifficultyLevel` is also
+ * carried at the top level for adaptive tests (server schema, PRD-7 §6.4).
+ *
+ * For standard mode `mapEditorAdaptiveToPayload` returns `null`, and the
+ * adaptive-related fields are simply omitted from the payload.
+ */
+function buildSavePayload(draft: TestEditorModel): Record<string, unknown> {
+  const test = editorModelToPayload(draft);
+  const sections = mapEditorSectionsToPayload(draft);
+  const adaptive = mapEditorAdaptiveToPayload(draft);
+  const payload: Record<string, unknown> = { ...test, sections };
+  if (adaptive) {
+    payload.showDifficultyLevel = adaptive.showDifficultyLevel;
+    payload.adaptiveSettings = adaptive.topics;
+  }
+  return payload;
 }
 
 async function postTest(payload: unknown): Promise<unknown> {
@@ -369,27 +405,29 @@ export function useTestEditor(
   const [requiredFieldsMissing, setRequiredFieldsMissing] = useState<
     RequiredFieldsMissing[]
   >([]);
+  /**
+   * Any save error that is not a known 409/422 case. Surfaced to the Drawer
+   * so an unexpected 400 (validation rejection) or 5xx does not silently slip
+   * past — without this the Drawer would close on a failed save and the user
+   * would think the change was persisted.
+   */
+  const [saveError, setSaveError] = useState<{ status: number; message: string } | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (!draft) throw new Error("save: editor is not ready");
-      const payload = editorModelToPayload(draft);
+      const fullPayload = buildSavePayload(draft);
       if (isEdit) {
         if (!editTestId) throw new Error("save: edit mode without testId");
-        return putTest(editTestId, payload);
+        return putTest(editTestId, fullPayload);
       }
-      // Create: POST. Server requires `sections` for standard mode (route),
-      // so we attach the mapped sections here in addition to `payload`.
-      const createPayload = {
-        ...payload,
-        sections: mapEditorSectionsToPayload(draft),
-      };
-      return postTest(createPayload);
+      return postTest(fullPayload);
     },
     onSuccess: (data) => {
       setConflict(null);
       setRequiredFieldsMissing([]);
+      setSaveError(null);
       try {
         const next = apiToEditorModel(data);
         setSnapshot(next);
@@ -419,7 +457,12 @@ export function useTestEditor(
           setRequiredFieldsMissing(err.body.fields);
           return;
         }
+        // Unknown HTTP error (400 from zod, 5xx, ...): keep the editor open and
+        // surface the message so the user is not left thinking the change was saved.
+        setSaveError({ status: err.status, message: describeSaveError(err) });
+        return;
       }
+      setSaveError({ status: 0, message: (err as Error)?.message ?? "Неизвестная ошибка" });
     },
   });
 
@@ -432,13 +475,17 @@ export function useTestEditor(
     [],
   );
 
-  const save = useCallback(async () => {
-    if (!draft || !options) return;
-    if (isEdit && !editTestId) return;
-    if (validation.errors.length > 0) return;
-    await mutation.mutateAsync().catch(() => {
-      /* swallow — surfaced via conflict / requiredFieldsMissing state */
-    });
+  const save = useCallback(async (): Promise<boolean> => {
+    if (!draft || !options) return false;
+    if (isEdit && !editTestId) return false;
+    if (validation.errors.length > 0) return false;
+    try {
+      await mutation.mutateAsync();
+      return true;
+    } catch {
+      // Surfaced via `conflict` / `requiredFieldsMissing` / `saveError` state.
+      return false;
+    }
   }, [draft, options, isEdit, editTestId, validation.errors.length, mutation]);
 
   const reset = useCallback(() => {
@@ -472,6 +519,10 @@ export function useTestEditor(
     setConflict(null);
   }, []);
 
+  const dismissSaveError = useCallback(() => {
+    setSaveError(null);
+  }, []);
+
   const consumeCreatedId = useCallback(() => {
     setCreatedId(null);
   }, []);
@@ -490,6 +541,7 @@ export function useTestEditor(
     tabStatuses,
     conflict,
     requiredFieldsMissing,
+    saveError,
     createdId,
     updateModel,
     save,
@@ -497,6 +549,7 @@ export function useTestEditor(
     resolveConflictReload,
     resolveConflictOverwrite,
     dismissConflict,
+    dismissSaveError,
     consumeCreatedId,
   };
 }
@@ -515,6 +568,34 @@ function isConflictBody(value: unknown): value is {
     typeof (value as { currentVersion?: unknown }).currentVersion === "number" &&
     typeof (value as { expectedVersion?: unknown }).expectedVersion === "number"
   );
+}
+
+/**
+ * Build a short human-readable message from an unknown save error. For zod
+ * `Validation failed` responses (400) the offending field paths are appended
+ * so the author can spot the bad field without opening DevTools.
+ */
+function describeSaveError(err: SaveHttpError): string {
+  const body = err.body as { error?: unknown; fields?: unknown } | null;
+  if (body && typeof body === "object") {
+    const fields = (body as { fields?: unknown }).fields;
+    if (Array.isArray(fields) && fields.length > 0) {
+      const names = fields
+        .map((f) =>
+          typeof f === "object" && f !== null && typeof (f as { field?: unknown }).field === "string"
+            ? (f as { field: string }).field
+            : null,
+        )
+        .filter((s): s is string => s !== null);
+      const head = names.slice(0, 5).join(", ");
+      const tail = names.length > 5 ? `, …(+${names.length - 5})` : "";
+      return `Сервер отверг сохранение (HTTP ${err.status}): ${head || "validation failed"}${tail}`;
+    }
+    if (typeof (body as { error?: unknown }).error === "string") {
+      return `Сервер отверг сохранение (HTTP ${err.status}): ${(body as { error: string }).error}`;
+    }
+  }
+  return `Сервер отверг сохранение (HTTP ${err.status})`;
 }
 
 function isRequiredFieldsBody(value: unknown): value is {

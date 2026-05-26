@@ -578,7 +578,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
 export function editorModelToPayload(model: TestEditorModel): TestSettingsPayload {
   const flowPolicyJson = buildFlowPolicyForPayload(model);
 
-  const feedback: FeedbackPayload = {
+  const feedbackJson: FeedbackPayload = {
     format: model.basic.feedback.format,
     text: model.basic.feedback.text,
     links: model.basic.feedbackLinks,
@@ -596,7 +596,7 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     timeLimitMinutes: model.runtime.timeLimitMinutes,
     maxAttempts: model.runtime.maxAttempts,
     showCorrectAnswers: model.runtime.showCorrectAnswers,
-    feedback,
+    feedbackJson,
     webhookUrl: emptyToNull(model.basic.webhookUrl),
     telemetryEnabled: model.basic.telemetryEnabled,
     expectedVersion: model.version,
