@@ -1,7 +1,7 @@
 # PRD-4: Гибкий поток прохождения, разделы и переходы SCORM-пакетов
 
 **Версия:** 1.0  
-**Статус:** Backlog (queued, шаг 2 ROADMAP — следующий после PRD-7 S9-S11)  
+**Статус:** Backlog — **MVP** (Storyline-MVP, ROADMAP §0.1); шаг 2, следующий после PRD-7 S10-S11  
 **Дата актуализации:** 2026-05-26  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-1](../prd-1/templates-content-pages.md), [PRD-2](../prd-2/result-variables.md),

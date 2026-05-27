@@ -1,7 +1,7 @@
 # PRD-8: Сценарий прохождения через страницу-маршрутизатор
 
 **Версия:** 1.0  
-**Статус:** Backlog (queued, шаг 4 ROADMAP)  
+**Статус:** Backlog — **MVP** (Storyline-MVP, ROADMAP §0.1); шаг 4  
 **Дата актуализации:** 2026-05-26  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-1](../prd-1/templates-content-pages.md), [PRD-2](../prd-2/result-variables.md),

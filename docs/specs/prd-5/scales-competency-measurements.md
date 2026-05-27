@@ -1,7 +1,7 @@
 # PRD-5: Шкалы, компетенции и многомерные измерения результатов
 
 **Версия:** 1.0  
-**Статус:** Backlog (queued, шаг 6 ROADMAP)  
+**Статус:** Backlog — post-MVP (ROADMAP §0.2); шаг 6  
 **Дата актуализации:** 2026-05-26  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-2](../prd-2/result-variables.md), [PRD-4](../prd-4/course-flow-sections.md),

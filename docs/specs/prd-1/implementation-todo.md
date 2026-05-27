@@ -287,7 +287,9 @@ row-menu, severity-rail) 2026-05-21 — в коде не реализовано 
 
 ## 4. Closeout PRD-1: редактор content-pages во вкладке «Структура» PRD-7
 
-**Статус:** Запланировано (closeout PRD-1, вне нумерации PRD-7 S9-S11)
+**Статус:** Запланировано — **входит в Storyline-MVP** (критический путь, см.
+[ROADMAP §0.1](../../ROADMAP.md)); вне нумерации PRD-7 S9-S11. Шаг 1 (редактор
+content-pages в «Структуре») делать совмещённо с PRD-7 S10 — общая кодовая зона.
 **Модель:** Sonnet 4.6 (UI) + Opus 4.7 (acceptance-сверка)
 **Зависит от:** PRD-7 S5-S8 (секции редактора закрыты); API `content-pages` (готов,
 `server/routes/content-pages.ts`); variant.kind (PRD-1 §4.3, серверная часть закрыта

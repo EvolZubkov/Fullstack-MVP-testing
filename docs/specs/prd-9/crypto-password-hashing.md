@@ -1,7 +1,7 @@
 # PRD-9: Доработка @vvlad1973/crypto и отказ от bcryptjs
 
 **Версия:** 1.0
-**Статус:** Backlog (queued, шаг 8 ROADMAP — tech debt, low priority)
+**Статус:** Backlog — post-MVP, tech debt (ROADMAP §0.2); шаг 8
 **Дата актуализации:** 2026-05-26
 **Связанные документы:** [Service Architecture](../../architecture/service-architecture.md),
 [Deps audit 2026-05](../../reports/deps-audit-2026-05.md), [ROADMAP](../../ROADMAP.md)

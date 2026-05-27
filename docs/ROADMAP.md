@@ -1,9 +1,9 @@
 # Roadmap реализации SCORM-расширений
 
-**Версия:** 1.2
+**Версия:** 1.3
 **Статус:** Утверждено
 **Источник:** [BRD](./specs/brd-scorm-enhancements.md), PRD-1...PRD-9
-**Последняя актуализация:** 2026-05-27
+**Последняя актуализация:** 2026-05-27 (реструктурирован под Storyline-MVP — см. §0.1/§0.2)
 
 ---
 
@@ -19,14 +19,14 @@
 | 1 | PRD-7 | S9 — component + API тесты, regression | Закрыта 2026-05-27 (тесты + FR-20c; полный suite 1375 зелёных, `npm run check` 0 ошибок) | — |
 | 1 | PRD-7 | S10 — удаление legacy UI | **Активна (следующая)** | — |
 | 1 | PRD-7 | S11 — acceptance pass §10 | Ожидает | S10 |
-| 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | Не начата | Завершение PRD-7 S9-S11 |
-| 3 | PRD-6 | Retake gate, eligibility plugins | Не начата | PRD-4 |
-| 4 | PRD-8 | Router-flow runtime + UI «Структура» в router-режиме | Не начата | PRD-4, PRD-7 |
-| 5 | PRD-2 | `result.*` показатели результата | Не начата | PRD-4 |
-| 6 | PRD-5 | Шкалы и многомерные измерения | Не начата | PRD-2, PRD-4 |
-| 7 | PRD-3 | Жизненный цикл шаблонов | Не начата | PRD-1 closeout (отдельный трек) |
-| 8 | PRD-9 | Миграция bcryptjs → `@vvlad1973/crypto` | Не начата (backlog, low priority, tech debt) | Завершение PRD-7 S9-S11 |
-| — | PRD-1 | Шаблоны и контентные страницы | In Implementation (Backend 90%, Runtime 95%, Frontend 65%) | Code-walk + closeout вне PRD-7; редактор content-pages в «Структуре» — closeout-фаза, см. [PRD-1 todo §4](./specs/prd-1/implementation-todo.md) |
+| 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | Не начата — **MVP** | Завершение PRD-7 S10-S11 |
+| 4 | PRD-8 | Router-flow runtime + UI «Структура» в router-режиме | Не начата — **MVP** | PRD-4, PRD-7 |
+| 3 | PRD-6 | Retake gate, eligibility plugins | Не начата — post-MVP | PRD-4 |
+| 5 | PRD-2 | `result.*` показатели результата | Не начата — post-MVP | PRD-4 |
+| 6 | PRD-5 | Шкалы и многомерные измерения | Не начата — post-MVP | PRD-2, PRD-4 |
+| 7 | PRD-3 | Жизненный цикл шаблонов | Не начата — post-MVP | PRD-1 closeout (отдельный трек) |
+| 8 | PRD-9 | Миграция bcryptjs → `@vvlad1973/crypto` | Не начата — post-MVP (tech debt) | Завершение PRD-7 S10-S11 |
+| — | PRD-1 | Шаблоны и контентные страницы | In Implementation (Backend 90%, Runtime 95%, Frontend 65%) — **MVP** (closeout) | Code-walk + closeout; редактор content-pages в «Структуре» — closeout-фаза, см. [PRD-1 todo §4](./specs/prd-1/implementation-todo.md) |
 
 Детальный прогресс по PRD-7:
 
@@ -34,6 +34,52 @@
 - Активные фазы S9-S11 — см. [specs/prd-7/s9-s11-in-progress.md](./specs/prd-7/s9-s11-in-progress.md).
 
 Детальный прогресс по PRD-1 — см. [specs/prd-1/implementation-todo.md](./specs/prd-1/implementation-todo.md).
+
+---
+
+## 0.1 MVP-срез: Storyline-MVP (критический путь)
+
+**Граница MVP зафиксирована 2026-05-27.** Цель — максимально быстро довести продукт до
+shippable-состояния с главной бизнес-ценностью BRD (Storyline-подобный сценарий через
+страницу-маршрутизатор), отложив тяжёлые и несрочные тректы в post-MVP (§0.2).
+
+**В MVP входят:**
+
+- **PRD-7** — единый редактор: закрытие S10 (удаление legacy) + S11 (acceptance).
+- **PRD-1 closeout** — редактор content-pages в «Структуре» (см. [PRD-1 todo §4](./specs/prd-1/implementation-todo.md)).
+- **PRD-4** — гибкий поток и разделы (`flowPolicy`, `section.*`, `sort_order`).
+- **PRD-8** — сценарий через страницу-маршрутизатор (Storyline-сценарий).
+
+**Критический путь MVP (порядок исполнения):**
+
+| # | Шаг | Зона | Зависит от | Статус |
+| --- | --- | --- | --- | --- |
+| 1 | PRD-7 S10 (удаление legacy: inline wizard, чтение legacy-полей) **совмещённо с** closeout PRD-1 шаг 1 (редактор content-pages в «Структуре») — общая кодовая зона | frontend `tests.tsx` + секция «Структура» | S9 (закрыта) | **Активна (следующая)** |
+| 2 | PRD-7 S11 — acceptance pass §10 (закрывает PRD-7) | acceptance | шаг 1 | Ожидает |
+| 3 | PRD-1 closeout — остаток (manifest validation, приёмка), отметить PRD-1 closed | backend + docs | шаг 1 | Ожидает |
+| 4 | PRD-4 — runtime потока + flow-настройки в редакторе («Сценарий») | backend + frontend | PRD-7 закрыт | Не начата |
+| 5 | PRD-8 — router-runtime + вкладка «Структура» в router-режиме | backend + frontend | PRD-4, PRD-1 | Не начата |
+
+После шага 5 — **Storyline-MVP shippable.**
+
+**Ускоритель:** шаги 1 и 3 (PRD-7 S10 + closeout PRD-1) делаются в одной сессии/зоне —
+экономит двойной проход по `tests.tsx` и вкладке «Структура».
+
+## 0.2 Post-MVP backlog
+
+Включается после Storyline-MVP, в порядке ценности/зависимостей:
+
+| Приоритет | PRD | Что даёт | Зависит от |
+| --- | --- | --- | --- |
+| 1 | PRD-6 | Retake gate / cooldown (compliance для корпоративных курсов) | PRD-4 |
+| 2 | PRD-2 | Показатели результата `result.*` | PRD-4 |
+| 3 | PRD-5 | Шкалы и компетенции `scale.*` | PRD-2, PRD-4 |
+| 4 | PRD-3 | Реестр и жизненный цикл внешних шаблонов | PRD-1 |
+| — | PRD-9 | Миграция bcrypt → `@vvlad1973/crypto` (tech debt, изолирован) | — |
+
+Отложенные точечные пункты: `showSectionResult` (промежуточные результаты по темам),
+предпросмотр шаблона и text-overflow diagnostics в PRD-1, порог coverage 50%, раздел
+«Архив» с восстановлением в списке тестов.
 
 ---
 
@@ -50,6 +96,10 @@ PRD-1 уже частично реализован (см. [specs/prd-1/implement
 ---
 
 ## 2. Порядок реализации
+
+> Таблица ниже документирует **зависимости и обоснование** порядка PRD. Фактический
+> порядок **исполнения** — MVP-first (см. §0.1): PRD-7 → closeout PRD-1 → PRD-4 → PRD-8,
+> затем post-MVP PRD-6 → PRD-2 → PRD-5 → PRD-3. То есть для MVP PRD-8 поднят выше PRD-6.
 
 | Шаг | PRD | Этап BRD | Основная причина выбранного порядка |
 | --- | --- | --- | --- |

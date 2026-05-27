@@ -1,7 +1,7 @@
 # PRD-3: Администрирование и жизненный цикл SCORM-шаблонов
 
 **Версия:** 2.0  
-**Статус:** Backlog (queued, шаг 7 ROADMAP)  
+**Статус:** Backlog — post-MVP (ROADMAP §0.2); шаг 7  
 **Дата актуализации:** 2026-05-26  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-1](../prd-1/templates-content-pages.md),
