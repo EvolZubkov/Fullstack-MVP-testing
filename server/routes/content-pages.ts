@@ -273,8 +273,11 @@ router.put("/:id/content-pages/:pageId", requireAuthor, async (req, res) => {
       sortOrder?: number;
     };
 
-    // Validate topicId if provided
-    if (topicId !== undefined) {
+    // Validate topicId membership only for a non-null id. A null topicId is
+    // valid: it moves the page to a test-scope zone («До теста» / «После теста»,
+    // position before/after) — e.g. dragging a page out of a topic. Mirrors the
+    // POST route's truthy check; `topicId !== undefined` wrongly rejected null.
+    if (topicId != null) {
       const validTopicIds = await getTestTopicIds(testId);
       if (!validTopicIds.has(topicId)) {
         return res.status(422).json({ error: "topicId does not belong to this test", field: "topicId" });

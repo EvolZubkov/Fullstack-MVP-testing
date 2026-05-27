@@ -53,10 +53,12 @@ import {
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
-  closestCenter,
+  pointerWithin,
+  rectIntersection,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
@@ -242,6 +244,19 @@ function parseZoneId(id: string): { position: ContentPagePosition; topicId: stri
   const [, position, topicId] = id.split(":");
   return { position: position as ContentPagePosition, topicId: topicId === "" ? null : topicId };
 }
+
+/**
+ * Pointer-based collision so a drop lands in the zone/row actually UNDER the
+ * cursor (closestCenter compared the dragged item's center to droppable centers,
+ * which mis-targeted small/empty zones). Prefer a row hit (precise sort/position)
+ * over the wrapping zone; fall back to the zone, then to rect intersection.
+ */
+const structureCollision: CollisionDetection = (args) => {
+  const hits = pointerWithin(args);
+  const pool = hits.length ? hits : rectIntersection(args);
+  const row = pool.find((c) => !String(c.id).startsWith("zone:"));
+  return row ? [row] : pool;
+};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -455,7 +470,7 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={structureCollision}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}

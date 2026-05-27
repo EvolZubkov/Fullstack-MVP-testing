@@ -429,6 +429,17 @@ describe("PUT /api/tests/:id/content-pages/:pageId", () => {
     expect(res.body.field).toBe("topicId");
   });
 
+  it("allows topicId=null to move a page to a test-scope zone (cross-zone DnD)", async () => {
+    const res = await request(makeApp())
+      .put("/api/tests/test-1/content-pages/page-1")
+      .send({ position: "before", topicId: null });
+    expect(res.status).toBe(200);
+    expect(storageMock.updateContentPage).toHaveBeenCalledWith(
+      "page-1",
+      expect.objectContaining({ topicId: null, position: "before" }),
+    );
+  });
+
   it("updates successfully", async () => {
     const res = await request(makeApp())
       .put("/api/tests/test-1/content-pages/page-1")
