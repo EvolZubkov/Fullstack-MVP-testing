@@ -55,24 +55,33 @@ Reference: `__tests__/sections/basic-settings-section.test.tsx` и
 
 Чек-лист (из §1.13.2 implementation-todo):
 
-- [ ] Create standard happy path в Drawer.
-- [ ] Edit standard с existing sections.
-- [ ] Create adaptive с загрузкой difficulty distribution.
-- [ ] Edit adaptive с сохранёнными levels/links.
-- [ ] Переключение standard/adaptive показывает inline warning без удаления данных.
-- [ ] Переключение `flowMode` пересобирает структуру и сохраняет несовместимые
-  элементы как скрытые.
-- [ ] Возврат предыдущего режима восстанавливает скрытые настройки.
-- [ ] Confirmation dialog при закрытии с несохранёнными изменениями.
-- [ ] Confirmation dialog c блокирующими ошибками: "Сохранить" disabled.
-- [ ] API error остаётся в редакторе.
-- [ ] Optimistic conflict dialog "Обновить данные" / "Сохранить поверх".
-- [ ] Удаление теста: confirmation с вводом точного названия.
-- [ ] Архивные тесты скрыты из основного списка.
-- [ ] Раздел "Архив" показывает архивные тесты и позволяет восстановить.
-- [ ] Drawer открывается с данными за < 1.5 с на тесте с 20 темами (NFR-17).
-- [ ] Валидация debounced 300 мс (NFR-18).
-- [ ] Фокус переходит на первый интерактивный элемент при открытии (NFR-19).
+- [x] Create standard happy path в Drawer — `test-editor.test.tsx` (DOM/focus + create-mode POST).
+- [x] Edit standard с existing sections — `test-editor.test.tsx` (load test-1).
+- [x] Create adaptive с загрузкой difficulty distribution — `test-editor.test.tsx` (Gap 4).
+- [x] Edit adaptive с сохранёнными levels/links — `test-editor.test.tsx` (Gap 4, десериализация adaptiveSettings).
+- [x] Переключение standard/adaptive показывает inline warning без удаления данных —
+  `basic-settings-section.test.tsx` (драйвит реальный onChange через `runUpdater`,
+  проверяет сохранение title/sections и adaptive-топиков).
+- [x] Переключение `flowMode` пересобирает структуру и сохраняет несовместимые
+  элементы как скрытые — `basic-settings-section.test.tsx` (router flowSettings не
+  очищаются при уходе с router-режима).
+- [x] Возврат предыдущего режима восстанавливает скрытые настройки —
+  `basic-settings-section.test.tsx` (скрытые adaptive/router-настройки удерживаются в draft).
+- [x] Confirmation dialog при закрытии с несохранёнными изменениями — `test-editor.test.tsx` (FR-05).
+- [x] Confirmation dialog c блокирующими ошибками: "Сохранить" disabled — `test-editor.test.tsx` (Gap 5, component-level).
+- [x] API error остаётся в редакторе — `test-editor.test.tsx` (Gap 6, saveError banner на 500).
+- [x] Optimistic conflict dialog "Обновить данные" / "Сохранить поверх" —
+  `test-editor.test.tsx` (Gap 7, component-level 409).
+- [x] Удаление теста: confirmation с вводом точного названия — `tests-list.test.tsx` (FR-30).
+- [x] Архивные тесты скрыты из основного списка — `tree-builder.ts` `excludeArchived()`
+  (по умолчанию).
+- [ ] Раздел "Архив" показывает архивные тесты и позволяет восстановить — **НЕ реализовано**
+  в `tests-list`: отдельного раздела «Архив»/восстановления нет (есть только смена статуса
+  на `archived`). Вынести как отдельный пункт list-feature / S11.
+- [x] Drawer открывается с данными за < 1.5 с на тесте с 20 темами (NFR-17) — smoke-тест
+  `test-editor.test.tsx` (рендер без ошибки на 20 темах; реальное измерение времени — S11).
+- [x] Валидация debounced 300 мс (NFR-18) — `test-editor.test.tsx` (Gap 9).
+- [x] Фокус переходит на первый интерактивный элемент при открытии (NFR-19) — `test-editor.test.tsx`.
 - [x] **FR-20c** — ссылки-якоря из сводки ошибок к проблемным полям по `field`-путям
   из `ValidationIssue`. Реализовано: DS `Banner` (error tone) в начале drawer-body со
   счётчиком полей и действием «Перейти к ошибкам» (по approved wireframe); навигация

@@ -375,3 +375,419 @@ describe("useTestEditor — create mode", () => {
     expect(result.current.createdId).toBe("te-new");
   });
 });
+
+// ─── Gap 4: Create adaptive happy path ──────────────────────────────────────────
+
+describe("useTestEditor — create adaptive mode (Gap 4)", () => {
+  it("creates a test in adaptive mode with levels and links", async () => {
+    // API response with adaptive settings as array (topics directly).
+    nextResponse(
+      {
+        ...buildApiResponse({
+          id: "te-adaptive-new",
+          mode: "adaptive",
+          title: "Adaptive Test",
+          folderId: "fld-ib",
+          adaptiveSettings: [
+            {
+              topicId: "topic-1",
+              topicName: "Topic A",
+              failureFeedback: null,
+              levels: [
+                {
+                  levelIndex: 0,
+                  levelName: "Easy",
+                  minDifficulty: 0,
+                  maxDifficulty: 3,
+                  questionsCount: 5,
+                  passThreshold: 60,
+                  passThresholdType: "percent",
+                  links: [
+                    { id: "link-1", title: "More info", url: "https://example.com" },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      },
+      201,
+    );
+
+    const client = makeClient();
+    const { result } = renderHook(
+      () => useTestEditor({ mode: "create", folderId: "fld-ib" }),
+      { wrapper: ({ children }) => withClient(client, <>{children}</>) },
+    );
+
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+
+    // Set up adaptive mode with title, sections, and levels.
+    act(() => {
+      result.current.updateModel((m) => ({
+        ...m,
+        mode: "adaptive",
+        basic: { ...m.basic, title: "Adaptive Test" },
+        sections: [
+          {
+            topicId: "topic-1",
+            topicName: "Topic A",
+            maxQuestions: 10,
+            drawCount: 1,
+            required: true,
+            timeLimit: { source: "inherit_test" },
+            feedback: { format: "plain", text: "" },
+            feedbackLinks: [],
+            feedbackAssets: [],
+          },
+        ],
+        adaptive: {
+          showDifficultyLevel: true,
+          testSettings: { showDifficultyLevel: true },
+          topics: [
+            {
+              topicId: "topic-1",
+              topicName: "Topic A",
+              failureFeedback: null,
+              levels: [
+                {
+                  levelIndex: 0,
+                  levelName: "Easy",
+                  minDifficulty: 0,
+                  maxDifficulty: 3,
+                  questionsCount: 5,
+                  passThreshold: 60,
+                  passThresholdType: "percent",
+                  links: [{ title: "More info", url: "https://example.com" }],
+                },
+              ],
+              enabled: true,
+            },
+          ],
+        },
+      }));
+    });
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/tests",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(result.current.createdId).toBe("te-adaptive-new");
+  });
+
+  it("edits an existing adaptive test with saved levels and links loaded from API", async () => {
+    // Load an existing adaptive test with saved levels.
+    // NOTE: adaptiveSettings in the API response is an array of topics directly.
+    nextResponse(buildApiResponse({
+      id: "test-adaptive-1",
+      mode: "adaptive",
+      title: "Existing Adaptive",
+      adaptiveSettings: [
+        {
+          topicId: "topic-1",
+          topicName: "Topic A",
+          failureFeedback: null,
+          levels: [
+            {
+              id: "level-1",
+              levelIndex: 0,
+              levelName: "Easy",
+              minDifficulty: 0,
+              maxDifficulty: 3,
+              questionsCount: 5,
+              passThreshold: 60,
+              passThresholdType: "percent",
+              links: [
+                { id: "link-1", title: "Resources", url: "https://resources.example.com" },
+              ],
+            },
+            {
+              id: "level-2",
+              levelIndex: 1,
+              levelName: "Hard",
+              minDifficulty: 7,
+              maxDifficulty: 10,
+              questionsCount: 8,
+              passThreshold: 75,
+              passThresholdType: "percent",
+              links: [],
+            },
+          ],
+        },
+      ],
+      sections: [
+        {
+          id: "section-1",
+          topicId: "topic-1",
+          topicName: "Topic A",
+          drawCount: 5,
+          required: true,
+          maxQuestions: 10,
+        },
+      ],
+    }));
+
+    const client = makeClient();
+    const { result } = renderHook(() => useTestEditor({ mode: "edit", testId: "test-adaptive-1" }), {
+      wrapper: ({ children }) => withClient(client, <>{children}</>) },
+    );
+
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+
+    // Verify the model was loaded with adaptive settings.
+    expect(result.current.model?.mode).toBe("adaptive");
+    expect(result.current.model?.adaptive.topics.length).toBeGreaterThan(0);
+    const firstTopic = result.current.model?.adaptive.topics[0];
+    expect(firstTopic?.levels.length).toBe(2);
+    expect(firstTopic?.levels[0].links.length).toBe(1);
+    expect(firstTopic?.levels[0].links[0].title).toBe("Resources");
+  });
+});
+
+// ─── Gap 5: Close-confirmation dialog with blocking errors disables Save button ──
+
+describe("<TestEditor /> — close-confirmation with blocking errors (Gap 5)", () => {
+  it("disables «Сохранить» in the close-confirm dialog while there are blocking errors", async () => {
+    // Empty title is a blocking error. Dirty the draft via the DESCRIPTION so the
+    // title stays invalid; closing then opens the confirm dialog with Save disabled.
+    nextResponse(buildApiResponse({ title: "" }));
+    const client = makeClient();
+
+    function Harness() {
+      const editor = useTestEditor({ mode: "edit", testId: "test-1" });
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="harness-dirty"
+            onClick={() =>
+              editor.updateModel((m) => ({
+                ...m,
+                basic: { ...m.basic, description: m.basic.description + " edited" },
+              }))
+            }
+          >
+            dirty
+          </button>
+          <TestEditorView open onClose={() => {}} editor={editor} />
+        </>
+      );
+    }
+
+    render(withClient(client, <Harness />));
+    // Title is empty, so wait for a loaded-model marker (the default section topic).
+    await screen.findByText("Основы ИБ");
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("harness-dirty"));
+    });
+
+    fireEvent.click(screen.getByTestId("test-editor-close"));
+
+    // The confirm dialog opens (dirty); validation is debounced, so poll until
+    // the error gate disables its «Сохранить» button.
+    await waitFor(() =>
+      expect(screen.getByTestId("test-editor-close-confirm-save")).toBeDisabled(),
+    );
+  });
+});
+
+// ─── Gap 6: API save error keeps editor open and shows error banner ────────────
+
+describe("<TestEditor /> — API save error (Gap 6)", () => {
+  it("keeps the editor open and shows saveError banner on 500", async () => {
+    nextResponse(buildApiResponse());
+    const onClose = vi.fn();
+    const client = makeClient();
+
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      const editor = useTestEditor(open ? { mode: "edit", testId: "test-1" } : null);
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="harness-dirty"
+            onClick={() =>
+              editor.updateModel((m) => ({
+                ...m,
+                basic: { ...m.basic, title: m.basic.title + " edited" },
+              }))
+            }
+          >
+            dirty
+          </button>
+          <TestEditorView
+            open={open}
+            onClose={() => {
+              onClose();
+              setOpen(false);
+            }}
+            editor={editor}
+          />
+        </>
+      );
+    }
+
+    render(withClient(client, <Harness />));
+    await screen.findByText("Sample Test");
+
+    // Dirty the draft.
+    act(() => {
+      fireEvent.click(screen.getByTestId("harness-dirty"));
+    });
+
+    // Queue a 500 error response for the save.
+    nextResponse({ error: "Internal server error" }, 500);
+
+    // Attempt to save.
+    fireEvent.click(screen.getByTestId("test-editor-save"));
+
+    // Verify the error banner appears.
+    await waitFor(() => {
+      expect(screen.getByTestId("test-editor-save-error")).toBeInTheDocument();
+    });
+
+    // Verify the editor is still open (onClose was NOT called).
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Gap 7: Conflict dialog at component level with reload and overwrite buttons ─
+
+describe("<TestEditor /> — optimistic conflict dialog (Gap 7)", () => {
+  it("renders the conflict dialog with «Обновить данные» / «Сохранить поверх» on a 409", async () => {
+    nextResponse(buildApiResponse());
+    const client = makeClient();
+
+    function Harness() {
+      const editor = useTestEditor({ mode: "edit", testId: "test-1" });
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="harness-dirty"
+            onClick={() =>
+              editor.updateModel((m) => ({
+                ...m,
+                basic: { ...m.basic, title: m.basic.title + " edited" },
+              }))
+            }
+          >
+            dirty
+          </button>
+          <TestEditorView open onClose={() => {}} editor={editor} />
+        </>
+      );
+    }
+
+    render(withClient(client, <Harness />));
+    await screen.findByText("Sample Test");
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("harness-dirty"));
+    });
+
+    // The save PUT returns a version conflict; the Drawer must surface the dialog.
+    nextResponse({ error: "version_conflict", currentVersion: 9, expectedVersion: 7 }, 409);
+    fireEvent.click(screen.getByTestId("test-editor-save"));
+
+    // The 409 surfaces ConflictDialog with both resolution actions.
+    await screen.findByTestId("test-editor-conflict-reload");
+    expect(screen.getByTestId("test-editor-conflict-overwrite")).toBeInTheDocument();
+  });
+});
+
+// ─── Gap 9: Validation is debounced ~300ms (NFR-18) ──────────────────────────────
+
+describe("useTestEditor — debounced validation (Gap 9, NFR-18)", () => {
+  it("debounces validation for ~300ms after model updates", async () => {
+    nextResponse(buildApiResponse());
+
+    const client = makeClient();
+    const { result } = renderHook(() => useTestEditor({ mode: "edit", testId: "test-1" }), {
+      wrapper: ({ children }) => withClient(client, <>{children}</>) },
+    );
+
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+
+    // Initial validation should have no errors (valid model).
+    expect(result.current.validation.errors.length).toBe(0);
+
+    // Update the model: empty the title (causes a blocking error).
+    act(() => {
+      result.current.updateModel((m) => ({
+        ...m,
+        basic: { ...m.basic, title: "" },
+      }));
+    });
+
+    // Immediately after the update, validation should still be stale.
+    // The debounce delay is 300ms, so wait less than that to see no errors yet.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(result.current.validation.errors.length).toBe(0);
+
+    // Now wait for the debounce to fire (300ms from the last update).
+    await waitFor(
+      () => {
+        expect(result.current.validation.errors.length).toBeGreaterThan(0);
+      },
+      { timeout: 500 },
+    );
+
+    // Verify the error is for the title field.
+    const titleError = result.current.validation.errors.find((e) =>
+      e.field.includes("title"),
+    );
+    expect(titleError).toBeDefined();
+  });
+});
+
+// ─── Gap 10: Smoke test for 20-topic Drawer performance (NFR-17) ────────────────
+
+describe("<TestEditor /> — NFR-17 smoke test with 20 topics", () => {
+  it("renders without error given a test with 20 topics (smoke test)", async () => {
+    // Build a response with 20 topics in sections.
+    const manyTopics = Array.from({ length: 20 }, (_, i) => ({
+      id: `section-${i + 1}`,
+      topicId: `topic-${i + 1}`,
+      topicName: `Topic ${i + 1}`,
+      drawCount: 5,
+      required: i % 2 === 0,
+      maxQuestions: 10,
+    }));
+
+    nextResponse(buildApiResponse({ sections: manyTopics }));
+
+    const client = makeClient();
+    render(
+      withClient(
+        client,
+        <TestEditor testId="test-1" open onClose={() => {}} />,
+      ),
+    );
+
+    // Verify the drawer renders and loads data without error.
+    // Extended timeout to allow for larger payload processing.
+    await waitFor(
+      () => {
+        expect(screen.getByTestId("test-editor-root")).toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
+
+    // Verify the title appears (model was loaded).
+    await waitFor(
+      () => {
+        expect(screen.getByText("Sample Test")).toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
+
+    // Smoke test passes: no crash with 20 topics.
+  });
+});

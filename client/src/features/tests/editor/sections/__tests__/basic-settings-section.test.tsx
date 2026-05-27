@@ -145,6 +145,98 @@ describe("<SettingsSection /> — Основное pane", () => {
   });
 });
 
+// ─── Mode / flowMode switching preserves data (FR-25h/i; checklist §2.2) ────────
+//
+// These drive the REAL production onChange handlers (SegmentedControl / Select)
+// and apply the captured updater via runUpdater — so they catch regressions
+// where a switch handler clears the other mode's data.
+
+const sampleSection: TestEditorModel["sections"][number] = {
+  topicId: "topic-1",
+  topicName: "Topic A",
+  maxQuestions: 10,
+  drawCount: 5,
+  required: true,
+  timeLimit: { source: "inherit_test" },
+  feedback: { format: "plain", text: "" },
+  feedbackLinks: [],
+  feedbackAssets: [],
+};
+
+const sampleAdaptiveTopic: TestEditorModel["adaptive"]["topics"][number] = {
+  topicId: "topic-1",
+  topicName: "Topic A",
+  failureFeedback: null,
+  enabled: true,
+  levels: [
+    {
+      levelIndex: 0,
+      levelName: "Базовый",
+      minDifficulty: 0,
+      maxDifficulty: 33,
+      questionsCount: 5,
+      passThreshold: 70,
+      passThresholdType: "percent",
+      links: [{ title: "Курс", url: "https://e.com/1" }],
+    },
+  ],
+};
+
+describe("<SettingsSection /> — mode/flowMode switch preserves data", () => {
+  it("switching standard → adaptive keeps title/sections and scaffolds adaptive topics", () => {
+    const updateModel = vi.fn();
+    const model = baseModel({ mode: "standard", sections: [sampleSection] });
+    render(<SettingsSection model={model} updateModel={updateModel} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Адаптивный" }));
+
+    const next = runUpdater(updateModel, model);
+    expect(next.mode).toBe("adaptive");
+    expect(next.basic.title).toBe(model.basic.title); // standard data not lost
+    expect(next.sections).toEqual(model.sections);
+    // adaptive scaffold built for the existing section
+    expect(next.adaptive.topics.some((t) => t.topicId === "topic-1")).toBe(true);
+  });
+
+  it("switching adaptive → standard keeps adaptive topics in the draft (hidden, not deleted)", () => {
+    const updateModel = vi.fn();
+    const model = baseModel({
+      mode: "adaptive",
+      sections: [sampleSection],
+      adaptive: {
+        showDifficultyLevel: true,
+        testSettings: { showDifficultyLevel: true },
+        topics: [sampleAdaptiveTopic],
+      },
+    });
+    render(<SettingsSection model={model} updateModel={updateModel} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Стандартный" }));
+
+    const next = runUpdater(updateModel, model);
+    expect(next.mode).toBe("standard");
+    // Hidden adaptive levels/links survive so returning to adaptive restores them.
+    expect(next.adaptive.topics).toEqual(model.adaptive.topics);
+  });
+
+  it("switching flowMode away from router keeps router flowSettings (restored on return)", () => {
+    const updateModel = vi.fn();
+    const router = {
+      completionPolicy: "all_required_passed" as const,
+      sectionUnlockRules: {},
+    };
+    const model = baseModel({ flowMode: "router_by_topics", flowSettings: { router } });
+    render(<SettingsSection model={model} updateModel={updateModel} />);
+
+    selectOption("settings-flow-mode", "Линейный");
+
+    const next = runUpdater(updateModel, model);
+    expect(next.flowMode).toBe("linear_flat");
+    // Incompatible router settings are retained in the draft, not cleared.
+    expect(next.flowSettings.router).toEqual(router);
+  });
+});
+
 // ─── Limits pane bindings ─────────────────────────────────────────────────────
 
 describe("<SettingsSection /> — Ограничения pane", () => {
