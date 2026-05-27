@@ -7,7 +7,8 @@ import express from "express";
 import session from "express-session";
 
 // ─── Hoist mocks ──────────────────────────────────────────────────────────────
-const { storageMock } = vi.hoisted(() => ({
+const { storageMock, serviceMock } = vi.hoisted(() => ({
+  serviceMock: { create: vi.fn(), save: vi.fn() },
   storageMock: {
     getTest: vi.fn(), getTests: vi.fn(), createTest: vi.fn(),
     updateTest: vi.fn(), deleteTest: vi.fn(), getTestSections: vi.fn(),
@@ -28,6 +29,14 @@ const { storageMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("../server/storage", () => ({ storage: storageMock }));
+// testsRouter pulls in TestSettingsService -> server/db, which throws at import
+// unless DATABASE_URL is set. Stub db (and the service) so the router imports
+// without a live database, mirroring tests/routes.tests.test.ts.
+vi.mock("../server/db", () => ({ db: {} }));
+vi.mock("../server/services/test-settings", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../server/services/test-settings")>();
+  return { ...actual, testSettingsService: serviceMock };
+});
 vi.mock("../server/scorm/exporter", () => ({
   buildScormPackage: vi.fn().mockResolvedValue(Buffer.from("fake-zip")),
 }));
@@ -358,8 +367,12 @@ describe("Tests routes", () => {
   });
 
   it("POST / — creates test", async () => {
-    storageMock.createTest.mockResolvedValue(dbTestFull);
+    // POST goes through TestSettingsService; loadFullTest then re-reads the row.
+    serviceMock.create.mockResolvedValue(dbTestFull);
+    storageMock.getTest.mockResolvedValue(dbTestFull);
     storageMock.getTestSections.mockResolvedValue([dbSection]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([]);
     storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([]);
     storageMock.getAdaptiveLevelsByTest.mockResolvedValue([]);
     storageMock.getAdaptiveLevelLinks.mockResolvedValue([]);
@@ -369,7 +382,7 @@ describe("Tests routes", () => {
       overallPassRuleJson: { type: "percent", value: 70 },
     }));
     expect(res.status).toBe(201);
-    expect(storageMock.createTest).toHaveBeenCalled();
+    expect(serviceMock.create).toHaveBeenCalled();
   });
 
   it("POST / — returns 400 when title missing", async () => {
@@ -378,8 +391,11 @@ describe("Tests routes", () => {
   });
 
   it("PUT /:id — updates test", async () => {
-    storageMock.updateTest.mockResolvedValue(dbTestFull);
+    serviceMock.save.mockResolvedValue(dbTestFull);
+    storageMock.getTest.mockResolvedValue(dbTestFull);
     storageMock.getTestSections.mockResolvedValue([dbSection]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([]);
     storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([]);
     storageMock.getAdaptiveLevelsByTest.mockResolvedValue([]);
     storageMock.getAdaptiveLevelLinks.mockResolvedValue([]);
@@ -388,7 +404,8 @@ describe("Tests routes", () => {
   });
 
   it("PUT /:id — returns 404 when not found", async () => {
-    storageMock.updateTest.mockResolvedValue(undefined);
+    // The service throws a 404-tagged error when the row is absent.
+    serviceMock.save.mockRejectedValue(Object.assign(new Error("Test not found"), { status: 404 }));
     const res = await asAuthor(request(app).put("/api/tests/x").send({ title: "X" }));
     expect(res.status).toBe(404);
   });

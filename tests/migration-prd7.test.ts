@@ -30,6 +30,32 @@ loadEnv({ path: resolve(__dirname, "..", "tmp", ".env") });
 const MIGRATION_SQL_PATH = resolve(__dirname, "..", "migrations", "003_prd7_test_settings.sql");
 const MIGRATION_SQL = readFileSync(MIGRATION_SQL_PATH, "utf-8");
 
+// Migration 004 adds content_pages.kind and backfills it from `type`.
+const MIGRATION_004_SQL = readFileSync(
+  resolve(__dirname, "..", "migrations", "004_prd1_content_pages_kind.sql"),
+  "utf-8",
+);
+
+/**
+ * Reproduces the historical deploy order for content_pages. Migration 003's
+ * legacy INSERT predates the `kind` column (introduced by 004), so against the
+ * already-fully-migrated dev DB we temporarily relax `kind` NOT NULL, run 003
+ * (the intro row lands with kind = NULL), then run 004 which backfills `kind`
+ * from `type` and restores NOT NULL — exactly as it happened at deploy time.
+ *
+ * @param repeat003 how many times to apply migration 003 (for idempotency checks).
+ */
+async function applyPrd7ContentPageMigrations(
+  client: pg.PoolClient,
+  repeat003 = 1,
+): Promise<void> {
+  await client.query(`ALTER TABLE "content_pages" ALTER COLUMN "kind" DROP NOT NULL`);
+  for (let i = 0; i < repeat003; i++) {
+    await client.query(MIGRATION_SQL);
+  }
+  await client.query(MIGRATION_004_SQL);
+}
+
 const databaseUrl = process.env.DATABASE_URL;
 const SUITE = databaseUrl ? describe : describe.skip;
 
@@ -139,15 +165,16 @@ SUITE("migration 003_prd7_test_settings", () => {
       const id = `${FIXTURE_PREFIX}intro`;
       const html = "<p>Welcome to the test</p>";
       await insertLegacyTest(client, { id, published: false, startPageContent: html });
-      await client.query(MIGRATION_SQL);
+      await applyPrd7ContentPageMigrations(client);
       const { rows } = await client.query<{
         topic_id: string | null;
         position: string;
         mode: string;
         type: string;
+        kind: string;
         values_json: { values?: { html?: string } };
       }>(
-        `SELECT "topic_id", "position", "mode", "type", "values_json"
+        `SELECT "topic_id", "position", "mode", "type", "kind", "values_json"
            FROM "content_pages" WHERE "test_id" = $1`,
         [id],
       );
@@ -155,6 +182,7 @@ SUITE("migration 003_prd7_test_settings", () => {
       expect(rows[0].topic_id).toBeNull();
       expect(rows[0].position).toBe("before");
       expect(rows[0].type).toBe("intro");
+      expect(rows[0].kind).toBe("intro"); // backfilled from `type` by migration 004
       expect(rows[0].mode).toBe("html");
       expect(rows[0].values_json?.values?.html).toBe(html);
     });
@@ -271,8 +299,8 @@ SUITE("migration 003_prd7_test_settings", () => {
       const id = `${FIXTURE_PREFIX}idempotent`;
       await insertLegacyTest(client, { id, published: true, startPageContent: "<p>X</p>" });
 
-      await client.query(MIGRATION_SQL);
-      await client.query(MIGRATION_SQL);
+      // Apply migration 003 twice (the idempotency check), then 004.
+      await applyPrd7ContentPageMigrations(client, 2);
 
       const { rowCount } = await client.query(
         `SELECT 1 FROM "content_pages" WHERE "test_id" = $1 AND "topic_id" IS NULL`,

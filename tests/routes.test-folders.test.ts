@@ -199,20 +199,23 @@ describe("DELETE /api/test-folders/:id", () => {
   });
 
   it("returns 404 when folder not found", async () => {
-    storageMock.deleteTestFolder.mockResolvedValue(false);
+    // The route resolves the folder via getTestFolders() before deleting.
+    storageMock.getTestFolders.mockResolvedValue([folder1, folder2]);
     const res = await asAuthor(request(makeApp()).delete("/api/test-folders/nonexistent"));
     expect(res.status).toBe(404);
   });
 
-  it("deletes folder and returns success", async () => {
+  it("deletes folder (folder-only) and returns 204", async () => {
+    storageMock.getTestFolders.mockResolvedValue([folder1, folder2]);
     storageMock.deleteTestFolder.mockResolvedValue(true);
     const res = await asAuthor(request(makeApp()).delete("/api/test-folders/f1"));
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(storageMock.deleteTestFolder).toHaveBeenCalledWith("f1");
+    expect(res.status).toBe(204);
+    // Default "folder-only" mode moves contained tests/sub-folders to root (null).
+    expect(storageMock.deleteTestFolder).toHaveBeenCalledWith("f1", null);
   });
 
   it("returns 500 on storage error", async () => {
+    storageMock.getTestFolders.mockResolvedValue([folder1]);
     storageMock.deleteTestFolder.mockRejectedValue(new Error("DB error"));
     const res = await asAuthor(request(makeApp()).delete("/api/test-folders/f1"));
     expect(res.status).toBe(500);

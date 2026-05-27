@@ -41,7 +41,13 @@ const { storageMock, sendEmailMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("../server/storage", () => ({ storage: storageMock }));
-vi.mock("../server/email", () => ({ sendPasswordResetEmail: sendEmailMock }));
+// Bulk-import sends invites via sendInviteEmail({ to, userName, inviteLink });
+// the single reset-password endpoint uses sendPasswordResetEmail. Map both to
+// the same spy so either call path is observable.
+vi.mock("../server/email", () => ({
+  sendInviteEmail: sendEmailMock,
+  sendPasswordResetEmail: sendEmailMock,
+}));
 
 import usersRouter from "../server/routes/users";
 
@@ -379,7 +385,12 @@ describe("POST /api/users/bulk-import", () => {
     expect(res.body.invitesSent).toBe(1);
     expect(storageMock.createPasswordResetToken).toHaveBeenCalledOnce();
     expect(sendEmailMock).toHaveBeenCalledOnce();
-    expect(sendEmailMock).toHaveBeenCalledWith(newUser.email, expect.stringContaining("reset-password"), newUser.name);
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: newUser.email,
+        inviteLink: expect.stringContaining("reset-password"),
+      }),
+    );
   });
 
   it("does not send invite emails when sendInvites=false", async () => {

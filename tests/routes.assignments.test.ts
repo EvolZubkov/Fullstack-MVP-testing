@@ -145,6 +145,7 @@ describe("GET /api/tests/:id/assignments", () => {
     storageMock.getTest.mockResolvedValue(dbTest);
     storageMock.getTestAssignments.mockResolvedValue([groupAssignment]);
     storageMock.getGroup.mockResolvedValue(dbGroup);
+    storageMock.getGroupUsers.mockResolvedValue([]); // enrichment fetches group members
     storageMock.getAssignmentAccessTokensByAssignment.mockResolvedValue([]);
 
     const res = await asAuthor(request(makeApp()).get("/api/tests/test1/assignments"));
