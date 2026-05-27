@@ -814,9 +814,11 @@ export const templates = pgTable("templates", {
 export const contentPages = pgTable("content_pages", {
   id: uuid("id").primaryKey().defaultRandom(),
   testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
-  // PRD-7 §4.2: nullable topicId allows test-scope start pages (position='before')
+  // PRD-7 §4.2: nullable topicId allows test-scope pages (position 'before'/'after',
+  // i.e. the «До теста» / «После теста» zones in linear_flat); topic-scoped pages
+  // use 'before_topic'/'after_topic' with a topicId.
   topicId: varchar("topic_id", { length: 36 }).references(() => topics.id),
-  position: text("position", { enum: ["before", "before_topic", "after_topic"] }).notNull(),
+  position: text("position", { enum: ["before", "after", "before_topic", "after_topic"] }).notNull(),
   mode: text("mode", { enum: ["template", "standard", "html"] }).notNull().default("template"),
   /** @deprecated Use `kind` instead. Kept for backward compat in this release. */
   type: text("type", { enum: ["intro", "info", "summary", "html"] }).notNull(),
