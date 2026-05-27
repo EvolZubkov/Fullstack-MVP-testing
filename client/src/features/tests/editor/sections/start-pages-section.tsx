@@ -54,6 +54,7 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCenter,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -207,6 +208,41 @@ function sideByIndex<T extends { id: string }>(
     : "before";
 }
 
+/**
+ * Cross-zone insertion side from the dragged row's center vs the hovered row's
+ * center. Used only when the dragged page is moving to a DIFFERENT zone (the
+ * dragged item isn't in the target list, so index ordering doesn't apply); the
+ * DragOverlay follows the pointer so its translated rect is reliable here.
+ */
+function dropSideFromRects(event: DragOverEvent | DragEndEvent): DropSide {
+  const ar = event.active.rect.current.translated;
+  const or = event.over?.rect;
+  if (!ar || !or) return "before";
+  return ar.top + ar.height / 2 < or.top + or.height / 2 ? "before" : "after";
+}
+
+/** Index in `zone` where a page should be inserted for (`overId`, `side`). */
+export function insertIndexFor<T extends { id: string }>(
+  zone: T[],
+  overId: string | null,
+  side: DropSide,
+): number {
+  if (!overId) return zone.length;
+  const oi = zone.findIndex((p) => p.id === overId);
+  if (oi < 0) return zone.length;
+  return side === "after" ? oi + 1 : oi;
+}
+
+// Zone droppable ids encode the target zone so an empty zone (no rows to hover)
+// is still a drop target. Position/topic contain no ":" so parsing is safe.
+const zoneDroppableId = (position: ContentPagePosition, topicId: string | null) =>
+  `zone:${position}:${topicId ?? ""}`;
+function parseZoneId(id: string): { position: ContentPagePosition; topicId: string | null } | null {
+  if (!id.startsWith("zone:")) return null;
+  const [, position, topicId] = id.split(":");
+  return { position: position as ContentPagePosition, topicId: topicId === "" ? null : topicId };
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function StructureSection({ model, testId, content: contentProp }: StructureSectionProps) {
@@ -341,43 +377,64 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
 
   const activePage = activeId ? pages.find((p) => p.id === activeId) ?? null : null;
 
+  // Resolve the drop target for the current drag. `over` is another page row or
+  // a zone droppable (empty/zone area). Shared by the indicator (onDragOver) and
+  // the actual move (onDragEnd) so they can never disagree.
+  const resolveTarget = (event: DragOverEvent | DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return null;
+    const activeP = pages.find((p) => p.id === active.id);
+    if (!activeP || activeP.kind !== "info") return null;
+    const overId = String(over.id);
+    const zoneRef = parseZoneId(overId);
+    const overP = zoneRef ? null : pages.find((p) => p.id === overId);
+    const position = zoneRef ? zoneRef.position : overP?.position;
+    const topicId = zoneRef ? zoneRef.topicId : overP?.topicId;
+    if (!position) return null;
+    const overPageId = overP ? overId : null;
+    const sameZone = position === activeP.position && (topicId ?? null) === activeP.topicId;
+    const targetZone = infoIn(position, topicId ?? null);
+    const side: DropSide = overPageId
+      ? sameZone
+        ? sideByIndex(targetZone, String(active.id), overPageId)
+        : dropSideFromRects(event)
+      : "after";
+    return { activeP, sameZone, position, topicId: topicId ?? null, overPageId, side, targetZone };
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(String(event.active.id));
     setDrop(null);
   };
 
-  // Track the live drop target so the hovered row can show an insertion line on
-  // the correct side without shifting. Stage A: same-zone only.
   const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return setDrop(null);
-    const a = pages.find((p) => p.id === active.id);
-    const o = pages.find((p) => p.id === over.id);
-    if (!a || !o || a.position !== o.position || a.topicId !== o.topicId) return setDrop(null);
-    const zone = infoIn(a.position, a.topicId);
-    setDrop({ overId: String(over.id), side: sideByIndex(zone, String(active.id), String(over.id)) });
+    const t = resolveTarget(event);
+    // Row indicator only when hovering a specific row; empty-zone targeting is
+    // shown by the zone droppable highlight (see AuthorPageGroup).
+    setDrop(t && t.overPageId ? { overId: t.overPageId, side: t.side } : null);
   };
 
-  // Reorder author pages within their zone, placing the dragged row on the
-  // indicated side of the drop target. Cross-zone moves are a follow-up step.
+  // Reorder within a zone, or move the page to another zone (changing
+  // position/topicId), placing it on the indicated side of the drop target.
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveId(null);
     setDrop(null);
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const activeP = pages.find((p) => p.id === active.id);
-    const overP = pages.find((p) => p.id === over.id);
-    if (!activeP || !overP) return;
-    if (overP.position === activeP.position && overP.topicId === activeP.topicId) {
-      const zone = infoIn(activeP.position, activeP.topicId);
-      const next = reorderByDrop(
-        zone,
-        String(active.id),
-        String(over.id),
-        sideByIndex(zone, String(active.id), String(over.id)),
-      );
+    const t = resolveTarget(event);
+    if (!t) return;
+    const activeId = t.activeP.id;
+    if (t.sameZone) {
+      if (!t.overPageId) return;
+      const next = reorderByDrop(t.targetZone, activeId, t.overPageId, t.side);
       if (next) void handlers.cp.reorder(next);
+      return;
     }
+    const insertAt = insertIndexFor(t.targetZone, t.overPageId, t.side);
+    const newOrder = [...t.targetZone];
+    newOrder.splice(insertAt, 0, t.activeP);
+    void (async () => {
+      await handlers.cp.update(activeId, { position: t.position, topicId: t.topicId });
+      await handlers.cp.reorder(newOrder.map((p, i) => ({ id: p.id, sortOrder: i })));
+    })();
   };
 
   if (model.sections.length === 0) {
@@ -677,19 +734,29 @@ function AuthorPageGroup(props: {
     handlers.onAdd({ position, topicId, group: pages, index, zoneLabel });
 
   const slug = `${position}-${topicId ?? "test"}`;
+  // Zone-level droppable so a page can be dropped INTO this zone — including an
+  // empty one with no rows to hover. Highlights when it is the active drop
+  // target (pointer over the zone's gap, not over a specific row).
+  const { setNodeRef, isOver } = useDroppable({ id: zoneDroppableId(position, topicId) });
 
   return (
     <SortableContext items={pages.map((p) => p.id)} strategy={verticalListSortingStrategy}>
-      <InsertRow onClick={() => insert(0)} testId={`structure-insert-${slug}-0`} />
-      {pages.map((page, idx) => (
-        <SortablePageItem
-          key={page.id}
-          page={page}
-          handlers={handlers}
-          insertTestId={`structure-insert-${slug}-${idx + 1}`}
-          onInsertAfter={() => insert(idx + 1)}
-        />
-      ))}
+      <div
+        ref={setNodeRef}
+        className={"structure-drop-zone" + (isOver ? " is-zone-drop-target" : "")}
+        data-testid={`structure-dropzone-${slug}`}
+      >
+        <InsertRow onClick={() => insert(0)} testId={`structure-insert-${slug}-0`} />
+        {pages.map((page, idx) => (
+          <SortablePageItem
+            key={page.id}
+            page={page}
+            handlers={handlers}
+            insertTestId={`structure-insert-${slug}-${idx + 1}`}
+            onInsertAfter={() => insert(idx + 1)}
+          />
+        ))}
+      </div>
     </SortableContext>
   );
 }

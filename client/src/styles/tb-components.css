@@ -900,6 +900,12 @@
 .structure-sortable-item.drop-after > .page-row {
   box-shadow: inset 0 calc(-1 * var(--wf-space-half, 2px)) 0 0 var(--ou-accent-default);
 }
+/* Zone-level drop target (cross-zone move, incl. dropping into an empty zone). */
+.structure-drop-zone.is-zone-drop-target {
+  outline: var(--wf-border-w, 1px) dashed var(--ou-accent-default);
+  outline-offset: calc(-1 * var(--wf-space-half, 2px));
+  border-radius: var(--ou-radius-s, 4px);
+}
 
 /* Variant badge: neutral chip with the variant name (kind/template label). */
 .page-variant-badge {

@@ -13,7 +13,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { StructureSection, reorderByDrop } from "../start-pages-section";
+import { StructureSection, reorderByDrop, insertIndexFor } from "../start-pages-section";
 import type { TestEditorModel, EditorSection } from "../../test-editor.types";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -362,6 +362,20 @@ describe("reorderByDrop", () => {
     expect(reorderByDrop(zone, "pg-a", "missing", "before")).toBeNull();
     // A dropped before B is exactly where A already sits → no-op.
     expect(reorderByDrop(zone, "pg-a", "pg-b", "before")).toBeNull();
+  });
+});
+
+describe("insertIndexFor (cross-zone drop position)", () => {
+  const zone = ["x", "y", "z"].map((id, i) =>
+    buildPage({ id, kind: "info", position: "after", topicId: null, sortOrder: i }),
+  );
+  it("inserts before / after the hovered row", () => {
+    expect(insertIndexFor(zone, "y", "before")).toBe(1);
+    expect(insertIndexFor(zone, "y", "after")).toBe(2);
+  });
+  it("appends to the end when dropping on the zone (no row) or an unknown row", () => {
+    expect(insertIndexFor(zone, null, "after")).toBe(3);
+    expect(insertIndexFor(zone, "missing", "before")).toBe(3);
   });
 });
 
