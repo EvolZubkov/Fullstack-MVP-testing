@@ -269,6 +269,33 @@ describe("POST /api/tests/:id/content-pages", () => {
     expect(storageMock.createContentPage).toHaveBeenCalledOnce();
   });
 
+  it("creates a test-scope page (position before, no topicId)", async () => {
+    storageMock.createContentPage.mockResolvedValue({ ...basePage, topicId: null, position: "before", type: "info", kind: "info" });
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({ position: "before", type: "info" });
+    expect(res.status).toBe(201);
+    expect(storageMock.createContentPage).toHaveBeenCalledOnce();
+    const callArgs = storageMock.createContentPage.mock.calls[0][0];
+    expect(callArgs.topicId).toBeNull();
+    expect(callArgs.position).toBe("before");
+    expect(callArgs.kind).toBe("info");
+    // Test-scope pages skip topic-membership validation entirely.
+    expect(storageMock.getTestSections).not.toHaveBeenCalled();
+  });
+
+  it("creates a test-scope page in the after-test zone (position after, no topicId)", async () => {
+    storageMock.createContentPage.mockResolvedValue({ ...basePage, topicId: null, position: "after", type: "info", kind: "info" });
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages")
+      .send({ position: "after", type: "info" });
+    expect(res.status).toBe(201);
+    const callArgs = storageMock.createContentPage.mock.calls[0][0];
+    expect(callArgs.topicId).toBeNull();
+    expect(callArgs.position).toBe("after");
+    expect(storageMock.getTestSections).not.toHaveBeenCalled();
+  });
+
   it("sanitizes script tags in richText values", async () => {
     const testWithTemplate = { ...baseTest, designSettingsJson: { templateId: "corporate" } };
     storageMock.getTest.mockResolvedValue(testWithTemplate);

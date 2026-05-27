@@ -157,20 +157,26 @@ router.post("/:id/content-pages", requireAuthor, async (req, res) => {
       sortOrder?: number;
     };
 
-    if (!topicId) {
-      return res.status(422).json({ error: "topicId is required", field: "topicId" });
-    }
-    if (!position || !["before_topic", "after_topic"].includes(position)) {
-      return res.status(422).json({ error: "position must be before_topic or after_topic", field: "position" });
+    if (!position || !["before", "after", "before_topic", "after_topic"].includes(position)) {
+      return res.status(422).json({ error: "position must be before, after, before_topic, or after_topic", field: "position" });
     }
     if (!type || !["intro", "info", "summary", "html"].includes(type)) {
       return res.status(422).json({ error: "type must be intro, info, summary, or html", field: "type" });
     }
 
-    // Validate topicId belongs to test
-    const validTopicIds = await getTestTopicIds(testId);
-    if (!validTopicIds.has(topicId)) {
-      return res.status(422).json({ error: "topicId does not belong to this test", field: "topicId" });
+    // `position: "before"`/`"after"` are test-scope pages (topicId = null) used
+    // by the linear_flat «До теста» / «После теста» zones (schema
+    // content_pages.position enum, PRD-7 closeout / PRD-1 §4.2). The
+    // topic-scoped positions require a topicId that belongs to the test.
+    const isTestScope = position === "before" || position === "after";
+    if (!isTestScope && !topicId) {
+      return res.status(422).json({ error: "topicId is required", field: "topicId" });
+    }
+    if (topicId) {
+      const validTopicIds = await getTestTopicIds(testId);
+      if (!validTopicIds.has(topicId)) {
+        return res.status(422).json({ error: "topicId does not belong to this test", field: "topicId" });
+      }
     }
 
     // Validate templateKey against current design template
@@ -196,8 +202,8 @@ router.post("/:id/content-pages", requireAuthor, async (req, res) => {
 
     const page = await storage.createContentPage({
       testId,
-      topicId,
-      position: position as "before_topic" | "after_topic",
+      topicId: isTestScope ? null : (topicId as string),
+      position: position as "before" | "after" | "before_topic" | "after_topic",
       mode: (mode as "template" | "standard" | "html") ?? "template",
       type: pageType,
       kind,
