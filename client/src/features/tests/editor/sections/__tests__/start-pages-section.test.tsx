@@ -13,7 +13,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { StructureSection } from "../start-pages-section";
+import { StructureSection, computeZoneReorder } from "../start-pages-section";
 import type { TestEditorModel, EditorSection } from "../../test-editor.types";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -328,23 +328,50 @@ describe("<StructureSection /> — inline edit", () => {
   });
 });
 
-describe("<StructureSection /> — reorder", () => {
-  it("dragging one page onto another PUTs /reorder", async () => {
-    const spies = installApi([
+describe("computeZoneReorder", () => {
+  // DnD itself runs through @dnd-kit sensors, which need real DOM measurements
+  // (unavailable in jsdom). The reorder math is extracted and tested here; the
+  // drag interaction is verified live in the browser.
+  it("moving B onto A yields the B,A order with reindexed sortOrder", () => {
+    const zone = [
+      buildPage({ id: "pg-a", kind: "info", position: "before", topicId: null, sortOrder: 0 }),
+      buildPage({ id: "pg-b", kind: "info", position: "before", topicId: null, sortOrder: 1 }),
+    ];
+    expect(computeZoneReorder(zone, "pg-b", "pg-a")).toEqual([
+      { id: "pg-b", sortOrder: 0 },
+      { id: "pg-a", sortOrder: 1 },
+    ]);
+  });
+
+  it("supports arbitrary placement (move first to last in a 3-item zone)", () => {
+    const zone = ["pg-a", "pg-b", "pg-c"].map((id, i) =>
+      buildPage({ id, kind: "info", position: "before", topicId: null, sortOrder: i }),
+    );
+    expect(computeZoneReorder(zone, "pg-a", "pg-c")).toEqual([
+      { id: "pg-b", sortOrder: 0 },
+      { id: "pg-c", sortOrder: 1 },
+      { id: "pg-a", sortOrder: 2 },
+    ]);
+  });
+
+  it("returns null for a no-op (same id / not found)", () => {
+    const zone = [buildPage({ id: "pg-a", kind: "info", position: "before", topicId: null })];
+    expect(computeZoneReorder(zone, "pg-a", "pg-a")).toBeNull();
+    expect(computeZoneReorder(zone, "pg-a", "missing")).toBeNull();
+  });
+});
+
+describe("<StructureSection /> — reorder (DnD wiring)", () => {
+  it("renders a drag handle on each author page", async () => {
+    installApi([
       buildPage({ id: "pg-a", kind: "info", position: "before", topicId: null, sortOrder: 0, valuesJson: { values: { title: "A" } } }),
       buildPage({ id: "pg-b", kind: "info", position: "before", topicId: null, sortOrder: 1, valuesJson: { values: { title: "B" } } }),
     ]);
     renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
     await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-b")).toBeInTheDocument());
 
-    fireEvent.dragStart(screen.getByTestId("structure-page-row-pg-b"));
-    fireEvent.drop(screen.getByTestId("structure-page-row-pg-a"));
-
-    await waitFor(() => expect(spies.reorder).toHaveBeenCalledTimes(1));
-    expect(spies.reorder.mock.calls[0][0]).toEqual([
-      { id: "pg-b", sortOrder: 0 },
-      { id: "pg-a", sortOrder: 1 },
-    ]);
+    expect(screen.getByTestId("structure-page-grip-pg-a")).toBeInTheDocument();
+    expect(screen.getByTestId("structure-page-grip-pg-b")).toBeInTheDocument();
   });
 });
 

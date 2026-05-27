@@ -49,6 +49,25 @@ import {
   Textarea,
 } from "@universityrt/ui-kit";
 import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   useContentPages,
   type ContentPage,
   type ContentPageKind,
@@ -134,6 +153,23 @@ function missingRequired(
       return v === undefined || v === null || (typeof v === "string" && v.trim() === "");
     })
     .map((ph) => ph.key);
+}
+
+/**
+ * Computes the new `sortOrder` list for a same-zone reorder — dragging
+ * `activeId` onto `overId` inside `zone` (already sorted). Returns `null` for a
+ * no-op. Pure, so the reorder math is unit-tested independently of the @dnd-kit
+ * sensors (which need real DOM measurements unavailable in jsdom).
+ */
+export function computeZoneReorder<T extends { id: string }>(
+  zone: T[],
+  activeId: string,
+  overId: string,
+): Array<{ id: string; sortOrder: number }> | null {
+  const from = zone.findIndex((p) => p.id === activeId);
+  const to = zone.findIndex((p) => p.id === overId);
+  if (from < 0 || to < 0 || from === to) return null;
+  return arrayMove(zone, from, to).map((p, i) => ({ id: p.id, sortOrder: i }));
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -251,6 +287,46 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
   const { model, handlers } = props;
   const pages = handlers.cp.pages;
 
+  // Hooks must run unconditionally, before the «no topics» early return.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const infoIn = (position: ContentPagePosition, topicId: string | null) =>
+    pages
+      .filter((p) => p.kind === "info" && p.position === position && p.topicId === topicId)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  const systemSingleton = (kind: ContentPageKind) =>
+    pages.find((p) => p.kind === kind && p.topicId === null) ?? null;
+  const questionsForTopic = (tid: string) =>
+    pages.find((p) => p.kind === "questions" && p.topicId === tid) ?? null;
+
+  const activePage = activeId ? pages.find((p) => p.id === activeId) ?? null : null;
+
+  const handleDragStart = (event: DragStartEvent) => setActiveId(String(event.active.id));
+
+  // DnD reorder of author pages. Stage A: reorder within the same zone (drop a
+  // row onto another row of the same position+topic). Cross-zone moves are
+  // added in a follow-up step.
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const activeP = pages.find((p) => p.id === active.id);
+    const overP = pages.find((p) => p.id === over.id);
+    if (!activeP || !overP) return;
+    if (overP.position === activeP.position && overP.topicId === activeP.topicId) {
+      const next = computeZoneReorder(
+        infoIn(activeP.position, activeP.topicId),
+        String(active.id),
+        String(over.id),
+      );
+      if (next) void handlers.cp.reorder(next);
+    }
+  };
+
   if (model.sections.length === 0) {
     return (
       <Banner
@@ -262,20 +338,17 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
     );
   }
 
-  const infoIn = (position: ContentPagePosition, topicId: string | null) =>
-    pages
-      .filter((p) => p.kind === "info" && p.position === position && p.topicId === topicId)
-      .sort((a, b) => a.sortOrder - b.sortOrder);
-  const systemSingleton = (kind: ContentPageKind) =>
-    pages.find((p) => p.kind === kind && p.topicId === null) ?? null;
-  const questionsForTopic = (tid: string) =>
-    pages.find((p) => p.kind === "questions" && p.topicId === tid) ?? null;
-
   const intro = systemSingleton("intro");
   const summary = systemSingleton("summary");
   const router = systemSingleton("router");
 
   return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
     <div data-testid="structure-section-list">
       <Zone title="До теста" testId="structure-zone-before-test">
         {intro && (
@@ -348,6 +421,18 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
         />
       </Zone>
     </div>
+      <DragOverlay>
+        {activePage ? (
+          <div className="page-row dragging" data-testid="structure-drag-overlay">
+            <span className="drag-handle">
+              <GripVertical className="h-3.5 w-3.5" />
+            </span>
+            <span className="page-variant-badge">{KIND_LABEL[activePage.kind] ?? "Материал"}</span>
+            <span className="page-title">{pageTitle(activePage)}</span>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }
 
@@ -527,23 +612,6 @@ function AuthorPageGroup(props: {
   handlers: ZoneHandlers;
 }) {
   const { pages, position, topicId, zoneLabel, handlers } = props;
-  const { cp } = handlers;
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-
-  const reorderTo = (fromIdx: number, toIdx: number) => {
-    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return;
-    const next = [...pages];
-    const [moved] = next.splice(fromIdx, 1);
-    next.splice(toIdx, 0, moved);
-    void cp.reorder(next.map((p, i) => ({ id: p.id, sortOrder: i })));
-  };
-
-  const handleDrop = (targetIdx: number) => {
-    if (!draggingId) return;
-    const fromIdx = pages.findIndex((p) => p.id === draggingId);
-    setDraggingId(null);
-    reorderTo(fromIdx, targetIdx);
-  };
 
   const insert = (index: number) =>
     handlers.onAdd({ position, topicId, group: pages, index, zoneLabel });
@@ -551,26 +619,22 @@ function AuthorPageGroup(props: {
   const slug = `${position}-${topicId ?? "test"}`;
 
   return (
-    <>
+    <SortableContext items={pages.map((p) => p.id)} strategy={verticalListSortingStrategy}>
       <InsertRow onClick={() => insert(0)} testId={`structure-insert-${slug}-0`} />
       {pages.map((page, idx) => (
         <div key={page.id}>
           <AuthorPageRow
             page={page}
-            cp={cp}
+            cp={handlers.cp}
             expanded={handlers.expandedId === page.id}
             onToggleExpand={() =>
               handlers.setExpandedId(handlers.expandedId === page.id ? null : page.id)
             }
-            isDragging={draggingId === page.id}
-            onDragStart={() => setDraggingId(page.id)}
-            onDragEnd={() => setDraggingId(null)}
-            onDropOnRow={() => handleDrop(idx)}
           />
           <InsertRow onClick={() => insert(idx + 1)} testId={`structure-insert-${slug}-${idx + 1}`} />
         </div>
       ))}
-    </>
+    </SortableContext>
   );
 }
 
@@ -593,13 +657,12 @@ function AuthorPageRow(props: {
   cp: UseContentPagesResult;
   expanded: boolean;
   onToggleExpand: () => void;
-  isDragging: boolean;
-  onDragStart: () => void;
-  onDragEnd: () => void;
-  onDropOnRow: () => void;
 }) {
   const { page, cp } = props;
   const [confirming, setConfirming] = useState(false);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: page.id });
+  const dragStyle = { transform: CSS.Transform.toString(transform), transition };
 
   const variant = cp.contentTemplates.find((v) => v.key === page.templateKey);
   const values = page.valuesJson?.values ?? {};
@@ -612,23 +675,22 @@ function AuthorPageRow(props: {
   return (
     <>
       <div
+        ref={setNodeRef}
+        style={dragStyle}
         className={
           "page-row" +
           (hasWarn ? " page-row--warn" : "") +
           (props.expanded ? " is-expanded" : "") +
-          (props.isDragging ? " dragging" : "")
+          (isDragging ? " dragging" : "")
         }
         data-testid={`structure-page-row-${page.id}`}
-        draggable
-        onDragStart={props.onDragStart}
-        onDragEnd={props.onDragEnd}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          props.onDropOnRow();
-        }}
       >
-        <span className="drag-handle" aria-hidden="true" data-testid={`structure-page-grip-${page.id}`}>
+        <span
+          className="drag-handle"
+          data-testid={`structure-page-grip-${page.id}`}
+          {...attributes}
+          {...listeners}
+        >
           <GripVertical className="h-3.5 w-3.5" />
         </span>
         <button
