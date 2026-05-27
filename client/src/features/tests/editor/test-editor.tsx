@@ -487,7 +487,10 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
               <Button
                 variant="secondary"
                 size="m"
-                onClick={requestClose}
+                // Explicit cancel: discard the draft and close immediately, with no
+                // "save before closing?" prompt (that prompt belongs to the ambiguous
+                // header «×» / backdrop). The user already declared intent to cancel.
+                onClick={handleExitWithoutSave}
                 disabled={combinedSaving}
                 data-testid="test-editor-cancel"
               >
@@ -663,7 +666,7 @@ function CloseConfirmDialog(props: {
             onClick={props.onCancel}
             data-testid="test-editor-close-confirm-cancel"
           >
-            Отмена
+            Продолжить редактирование
           </Button>
           <Button
             variant="secondary"

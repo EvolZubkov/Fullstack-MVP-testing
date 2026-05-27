@@ -615,6 +615,55 @@ describe("<TestEditor /> — close-confirmation with blocking errors (Gap 5)", (
   });
 });
 
+// ─── Footer «Отменить»: discard + close, no save prompt ───────────────────────
+
+describe("<TestEditor /> — footer «Отменить» discards and closes without a save prompt", () => {
+  it("calls onClose and shows NO «Есть несохранённые изменения» dialog when dirty", async () => {
+    nextResponse(buildApiResponse());
+    const onClose = vi.fn();
+    const client = makeClient();
+
+    function Harness() {
+      const editor = useTestEditor({ mode: "edit", testId: "test-1" });
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="harness-dirty"
+            onClick={() =>
+              editor.updateModel((m) => ({
+                ...m,
+                basic: { ...m.basic, description: m.basic.description + " edited" },
+              }))
+            }
+          >
+            dirty
+          </button>
+          <TestEditorView open onClose={onClose} editor={editor} />
+        </>
+      );
+    }
+
+    render(withClient(client, <Harness />));
+    await screen.findByText("Основы ИБ");
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("harness-dirty"));
+    });
+
+    // Footer secondary button is «Отменить» when dirty. It must discard + close
+    // immediately — the save-confirm dialog is reserved for the ambiguous header «×».
+    const cancel = await screen.findByTestId("test-editor-cancel");
+    expect(cancel).toHaveTextContent("Отменить");
+    fireEvent.click(cancel);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("dialog", { name: /Есть несохранённые изменения/i }),
+    ).toBeNull();
+  });
+});
+
 // ─── Gap 6: API save error keeps editor open and shows error banner ────────────
 
 describe("<TestEditor /> — API save error (Gap 6)", () => {
