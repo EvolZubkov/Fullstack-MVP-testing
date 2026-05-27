@@ -289,6 +289,10 @@ issues для невыполненных.
   индикация (поле + summary секции с anchor-навигацией — FR-20c из S9).
 - **PRD-1 интеграция:** оформление и content pages в Drawer; экспорт SCORM в меню
   карточки; variant.kind контракт; required-fields validation на publish.
+  Примечание: полноценный редактор content-pages в «Структуре» (add/edit/reorder/
+  выбор шаблона) вынесен в closeout-фазу PRD-1 — см.
+  [PRD-1 implementation-todo §4](../prd-1/implementation-todo.md). До её закрытия
+  секция «Структура» остаётся read-only + delete (стаб `structure-content-pages-stub`).
 - **Layout:** wide Drawer `min(1120px, calc(100vw - 48px))`; двухпанельные настройки
   ≥ 960px; mobile out-of-scope PRD-7.
 - **Архив:** удаление с вводом названия; archived скрыты из общего списка;

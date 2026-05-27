@@ -7,7 +7,8 @@ API, SCORM export, runtime loader, navigation, frontend dialogs). Незакры
 acceptance pass. Контрактные дополнения PRD-1 §4.3 (variant.kind model, row-menu,
 severity-rail, required-params validation), внесённые 2026-05-21: variant.kind schema,
 тихая привязка, replace-variant endpoint и required-fields validation (server) — закрыты
-2026-05-25; остальные — в коде не реализованы, см. §1.12 ниже.  
+2026-05-25; остальные — в коде не реализованы, см. §1.12 ниже. Интеграция редактора
+content-pages в новую вкладку «Структура» PRD-7 вынесена в closeout-фазу — см. §4.  
 **Последняя проверка по коду:** 2026-05-25  
 **Правило UI:** UI-разработка начинается только после подготовки и явного согласования wireframes.
 
@@ -254,6 +255,9 @@ row-menu, severity-rail) 2026-05-21 — в коде не реализовано 
   полноценного визуального предпросмотра всех layout-состояний.
 - Полный acceptance pass по PRD-1 ещё требует ручного end-to-end просмотра
   экспортированного SCORM в браузере/LMS.
+- **Редактор content-pages не интегрирован в новую вкладку «Структура» PRD-7**:
+  секция read-only + delete, CRUD вынесен в заглушку; legacy `ContentPagesDialog`
+  отвязан. Вынесено в closeout-фазу — см. §4.
 
 ### 3.3 Последняя проверка команд (2026-05-22)
 
@@ -278,3 +282,65 @@ row-menu, severity-rail) 2026-05-21 — в коде не реализовано 
 - `20e6bcb` 2026-05-11 — client: PRD-7 test settings editor (затронул PRD-1 dialogs).
 
 После 2026-05-11 — коммитов в PRD-1 зонах нет.
+
+---
+
+## 4. Closeout PRD-1: редактор content-pages во вкладке «Структура» PRD-7
+
+**Статус:** Запланировано (closeout PRD-1, вне нумерации PRD-7 S9-S11)
+**Модель:** Sonnet 4.6 (UI) + Opus 4.7 (acceptance-сверка)
+**Зависит от:** PRD-7 S5-S8 (секции редактора закрыты); API `content-pages` (готов,
+`server/routes/content-pages.ts`); variant.kind (PRD-1 §4.3, серверная часть закрыта
+2026-05-25).
+**Связано:** PRD-7 §1.4 (тихая привязка system-страниц);
+[PRD-7 S9-S11](../prd-7/s9-s11-in-progress.md) — фаза должна быть закрыта до acceptance-
+критериев «оформление и content pages в Drawer» (PRD-7 §10).
+
+### 4.1 Контекст
+
+Вкладка «Структура» нового редактора
+(`client/src/features/tests/editor/sections/start-pages-section.tsx`) сейчас **read-only**:
+показывает зональный просмотр `content_pages` (system-строки `intro`/`summary`/`questions`/
+`router` + авторские `info`) и позволяет только удалять строку. Создание/редактирование/
+перенос страниц вынесены в заглушку `NextStepBanner`
+(`data-testid="structure-content-pages-stub"`).
+
+Полноценный CRUD авторских страниц реализован в legacy-компоненте
+`client/src/components/content-pages-dialog.tsx` (`ContentPagesDialog`: добавить до/после,
+inline-форма, выбор шаблона, сортировка; покрыт `content-pages-dialog.test.tsx`), но он
+**не подключён** ни к одной странице после рефакторинга PRD-7. Фаза переносит эту
+функциональность в секцию «Структура» Drawer и выводит legacy-диалог из эксплуатации.
+
+### 4.2 Scope
+
+Только авторские страницы `kind: info`. System-строки (`intro`/`summary`/`questions`/
+`router`) управляются сервисом тихо (PRD-7 §1.4) и как сущности в этой фазе не редактируются.
+
+- [ ] Добавление страницы `kind: info` в разрешённую зону по `flowMode`:
+  - `linear_flat` — зоны «До теста» / «После теста»;
+  - `linear_by_topics` — до/после каждой темы;
+  - `router_by_topics` — под router-row.
+- [ ] Редактирование страницы: выбор варианта (`manifest.contentTemplates[]` с `kind: info`),
+  форма `values` по placeholders варианта, режим `template`/`standard`/`html`.
+- [ ] Встроенный rich-text редактор для `richText`/`html` placeholders (санитизация как в legacy).
+- [ ] Drag-reorder страниц внутри разрешённой области (`sort_order`).
+- [ ] Удаление страницы — сохранить текущее поведение.
+- [ ] Required-fields варианта подсвечиваются в секции и участвуют в блокировке Save / publish-gate.
+- [ ] Убрать `NextStepBanner` / стаб после включения функциональности.
+- [ ] Вывести из эксплуатации `ContentPagesDialog` (удалить либо оставить только до миграции,
+  по аналогии с anti-goals S10); удалить мёртвый код и неиспользуемые импорты.
+
+### 4.3 DoD
+
+- Автор создаёт/редактирует/переносит/удаляет `info`-страницы во вкладке «Структура» во всех
+  трёх `flowMode` end-to-end через Drawer.
+- Заглушка `structure-content-pages-stub` удалена; вместо неё рабочий UI.
+- System-строки остаются под тихой логикой PRD-7 §1.4 (не ломаются при add/reorder info).
+- Component-тесты на add/edit/reorder/delete в секции; `npm run check` и полный `vitest run` зелёные.
+- Manual smoke: добавить страницу -> сохранить -> повторное открытие сохраняет порядок и контент.
+
+### 4.4 Anti-goals
+
+- НЕ редактировать system-страницы как пользовательские сущности (управляются сервисом).
+- НЕ менять контракт API `content-pages` без необходимости.
+- НЕ трогать runtime-рендер content-pages (PRD-1 §1.8/§1.9 закрыты).

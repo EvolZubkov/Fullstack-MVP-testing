@@ -26,7 +26,7 @@
 | 6 | PRD-5 | Шкалы и многомерные измерения | Не начата | PRD-2, PRD-4 |
 | 7 | PRD-3 | Жизненный цикл шаблонов | Не начата | PRD-1 closeout (отдельный трек) |
 | 8 | PRD-9 | Миграция bcryptjs → `@vvlad1973/crypto` | Не начата (backlog, low priority, tech debt) | Завершение PRD-7 S9-S11 |
-| — | PRD-1 | Шаблоны и контентные страницы | In Implementation (Backend 90%, Runtime 95%, Frontend 65%) | Code-walk + closeout вне PRD-7 |
+| — | PRD-1 | Шаблоны и контентные страницы | In Implementation (Backend 90%, Runtime 95%, Frontend 65%) | Code-walk + closeout вне PRD-7; редактор content-pages в «Структуре» — closeout-фаза, см. [PRD-1 todo §4](./specs/prd-1/implementation-todo.md) |
 
 Детальный прогресс по PRD-7:
 
