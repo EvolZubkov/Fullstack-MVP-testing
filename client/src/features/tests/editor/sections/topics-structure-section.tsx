@@ -136,9 +136,10 @@ export function CompositionSection({ model, updateModel }: CompositionSectionPro
         />
       )}
 
-      {model.sections.map((section) => (
+      {model.sections.map((section, index) => (
         <TopicRow
           key={section.topicId}
+          index={index}
           section={section}
           onChangeDrawCount={(n) => updateSection(section.topicId, { drawCount: n })}
           onToggleRequired={(required) =>
@@ -156,6 +157,7 @@ export function CompositionSection({ model, updateModel }: CompositionSectionPro
         leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
         onClick={() => setPickerOpen(true)}
         data-testid="composition-add-topic"
+        data-field="sections"
       >
         Добавить тему
       </Button>
@@ -176,6 +178,8 @@ export const TopicsStructureSection = CompositionSection;
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function TopicRow(props: {
+  /** Position in `model.sections`; feeds the `sections[i]` FR-20c anchor. */
+  index: number;
   section: EditorSection;
   onChangeDrawCount: (n: number) => void;
   onToggleRequired: (required: boolean) => void;
@@ -214,7 +218,7 @@ function TopicRow(props: {
           />
         </div>
         <div className="tb-topic-row__body">
-          <div className="tb-draw-count-row">
+          <div className="tb-draw-count-row" data-field={`sections[${props.index}].drawCount`}>
             <span className="tb-draw-count-row__label">Вопросов в тест</span>
             <NumberInput
               size="s"

@@ -211,6 +211,38 @@ describe("<TestEditor /> DOM and focus", () => {
   });
 });
 
+// ─── FR-20c: error summary + anchor navigation ────────────────────────────────
+
+describe("<TestEditor /> FR-20c — error summary anchor navigation", () => {
+  it("surfaces the summary and focuses the offending field via «Перейти к ошибкам»", async () => {
+    // Empty title is a blocking error (FR-11); the field lives in the Настройки
+    // tab while the editor opens on Состав, so the anchor must switch tabs.
+    nextResponse(buildApiResponse({ title: "" }));
+    const client = makeClient();
+    render(withClient(client, <TestEditor testId="test-1" open onClose={() => {}} />));
+
+    await screen.findByTestId("test-editor-error-summary");
+
+    fireEvent.click(screen.getByRole("button", { name: /Перейти к ошибкам/i }));
+
+    // The Настройки tab activates (so the title input mounts) and gets focus.
+    await waitFor(() => {
+      const input = screen.getByTestId("settings-title-input");
+      expect(input).toHaveFocus();
+      expect(input.closest('[data-field="basic.title"]')).not.toBeNull();
+    });
+  });
+
+  it("does not render the error summary when the model is valid", async () => {
+    nextResponse(buildApiResponse());
+    const client = makeClient();
+    render(withClient(client, <TestEditor testId="test-1" open onClose={() => {}} />));
+
+    await screen.findByText("Sample Test");
+    expect(screen.queryByTestId("test-editor-error-summary")).toBeNull();
+  });
+});
+
 // ─── Hook-level conflict / 422 tests ──────────────────────────────────────────
 
 describe("useTestEditor — optimistic conflict and required-fields", () => {

@@ -92,6 +92,18 @@ const TAB_LABELS: Record<EditorTabKey, string> = {
   structure: "Структура",
 };
 
+/**
+ * Maps a {@link ValidationIssue} `field` path to the editor tab that renders it
+ * (FR-20c anchor navigation). `sections*` live in the Состав tab; everything
+ * else (`basic.*`, `passRules.*`, `adaptive.*`) is edited in the Настройки tab.
+ */
+function tabForField(field: string): EditorTabKey {
+  if (field === "sections" || field.startsWith("sections[") || field.startsWith("sections.")) {
+    return "composition";
+  }
+  return "settings";
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 /**
@@ -193,6 +205,41 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
 
   const hasErrors = editor.validation.errors.length > 0;
   const saveDisabled = !combinedDirty || hasErrors || combinedSaving;
+
+  // FR-20c: distinct count of fields carrying a blocking error (for the summary
+  // banner) and anchor navigation to the first offending field.
+  const errorFieldCount = useMemo(
+    () => new Set(editor.validation.errors.map((e) => e.field)).size,
+    [editor.validation.errors],
+  );
+
+  /**
+   * FR-20c: switch to the tab owning `field`, then scroll/focus the matching
+   * input. Anchors are `data-field` attributes on the section formfields; an
+   * exact match wins, otherwise the nearest ancestor path (for nested array
+   * fields) is used. Focus lands on the first focusable control inside it.
+   */
+  const goToError = useCallback((field: string) => {
+    setActiveTab(tabForField(field));
+    // Defer to the next macrotask so the freshly-activated tab has rendered.
+    window.setTimeout(() => {
+      const root = drawerRef.current;
+      if (!root) return;
+      let anchor = root.querySelector<HTMLElement>(`[data-field="${field}"]`);
+      if (!anchor) {
+        anchor = Array.from(root.querySelectorAll<HTMLElement>("[data-field]")).find((el) => {
+          const f = el.dataset.field;
+          return f !== undefined && (field === f || field.startsWith(`${f}.`) || field.startsWith(`${f}[`));
+        }) ?? null;
+      }
+      if (!anchor) return;
+      anchor.scrollIntoView?.({ block: "center" });
+      const control = anchor.matches("input, textarea, select, button, [tabindex]")
+        ? anchor
+        : anchor.querySelector<HTMLElement>("input, textarea, select, button, [tabindex]");
+      control?.focus();
+    }, 0);
+  }, []);
 
   // Unified save: persist whichever drafts are dirty. Test-settings first
   // (its PUT controls `expectedVersion` ordering); design after, since its
@@ -345,6 +392,20 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
           tabIndex={0}
           data-testid="test-editor-body"
         >
+          {hasErrors && (
+            <Banner
+              tone="error"
+              title={`Поля с ошибками: ${errorFieldCount}`}
+              description="Исправьте отмеченные поля — сохранение недоступно, пока есть ошибки."
+              actions={[
+                {
+                  label: "Перейти к ошибкам",
+                  onClick: () => goToError(editor.validation.errors[0].field),
+                },
+              ]}
+              data-testid="test-editor-error-summary"
+            />
+          )}
           {editor.saveError && (
             <Banner
               tone="error"

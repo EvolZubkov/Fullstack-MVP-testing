@@ -165,7 +165,7 @@ export const BasicSettingsSection = SettingsSection;
 function BasicPane({ model, updateModel }: SettingsSectionProps) {
   return (
     <>
-      <div className="ou-formfield">
+      <div className="ou-formfield" data-field="basic.title">
         <Input
           id="settings-title"
           size="m"
@@ -332,7 +332,7 @@ function LimitsPane({ model, updateModel }: SettingsSectionProps) {
 function IntegrationPane({ model, updateModel }: SettingsSectionProps) {
   return (
     <>
-      <div className="ou-formfield">
+      <div className="ou-formfield" data-field="basic.webhookUrl">
         <Input
           id="settings-webhook"
           size="m"
@@ -393,6 +393,7 @@ function PassRulesPane({ model, updateModel }: SettingsSectionProps) {
         size="sm"
         className="tb-pass-card"
         data-testid="settings-pass-rules-card"
+        data-field="passRules"
       >
         <CardHeader title="Тест пройден, если:" />
         <CardBody>
@@ -436,7 +437,7 @@ function PassRulesPane({ model, updateModel }: SettingsSectionProps) {
               />
             </div>
             {model.passRules.overall.type !== "none" && (
-              <div className="ou-formfield">
+              <div className="ou-formfield" data-field="passRules.overall.value">
                 <NumberInput
                   id="pass-overall-value"
                   size="m"
