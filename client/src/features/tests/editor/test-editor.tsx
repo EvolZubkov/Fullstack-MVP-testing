@@ -650,7 +650,9 @@ function CloseConfirmDialog(props: {
     <ModalDialog
       open={props.open}
       onClose={props.onCancel}
-      size="m"
+      // size "l": the three actions («Продолжить редактирование» / «Выйти без
+      // сохранения» / «Сохранить») do not fit a medium modal and overflow.
+      size="l"
       icon={props.hasErrors ? <XCircle size={20} /> : <AlertTriangle size={20} />}
       iconTone={props.hasErrors ? "danger" : "warning"}
       title={
