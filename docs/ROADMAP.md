@@ -3,11 +3,11 @@
 **Версия:** 1.2
 **Статус:** Утверждено
 **Источник:** [BRD](./specs/brd-scorm-enhancements.md), PRD-1...PRD-9
-**Последняя актуализация:** 2026-05-26
+**Последняя актуализация:** 2026-05-27
 
 ---
 
-## 0. Текущий статус (на 2026-05-26)
+## 0. Текущий статус (на 2026-05-27)
 
 | Шаг | PRD | Фаза | Статус | Блокер для старта следующей фазы |
 | --- | --- | --- | --- | --- |
@@ -16,9 +16,9 @@
 | 1 | PRD-7 | S2 — backend, миграции, API | Закрыта (миграции, TestSettingsService, endpoints; regression проверяется в S9) | — |
 | 1 | PRD-7 | S3 — frontend mappers + validation | Закрыта (unit-тесты 46 шт.) | — |
 | 1 | PRD-7 | S4-S8 — UI Drawer + секции | Закрыта (2026-05-25; FR-20c якорная навигация → S9) | — |
-| 1 | PRD-7 | S9 — component + API тесты, regression | **Активна** | — |
-| 1 | PRD-7 | S10 — удаление legacy UI | Ожидает | S9 |
-| 1 | PRD-7 | S11 — acceptance pass §10 | Ожидает | S9, S10 |
+| 1 | PRD-7 | S9 — component + API тесты, regression | Закрыта 2026-05-27 (тесты + FR-20c; полный suite 1375 зелёных, `npm run check` 0 ошибок) | — |
+| 1 | PRD-7 | S10 — удаление legacy UI | **Активна (следующая)** | — |
+| 1 | PRD-7 | S11 — acceptance pass §10 | Ожидает | S10 |
 | 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | Не начата | Завершение PRD-7 S9-S11 |
 | 3 | PRD-6 | Retake gate, eligibility plugins | Не начата | PRD-4 |
 | 4 | PRD-8 | Router-flow runtime + UI «Структура» в router-режиме | Не начата | PRD-4, PRD-7 |
