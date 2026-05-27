@@ -246,8 +246,14 @@ function renderResults() {
     html += '<button class="btn btn-outline" onclick="restart()">Пройти заново</button>';
   }
 
-  // "Завершить" — всегда
-  html += '<button class="btn" onclick="finishAndClose()">Завершить тест</button>';
+  // Test-scope «После теста» content pages declared after the summary render
+  // after this screen — show «Далее» instead of finishing immediately.
+  if (state.postResultsPages && state.postResultsPages.length > 0) {
+    html += '<button class="btn" data-nav="next" onclick="enterPostResults()">Далее</button>';
+  } else {
+    // "Завершить" — всегда
+    html += '<button class="btn" onclick="finishAndClose()">Завершить тест</button>';
+  }
 
   html += '</div>';
 

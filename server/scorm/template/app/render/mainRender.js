@@ -16,6 +16,11 @@ function render() {
         return;
     }
 
+    if (state.phase === 'postResults') {
+        renderPostResults();
+        return;
+    }
+
     if (state.phase === 'content') {
         var item = typeof currentPageItem === 'function' ? currentPageItem() : null;
         var manifest = state.templateManifest || {};
