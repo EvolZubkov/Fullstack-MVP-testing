@@ -449,7 +449,9 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
     void (async () => {
       await handlers.cp.update(activeId, { position: t.position, topicId: t.topicId });
       await handlers.cp.reorder(newOrder.map((p, i) => ({ id: p.id, sortOrder: i })));
-    })();
+    })().catch(() => {
+      /* error surfaced via cp.mutationError banner — avoid an uncaught rejection */
+    });
   };
 
   if (model.sections.length === 0) {
