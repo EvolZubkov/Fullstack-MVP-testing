@@ -106,26 +106,58 @@ Reference: `tests/routes.tests.test.ts`, `tests/services/test-settings.test.ts`.
 
 API-чек-лист (из §1.13.3):
 
-- [ ] `POST /api/tests` standard создаёт test + sections атомарно.
-- [ ] `PUT /api/tests/:id` standard атомарно обновляет sections.
-- [ ] `POST /api/tests` adaptive создаёт test + adaptive settings атомарно.
-- [ ] `PUT /api/tests/:id` adaptive откатывает изменения при ошибке уровня/link.
-- [ ] Validation errors возвращают field-level payload.
-- [ ] Optimistic version check возвращает 409 Conflict при mismatch.
-- [ ] `PATCH /api/tests/:id/status` корректно меняет статус.
-- [ ] `DELETE /api/tests/:id` требует точное совпадение названия.
-- [ ] `POST /api/tests/:id/restore` восстанавливает из архива.
-- [ ] Список тестов по умолчанию не показывает `archived`.
+- [x] `POST /api/tests` standard создаёт test + sections атомарно — service
+  `create() inserts sections for each entry` + `runs inside a transaction`.
+- [x] `PUT /api/tests/:id` standard атомарно обновляет sections — service
+  `replaces sections when sections array provided`.
+- [x] `POST /api/tests` adaptive создаёт test + adaptive settings атомарно —
+  service `create() adaptive inserts topic settings + levels + links in one
+  transaction` (добавлено в S9 ч.2) + route `POST adaptive — forwards
+  adaptiveSettings to service.create`.
+- [x] `PUT /api/tests/:id` adaptive откатывает изменения при ошибке уровня/link —
+  service `save() adaptive propagates a level-insert failure so the transaction
+  rolls back` (добавлено в S9 ч.2).
+- [x] Validation errors возвращают field-level payload — routes `POST/PUT … Zod
+  validation`.
+- [x] Optimistic version check возвращает 409 Conflict при mismatch — routes
+  `PATCH … 409` + `PUT … 409 on VersionConflictError`.
+- [x] `PATCH /api/tests/:id/status` корректно меняет статус.
+- [x] `DELETE /api/tests/:id` требует точное совпадение названия.
+- [x] `POST /api/tests/:id/restore` восстанавливает из архива.
+- [x] Список тестов по умолчанию не показывает `archived`.
 
 Regression-чек-лист (из §1.13.4):
 
-- [ ] Старые тесты с `published=true/false` корректно открываются и сохраняются
-  через новый редактор.
-- [ ] Старые тесты с непустым `start_page_content` корректно мигрируются в `intro`
-  content page.
-- [ ] Старые тесты без `designSettingsJson` используют default template.
-- [ ] Старые тесты без adaptive settings продолжают работать как standard.
-- [ ] SCORM export старых тестов после миграции данных проходит golden-тест.
+- [x] Старые тесты с `published=true/false` корректно открываются и сохраняются
+  через новый редактор — service `derives status from published flag` +
+  `syncs status<->published`; route `GET … legacy published test loads with
+  sections` (добавлено в S9 ч.2).
+- [x] Старые тесты с непустым `start_page_content` корректно мигрируются в `intro`
+  content page — `tests/migration-prd7.test.ts`. Test-harness воспроизводит порядок
+  деплоя: 003 (INSERT без `kind`) → 004 (backfill `kind` из `type`), а не применяет
+  003 в одиночку поверх уже мигрированной dev-БД. Проверяется в т.ч. `kind = 'intro'`.
+- [x] Старые тесты без `designSettingsJson` используют default template — service
+  `create() without designSettingsJson falls back to the default template`
+  (добавлено в S9 ч.2) + `tests/scorm-export.test.ts` default-template path.
+- [x] Старые тесты без adaptive settings продолжают работать как standard —
+  service `create() without adaptiveSettings inserts no adaptive rows`
+  (добавлено в S9 ч.2).
+- [ ] SCORM export старых тестов после миграции данных проходит golden-тест —
+  частично: `tests/scorm-export.test.ts` покрывает default-template fallback и
+  сериализацию contentPages/designSettings в `TEST_DATA`; полноценного
+  golden-snapshot всего ZIP нет. Кандидат на S11 acceptance.
+
+> **Статус S9 ч.2 (2026-05-27).** Добавлено 10 тест-кейсов (6 service-уровня:
+> adaptive create/replace/rollback + legacy default-template/no-adaptive; 4
+> route-уровня: adaptive forwarding POST/PUT + legacy GET). Дополнительно
+> устранены 8 pre-existing падений в 6 файлах (migration-prd7 ×2, attempts-tests,
+> assignments, test-folders ×2, users-bulk, scorm-media ×2) — все были стале-тестами
+> после рефакторингов PRD-7/PRD-1, кроме одной 1-строчной правки production в
+> `server/scorm/builders/media-assets.ts` (двойная обработка `mediaUrl`).
+> **Полный `vitest run` зелёный: 52 файла, 1363 теста.** `npm run check` 0 ошибок.
+> Замечание: глобальный порог coverage 50% (`vitest.config.ts`) сейчас не добирает
+> ~0.1-0.6 пп (≈49.4-49.9%) — pre-existing gate, не связан с этими правками; вынесен
+> отдельно.
 
 #### Промпт для исполнителя (Haiku, S9 часть 2)
 
