@@ -876,13 +876,24 @@
 .page-row--system .page-row__meta { margin-left: var(--ou-space-4); }
 .page-row__meta .ou-tag { display: inline-flex; align-items: center; gap: var(--wf-space-tiny, 2px); }
 
-/* Drag handle (visual placeholder until DnD ships). */
+/* Drag handle — grip for @dnd-kit page reordering (Структура). */
 .drag-handle {
   color: var(--ou-fg-muted);
   cursor: grab;
   display: flex;
   align-items: center;
   flex-shrink: 0;
+  touch-action: none;
+}
+.drag-handle:active { cursor: grabbing; }
+
+/* @dnd-kit sortable unit. The dragged row dims and lifts; the row currently
+   under the pointer shows an accent insertion line so the drop position is
+   explicit (complements the gap the sortable shift opens). */
+.structure-sortable-item { position: relative; }
+.page-row.dragging { opacity: 0.4; }
+.structure-sortable-item.is-drop-target > .page-row {
+  box-shadow: inset 0 var(--wf-space-half, 2px) 0 0 var(--ou-accent-default);
 }
 
 /* Variant badge: neutral chip with the variant name (kind/template label). */

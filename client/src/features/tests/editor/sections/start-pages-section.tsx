@@ -622,19 +622,59 @@ function AuthorPageGroup(props: {
     <SortableContext items={pages.map((p) => p.id)} strategy={verticalListSortingStrategy}>
       <InsertRow onClick={() => insert(0)} testId={`structure-insert-${slug}-0`} />
       {pages.map((page, idx) => (
-        <div key={page.id}>
-          <AuthorPageRow
-            page={page}
-            cp={handlers.cp}
-            expanded={handlers.expandedId === page.id}
-            onToggleExpand={() =>
-              handlers.setExpandedId(handlers.expandedId === page.id ? null : page.id)
-            }
-          />
-          <InsertRow onClick={() => insert(idx + 1)} testId={`structure-insert-${slug}-${idx + 1}`} />
-        </div>
+        <SortablePageItem
+          key={page.id}
+          page={page}
+          handlers={handlers}
+          insertTestId={`structure-insert-${slug}-${idx + 1}`}
+          onInsertAfter={() => insert(idx + 1)}
+        />
       ))}
     </SortableContext>
+  );
+}
+
+/**
+ * One sortable unit = the author page row plus its trailing «+ Добавить» line,
+ * so the whole unit is the measured/transformed @dnd-kit node. Keeping the
+ * insert-row INSIDE the sortable node (not interleaved as a static sibling) is
+ * what makes the reorder shift open a clean gap at the drop point — the drop
+ * indicator — and makes arbitrary placement work for 3+ rows.
+ */
+function SortablePageItem(props: {
+  page: ContentPage;
+  handlers: ZoneHandlers;
+  insertTestId: string;
+  onInsertAfter: () => void;
+}) {
+  const { page, handlers } = props;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } =
+    useSortable({ id: page.id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 2 : undefined,
+    position: isDragging ? "relative" : undefined,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={"structure-sortable-item" + (isOver && !isDragging ? " is-drop-target" : "")}
+      data-testid={`structure-sortable-${page.id}`}
+    >
+      <AuthorPageRow
+        page={page}
+        cp={handlers.cp}
+        expanded={handlers.expandedId === page.id}
+        onToggleExpand={() =>
+          handlers.setExpandedId(handlers.expandedId === page.id ? null : page.id)
+        }
+        dragHandleProps={{ ...attributes, ...listeners }}
+        isDragging={isDragging}
+      />
+      <InsertRow onClick={props.onInsertAfter} testId={props.insertTestId} />
+    </div>
   );
 }
 
@@ -657,12 +697,12 @@ function AuthorPageRow(props: {
   cp: UseContentPagesResult;
   expanded: boolean;
   onToggleExpand: () => void;
+  /** Spread on the grip handle: @dnd-kit `attributes` + `listeners`. */
+  dragHandleProps: Record<string, unknown>;
+  isDragging: boolean;
 }) {
   const { page, cp } = props;
   const [confirming, setConfirming] = useState(false);
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: page.id });
-  const dragStyle = { transform: CSS.Transform.toString(transform), transition };
 
   const variant = cp.contentTemplates.find((v) => v.key === page.templateKey);
   const values = page.valuesJson?.values ?? {};
@@ -675,21 +715,18 @@ function AuthorPageRow(props: {
   return (
     <>
       <div
-        ref={setNodeRef}
-        style={dragStyle}
         className={
           "page-row" +
           (hasWarn ? " page-row--warn" : "") +
           (props.expanded ? " is-expanded" : "") +
-          (isDragging ? " dragging" : "")
+          (props.isDragging ? " dragging" : "")
         }
         data-testid={`structure-page-row-${page.id}`}
       >
         <span
           className="drag-handle"
           data-testid={`structure-page-grip-${page.id}`}
-          {...attributes}
-          {...listeners}
+          {...props.dragHandleProps}
         >
           <GripVertical className="h-3.5 w-3.5" />
         </span>
