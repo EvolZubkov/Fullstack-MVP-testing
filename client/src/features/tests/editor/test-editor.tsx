@@ -47,6 +47,7 @@ import {
   type UseTestEditorResult,
 } from "./use-test-editor";
 import { useDesignSettings } from "./use-design-settings";
+import { useContentPages, hasStructureWarnings } from "./use-content-pages";
 import { CompositionSection } from "./sections/topics-structure-section";
 import { SettingsSection } from "./sections/basic-settings-section";
 import { DesignSection } from "./sections/design-section";
@@ -146,6 +147,15 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
   // both the test-settings PUT and the design-settings PUT in a single
   // action (per wireframe prd7-design-tab.html — single footer save).
   const design = useDesignSettings(editor.model?.id);
+
+  // Hoist content-pages here too so the «Структура» section shares one hook
+  // instance with the drawer — letting the tab reflect content-page warnings
+  // (missing variant / unfilled required fields) in its status dot.
+  const contentPages = useContentPages(editor.model?.id);
+  const structureWarn = useMemo(
+    () => hasStructureWarnings(contentPages.pages, contentPages.contentTemplates),
+    [contentPages.pages, contentPages.contentTemplates],
+  );
 
   const queryClient = useQueryClient();
 
@@ -292,7 +302,13 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
   const tabItems = useMemo<TabItem<EditorTabKey>[]>(
     () =>
       TAB_ORDER.map((tab) => {
-        const status = editor.tabStatuses[tab];
+        const base = editor.tabStatuses[tab];
+        // The «Структура» tab folds in content-page warnings (missing variant /
+        // unfilled required fields) on top of its own draft status.
+        const status =
+          tab === "structure"
+            ? { ...base, warning: base.warning || structureWarn }
+            : base;
         // Per prd7-editor-drawer.html the dirty/warn/error indicator is a
         // small inline dot rendered INSIDE the tab label (not in the badge
         // pill slot). Using the `badge` prop would wrap it in
@@ -308,7 +324,7 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
           ),
         };
       }),
-    [editor.tabStatuses],
+    [editor.tabStatuses, structureWarn],
   );
 
   if (!open) return null;
@@ -431,7 +447,11 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
             <DesignSection testId={editor.model.id} design={design} />
           )}
           {editor.model && activeTab === "structure" && (
-            <StructureSection model={editor.model} testId={editor.model.id} />
+            <StructureSection
+              model={editor.model}
+              testId={editor.model.id}
+              content={contentPages}
+            />
           )}
           {!editor.model && <TabPlaceholder tab={activeTab} />}
         </div>

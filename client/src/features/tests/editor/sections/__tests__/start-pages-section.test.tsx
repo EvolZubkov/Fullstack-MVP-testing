@@ -1,17 +1,14 @@
 /**
  * @module features/tests/editor/sections/__tests__/start-pages-section.test
- * @description Tests for the «Структура» tab section.
+ * @description Tests for the «Структура» tab section (closeout of PRD-1 §4).
  *
  * Coverage:
- *   - flowMode banner with the human-readable label
- *   - Empty state when sections array is empty
- *   - Create-mode notice when testId is undefined
- *   - Loads content_pages from `/api/tests/:id/content-pages`
- *   - linear_flat: «До теста» zone + single questions row + per-test pages
- *   - linear_by_topics: per-topic blocks with before/after groups
- *   - Page delete: requires confirmation, fires DELETE, triggers refetch
- *   - templateKeyMissing flag surfaces a warning tag
- *   - Content-pages «next step» stub is always present
+ *   - flowMode banner, empty state, create-mode notice, no stub
+ *   - Kind-aware layout: intro → «До теста», summary → «После теста»,
+ *     questions → one row per topic (no synthetic duplicate)
+ *   - Author info pages: add (variant modal), inline edit, reorder, delete
+ *   - Required-field + missing-template warnings
+ *   - «Сменить вариант» on system rows (enabled when >1 variant, replace-variant)
  */
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -22,6 +19,31 @@ import type { TestEditorModel, EditorSection } from "../../test-editor.types";
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const TEST_ID = "te-1";
+
+const TEMPLATE = {
+  id: "default",
+  name: "Базовый",
+  manifest: {
+    contentTemplates: [
+      {
+        key: "info.text",
+        label: "Материал",
+        kind: "info",
+        description: "Текстово-медийная страница.",
+        placeholders: [
+          { key: "title", type: "text", label: "Заголовок", required: true },
+          { key: "body", type: "richText", label: "Текст" },
+        ],
+      },
+      { key: "intro.hero", label: "Введение", kind: "intro", placeholders: [{ key: "title", type: "text", label: "Заголовок" }] },
+      // Two summary variants → «Сменить вариант» enabled.
+      { key: "summary.result", label: "Итог: результат", kind: "summary", placeholders: [] },
+      { key: "summary.ring", label: "Итог: кольцо", kind: "summary", placeholders: [] },
+      // One questions variant → «Сменить вариант» disabled.
+      { key: "question.standard", label: "Стандартный макет вопроса", kind: "questions", placeholders: [] },
+    ],
+  },
+};
 
 function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
   return {
@@ -41,11 +63,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       telemetryEnabled: false,
     },
     runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false },
-    passRules: {
-      decisionPolicy: "overall_only",
-      overall: { type: "percent", value: 70 },
-      byTopic: {},
-    },
+    passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
     ...overrides,
@@ -67,229 +85,293 @@ function buildSection(over: Partial<EditorSection> = {}): EditorSection {
   };
 }
 
-function buildPage(over: Partial<{ id: string; topicId: string | null; position: string; kind: string; sortOrder: number; valuesJson: Record<string, unknown>; templateKeyMissing: boolean }> = {}) {
+type RawPage = {
+  id: string;
+  testId: string;
+  topicId: string | null;
+  position: string;
+  mode: string;
+  type: string;
+  kind: string;
+  templateKey: string | null;
+  sortOrder: number;
+  valuesJson: Record<string, unknown>;
+  autoAdvance: boolean;
+  autoAdvanceDelayMs: number | null;
+  createdAt: string;
+  updatedAt: string;
+  templateKeyMissing?: boolean;
+};
+
+function buildPage(over: Partial<RawPage> = {}): RawPage {
   return {
-    id: over.id ?? "pg-1",
+    id: "pg-1",
     testId: TEST_ID,
-    topicId: over.topicId ?? null,
-    position: over.position ?? "before",
+    topicId: null,
+    position: "before",
     mode: "standard",
     type: "info",
-    kind: over.kind ?? "info",
+    kind: "info",
     templateKey: null,
-    sortOrder: over.sortOrder ?? 0,
-    valuesJson: over.valuesJson ?? { values: { title: "Введение" } },
+    sortOrder: 0,
+    valuesJson: { values: { title: "Введение" } },
     autoAdvance: false,
     autoAdvanceDelayMs: null,
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
-    ...(over.templateKeyMissing !== undefined
-      ? { templateKeyMissing: over.templateKeyMissing }
-      : {}),
+    ...over,
   };
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Stateful fetch mock ────────────────────────────────────────────────────────
 
 function makeQueryClient() {
-  return new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
-}
-
-function renderWithClient(ui: React.ReactElement) {
-  const client = makeQueryClient();
-  return render(
-    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
-  );
-}
-
-function mockFetch(impl: (url: string, init?: RequestInit) => Promise<Response>) {
-  vi.stubGlobal("fetch", vi.fn(impl));
+  return new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
 }
 
 function jsonResponse(body: unknown, status = 200): Promise<Response> {
   return Promise.resolve(
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { "Content-Type": "application/json" },
-    }),
+    new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }),
   );
 }
 
-function emptyResponse(status = 204): Promise<Response> {
-  return Promise.resolve(new Response(null, { status }));
+/** Installs a stateful fetch over the content-pages + design + templates API. */
+function installApi(initialPages: RawPage[]) {
+  const pages = [...initialPages];
+  let seq = 0;
+  const spies = {
+    post: vi.fn<(b: any) => void>(),
+    put: vi.fn<(b: { id: string; body: any }) => void>(),
+    reorder: vi.fn<(b: any) => void>(),
+    replaceVariant: vi.fn<(b: { id: string; body: any }) => void>(),
+    del: vi.fn<(id: string) => void>(),
+  };
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const body = init?.body ? JSON.parse(init.body as string) : undefined;
+
+      if (url === `/api/tests/${TEST_ID}/content-pages` && method === "GET") return jsonResponse(pages);
+      if (url === `/api/tests/${TEST_ID}/design`) return jsonResponse({ templateId: "default" });
+      if (url === "/api/templates/default") return jsonResponse(TEMPLATE);
+
+      if (url === `/api/tests/${TEST_ID}/content-pages` && method === "POST") {
+        spies.post(body);
+        const created = buildPage({ ...body, id: `pg-new-${++seq}`, valuesJson: body.valuesJson ?? { values: {} } });
+        pages.push(created);
+        return jsonResponse(created, 201);
+      }
+      if (url === `/api/tests/${TEST_ID}/content-pages/reorder` && method === "PUT") {
+        spies.reorder(body);
+        return jsonResponse({ ok: true });
+      }
+      const rvMatch = url.match(new RegExp(`/content-pages/([^/]+)/replace-variant$`));
+      if (rvMatch && method === "POST") {
+        spies.replaceVariant({ id: rvMatch[1], body });
+        const p = pages.find((x) => x.id === rvMatch[1]);
+        if (p && body.newTemplateKey) p.templateKey = body.newTemplateKey;
+        return jsonResponse({ diff: { preserved: [], removed: [], added: [] }, applied: true });
+      }
+      const idMatch = url.match(new RegExp(`/api/tests/${TEST_ID}/content-pages/([^/]+)$`));
+      if (idMatch && method === "PUT") {
+        spies.put({ id: idMatch[1], body });
+        const p = pages.find((x) => x.id === idMatch[1]);
+        if (p && body.valuesJson) p.valuesJson = body.valuesJson;
+        return jsonResponse(p);
+      }
+      if (idMatch && method === "DELETE") {
+        spies.del(idMatch[1]);
+        const i = pages.findIndex((x) => x.id === idMatch[1]);
+        if (i >= 0) pages.splice(i, 1);
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      return jsonResponse({ error: "unexpected " + method + " " + url }, 500);
+    }),
+  );
+  return spies;
 }
 
-beforeEach(() => {
-  mockFetch((url) => {
-    if (url === `/api/tests/${TEST_ID}/content-pages`) return jsonResponse([]);
-    return jsonResponse({ error: "unexpected" }, 500);
-  });
-});
+function renderSection(model: TestEditorModel) {
+  const client = makeQueryClient();
+  return render(
+    <QueryClientProvider client={client}>
+      <StructureSection model={model} testId={TEST_ID} />
+    </QueryClientProvider>,
+  );
+}
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
+afterEach(() => vi.unstubAllGlobals());
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe("<StructureSection /> — flow mode + lifecycle", () => {
+  beforeEach(() => installApi([]));
+
   it("shows the current flowMode in the banner", () => {
-    renderWithClient(
-      <StructureSection
-        model={baseModel({ flowMode: "router_by_topics" })}
-        testId={TEST_ID}
-      />,
-    );
-    expect(screen.getByTestId("structure-mode-banner")).toHaveTextContent(
-      "Маршрутизатор по темам",
-    );
+    renderSection(baseModel({ flowMode: "router_by_topics" }));
+    expect(screen.getByTestId("structure-mode-banner")).toHaveTextContent("Маршрутизатор по темам");
   });
 
   it("shows the empty state when there are no sections", async () => {
-    renderWithClient(<StructureSection model={baseModel()} testId={TEST_ID} />);
-    await waitFor(() =>
-      expect(screen.getByTestId("structure-empty")).toBeInTheDocument(),
-    );
+    renderSection(baseModel());
+    await waitFor(() => expect(screen.getByTestId("structure-empty")).toBeInTheDocument());
   });
 
   it("shows the create-mode notice when testId is undefined", () => {
-    renderWithClient(<StructureSection model={baseModel()} />);
+    const client = makeQueryClient();
+    render(
+      <QueryClientProvider client={client}>
+        <StructureSection model={baseModel()} />
+      </QueryClientProvider>,
+    );
     expect(screen.getByTestId("structure-create-notice")).toBeInTheDocument();
   });
 
-  it("always shows the content-pages «next step» stub", () => {
-    renderWithClient(
-      <StructureSection
-        model={baseModel({ sections: [buildSection()] })}
-        testId={TEST_ID}
-      />,
-    );
-    expect(screen.getByTestId("structure-content-pages-stub")).toBeInTheDocument();
+  it("no longer renders the «next step» stub (feature is live)", async () => {
+    renderSection(baseModel({ sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-zone-before-test")).toBeInTheDocument());
+    expect(screen.queryByTestId("structure-content-pages-stub")).toBeNull();
   });
 });
 
-describe("<StructureSection /> — linear_flat layout", () => {
-  it("renders «До теста» pages + single «Внутри теста» questions row", async () => {
-    mockFetch((url) => {
-      if (url === `/api/tests/${TEST_ID}/content-pages`)
-        return jsonResponse([
-          buildPage({ id: "pg-before-1", position: "before", topicId: null, kind: "intro", valuesJson: { values: { title: "Правила" } } }),
-        ]);
-      return jsonResponse({ error: "unexpected" }, 500);
+describe("<StructureSection /> — kind-aware layout", () => {
+  it("linear_flat: intro → «До теста», single questions row, summary → «После теста»", async () => {
+    installApi([
+      buildPage({ id: "pg-intro", kind: "intro", position: "before", topicId: null, templateKey: "intro.hero", valuesJson: { values: { title: "Введение в курс" } } }),
+      buildPage({ id: "pg-q", kind: "questions", position: "before", topicId: null, templateKey: "question.standard", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-sum", kind: "summary", position: "after_topic", topicId: null, templateKey: "summary.result", valuesJson: { values: { title: "Ваш результат" } } }),
+    ]);
+    renderSection(
+      baseModel({
+        flowMode: "linear_flat",
+        sections: [
+          buildSection({ topicId: "t1", topicName: "Тема А", drawCount: 5, maxQuestions: 12 }),
+          buildSection({ topicId: "t2", topicName: "Тема Б", drawCount: 2, maxQuestions: 6 }),
+        ],
+      }),
+    );
+    await waitFor(() => expect(screen.getByTestId("structure-zone-before-test")).toBeInTheDocument());
+    // intro under «До теста»
+    expect(screen.getByTestId("structure-system-intro")).toHaveTextContent("Введение в курс");
+    // single flat questions row with the total count
+    expect(screen.getByTestId("structure-flat-questions-row")).toHaveTextContent("Единый поток: 7 вопросов из 18");
+    // summary under «После теста»
+    expect(screen.getByTestId("structure-zone-after-test")).toContainElement(
+      screen.getByTestId("structure-system-summary"),
+    );
+    expect(screen.getByTestId("structure-system-summary")).toHaveTextContent("Ваш результат");
+  });
+
+  it("linear_by_topics: exactly one questions row per topic (no synthetic duplicate)", async () => {
+    installApi([
+      buildPage({ id: "pg-qt1", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-info", kind: "info", position: "before_topic", topicId: "t1", templateKey: "info.text", valuesJson: { values: { title: "Вводная А" } } }),
+    ]);
+    renderSection(
+      baseModel({
+        flowMode: "linear_by_topics",
+        sections: [buildSection({ topicId: "t1", topicName: "Тема А", drawCount: 4, maxQuestions: 10 })],
+      }),
+    );
+    await waitFor(() => expect(screen.getByTestId("structure-zone-topic-t1")).toBeInTheDocument());
+    // The kind:questions page is THE questions row — rendered once, with the count.
+    const qRows = screen.getAllByTestId("structure-questions-row-t1");
+    expect(qRows).toHaveLength(1);
+    expect(qRows[0]).toHaveTextContent("4 из 10 вопросов");
+    // It is NOT also rendered as an author page-row.
+    expect(screen.queryByTestId("structure-page-row-pg-qt1")).toBeNull();
+    // The author info page renders as an editable row.
+    expect(screen.getByTestId("structure-page-row-pg-info")).toHaveTextContent("Вводная А");
+  });
+});
+
+describe("<StructureSection /> — add page", () => {
+  it("insert-row → picks the info variant → POSTs a page that appears", async () => {
+    const spies = installApi([]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-zone-before-test")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("structure-insert-before-test-0"));
+    await waitFor(() => expect(screen.getByTestId("structure-add-option-tpl:info.text")).toBeInTheDocument());
+    expect(screen.queryByTestId("structure-add-option-tpl:intro.hero")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("structure-add-confirm"));
+    await waitFor(() => expect(spies.post).toHaveBeenCalledTimes(1));
+    expect(spies.post.mock.calls[0][0]).toMatchObject({
+      position: "before",
+      topicId: null,
+      mode: "template",
+      type: "info",
+      templateKey: "info.text",
     });
-    renderWithClient(
-      <StructureSection
-        model={baseModel({
-          flowMode: "linear_flat",
-          sections: [
-            buildSection({ topicId: "t1", topicName: "Тема А", drawCount: 5, maxQuestions: 12 }),
-            buildSection({ topicId: "t2", topicName: "Тема Б", drawCount: 2, maxQuestions: 6 }),
-          ],
-        })}
-        testId={TEST_ID}
-      />,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("structure-zone-before-test")).toBeInTheDocument(),
-    );
-    expect(screen.getByTestId("structure-page-row-pg-before-1")).toHaveTextContent("Правила");
-    expect(screen.getByTestId("structure-zone-questions")).toBeInTheDocument();
-    expect(screen.getByTestId("structure-flat-questions-row")).toHaveTextContent(
-      "Единый поток: 7 вопросов из 18",
-    );
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-new-1")).toBeInTheDocument());
   });
 });
 
-describe("<StructureSection /> — linear_by_topics layout", () => {
-  it("renders one block per topic with before/after groups", async () => {
-    mockFetch((url) => {
-      if (url === `/api/tests/${TEST_ID}/content-pages`)
-        return jsonResponse([
-          buildPage({ id: "pg-bt-1", position: "before_topic", topicId: "t1", kind: "info", valuesJson: { values: { title: "Вводная А" } } }),
-          buildPage({ id: "pg-at-1", position: "after_topic", topicId: "t1", kind: "summary", valuesJson: { values: { title: "Итог А" } } }),
-        ]);
-      return jsonResponse({ error: "unexpected" }, 500);
-    });
-    renderWithClient(
-      <StructureSection
-        model={baseModel({
-          flowMode: "linear_by_topics",
-          sections: [
-            buildSection({ topicId: "t1", topicName: "Тема А", drawCount: 4, maxQuestions: 10 }),
-            buildSection({ topicId: "t2", topicName: "Тема Б", drawCount: 2, maxQuestions: 6 }),
-          ],
-        })}
-        testId={TEST_ID}
-      />,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("structure-zone-topic-t1")).toBeInTheDocument(),
-    );
-    expect(screen.getByTestId("structure-zone-topic-t2")).toBeInTheDocument();
-    const t1Block = screen.getByTestId("structure-zone-topic-t1");
-    expect(t1Block).toHaveTextContent("Вводная А");
-    expect(t1Block).toHaveTextContent("Итог А");
-    expect(t1Block).toHaveTextContent("4 вопросов из 10");
+describe("<StructureSection /> — inline edit", () => {
+  it("expands a page, edits a field and PUTs the new values", async () => {
+    const spies = installApi([
+      buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, templateKey: "info.text", valuesJson: { values: { title: "Старое" } } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("structure-page-expand-pg-1"));
+    const titleInput = await screen.findByTestId("structure-page-field-pg-1-title");
+    fireEvent.change(titleInput, { target: { value: "Новый заголовок" } });
+    fireEvent.click(screen.getByTestId("structure-page-edit-save-pg-1"));
+
+    await waitFor(() => expect(spies.put).toHaveBeenCalledTimes(1));
+    expect(spies.put.mock.calls[0][0].body.valuesJson.values.title).toBe("Новый заголовок");
   });
 });
 
-describe("<StructureSection /> — content_pages delete flow", () => {
+describe("<StructureSection /> — reorder", () => {
+  it("dragging one page onto another PUTs /reorder", async () => {
+    const spies = installApi([
+      buildPage({ id: "pg-a", kind: "info", position: "before", topicId: null, sortOrder: 0, valuesJson: { values: { title: "A" } } }),
+      buildPage({ id: "pg-b", kind: "info", position: "before", topicId: null, sortOrder: 1, valuesJson: { values: { title: "B" } } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-b")).toBeInTheDocument());
+
+    fireEvent.dragStart(screen.getByTestId("structure-page-row-pg-b"));
+    fireEvent.drop(screen.getByTestId("structure-page-row-pg-a"));
+
+    await waitFor(() => expect(spies.reorder).toHaveBeenCalledTimes(1));
+    expect(spies.reorder.mock.calls[0][0]).toEqual([
+      { id: "pg-b", sortOrder: 0 },
+      { id: "pg-a", sortOrder: 1 },
+    ]);
+  });
+});
+
+describe("<StructureSection /> — delete flow", () => {
   it("confirm + delete calls DELETE and refetches the list", async () => {
-    let deleted = false;
-    mockFetch((url, init) => {
-      if (url === `/api/tests/${TEST_ID}/content-pages` && (!init || init.method !== "DELETE")) {
-        return jsonResponse(
-          deleted
-            ? []
-            : [buildPage({ id: "pg-1", position: "before", topicId: null, valuesJson: { values: { title: "К удалению" } } })],
-        );
-      }
-      if (url === `/api/tests/${TEST_ID}/content-pages/pg-1` && init?.method === "DELETE") {
-        deleted = true;
-        return emptyResponse(204);
-      }
-      return jsonResponse({ error: "unexpected" }, 500);
-    });
-    renderWithClient(
-      <StructureSection
-        model={baseModel({
-          flowMode: "linear_flat",
-          sections: [buildSection()],
-        })}
-        testId={TEST_ID}
-      />,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument(),
-    );
+    const spies = installApi([
+      buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, valuesJson: { values: { title: "К удалению" } } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument());
+
     fireEvent.click(screen.getByTestId("structure-page-actions-pg-1"));
     fireEvent.click(screen.getByTestId("structure-page-delete-pg-1"));
     expect(screen.getByTestId("structure-page-delete-confirm-pg-1")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("structure-page-delete-confirm-pg-1"));
-    await waitFor(() =>
-      expect(screen.queryByTestId("structure-page-row-pg-1")).toBeNull(),
-    );
+
+    await waitFor(() => expect(spies.del).toHaveBeenCalledWith("pg-1"));
+    await waitFor(() => expect(screen.queryByTestId("structure-page-row-pg-1")).toBeNull());
   });
 
   it("cancel keeps the row and reverts the confirm prompt", async () => {
-    mockFetch((url) => {
-      if (url === `/api/tests/${TEST_ID}/content-pages`)
-        return jsonResponse([
-          buildPage({ id: "pg-1", position: "before", topicId: null, valuesJson: { values: { title: "Не трогаем" } } }),
-        ]);
-      return jsonResponse({ error: "unexpected" }, 500);
-    });
-    renderWithClient(
-      <StructureSection
-        model={baseModel({ flowMode: "linear_flat", sections: [buildSection()] })}
-        testId={TEST_ID}
-      />,
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument(),
-    );
+    installApi([
+      buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, valuesJson: { values: { title: "Не трогаем" } } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-1")).toBeInTheDocument());
+
     fireEvent.click(screen.getByTestId("structure-page-actions-pg-1"));
     fireEvent.click(screen.getByTestId("structure-page-delete-pg-1"));
     fireEvent.click(screen.getByTestId("structure-page-delete-cancel-pg-1"));
@@ -297,29 +379,62 @@ describe("<StructureSection /> — content_pages delete flow", () => {
   });
 });
 
-describe("<StructureSection /> — missing template flag", () => {
+describe("<StructureSection /> — warnings", () => {
   it("renders a warning tag on pages whose templateKey is missing", async () => {
-    mockFetch((url) => {
-      if (url === `/api/tests/${TEST_ID}/content-pages`)
-        return jsonResponse([
-          buildPage({
-            id: "pg-stale",
-            position: "before",
-            topicId: null,
-            valuesJson: { values: { title: "Старая шапка" } },
-            templateKeyMissing: true,
-          }),
-        ]);
-      return jsonResponse({ error: "unexpected" }, 500);
-    });
-    renderWithClient(
-      <StructureSection
-        model={baseModel({ flowMode: "linear_flat", sections: [buildSection()] })}
-        testId={TEST_ID}
-      />,
+    installApi([
+      buildPage({ id: "pg-stale", kind: "info", position: "before", topicId: null, valuesJson: { values: { title: "Старая шапка" } }, templateKeyMissing: true }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-missing-pg-stale")).toBeInTheDocument());
+  });
+
+  it("flags an info page that leaves a required field empty", async () => {
+    installApi([
+      buildPage({ id: "pg-req", kind: "info", position: "before", topicId: null, templateKey: "info.text", valuesJson: { values: {} } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-required-pg-req")).toBeInTheDocument());
+  });
+});
+
+describe("<StructureSection /> — switch variant of a system page", () => {
+  it("summary has >1 variant → «Сменить вариант» applies replace-variant", async () => {
+    const spies = installApi([
+      buildPage({ id: "pg-sum", kind: "summary", position: "after_topic", topicId: null, templateKey: "summary.result", valuesJson: { values: {} } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-system-summary")).toBeInTheDocument());
+
+    // Two summary variants → the variant hint is shown.
+    expect(screen.getByTestId("structure-system-summary-variant-hint")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("structure-system-summary-actions"));
+    fireEvent.click(screen.getByTestId("structure-system-summary-replace"));
+    await waitFor(() => expect(screen.getByTestId("structure-replace-option-summary.ring")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("structure-replace-option-summary.ring"));
+    fireEvent.click(screen.getByTestId("structure-replace-confirm"));
+
+    await waitFor(() => expect(spies.replaceVariant).toHaveBeenCalledTimes(1));
+    expect(spies.replaceVariant.mock.calls[0][0]).toMatchObject({ id: "pg-sum", body: { newTemplateKey: "summary.ring" } });
+  });
+
+  it("questions has a single variant → no hint, «Сменить вариант» disabled", async () => {
+    installApi([
+      buildPage({ id: "pg-qt1", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
+    ]);
+    renderSection(
+      baseModel({
+        flowMode: "linear_by_topics",
+        sections: [buildSection({ topicId: "t1", topicName: "Тема А", drawCount: 4, maxQuestions: 10 })],
+      }),
     );
-    await waitFor(() =>
-      expect(screen.getByTestId("structure-page-missing-pg-stale")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId("structure-questions-row-t1")).toBeInTheDocument());
+    // No «Доступно вариантов» hint label and no «Единственный вариант» chip.
+    expect(screen.queryByTestId("structure-questions-row-t1-variant-hint")).toBeNull();
+    expect(screen.getByTestId("structure-questions-row-t1")).not.toHaveTextContent("Единственный вариант");
+    // The command exists but is disabled — clicking it does not open the modal.
+    fireEvent.click(screen.getByTestId("structure-questions-row-t1-actions"));
+    fireEvent.click(screen.getByTestId("structure-questions-row-t1-replace"));
+    expect(screen.queryByTestId("structure-replace-confirm")).toBeNull();
   });
 });

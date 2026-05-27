@@ -966,6 +966,118 @@
   color: var(--ou-fg-muted);
 }
 
+/* ── Structure tab — inline-edit, insert-rows, variant picker ───────────
+   Used in features/tests/editor/sections/start-pages-section.tsx.
+   Ported from prd7-structure-*.html (closeout of PRD-1 §4). */
+
+/* Inline-edit expand toggle: a chevron that rotates 90° when the row is open. */
+.page-expand-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ou-space-5);
+  height: var(--ou-space-5);
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ou-fg-muted);
+  cursor: pointer;
+  border-radius: var(--ou-radius-xs);
+  transition: transform var(--ou-motion-fast), background var(--ou-motion-fast);
+}
+.page-expand-toggle:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
+.page-row.is-expanded .page-expand-toggle { transform: rotate(90deg); }
+.page-row.is-expanded {
+  background: var(--ou-bg-surface-2);
+  border-bottom: var(--wf-border-w) dashed var(--ou-border-soft);
+}
+.page-row.dragging {
+  opacity: 0.5;
+  background: var(--ou-bg-surface-3);
+}
+
+/* Expand panel hosting the variant placeholder form. */
+.page-row-expand {
+  padding: var(--ou-space-3) var(--ou-space-4) var(--ou-space-4) var(--wf-space-14, 14px);
+  background: var(--ou-bg-surface-2);
+  border-bottom: var(--wf-border-w) dashed var(--ou-border-soft);
+}
+.page-row-expand .ou-formfield { margin-bottom: var(--ou-space-3); }
+.page-row-expand .ou-formfield:last-child { margin-bottom: 0; }
+.page-row-expand-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--ou-space-2);
+  margin-top: var(--ou-space-3);
+}
+
+/* Insert-row: a thin guideline with a reveal-on-hover «Добавить страницу» pill. */
+.insert-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: var(--wf-space-1q, 3px) var(--wf-space-14, 14px);
+}
+.insert-row-line { flex: 1; height: var(--wf-border-w); background: var(--ou-border-default); }
+.insert-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+  margin: 0 var(--wf-space-6, 6px);
+  padding: var(--wf-space-half, 4px) var(--ou-space-2);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--wf-space-10, 10px);
+  background: var(--ou-bg-elevated);
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-caption);
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity var(--ou-motion-fast), color var(--ou-motion-fast),
+    border-color var(--ou-motion-fast), background var(--ou-motion-fast);
+}
+.insert-row:hover .insert-btn,
+.insert-row:focus-within .insert-btn {
+  opacity: 1;
+  color: var(--ou-accent-default);
+  border-color: var(--ou-accent-container-hover);
+  background: var(--ou-accent-soft);
+}
+
+/* Variant picker list inside the «Добавить страницу» modal. */
+.variant-list {
+  list-style: none;
+  padding: var(--ou-space-1);
+  margin: 0;
+  max-height: var(--wf-size-360, 360px);
+  overflow-y: auto;
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-elevated);
+}
+.variant-list__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  border-radius: var(--ou-radius-xs);
+  cursor: pointer;
+}
+.variant-list__item:hover { background: var(--ou-bg-hover); }
+.variant-list__item.is-selected { background: var(--ou-accent-soft); }
+.variant-list__item.is-selected .variant-list__name {
+  color: var(--ou-accent-on-soft);
+  font-weight: 600;
+}
+.variant-list__name { font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+.variant-list__desc {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  margin-top: var(--wf-space-half, 4px);
+}
+
 /* ── Design tab — template card + savebar ──────────────────────────────
    Used in features/tests/editor/sections/design-section.tsx.
    tpl-block / tpl-thumb / preview-sketch ported from prd7-design-tab.html. */

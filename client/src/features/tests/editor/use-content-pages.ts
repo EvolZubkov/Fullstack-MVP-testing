@@ -1,25 +1,30 @@
 /**
  * @module features/tests/editor/use-content-pages
- * @description React hook for loading and mutating a test's content_pages.
+ * @description React hook for loading and mutating a test's content_pages plus
+ * the variant catalogue of the active design template.
  *
  * Responsibilities:
  *   - Fetch all `content_pages` for a test via
  *     `GET /api/tests/:id/content-pages`.
- *   - Provide a delete mutation that calls
- *     `DELETE /api/tests/:id/content-pages/:pageId` and invalidates the list.
+ *   - Resolve the active template (`GET /api/tests/:id/design` →
+ *     `GET /api/templates/:templateId`) and expose its
+ *     `manifest.contentTemplates` variant catalogue. Author pages pick a
+ *     variant with `kind === "info"` (PRD-1 §4.3).
+ *   - Provide create / update / reorder / delete mutations that invalidate the
+ *     list. Used by the «Структура» editor (PRD-7 closeout of PRD-1 §4).
  *
- * Anti-goals:
- *   - Create / reorder / rich-edit are deferred to the next step. The hook
- *     intentionally exposes only the surface area required by the current
- *     read-only zones view.
+ * The design / template queries reuse the same React Query keys as
+ * {@link useDesignSettings} so the two hooks share one network round-trip.
  */
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type ContentPagePosition = "before" | "before_topic" | "after_topic";
+export type ContentPagePosition = "before" | "after" | "before_topic" | "after_topic";
 export type ContentPageKind = "questions" | "router" | "summary" | "intro" | "info";
 export type ContentPageMode = "template" | "standard" | "html";
+export type ContentPageType = "intro" | "info" | "summary" | "html";
 
 export type ContentPage = {
   id: string;
@@ -27,7 +32,7 @@ export type ContentPage = {
   topicId: string | null;
   position: ContentPagePosition;
   mode: ContentPageMode;
-  type: "intro" | "info" | "summary" | "html";
+  type: ContentPageType;
   kind: ContentPageKind;
   templateKey: string | null;
   sortOrder: number;
@@ -43,6 +48,56 @@ export type ContentPage = {
   templateKeyMissing?: boolean;
 };
 
+/** A placeholder definition from a template's `contentTemplates[].placeholders`. */
+export type ContentTemplatePlaceholder = {
+  key: string;
+  type: string;
+  label: string;
+  required?: boolean;
+  maxLength?: number;
+  options?: string[];
+  allowedRenderers?: string[];
+  allowedPaths?: string[];
+  defaultRenderer?: string;
+  defaultPath?: string;
+  optionsSchema?: Record<string, unknown>;
+  textFit?: {
+    mode: string;
+    defaultFontSize?: number;
+    minFontSize?: number;
+    maxFontSize?: number;
+    allowAuthorFontSize?: boolean;
+    allowedFontSizes?: number[];
+    overflow?: string;
+  };
+};
+
+/** A content-page variant declared in `manifest.contentTemplates[]`. */
+export type ContentTemplateVariant = {
+  key: string;
+  label: string;
+  /** PRD-1 §4.3 variant kind. Built-in manifests declare it; older ones may not. */
+  kind?: ContentPageKind;
+  description?: string;
+  placeholders: ContentTemplatePlaceholder[];
+};
+
+/** Payload for creating a content page (POST). */
+export type ContentPageInput = {
+  topicId?: string | null;
+  position: ContentPagePosition;
+  mode: ContentPageMode;
+  type: ContentPageType;
+  templateKey?: string | null;
+  valuesJson?: {
+    values?: Record<string, unknown>;
+    placeholderStyles?: Record<string, unknown>;
+  };
+  autoAdvance?: boolean;
+  autoAdvanceDelayMs?: number | null;
+  sortOrder?: number;
+};
+
 // ─── Network helpers ──────────────────────────────────────────────────────────
 
 async function fetchContentPages(testId: string): Promise<ContentPage[]> {
@@ -53,6 +108,95 @@ async function fetchContentPages(testId: string): Promise<ContentPage[]> {
     throw new Error(`Failed to load content pages: ${res.status}`);
   }
   return res.json();
+}
+
+/**
+ * Fetches the test's design settings. Returns the full object (not just the id)
+ * so this query can safely share the `["tests", id, "design"]` cache key with
+ * {@link useDesignSettings} — both queryFns must yield the same shape.
+ */
+async function fetchDesignSettings(testId: string): Promise<{ templateId?: string }> {
+  const res = await fetch(`/api/tests/${testId}/design`, { credentials: "include" });
+  if (!res.ok) {
+    throw new Error(`Failed to load design settings: ${res.status}`);
+  }
+  return res.json();
+}
+
+async function fetchTemplateVariants(templateId: string): Promise<ContentTemplateVariant[]> {
+  const res = await fetch(`/api/templates/${templateId}`, { credentials: "include" });
+  if (!res.ok) {
+    throw new Error(`Failed to load template ${templateId}: ${res.status}`);
+  }
+  const data = (await res.json()) as {
+    manifest?: { contentTemplates?: ContentTemplateVariant[] };
+  };
+  return data.manifest?.contentTemplates ?? [];
+}
+
+async function postContentPage(testId: string, input: ContentPageInput): Promise<ContentPage> {
+  const res = await fetch(`/api/tests/${testId}/content-pages`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to create content page: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
+async function putContentPage(
+  testId: string,
+  pageId: string,
+  input: Partial<ContentPageInput>,
+): Promise<ContentPage> {
+  const res = await fetch(`/api/tests/${testId}/content-pages/${pageId}`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to update content page: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
+async function putReorder(
+  testId: string,
+  updates: Array<{ id: string; sortOrder: number }>,
+): Promise<void> {
+  const res = await fetch(`/api/tests/${testId}/content-pages/reorder`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to reorder content pages: ${res.status} ${text}`);
+  }
+}
+
+async function postReplaceVariant(
+  testId: string,
+  pageId: string,
+  newTemplateKey: string,
+): Promise<void> {
+  const res = await fetch(`/api/tests/${testId}/content-pages/${pageId}/replace-variant`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ newTemplateKey }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to replace variant: ${res.status} ${text}`);
+  }
 }
 
 async function deleteContentPage(testId: string, pageId: string): Promise<void> {
@@ -70,36 +214,135 @@ async function deleteContentPage(testId: string, pageId: string): Promise<void> 
 
 export type UseContentPagesResult = {
   pages: ContentPage[];
+  /** Variant catalogue of the active template (`manifest.contentTemplates`). */
+  contentTemplates: ContentTemplateVariant[];
+  /** Author-selectable variants — those whose `kind` is `info`. */
+  infoVariants: ContentTemplateVariant[];
   isLoading: boolean;
   error: Error | null;
+  create: (input: ContentPageInput) => Promise<ContentPage>;
+  isCreating: boolean;
+  update: (pageId: string, input: Partial<ContentPageInput>) => Promise<ContentPage>;
+  isUpdating: boolean;
+  reorder: (updates: Array<{ id: string; sortOrder: number }>) => Promise<void>;
+  isReordering: boolean;
+  /** Switch a (system or author) page to another variant of the same `kind` (FR-46). */
+  replaceVariant: (pageId: string, newTemplateKey: string) => Promise<void>;
+  isReplacingVariant: boolean;
   remove: (pageId: string) => Promise<void>;
   isRemoving: boolean;
-  removeError: Error | null;
+  /** First mutation error (create / update / reorder / delete), if any. */
+  mutationError: Error | null;
 };
+
+/** True when a placeholder value counts as unfilled for required-field checks. */
+function isPlaceholderEmpty(value: unknown): boolean {
+  return value === undefined || value === null || (typeof value === "string" && value.trim() === "");
+}
+
+/**
+ * Aggregate warning signal for the «Структура» tab: true when any author
+ * (`kind: "info"`) page references a missing template variant or leaves a
+ * required placeholder unfilled (PRD-1 §4.3.6). Drives the tab's warning dot
+ * and complements the server-side publish gate.
+ */
+export function hasStructureWarnings(
+  pages: ContentPage[],
+  contentTemplates: ContentTemplateVariant[],
+): boolean {
+  return pages.some((p) => {
+    if (p.kind !== "info") return false;
+    if (p.templateKeyMissing) return true;
+    const variant = contentTemplates.find((v) => v.key === p.templateKey);
+    if (!variant) return false;
+    const values = p.valuesJson?.values ?? {};
+    return variant.placeholders.some((ph) => ph.required && isPlaceholderEmpty(values[ph.key]));
+  });
+}
 
 export function useContentPages(testId: string | undefined): UseContentPagesResult {
   const queryClient = useQueryClient();
-  const query = useQuery({
+  const enabled = typeof testId === "string" && testId.length > 0;
+
+  const pagesQuery = useQuery({
     queryKey: ["tests", testId, "content-pages"],
     queryFn: () => fetchContentPages(testId!),
-    enabled: typeof testId === "string" && testId.length > 0,
+    enabled,
+  });
+
+  const designQuery = useQuery({
+    queryKey: ["tests", testId, "design"],
+    queryFn: () => fetchDesignSettings(testId!),
+    enabled,
+  });
+  const templateId = designQuery.data?.templateId || (enabled ? "default" : undefined);
+
+  const templateQuery = useQuery({
+    queryKey: ["templates", templateId, "content-templates"],
+    queryFn: () => fetchTemplateVariants(templateId!),
+    enabled: Boolean(templateId),
+  });
+
+  const contentTemplates = templateQuery.data ?? [];
+  const infoVariants = useMemo(
+    () => contentTemplates.filter((v) => v.kind === "info"),
+    [contentTemplates],
+  );
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["tests", testId, "content-pages"] });
+
+  const createMutation = useMutation({
+    mutationFn: (input: ContentPageInput) => postContentPage(testId!, input),
+    onSuccess: invalidate,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ pageId, input }: { pageId: string; input: Partial<ContentPageInput> }) =>
+      putContentPage(testId!, pageId, input),
+    onSuccess: invalidate,
+  });
+
+  const reorderMutation = useMutation({
+    mutationFn: (updates: Array<{ id: string; sortOrder: number }>) =>
+      putReorder(testId!, updates),
+    onSuccess: invalidate,
+  });
+
+  const replaceVariantMutation = useMutation({
+    mutationFn: ({ pageId, newTemplateKey }: { pageId: string; newTemplateKey: string }) =>
+      postReplaceVariant(testId!, pageId, newTemplateKey),
+    onSuccess: invalidate,
   });
 
   const removeMutation = useMutation({
     mutationFn: (pageId: string) => deleteContentPage(testId!, pageId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["tests", testId, "content-pages"],
-      });
-    },
+    onSuccess: invalidate,
   });
 
   return {
-    pages: query.data ?? [],
-    isLoading: query.isLoading,
-    error: (query.error as Error | null) ?? null,
+    pages: pagesQuery.data ?? [],
+    contentTemplates,
+    infoVariants,
+    isLoading: pagesQuery.isLoading,
+    error: (pagesQuery.error as Error | null) ?? null,
+    create: (input) => createMutation.mutateAsync(input),
+    isCreating: createMutation.isPending,
+    update: (pageId, input) => updateMutation.mutateAsync({ pageId, input }),
+    isUpdating: updateMutation.isPending,
+    reorder: (updates) => reorderMutation.mutateAsync(updates),
+    isReordering: reorderMutation.isPending,
+    replaceVariant: (pageId, newTemplateKey) =>
+      replaceVariantMutation.mutateAsync({ pageId, newTemplateKey }),
+    isReplacingVariant: replaceVariantMutation.isPending,
     remove: (pageId) => removeMutation.mutateAsync(pageId),
     isRemoving: removeMutation.isPending,
-    removeError: removeMutation.error as Error | null,
+    mutationError:
+      (createMutation.error as Error | null) ??
+      (updateMutation.error as Error | null) ??
+      (reorderMutation.error as Error | null) ??
+      (replaceVariantMutation.error as Error | null) ??
+      (removeMutation.error as Error | null) ??
+      null,
   };
 }
