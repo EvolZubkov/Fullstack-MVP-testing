@@ -12,6 +12,9 @@
     "create-admin": "tsx script/create-admin.ts",
     "test": "vitest run",
     "check:wireframes:ds": "node scripts/check-wireframes-ds.mjs",
+    "scorm:sample": "tsx scripts/generate-sample-scorm.ts",
+    "scorm:template": "tsx scripts/generate-template-scorm.ts",
+    "scorm:player": "node scripts/scorm-player.mjs",
     "test:watch": "vitest",
     "push:upstream": "git push upstream HEAD"
   },
