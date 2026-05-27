@@ -83,12 +83,10 @@ function renderStartPage() {
 
   html += '</div>';
 
-  // Custom content
-  if (TEST_DATA.startPageContent) {
-    html += '<div style="margin-top:20px;padding:16px;background:hsl(var(--muted));border-radius:12px;border-left:4px solid hsl(var(--primary));border:1px solid hsl(var(--border));">';
-    html += '<div style="color:hsl(var(--foreground));font-size:14px;line-height:1.6;">' + escapeHtml(TEST_DATA.startPageContent) + '</div>';
-    html += '</div>';
-  }
+  // PRD-7 S10: legacy `startPageContent` is no longer rendered here. Its content
+  // is migrated to a `content_pages` 'intro' page (migration 003 §4.2) and played
+  // as the first item of the page sequence by the content-flow runtime, so the
+  // start overview no longer duplicates it.
 
   // ===== ЛОГИКА КНОПОК =====
   var noAttempts = hasLimit && left <= 0;

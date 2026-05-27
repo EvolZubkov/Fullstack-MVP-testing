@@ -146,6 +146,21 @@ describe("SCORM package acceptance (real generateScormPackage)", () => {
     expect(positions).toContain("after_topic");
   });
 
+  it("does NOT export legacy startPageContent into TEST_DATA (PRD-7 S10)", async () => {
+    // S10: the deprecated `start_page_content` is migrated to a `content_pages`
+    // 'intro' row (migration 003 §4.2) and played by the content-flow runtime, so
+    // the package must not also carry the legacy top-level field (no duplication).
+    const appjs = await zip.file("app.js")!.async("string");
+    const b64 = (appjs.match(/var b64 = "([A-Za-z0-9+/=]+)"/) || [])[1]!;
+    const td = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
+    expect(td.startPageContent).toBeUndefined();
+    // The migrated intro page (test-scope, position 'before') is what carries it now.
+    const intro = (td.contentPages as { position: string; type: string }[]).find(
+      (p) => p.position === "before" && p.type === "intro",
+    );
+    expect(intro, "an intro content page must replace the legacy start text").toBeTruthy();
+  });
+
   it("sanitizes script injected into content-page richText values", async () => {
     const appjs = await zip.file("app.js")!.async("string");
     const b64 = (appjs.match(/var b64 = "([A-Za-z0-9+/=]+)"/) || [])[1]!;

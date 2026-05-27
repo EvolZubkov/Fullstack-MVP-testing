@@ -55,7 +55,10 @@ export function buildTestJson(data: ExportData): string {
     timeLimitMinutes: data.test.timeLimitMinutes || null,
     maxAttempts: data.test.maxAttempts || null,
     showCorrectAnswers: data.test.showCorrectAnswers || false,
-    startPageContent: data.test.startPageContent || null,
+    // PRD-7 S10: legacy `start_page_content` is no longer exported into TEST_DATA.
+    // Its content is migrated to a `content_pages` 'intro' row (migration 003 §4.2)
+    // and rendered by the content-flow runtime; the DB column is kept write-only
+    // for legacy clients (decisions §1, S10 §3.3).
     passPercent: passPercent,
     totalQuestions: totalQuestions,
     sections: data.sections.map((s) => ({

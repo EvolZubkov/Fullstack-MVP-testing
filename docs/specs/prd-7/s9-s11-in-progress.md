@@ -1,7 +1,8 @@
 # PRD-7: Активные фазы S9-S11
 
-**Статус:** In Implementation (S9 закрыта 2026-05-27; S10 почти закрыта 2026-05-27,
-остаток см. §3; S11 — активная фаза)
+**Статус:** Closed 2026-05-27 (S9 + S10 + S11 закрыты). PRD-7 завершён; остаточный
+ручной gate (live axe/Lighthouse + end-to-end smoke в LMS) зафиксирован в
+[docs/prd-7-acceptance-report.md §4](../../prd-7-acceptance-report.md).
 **Дата актуализации:** 2026-05-27
 **Связанные документы:**
 
@@ -33,13 +34,20 @@
   §2.2 (component, ч.1), §2.3 (API/regression, ч.2). Полный `vitest run` — 52 файла /
   1375 тестов зелёные, `npm run check` 0 ошибок. Открытый пункт (это фича, не тест):
   раздел «Архив» с восстановлением в `tests-list` не реализован — см. чек-лист §2.2.
-- **S10 — почти закрыта 2026-05-27.** Inline wizard удалён ещё в S5-S8 (`tests.tsx` —
+- **S10 — закрыта 2026-05-27.** Inline wizard удалён ещё в S5-S8 (`tests.tsx` —
   ре-экспорт `tests-list`, монтирующего `TestEditor`); orphaned `ContentPagesDialog`
-  выведен из эксплуатации. Остаток (отдельный шаг с golden-проверкой): чтение
-  `tests.start_page_content` из runtime/SCORM. Чтение `tests.published` в
-  `test-settings.ts` — намеренная обратная совместимость (§3.3).
-- **S11 — активная (следующая).** Acceptance pass (~50 criteria PRD-7 §10), Lighthouse/axe
-  audit, end-to-end smoke.
+  выведен из эксплуатации. Остаток закрыт: чтение `tests.start_page_content` удалено
+  из SCORM-export (`test-json.ts`) и runtime (`startPage.js`), контент играется как
+  intro content-page (миграция 003 §4.2); добавлен golden-guard в
+  `tests/scorm-package-acceptance.test.ts`; удалён осиротевший файл-бэкап
+  `startPage здесь кнопка меняется.js`. Чтение `tests.published` в `test-settings.ts`
+  — намеренная обратная совместимость (§3.3), остаётся. In-app web-плеер
+  (`take-test.tsx`) не затронут (рендерит legacy-текст, content-pages не использует).
+- **S11 — закрыта 2026-05-27.** Acceptance pass пройден: 10/10 групп критериев §10,
+  0 блокеров; suite 52 файла / 1344 зелёные, `npm run check` 0. Отчёт —
+  [docs/prd-7-acceptance-report.md](../../prd-7-acceptance-report.md). Раздел «Архив»
+  с восстановлением (UI) — санкционированная отсрочка post-MVP (ROADMAP §0.2),
+  backend `POST /restore` готов и протестирован. Остаточный ручной gate — §4.4 ниже.
 
 ---
 
@@ -216,15 +224,16 @@ Anti-goals: НЕ менять production routes/storage без острой не
 **Блокирует:** S11
 **Зависит от:** S9 зелёный (regression подтвердил отсутствие регрессий).
 
-> **Статус (2026-05-27).** Бо́льшая часть S10 закрыта ещё в рамках S5-S8: inline wizard
-> в `client/src/pages/author/tests.tsx` удалён (файл — тонкий ре-экспорт
+> **Статус (2026-05-27) — закрыта.** Бо́льшая часть S10 закрыта ещё в рамках S5-S8:
+> inline wizard в `client/src/pages/author/tests.tsx` удалён (файл — тонкий ре-экспорт
 > `features/tests/list/tests-list.tsx`), `tests-list` монтирует `TestEditor` для
 > create/edit. В Шаге 1 closeout (2026-05-27) выведен из эксплуатации orphaned
-> `ContentPagesDialog`. **Остаётся** один пункт §3.2: удалить чтение
-> `tests.start_page_content` из SCORM-export (`server/scorm/builders/test-json.ts`) и
-> runtime (`startPage.js`) — отдельным шагом с golden-проверкой пакета. Чтение
-> `tests.published` в `test-settings.ts` — намеренная обратная совместимость (§3.3),
-> остаётся.
+> `ContentPagesDialog`. Финальный пункт §3.2 закрыт: чтение `tests.start_page_content`
+> удалено из SCORM-export (`server/scorm/builders/test-json.ts`) и runtime
+> (`startPage.js`); контент играется как intro content-page (миграция 003 §4.2);
+> golden-guard в `tests/scorm-package-acceptance.test.ts`; удалён осиротевший
+> файл-бэкап `startPage здесь кнопка меняется.js`. Чтение `tests.published` в
+> `test-settings.ts` — намеренная обратная совместимость (§3.3), остаётся.
 
 ### 3.1 Scope
 
@@ -397,11 +406,13 @@ Anti-goals: НЕ начинать новые фичи. Только провер
 
 ### 4.6 Definition of Done для S11
 
-- Все ~50 acceptance criteria PRD-7 §10 пройдены или зафиксированы issues.
-- `docs/prd-7-acceptance-report.md` создан и заполнен.
-- Lighthouse / axe audit пройден для Drawer.
-- Performance NFR-17 (< 1.5s) подтверждён.
-- Manual smoke по всем сценариям §4.4 успешен.
+- [x] Все группы acceptance criteria PRD-7 §10 пройдены или зафиксированы как
+  deferred/issue (10/10; 0 блокеров; раздел «Архив» — отсрочка post-MVP).
+- [x] `docs/prd-7-acceptance-report.md` создан и заполнен.
+- [x] Полный автотест-suite зелёный (52 файла / 1344), `npm run check` 0 ошибок.
+- [ ] Lighthouse / axe audit пройден для Drawer — остаточный ручной gate (§4 отчёта).
+- [ ] Performance NFR-17 (< 1.5s) подтверждён вживую — остаточный ручной gate.
+- [ ] Manual smoke по всем сценариям §4.4 — остаточный ручной gate.
 
 ---
 
