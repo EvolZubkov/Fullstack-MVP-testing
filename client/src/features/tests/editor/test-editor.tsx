@@ -399,6 +399,13 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
         />
 
         <div
+          // `Tabs` runs with `hidePanel`, so it renders only the tab strip; this
+          // container is the active tab's panel. Mark it as such so the tab's
+          // `aria-controls="panel-<key>"` resolves and the panel is labelled by
+          // its tab (a11y: resolves axe `aria-valid-attr-value` on the tablist).
+          role="tabpanel"
+          id={`panel-${activeTab}`}
+          aria-labelledby={`tab-${activeTab}`}
           className={
             "ou-drawer__body" +
             (activeTab === "settings" || activeTab === "design"

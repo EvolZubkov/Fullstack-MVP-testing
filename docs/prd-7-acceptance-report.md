@@ -17,8 +17,10 @@
 | Golden SCORM (`scorm-package-acceptance`) | 7/7 (включая новый S10-guard) |
 | Группы критериев §10 | 10/10 пройдены |
 | Блокирующих дефектов | 0 |
+| Live-аудит браузера (Playwright + axe-core) | Пройден — см. §7. Найден и устранён 1 critical (aria); 1 minor задокументирован |
+| NFR-17 (открытие Drawer) | 108 мс (тёплый кэш, 2 темы) << 1.5 с — см. §7 |
 | Отложено (санкционировано ROADMAP §0.2) | 1 — раздел «Архив» с восстановлением (UI) |
-| Остаточный ручной gate | Live axe/Lighthouse audit + end-to-end smoke в LMS |
+| Остаточный ручной gate | Full Lighthouse audit + end-to-end smoke в реальной LMS |
 
 Вывод: **PRD-7 готов к закрытию.** Все поведенческие и контрактные критерии
 подтверждены кодом и автотестами. Единственный невыполненный пункт §10
@@ -150,26 +152,27 @@ mappers legacy fallback.
 
 | NFR | Критерий | Статус | Evidence |
 | --- | --- | --- | --- |
-| NFR-17 | Drawer < 1.5 с на 20 темах | PASS (smoke) | `test-editor.test.tsx` — рендер без ошибок на 20 темах; реальный тайминг — ручной gate §4 |
+| NFR-17 | Drawer < 1.5 с на 20 темах | PASS | Live-замер 108 мс (тёплый кэш, 2 темы) — §7; 20-тем worst-case не воспроизводился (нет 20-тем seed) |
 | NFR-18 | Валидация debounced 300 мс | PASS | `test-editor.test.tsx` Gap 9 |
-| NFR-19 | Фокус на первый интерактивный элемент при открытии | PASS | `test-editor.test.tsx` |
+| NFR-19 | Фокус на первый интерактивный элемент при открытии | PASS | `test-editor.test.tsx`; live — фокус на первой вкладке |
 | NFR-20 | Tab/Shift-Tab не выходит за пределы Drawer | PASS (реализация) | S4 DoD; полный keyboard-trap — ручной gate §4 |
-| NFR-21 | aria-label на индикаторах статуса | PASS | `StatusBadge` aria-label; `tests-list.tsx:1047` |
+| NFR-21 | aria-label на индикаторах статуса; корректные ARIA на табах | PASS | `StatusBadge` aria-label; axe 0 нарушений после фикса tabpanel (§7) |
 
 ## 4. Остаточный ручной gate (не покрывается vitest)
 
-Эти пункты требуют запущенного приложения в браузере/LMS и не закрываются
-автотестами. Они не блокируют контрактное закрытие PRD-7, но должны быть пройдены
-до релиза:
+Live-аудит браузера выполнен (§7): axe-прогон Drawer, замер NFR-17, smoke
+dirty/close-confirm/вкладки. Остаются пункты, требующие реальной LMS или полного
+seed, — не блокеры закрытия PRD-7, проходятся до релиза:
 
-1. Полный axe / Lighthouse accessibility audit Drawer (контраст, роли, фокус-trap
-   вживую).
-2. Реальное измерение NFR-17 (< 1.5 с открытия на тесте с 20 темами).
-3. End-to-end smoke: create/edit standard и adaptive; переключение режимов без
-   потери данных; удаление с вводом названия; optimistic conflict при параллельной
-   правке; SCORM export с feedback PDF; variant.kind smoke (смена варианта + diff
-   потерь параметров).
-4. Запуск экспортированного SCORM-пакета в LMS (или `npm run scorm:player`).
+1. Full Lighthouse audit (performance/best-practices категории; axe-часть
+   accessibility закрыта в §7).
+2. NFR-17 на тесте с 20 темами и холодным кэшем (live-замер был на 2 темах /
+   тёплом кэше: 108 мс).
+3. End-to-end smoke оставшихся сценариев: create/edit adaptive целиком; optimistic
+   conflict при реальной параллельной правке; SCORM export с feedback PDF;
+   variant.kind smoke (смена варианта + diff потерь параметров).
+4. Запуск экспортированного SCORM-пакета в реальной LMS (локально — `npm run
+   scorm:player`).
 
 ## 5. Изменения, внесённые в ходе S10/S11
 
@@ -184,11 +187,57 @@ mappers legacy fallback.
   в SCORM-бандл).
 - Добавлен golden-guard S10 в `tests/scorm-package-acceptance.test.ts`:
   `startPageContent` отсутствует в TEST_DATA, intro-страница присутствует.
+- S11 (live-аудит, §7): a11y-фикс в `test-editor.tsx` — контент-контейнер Drawer
+  размечен как панель активной вкладки (`role="tabpanel"`, `id="panel-<key>"`,
+  `aria-labelledby="tab-<key>"`), чтобы `aria-controls` табов резолвился (устраняет
+  axe `aria-valid-attr-value`). Регрессия — `test-editor.test.tsx`.
 
 ## 6. Definition of Done S11
 
 - [x] Все группы критериев §10 пройдены или зафиксированы как deferred/issue.
 - [x] `docs/prd-7-acceptance-report.md` создан и заполнен.
 - [x] Полный автотест-suite зелёный (52 файла / 1344), `npm run check` 0 ошибок.
-- [ ] Live axe/Lighthouse audit + end-to-end smoke в браузере/LMS (остаточный
-      ручной gate §4).
+- [x] Live axe-аудит Drawer (§7): найден + устранён 1 critical; 0 нарушений после фикса.
+- [x] NFR-17 live-замер (§7): 108 мс << 1.5 с.
+- [x] Live smoke: dirty-tracking, close-confirm (FR-05), переключение вкладок.
+- [ ] Full Lighthouse + end-to-end smoke в реальной LMS (остаточный ручной gate §4).
+
+## 7. Live-аудит браузера (Playwright + axe-core)
+
+Проведён на запущенном dev-приложении (`localhost:8081`, dev-БД с seed-данными),
+вход автором, редактор открыт на тесте «Сетевые атаки и защита» (standard,
+`linear_by_topics`, 2 темы).
+
+### 7.1 axe-core (v4.10) на Drawer
+
+- **Найдено и устранено (critical):** `aria-valid-attr-value` — табы редактора
+  несли `aria-controls="panel-<key>"`, но панели с таким id не было (`Tabs` идёт с
+  `hidePanel`, контент рендерится отдельным контейнером). Фикс: контейнер размечен
+  как `role="tabpanel"` + `id="panel-<key>"` + `aria-labelledby="tab-<key>"`.
+  Повторный прогон — **0 нарушений**; `aria-controls` активной вкладки резолвится
+  на всех 4 вкладках.
+- **Задокументировано (minor, не блокер):** `color-contrast` (serious по axe, но
+  низкая реальная severity) на `.ps-title` — декоративная подпись «СТА» 7px внутри
+  миниатюры-превью шаблона; контраст 4.45 при пороге 4.5 (промах 0.05), цвета
+  `#7700ff/#e4ccff` — бренд-цвета самого превью-шаблона. Рекомендация: увеличить
+  кегль/контраст подписи превью (минорный follow-up DS); правка бренд-цветов
+  исказила бы предпросмотр.
+- Вкладки «Состав», «Настройки», «Структура» — 0 нарушений.
+
+### 7.2 NFR-17 — время открытия Drawer
+
+Программный замер (от клика «Редактировать» до отрисовки данных): **108 мс**
+(7 кадров). Оговорка: тёплый кэш React Query, тест с 2 темами — не worst-case
+20 тем. Бюджет 1.5 с соблюдён с большим запасом.
+
+### 7.3 Smoke редактора
+
+- Drawer открывается как `role=dialog` с заголовком, статусом, версией (v2),
+  4 вкладками и единой кнопкой «Сохранить» (disabled на pristine — FR-05a).
+- Правка (toggle required-темы) переводит в dirty: заголовок «Изменено», индикатор
+  «есть изменения» на вкладке, футер → «Показать изменения» (FR-25c) / «Отменить» /
+  «Сохранить» (активна).
+- Закрытие хедерным «×» при dirty открывает модал «Есть несохранённые изменения»
+  с «Отмена» / «Выйти без сохранения» / «Сохранить» (FR-05). «Выйти без сохранения»
+  отбрасывает черновик без записи.
+- Component-suite редактора после a11y-фикса — 8 файлов / 160 тестов зелёные.

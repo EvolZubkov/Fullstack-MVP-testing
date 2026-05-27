@@ -130,6 +130,25 @@ describe("<TestEditor /> DOM and focus", () => {
     expect(save.getAttribute("aria-disabled")).toBe("true");
   });
 
+  it("wires the body as the active tab's panel (a11y: tab aria-controls resolves)", async () => {
+    // `Tabs` runs with `hidePanel`, so the body div is the panel. It must carry
+    // role=tabpanel + id=panel-<activeKey> + aria-labelledby=tab-<activeKey> so
+    // the tab's `aria-controls` resolves (regression for axe aria-valid-attr-value).
+    nextResponse(buildApiResponse());
+    const client = makeClient();
+    render(
+      withClient(client, <TestEditor testId="test-1" open onClose={() => {}} />),
+    );
+
+    await screen.findByTestId("test-editor-root");
+    const body = screen.getByTestId("test-editor-body");
+    const activeTab = screen.getByRole("tab", { selected: true });
+
+    expect(body.getAttribute("role")).toBe("tabpanel");
+    expect(body.id).toBe(activeTab.getAttribute("aria-controls"));
+    expect(body.getAttribute("aria-labelledby")).toBe(activeTab.id);
+  });
+
   it("focuses the first interactive tab on open (NFR-19)", async () => {
     nextResponse(buildApiResponse());
     const client = makeClient();
