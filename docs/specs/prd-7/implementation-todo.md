@@ -7,7 +7,8 @@
 **Стратегия и промпты:** [execution-strategy.md](./execution-strategy.md)
 **Roadmap:** [ROADMAP.md](../../ROADMAP.md) шаг 1
 **Статус:** S0-S9 закрыты (S9 — 2026-05-27: component + API + regression тесты + FR-20c,
-полный suite 52 файла / 1375 тестов зелёные); S10 — активная (следующая), S11 не начата.
+полный suite 52 файла / 1375 тестов зелёные); S10 почти закрыта 2026-05-27 (остаток —
+чтение `start_page_content` из runtime/SCORM), S11 — следующая.
 **Последняя актуализация:** 2026-05-27
 **Правило UI:** UI-разработка начинается только после подготовки и явного
 согласования wireframes ([BRD §2.6](../brd-scorm-enhancements.md), NFR-14,
@@ -93,8 +94,8 @@ PRD-1 / PRD-7 / PRD-8 фиксируют **бизнес-контракты и п
 | S7 | Секция adaptive-settings | Закрыта 2026-05-25 |
 | S8 | Секции start-pages + design | Закрыта 2026-05-25 |
 | S9 | Component + API тесты + FR-20c | Закрыта 2026-05-27 |
-| S10 | Удаление legacy | **Активна (следующая)** |
-| S11 | Acceptance pass | Не начата |
+| S10 | Удаление legacy | Почти закрыта 2026-05-27 (остаток — runtime-read) |
+| S11 | Acceptance pass | **Активна (следующая)** |
 
 Регрессия на 2026-05-25: ~19 файлов × ~457 тестов. На закрытие S9 (2026-05-27):
 полный `vitest run` — 52 файла / 1375 тестов, `npm run check` 0 ошибок.
@@ -199,7 +200,9 @@ Reference: `__tests__/sections/basic-settings-section.test.tsx`,
 Минимальный срез для end-to-end-проверки PRD-7. Закрытые пункты S0-S8 — см.
 [specs/prd-7/s0-s8-closed.md](./s0-s8-closed.md). Остались:
 
-- [ ] (S10) Старый inline wizard удалён из `TestsPage`.
+- [x] (S10) Старый inline wizard удалён из `TestsPage` (ещё в S5-S8; `tests.tsx` —
+  ре-экспорт `tests-list`, монтирующего `TestEditor`). Orphaned `ContentPagesDialog`
+  выведен из эксплуатации 2026-05-27.
 - [ ] (S9) Старые тесты без регрессии: `published`, `start_page_content`,
   отсутствие adaptive settings.
 

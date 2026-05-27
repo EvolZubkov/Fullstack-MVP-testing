@@ -1,6 +1,7 @@
 # PRD-7: Активные фазы S9-S11
 
-**Статус:** In Implementation (S9 закрыта 2026-05-27; S10 — активная фаза)
+**Статус:** In Implementation (S9 закрыта 2026-05-27; S10 почти закрыта 2026-05-27,
+остаток см. §3; S11 — активная фаза)
 **Дата актуализации:** 2026-05-27
 **Связанные документы:**
 
@@ -32,10 +33,13 @@
   §2.2 (component, ч.1), §2.3 (API/regression, ч.2). Полный `vitest run` — 52 файла /
   1375 тестов зелёные, `npm run check` 0 ошибок. Открытый пункт (это фича, не тест):
   раздел «Архив» с восстановлением в `tests-list` не реализован — см. чек-лист §2.2.
-- **S10 — активная (следующая).** Удаление legacy (inline wizard в `tests.tsx`, чтение
-  `tests.published` и `tests.start_page_content` из runtime).
-- **S11 — ожидает S10.** Acceptance pass (~50 criteria PRD-7 §10), Lighthouse/axe audit,
-  end-to-end smoke.
+- **S10 — почти закрыта 2026-05-27.** Inline wizard удалён ещё в S5-S8 (`tests.tsx` —
+  ре-экспорт `tests-list`, монтирующего `TestEditor`); orphaned `ContentPagesDialog`
+  выведен из эксплуатации. Остаток (отдельный шаг с golden-проверкой): чтение
+  `tests.start_page_content` из runtime/SCORM. Чтение `tests.published` в
+  `test-settings.ts` — намеренная обратная совместимость (§3.3).
+- **S11 — активная (следующая).** Acceptance pass (~50 criteria PRD-7 §10), Lighthouse/axe
+  audit, end-to-end smoke.
 
 ---
 
@@ -211,6 +215,16 @@ Anti-goals: НЕ менять production routes/storage без острой не
 **Длительность:** 1 сессия
 **Блокирует:** S11
 **Зависит от:** S9 зелёный (regression подтвердил отсутствие регрессий).
+
+> **Статус (2026-05-27).** Бо́льшая часть S10 закрыта ещё в рамках S5-S8: inline wizard
+> в `client/src/pages/author/tests.tsx` удалён (файл — тонкий ре-экспорт
+> `features/tests/list/tests-list.tsx`), `tests-list` монтирует `TestEditor` для
+> create/edit. В Шаге 1 closeout (2026-05-27) выведен из эксплуатации orphaned
+> `ContentPagesDialog`. **Остаётся** один пункт §3.2: удалить чтение
+> `tests.start_page_content` из SCORM-export (`server/scorm/builders/test-json.ts`) и
+> runtime (`startPage.js`) — отдельным шагом с golden-проверкой пакета. Чтение
+> `tests.published` в `test-settings.ts` — намеренная обратная совместимость (§3.3),
+> остаётся.
 
 ### 3.1 Scope
 

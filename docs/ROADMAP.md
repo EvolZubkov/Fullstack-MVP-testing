@@ -17,8 +17,8 @@
 | 1 | PRD-7 | S3 — frontend mappers + validation | Закрыта (unit-тесты 46 шт.) | — |
 | 1 | PRD-7 | S4-S8 — UI Drawer + секции | Закрыта (2026-05-25; FR-20c якорная навигация → S9) | — |
 | 1 | PRD-7 | S9 — component + API тесты, regression | Закрыта 2026-05-27 (тесты + FR-20c; полный suite 1375 зелёных, `npm run check` 0 ошибок) | — |
-| 1 | PRD-7 | S10 — удаление legacy UI | **Активна (следующая)** | — |
-| 1 | PRD-7 | S11 — acceptance pass §10 | Ожидает | S10 |
+| 1 | PRD-7 | S10 — удаление legacy UI | Почти закрыта 2026-05-27 (inline wizard удалён ещё в S5-S8; `tests-list` монтирует `TestEditor`; orphaned `ContentPagesDialog` выведен). Остаток: чтение `start_page_content` из SCORM/runtime — отдельный шаг с golden-проверкой | — |
+| 1 | PRD-7 | S11 — acceptance pass §10 | **Активна (следующая)** | S10 (остаток) |
 | 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | Не начата — **MVP** | Завершение PRD-7 S10-S11 |
 | 4 | PRD-8 | Router-flow runtime + UI «Структура» в router-режиме | Не начата — **MVP** | PRD-4, PRD-7 |
 | 3 | PRD-6 | Retake gate, eligibility plugins | Не начата — post-MVP | PRD-4 |
@@ -26,7 +26,7 @@
 | 6 | PRD-5 | Шкалы и многомерные измерения | Не начата — post-MVP | PRD-2, PRD-4 |
 | 7 | PRD-3 | Жизненный цикл шаблонов | Не начата — post-MVP | PRD-1 closeout (отдельный трек) |
 | 8 | PRD-9 | Миграция bcryptjs → `@vvlad1973/crypto` | Не начата — post-MVP (tech debt) | Завершение PRD-7 S10-S11 |
-| — | PRD-1 | Шаблоны и контентные страницы | In Implementation (Backend 90%, Runtime 95%, Frontend 65%) — **MVP** (closeout) | Code-walk + closeout; редактор content-pages в «Структуре» — closeout-фаза, см. [PRD-1 todo §4](./specs/prd-1/implementation-todo.md) |
+| — | PRD-1 | Шаблоны и контентные страницы | In Implementation (Backend 90%, Runtime 95%, Frontend ~85%) — **MVP** (closeout) | Редактор content-pages в «Структуре» реализован 2026-05-27 (add/edit/reorder/delete, см. [PRD-1 todo §4](./specs/prd-1/implementation-todo.md)); остаток closeout — manifest validation + ручной acceptance |
 
 Детальный прогресс по PRD-7:
 
@@ -54,8 +54,8 @@ shippable-состояния с главной бизнес-ценностью B
 
 | # | Шаг | Зона | Зависит от | Статус |
 | --- | --- | --- | --- | --- |
-| 1 | PRD-7 S10 (удаление legacy: inline wizard, чтение legacy-полей) **совмещённо с** closeout PRD-1 шаг 1 (редактор content-pages в «Структуре») — общая кодовая зона | frontend `tests.tsx` + секция «Структура» | S9 (закрыта) | **Активна (следующая)** |
-| 2 | PRD-7 S11 — acceptance pass §10 (закрывает PRD-7) | acceptance | шаг 1 | Ожидает |
+| 1 | PRD-7 S10 (удаление legacy) **совмещённо с** closeout PRD-1 шаг 1 (редактор content-pages в «Структуре») — общая кодовая зона | frontend `tests.tsx` + секция «Структура» | S9 (закрыта) | **Выполнен 2026-05-27** (редактор content-pages + вывод `ContentPagesDialog`; остаток S10 — чтение `start_page_content` из runtime/SCORM — отдельным шагом с golden-проверкой) |
+| 2 | PRD-7 S11 — acceptance pass §10 (закрывает PRD-7) | acceptance | шаг 1 | **Активна (следующая)** |
 | 3 | PRD-1 closeout — остаток (manifest validation, приёмка), отметить PRD-1 closed | backend + docs | шаг 1 | Ожидает |
 | 4 | PRD-4 — runtime потока + flow-настройки в редакторе («Сценарий») | backend + frontend | PRD-7 закрыт | Не начата |
 | 5 | PRD-8 — router-runtime + вкладка «Структура» в router-режиме | backend + frontend | PRD-4, PRD-1 | Не начата |

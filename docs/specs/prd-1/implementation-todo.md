@@ -179,19 +179,22 @@ Wireframes подготовлены: [docs/wireframes-prd1-design-pages.md](wire
       смене `flowMode` или `templateId`: 1 → молча, N → default + dirty flag,
       0 → fallback на стандартный шаблон + warning (PRD-1 §4.3.2 / PRD-7 §1.4).
       _(d227900: silent variant binding service; caeb4a9 + efe47cb: lifecycle planner + reconcile.)_
-- [ ] Реализовать unified row-menu композицию (PRD-1 §4.3.3): состав пунктов
-      зависит от `variant.kind` (info-row vs системные `intro`/`summary`/`questions`/
-      `router`); destructive-действия отделены `row-menu__sep`.
-- [ ] Реализовать визуальную индикацию состояния `page-row` (PRD-1 §4.3.7,
-      severity-rail): приоритет `error > warning > info`, нет border в норме.
+- [x] Реализовать unified row-menu композицию (PRD-1 §4.3.3): состав пунктов
+      зависит от `variant.kind` — системные `intro`/`summary`/`questions`/`router`
+      получают «Сменить вариант» (FR-46, disabled при единственном варианте),
+      авторские `info` — «Удалить». _(2026-05-27, start-pages-section.tsx.)_
+- [x] Реализовать визуальную индикацию состояния `page-row` (PRD-1 §4.3.7,
+      severity-rail): `page-row--warn` для незаполненных required / недоступного
+      шаблона; severity error > warning > info в `tb-components.css`.
+      _(2026-05-27.)_
 - [x] Реализовать серверную валидацию обязательных параметров варианта
       (PRD-1 §4.3.6): при незаполненных `required: true` полях — структурированная
       ошибка с `pageId` + именами полей; Save не выполняется.
       _(d445861: required-fields validation on publish transition.)_
-- [ ] Frontend: для каждой `content_pages` запись сравнивать `values_json.values`
-      с `variant.schema.fields` (только `required: true`); незаполненные поля →
-      `page-row--warn` + warning-баннер в expand + агрегат в `status-dot--error`
-      на табе «Структура».
+- [x] Frontend: для каждой `content_pages` записи сравнивать `values_json.values`
+      с `variant.placeholders` (только `required: true`); незаполненные поля →
+      `page-row--warn` + meta-тег + агрегат warning-dot на табе «Структура».
+      Draft-save не блокируется (publish-gate enforced на сервере). _(2026-05-27.)_
 - [x] API endpoint `POST /api/tests/:id/pages/:pageId/replace-variant`:
       смена варианта существующей страницы с возвратом diff потерь параметров.
       _(5101d5c: replace-variant endpoint for content_pages, FR-46.)_
@@ -255,9 +258,9 @@ row-menu, severity-rail) 2026-05-21 — в коде не реализовано 
   полноценного визуального предпросмотра всех layout-состояний.
 - Полный acceptance pass по PRD-1 ещё требует ручного end-to-end просмотра
   экспортированного SCORM в браузере/LMS.
-- **Редактор content-pages не интегрирован в новую вкладку «Структура» PRD-7**:
-  секция read-only + delete, CRUD вынесен в заглушку; legacy `ContentPagesDialog`
-  отвязан. Вынесено в closeout-фазу — см. §4.
+- ~~Редактор content-pages не интегрирован в новую вкладку «Структура» PRD-7~~ —
+  **закрыто 2026-05-27** (см. §4): полноценный CRUD авторских `info`-страниц в секции
+  «Структура», заглушка убрана, `ContentPagesDialog` выведен из эксплуатации.
 
 ### 3.3 Последняя проверка команд (2026-05-22)
 
@@ -287,9 +290,12 @@ row-menu, severity-rail) 2026-05-21 — в коде не реализовано 
 
 ## 4. Closeout PRD-1: редактор content-pages во вкладке «Структура» PRD-7
 
-**Статус:** Запланировано — **входит в Storyline-MVP** (критический путь, см.
-[ROADMAP §0.1](../../ROADMAP.md)); вне нумерации PRD-7 S9-S11. Шаг 1 (редактор
-content-pages в «Структуре») делать совмещённо с PRD-7 S10 — общая кодовая зона.
+**Статус:** Реализовано 2026-05-27 (Шаг 1 критического пути Storyline-MVP, см.
+[ROADMAP §0.1](../../ROADMAP.md)). Редактор content-pages в «Структуре»:
+add/edit/reorder/delete + warnings во всех трёх `flowMode`. `npm run check` чист,
+полный `vitest run` зелёный (51 файл / 1336 тестов). Осталось вне этого шага:
+ручной acceptance-проход (S11) и удаление чтения `start_page_content` из runtime/
+SCORM (отдельный S10-шаг с golden-проверкой — см. §4.5).
 **Модель:** Sonnet 4.6 (UI) + Opus 4.7 (acceptance-сверка)
 **Зависит от:** PRD-7 S5-S8 (секции редактора закрыты); API `content-pages` (готов,
 `server/routes/content-pages.ts`); variant.kind (PRD-1 §4.3, серверная часть закрыта
@@ -300,49 +306,87 @@ content-pages в «Структуре») делать совмещённо с PR
 
 ### 4.1 Контекст
 
-Вкладка «Структура» нового редактора
-(`client/src/features/tests/editor/sections/start-pages-section.tsx`) сейчас **read-only**:
-показывает зональный просмотр `content_pages` (system-строки `intro`/`summary`/`questions`/
-`router` + авторские `info`) и позволяет только удалять строку. Создание/редактирование/
-перенос страниц вынесены в заглушку `NextStepBanner`
-(`data-testid="structure-content-pages-stub"`).
+Вкладка «Структура» редактора
+(`client/src/features/tests/editor/sections/start-pages-section.tsx`) теперь
+полноценный редактор авторских страниц: зональный просмотр `content_pages`
+(system-строки `intro`/`summary`/`questions`/`router` — read-only + авторские
+`info` — CRUD). Заглушка `NextStepBanner` удалена. Legacy-компонент
+`ContentPagesDialog` (`client/src/components/content-pages-dialog.tsx` + тест) был
+orphaned после рефакторинга PRD-7 и выведен из эксплуатации (удалён) 2026-05-27.
 
-Полноценный CRUD авторских страниц реализован в legacy-компоненте
-`client/src/components/content-pages-dialog.tsx` (`ContentPagesDialog`: добавить до/после,
-inline-форма, выбор шаблона, сортировка; покрыт `content-pages-dialog.test.tsx`), но он
-**не подключён** ни к одной странице после рефакторинга PRD-7. Фаза переносит эту
-функциональность в секцию «Структура» Drawer и выводит legacy-диалог из эксплуатации.
-
-### 4.2 Scope
+### 4.2 Scope — выполнено 2026-05-27
 
 Только авторские страницы `kind: info`. System-строки (`intro`/`summary`/`questions`/
-`router`) управляются сервисом тихо (PRD-7 §1.4) и как сущности в этой фазе не редактируются.
+`router`) управляются сервисом тихо (PRD-7 §1.4) и как сущности не редактируются.
 
-- [ ] Добавление страницы `kind: info` в разрешённую зону по `flowMode`:
-  - `linear_flat` — зоны «До теста» / «После теста»;
-  - `linear_by_topics` — до/после каждой темы;
-  - `router_by_topics` — под router-row.
-- [ ] Редактирование страницы: выбор варианта (`manifest.contentTemplates[]` с `kind: info`),
-  форма `values` по placeholders варианта, режим `template`/`standard`/`html`.
-- [ ] Встроенный rich-text редактор для `richText`/`html` placeholders (санитизация как в legacy).
-- [ ] Drag-reorder страниц внутри разрешённой области (`sort_order`).
-- [ ] Удаление страницы — сохранить текущее поведение.
-- [ ] Required-fields варианта подсвечиваются в секции и участвуют в блокировке Save / publish-gate.
-- [ ] Убрать `NextStepBanner` / стаб после включения функциональности.
-- [ ] Вывести из эксплуатации `ContentPagesDialog` (удалить либо оставить только до миграции,
-  по аналогии с anti-goals S10); удалить мёртвый код и неиспользуемые импорты.
+- [x] Добавление страницы `kind: info` в разрешённую зону по `flowMode`:
+  - `linear_flat` — зоны «До теста» (`position: before`) / «После теста» (`position: after`);
+  - `linear_by_topics` — до/после каждой темы (`before_topic`/`after_topic`);
+  - `router_by_topics` — те же зоны (router-row — system).
+  _(insert-row + variant-picker модал; backend расширен — см. §4.6.)_
+- [x] Редактирование страницы: вариант выбирается при добавлении (`contentTemplates[]`
+  с `kind: info`), inline-форма `values` по placeholders варианта; режимы `template`/`html`.
+  _(режим `standard` отдельной формы не требует; вынесен как не нужный для info-страниц.)_
+- [x] Rich-text для `richText`/`html` placeholders — `Textarea`, санитизация на сервере (как в legacy).
+- [x] Drag-reorder страниц внутри зоны (`sort_order`) — HTML5 DnD + `PUT /reorder`.
+- [x] Удаление страницы — поведение сохранено (dots-menu → подтверждение).
+- [x] Required-fields варианта подсвечиваются (`page-row--warn` + meta-тег + warning-dot
+  на вкладке «Структура»); publish-gate enforced на сервере (commit d445861).
+- [x] Заглушка `NextStepBanner` / `structure-content-pages-stub` удалена.
+- [x] `ContentPagesDialog` выведен из эксплуатации (удалён вместе с тестом).
 
-### 4.3 DoD
+### 4.3 DoD — выполнено
 
-- Автор создаёт/редактирует/переносит/удаляет `info`-страницы во вкладке «Структура» во всех
-  трёх `flowMode` end-to-end через Drawer.
-- Заглушка `structure-content-pages-stub` удалена; вместо неё рабочий UI.
-- System-строки остаются под тихой логикой PRD-7 §1.4 (не ломаются при add/reorder info).
-- Component-тесты на add/edit/reorder/delete в секции; `npm run check` и полный `vitest run` зелёные.
-- Manual smoke: добавить страницу -> сохранить -> повторное открытие сохраняет порядок и контент.
+- [x] Автор создаёт/редактирует/переносит/удаляет `info`-страницы во всех трёх `flowMode`.
+- [x] Заглушка `structure-content-pages-stub` удалена; рабочий UI.
+- [x] System-строки остаются read-only под логикой PRD-7 §1.4.
+- [x] Component-тесты (add/edit/reorder/delete/warnings — 13) + route-тесты; `npm run check`
+  и полный `vitest run` (51 файл / 1336 тестов) зелёные.
+- [ ] Manual smoke в браузере/LMS — вынесено в S11 acceptance.
 
-### 4.4 Anti-goals
+### 4.4 Anti-goals — соблюдено
 
-- НЕ редактировать system-страницы как пользовательские сущности (управляются сервисом).
-- НЕ менять контракт API `content-pages` без необходимости.
-- НЕ трогать runtime-рендер content-pages (PRD-1 §1.8/§1.9 закрыты).
+- НЕ редактировали system-страницы как пользовательские сущности (управляются сервисом).
+- Контракт API `content-pages` расширен по необходимости (тест-scope `before`/`after`,
+  см. §4.6) — это требовалось §4.2 для зон «До/После теста» linear_flat.
+- НЕ трогали runtime-рендер content-pages (PRD-1 §1.8/§1.9).
+
+### 4.5 Остаток S10 (отдельный шаг)
+
+Удаление чтения `tests.start_page_content` из SCORM-export
+(`server/scorm/builders/test-json.ts:58`) и runtime (`server/scorm/template/app/render/
+startPage.js`) НЕ выполнено в этом шаге: затрагивает runtime-рендер и требует golden-
+проверки SCORM-пакета (intro-страница из миграции 003 должна заменить `startPageContent`
+без регрессии). Чтение `tests.published` в `test-settings.ts` — намеренная обратная
+совместимость (S10 §3.3), НЕ удаляется.
+
+### 4.6 Расширение модели данных (2026-05-27)
+
+Для тест-scope зон «До/После теста» (`topic_id = NULL`) добавлена позиция:
+
+- `shared/schema.ts`: `content_pages.position` enum → `before | after | before_topic | after_topic`.
+- `migrations/005_prd1_content_pages_after_position.sql`: расширен CHECK-constraint.
+- `server/routes/content-pages.ts`: POST принимает `before`/`after` (тест-scope, `topicId`
+  не обязателен); `before_topic`/`after_topic` по-прежнему требуют валидный `topicId`.
+
+### 4.7 Runtime content-flow реализован (2026-05-27)
+
+Экспортируемый runtime теперь играет полный поток content-pages (раньше `contentFlow.js`
+собирал только topic-scoped `before_topic`/`after_topic`):
+
+- `server/scorm/template/app/contentFlow.js` `rebuildPageSequence`: тест-scope `before`
+  (intro/info «До теста») в начало; тест-scope `after` info до summary — в поток перед
+  результатами; первая `summary`-страница = граница (встроенный экран результатов = «Итоги
+  с результатами»); страницы после summary → `state.postResultsPages`.
+- Post-results: новая фаза `postResults` (`enterPostResults`/`nextPostResults`/
+  `renderPostResults` в `contentFlow.js`, ветка в `render/mainRender.js`, кнопка «Далее» в
+  `renderResults` `assets/app.js`) — рендер страниц «после результатов», финал → `finishAndClose`.
+- Обратная совместимость: без тест-scope страниц поток идентичен прежнему (всё additive).
+- Проверено end-to-end в SCORM-плеере (см. [[reference-scorm-acceptance-tooling]]): полный
+  поток (intro → info → before_topic → 10 вопросов → after_topic → pre-results info →
+  результаты → post-results) рендерится без ошибок; SCORM 2004 cmi корректен. Guard в
+  `tests/scorm-package-acceptance.test.ts` (бандл содержит `rebuildPageSequence`/
+  `postResultsPages`).
+- Остаток (минор): стартовый экран всё ещё берёт текст из legacy `startPageContent` (это
+  отдельный экран-обзор перед intro-content-page, не замена); content-page `summary`
+  отображается встроенным экраном результатов, а не отдельным summary-layout.
