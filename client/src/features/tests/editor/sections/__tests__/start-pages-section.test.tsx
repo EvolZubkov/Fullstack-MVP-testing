@@ -13,7 +13,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { StructureSection, computeZoneReorder } from "../start-pages-section";
+import { StructureSection, reorderByDrop } from "../start-pages-section";
 import type { TestEditorModel, EditorSection } from "../../test-editor.types";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -328,36 +328,40 @@ describe("<StructureSection /> — inline edit", () => {
   });
 });
 
-describe("computeZoneReorder", () => {
+describe("reorderByDrop", () => {
   // DnD itself runs through @dnd-kit sensors, which need real DOM measurements
   // (unavailable in jsdom). The reorder math is extracted and tested here; the
   // drag interaction is verified live in the browser.
-  it("moving B onto A yields the B,A order with reindexed sortOrder", () => {
+  it("dropping B before A yields the B,A order with reindexed sortOrder", () => {
     const zone = [
       buildPage({ id: "pg-a", kind: "info", position: "before", topicId: null, sortOrder: 0 }),
       buildPage({ id: "pg-b", kind: "info", position: "before", topicId: null, sortOrder: 1 }),
     ];
-    expect(computeZoneReorder(zone, "pg-b", "pg-a")).toEqual([
+    expect(reorderByDrop(zone, "pg-b", "pg-a", "before")).toEqual([
       { id: "pg-b", sortOrder: 0 },
       { id: "pg-a", sortOrder: 1 },
     ]);
   });
 
-  it("supports arbitrary placement (move first to last in a 3-item zone)", () => {
+  it("supports arbitrary placement (drop the first AFTER the last of three)", () => {
     const zone = ["pg-a", "pg-b", "pg-c"].map((id, i) =>
       buildPage({ id, kind: "info", position: "before", topicId: null, sortOrder: i }),
     );
-    expect(computeZoneReorder(zone, "pg-a", "pg-c")).toEqual([
+    expect(reorderByDrop(zone, "pg-a", "pg-c", "after")).toEqual([
       { id: "pg-b", sortOrder: 0 },
       { id: "pg-c", sortOrder: 1 },
       { id: "pg-a", sortOrder: 2 },
     ]);
   });
 
-  it("returns null for a no-op (same id / not found)", () => {
-    const zone = [buildPage({ id: "pg-a", kind: "info", position: "before", topicId: null })];
-    expect(computeZoneReorder(zone, "pg-a", "pg-a")).toBeNull();
-    expect(computeZoneReorder(zone, "pg-a", "missing")).toBeNull();
+  it("returns null for no-op moves (same id, not found, already in place)", () => {
+    const zone = ["pg-a", "pg-b"].map((id, i) =>
+      buildPage({ id, kind: "info", position: "before", topicId: null, sortOrder: i }),
+    );
+    expect(reorderByDrop(zone, "pg-a", "pg-a", "before")).toBeNull();
+    expect(reorderByDrop(zone, "pg-a", "missing", "before")).toBeNull();
+    // A dropped before B is exactly where A already sits → no-op.
+    expect(reorderByDrop(zone, "pg-a", "pg-b", "before")).toBeNull();
   });
 });
 

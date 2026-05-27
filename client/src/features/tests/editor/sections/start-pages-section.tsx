@@ -22,7 +22,7 @@
  * classes live in `client/src/styles/tb-components.css`; controls use
  * `@universityrt/ui-kit`.
  */
-import { useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import {
   ChevronRight,
   FileText,
@@ -57,16 +57,15 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  arrayMove,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import {
   useContentPages,
   type ContentPage,
@@ -155,21 +154,57 @@ function missingRequired(
     .map((ph) => ph.key);
 }
 
+/** Which edge of the hovered row the dragged row will land on. */
+export type DropSide = "before" | "after";
+
+/** Active drop target during a drag: hovered row id + the insertion side. */
+export type DropState = { overId: string; side: DropSide } | null;
+
 /**
- * Computes the new `sortOrder` list for a same-zone reorder — dragging
- * `activeId` onto `overId` inside `zone` (already sorted). Returns `null` for a
- * no-op. Pure, so the reorder math is unit-tested independently of the @dnd-kit
- * sensors (which need real DOM measurements unavailable in jsdom).
+ * Shared drop-indicator state for «Структура» DnD. Rows do NOT shift while
+ * dragging (the shift confused the drop direction); instead the row under the
+ * pointer shows an insertion line on `side` — exactly where the dragged row
+ * will land (see {@link reorderByDrop}).
  */
-export function computeZoneReorder<T extends { id: string }>(
+const DropContext = createContext<DropState>(null);
+
+/**
+ * New `sortOrder` list after dropping `activeId` on the `side` of `overId`
+ * inside `zone` (already sorted). Returns `null` for a no-op. Pure — unit tested
+ * independently of the @dnd-kit sensors (which need real DOM measurements
+ * unavailable in jsdom).
+ */
+export function reorderByDrop<T extends { id: string }>(
   zone: T[],
   activeId: string,
   overId: string,
+  side: DropSide,
 ): Array<{ id: string; sortOrder: number }> | null {
-  const from = zone.findIndex((p) => p.id === activeId);
-  const to = zone.findIndex((p) => p.id === overId);
-  if (from < 0 || to < 0 || from === to) return null;
-  return arrayMove(zone, from, to).map((p, i) => ({ id: p.id, sortOrder: i }));
+  if (activeId === overId) return null;
+  const moved = zone.find((p) => p.id === activeId);
+  if (!moved || !zone.some((p) => p.id === overId)) return null;
+  const without = zone.filter((p) => p.id !== activeId);
+  let insertAt = without.findIndex((p) => p.id === overId);
+  if (side === "after") insertAt += 1;
+  without.splice(insertAt, 0, moved);
+  if (without.every((p, i) => p.id === zone[i].id)) return null; // no-op
+  return without.map((p, i) => ({ id: p.id, sortOrder: i }));
+}
+
+/**
+ * Insertion side by list index (deterministic — matches @dnd-kit's sortable
+ * convention and avoids rect-center flicker when rows don't shift): dragging a
+ * lower item DOWN onto a later one drops it AFTER; dragging UP drops BEFORE.
+ * Keeps the indicator and the actual reorder ({@link reorderByDrop}) in sync.
+ */
+function sideByIndex<T extends { id: string }>(
+  zone: T[],
+  activeId: string,
+  overId: string,
+): DropSide {
+  return zone.findIndex((p) => p.id === activeId) < zone.findIndex((p) => p.id === overId)
+    ? "after"
+    : "before";
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -293,6 +328,7 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [drop, setDrop] = useState<DropState>(null);
 
   const infoIn = (position: ContentPagePosition, topicId: string | null) =>
     pages
@@ -305,23 +341,40 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
 
   const activePage = activeId ? pages.find((p) => p.id === activeId) ?? null : null;
 
-  const handleDragStart = (event: DragStartEvent) => setActiveId(String(event.active.id));
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+    setDrop(null);
+  };
 
-  // DnD reorder of author pages. Stage A: reorder within the same zone (drop a
-  // row onto another row of the same position+topic). Cross-zone moves are
-  // added in a follow-up step.
+  // Track the live drop target so the hovered row can show an insertion line on
+  // the correct side without shifting. Stage A: same-zone only.
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return setDrop(null);
+    const a = pages.find((p) => p.id === active.id);
+    const o = pages.find((p) => p.id === over.id);
+    if (!a || !o || a.position !== o.position || a.topicId !== o.topicId) return setDrop(null);
+    const zone = infoIn(a.position, a.topicId);
+    setDrop({ overId: String(over.id), side: sideByIndex(zone, String(active.id), String(over.id)) });
+  };
+
+  // Reorder author pages within their zone, placing the dragged row on the
+  // indicated side of the drop target. Cross-zone moves are a follow-up step.
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveId(null);
+    setDrop(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const activeP = pages.find((p) => p.id === active.id);
     const overP = pages.find((p) => p.id === over.id);
     if (!activeP || !overP) return;
     if (overP.position === activeP.position && overP.topicId === activeP.topicId) {
-      const next = computeZoneReorder(
-        infoIn(activeP.position, activeP.topicId),
+      const zone = infoIn(activeP.position, activeP.topicId);
+      const next = reorderByDrop(
+        zone,
         String(active.id),
         String(over.id),
+        sideByIndex(zone, String(active.id), String(over.id)),
       );
       if (next) void handlers.cp.reorder(next);
     }
@@ -347,8 +400,10 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
+    <DropContext.Provider value={drop}>
     <div data-testid="structure-section-list">
       <Zone title="До теста" testId="structure-zone-before-test">
         {intro && (
@@ -427,11 +482,16 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
             <span className="drag-handle">
               <GripVertical className="h-3.5 w-3.5" />
             </span>
-            <span className="page-variant-badge">{KIND_LABEL[activePage.kind] ?? "Материал"}</span>
+            <span className="page-variant-badge">
+              {handlers.cp.contentTemplates.find((v) => v.key === activePage.templateKey)?.label ??
+                KIND_LABEL[activePage.kind] ??
+                "Материал"}
+            </span>
             <span className="page-title">{pageTitle(activePage)}</span>
           </div>
         ) : null}
       </DragOverlay>
+    </DropContext.Provider>
     </DndContext>
   );
 }
@@ -636,10 +696,11 @@ function AuthorPageGroup(props: {
 
 /**
  * One sortable unit = the author page row plus its trailing «+ Добавить» line,
- * so the whole unit is the measured/transformed @dnd-kit node. Keeping the
- * insert-row INSIDE the sortable node (not interleaved as a static sibling) is
- * what makes the reorder shift open a clean gap at the drop point — the drop
- * indicator — and makes arbitrary placement work for 3+ rows.
+ * so the whole unit is the measured @dnd-kit node (the insert-row lives inside
+ * the node, not as an interleaved static sibling, which keeps hit-testing and
+ * arbitrary placement correct). Rows do NOT shift while dragging — that
+ * confused the drop direction; instead the drop position is shown by an
+ * insertion line driven by {@link DropContext}.
  */
 function SortablePageItem(props: {
   page: ContentPage;
@@ -648,19 +709,13 @@ function SortablePageItem(props: {
   onInsertAfter: () => void;
 }) {
   const { page, handlers } = props;
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } =
-    useSortable({ id: page.id });
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 2 : undefined,
-    position: isDragging ? "relative" : undefined,
-  };
+  const { attributes, listeners, setNodeRef, isDragging } = useSortable({ id: page.id });
+  const drop = useContext(DropContext);
+  const dropCls = drop && drop.overId === page.id && !isDragging ? ` drop-${drop.side}` : "";
   return (
     <div
       ref={setNodeRef}
-      style={style}
-      className={"structure-sortable-item" + (isOver && !isDragging ? " is-drop-target" : "")}
+      className={"structure-sortable-item" + dropCls}
       data-testid={`structure-sortable-${page.id}`}
     >
       <AuthorPageRow
