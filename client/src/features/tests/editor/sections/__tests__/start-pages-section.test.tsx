@@ -35,6 +35,22 @@ const TEMPLATE = {
           { key: "body", type: "richText", label: "Текст" },
         ],
       },
+      // S13.6 fixtures: info.title only carries `title` (body would be lost on
+      // switch), info.empty has zero placeholders (s-replace-no-fields state).
+      {
+        key: "info.title",
+        label: "Только заголовок",
+        kind: "info",
+        description: "Без текстового блока.",
+        placeholders: [{ key: "title", type: "text", label: "Заголовок" }],
+      },
+      {
+        key: "info.empty",
+        label: "Готовая инструкция",
+        kind: "info",
+        description: "Содержимое полностью задано шаблоном.",
+        placeholders: [],
+      },
       { key: "intro.hero", label: "Введение", kind: "intro", placeholders: [{ key: "title", type: "text", label: "Заголовок" }] },
       // Two summary variants → «Сменить вариант» enabled.
       { key: "summary.result", label: "Итог: результат", kind: "summary", placeholders: [] },
@@ -481,5 +497,110 @@ describe("<StructureSection /> — switch variant of a system page", () => {
     fireEvent.click(screen.getByTestId("structure-questions-row-t1-actions"));
     fireEvent.click(screen.getByTestId("structure-questions-row-t1-replace"));
     expect(screen.queryByTestId("structure-replace-confirm")).toBeNull();
+  });
+});
+
+// ─── S13.6 — Replace-variant modal: search + diff-block (G28/G29) ──────────────
+
+describe("<StructureSection /> — replace-variant search + diff", () => {
+  function openReplaceModal() {
+    installApi([
+      buildPage({
+        id: "pg-info",
+        kind: "info",
+        position: "before",
+        topicId: null,
+        templateKey: "info.text",
+        valuesJson: { values: { title: "Введение", body: "<p>Привет</p>" } },
+      }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+  }
+
+  it("renders the variant-search input and filters the list (G28)", async () => {
+    openReplaceModal();
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-info")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("structure-page-actions-pg-info"));
+    fireEvent.click(screen.getByTestId("structure-page-replace-pg-info"));
+
+    await waitFor(() => expect(screen.getByTestId("structure-replace-search")).toBeInTheDocument());
+
+    // All three info variants visible before filtering.
+    expect(screen.getByTestId("structure-replace-option-info.text")).toBeInTheDocument();
+    expect(screen.getByTestId("structure-replace-option-info.title")).toBeInTheDocument();
+    expect(screen.getByTestId("structure-replace-option-info.empty")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId("structure-replace-search"), {
+      target: { value: "только" },
+    });
+
+    // Only «Только заголовок» matches.
+    expect(screen.queryByTestId("structure-replace-option-info.text")).toBeNull();
+    expect(screen.getByTestId("structure-replace-option-info.title")).toBeInTheDocument();
+    expect(screen.queryByTestId("structure-replace-option-info.empty")).toBeNull();
+
+    // Empty-state when no matches.
+    fireEvent.change(screen.getByTestId("structure-replace-search"), {
+      target: { value: "несуществующий" },
+    });
+    expect(screen.getByTestId("structure-replace-empty")).toBeInTheDocument();
+  });
+
+  it("highlights the current variant as disabled with «Текущий» chip (G28)", async () => {
+    openReplaceModal();
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-info")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("structure-page-actions-pg-info"));
+    fireEvent.click(screen.getByTestId("structure-page-replace-pg-info"));
+
+    await waitFor(() => expect(screen.getByTestId("structure-replace-option-info.text")).toBeInTheDocument());
+    const currentOption = screen.getByTestId("structure-replace-option-info.text");
+    expect(currentOption.className).toContain("is-current");
+    expect(currentOption.getAttribute("aria-disabled")).toBe("true");
+    expect(currentOption).toHaveTextContent("Текущий");
+  });
+
+  it("shows diff-block listing lost placeholder values (G28)", async () => {
+    openReplaceModal();
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-info")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("structure-page-actions-pg-info"));
+    fireEvent.click(screen.getByTestId("structure-page-replace-pg-info"));
+
+    // Switch to info.title — drops `body` (no `body` placeholder in new variant).
+    await waitFor(() => expect(screen.getByTestId("structure-replace-option-info.title")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("structure-replace-option-info.title"));
+
+    const diff = await screen.findByTestId("structure-replace-diff");
+    expect(diff).toHaveTextContent("Часть настроек не переносится");
+    expect(diff).toHaveTextContent("Текст:");
+    expect(diff).toHaveTextContent("Привет"); // HTML stripped from "<p>Привет</p>"
+    // Title is preserved in info.title → not listed.
+    expect(diff).not.toHaveTextContent("Заголовок:");
+  });
+
+  it("shows «потеряны» variant of diff when new variant has zero placeholders (G29)", async () => {
+    openReplaceModal();
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-info")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("structure-page-actions-pg-info"));
+    fireEvent.click(screen.getByTestId("structure-page-replace-pg-info"));
+
+    await waitFor(() => expect(screen.getByTestId("structure-replace-option-info.empty")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("structure-replace-option-info.empty"));
+
+    const diff = await screen.findByTestId("structure-replace-diff");
+    expect(diff).toHaveTextContent("Текущие настройки страницы будут потеряны");
+    expect(diff).toHaveTextContent("Заголовок:");
+    expect(diff).toHaveTextContent("Текст:");
+    expect(diff).toHaveTextContent("У нового варианта нет редактируемых полей");
+  });
+
+  it("does not show diff-block when switching back to current variant", async () => {
+    openReplaceModal();
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-info")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("structure-page-actions-pg-info"));
+    fireEvent.click(screen.getByTestId("structure-page-replace-pg-info"));
+
+    // Modal opens with the page's current variant pre-selected → no diff.
+    await waitFor(() => expect(screen.getByTestId("structure-replace-search")).toBeInTheDocument());
+    expect(screen.queryByTestId("structure-replace-diff")).toBeNull();
   });
 });

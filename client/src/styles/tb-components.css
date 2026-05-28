@@ -1249,6 +1249,104 @@
   color: var(--ou-fg-muted);
   margin-top: var(--wf-space-half, 4px);
 }
+/* Variant list — current/disabled state (PRD-7 S13.6, wf prd7-variant-replace). */
+.variant-list__item.is-current {
+  background: var(--ou-bg-surface-3);
+  cursor: default;
+  opacity: 0.7;
+}
+.variant-list__item.is-current:hover { background: var(--ou-bg-surface-3); }
+.variant-list__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+  margin-top: var(--wf-space-tiny, 2px);
+}
+.variant-list__meta-tag {
+  font: var(--ou-text-caption);
+  padding: var(--wf-space-half, 1px) var(--wf-space-6, 6px);
+  border-radius: var(--wf-space-1q, 3px);
+  background: var(--ou-bg-surface-3);
+  color: var(--ou-fg-muted);
+}
+.variant-list__meta-tag--current {
+  background: var(--ou-info-soft);
+  color: var(--ou-info-on-soft);
+}
+
+/* Search input above the variant list (PRD-7 S13.6-G28). Plain CSS — the DS
+   Input wraps in too much chrome for this lightweight in-modal filter. */
+.variant-search {
+  position: relative;
+  margin-bottom: var(--ou-space-3);
+}
+.variant-search__icon {
+  position: absolute;
+  left: var(--ou-space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ou-fg-muted);
+  pointer-events: none;
+}
+.variant-search__input {
+  width: 100%;
+  height: var(--ou-size-control-m, 32px);
+  padding: 0 var(--ou-space-3) 0 var(--ou-space-7, 28px);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-input);
+  font: var(--ou-text-body-m);
+  color: var(--ou-fg-default);
+  outline: none;
+}
+.variant-search__input:focus {
+  border-color: var(--ou-accent-default);
+  box-shadow: var(--ou-shadow-focus);
+}
+.variant-search__empty {
+  padding: var(--ou-space-3);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  text-align: center;
+}
+
+/* Warning diff-block listing placeholder values that will be lost when the
+   author confirms a variant switch (PRD-7 S13.6-G28, wf prd7-variant-replace). */
+.diff-block {
+  margin-top: var(--ou-space-3);
+  border-radius: var(--ou-radius-s);
+  overflow: hidden;
+}
+.diff-block__group {
+  padding: var(--wf-space-10, 10px) var(--wf-space-14, 14px);
+  border: var(--wf-border-w) solid var(--ou-warning-default);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-warning-soft);
+}
+.diff-block__title {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  margin-bottom: var(--wf-space-6, 6px);
+  color: var(--ou-warning-on-soft);
+}
+.diff-block__list { list-style: none; padding: 0; margin: 0; }
+.diff-block__item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ou-space-2);
+  padding: var(--wf-space-tiny, 2px) 0;
+  font: var(--ou-text-body-s);
+}
+.diff-block__field-name { font-weight: 600; color: var(--ou-fg-default); }
+.diff-block__field-value { color: var(--ou-fg-muted); font: var(--ou-text-caption); }
+.diff-block__meta {
+  font: var(--ou-text-caption);
+  color: var(--ou-fg-muted);
+  margin-top: var(--wf-space-6, 6px);
+}
 
 /* ── Design tab — template card + savebar ──────────────────────────────
    Used in features/tests/editor/sections/design-section.tsx.

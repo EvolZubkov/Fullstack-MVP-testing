@@ -22,7 +22,7 @@
  * classes live in `client/src/styles/tb-components.css`; controls use
  * `@universityrt/ui-kit`.
  */
-import { createContext, Fragment, useContext, useMemo, useState } from "react";
+import { createContext, Fragment, useContext, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -35,6 +35,7 @@ import {
   MoreHorizontal,
   Plus,
   Route,
+  Search,
   X,
 } from "lucide-react";
 import {
@@ -1733,6 +1734,34 @@ function AddPageModal(props: {
 
 // ─── Replace-variant modal (system pages, FR-46) ─────────────────────────────────
 
+/**
+ * Renders a single placeholder value as a short, readable string for the
+ * diff-block list. HTML tags are stripped (richText fields), arrays/objects
+ * are JSON-stringified, very long strings are truncated to 60 chars.
+ */
+function describePlaceholderValue(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === "") return "(пусто)";
+  if (typeof raw === "string") {
+    const stripped = raw.replace(/<[^>]+>/g, "").trim();
+    if (stripped === "") return "(пусто)";
+    return stripped.length > 60 ? `${stripped.slice(0, 60)}…` : stripped;
+  }
+  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
+  try {
+    const s = JSON.stringify(raw);
+    return s.length > 60 ? `${s.slice(0, 60)}…` : s;
+  } catch {
+    return "(составное значение)";
+  }
+}
+
+/** True for "non-empty" placeholder values - mirrors `isPlaceholderEmpty` in use-content-pages. */
+function hasPlaceholderValue(raw: unknown): boolean {
+  if (raw === null || raw === undefined) return false;
+  if (typeof raw === "string") return raw.trim() !== "";
+  return true;
+}
+
 function ReplaceVariantModal(props: {
   ctx: ReplaceContext | null;
   cp: UseContentPagesResult;
@@ -1745,7 +1774,63 @@ function ReplaceVariantModal(props: {
     [cp.contentTemplates, page],
   );
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+
+  // Reset transient state when the modal opens for a new page.
+  useEffect(() => {
+    if (page) {
+      setSelectedKey(null);
+      setQuery("");
+    }
+  }, [page?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const effectiveKey = selectedKey ?? page?.templateKey ?? variants[0]?.key ?? null;
+  const currentVariant = useMemo(
+    () => variants.find((v) => v.key === page?.templateKey) ?? null,
+    [variants, page?.templateKey],
+  );
+  const selectedVariant = useMemo(
+    () => variants.find((v) => v.key === effectiveKey) ?? null,
+    [variants, effectiveKey],
+  );
+
+  // PRD-7 S13.6-G28: compute the set of current placeholder values that will
+  // be lost when switching variants. Contract (PRD-1 §4.3.3): placeholder key
+  // is the bridge between variants of the same kind - identical keys carry
+  // their value forward, missing keys are dropped. We surface only the lost
+  // ones in the warning diff-block; preserved values are shown silently in
+  // the page expand after the switch.
+  const lostFields = useMemo(() => {
+    if (!page || !selectedVariant || !currentVariant) return [];
+    if (selectedVariant.key === page.templateKey) return [];
+    const newKeys = new Set(selectedVariant.placeholders.map((p) => p.key));
+    const currentValues = (page.valuesJson?.values ?? {}) as Record<string, unknown>;
+    return currentVariant.placeholders
+      .filter((ph) => !newKeys.has(ph.key))
+      .map((ph) => ({
+        key: ph.key,
+        label: ph.label ?? ph.key,
+        value: currentValues[ph.key],
+      }))
+      .filter((f) => hasPlaceholderValue(f.value));
+  }, [page, currentVariant, selectedVariant]);
+
+  // s-replace-no-fields (G29): the new variant declares zero placeholders -
+  // the page becomes purely template-driven and any current values are lost.
+  const isNoFields =
+    selectedVariant !== null &&
+    selectedVariant.placeholders.length === 0 &&
+    selectedVariant.key !== page?.templateKey;
+
+  // Filter variants by search query (case-insensitive, matches label OR description).
+  const filteredVariants = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q === "") return variants;
+    return variants.filter((v) => {
+      const haystack = `${v.label} ${v.description ?? ""}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [variants, query]);
 
   const handleApply = () => {
     if (!page || !effectiveKey || effectiveKey === page.templateKey) return;
@@ -1753,6 +1838,7 @@ function ReplaceVariantModal(props: {
       .replaceVariant(page.id, effectiveKey)
       .then(() => {
         setSelectedKey(null);
+        setQuery("");
         props.onClose();
       })
       .catch(() => {
@@ -1765,6 +1851,7 @@ function ReplaceVariantModal(props: {
       open={page !== null}
       onClose={() => {
         setSelectedKey(null);
+        setQuery("");
         props.onClose();
       }}
       size="m"
@@ -1777,6 +1864,7 @@ function ReplaceVariantModal(props: {
             size="m"
             onClick={() => {
               setSelectedKey(null);
+              setQuery("");
               props.onClose();
             }}
             data-testid="structure-replace-cancel"
@@ -1797,16 +1885,69 @@ function ReplaceVariantModal(props: {
       }
       data-testid="structure-replace-modal"
     >
-      <VariantList
-        options={variants.map((v) => ({
-          key: v.key,
-          label: v.label + (v.key === page?.templateKey ? " (текущий)" : ""),
-          description: v.description,
-        }))}
-        selectedKey={effectiveKey}
-        onSelect={setSelectedKey}
-        testIdPrefix="structure-replace-option"
-      />
+      {variants.length > 1 && (
+        <div className="variant-search">
+          <Search
+            width={14}
+            height={14}
+            className="variant-search__icon"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            className="variant-search__input"
+            placeholder="Поиск по названию варианта…"
+            aria-label="Поиск вариантов"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            data-testid="structure-replace-search"
+          />
+        </div>
+      )}
+      {filteredVariants.length === 0 ? (
+        <div className="variant-search__empty" data-testid="structure-replace-empty">
+          Ничего не найдено
+        </div>
+      ) : (
+        <VariantList
+          options={filteredVariants.map((v) => ({
+            key: v.key,
+            label: v.label,
+            description: v.description,
+            isCurrent: v.key === page?.templateKey,
+          }))}
+          selectedKey={effectiveKey}
+          onSelect={setSelectedKey}
+          testIdPrefix="structure-replace-option"
+        />
+      )}
+      {lostFields.length > 0 && (
+        <div className="diff-block" data-testid="structure-replace-diff">
+          <div className="diff-block__group">
+            <div className="diff-block__title">
+              <AlertTriangle width={14} height={14} aria-hidden="true" />
+              {isNoFields
+                ? "Текущие настройки страницы будут потеряны"
+                : "Часть настроек не переносится"}
+            </div>
+            <ul className="diff-block__list">
+              {lostFields.map((f) => (
+                <li className="diff-block__item" key={f.key}>
+                  <span className="diff-block__field-name">{f.label}:</span>
+                  <span className="diff-block__field-value">
+                    «{describePlaceholderValue(f.value)}»
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="diff-block__meta">
+              {isNoFields
+                ? "У нового варианта нет редактируемых полей — содержимое страницы будет полностью задано шаблоном."
+                : "У нового варианта таких полей нет."}
+            </p>
+          </div>
+        </div>
+      )}
     </ModalDialog>
   );
 }
@@ -1814,7 +1955,13 @@ function ReplaceVariantModal(props: {
 // ─── Variant list (shared listbox) ───────────────────────────────────────────────
 
 function VariantList(props: {
-  options: Array<{ key: string; label: string; description?: string }>;
+  options: Array<{
+    key: string;
+    label: string;
+    description?: string;
+    /** PRD-7 S13.6: mark the current variant (disabled + «Текущий» chip). */
+    isCurrent?: boolean;
+  }>;
   selectedKey: string | null;
   onSelect: (key: string) => void;
   testIdPrefix: string;
@@ -1823,15 +1970,21 @@ function VariantList(props: {
     <ul className="variant-list" role="listbox" aria-label="Варианты страниц">
       {props.options.map((o) => {
         const selected = o.key === props.selectedKey;
+        const cls =
+          "variant-list__item" +
+          (selected ? " is-selected" : "") +
+          (o.isCurrent ? " is-current" : "");
         return (
           <li
             key={o.key}
-            className={"variant-list__item" + (selected ? " is-selected" : "")}
+            className={cls}
             role="option"
             aria-selected={selected ? "true" : "false"}
-            tabIndex={0}
-            onClick={() => props.onSelect(o.key)}
+            aria-disabled={o.isCurrent ? "true" : undefined}
+            tabIndex={o.isCurrent ? -1 : 0}
+            onClick={o.isCurrent ? undefined : () => props.onSelect(o.key)}
             onKeyDown={(e) => {
+              if (o.isCurrent) return;
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 props.onSelect(o.key);
@@ -1842,6 +1995,13 @@ function VariantList(props: {
             <div>
               <div className="variant-list__name">{o.label}</div>
               {o.description && <div className="variant-list__desc">{o.description}</div>}
+              {o.isCurrent && (
+                <div className="variant-list__meta">
+                  <span className="variant-list__meta-tag variant-list__meta-tag--current">
+                    Текущий
+                  </span>
+                </div>
+              )}
             </div>
           </li>
         );
