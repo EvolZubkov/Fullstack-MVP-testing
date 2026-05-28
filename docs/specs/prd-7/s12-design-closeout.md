@@ -1,8 +1,11 @@
 # PRD-7 S12 — Design Tab Closeout
 
 **Статус:** Open (reopen 2026-05-28)
-**Триггер:** возражение бизнеса против заглушек во вкладке «Оформление»; acceptance S11 от 2026-05-27 был выдан преждевременно — две из четырёх sub-rail секций и часть param-типов оставлены как stub-баннеры со ссылкой «реализуются отдельным шагом PRD-7».
-**Источник истины:** [docs/wireframes/approved/prd7-design-tab.html](../../wireframes/approved/prd7-design-tab.html) (одиннадцать состояний, согласованы 2026-05-21).
+**Триггер:** возражение бизнеса против заглушек во вкладке «Оформление»; acceptance S11 от
+2026-05-27 был выдан преждевременно — две из четырёх sub-rail секций и часть param-типов
+оставлены как stub-баннеры со ссылкой «реализуются отдельным шагом PRD-7».
+**Источник истины:** [docs/wireframes/approved/prd7-design-tab.html](../../wireframes/approved/prd7-design-tab.html)
+(одиннадцать состояний, согласованы 2026-05-21).
 **Зависит от:** PRD-7 S0-S11 (закрыты — модель, mappers, Drawer-каркас, save-flow, status-индикаторы).
 **Блокирует:** PRD-1 closeout (manifest validation + acceptance), затем PRD-4.
 
@@ -35,24 +38,63 @@
 
 **Verification:** `npm run check` 0 ошибок; `vitest run` 1331/1331 зелёный (11/11 design-section).
 
-### G2 — Кнопка «Предпросмотр шаблона» (FR-30)
+### G2 — Кнопка «Предпросмотр шаблона» (FR-30) — **CLOSED 2026-05-28**
 
-**Что сейчас.** [design-section.tsx:156-158](../../../client/src/features/tests/editor/sections/design-section.tsx) на клик показывает `window.alert("Предпросмотр шаблона будет доступен в следующем шаге.")`.
+**Что было.** Кнопка предпросмотра в TemplatePane вызывала
+`window.alert("Предпросмотр шаблона будет доступен в следующем шаге.")`.
 
-**Что должно быть.** ModalDialog `--xl` (`tpl-preview-modal`) с двупанельным layout: левый rail группирует элементы шаблона (Введение / Учебный материал / Вопросы / Итог), правый stage — мини-демо SCORM-shell с применёнными `design_settings_json.params` и шрифтами/цветами шаблона. Демо-данные: фиксированный набор примеров вопросов/страниц. Прогресс не сохраняется.
+**Что сделано.**
 
-**Edge cases:**
+1. **Demo-fixtures** — [template-preview-fixtures.ts](../../../client/src/features/tests/editor/sections/template-preview-fixtures.ts):
+   фиксированные demo-данные на русском для intro/info/summary/4-х question-типов,
+   плюс shared course chrome (sidebar + progress + topic label).
+2. **CSS** — портированы классы `.tpl-preview-{modal,group,stage,shell,caption}` +
+   sub-элементы shell'а и question-вариантов в [tb-components.css](../../../client/src/styles/tb-components.css)
+   (≈230 строк, источник — wireframe `wf-template-preview` state). Shell использует
+   CSS custom properties `--tpl-primary` / `--tpl-fg` / `--tpl-card` / `--tpl-font`.
+3. **Компонент** — новый [template-preview-modal.tsx](../../../client/src/features/tests/editor/sections/template-preview-modal.tsx):
+   `ModalDialog size="xl" className="tpl-preview-modal"`. Rail-derivation из
+   `manifest.contentTemplates` (intro → info → questions[4 типа] → summary; router
+   skipped); 4 группы по wireframe-структуре. Stage — mock SCORM-shell, контент
+   меняется по выбранному rail-item. Branding применён через inline `style` с
+   CSS custom properties из текущих `draft.params` (HSL-строки манифеста
+   оборачиваются в `hsl(...)`, hex/rgb/hsl значения проходят как есть).
+4. **DesignSection** — `previewOpen` state поднят, `window.alert` заменён на
+   `() => setPreviewOpen(true)`. Кнопка disabled при `template === null`
+   (предварительная защита для будущего G6 incompatible-state). Modal-компонент
+   рендерится после split-контейнера через React Fragment.
+5. **Edge cases.** `template === null` → modal не рендерится (return null), кнопка
+   disabled. Если `contentTemplates` пустой → modal не рендерится (return null) —
+   при текущих 4 built-in шаблонах не достижимо, но защитная ветка есть.
+6. **Тесты** — 3 новых теста в [design-section.test.tsx](../../../client/src/features/tests/editor/sections/__tests__/design-section.test.tsx):
+   modal открывается по клику preview-кнопки; закрывается по «Закрыть»;
+   rail-items дериватся из `contentTemplates` (4 группы + 4 question sub-items).
+   Fixture `TEMPLATE.manifest` расширена `contentTemplates`-массивом.
 
-- `wf-template-incompatible` — кнопка предпросмотра disabled.
-- Шаблон без `contentTemplates[]` (legacy) — показать только Вопросы.
+**Verification:** `npm run check` 0 ошибок; `vitest run` 51 / 1334 зелёный (+3 теста
+для preview-модалки).
+
+**Известное ограничение реализации.** Stage рендерится React-моком, а не реальным
+SCORM-плеером (preview.html шаблонов остаётся артефактом сборки). Это соответствует
+spec'у («мини-демо SCORM-shell с применёнными `design_settings_json.params`») —
+автор увидит брендирование, типографику и порядок элементов, но не пиксельную
+копию SCORM-runtime'а. Свап на iframe с preview.html — при необходимости
+отдельным S13.x.
 
 ### G3 — Галерея шаблонов (FR-33)
 
-**Что сейчас.** [design-section.tsx:8-9](../../../client/src/features/tests/editor/sections/design-section.tsx) JSDoc: «*«Заменить шаблон» is left as a placeholder (full gallery deferred to FR-30/31)*». Кнопка не делает ничего полезного.
+**Что сейчас.** [design-section.tsx:8-9](../../../client/src/features/tests/editor/sections/design-section.tsx)
+JSDoc: «*«Заменить шаблон» is left as a placeholder (full gallery deferred to FR-30/31)*». Кнопка не
+делает ничего полезного.
 
-**Что должно быть.** ModalDialog `--xl` (`tpl-gallery-modal`) с поиском (placeholder «Поиск по названию или тегу»), сеткой 3-в-ряд (`gallery-grid`). Каждая карточка: миниатюра + название + описание + теги «Встроенный» / «v1.2.0» + действия «Просмотр» / «Выбрать». Текущая карточка отмечена `selected` + ou-tag «Текущий».
+**Что должно быть.** ModalDialog `--xl` (`tpl-gallery-modal`) с поиском (placeholder «Поиск по
+названию или тегу»), сеткой 3-в-ряд (`gallery-grid`). Каждая карточка: миниатюра + название +
+описание + теги «Встроенный» / «v1.2.0» + действия «Просмотр» / «Выбрать». Текущая карточка
+отмечена `selected` + ou-tag «Текущий».
 
-**Подтверждение замены.** При выборе шаблона с **изменёнными** params (dirty) — confirm-dialog «*Заменить шаблон и сбросить параметры*». При выборе шаблона с **неизменёнными** params (clean) — замена сразу.
+**Подтверждение замены.** При выборе шаблона с **изменёнными** params (dirty) — confirm-dialog
+«*Заменить шаблон и сбросить параметры*». При выборе шаблона с **неизменёнными** params (clean) —
+замена сразу.
 
 **Состояния:**
 
@@ -63,7 +105,9 @@
 
 ### G4 — Поддержка всех param-типов (FR-31a)
 
-**Что сейчас.** [design-section.tsx:359-369](../../../client/src/features/tests/editor/sections/design-section.tsx) — fallback `Banner "Тип «X» поддерживается в следующем шаге (медиатека)"`. Не реализованы типы: `image`, `asset`, `file`, `downloadLink`, `url`, `multiselect`, `number`.
+**Что сейчас.** [design-section.tsx:359-369](../../../client/src/features/tests/editor/sections/design-section.tsx)
+— fallback `Banner "Тип «X» поддерживается в следующем шаге (медиатека)"`. Не реализованы типы:
+`image`, `asset`, `file`, `downloadLink`, `url`, `multiselect`, `number`.
 
 **Что должно быть.** Каждый тип имеет UI по wireframe `wf-branding`:
 
@@ -81,19 +125,26 @@
 | `asset` | DS Button «Выбрать из медиатеки» + chip | `{ mediaId }` |
 | `downloadLink` | DS Button «Добавить файл» + chip + desc «Файл будет доступен обучающемуся» | `{ name, mediaId, label? }` |
 
-**Зависимость от медиатеки.** Типы `image` / `asset` / `downloadLink` опираются на существующий upload-пайплайн `uploads/media/` (multer). MVP: переиспользуем существующий endpoint загрузки; design-section вызывает его и сохраняет `mediaId` в `params`.
+**Зависимость от медиатеки.** Типы `image` / `asset` / `downloadLink` опираются на существующий
+upload-пайплайн `uploads/media/` (multer). MVP: переиспользуем существующий endpoint загрузки;
+design-section вызывает его и сохраняет `mediaId` в `params`.
 
 ### G5 — Удаление orphan `DesignSettingsDialog`
 
-**Что было.** `client/src/components/design-settings-dialog.tsx` импортировался только своим тестом (grep вне теста — 0 совпадений). Должен был уйти в S10 вместе с `ContentPagesDialog`.
+**Что было.** `client/src/components/design-settings-dialog.tsx` импортировался только своим
+тестом (grep вне теста — 0 совпадений). Должен был уйти в S10 вместе с `ContentPagesDialog`.
 
-**Статус:** **закрыто 2026-05-28** (batch parity cleanup). Файл и тест удалены (`git rm`). Полная suite зелёная.
+**Статус:** **закрыто 2026-05-28** (batch parity cleanup). Файл и тест удалены (`git rm`).
+Полная suite зелёная.
 
 ### G6 — Состояние `wf-template-incompatible`
 
 **Что сейчас.** Не реализовано. При невалидном `templateId` UI падает в loading/error без специального баннера.
 
-**Что должно быть.** Если `template = null` при наличии `design.draft.templateId`, показать баннер `ou-banner--error` с действиями «Выбрать шаблон» (открывает галерею) / «Применить «Стандартный»» (set templateId = default + clear params). Sub-rail Брендирование/Макет/Прогресс — disabled. Status-dot error на табе «Оформление».
+**Что должно быть.** Если `template = null` при наличии `design.draft.templateId`, показать
+баннер `ou-banner--error` с действиями «Выбрать шаблон» (открывает галерею) / «Применить
+«Стандартный»» (set templateId = default + clear params). Sub-rail Брендирование/Макет/Прогресс
+— disabled. Status-dot error на табе «Оформление».
 
 ---
 
@@ -136,10 +187,13 @@ type ParamSection = "branding" | "layout" | "progress";
 - [ ] `wf-template-incompatible`: баннер + действия + disabled rail.
 - [ ] Orphan `design-settings-dialog.tsx` + тест удалены.
 - [ ] Зод-схема манифеста обновлена, валидация built-in шаблонов проходит.
-- [ ] Component-тесты по каждому state wireframe (`wf-template`, `wf-branding`, `wf-template-empty`, `wf-template-incompatible`, `wf-template-preview`, `wf-template-gallery`, `wf-template-gallery-search`, `wf-template-gallery-empty`, `wf-template-gallery-confirm`, `wf-branding-color-picker`).
+- [ ] Component-тесты по каждому state wireframe (`wf-template`, `wf-branding`, `wf-template-empty`,
+      `wf-template-incompatible`, `wf-template-preview`, `wf-template-gallery`, `wf-template-gallery-search`,
+      `wf-template-gallery-empty`, `wf-template-gallery-confirm`, `wf-branding-color-picker`).
 - [ ] `npm run check` без ошибок; полный `vitest run` зелёный.
 - [ ] Acceptance pass S12: 1:1 с wireframe (axe/Playwright) + LMS smoke.
-- [ ] Обновлены [ROADMAP.md](../../ROADMAP.md) §0 и [prd-7-acceptance-report.md](../../prd-7-acceptance-report.md) (S12 closeout).
+- [ ] Обновлены [ROADMAP.md](../../ROADMAP.md) §0 и
+      [prd-7-acceptance-report.md](../../prd-7-acceptance-report.md) (S12 closeout).
 
 ---
 
@@ -161,9 +215,15 @@ type ParamSection = "branding" | "layout" | "progress";
 
 ## 5. Риски
 
-- **Медиатека.** Типы `image` / `asset` / `downloadLink` требуют связки с upload-пайплайном `uploads/media/`. Если текущий endpoint не возвращает `mediaId` (а только URL) — нужен мини-расширитель API. Не блокер, но эстимейт +2-4 часа.
-- **Preview demo-data.** Stage нуждается в фиксированном демо-наборе (1 intro + 1 question per type + 1 results). Можно завести в `client/src/features/tests/editor/sections/design-preview-fixtures.ts`.
-- **Backwards compat манифестов.** Существующие `manifest.params` без `section` должны попадать в `branding` (см. §2.1). Это означает обновление всех 4 built-in манифестов в одном коммите со схемой.
+- **Медиатека.** Типы `image` / `asset` / `downloadLink` требуют связки с upload-пайплайном
+  `uploads/media/`. Если текущий endpoint не возвращает `mediaId` (а только URL) — нужен
+  мини-расширитель API. Не блокер, но эстимейт +2-4 часа.
+- **Preview demo-data.** Stage нуждается в фиксированном демо-наборе (1 intro + 1 question per
+  type + 1 results). Можно завести в
+  `client/src/features/tests/editor/sections/design-preview-fixtures.ts`.
+- **Backwards compat манифестов.** Существующие `manifest.params` без `section` должны попадать
+  в `branding` (см. §2.1). Это означает обновление всех 4 built-in манифестов в одном коммите
+  со схемой.
 
 ---
 

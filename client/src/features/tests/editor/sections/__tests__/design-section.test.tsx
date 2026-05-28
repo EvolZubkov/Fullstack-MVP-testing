@@ -46,6 +46,12 @@ const TEMPLATE = {
       { key: "fontFamily", type: "select", label: "Шрифт", options: ["Inter", "Roboto"], default: "Inter" },
       { key: "logoUrl", type: "image", label: "Логотип" },
     ],
+    contentTemplates: [
+      { key: "intro-default", kind: "intro", label: "Вступление" },
+      { key: "info-default", kind: "info", label: "Учебный слайд" },
+      { key: "questions-default", kind: "questions", label: "Вопросы" },
+      { key: "summary-default", kind: "summary", label: "Итоги" },
+    ],
   },
 };
 
@@ -315,5 +321,59 @@ describe("<DesignSection /> — save flow (via hoisted hook)", () => {
     expect((putCall!.body as { params: Record<string, unknown> }).params.companyName).toBe(
       "Acme",
     );
+  });
+});
+
+describe("<DesignSection /> — template preview modal (S12-G2)", () => {
+  it("opens the modal on «Предпросмотр» click", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    // Wait for template pane to load
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    // Click the preview icon button
+    fireEvent.click(screen.getByTestId("design-template-preview"));
+    // Modal and stage should appear
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-preview-modal")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("design-template-preview-stage")).toBeInTheDocument();
+  });
+
+  it("closes on close button click", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-template-preview"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-preview-modal")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-template-preview-close"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("design-template-preview-modal")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("renders rail items derived from contentTemplates (4 groups, 4 question sub-items)", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-template-preview"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-preview-modal")).toBeInTheDocument(),
+    );
+    // All 4 rail groups must appear (intro, info, questions, summary)
+    const modal = screen.getByTestId("design-template-preview-modal");
+    expect(within(modal).getByText("Введение")).toBeInTheDocument();
+    expect(within(modal).getByText("Учебный материал")).toBeInTheDocument();
+    expect(within(modal).getByText("Вопросы")).toBeInTheDocument();
+    expect(within(modal).getByText("Итог")).toBeInTheDocument();
+    // Questions group must contain all 4 question sub-items
+    expect(screen.getByTestId("design-template-preview-rail-single")).toBeInTheDocument();
+    expect(screen.getByTestId("design-template-preview-rail-multiple")).toBeInTheDocument();
+    expect(screen.getByTestId("design-template-preview-rail-ranking")).toBeInTheDocument();
+    expect(screen.getByTestId("design-template-preview-rail-matching")).toBeInTheDocument();
   });
 });

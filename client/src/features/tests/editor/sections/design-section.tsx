@@ -42,6 +42,7 @@ import {
   type UseDesignSettingsResult,
 } from "../use-design-settings";
 import { fromHex, toHex } from "./color-format";
+import { TemplatePreviewModal } from "./template-preview-modal";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -71,65 +72,74 @@ const RAIL_ITEMS: { key: DesignRailKey; label: string }[] = [
 
 export function DesignSection({ testId, design: designProp }: DesignSectionProps) {
   const [active, setActive] = useState<DesignRailKey>("template");
+  const [previewOpen, setPreviewOpen] = useState(false);
   // Fallback hook usage kept so the section still works as a standalone unit
   // (e.g., in component tests) when the parent hasn't hoisted the hook.
   const fallback = useDesignSettings(designProp ? undefined : testId);
   const design = designProp ?? fallback;
 
   return (
-    <div className="ou-drawer__split" data-testid="design-split">
-      <nav className="ou-drawer__rail" aria-label="Подразделы оформления">
-        {RAIL_ITEMS.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            className={
-              "ou-drawer__rail-item" + (active === item.key ? " is-active" : "")
-            }
-            aria-current={active === item.key ? "page" : undefined}
-            onClick={() => setActive(item.key)}
-            data-testid={`design-rail-${item.key}`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
-      <div className="tb-settings-content" data-testid={`design-pane-${active}`}>
-        {testId === undefined ? (
-          <CreateModeNotice />
-        ) : design.isLoading ? (
-          <LoadingNotice />
-        ) : design.error ? (
-          <ErrorNotice message={design.error.message} />
-        ) : active === "template" ? (
-          <TemplatePane design={design} />
-        ) : active === "branding" ? (
-          <SectionPane
-            design={design}
-            section="branding"
-            emptyTitle="В шаблоне нет настраиваемых параметров оформления"
-            emptyDesc={`У выбранного шаблона «${design.template?.manifest.name ?? ""}» в секции «Брендирование» не объявлено ни одного параметра.`}
-            testId="design-branding-pane"
-          />
-        ) : active === "layout" ? (
-          <SectionPane
-            design={design}
-            section="layout"
-            emptyTitle="В шаблоне нет настроек макета"
-            emptyDesc={`У выбранного шаблона «${design.template?.manifest.name ?? ""}» в секции «Макет» не объявлено ни одного параметра. Шаблон поддерживает только встроенный макет.`}
-            testId="design-layout-pane"
-          />
-        ) : (
-          <SectionPane
-            design={design}
-            section="progress"
-            emptyTitle="В шаблоне нет настроек прогресса"
-            emptyDesc={`У выбранного шаблона «${design.template?.manifest.name ?? ""}» в секции «Прогресс и шапка» не объявлено ни одного параметра.`}
-            testId="design-progress-pane"
-          />
-        )}
+    <>
+      <div className="ou-drawer__split" data-testid="design-split">
+        <nav className="ou-drawer__rail" aria-label="Подразделы оформления">
+          {RAIL_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={
+                "ou-drawer__rail-item" + (active === item.key ? " is-active" : "")
+              }
+              aria-current={active === item.key ? "page" : undefined}
+              onClick={() => setActive(item.key)}
+              data-testid={`design-rail-${item.key}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div className="tb-settings-content" data-testid={`design-pane-${active}`}>
+          {testId === undefined ? (
+            <CreateModeNotice />
+          ) : design.isLoading ? (
+            <LoadingNotice />
+          ) : design.error ? (
+            <ErrorNotice message={design.error.message} />
+          ) : active === "template" ? (
+            <TemplatePane design={design} onPreview={() => setPreviewOpen(true)} />
+          ) : active === "branding" ? (
+            <SectionPane
+              design={design}
+              section="branding"
+              emptyTitle="В шаблоне нет настраиваемых параметров оформления"
+              emptyDesc={`У выбранного шаблона «${design.template?.manifest.name ?? ""}» в секции «Брендирование» не объявлено ни одного параметра.`}
+              testId="design-branding-pane"
+            />
+          ) : active === "layout" ? (
+            <SectionPane
+              design={design}
+              section="layout"
+              emptyTitle="В шаблоне нет настроек макета"
+              emptyDesc={`У выбранного шаблона «${design.template?.manifest.name ?? ""}» в секции «Макет» не объявлено ни одного параметра. Шаблон поддерживает только встроенный макет.`}
+              testId="design-layout-pane"
+            />
+          ) : (
+            <SectionPane
+              design={design}
+              section="progress"
+              emptyTitle="В шаблоне нет настроек прогресса"
+              emptyDesc={`У выбранного шаблона «${design.template?.manifest.name ?? ""}» в секции «Прогресс и шапка» не объявлено ни одного параметра.`}
+              testId="design-progress-pane"
+            />
+          )}
+        </div>
       </div>
-    </div>
+      <TemplatePreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        template={design.template}
+        params={design.draft.params ?? {}}
+      />
+    </>
   );
 }
 
@@ -167,7 +177,13 @@ function ErrorNotice({ message }: { message: string }) {
   );
 }
 
-function TemplatePane({ design }: { design: UseDesignSettingsResult }) {
+function TemplatePane({
+  design,
+  onPreview,
+}: {
+  design: UseDesignSettingsResult;
+  onPreview: () => void;
+}) {
   const tpl = design.template;
   if (!tpl) return null;
   return (
@@ -177,9 +193,8 @@ function TemplatePane({ design }: { design: UseDesignSettingsResult }) {
           type="button"
           className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s tpl-preview-btn"
           aria-label="Предпросмотр шаблона"
-          onClick={() =>
-            window.alert("Предпросмотр шаблона будет доступен в следующем шаге.")
-          }
+          disabled={design.template === null}
+          onClick={onPreview}
           data-testid="design-template-preview"
         >
           <Eye className="h-4 w-4" aria-hidden="true" />
