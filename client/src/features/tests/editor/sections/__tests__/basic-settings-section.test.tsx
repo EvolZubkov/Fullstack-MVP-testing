@@ -729,3 +729,55 @@ describe("<SettingsSection /> — Адаптивный режим pane (mode = a
     expect(next.adaptive.topics[0].levels[0].links).toHaveLength(0);
   });
 });
+
+// ─── PRD-4 v1.1 L1: flowMode `linear_flat` blocked in adaptive mode ──────────
+
+describe("PRD-4 v1.1 L1: adaptive+linear_flat UI guard", () => {
+  it("opens flowMode select and marks linear_flat option disabled when mode=adaptive", () => {
+    const model = baseModel({ mode: "adaptive", flowMode: "linear_by_topics" });
+    render(<SettingsSection model={model} updateModel={vi.fn()} />);
+    // DS Select renders the listbox lazily — click to open. The trigger is
+    // marked with the parent test id; option text appears inside the popup.
+    const trigger = screen
+      .getByTestId("settings-flow-mode")
+      .querySelector('[role="combobox"], button');
+    if (trigger) fireEvent.click(trigger);
+    // The augmented label «Линейный — недоступно в адаптивном режиме» is now
+    // visible in the open listbox.
+    expect(
+      screen.queryByText(/недоступно в адаптивном режиме/i),
+    ).toBeInTheDocument();
+  });
+
+  it("renders warning banner when an invalid (adaptive, linear_flat) state slips through", () => {
+    // This combo should never occur once L4 auto-fix runs, but if a user
+    // forces it via mode-switch in the UI we surface a recovery banner.
+    const model = baseModel({ mode: "adaptive", flowMode: "linear_flat" });
+    render(<SettingsSection model={model} updateModel={vi.fn()} />);
+    expect(
+      screen.getByTestId("settings-flow-mode-adaptive-flat-warning"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render the warning for any valid (mode, flowMode) combination", () => {
+    const validCombos: Array<{
+      mode: "standard" | "adaptive";
+      flowMode: TestEditorModel["flowMode"];
+    }> = [
+      { mode: "standard", flowMode: "linear_flat" },
+      { mode: "standard", flowMode: "linear_by_topics" },
+      { mode: "standard", flowMode: "router_by_topics" },
+      { mode: "adaptive", flowMode: "linear_by_topics" },
+      { mode: "adaptive", flowMode: "router_by_topics" },
+    ];
+    for (const combo of validCombos) {
+      const { unmount } = render(
+        <SettingsSection model={baseModel(combo)} updateModel={vi.fn()} />,
+      );
+      expect(
+        screen.queryByTestId("settings-flow-mode-adaptive-flat-warning"),
+      ).toBeNull();
+      unmount();
+    }
+  });
+});

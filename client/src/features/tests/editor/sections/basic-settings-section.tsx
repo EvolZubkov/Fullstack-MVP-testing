@@ -259,14 +259,32 @@ function BasicPane({ model, updateModel }: SettingsSectionProps) {
           fullWidth
           label="Сценарий прохождения"
           value={model.flowMode}
+          // PRD-4 v1.1 L1 guard: linear_flat is disabled when mode=adaptive
+          // (the (adaptive, linear_flat) combo is deferred to a future PRD).
           options={[
-            { value: "linear_flat", label: "Линейный" },
+            {
+              value: "linear_flat",
+              label:
+                model.mode === "adaptive"
+                  ? "Линейный — недоступно в адаптивном режиме"
+                  : "Линейный",
+              disabled: model.mode === "adaptive",
+            },
             { value: "linear_by_topics", label: "Линейный по темам" },
             { value: "router_by_topics", label: "Через страницу-маршрутизатор" },
           ]}
           onChange={(value) => updateModel((m) => ({ ...m, flowMode: value }))}
           data-testid="settings-flow-mode"
         />
+        {model.mode === "adaptive" && model.flowMode === "linear_flat" && (
+          <Banner
+            tone="warning"
+            size="sm"
+            title="Адаптивный режим несовместим с линейным сценарием"
+            description="Выберите «Линейный по темам» или «Через страницу-маршрутизатор» — адаптивная выдача вопросов требует разделения теста по темам."
+            data-testid="settings-flow-mode-adaptive-flat-warning"
+          />
+        )}
       </div>
 
       <hr className="wf-sep" />
