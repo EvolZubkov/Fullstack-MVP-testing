@@ -2,10 +2,15 @@
  * @module server/routes/templates
  * @description REST API for the template registry.
  *
- * GET /api/templates      - list all active templates (for gallery UI)
- * GET /api/templates/:id  - single template with full manifest and metadata
+ * GET /api/templates                          - list all active templates
+ * GET /api/templates/:id                      - single template + full manifest
+ * GET /api/templates/:id/preview-page         - standalone preview.html embedded
+ *                                               by the design-tab preview modal
+ *                                               (PRD-7 S12-G2 / FR-30)
  */
 import { Router } from "express";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { db } from "../db";
 import { templates } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
@@ -14,6 +19,97 @@ import { logger } from "../logger";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 
 const router = Router();
+
+/**
+ * Whitelist of built-in template directory names. We do not let the URL
+ * derive a filesystem path freely — id is matched against this set first.
+ */
+const BUILTIN_TEMPLATE_IDS = new Set([
+  "default",
+  "corporate",
+  "minimal",
+  "rtk-storyline",
+]);
+
+/** Resolves to the absolute path of a built-in template's preview.html, or null. */
+async function resolveBuiltinPreviewPath(id: string): Promise<string | null> {
+  if (!BUILTIN_TEMPLATE_IDS.has(id)) return null;
+  // Path is relative to the project root the server runs from.
+  const candidate = path.resolve(
+    process.cwd(),
+    "server",
+    "scorm",
+    "templates",
+    id,
+    "preview.html",
+  );
+  try {
+    await fs.access(candidate);
+    return candidate;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Builds the JSON of param overrides parsed from a flat query string.
+ * Accepts both `?p[primaryColor]=...` and `?primaryColor=...` shapes — the
+ * latter is convenient for short manual URLs, the former for nested keys
+ * (e.g. `?p[brand.primaryColor]=...`).
+ */
+function parseParamOverrides(query: Record<string, unknown>): Record<string, unknown> {
+  const overrides: Record<string, unknown> = {};
+  const nested = query.p;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    for (const [k, v] of Object.entries(nested as Record<string, unknown>)) {
+      if (typeof v === "string") overrides[k] = v;
+    }
+  }
+  // Reserved keys that are not template params and must not leak through.
+  const RESERVED = new Set(["p", "route"]);
+  for (const [k, v] of Object.entries(query)) {
+    if (RESERVED.has(k)) continue;
+    if (typeof v === "string") overrides[k] = v;
+  }
+  return overrides;
+}
+
+/**
+ * Embedding fix-up: hides the standalone preview chrome (.pv-sidebar /
+ * .pv-main / pv-overlay backdrop) and lets the dialog body fill the iframe
+ * naturally. Also re-applies param defaults from the supplied overrides
+ * before the bootstrap reads PRD1_PREVIEW_MANIFEST.
+ */
+function rewritePreviewForEmbedding(
+  html: string,
+  overrides: Record<string, unknown>,
+): string {
+  const overrideScript = `\n<script id="prd1-preview-overrides">\n(function(){\n  var overrides = ${JSON.stringify(overrides).replace(/<\/script/gi, "<\\/script")};\n  function apply() {\n    var m = window.PRD1_PREVIEW_MANIFEST;\n    if (!m || !Array.isArray(m.params)) return;\n    m.params.forEach(function (p) {\n      if (overrides && Object.prototype.hasOwnProperty.call(overrides, p.key)) {\n        p.default = overrides[p.key];\n      }\n    });\n  }\n  // Manifest is inlined as window.PRD1_PREVIEW_MANIFEST higher up in the file,\n  // so it is already defined by the time this script executes.\n  apply();\n})();\n</script>\n`;
+  // Embedding stylesheet: keep the inner dialog but drop standalone-only chrome.
+  // !important is used because the inlined template CSS sets `body { background: #e5e7eb }`
+  // and the chrome rules carry their own specificity from being defined first.
+  const embedCss = `
+<style id="prd1-preview-embed-overrides">
+  html, body { background: transparent !important; height: 100% !important; min-height: 0 !important; overflow: hidden !important; }
+  .pv-sidebar, .shell > .pv-sidebar { display: none !important; }
+  .pv-main { display: none !important; }
+  .pv-overlay { position: static !important; padding: 0 !important; background: transparent !important; inset: auto !important; height: 100% !important; }
+  .pv-dialog { max-width: 100% !important; max-height: 100% !important; height: 100% !important; box-shadow: none !important; border-radius: 0 !important; border: 0 !important; }
+</style>
+`;
+  // Insert override script right before the closing </body> so it executes
+  // after the inline manifest definition but before any user interaction.
+  // Insert the embed CSS into <head> so it wins on cascade order.
+  let out = html.replace(
+    /<\/head>/i,
+    `${embedCss}</head>`,
+  );
+  out = out.replace(
+    /<\/body>/i,
+    `${overrideScript}</body>`,
+  );
+  return out;
+}
 
 /** GET /api/templates — returns all active templates. */
 router.get("/", requireAuth, async (_req, res) => {
@@ -26,6 +122,33 @@ router.get("/", requireAuth, async (_req, res) => {
   } catch (error) {
     logger.error("Get templates error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get templates" });
+  }
+});
+
+/**
+ * GET /api/templates/:id/preview-page — serves the standalone preview.html
+ * for a built-in template, with embedding tweaks so it can live in an iframe
+ * inside the design-tab preview modal. Query string is interpreted as a flat
+ * map of param overrides (e.g. `?primaryColor=217+91%25+42%25&fontFamily=Roboto`).
+ * Each override replaces the manifest's `default` for the matching param key,
+ * which the preview bootstrap then applies as a CSS variable on load.
+ */
+router.get("/:id/preview-page", requireAuth, async (req, res) => {
+  try {
+    const previewPath = await resolveBuiltinPreviewPath(req.params.id);
+    if (!previewPath) {
+      return res.status(404).type("text/plain").send("preview.html not found");
+    }
+    const html = await fs.readFile(previewPath, "utf8");
+    const overrides = parseParamOverrides(req.query as Record<string, unknown>);
+    const out = rewritePreviewForEmbedding(html, overrides);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    // Preview is keyed in the URL by params; avoid caching the embedded variant.
+    res.setHeader("Cache-Control", "no-store");
+    res.send(out);
+  } catch (error) {
+    logger.error("Preview-page error: " + (error as Error).message);
+    res.status(500).type("text/plain").send("preview-page failed");
   }
 });
 

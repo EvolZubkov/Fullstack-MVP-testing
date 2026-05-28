@@ -43,43 +43,65 @@
 **Что было.** Кнопка предпросмотра в TemplatePane вызывала
 `window.alert("Предпросмотр шаблона будет доступен в следующем шаге.")`.
 
-**Что сделано.**
+**Финальная архитектура (v2 — iframe + готовый preview.html).** Первая
+итерация (commit `d1ebe31`) собирала собственный React-мок SCORM-shell на
+демо-фикстурах. Бизнес отверг подход: мок был одинаковым для всех 4 шаблонов
+и не позволял оценить **визуал конкретного шаблона** (sidebar-цвет
+`corporate`, hero-иллюстрации `rtk-storyline`, отсутствие sidebar у
+`default`/`minimal` — всё это в моке было размыто). Поэтому модалка переехала
+на iframe с готовым standalone `preview.html`, который генерируется
+скриптом `scripts/generate-prd1-template-previews.mjs` для каждого
+built-in шаблона.
 
-1. **Demo-fixtures** — [template-preview-fixtures.ts](../../../client/src/features/tests/editor/sections/template-preview-fixtures.ts):
-   фиксированные demo-данные на русском для intro/info/summary/4-х question-типов,
-   плюс shared course chrome (sidebar + progress + topic label).
-2. **CSS** — портированы классы `.tpl-preview-{modal,group,stage,shell,caption}` +
-   sub-элементы shell'а и question-вариантов в [tb-components.css](../../../client/src/styles/tb-components.css)
-   (≈230 строк, источник — wireframe `wf-template-preview` state). Shell использует
-   CSS custom properties `--tpl-primary` / `--tpl-fg` / `--tpl-card` / `--tpl-font`.
-3. **Компонент** — новый [template-preview-modal.tsx](../../../client/src/features/tests/editor/sections/template-preview-modal.tsx):
-   `ModalDialog size="xl" className="tpl-preview-modal"`. Rail-derivation из
-   `manifest.contentTemplates` (intro → info → questions[4 типа] → summary; router
-   skipped); 4 группы по wireframe-структуре. Stage — mock SCORM-shell, контент
-   меняется по выбранному rail-item. Branding применён через inline `style` с
-   CSS custom properties из текущих `draft.params` (HSL-строки манифеста
-   оборачиваются в `hsl(...)`, hex/rgb/hsl значения проходят как есть).
-4. **DesignSection** — `previewOpen` state поднят, `window.alert` заменён на
-   `() => setPreviewOpen(true)`. Кнопка disabled при `template === null`
-   (предварительная защита для будущего G6 incompatible-state). Modal-компонент
-   рендерится после split-контейнера через React Fragment.
-5. **Edge cases.** `template === null` → modal не рендерится (return null), кнопка
-   disabled. Если `contentTemplates` пустой → modal не рендерится (return null) —
-   при текущих 4 built-in шаблонах не достижимо, но защитная ветка есть.
-6. **Тесты** — 3 новых теста в [design-section.test.tsx](../../../client/src/features/tests/editor/sections/__tests__/design-section.test.tsx):
-   modal открывается по клику preview-кнопки; закрывается по «Закрыть»;
-   rail-items дериватся из `contentTemplates` (4 группы + 4 question sub-items).
-   Fixture `TEMPLATE.manifest` расширена `contentTemplates`-массивом.
+**Что сделано (v2).**
 
-**Verification:** `npm run check` 0 ошибок; `vitest run` 51 / 1334 зелёный (+3 теста
-для preview-модалки).
+1. **Backend route** —
+   `GET /api/templates/:id/preview-page` в [server/routes/templates.ts](../../../server/routes/templates.ts).
+   Отдаёт `server/scorm/templates/{id}/preview.html` со встроенными tweak'ами:
+   (a) `<style>` спрятавший stand-alone builder-chrome (`.pv-sidebar`,
+   `.pv-main`, backdrop в `.pv-overlay`) — внутри iframe нужен только
+   диалог; (b) inline `<script>` перед `</body>`, который читает query
+   string и переопределяет `manifest.params[].default` ДО запуска
+   bootstrap'а. Whitelist `BUILTIN_TEMPLATE_IDS` исключает path-traversal.
+2. **Frontend** — [template-preview-modal.tsx](../../../client/src/features/tests/editor/sections/template-preview-modal.tsx)
+   полностью переписан: ModalDialog `size="xl" className="tpl-preview-modal"`
+   с `<iframe sandbox="allow-scripts allow-same-origin">` в теле, URL
+   собирается из `draft.params` через `URLSearchParams`. Iframe keyed на
+   `previewUrl` — любое изменение param-снапшота перерендерит iframe
+   с новой query. Подход «react-mock + buildShellStyle + demo-фикстуры»
+   удалён (`template-preview-fixtures.ts` удалён).
+3. **CSS cleanup** — из [tb-components.css](../../../client/src/styles/tb-components.css)
+   убраны `.tpl-preview-shell*`, `.tpl-preview-q__*`, `.tpl-preview-result*`,
+   `.tpl-preview-group`, `.tpl-preview-stage`, `.tpl-preview-caption`. Остались:
+   `.tpl-preview-modal` (sizing), `.tpl-preview-frame` (flex-container),
+   `.tpl-preview-iframe` (стречит iframe), `.tpl-preview-foot`/`__info` (footer).
+4. **DesignSection** — без изменений относительно v1: `previewOpen` state,
+   кнопка disabled при `template === null`, модал рендерится в React Fragment
+   рядом со split-контейнером.
+5. **Тесты** — три теста в [design-section.test.tsx](../../../client/src/features/tests/editor/sections/__tests__/design-section.test.tsx):
+   modal открывается + iframe рендерится; закрывается по «Закрыть»; iframe
+   `src` указывает на `/api/templates/{id}/preview-page` и содержит
+   `draft.params` как query overrides (`?companyName=Acme&primaryColor=…`).
+   Тест rail-derivation из contentTemplates удалён — собственного rail у
+   модалки больше нет (preview.html содержит свой rail и stage внутри
+   iframe).
 
-**Известное ограничение реализации.** Stage рендерится React-моком, а не реальным
-SCORM-плеером (preview.html шаблонов остаётся артефактом сборки). Это соответствует
-spec'у («мини-демо SCORM-shell с применёнными `design_settings_json.params`») —
-автор увидит брендирование, типографику и порядок элементов, но не пиксельную
-копию SCORM-runtime'а. Свап на iframe с preview.html — при необходимости
-отдельным S13.x.
+**Verification:** `npm run check` 0 ошибок; `vitest run` 51 файл / 1334 теста
+зелёные.
+
+**Известные ограничения v2.**
+
+- preview.html у каждого шаблона на 2500-4000 строк (inlined templateCore +
+  layouts + demo-data). Backend читает их с диска и инжектирует override-script
+  каждый раз — приемлемо для редкого открытия модалки, для production стоит
+  add cache layer (если профиль покажет потребность).
+- Поддерживаются скалярные overrides (цвет HSL/hex/rgb-строка, шрифт-имя,
+  boolean). Object/array params (media с `mediaId`-структурой из будущего
+  G4) пропускаются — для них preview покажет манифестные defaults. Это
+  не блокер для G2 (статичный визуал), но фикс понадобится в G4.
+- Sandbox `allow-scripts allow-same-origin` нужен потому, что preview.html
+  читает inlined `window.PRD1_PREVIEW_*` глобалы — full sandbox блокирует
+  inline-скрипты. Источник — наш собственный backend, риск приемлем.
 
 ### G3 — Галерея шаблонов (FR-33)
 

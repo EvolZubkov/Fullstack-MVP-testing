@@ -327,17 +327,16 @@ describe("<DesignSection /> — save flow (via hoisted hook)", () => {
 describe("<DesignSection /> — template preview modal (S12-G2)", () => {
   it("opens the modal on «Предпросмотр» click", async () => {
     renderWithClient(<DesignSection testId={TEST_ID} />);
-    // Wait for template pane to load
     await waitFor(() =>
       expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
     );
-    // Click the preview icon button
     fireEvent.click(screen.getByTestId("design-template-preview"));
-    // Modal and stage should appear
     await waitFor(() =>
       expect(screen.getByTestId("design-template-preview-modal")).toBeInTheDocument(),
     );
-    expect(screen.getByTestId("design-template-preview-stage")).toBeInTheDocument();
+    // Iframe is the body of the modal — verifies the iframe-based embedding
+    // (the previous React mock has been replaced — see s12-design-closeout §G2 v2).
+    expect(screen.getByTestId("design-template-preview-iframe")).toBeInTheDocument();
   });
 
   it("closes on close button click", async () => {
@@ -355,25 +354,33 @@ describe("<DesignSection /> — template preview modal (S12-G2)", () => {
     );
   });
 
-  it("renders rail items derived from contentTemplates (4 groups, 4 question sub-items)", async () => {
+  it("iframe src points at the preview-page endpoint and forwards draft.params as query overrides", async () => {
+    // Pre-load a non-default param so the iframe URL must include it.
+    mockFetch((url) => {
+      if (url === `/api/tests/${TEST_ID}/design`)
+        return jsonResponse({ templateId: "corporate", params: { companyName: "Acme", primaryColor: "180 50% 40%" } });
+      if (url === `/api/templates/corporate`) return jsonResponse(TEMPLATE);
+      return jsonResponse({ error: "unexpected" }, 500);
+    });
     renderWithClient(<DesignSection testId={TEST_ID} />);
     await waitFor(() =>
       expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
     );
+    // Wait for the design settings query to populate draft.params before opening.
+    await waitFor(() => {
+      fireEvent.click(screen.getByTestId("design-rail-branding"));
+      const input = screen.getByTestId("design-param-input-companyName") as HTMLInputElement;
+      expect(input.value).toBe("Acme");
+    });
+    fireEvent.click(screen.getByTestId("design-rail-template"));
     fireEvent.click(screen.getByTestId("design-template-preview"));
     await waitFor(() =>
-      expect(screen.getByTestId("design-template-preview-modal")).toBeInTheDocument(),
+      expect(screen.getByTestId("design-template-preview-iframe")).toBeInTheDocument(),
     );
-    // All 4 rail groups must appear (intro, info, questions, summary)
-    const modal = screen.getByTestId("design-template-preview-modal");
-    expect(within(modal).getByText("Введение")).toBeInTheDocument();
-    expect(within(modal).getByText("Учебный материал")).toBeInTheDocument();
-    expect(within(modal).getByText("Вопросы")).toBeInTheDocument();
-    expect(within(modal).getByText("Итог")).toBeInTheDocument();
-    // Questions group must contain all 4 question sub-items
-    expect(screen.getByTestId("design-template-preview-rail-single")).toBeInTheDocument();
-    expect(screen.getByTestId("design-template-preview-rail-multiple")).toBeInTheDocument();
-    expect(screen.getByTestId("design-template-preview-rail-ranking")).toBeInTheDocument();
-    expect(screen.getByTestId("design-template-preview-rail-matching")).toBeInTheDocument();
+    const iframe = screen.getByTestId("design-template-preview-iframe") as HTMLIFrameElement;
+    expect(iframe.getAttribute("src")).toMatch(/^\/api\/templates\/corporate\/preview-page\?/);
+    expect(iframe.getAttribute("src")).toContain("companyName=Acme");
+    expect(iframe.getAttribute("src")).toContain("primaryColor=");
+    expect(iframe.getAttribute("sandbox")).toBe("allow-scripts allow-same-origin");
   });
 });
