@@ -211,7 +211,7 @@ describe("<StructureSection /> — flow mode + lifecycle", () => {
 
   it("shows the current flowMode in the banner", () => {
     renderSection(baseModel({ flowMode: "router_by_topics" }));
-    expect(screen.getByTestId("structure-mode-banner")).toHaveTextContent("Маршрутизатор по темам");
+    expect(screen.getByTestId("structure-mode-banner")).toHaveTextContent("Через страницу-маршрутизатор");
   });
 
   it("shows the empty state when there are no sections", async () => {
@@ -279,7 +279,7 @@ describe("<StructureSection /> — kind-aware layout", () => {
     // The kind:questions page is THE questions row — rendered once, with the count.
     const qRows = screen.getAllByTestId("structure-questions-row-t1");
     expect(qRows).toHaveLength(1);
-    expect(qRows[0]).toHaveTextContent("4 из 10 вопросов");
+    expect(qRows[0]).toHaveTextContent("4 вопросов темы «Тема А»");
     // It is NOT also rendered as an author page-row.
     expect(screen.queryByTestId("structure-page-row-pg-qt1")).toBeNull();
     // The author info page renders as an editable row.

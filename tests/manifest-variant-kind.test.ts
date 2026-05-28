@@ -148,37 +148,44 @@ describe("defaultTemplateManifestSchema", () => {
     templateApiVersion: "1.0",
   };
 
-  it("accepts manifest with kind:questions variant present", () => {
+  // The default template is the system-wide fallback for every system kind
+  // (PRD-1 §4.3.2). It must declare intro/summary/router/questions; otherwise
+  // bindSystemVariant() silently returns null and reconcile drops the row
+  // (G48 2026-05-28).
+  const allSystemKinds = [
+    { key: "intro.simple", label: "Intro", kind: "intro" },
+    { key: "summary.simple", label: "Summary", kind: "summary" },
+    { key: "router.menu", label: "Router", kind: "router" },
+    { key: "question.standard", label: "Q", kind: "questions" },
+  ];
+
+  it("accepts manifest declaring all four system kinds", () => {
     expect(defaultTemplateManifestSchema.safeParse({
       ...baseDefault,
-      contentTemplates: [
-        { key: "question.standard", label: "Q", kind: "questions" },
-        { key: "intro.simple", label: "Intro", kind: "intro" },
-      ],
+      contentTemplates: allSystemKinds,
     }).success).toBe(true);
   });
 
-  it("rejects manifest without any kind:questions variant", () => {
-    const result = defaultTemplateManifestSchema.safeParse({
-      ...baseDefault,
-      contentTemplates: [
-        { key: "intro.simple", label: "Intro", kind: "intro" },
-        { key: "info.text", label: "Info", kind: "info" },
-        { key: "summary.text", label: "Summary", kind: "summary" },
-      ],
-    });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      const messages = result.error.issues.map((i) => i.message).join(" ");
-      expect(messages).toMatch(/kind: "questions"/);
-    }
-  });
+  it.each(["intro", "summary", "router", "questions"] as const)(
+    "rejects manifest missing kind:%s variant",
+    (missing) => {
+      const result = defaultTemplateManifestSchema.safeParse({
+        ...baseDefault,
+        contentTemplates: allSystemKinds.filter((ct) => ct.kind !== missing),
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        const messages = result.error.issues.map((i) => i.message).join(" ");
+        expect(messages).toMatch(new RegExp(`kind: "${missing}"`));
+      }
+    },
+  );
 });
 
 // ─── validateManifest gatekeeper ──────────────────────────────────────────────
 
 describe("validateManifest", () => {
-  it("returns null for a valid default-template manifest with questions variant", () => {
+  it("returns null for a valid default-template manifest with all four system kinds", () => {
     expect(validateManifest(
       {
         id: "default",
@@ -186,28 +193,39 @@ describe("validateManifest", () => {
         version: "1.0.0",
         templateApiVersion: "1.0",
         contentTemplates: [
-          { key: "q.s", label: "Q", kind: "questions" },
           { key: "i.s", label: "I", kind: "intro" },
+          { key: "s.s", label: "S", kind: "summary" },
+          { key: "r.s", label: "R", kind: "router" },
+          { key: "q.s", label: "Q", kind: "questions" },
         ],
       },
       "default",
     )).toBeNull();
   });
 
-  it("rejects default-template manifest without questions variant", () => {
-    const reason = validateManifest(
-      {
-        id: "default",
-        name: "Default",
-        version: "1.0.0",
-        templateApiVersion: "1.0",
-        contentTemplates: [{ key: "i", label: "I", kind: "intro" }],
-      },
-      "default",
-    );
-    expect(reason).not.toBeNull();
-    expect(reason!).toMatch(/kind: "questions"/);
-  });
+  it.each(["intro", "summary", "router", "questions"] as const)(
+    "rejects default-template manifest missing kind:%s variant",
+    (missing) => {
+      const allEntries = [
+        { key: "i.s", label: "I", kind: "intro" },
+        { key: "s.s", label: "S", kind: "summary" },
+        { key: "r.s", label: "R", kind: "router" },
+        { key: "q.s", label: "Q", kind: "questions" },
+      ];
+      const reason = validateManifest(
+        {
+          id: "default",
+          name: "Default",
+          version: "1.0.0",
+          templateApiVersion: "1.0",
+          contentTemplates: allEntries.filter((ct) => ct.kind !== missing),
+        },
+        "default",
+      );
+      expect(reason).not.toBeNull();
+      expect(reason!).toMatch(new RegExp(`kind: "${missing}"`));
+    },
+  );
 
   it("allows non-default templates to omit the questions variant", () => {
     expect(validateManifest(
@@ -255,9 +273,12 @@ describe("built-in manifests parse and validate", () => {
     });
   }
 
-  it("default manifest contains at least one kind:questions variant", () => {
-    const m = loadManifest("default");
-    const cts = m.contentTemplates as Array<{ kind: string }>;
-    expect(cts.some((ct) => ct.kind === "questions")).toBe(true);
-  });
+  it.each(["intro", "summary", "router", "questions"] as const)(
+    "default manifest declares at least one kind:%s variant",
+    (kind) => {
+      const m = loadManifest("default");
+      const cts = m.contentTemplates as Array<{ kind: string }>;
+      expect(cts.some((ct) => ct.kind === kind)).toBe(true);
+    },
+  );
 });

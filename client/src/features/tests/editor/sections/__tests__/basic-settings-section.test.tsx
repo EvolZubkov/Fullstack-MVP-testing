@@ -140,7 +140,7 @@ describe("<SettingsSection /> — Основное pane", () => {
     const updateModel = vi.fn();
     const model = baseModel();
     render(<SettingsSection model={model} updateModel={updateModel} />);
-    selectOption("settings-flow-mode", "Маршрутизатор по темам");
+    selectOption("settings-flow-mode", "Через страницу-маршрутизатор");
     expect(runUpdater(updateModel, model).flowMode).toBe("router_by_topics");
   });
 });

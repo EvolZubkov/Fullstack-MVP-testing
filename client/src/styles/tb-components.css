@@ -818,6 +818,73 @@
   border-bottom: var(--wf-border-w) dashed var(--ou-border-default);
 }
 
+/* Inside-test container — dashed zone that wraps the router-row together with
+   its topic-branches (PRD-7 G45 / prd7-structure-router.html). Shares visual
+   contour with .zone-block, but uses a BEM-style label/body split so we don't
+   couple zone-header to a specific layout. */
+.inside-test {
+  margin-bottom: var(--ou-space-3);
+  border: var(--wf-border-w) dashed var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+}
+.inside-test__label {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--wf-space-14, 14px);
+  color: var(--ou-fg-muted);
+  font: var(--ou-text-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: var(--wf-border-w) dashed var(--ou-border-default);
+}
+.inside-test__body { padding: var(--ou-space-2) var(--ou-space-4); }
+
+/* Tree-connectors — visual hierarchy router-row → topic branches (PRD-7 G20).
+   Thin DS lines via --ou-border-soft (no accent, no shadow). Vertical guide on
+   the left of the topic group; horizontal stub from guide to each topic.
+   The last branch overlays a background-coloured rectangle from its
+   connector down to the bottom, which clips the guide to draw └─. */
+.tree-branches {
+  position: relative;
+  margin-left: var(--ou-space-7);
+  padding-left: var(--ou-space-5);
+  padding-top: var(--ou-space-2);
+}
+.tree-branches::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--wf-border-w);
+  background: var(--ou-border-soft);
+}
+.tree-branches > .tree-branch {
+  position: relative;
+  margin-bottom: var(--ou-space-3);
+}
+.tree-branches > .tree-branch::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--ou-space-5));
+  top: var(--ou-space-5);
+  width: var(--ou-space-5);
+  height: var(--wf-border-w);
+  background: var(--ou-border-soft);
+}
+.tree-branches > .tree-branch:last-child { margin-bottom: 0; }
+.tree-branches > .tree-branch:last-child::after {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--ou-space-5));
+  top: var(--ou-space-5);
+  bottom: 0;
+  width: var(--wf-border-w);
+  background: var(--ou-bg-elevated);
+}
+
 /* Topic-blocks (cards) for linear_by_topics + router_by_topics layouts. */
 .topic-block {
   margin-bottom: var(--ou-space-3);
@@ -1034,6 +1101,60 @@
   margin-top: var(--ou-space-3);
 }
 
+/* Expand-toggle button on system page-rows that have variant placeholders
+   (PRD-7 G27). Rotates 90deg when the row is expanded; transition follows DS
+   motion timing. The :hover/:focus visuals mirror other iconbtn-ghost surfaces. */
+.page-expand-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ou-space-5);
+  height: var(--ou-space-5);
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ou-fg-muted);
+  cursor: pointer;
+  border-radius: var(--ou-radius-xs);
+  transition: transform var(--ou-motion-fast), background var(--ou-motion-fast);
+}
+.page-expand-toggle:hover {
+  background: var(--ou-bg-hover);
+  color: var(--ou-fg-default);
+}
+.page-row.is-expanded .page-expand-toggle { transform: rotate(90deg); }
+
+/* Inline validation banner for unfilled required placeholders (PRD-1 §4.3.6 /
+   PRD-7 G27). Lives at the top of `.page-row-expand`; pairs with the
+   `.page-row--error` border-left modifier on the parent row. */
+.validation-banner {
+  background: var(--ou-error-soft);
+  border: var(--wf-border-w) solid var(--ou-error-default);
+  border-radius: var(--ou-radius-s);
+  padding: var(--wf-space-10, 10px) var(--ou-space-3);
+  margin-bottom: var(--ou-space-3);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+}
+.validation-banner__ico {
+  color: var(--ou-error-default);
+  flex-shrink: 0;
+  margin-top: var(--wf-space-half, 4px);
+  display: inline-flex;
+}
+.validation-banner__body {
+  font: var(--ou-text-body-s);
+  color: var(--ou-error-on-soft);
+}
+.validation-banner__title {
+  font-weight: 600;
+  margin-bottom: var(--wf-space-tiny, 2px);
+}
+.validation-banner__list { margin: 0; padding-left: var(--ou-space-4); }
+.validation-banner__list li { margin-bottom: var(--wf-space-tiny, 2px); }
+
 /* Insert-row: a thin guideline with a reveal-on-hover «Добавить страницу» pill. */
 .insert-row {
   display: flex;
@@ -1246,7 +1367,11 @@
    which serves the generated standalone preview.html with embedding tweaks
    (built-in builder chrome hidden, draft.params applied). */
 
-.tpl-preview-modal {
+/* Sizing applies to .ou-modal (the dialog box) — the DS `className` prop lands on
+   .ou-modal-root (the fixed inset overlay), which is already full-viewport, so
+   width/height rules there have no effect. Targeting the inner .ou-modal lets
+   the dialog actually grow to the preview's intended ~1120×860 footprint. */
+.tpl-preview-modal .ou-modal {
   max-width: var(--wf-size-1120, 1120px);
   width: 100%;
   height: calc(100vh - var(--ou-space-7) * 2);

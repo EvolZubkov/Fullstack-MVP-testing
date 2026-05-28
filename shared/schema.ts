@@ -163,6 +163,10 @@ export const testSections = pgTable("test_sections", {
   required: boolean("required").notNull().default(true),
   timeLimitMinutes: integer("time_limit_minutes"),
   feedbackJson: jsonb("feedback_json"),
+  // PRD-7 S13.5 / G47: explicit author-controlled topic order. Persisted on
+  // every save as the index of the topic in the editor's sections array, so
+  // drag-reorder in Structure round-trips through getTestSections() ORDER BY.
+  sortOrder: integer("sort_order").notNull().default(0),
 });
 
 export const adaptiveTopicSettings = pgTable("adaptive_topic_settings", {
@@ -885,17 +889,29 @@ export const templateManifestSchema = z.object({
 }).passthrough();
 
 /**
- * PRD-1 §4.3.2: the built-in `default` template must declare at least one
- * variant with `kind: "questions"` — it is the system-wide fallback used when
- * other templates omit a `questions` variant.
+ * PRD-1 §4.3.2 / PRD-7 §1.4: the built-in `default` template is the system-wide
+ * fallback for every system variant kind. When another template omits a variant
+ * of a system kind, `bindSystemVariant()` falls back to the default — so the
+ * default itself must declare each system kind, otherwise reconcile silently
+ * fails to materialize the corresponding `content_pages` row (G48 2026-05-28).
+ *
+ * System kinds: `intro`, `summary`, `router`, `questions`. The user kind `info`
+ * is author-created and not lifecycle-managed.
  */
-export const defaultTemplateManifestSchema = templateManifestSchema.refine(
-  (m) => m.contentTemplates.some((ct) => ct.kind === "questions"),
-  {
-    message: "Default template must declare at least one contentTemplate with kind: \"questions\"",
-    path: ["contentTemplates"],
-  },
-);
+const REQUIRED_DEFAULT_VARIANT_KINDS = ["intro", "summary", "router", "questions"] as const;
+
+export const defaultTemplateManifestSchema = templateManifestSchema.superRefine((m, ctx) => {
+  const declared = new Set(m.contentTemplates.map((ct) => ct.kind));
+  for (const required of REQUIRED_DEFAULT_VARIANT_KINDS) {
+    if (!declared.has(required)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Default template must declare at least one contentTemplate with kind: "${required}"`,
+        path: ["contentTemplates"],
+      });
+    }
+  }
+});
 
 export type TemplateManifest = z.infer<typeof templateManifestSchema>;
 

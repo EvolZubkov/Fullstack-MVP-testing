@@ -691,7 +691,7 @@
                   >
                   <div
                     class="ou-select ou-field--m ou-field--full"
-                    data-ou-options="Линейный|Линейный по темам|Маршрутизатор по темам"
+                    data-ou-options="Линейный|Линейный по темам|Через страницу-маршрутизатор"
                   >
                     <button
                       type="button"
@@ -1927,7 +1927,7 @@
                   >
                   <div
                     class="ou-select ou-field--m ou-field--full"
-                    data-ou-options="Линейный|Линейный по темам|Маршрутизатор по темам"
+                    data-ou-options="Линейный|Линейный по темам|Через страницу-маршрутизатор"
                   >
                     <button
                       type="button"
@@ -2107,7 +2107,7 @@
                   >
                   <div
                     class="ou-select ou-field--m ou-field--full"
-                    data-ou-options="Линейный|Линейный по темам|Маршрутизатор по темам"
+                    data-ou-options="Линейный|Линейный по темам|Через страницу-маршрутизатор"
                   >
                     <button
                       type="button"
@@ -6865,7 +6865,7 @@
             <td>
               Режим и сценарий: segmented control для tests.mode (Стандартный /
               Адаптивный) и select flowMode с тремя значениями (Линейный /
-              Линейный по темам / Маршрутизатор по темам) перенесены в подраздел
+              Линейный по темам / Через страницу-маршрутизатор) перенесены в подраздел
               «Основное». sectionUnlockRules per-topic настраиваются во вкладке
               Структура. completionPolicy удалён — gate к итоговому результату
               вычисляется из passDecisionPolicy + sections[].required (см.
@@ -7168,12 +7168,12 @@
               <td><code>tests.flow_mode</code></td>
               <td>
                 UI: три значения — «Линейный», «Линейный по темам»,
-                «Маршрутизатор по темам». Backend-маппинг: «Линейный» →
+                «Через страницу-маршрутизатор». Backend-маппинг: «Линейный» →
                 <code>linear_flat</code> при отсутствии тем или
                 <code>mixed</code>, если темы заведены (вопросы всех тем
                 перемешиваются в один блок, темы остаются только для feedback).
                 «Линейный по темам» → <code>linear_by_topics</code>.
-                «Маршрутизатор по темам» → <code>router_by_topics</code>. Блок
+                «Через страницу-маршрутизатор» → <code>router_by_topics</code>. Блок
                 «Настройки маршрутизатора» виден только для router_by_topics.
               </td>
             </tr>

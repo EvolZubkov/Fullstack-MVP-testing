@@ -217,6 +217,26 @@ router.get("/migration-health", requireAuthor, async (req, res) => {
 // `adaptiveSettings` для adaptive-режима. Используется редактором PRD-7.
 router.get("/:id", requireAuthor, async (req, res) => {
   try {
+    // Heal `content_pages` system rows against current (flowMode, topics,
+    // template) before returning the bundle (G48 2026-05-28). Idempotent —
+    // no-op when state is already consistent. Surfaces silently-missed system
+    // rows from out-of-band seed data or pre-fix tests stuck on router mode.
+    try {
+      const diff = await testSettingsService.reconcileExisting(req.params.id);
+      if (diff.created > 0 || diff.deleted > 0) {
+        logger.info(
+          `Reconciled content_pages on GET tests/${req.params.id}: +${diff.created} −${diff.deleted}`,
+          "tests",
+        );
+      }
+    } catch (reconcileError) {
+      // Reconcile is a healing best-effort — never block the load on it.
+      logger.warn(
+        `Reconcile-on-GET failed for tests/${req.params.id}: ${(reconcileError as Error).message}`,
+        "tests",
+      );
+    }
+
     const full = await loadFullTest(req.params.id);
     if (!full) return res.status(404).json({ error: "Test not found" });
     res.json(full);

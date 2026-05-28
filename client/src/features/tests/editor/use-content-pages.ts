@@ -260,7 +260,8 @@ export function hasStructureErrors(
   contentTemplates: ContentTemplateVariant[],
 ): boolean {
   return pages.some((p) => {
-    if (p.kind !== "info") return false;
+    // Any kind with a bound variant counts (system pages have required fields
+    // too — e.g. router title/instruction; PRD-7 G27 / 2026-05-28).
     const variant = contentTemplates.find((v) => v.key === p.templateKey);
     if (!variant) return false;
     const values = p.valuesJson?.values ?? {};

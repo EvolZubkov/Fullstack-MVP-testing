@@ -74,14 +74,18 @@ UI, без миграций БД и API.
 | **G17** | **critical** | **row-menu**: author-row меню только «Удалить»; wireframe требует «Сменить вариант» (PRD-1 §4.3.3) + «Предпросмотр» (FR-44). Для system-row — то же | [start-pages-section.tsx:961-985](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) (state `s-row-menu-open`) |
 | **G18** | **critical** | После сохранения HTML-вставки не выводится yellow warning `s-sanitize` («HTML санитизирован: …») | (state `s-sanitize`, linear-by-topics, wf 1208-1279) |
 | **G19** | **critical** | **Read-only режим** не реализован: grip dimmed, без insert-rows, action-menu свернуто до eye-icon, footer = «Закрыть». В коде структура всегда editable | (state `s-readonly`, linear-by-topics, wf 790-852) |
-| G20 | substantial | В router-режиме темы под router-row рендерятся плоско, без `tree-branches`/`tree-connectors` визуального паттерна | [start-pages-section.tsx:498-583](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) (state `s-main` router, wf 384-485) |
-| G21 | substantial | При 0 router-вариантов в шаблоне отсутствует yellow-тег «Из стандартного шаблона» в `page-row__meta` | [start-pages-section.tsx:739-746](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) (state `s-main-fallback` router, wf 645-674) |
+| G20 | ~~substantial~~ **closed 2026-05-28** | Темы router-режима теперь оборачиваются в `.tree-branches > .tree-branch`; CSS pseudo-elements рисуют └─/├─ через `--ou-border-soft`. См. [tb-components.css :.tree-branches](../../../client/src/styles/tb-components.css) и `InsideTestZone` | — |
+| G21 | ~~substantial~~ **closed 2026-05-28** | При `variants.length === 0` для system-kind в активном шаблоне `SystemPageRow` рендерит `Tag tone="warning"` «Из стандартного шаблона» (`data-testid={testId}-fallback-tag`) | — |
 | **G22** | **critical** | **Mapping-flow при смене шаблона** не реализован: warning-banner «Новый шаблон не поддерживает все типы страниц» + inline Select per row | (state `s-mapping`, linear-by-topics, wf 857+) |
 | G23 | cleanup | `mixed: "Смешанный (устаревший)"` в `FLOW_LABEL` — dead UI, но **`mixed` всё ещё в TS-типе `FlowMode`** ([test-editor.types.ts:20](../../../client/src/features/tests/editor/test-editor.types.ts)) для legacy-compat в mappers; удаление требует multi-file refactor (тип + mapper + tests-list types — 5 файлов). **Перенесён в S13.4** (не safe one-line cleanup) | [start-pages-section.tsx:106](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) |
 | G24 | verify | Default-fallback fields в page-row-expand: wireframe рисует «Заголовок/Содержимое/Текст «Далее»» даже без variant — сверить, что манифесты их содержат | — |
 | G25 | substantial | Нет различия `page-row--template` vs `page-row--system` с маркером `tpl-page-marker`. Все system-pages выводятся `--system` | [start-pages-section.tsx:692-749](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) (state `s-main` linear-by-topics, wf 559-563) |
 | G26 | ~~substantial~~ **closed 2026-05-28** | Empty-state router без тем теперь содержит CTA-кнопку «Перейти к Составу» (`data-testid="structure-empty-topics-cta"`) с callback'ом `onGoToComposition → setActiveTab("composition")` | (state `s-empty-topics` router, wf 696-761) |
-| G27 | substantial | Router-validation: нет inline `validation-banner` ВНУТРИ expand-формы с перечнем незаполненных полей; row не получает `page-row--error` | [start-pages-section.tsx:1014-1029](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) (state `s-validation` router, wf 807-900) |
+| G27 | ~~substantial~~ **closed 2026-05-28** | `SystemPageRow` теперь раскрывается, когда у variant есть placeholders; внутри `.page-row-expand` поднимается `.validation-banner` со списком label незаполненных required-полей; row получает `page-row--error`. `hasStructureErrors` расширен на все kinds (не только info) | — |
+| G45 | ~~substantial~~ **closed 2026-05-28** | Введён компонент `InsideTestZone` + CSS-классы `.inside-test`/`.inside-test__label`/`.inside-test__body`; router-row и tree-branches тем рендерятся внутри одного dashed-контейнера с label «Внутри теста» | — |
+| G46 | ~~minor~~ **closed 2026-05-28** | `FLOW_LABEL.router_by_topics` → «Через страницу-маршрутизатор» + Settings select option + `prd7-editor-settings-tab.html` (все occurrences) + test expectations | — |
+| G47 | ~~substantial~~ **closed 2026-05-28** | `TopicBlock` получил `.topic-grip` (виден когда `updateModel` пробрасывается); счётчик — `«${drawCount} вопросов»` без «из M»; темы перенесены в `SortableContext` (@dnd-kit). Backend: добавлен `test_sections.sort_order` (migration 007) с backfill, `getTestSections` упорядочен по `sortOrder`, `_insertSections` пишет `i` по индексу массива | — |
+| G48 | ~~verify~~ **closed 2026-05-28 (backend-fix applied)** | Root cause: ни один встроенный шаблон не объявлял `kind: router`; `bindSystemVariant` → `null` → `planSingletonKind` no-op. Fix: (a) добавлен `router.menu` variant в `server/scorm/templates/default/manifest.json`; (b) `defaultTemplateManifestSchema` теперь требует все 4 system-kind через `superRefine`; (c) `GET /api/tests/:id` идемпотентно вызывает `testSettingsService.reconcileExisting()` для существующих тестов; (d) `migrations/006_prd7_g48_backfill_system_pages.sql` — одноразовый backfill для уже созданных router_by_topics тестов | [content-pages-lifecycle.ts:103-109](../../../server/services/content-pages-lifecycle.ts) |
 
 ### 1.4 Variant-replace (`prd7-variant-replace.html`)
 
@@ -141,8 +145,8 @@ UI, без миграций БД и API.
 | **S13.1** | Замена `window.prompt`/`window.alert` на DS-компоненты: folder-pick-modal на «Переместить в папку», link-insert UI в RTE, Banner/Toast для oversize-файлов | G32, G39, G40 | `tests-list.tsx`, `feedback-editor-modal.tsx` + новый `link-insert-modal.tsx` | 2-3ч |
 | **S13.2** | Настройки → «Основное»: реализация секции «Общая обратная связь теста» (rich-text body, links list, PDF chip-group + upload, hr + Switch); перенос «Показывать правильные ответы» из Ограничений в Основное | G7, G8, G13, G14 | `basic-settings-section.tsx`, ~~`feedback-test-section.tsx`~~ (новый компонент) | 5-7ч |
 | **S13.3** | Настройки → «Ограничения»: per-topic time-limit table (Switch «Индивидуальные лимиты» → таблица), state `s-limits-no-topics` для linear_flat; webhook-desc; cleanup устаревших JSDoc/комментариев | G9, G10, G11 | `basic-settings-section.tsx` + новый `per-topic-limits-table.tsx` | 4-5ч |
-| **S13.4** | Структура — критичные row-actions: row-menu (Сменить вариант + Предпросмотр для author/system), sanitize-warning после save HTML, `page-row--template` маркер; cleanup `mixed` в FLOW_LABEL | G17, G18, G23, G25 | `start-pages-section.tsx` + новый `page-preview-modal.tsx` | 4-5ч |
-| **S13.5** | Структура — режимы и состояния: read-only режим (grip dimmed, нет insert-rows, eye-icon вместо menu, footer «Закрыть»); router tree-connectors; router fallback-tag «Из стандартного шаблона»; mapping-flow при смене шаблона; empty-topics CTA; router validation banner внутри expand | G19, G20, G21, G22, G26, G27 | `start-pages-section.tsx` + `tb-components.css` доработки | 6-8ч |
+| **S13.4** | Структура — критичные row-actions: row-menu (Сменить вариант + Предпросмотр для author/system), sanitize-warning после save HTML, `page-row--template` маркер; cleanup `mixed` в FLOW_LABEL; **лейбл `router_by_topics` → «Через страницу-маршрутизатор»** (G46) | G17, G18, G23, G25, G46 | `start-pages-section.tsx` + новый `page-preview-modal.tsx` | 4-5ч |
+| **S13.5** | Структура — режимы и состояния: read-only режим (grip dimmed, нет insert-rows, eye-icon вместо menu, footer «Закрыть»); **router-зона «Внутри теста» dashed-контейнер `.inside-test` (G45)** + tree-connectors (G20); **`topic-header` с grip и счётчиком формата wf (G47)**; router fallback-tag «Из стандартного шаблона»; mapping-flow при смене шаблона; empty-topics CTA; router validation banner внутри expand; **prep-investigation G48** — проверить в БД, создаётся ли `kind:router` content_page при `flowMode=router_by_topics` на существующих тестах и не возвращает ли `bindSystemVariant` `null` для встроенных шаблонов | G19, G20, G21, G22, G26, G27, G45, G47, G48 | `start-pages-section.tsx` + `tb-components.css` доработки; **для G48** возможен backend-touch в `content-pages-lifecycle.ts` / built-in template manifests | 6-8ч (без G48) / +2-3ч (если G48 → backend-fix) |
 | **S13.6** | Variant-replace: поиск `variant-search` + `diff-block` warning «Текущие настройки страницы будут потеряны» с перечнем теряемых полей; state `s-replace-no-fields` | G28, G29 | `start-pages-section.tsx` (ReplaceVariantModal) | 3-4ч |
 | **S13.7** | Drawer-каркас + add-page modal: `tb-saving-overlay` со spinner-ом и `inert`; per-field changes-popover; adaptive info-banner на «Состав»; conflict diff-table; close-confirm chips + inline error-banner с «Перейти к первой ошибке»; mode-change info-banner на «Структуре»; search в add-page modal + state `s-page-preview` | G1, G2, G3, G5, G15, G16, G30, G31 | `test-editor.tsx`, `start-pages-section.tsx` + новые компоненты `saving-overlay.tsx`, `changes-popover-detail.tsx`, `conflict-diff-table.tsx`, `add-page-search.tsx`, `page-preview-modal.tsx` | 7-10ч |
 | **S13.8** | Cleanup + visual verification + S13 acceptance: удаление orphan `pass-rules-section.tsx` / `adaptive-settings-section.tsx`; DS Select вместо native для сортировки; `wf-typed-confirm__name-block` + регистр-hint в delete-confirm; визуальная сверка G6/G12/G24/G44 в браузере + axe; полный `vitest run`; обновление ROADMAP + acceptance | G36, G38, G41, G42, G6, G12, G24, G44 | tests-list.tsx, delete-confirm, удаление файлов; визуальный pass | 3-4ч |
@@ -179,12 +183,12 @@ S13 — UI-only. **Контрактных изменений ни в API, ни �
 
 ## 4. Definition of Done S13
 
-- [ ] 22 critical/substantial находки закрыты (G1, G2, G3, G5, G7, G8, G9, G10,
+- [ ] 25 critical/substantial находки закрыты (G1, G2, G3, G5, G7, G8, G9, G10,
       G15, G16, G17, G18, G19, G20, G21, G22, G25, G26, G27, G28, G29, G30,
-      G31, G32, G39, G40).
-- [ ] 9 cleanup находок закрыты (G11, G13, G14, G23, G36, G38, G41, G42).
-- [ ] 4 «verify» находки проверены и либо закрыты, либо явно подтверждены как
-      ok (G6, G12, G24, G44).
+      G31, G32, G39, G40, G45, G47).
+- [ ] 10 cleanup/minor находок закрыты (G11, G13, G14, G23, G36, G38, G41, G42, G46).
+- [ ] 5 «verify» находок проверены и либо закрыты, либо явно подтверждены как
+      ok / переведены в backend-sub-task (G6, G12, G24, G44, G48).
 - [ ] Зод-схемы и mappers не сломаны: `npm run check` 0 ошибок; полный `vitest
       run` зелёный.
 - [ ] Component-тесты добавлены для всех новых modal-компонентов и состояний:
@@ -241,6 +245,13 @@ S12 (Design tab closeout) и S13 (Editor parity) — **независимые т
 - **Read-only режим (G19)** — нужно понять источник флага «тест опубликован /
   нет прав». Если флаг ещё не пробрасывается в UI — будет coupling с
   auth/permissions.
+- **Router reconcile (G48)** — если расследование покажет, что на существующих
+  adaptive-тестах `kind:router` content_page не создаётся (либо `bindSystemVariant`
+  фейлится на встроенных шаблонах), это **выходит за UI-only скоуп S13** и
+  требует backend-fix: либо `bindSystemVariant` всегда возвращает фолбэк для
+  router в default-template, либо backfill-миграция для existing-тестов с
+  `flowMode=router_by_topics`. Решение по составу фикса принимается после
+  prep-investigation в начале S13.5.
 
-Все три риска — UI+API мини-расследования, выделить как первый шаг
+Все риски — UI+API мини-расследования, выделить как первый шаг
 соответствующей sub-фазы.

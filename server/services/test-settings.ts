@@ -318,6 +318,62 @@ export class TestSettingsService {
     });
   }
 
+  /**
+   * Idempotent reconcile for an existing test, driven by the test's current
+   * persisted state (no payload). Used on editor open to heal databases where
+   * system rows were never materialized — e.g. seed data inserted out-of-band,
+   * or a `router_by_topics` test created before the default template declared
+   * a `kind: router` variant (G48 2026-05-28).
+   *
+   * Returns the count of mutations applied so callers can log a warning when
+   * non-zero. No-op when the test does not exist or its manifests cannot be
+   * loaded.
+   */
+  async reconcileExisting(testId: string): Promise<{ deleted: number; created: number }> {
+    return db.transaction(async (tx) => {
+      const [row] = await tx
+        .select({
+          id: tests.id,
+          flowPolicyJson: tests.flowPolicyJson,
+          designSettingsJson: tests.designSettingsJson,
+        })
+        .from(tests)
+        .where(eq(tests.id, testId));
+      if (!row) return { deleted: 0, created: 0 };
+
+      const sectionRows = await tx
+        .select({ topicId: testSections.topicId })
+        .from(testSections)
+        .where(eq(testSections.testId, testId));
+
+      const before = await tx
+        .select({ id: contentPages.id })
+        .from(contentPages)
+        .where(eq(contentPages.testId, testId));
+      const beforeIds = new Set(before.map((r) => r.id));
+
+      await this._reconcileSystemPages(
+        tx,
+        testId,
+        extractFlowMode(row.flowPolicyJson),
+        sectionRows.map((s) => s.topicId),
+        extractTemplateId(row.designSettingsJson),
+      );
+
+      const after = await tx
+        .select({ id: contentPages.id })
+        .from(contentPages)
+        .where(eq(contentPages.testId, testId));
+      const afterIds = new Set(after.map((r) => r.id));
+
+      let deleted = 0;
+      let created = 0;
+      for (const id of beforeIds) if (!afterIds.has(id)) deleted += 1;
+      for (const id of afterIds) if (!beforeIds.has(id)) created += 1;
+      return { deleted, created };
+    });
+  }
+
   // ── private helpers ──────────────────────────────────────────────────────
 
   /**
@@ -473,7 +529,11 @@ export class TestSettingsService {
     testId: string,
     sections: SectionPayload[],
   ): Promise<void> {
-    for (const s of sections) {
+    // The array index becomes the section's sortOrder, so author-controlled
+    // topic order in the editor (PRD-7 G47 drag-reorder) round-trips through
+    // getTestSections() ORDER BY sort_order.
+    for (let i = 0; i < sections.length; i += 1) {
+      const s = sections[i];
       await tx.insert(testSections).values({
         id: randomUUID(),
         testId,
@@ -483,6 +543,7 @@ export class TestSettingsService {
         required: s.required ?? true,
         timeLimitMinutes: s.timeLimitMinutes ?? null,
         feedbackJson: s.feedbackJson ?? null,
+        sortOrder: i,
       });
     }
   }

@@ -40,6 +40,10 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
   serviceMock: {
     create: vi.fn(),
     save: vi.fn(),
+    // GET /api/tests/:id calls reconcileExisting() as a best-effort healing
+    // pass (PRD-7 G48). A no-op is fine in route tests; failures are caught
+    // and logged.
+    reconcileExisting: vi.fn(async () => ({ deleted: 0, created: 0 })),
   },
 }));
 

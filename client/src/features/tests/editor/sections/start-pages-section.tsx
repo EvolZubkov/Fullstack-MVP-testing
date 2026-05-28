@@ -25,6 +25,7 @@
 import { createContext, Fragment, useContext, useMemo, useState } from "react";
 import {
   AlertCircle,
+  AlertTriangle,
   ChevronRight,
   FileText,
   GripVertical,
@@ -65,11 +66,13 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
+  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   useContentPages,
   type ContentPage,
@@ -106,6 +109,11 @@ export type StructureSectionProps = {
    * empty-topics CTA in router mode (G26).
    */
   onGoToComposition?: () => void;
+  /**
+   * Draft mutator for topic-drag reorder (PRD-7 G47). When `undefined` the
+   * topic-grip is omitted entirely — better than a non-functional affordance.
+   */
+  updateModel?: (updater: (model: TestEditorModel) => TestEditorModel) => void;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -114,7 +122,7 @@ export type StartPagesSectionProps = StructureSectionProps;
 const FLOW_LABEL: Record<TestEditorModel["flowMode"], string> = {
   linear_flat: "Последовательный",
   linear_by_topics: "Последовательный по темам",
-  router_by_topics: "Маршрутизатор по темам",
+  router_by_topics: "Через страницу-маршрутизатор",
   mixed: "Смешанный (устаревший)",
 };
 
@@ -273,7 +281,7 @@ const structureCollision: CollisionDetection = (args) => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition }: StructureSectionProps) {
+export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition, updateModel }: StructureSectionProps) {
   // Fallback hook so the section works standalone (component tests) when the
   // drawer has not hoisted the hook. Mirrors design-section's pattern.
   const fallback = useContentPages(contentProp ? undefined : testId);
@@ -310,7 +318,12 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
       ) : cp.error ? (
         <ErrorNotice message={cp.error.message} />
       ) : (
-        <ZonesBlock model={model} handlers={handlers} onGoToComposition={onGoToComposition} />
+        <ZonesBlock
+          model={model}
+          handlers={handlers}
+          onGoToComposition={onGoToComposition}
+          updateModel={updateModel}
+        />
       )}
 
       {cp.mutationError && (
@@ -390,9 +403,19 @@ type ZoneHandlers = {
   onReplaceVariant: (page: ContentPage) => void;
 };
 
-function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers; onGoToComposition?: () => void }) {
-  const { model, handlers, onGoToComposition } = props;
+function ZonesBlock(props: {
+  model: TestEditorModel;
+  handlers: ZoneHandlers;
+  onGoToComposition?: () => void;
+  updateModel?: (updater: (model: TestEditorModel) => TestEditorModel) => void;
+}) {
+  const { model, handlers, onGoToComposition, updateModel } = props;
   const pages = handlers.cp.pages;
+  // Distinct id namespace so the shared DndContext routes topic drags to the
+  // topic-level SortableContext and page drags stay on the existing path.
+  const TOPIC_ID_PREFIX = "topic:";
+  const topicSortableIds = model.sections.map((s) => TOPIC_ID_PREFIX + s.topicId);
+  const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
 
   // Hooks must run unconditionally, before the «no topics» early return.
   const sensors = useSensors(
@@ -461,20 +484,49 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers; onG
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(String(event.active.id));
+    const id = String(event.active.id);
+    if (id.startsWith(TOPIC_ID_PREFIX)) {
+      setActiveTopicId(id.slice(TOPIC_ID_PREFIX.length));
+      setDrop(null);
+      return;
+    }
+    setActiveId(id);
     setDrop(null);
   };
 
   const handleDragOver = (event: DragOverEvent) => {
+    if (activeTopicId !== null) return; // topic drag doesn't use the row insert-indicator
     const t = resolveTarget(event);
     // Row indicator only when hovering a specific row; empty-zone targeting is
     // shown by the zone droppable highlight (see AuthorPageGroup).
     setDrop(t && t.overPageId ? { overId: t.overPageId, side: t.side } : null);
   };
 
+  // Reorder topics in `model.sections`. Persists on the next save (sortOrder
+  // is rewritten from the array index in _insertSections — PRD-7 G47).
+  const handleTopicDragEnd = (event: DragEndEvent) => {
+    setActiveTopicId(null);
+    if (!event.over || !updateModel) return;
+    const activeId = String(event.active.id);
+    const overId = String(event.over.id);
+    if (activeId === overId) return;
+    const activeTopicId = activeId.slice(TOPIC_ID_PREFIX.length);
+    const overTopicId = overId.slice(TOPIC_ID_PREFIX.length);
+    updateModel((m) => {
+      const from = m.sections.findIndex((s) => s.topicId === activeTopicId);
+      const to = m.sections.findIndex((s) => s.topicId === overTopicId);
+      if (from < 0 || to < 0 || from === to) return m;
+      return { ...m, sections: arrayMove(m.sections, from, to) };
+    });
+  };
+
   // Reorder within a zone, or move the page to another zone (changing
   // position/topicId), placing it on the indicated side of the drop target.
   const handleDragEnd = (event: DragEndEvent) => {
+    if (String(event.active.id).startsWith(TOPIC_ID_PREFIX)) {
+      handleTopicDragEnd(event);
+      return;
+    }
     setActiveId(null);
     setDrop(null);
     const t = resolveTarget(event);
@@ -564,18 +616,6 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers; onG
         />
       </Zone>
 
-      {router && (
-        <Zone title="Маршрутизатор" testId="structure-zone-router">
-          <SystemPageRow
-            page={router}
-            title={pageTitle(router)}
-            handlers={handlers}
-            icon="router"
-            testId="structure-system-router"
-          />
-        </Zone>
-      )}
-
       {model.flowMode === "linear_flat" ? (
         <Zone title="Внутри теста" testId="structure-zone-questions">
           <QuestionsRow
@@ -586,17 +626,31 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers; onG
           />
         </Zone>
       ) : (
-        model.sections.map((section, idx) => (
-          <TopicBlock
-            key={section.topicId}
-            index={idx + 1}
-            section={section}
-            before={infoIn("before_topic", section.topicId)}
-            after={infoIn("after_topic", section.topicId)}
-            questions={questionsForTopic(section.topicId)}
-            handlers={handlers}
-          />
-        ))
+        <SortableContext items={topicSortableIds} strategy={verticalListSortingStrategy}>
+          {model.flowMode === "router_by_topics" ? (
+            <InsideTestZone
+              router={router}
+              handlers={handlers}
+              sections={model.sections}
+              infoIn={infoIn}
+              questionsForTopic={questionsForTopic}
+              dragEnabled={Boolean(updateModel)}
+            />
+          ) : (
+            model.sections.map((section, idx) => (
+              <TopicBlock
+                key={section.topicId}
+                index={idx + 1}
+                section={section}
+                before={infoIn("before_topic", section.topicId)}
+                after={infoIn("after_topic", section.topicId)}
+                questions={questionsForTopic(section.topicId)}
+                handlers={handlers}
+                dragEnabled={Boolean(updateModel)}
+              />
+            ))
+          )}
+        </SortableContext>
       )}
 
       <Zone title="После теста" testId="structure-zone-after-test">
@@ -649,17 +703,42 @@ function TopicBlock(props: {
   after: ContentPage[];
   questions: ContentPage | null;
   handlers: ZoneHandlers;
+  /** When false, no grip is rendered (read-only or test harness without updateModel). */
+  dragEnabled?: boolean;
 }) {
-  const { section } = props;
+  const { section, dragEnabled = false } = props;
+  const sortable = useSortable({ id: "topic:" + section.topicId });
+  // @dnd-kit's verticalListSortingStrategy requires `transform` and `transition`
+  // to be applied inline on the sortable node — they come from the hook's
+  // current drag state and cannot live in static CSS. Standard library pattern.
+  const dragStyle: React.CSSProperties = {
+    transform: CSS.Transform.toString(sortable.transform),
+    transition: sortable.transition,
+    opacity: sortable.isDragging ? 0.5 : undefined,
+  };
   return (
-    <section className="topic-block" data-testid={`structure-zone-topic-${section.topicId}`}>
+    <section
+      ref={sortable.setNodeRef}
+      style={dragStyle}
+      className="topic-block"
+      data-testid={`structure-zone-topic-${section.topicId}`}
+    >
       <div className="topic-header">
+        {dragEnabled && (
+          <span
+            className="topic-grip"
+            data-testid={`structure-topic-grip-${section.topicId}`}
+            aria-label={`Переместить тему «${section.topicName}»`}
+            {...sortable.attributes}
+            {...sortable.listeners}
+          >
+            <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        )}
         <span className="topic-name">
           {props.index}. {section.topicName}
         </span>
-        <span className="topic-count">
-          {section.drawCount} из {section.maxQuestions} вопросов
-        </span>
+        <span className="topic-count">{section.drawCount} вопросов</span>
       </div>
       <div className="topic-body">
         <AuthorPageGroup
@@ -671,7 +750,7 @@ function TopicBlock(props: {
         />
         <QuestionsRow
           page={props.questions}
-          countLabel={`${section.drawCount} из ${section.maxQuestions} вопросов темы «${section.topicName}»`}
+          countLabel={`${section.drawCount} вопросов темы «${section.topicName}»`}
           handlers={props.handlers}
           testId={`structure-questions-row-${section.topicId}`}
         />
@@ -682,6 +761,59 @@ function TopicBlock(props: {
           zoneLabel={`«${section.topicName}» — после темы`}
           handlers={props.handlers}
         />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Router-mode «Внутри теста» container (PRD-7 G45). Renders the system
+ * `router` page-row followed by a `.tree-branches` group with one
+ * `.tree-branch` wrapper per topic — the wrapper provides the tree-connector
+ * lines via CSS pseudo-elements. The topic-blocks inside reuse the same
+ * sortable behaviour as in linear-by-topics so drag-reorder works in both
+ * per-topic modes.
+ */
+function InsideTestZone(props: {
+  router: ContentPage | null;
+  handlers: ZoneHandlers;
+  sections: TestEditorModel["sections"];
+  infoIn: (position: ContentPagePosition, topicId: string | null) => ContentPage[];
+  questionsForTopic: (topicId: string) => ContentPage | null;
+  dragEnabled: boolean;
+}) {
+  const { router, handlers, sections, infoIn, questionsForTopic, dragEnabled } = props;
+  return (
+    <section className="inside-test" data-testid="structure-inside-test">
+      <div className="inside-test__label">
+        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+        Внутри теста
+      </div>
+      <div className="inside-test__body">
+        {router && (
+          <SystemPageRow
+            page={router}
+            title={pageTitle(router)}
+            handlers={handlers}
+            icon="router"
+            testId="structure-system-router"
+          />
+        )}
+        <div className="tree-branches">
+          {sections.map((section, idx) => (
+            <div className="tree-branch" key={section.topicId}>
+              <TopicBlock
+                index={idx + 1}
+                section={section}
+                before={infoIn("before_topic", section.topicId)}
+                after={infoIn("after_topic", section.topicId)}
+                questions={questionsForTopic(section.topicId)}
+                handlers={handlers}
+                dragEnabled={dragEnabled}
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -733,22 +865,50 @@ function SystemPageRow(props: {
   testId: string;
 }) {
   const { page, handlers } = props;
-  const { cp } = handlers;
+  const { cp, expandedId, setExpandedId } = handlers;
   const variants = cp.contentTemplates.filter((v) => v.kind === page.kind);
   const variant = variants.find((v) => v.key === page.templateKey);
   const badge = variant?.label ?? KIND_LABEL[page.kind] ?? page.kind;
   const canSwitch = variants.length > 1;
+  // PRD-7 G21: when the active template declares NO variant of this system
+  // kind, the planner falls back to the built-in `default` template. Surface
+  // that to the author via a `.page-row__meta` warning tag so the choice of
+  // visuals (which comes from default, not the active template) is visible.
+  const usingFallback = variants.length === 0;
+  // PRD-7 G27: surface unfilled required placeholders on system rows the same
+  // way author rows do — page-row--error border + validation-banner in expand.
+  const values = page.valuesJson?.values ?? {};
+  const missing = missingRequired(variant, values);
+  const hasErr = missing.length > 0;
+  const isExpandable = (variant?.placeholders.length ?? 0) > 0;
+  const expanded = isExpandable && expandedId === page.id;
 
   const Icon = props.icon === "router" ? Route : props.icon === "questions" ? HelpCircle : FileText;
 
   return (
+    <>
     <div
       className={
-        "page-row page-row--system" + (page.kind === "questions" ? " page-row--questions" : "")
+        "page-row page-row--system" +
+        (page.kind === "questions" ? " page-row--questions" : "") +
+        (hasErr ? " page-row--error" : "") +
+        (expanded ? " is-expanded" : "")
       }
       data-testid={props.testId}
       data-kind={page.kind}
     >
+      {isExpandable && (
+        <button
+          type="button"
+          className="page-expand-toggle"
+          aria-label={expanded ? "Свернуть" : "Развернуть"}
+          aria-expanded={expanded}
+          onClick={() => setExpandedId(expanded ? null : page.id)}
+          data-testid={`${props.testId}-expand`}
+        >
+          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      )}
       <Icon className="page-icon h-3.5 w-3.5" aria-hidden="true" />
       <span className="page-variant-badge">{badge}</span>
       <span className="page-title">{props.title}</span>
@@ -777,15 +937,40 @@ function SystemPageRow(props: {
           </Menu>
         </MenuTrigger>
       </div>
-      {canSwitch && (
+      {(canSwitch || usingFallback || hasErr) && (
         <div className="page-row__meta">
-          <Tag tone="info" size="s" data-testid={`${props.testId}-variant-hint`}>
-            <Info className="h-3 w-3" aria-hidden="true" />
-            Доступно вариантов: {variants.length}
-          </Tag>
+          {hasErr && (
+            <Tag tone="error" size="s" data-testid={`${props.testId}-required-tag`}>
+              <AlertCircle className="h-3 w-3" aria-hidden="true" />
+              Не заполнено обязательных полей: {missing.length}
+            </Tag>
+          )}
+          {usingFallback && (
+            <Tag tone="warning" size="s" data-testid={`${props.testId}-fallback-tag`}>
+              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+              Из стандартного шаблона
+            </Tag>
+          )}
+          {canSwitch && (
+            <Tag tone="info" size="s" data-testid={`${props.testId}-variant-hint`}>
+              <Info className="h-3 w-3" aria-hidden="true" />
+              Доступно вариантов: {variants.length}
+            </Tag>
+          )}
         </div>
       )}
     </div>
+    {expanded && variant && (
+      <PageEditForm
+        page={page}
+        variant={variant}
+        cp={cp}
+        onDone={() => setExpandedId(null)}
+        missingLabels={missing
+          .map((k) => variant.placeholders.find((ph) => ph.key === k)?.label ?? k)}
+      />
+    )}
+    </>
   );
 }
 
@@ -1084,8 +1269,16 @@ function PageEditForm(props: {
   variant: ContentTemplateVariant | undefined;
   cp: UseContentPagesResult;
   onDone: () => void;
+  /**
+   * Labels of currently-empty required placeholders. When non-empty, renders
+   * the PRD-7 G27 validation banner at the top of the expand (red banner with
+   * a bulleted list); also drives Save-disabled affordance via {@link hasErr}.
+   */
+  missingLabels?: string[];
 }) {
   const { page, variant, cp } = props;
+  const missingLabels = props.missingLabels ?? [];
+  const hasErr = missingLabels.length > 0;
   const [values, setValues] = useState<Record<string, unknown>>(
     () => ({ ...(page.valuesJson?.values ?? {}) }),
   );
@@ -1119,6 +1312,25 @@ function PageEditForm(props: {
           description="Вариант страницы недоступен в текущем шаблоне. Выберите другой шаблон оформления или пересоздайте страницу."
           data-testid={`structure-page-edit-no-variant-${page.id}`}
         />
+      )}
+      {hasErr && (
+        <div
+          className="validation-banner"
+          role="alert"
+          data-testid={`structure-page-edit-validation-${page.id}`}
+        >
+          <span className="validation-banner__ico" aria-hidden="true">
+            <AlertCircle className="h-3.5 w-3.5" />
+          </span>
+          <div className="validation-banner__body">
+            <div className="validation-banner__title">Заполните обязательные поля</div>
+            <ul className="validation-banner__list">
+              {missingLabels.map((label) => (
+                <li key={label}>{label}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
       )}
       {placeholders.map((ph) => (
         <div className="ou-formfield" key={ph.key}>

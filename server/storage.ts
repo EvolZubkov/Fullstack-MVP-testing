@@ -1023,7 +1023,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTestSections(testId: string): Promise<TestSection[]> {
-    return db.select().from(testSections).where(eq(testSections.testId, testId));
+    return db
+      .select()
+      .from(testSections)
+      .where(eq(testSections.testId, testId))
+      .orderBy(testSections.sortOrder);
   }
 
   async createAttempt(attempt: InsertAttempt): Promise<Attempt> {

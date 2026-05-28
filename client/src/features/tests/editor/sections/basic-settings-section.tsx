@@ -254,7 +254,7 @@ function BasicPane({ model, updateModel }: SettingsSectionProps) {
           options={[
             { value: "linear_flat", label: "Линейный" },
             { value: "linear_by_topics", label: "Линейный по темам" },
-            { value: "router_by_topics", label: "Маршрутизатор по темам" },
+            { value: "router_by_topics", label: "Через страницу-маршрутизатор" },
           ]}
           onChange={(value) => updateModel((m) => ({ ...m, flowMode: value }))}
           data-testid="settings-flow-mode"

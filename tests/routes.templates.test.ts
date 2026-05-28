@@ -185,9 +185,13 @@ describe("syncBuiltinTemplates", () => {
     version: "1.0.0",
     templateApiVersion: "1.0",
     description: "Test",
+    // Default template must declare all 4 system variant kinds — see
+    // defaultTemplateManifestSchema (PRD-7 G48 / 2026-05-28).
     contentTemplates: [
       { key: "question.standard", label: "Стандартный вопрос", kind: "questions", isDefault: true, placeholders: [] },
       { key: "intro.simple", label: "Введение", kind: "intro", pageKind: "content.intro", placeholders: [] },
+      { key: "summary.simple", label: "Итоги", kind: "summary", pageKind: "content.summary", placeholders: [] },
+      { key: "router.menu", label: "Меню", kind: "router", pageKind: "content.router", placeholders: [] },
     ],
     params: [],
   };
