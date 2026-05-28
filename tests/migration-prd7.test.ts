@@ -85,6 +85,13 @@ afterAll(async () => {
 /**
  * Runs `body` against a fresh transaction that is unconditionally rolled back.
  * Ensures the migration's DDL and any inserted fixtures never leak out of the test.
+ *
+ * Migration 003 re-adds `content_pages_position_check` *without* `'after'`
+ * (that value was introduced later by migration 005). On a real dev DB that
+ * has already migrated past 005, existing `position = 'after'` rows would
+ * fail the constraint when re-applied. Rewrite them to `'after_topic'` inside
+ * the transaction so the ADD CONSTRAINT validates; the trailing ROLLBACK
+ * restores the original rows. No effect on production data.
  */
 async function withRollback(body: (client: pg.PoolClient) => Promise<void>): Promise<void> {
   if (!pool) throw new Error("Pool is not initialized");
@@ -92,6 +99,9 @@ async function withRollback(body: (client: pg.PoolClient) => Promise<void>): Pro
   try {
     await client.query("BEGIN");
     try {
+      await client.query(
+        `UPDATE "content_pages" SET "position" = 'after_topic' WHERE "position" = 'after'`,
+      );
       await body(client);
     } finally {
       await client.query("ROLLBACK");
