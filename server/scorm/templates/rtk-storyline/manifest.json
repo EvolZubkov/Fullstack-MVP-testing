@@ -48,6 +48,7 @@
     {
       "key": "start.hero",
       "label": "Стартовая: герой с иллюстрацией",
+      "kind": "intro",
       "pageKind": "start",
       "layout": "start",
       "description": "Первый экран теста с крупным заголовком, вводным текстом и декоративной иллюстрацией.",
@@ -159,6 +160,7 @@
     {
       "key": "intro.briefing",
       "label": "Введение: краткий брифинг",
+      "kind": "intro",
       "pageKind": "content.intro",
       "layout": "content.intro",
       "description": "Вводная страница перед блоком вопросов.",
@@ -228,6 +230,7 @@
     {
       "key": "info.text",
       "label": "Информация: текстовая страница",
+      "kind": "info",
       "pageKind": "content.info",
       "layout": "content.info",
       "description": "Учебная или поясняющая страница с заголовком и текстовым блоком.",
@@ -297,6 +300,7 @@
     {
       "key": "summary.topicResult",
       "label": "Итог: результат темы",
+      "kind": "summary",
       "pageKind": "content.summary",
       "layout": "content.summary",
       "description": "Итоговая страница темы с краткой статистикой и пояснением.",

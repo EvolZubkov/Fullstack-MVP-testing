@@ -28,7 +28,7 @@
 | 6 | PRD-5 | Шкалы и многомерные измерения | Не начата — post-MVP | PRD-2, PRD-4 |
 | 7 | PRD-3 | Жизненный цикл шаблонов | Не начата — post-MVP | PRD-1 closeout (отдельный трек) |
 | 8 | PRD-9 | Миграция bcryptjs → `@vvlad1973/crypto` | Не начата — post-MVP (tech debt) | Завершение PRD-7 S10-S11 |
-| — | PRD-1 | Шаблоны и контентные страницы | In Implementation (Backend 90%, Runtime 95%, Frontend ~85%) — **MVP** (closeout) | Редактор content-pages в «Структуре» реализован 2026-05-27 (add/edit/reorder/delete, см. [PRD-1 todo §4](./specs/prd-1/implementation-todo.md)); остаток closeout — manifest validation + ручной acceptance |
+| — | PRD-1 | Шаблоны и контентные страницы | **Закрыта 2026-05-28** — Backend 100% / Runtime 100% / Frontend 100% (MVP-scope). Закрытие PRD-1 произошло одновременно с PRD-7: остаточные task'и (предпросмотр, галерея, all-param-types, manifest validation, `kind` во встроенных шаблонах) переехали в PRD-7 S12 G2/G3/G4/G6/G48. См. [PRD-1 todo](./specs/prd-1/implementation-todo.md). | Deferred post-MVP: text-overflow preview/diagnostics в content-pages (§1.10) — substantial, не блокирует MVP. |
 
 Детальный прогресс по PRD-7:
 

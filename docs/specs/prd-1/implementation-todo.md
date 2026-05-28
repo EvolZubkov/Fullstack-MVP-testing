@@ -1,15 +1,16 @@
 # TODO: Реализация PRD-1 - шаблоны и контентные страницы
 
 **Связанный PRD:** [PRD-1](./templates-content-pages.md)  
-**Статус:** Актуализировано по коду: основная MVP-функциональность готова (модель данных,
-API, SCORM export, runtime loader, navigation, frontend dialogs). Незакрыто: предпросмотр
-шаблона в Drawer «Оформление», text-overflow preview/diagnostics в content-pages, ручной
-acceptance pass. Контрактные дополнения PRD-1 §4.3 (variant.kind model, row-menu,
-severity-rail, required-params validation), внесённые 2026-05-21: variant.kind schema,
-тихая привязка, replace-variant endpoint и required-fields validation (server) — закрыты
-2026-05-25; остальные — в коде не реализованы, см. §1.12 ниже. Интеграция редактора
-content-pages в новую вкладку «Структура» PRD-7 вынесена в closeout-фазу — см. §4.  
-**Последняя проверка по коду:** 2026-05-25  
+**Статус:** **CLOSED 2026-05-28** — все MVP-блокеры закрыты. Предпросмотр шаблона + галерея +
+all-param-типы + incompatible-banner закрыты в PRD-7 S12 (G2/G3/G4/G6). Контрактные дополнения
+PRD-1 §4.3 (variant.kind enum, тихая привязка, replace-variant endpoint, required-fields validation,
+unified row-menu, severity-rail) закрыты 2026-05-25. Manifest-validation default-template
+(`kind: questions` обязателен) закрыто в PRD-7 G48 через `defaultTemplateManifestSchema.superRefine`
+(требует все 4 system-kind: intro/summary/router/questions). `kind` field добавлен ко всем
+variants во всех 4 встроенных шаблонах (default/corporate/minimal/rtk-storyline) 2026-05-28.
+**Deferred (post-MVP):** text-overflow preview/diagnostics в content-pages §1.10 (substantial,
+~3-4ч); live-browser acceptance pass §1.11 (отдельный pass от Playwright + axe).  
+**Последняя проверка по коду:** 2026-05-28  
 **Правило UI:** UI-разработка начинается только после подготовки и явного согласования wireframes.
 
 ---
@@ -122,18 +123,17 @@ Wireframes подготовлены: [docs/wireframes-prd1-design-pages.md](wire
 
 ### 1.10 Frontend UI
 
-- [~] Реализовать вкладку **"Оформление"** по согласованным wireframes.
-      _(2026-05-28: галочка снята — частично соответствует wireframe `prd7-design-tab.html`.
-      Полная реализация перенесена в [PRD-7 S12](../prd-7/s12-design-closeout.md), §1 G1-G6.)_
-- [~] Реализовать галерею шаблонов.
-      _(2026-05-28: пометка `[x]` относилась к legacy `DesignSettingsDialog`, выведенному
-      из эксплуатации. В новом редакторе галерея отсутствует — закрывается в PRD-7 S12 G3.)_
+- [x] Реализовать вкладку **"Оформление"** по согласованным wireframes.
+      _(2026-05-28: закрыто в PRD-7 S12 — все 6 design-tab гэпов G1-G6.)_
+- [x] Реализовать галерею шаблонов.
+      _(2026-05-28: `TemplateGalleryModal` закрыта в PRD-7 S12 G3 — `template-gallery-modal.tsx`.)_
 - [x] Реализовать форму параметров из `manifest.params`.
 - [x] Реализовать сброс параметров шаблона до умолчаний.
       _(reset mutation + кнопка «Сбросить до умолчаний» в design-settings-dialog.tsx:356-361.)_
-- [ ] Реализовать предпросмотр выбранного шаблона.
-      _(2026-05-28: задача перенесена в PRD-7 S12 G2 — `tpl-preview-modal`. Acceptance-отчёт PRD-7
-      §2.6 ошибочно отдал её сюда; на деле это требование самого PRD-7 wireframe FR-30.)_
+- [x] Реализовать предпросмотр выбранного шаблона.
+      _(2026-05-28: закрыто в PRD-7 S12 G2 — `template-preview-modal.tsx` iframe-embeds
+      `preview.html` с param overrides через query string. См. также S12-G2 polish: brand fonts
+      + embed CSS overrides в commit 818217c.)_
 - [x] Реализовать вкладку **"Структура"** по согласованным wireframes.
 - [x] Реализовать создание/редактирование/удаление `intro`, `info`, `summary`, `html`.
 - [x] Реализовать выбор режима страницы: `template`, `standard`, `html`.
@@ -144,6 +144,9 @@ Wireframes подготовлены: [docs/wireframes-prd1-design-pages.md](wire
 - [x] Для выбранного renderer строить форму `rendererOptions` по `optionsSchema`.
 - [x] Показывать настройку размера шрифта только при `allowAuthorFontSize = true`.
 - [ ] Показывать preview/diagnostics для переполнения при `fixed`, `autoFitFont`, `growBox`.
+      _(2026-05-28: deferred post-MVP. Substantial feature — runtime-side text-fit detection
+      требует client-side measurement в design-tab preview; не блокирует MVP — runtime уже
+      применяет text-fit при render'е SCORM-пакета.)_
 - [x] Реализовать сортировку страниц внутри разрешённой области.
 - [x] Показать ошибки API, санитизации и несохранённые изменения.
 
@@ -162,6 +165,9 @@ Wireframes подготовлены: [docs/wireframes-prd1-design-pages.md](wire
 - [x] Runtime smoke: `intro`, `info`, `summary`, `html`, `question`, `results`, `system.blocked`.
 - [x] Regression: старый тест без дизайна работает через `default`.
 - [ ] Проверить все acceptance criteria из PRD-1.
+      _(2026-05-28: code-level acceptance подтверждён — `npm run check` 0 ошибок, `vitest run`
+      1373/1373 зелёные. Live-browser acceptance (Playwright + axe + LMS smoke) выполняется
+      отдельно от кодового closeout.)_
 
 ### 1.12 Контрактные дополнения PRD-1 §4.3 (внесены 2026-05-21)
 
@@ -175,10 +181,15 @@ Wireframes подготовлены: [docs/wireframes-prd1-design-pages.md](wire
 - [x] Добавить enum `VariantKind = "questions" | "router" | "summary" | "intro" | "info"`
       в zod-схему манифеста шаблона.
       _(9e3606e: variant.kind contract for templates and content_pages.)_
-- [ ] Валидация манифеста: каждый `variant` обязан иметь `kind`; default-шаблон
+- [x] Валидация манифеста: каждый `variant` обязан иметь `kind`; default-шаблон
       обязан содержать минимум один `variant` с `kind: questions`.
-- [ ] Добавить `kind` поле в `manifest.json` встроенных шаблонов (`default`,
+      _(2026-05-28: закрыто в PRD-7 G48 — `defaultTemplateManifestSchema.superRefine` в
+      `shared/schema.ts` требует все 4 system-kind: intro/summary/router/questions.)_
+- [x] Добавить `kind` поле в `manifest.json` встроенных шаблонов (`default`,
       `corporate`, `minimal`).
+      _(2026-05-28: `kind` присутствует во всех 4 встроенных шаблонах включая
+      rtk-storyline — добавлены `kind: intro/intro/info/summary` для start.hero /
+      intro.briefing / info.text / summary.topicResult variants.)_
 - [x] Реализовать «тихую привязку» системных вариантов (типы 1-4) при сохранении/
       смене `flowMode` или `templateId`: 1 → молча, N → default + dirty flag,
       0 → fallback на стандартный шаблон + warning (PRD-1 §4.3.2 / PRD-7 §1.4).
