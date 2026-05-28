@@ -81,10 +81,35 @@
     }
     if (item.kind === "content") {
       state.phase = "content";
+      // PRD-4 v1.1 §4.4: when entering the first `after_topic` content page
+      // for a topic, compute and freeze that section's result so templates
+      // bound to TEST_DATA.section.current.result.* see correct data.
+      maybeExposeSectionResult(item);
       return;
     }
     state.phase = "question";
     state.currentIndex = item.questionIndex;
+  }
+
+  /**
+   * PRD-4 v1.1 §4.4: if the current content page belongs to a topic and
+   * carries `position === "after_topic"`, compute (or read cached) section
+   * result and expose it on TEST_DATA.section.current. Templates can bind
+   * via `data-path="section.current.result.percent"` (or `passed`, etc.).
+   */
+  function maybeExposeSectionResult(item) {
+    if (!item || item.kind !== "content" || !item.page) return;
+    var page = item.page;
+    if (!page.topicId || page.position !== "after_topic") return;
+    if (typeof computeSectionResult !== "function") return;
+    var result = computeSectionResult(page.topicId);
+    if (typeof TEST_DATA === "undefined") return;
+    if (!TEST_DATA.section) TEST_DATA.section = {};
+    TEST_DATA.section.current = {
+      topicId: page.topicId,
+      topicName: result.topicName,
+      result: result,
+    };
   }
 
   function goToPageSequenceIndex(index) {

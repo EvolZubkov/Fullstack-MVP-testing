@@ -226,6 +226,60 @@ function finishScormAdaptive(results, passedForLms) {
 window.finishAndClose = finishAndClose;
 
 
+/**
+ * PRD-4 v1.1 §4.4: compute the result of a single section (topic) using the
+ * same scoring math as {@link calculateResults} but scoped to questions of
+ * the given topicId. Called from the page-sequence navigation when the
+ * learner enters the first `after_topic` content page for a topic, so
+ * templates can bind `data-path="section.current.result.percent"` etc.
+ * The result is cached in `state.sectionResults[topicId]` and returned.
+ */
+function computeSectionResult(topicId) {
+  if (state.sectionResults && state.sectionResults[topicId]) {
+    return state.sectionResults[topicId];
+  }
+  var earnedPoints = 0;
+  var possiblePoints = 0;
+  var fullyCorrect = 0;
+  var total = 0;
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === topicId; }) || null;
+
+  state.flatQuestions.forEach(function (fq) {
+    if (fq.topicId !== topicId) return;
+    var q = fq.question;
+    var answer = state.answers[q.id];
+    var scoreRatio = checkAnswer(q, answer);
+    var qPoints = q.points || 1;
+    total++;
+    possiblePoints += qPoints;
+    earnedPoints += qPoints * scoreRatio;
+    if (scoreRatio === 1) fullyCorrect++;
+  });
+
+  var percent = possiblePoints > 0 ? (earnedPoints / possiblePoints) * 100 : 0;
+  var passRule = section ? section.topicPassRule : null;
+  var passed = passRule ? checkPassRuleWithPartial(passRule, percent, fullyCorrect) : null;
+
+  var result = {
+    topicId: topicId,
+    topicName: section ? section.topicName : "",
+    correct: fullyCorrect,
+    total: total,
+    earnedPoints: earnedPoints,
+    possiblePoints: possiblePoints,
+    percent: percent,
+    passed: passed,
+    passRule: passRule,
+    topicFeedback: section ? (section.topicFeedback || null) : null,
+    recommendedCourses: section ? (section.recommendedCourses || []) : [],
+    recommendedEvents: section ? (section.recommendedEvents || []) : [],
+  };
+
+  if (!state.sectionResults) state.sectionResults = {};
+  state.sectionResults[topicId] = result;
+  return result;
+}
+
 function calculateResults() {
   var totalEarnedPoints = 0;
   var totalPossiblePoints = 0;
