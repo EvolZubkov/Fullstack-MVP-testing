@@ -89,6 +89,26 @@ built-in шаблона.
 **Verification:** `npm run check` 0 ошибок; `vitest run` 51 файл / 1334 теста
 зелёные.
 
+**Post-implementation polish 2026-05-28 (visual closeout iframe-preview).**
+
+1. **Brand typeface available in iframe.** До polish'а DS-шрифт `RostelecomBasis`
+   объявлялся в [vendor/university-rt.css](../../../client/src/styles/vendor/university-rt.css)
+   с относительными URL'ами (`../fonts/...`), которые резолвились в несуществующий
+   `client/src/fonts/`. Переведены на абсолютные `/fonts/RostelecomBasis-*.{woff2,woff,otf}`;
+   все 12 файлов положены в [client/public/fonts/](../../../client/public/fonts/)
+   (Vite раздаёт `public/*` на корне). Iframe — отдельный document; в
+   `rewritePreviewForEmbedding` инлайнятся те же 4 `@font-face` декларации в
+   `<head>`, чтобы preview увидел шрифт без зависимости от родительского документа.
+2. **Embed CSS overrides.** Расширены до:
+   `.shell { display: block }` (стандартный flex-layout вытаскивал hidden
+   chrome как пустые flex-items → whitespace справа в iframe);
+   `.pv-dialog-head/foot/.pv-caption { display: none }` (дублировали ModalDialog
+   title/footer и нарушали DS-fonts);
+   `.pv-stage { flex-shrink: 0 }` + `.pv-stage-wrap { overflow-y: auto }`
+   (flex-shrink схлопывал stage до 0 при `overflow: hidden` для скруглений);
+   `.pv-nav { font-family: 'RostelecomBasis', ... }` (rail-typography приведён
+   к DS-stack вместо хардкоднутого Inter).
+
 **Известные ограничения v2.**
 
 - preview.html у каждого шаблона на 2500-4000 строк (inlined templateCore +
