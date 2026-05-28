@@ -182,6 +182,11 @@ export function buildTestJson(data: ExportData): string {
         position: page.position,
         mode: page.mode,
         type: page.type,
+        // PRD-4 v1.1 / PRD-1 §4.3: `kind` is the new variant-kind dimension
+        // (intro/info/summary/router/questions). Runtime distinguishes router
+        // pages from regular content pages by `kind === "router"` (Phase 4c).
+        // Legacy `type` is kept for backward compat.
+        kind: page.kind,
         templateKey: page.templateKey,
         sortOrder: page.sortOrder,
         values: sanitizedValues,

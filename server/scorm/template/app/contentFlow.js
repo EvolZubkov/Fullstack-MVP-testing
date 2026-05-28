@@ -17,12 +17,33 @@
 
   function rebuildPageSequence() {
     var seq = [];
+    var flowMode =
+      (TEST_DATA && TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode) ||
+      "linear_flat";
 
     // Test-scope «До теста» content (intro/info): topicId = null, position 'before'.
     // Rendered before the question stream (PRD-1 §1.9 / BR-02).
     contentPagesFor(null, "before").forEach(function (page) {
       seq.push({ kind: "content", page: page });
     });
+
+    // PRD-4 v1.1 §4.7: router_by_topics inserts the router content page
+    // (page.kind === "router", typically topicId=null/position=before) as a
+    // recurring navigation node. Phase 4c-i only marks the seq item with
+    // `isRouter: true` so future state-machine work (Phase 4c-ii) can
+    // detect it. Topic-card click handling, per-topic chunk traversal, and
+    // "return to router" transitions land in subsequent slices.
+    if (flowMode === "router_by_topics") {
+      seq.forEach(function (item) {
+        if (
+          item.kind === "content" &&
+          item.page &&
+          item.page.kind === "router"
+        ) {
+          item.isRouter = true;
+        }
+      });
+    }
 
     var remainingByTopic = {};
     var startedTopic = {};

@@ -132,6 +132,7 @@ describe("buildTestJson: contentPages and designSettings", () => {
         position: "before_topic",
         mode: "template",
         type: "intro",
+        kind: "intro",
         templateKey: "intro.hero",
         sortOrder: 0,
         valuesJson: { values: { title: "Hello", body: "<p>World</p>" }, placeholderStyles: {} },
@@ -148,6 +149,41 @@ describe("buildTestJson: contentPages and designSettings", () => {
     expect(page.topicId).toBe("t-1");
     expect(page.values.title).toBe("Hello");
     expect(page.templateKey).toBe("intro.hero");
+  });
+
+  it("exports page.kind for router-by-topics distinction (PRD-4 v1.1 §4.7)", () => {
+    const pages: any[] = [
+      {
+        id: "p-router",
+        topicId: null,
+        position: "before",
+        mode: "template",
+        type: "info",
+        kind: "router",
+        templateKey: "router.menu",
+        sortOrder: 0,
+        valuesJson: { values: { title: "Choose topic" }, placeholderStyles: {} },
+        autoAdvance: false,
+        autoAdvanceDelayMs: null,
+      },
+      {
+        id: "p-intro",
+        topicId: "t-1",
+        position: "before_topic",
+        mode: "template",
+        type: "intro",
+        kind: "intro",
+        templateKey: "intro.hero",
+        sortOrder: 0,
+        valuesJson: { values: {}, placeholderStyles: {} },
+        autoAdvance: false,
+        autoAdvanceDelayMs: null,
+      },
+    ];
+    const data = { ...minimalData, contentPages: pages };
+    const json = JSON.parse(buildTestJson(data));
+    expect(json.contentPages[0].kind).toBe("router");
+    expect(json.contentPages[1].kind).toBe("intro");
   });
 
   it("omits contentPages when not provided", () => {
