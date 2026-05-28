@@ -604,8 +604,13 @@
 .tb-saving-overlay { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; }
 .tb-saving-overlay__bd { position: absolute; inset: 0; background: var(--ou-bg-elevated); opacity: 0.88; }
 .tb-saving-overlay__inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); }
-.tb-saving-overlay__spinner { color: var(--ou-accent-default); }
+.tb-saving-overlay__spinner { color: var(--ou-accent-default); display: inline-flex; }
 .tb-saving-overlay__text { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.spin { animation: tb-spin 1s linear infinite; }
+@keyframes tb-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
 
 /* ── Changes popover (список изменений в Drawer footer) ─────────────────
    Открывается по клику на «Показать изменения» в Drawer footer; показывает
@@ -1272,6 +1277,42 @@
 .variant-list__meta-tag--current {
   background: var(--ou-info-soft);
   color: var(--ou-info-on-soft);
+}
+
+/* Close-confirm chip group (PRD-7 S13.7-G30) — Tag-list of dirty tab labels
+   inside the FR-05 close-confirm modal. */
+.tb-close-confirm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ou-space-1);
+  margin-top: var(--ou-space-3);
+}
+
+/* Conflict diff-table (PRD-7 S13.7-G5) — Поле / На сервере / Ваши изменения,
+   rendered inside the 409 conflict dialog. */
+.tb-conflict-diff {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--ou-space-3);
+  font: var(--ou-text-body-s);
+}
+.tb-conflict-diff th,
+.tb-conflict-diff td {
+  text-align: left;
+  padding: var(--wf-space-6, 6px) var(--ou-space-2);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+  vertical-align: top;
+}
+.tb-conflict-diff th {
+  font-weight: 600;
+  color: var(--ou-fg-muted);
+  background: var(--ou-bg-surface-3);
+}
+.tb-conflict-diff tbody tr:last-child td { border-bottom: 0; }
+.tb-conflict-diff__loading {
+  margin-top: var(--ou-space-3);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
 }
 
 /* Search input above the variant list (PRD-7 S13.6-G28). Plain CSS — the DS

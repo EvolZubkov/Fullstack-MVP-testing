@@ -27,7 +27,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { AlertTriangle, X, XCircle } from "lucide-react";
+import { AlertTriangle, Loader2, X, XCircle } from "lucide-react";
 import {
   Banner,
   Button,
@@ -46,6 +46,8 @@ import {
   type UseTestEditorOptions,
   type UseTestEditorResult,
 } from "./use-test-editor";
+import { apiToEditorModel, type ApiTestResponse } from "./test-editor.mappers";
+import type { TestEditorModel } from "./test-editor.types";
 import { useDesignSettings } from "./use-design-settings";
 import { useContentPages, hasStructureErrors, hasStructureWarnings } from "./use-content-pages";
 import { useToast } from "@/hooks/use-toast";
@@ -443,7 +445,7 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
           id={`panel-${activeTab}`}
           aria-labelledby={`tab-${activeTab}`}
           className={
-            "ou-drawer__body" +
+            "ou-drawer__body tb-saving-host" +
             (activeTab === "settings" || activeTab === "design"
               ? " ou-drawer__body--flush"
               : "")
@@ -451,6 +453,19 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
           tabIndex={0}
           data-testid="test-editor-body"
         >
+          {/*
+            PRD-7 S13.7-G1: while a save is in flight, lay an overlay over the
+            scrollable body and mark the inner content as `inert` so the
+            author cannot continue editing the now-stale draft. The overlay
+            sits inside `tb-saving-host` (the body itself) so it covers tabs
+            of all four sections without leaking into header / footer.
+            `inert` is a native attribute (HTMLAttributes) supported by React
+            and modern browsers; older browsers fall back to a visual block
+            via the overlay's pointer-events.
+          */}
+          {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
+          {/* @ts-expect-error inert attribute lacks types in older React/dom-lib versions */}
+          <div inert={combinedSaving ? "" : undefined}>
           {hasErrors && (
             <Banner
               tone="error"
@@ -501,6 +516,24 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
             />
           )}
           {!editor.model && <TabPlaceholder tab={activeTab} />}
+          </div>
+          {combinedSaving && (
+            <div
+              className="tb-saving-overlay"
+              role="status"
+              aria-live="polite"
+              aria-label="Сохранение в процессе"
+              data-testid="test-editor-saving-overlay"
+            >
+              <div className="tb-saving-overlay__bd" aria-hidden="true" />
+              <div className="tb-saving-overlay__inner">
+                <span className="tb-saving-overlay__spinner spin" aria-hidden="true">
+                  <Loader2 size={28} />
+                </span>
+                <span className="tb-saving-overlay__text">Сохранение…</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <footer
@@ -539,6 +572,8 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
                 {changesOpen && (
                   <ChangesPopover
                     tabStatuses={editor.tabStatuses}
+                    snapshot={editor.snapshot}
+                    model={editor.model}
                     onClose={() => setChangesOpen(false)}
                   />
                 )}
@@ -597,6 +632,15 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
       <CloseConfirmDialog
         open={closeDialogOpen}
         hasErrors={hasErrors}
+        tabStatuses={editor.tabStatuses}
+        errorFieldCount={errorFieldCount}
+        firstErrorField={editor.validation.errors[0]?.field ?? null}
+        onGoToFirstError={() => {
+          if (editor.validation.errors[0]) {
+            setCloseDialogOpen(false);
+            goToError(editor.validation.errors[0].field);
+          }
+        }}
         onCancel={() => setCloseDialogOpen(false)}
         onExitWithoutSave={handleExitWithoutSave}
         onSaveAndExit={handleSaveAndExit}
@@ -604,6 +648,8 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
 
       <ConflictDialog
         open={editor.conflict !== null}
+        testId={editor.model?.id}
+        localModel={editor.model}
         onCancel={editor.dismissConflict}
         onReload={editor.resolveConflictReload}
         onOverwrite={editor.resolveConflictOverwrite}
@@ -656,9 +702,23 @@ function TabPlaceholder({ tab }: { tab: EditorTabKey }) {
 
 function ChangesPopover(props: {
   tabStatuses: Record<EditorTabKey, TabStatus>;
+  /** PRD-7 S13.7-G2: needed to compute per-field diff for each dirty tab. */
+  snapshot: TestEditorModel | null;
+  model: TestEditorModel | null;
   onClose: () => void;
 }) {
   const dirtyTabs = TAB_ORDER.filter((tab) => props.tabStatuses[tab].dirty);
+  const fieldDiffs = useMemo(
+    () =>
+      props.snapshot && props.model
+        ? collectChangesByTab(props.snapshot, props.model)
+        : ({} as Record<EditorTabKey, FieldDiff[]>),
+    [props.snapshot, props.model],
+  );
+  const totalFields = dirtyTabs.reduce(
+    (sum, tab) => sum + (fieldDiffs[tab]?.length ?? 0),
+    0,
+  );
   return (
     <div
       className="tb-changes-popover"
@@ -677,7 +737,7 @@ function ChangesPopover(props: {
             Изменения в черновике
           </span>
           <span className="tb-changes-popover__count">
-            &nbsp;({dirtyTabs.length})
+            &nbsp;({totalFields > 0 ? totalFields : dirtyTabs.length})
           </span>
         </span>
         <IconButton
@@ -694,30 +754,191 @@ function ChangesPopover(props: {
             <div className="tb-changes-popover__group-title">Нет изменений</div>
           </div>
         ) : (
-          dirtyTabs.map((tab) => (
-            <div
-              key={tab}
-              className="tb-changes-popover__group"
-              aria-label={`Изменения во вкладке ${TAB_LABELS[tab]}`}
-            >
-              <div className="tb-changes-popover__group-title">
-                {TAB_LABELS[tab]}
+          dirtyTabs.map((tab) => {
+            const diffs = fieldDiffs[tab] ?? [];
+            return (
+              <div
+                key={tab}
+                className="tb-changes-popover__group"
+                aria-label={`Изменения во вкладке ${TAB_LABELS[tab]}`}
+                data-testid={`test-editor-changes-group-${tab}`}
+              >
+                <div className="tb-changes-popover__group-title">
+                  {TAB_LABELS[tab]}
+                  {diffs.length > 0 && (
+                    <>
+                      {" · "}
+                      {diffs.length}{" "}
+                      {diffs.length === 1
+                        ? "изменение"
+                        : diffs.length >= 2 && diffs.length <= 4
+                          ? "изменения"
+                          : "изменений"}
+                    </>
+                  )}
+                </div>
+                {diffs.length === 0 ? (
+                  <div className="tb-changes-popover__item">
+                    <span className="tb-changes-popover__label">
+                      Структурные изменения (раскрыть детали невозможно).
+                    </span>
+                  </div>
+                ) : (
+                  diffs.map((d) => (
+                    <div
+                      key={d.field}
+                      className="tb-changes-popover__item"
+                      data-testid={`test-editor-changes-item-${d.field}`}
+                    >
+                      <span className="tb-changes-popover__label">{d.label}</span>
+                      <span className="tb-changes-popover__old">{d.old}</span>
+                      <span className="tb-changes-popover__arrow">→</span>
+                      <span className="tb-changes-popover__new">{d.next}</span>
+                    </div>
+                  ))
+                )}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
   );
 }
 
+/** One row in the changes-popover diff. */
+type FieldDiff = { field: string; label: string; old: string; next: string };
+
+/**
+ * PRD-7 S13.7-G2: computes per-field diff between the last saved snapshot
+ * and the current draft, grouped by editor tab. Only top-level, primitive
+ * fields are compared — structural changes (sections, pass-rules, adaptive)
+ * are flagged with a generic «Структурные изменения» line.
+ */
+function collectChangesByTab(
+  snap: TestEditorModel,
+  draft: TestEditorModel,
+): Record<EditorTabKey, FieldDiff[]> {
+  const result: Record<EditorTabKey, FieldDiff[]> = {
+    composition: [],
+    settings: [],
+    design: [],
+    structure: [],
+  };
+
+  const fmtBool = (v: boolean) => (v ? "Да" : "Нет");
+  const fmtMinutes = (v: number | null) => (v == null ? "не задан" : `${v} мин`);
+  const fmtAttempts = (v: number | null) => (v == null ? "без ограничения" : String(v));
+  const fmtMode = (v: TestEditorModel["mode"]) =>
+    v === "adaptive" ? "Адаптивный" : "Стандартный";
+  const fmtFlow = (v: TestEditorModel["flowMode"]) =>
+    ({
+      linear_flat: "Линейный",
+      linear_by_topics: "Линейный по темам",
+      router_by_topics: "Через страницу-маршрутизатор",
+    })[v] ?? v;
+
+  const candidates: Array<
+    Omit<FieldDiff, "old" | "next"> & {
+      tab: EditorTabKey;
+      oldValue: string;
+      newValue: string;
+    }
+  > = [
+    {
+      tab: "settings",
+      field: "title",
+      label: "Название",
+      oldValue: snap.basic.title,
+      newValue: draft.basic.title,
+    },
+    {
+      tab: "settings",
+      field: "description",
+      label: "Описание",
+      oldValue: snap.basic.description || "не задано",
+      newValue: draft.basic.description || "не задано",
+    },
+    {
+      tab: "settings",
+      field: "mode",
+      label: "Режим теста",
+      oldValue: fmtMode(snap.mode),
+      newValue: fmtMode(draft.mode),
+    },
+    {
+      tab: "settings",
+      field: "flowMode",
+      label: "Сценарий прохождения",
+      oldValue: fmtFlow(snap.flowMode),
+      newValue: fmtFlow(draft.flowMode),
+    },
+    {
+      tab: "settings",
+      field: "timeLimitMinutes",
+      label: "Лимит времени",
+      oldValue: fmtMinutes(snap.runtime.timeLimitMinutes),
+      newValue: fmtMinutes(draft.runtime.timeLimitMinutes),
+    },
+    {
+      tab: "settings",
+      field: "maxAttempts",
+      label: "Максимум попыток",
+      oldValue: fmtAttempts(snap.runtime.maxAttempts),
+      newValue: fmtAttempts(draft.runtime.maxAttempts),
+    },
+    {
+      tab: "settings",
+      field: "showCorrectAnswers",
+      label: "Показывать правильные ответы",
+      oldValue: fmtBool(snap.runtime.showCorrectAnswers),
+      newValue: fmtBool(draft.runtime.showCorrectAnswers),
+    },
+    {
+      tab: "settings",
+      field: "webhookUrl",
+      label: "Webhook URL",
+      oldValue: snap.basic.webhookUrl || "не задан",
+      newValue: draft.basic.webhookUrl || "не задан",
+    },
+    {
+      tab: "settings",
+      field: "telemetryEnabled",
+      label: "Телеметрия",
+      oldValue: fmtBool(snap.basic.telemetryEnabled),
+      newValue: fmtBool(draft.basic.telemetryEnabled),
+    },
+  ];
+
+  for (const c of candidates) {
+    if (c.oldValue !== c.newValue) {
+      result[c.tab].push({
+        field: c.field,
+        label: c.label,
+        old: c.oldValue,
+        next: c.newValue,
+      });
+    }
+  }
+
+  return result;
+}
+
 function CloseConfirmDialog(props: {
   open: boolean;
   hasErrors: boolean;
+  /** PRD-7 S13.7-G30: dirty-tab chip group. */
+  tabStatuses: Record<EditorTabKey, TabStatus>;
+  /** PRD-7 S13.7-G31: error count surfaced in the inline error banner. */
+  errorFieldCount: number;
+  /** Field id of the first error — used for «Перейти к первой ошибке» CTA. */
+  firstErrorField: string | null;
+  onGoToFirstError: () => void;
   onCancel: () => void;
   onExitWithoutSave: () => void;
   onSaveAndExit: () => Promise<void>;
 }) {
+  const dirtyTabs = TAB_ORDER.filter((tab) => props.tabStatuses[tab].dirty);
   return (
     <ModalDialog
       open={props.open}
@@ -773,12 +994,51 @@ function CloseConfirmDialog(props: {
           ? "Вы внесли изменения, но некоторые поля содержат ошибки. Сохранение сейчас невозможно."
           : "Вы внесли изменения в тест. Что хотите сделать перед закрытием?"}
       </p>
+      {/* G31: inline error-banner with «Перейти к первой ошибке» CTA. */}
+      {props.hasErrors && props.errorFieldCount > 0 && (
+        <Banner
+          tone="error"
+          description={`${props.errorFieldCount} ${props.errorFieldCount === 1 ? "ошибка" : props.errorFieldCount >= 2 && props.errorFieldCount <= 4 ? "ошибки" : "ошибок"} во вкладке «${TAB_LABELS[tabForField(props.firstErrorField ?? "")]}».`}
+          actions={
+            props.firstErrorField
+              ? [
+                  {
+                    label: "Перейти к первой ошибке",
+                    onClick: props.onGoToFirstError,
+                  },
+                ]
+              : undefined
+          }
+          data-testid="test-editor-close-confirm-error-banner"
+        />
+      )}
+      {/* G30: chips listing the dirty tabs (Tag neutral). */}
+      {dirtyTabs.length > 0 && (
+        <div
+          className="tb-close-confirm-chips"
+          aria-label="Изменённые разделы"
+          data-testid="test-editor-close-confirm-chips"
+        >
+          {dirtyTabs.map((tab) => (
+            <Tag
+              key={tab}
+              tone="neutral"
+              variant="outline"
+              data-testid={`test-editor-close-confirm-chip-${tab}`}
+            >
+              {TAB_LABELS[tab]}
+            </Tag>
+          ))}
+        </div>
+      )}
     </ModalDialog>
   );
 }
 
 function ConflictDialog(props: {
   open: boolean;
+  testId: string | undefined;
+  localModel: TestEditorModel | null;
   onCancel: () => void;
   onReload: () => Promise<void>;
   onOverwrite: () => Promise<void>;
@@ -787,7 +1047,8 @@ function ConflictDialog(props: {
     <ModalDialog
       open={props.open}
       onClose={props.onCancel}
-      size="m"
+      // size "l" so the three actions + the diff-table fit without overflow.
+      size="l"
       icon={<AlertTriangle size={20} />}
       iconTone="warning"
       title="Конфликт версий"
@@ -832,8 +1093,188 @@ function ConflictDialog(props: {
       <p>
         Кто-то сохранил свои правки раньше вас. Выберите, как разрешить конфликт:
       </p>
+      {props.open && props.testId && props.localModel && (
+        <ConflictDiffTable testId={props.testId} localModel={props.localModel} />
+      )}
     </ModalDialog>
   );
+}
+
+/**
+ * PRD-7 S13.7-G5: diff-table «Поле / На сервере / Ваши изменения» rendered
+ * inside the conflict dialog. Fetches the server snapshot on mount (one-shot,
+ * scoped to the test), parses it via {@link apiToEditorModel}, and lists the
+ * basic top-level fields whose values differ between local draft and server.
+ * Deeper structural diffs (sections / pass-rules / adaptive) are intentionally
+ * out of scope — the wireframe lists just the high-signal fields (title,
+ * description, mode, flowMode, runtime limits) and that's what we render.
+ */
+function ConflictDiffTable(props: { testId: string; localModel: TestEditorModel }) {
+  const [server, setServer] = useState<TestEditorModel | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/tests/${props.testId}`, {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const raw = (await res.json()) as ApiTestResponse;
+        if (cancelled) return;
+        setServer(apiToEditorModel(raw));
+      } catch (err) {
+        if (cancelled) return;
+        setLoadError((err as Error).message ?? "Не удалось загрузить серверную версию");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.testId]);
+
+  if (loadError) {
+    return (
+      <Banner
+        tone="error"
+        size="sm"
+        description={`Не удалось загрузить серверную версию для сравнения: ${loadError}`}
+        data-testid="test-editor-conflict-diff-error"
+      />
+    );
+  }
+  if (!server) {
+    return (
+      <p
+        className="tb-conflict-diff__loading"
+        data-testid="test-editor-conflict-diff-loading"
+      >
+        Загружаем серверную версию для сравнения…
+      </p>
+    );
+  }
+
+  const rows = collectConflictRows(server, props.localModel);
+  if (rows.length === 0) {
+    return (
+      <p data-testid="test-editor-conflict-diff-empty">
+        Изменения затронули поля, не покрытые этим сравнением. Используйте
+        «Обновить данные», чтобы загрузить серверную версию.
+      </p>
+    );
+  }
+  return (
+    <table
+      className="tb-conflict-diff"
+      aria-label="Сравнение версий"
+      data-testid="test-editor-conflict-diff"
+    >
+      <thead>
+        <tr>
+          <th>Поле</th>
+          <th>На сервере</th>
+          <th>Ваши изменения</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.field} data-testid={`test-editor-conflict-diff-row-${r.field}`}>
+            <td>{r.label}</td>
+            <td>{r.server}</td>
+            <td>{r.local}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** One row in the conflict diff-table. */
+type ConflictDiffRow = { field: string; label: string; server: string; local: string };
+
+/**
+ * Computes a compact list of top-level fields whose values differ between the
+ * server snapshot and the local draft. Booleans render as Да/Нет, nullables
+ * as «не задано», `flowMode` and `mode` translate to their human labels.
+ */
+function collectConflictRows(
+  server: TestEditorModel,
+  local: TestEditorModel,
+): ConflictDiffRow[] {
+  const fmtBool = (v: boolean) => (v ? "Да" : "Нет");
+  const fmtMinutes = (v: number | null) => (v == null ? "не задано" : `${v} мин`);
+  const fmtAttempts = (v: number | null) => (v == null ? "без ограничения" : String(v));
+  const fmtMode = (v: TestEditorModel["mode"]) =>
+    v === "adaptive" ? "Адаптивный" : "Стандартный";
+  const fmtFlow = (v: TestEditorModel["flowMode"]) =>
+    ({
+      linear_flat: "Линейный",
+      linear_by_topics: "Линейный по темам",
+      router_by_topics: "Через страницу-маршрутизатор",
+    })[v] ?? v;
+
+  const candidates: Array<Omit<ConflictDiffRow, "server" | "local"> & {
+    serverValue: string;
+    localValue: string;
+  }> = [
+    {
+      field: "title",
+      label: "Название",
+      serverValue: server.basic.title,
+      localValue: local.basic.title,
+    },
+    {
+      field: "description",
+      label: "Описание",
+      serverValue: server.basic.description || "не задано",
+      localValue: local.basic.description || "не задано",
+    },
+    {
+      field: "mode",
+      label: "Режим теста",
+      serverValue: fmtMode(server.mode),
+      localValue: fmtMode(local.mode),
+    },
+    {
+      field: "flowMode",
+      label: "Сценарий прохождения",
+      serverValue: fmtFlow(server.flowMode),
+      localValue: fmtFlow(local.flowMode),
+    },
+    {
+      field: "timeLimitMinutes",
+      label: "Лимит времени",
+      serverValue: fmtMinutes(server.runtime.timeLimitMinutes),
+      localValue: fmtMinutes(local.runtime.timeLimitMinutes),
+    },
+    {
+      field: "maxAttempts",
+      label: "Максимум попыток",
+      serverValue: fmtAttempts(server.runtime.maxAttempts),
+      localValue: fmtAttempts(local.runtime.maxAttempts),
+    },
+    {
+      field: "showCorrectAnswers",
+      label: "Показывать правильные ответы",
+      serverValue: fmtBool(server.runtime.showCorrectAnswers),
+      localValue: fmtBool(local.runtime.showCorrectAnswers),
+    },
+    {
+      field: "webhookUrl",
+      label: "Webhook URL",
+      serverValue: server.basic.webhookUrl || "не задан",
+      localValue: local.basic.webhookUrl || "не задан",
+    },
+  ];
+
+  return candidates
+    .filter((c) => c.serverValue !== c.localValue)
+    .map(({ serverValue, localValue, ...rest }) => ({
+      ...rest,
+      server: serverValue,
+      local: localValue,
+    }));
 }
 
 // ─── Status tag derivation ────────────────────────────────────────────────────

@@ -88,6 +88,12 @@ export type UseTestEditorResult = {
   mode: "edit" | "create" | "idle";
   /** Current draft model (null until the API snapshot loads / empty create draft is built). */
   model: TestEditorModel | null;
+  /**
+   * Last saved snapshot. `null` in create mode before the first POST and
+   * while the initial GET is in flight. PRD-7 S13.7-G2: the changes-popover
+   * compares snapshot vs model to surface per-field diffs.
+   */
+  snapshot: TestEditorModel | null;
   /** True while the initial GET is in flight (always false in create mode). */
   isLoading: boolean;
   /** True while the PUT / POST mutation is in flight. */
@@ -541,6 +547,8 @@ export function useTestEditor(
   return {
     mode: resultMode,
     model: draft,
+    /** PRD-7 S13.7-G2: last saved snapshot, used by the changes-popover to compute per-field diff. */
+    snapshot,
     isLoading: isEdit ? query.isLoading : false,
     isSaving: mutation.isPending,
     isDirty,

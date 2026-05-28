@@ -904,3 +904,155 @@ describe("<TestEditor /> — NFR-17 smoke test with 20 topics", () => {
     // Smoke test passes: no crash with 20 topics.
   });
 });
+
+// ─── S13.7 — Close-confirm chips + inline error-banner (G30/G31) ─────────────
+
+describe("<TestEditor /> — close-confirm chips + error banner", () => {
+  it("renders dirty-tab chips inside the close-confirm modal (G30)", async () => {
+    nextResponse(buildApiResponse());
+    const onClose = vi.fn();
+    const client = makeClient();
+
+    function Harness() {
+      const editor = useTestEditor({ mode: "edit", testId: "test-1" });
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="harness-dirty"
+            onClick={() =>
+              editor.updateModel((m) => ({
+                ...m,
+                basic: { ...m.basic, description: m.basic.description + " edited" },
+              }))
+            }
+          >
+            dirty
+          </button>
+          <TestEditorView open onClose={onClose} editor={editor} />
+        </>
+      );
+    }
+
+    render(withClient(client, <Harness />));
+    await screen.findByText("Sample Test");
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("harness-dirty"));
+    });
+
+    // Click the header «×» to open the close-confirm (dirty path).
+    fireEvent.click(screen.getByTestId("test-editor-close"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("test-editor-close-confirm-chips")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("test-editor-close-confirm-chip-settings")).toBeInTheDocument();
+  });
+
+  it("shows the goToError banner inside close-confirm when there are validation errors (G31)", async () => {
+    // Clearing the title triggers a validation error (required).
+    nextResponse(buildApiResponse({ title: "" }));
+    const onClose = vi.fn();
+    const client = makeClient();
+
+    function Harness() {
+      const editor = useTestEditor({ mode: "edit", testId: "test-1" });
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="harness-dirty"
+            onClick={() =>
+              editor.updateModel((m) => ({
+                ...m,
+                basic: { ...m.basic, description: "x" },
+              }))
+            }
+          >
+            dirty
+          </button>
+          <TestEditorView open onClose={onClose} editor={editor} />
+        </>
+      );
+    }
+
+    render(withClient(client, <Harness />));
+    // Title is empty → wait for the loaded section marker instead of "Sample Test".
+    await screen.findByText("Основы ИБ");
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("harness-dirty"));
+    });
+
+    fireEvent.click(screen.getByTestId("test-editor-close"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("test-editor-close-confirm-error-banner")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("test-editor-close-confirm-error-banner")).toHaveTextContent(
+      /Перейти к первой ошибке/i,
+    );
+  });
+});
+
+// ─── S13.7 — Saving overlay (G1) ─────────────────────────────────────────────
+
+describe("<TestEditor /> — saving overlay", () => {
+  it("does NOT render the saving overlay while idle", async () => {
+    nextResponse(buildApiResponse());
+    const client = makeClient();
+    render(
+      withClient(client, <TestEditor testId="test-1" open onClose={() => {}} />),
+    );
+    await screen.findByText("Sample Test");
+    expect(screen.queryByTestId("test-editor-saving-overlay")).toBeNull();
+  });
+});
+
+// ─── S13.7 — Changes-popover per-field diff (G2) ─────────────────────────────
+
+describe("<TestEditor /> — changes-popover per-field diff", () => {
+  it("lists changed top-level Settings fields when the popover opens", async () => {
+    nextResponse(buildApiResponse({ description: "old description" }));
+    const client = makeClient();
+
+    function Harness() {
+      const editor = useTestEditor({ mode: "edit", testId: "test-1" });
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="harness-dirty-desc"
+            onClick={() =>
+              editor.updateModel((m) => ({
+                ...m,
+                basic: { ...m.basic, description: "new description" },
+              }))
+            }
+          >
+            dirty
+          </button>
+          <TestEditorView open onClose={() => {}} editor={editor} />
+        </>
+      );
+    }
+
+    render(withClient(client, <Harness />));
+    await screen.findByText("Sample Test");
+
+    act(() => {
+      fireEvent.click(screen.getByTestId("harness-dirty-desc"));
+    });
+
+    fireEvent.click(screen.getByTestId("test-editor-show-changes"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("test-editor-changes-popover")).toBeInTheDocument(),
+    );
+    const item = await screen.findByTestId("test-editor-changes-item-description");
+    expect(item).toHaveTextContent("Описание");
+    expect(item).toHaveTextContent("old description");
+    expect(item).toHaveTextContent("new description");
+  });
+});

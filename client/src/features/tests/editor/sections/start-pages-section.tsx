@@ -1653,8 +1653,19 @@ function AddPageModal(props: {
   }, [cp.infoVariants]);
 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const open = ctx !== null;
-  const effectiveKey = selectedKey ?? options[0]?.key ?? null;
+  // PRD-7 S13.7-G16: case-insensitive filter over label + description, identical
+  // to the ReplaceVariantModal search (S13.6-G28) so the two modals stay
+  // visually and behaviourally consistent.
+  const filteredOptions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q === "") return options;
+    return options.filter((o) =>
+      `${o.label} ${o.description ?? ""}`.toLowerCase().includes(q),
+    );
+  }, [options, query]);
+  const effectiveKey = selectedKey ?? filteredOptions[0]?.key ?? null;
 
   const handleAdd = () => {
     if (!ctx) return;
@@ -1690,6 +1701,7 @@ function AddPageModal(props: {
       open={open}
       onClose={() => {
         setSelectedKey(null);
+        setQuery("");
         props.onClose();
       }}
       size="m"
@@ -1702,6 +1714,7 @@ function AddPageModal(props: {
             size="m"
             onClick={() => {
               setSelectedKey(null);
+              setQuery("");
               props.onClose();
             }}
             data-testid="structure-add-cancel"
@@ -1722,12 +1735,37 @@ function AddPageModal(props: {
       }
       data-testid="structure-add-modal"
     >
-      <VariantList
-        options={options.map((o) => ({ key: o.key, label: o.label, description: o.description }))}
-        selectedKey={effectiveKey}
-        onSelect={setSelectedKey}
-        testIdPrefix="structure-add-option"
-      />
+      {options.length > 3 && (
+        <div className="variant-search">
+          <Search
+            width={14}
+            height={14}
+            className="variant-search__icon"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            className="variant-search__input"
+            placeholder="Поиск по названию варианта…"
+            aria-label="Поиск вариантов"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            data-testid="structure-add-search"
+          />
+        </div>
+      )}
+      {filteredOptions.length === 0 ? (
+        <div className="variant-search__empty" data-testid="structure-add-empty">
+          Ничего не найдено
+        </div>
+      ) : (
+        <VariantList
+          options={filteredOptions.map((o) => ({ key: o.key, label: o.label, description: o.description }))}
+          selectedKey={effectiveKey}
+          onSelect={setSelectedKey}
+          testIdPrefix="structure-add-option"
+        />
+      )}
     </ModalDialog>
   );
 }
