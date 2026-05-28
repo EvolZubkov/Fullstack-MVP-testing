@@ -664,6 +664,51 @@ describe("<TestEditor /> — footer «Отменить» discards and closes wit
   });
 });
 
+// ─── Read-only footer when test is published (G19, wf s-readonly) ─────────────
+
+describe("<TestEditor /> — published test renders single «Закрыть» footer", () => {
+  it("hides Save / Cancel / «Показать изменения» when status === 'published'", async () => {
+    // s-readonly per docs/wireframes/approved/prd7-structure-linear-by-topics.html
+    // (footer line 847-849): footer collapses to a single ghost «Закрыть» button.
+    nextResponse(buildApiResponse({ status: "published" }));
+    const client = makeClient();
+    render(
+      withClient(
+        client,
+        <TestEditor testId="test-1" open onClose={() => {}} />,
+      ),
+    );
+
+    await screen.findByText("Sample Test");
+
+    const foot = await screen.findByTestId("test-editor-foot");
+    expect(foot.getAttribute("data-state")).toBe("readonly");
+    expect(screen.queryByTestId("test-editor-save")).toBeNull();
+    expect(screen.queryByTestId("test-editor-show-changes")).toBeNull();
+
+    const closeBtn = screen.getByTestId("test-editor-cancel");
+    expect(closeBtn).toHaveTextContent("Закрыть");
+  });
+
+  it("closes immediately without confirm when published and clean", async () => {
+    nextResponse(buildApiResponse({ status: "published" }));
+    const onClose = vi.fn();
+    const client = makeClient();
+    render(
+      withClient(client, <TestEditor testId="test-1" open onClose={onClose} />),
+    );
+
+    await screen.findByText("Sample Test");
+
+    fireEvent.click(screen.getByTestId("test-editor-cancel"));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("dialog", { name: /Есть несохранённые изменения/i }),
+    ).toBeNull();
+  });
+});
+
 // ─── Gap 6: API save error keeps editor open and shows error banner ────────────
 
 describe("<TestEditor /> — API save error (Gap 6)", () => {

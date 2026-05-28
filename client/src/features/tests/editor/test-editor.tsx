@@ -214,6 +214,14 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
   // is the bridge: it lights up «Сохранить» after add / drag / reorder.
   const combinedDirty = editor.isDirty || design.isDirty || contentPages.hasMutated;
   const combinedSaving = editor.isSaving || design.isSaving;
+  // Read-only when the test is published. Structure tab already enforces
+  // this internally (drag-handles disabled, no row-menu, fieldset-disabled
+  // expand); the drawer footer collapses to a single «Закрыть» button per
+  // wireframe `s-readonly` (prd7-structure-linear-by-topics.html). Other tabs
+  // (Composition/Settings/Design) do not yet propagate the flag — until they
+  // do, the close-confirm guard remains in place to avoid silent edit loss
+  // from those tabs while published.
+  const isReadOnly = editor.model?.basic.status === "published";
 
   const requestClose = useCallback(() => {
     if (combinedSaving) return;
@@ -495,8 +503,27 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
           {!editor.model && <TabPlaceholder tab={activeTab} />}
         </div>
 
-        <footer className="ou-drawer__foot">
-          {combinedDirty ? (
+        <footer
+          className="ou-drawer__foot"
+          data-testid="test-editor-foot"
+          data-state={isReadOnly ? "readonly" : combinedDirty ? "dirty" : "default"}
+        >
+          {isReadOnly ? (
+            // s-readonly per wireframe prd7-structure-linear-by-topics.html
+            // (footer: single ghost «Закрыть»). No Save / no Cancel / no
+            // changes-popover — published tests are read-only at the Drawer
+            // level. Status tag «Опубликован» in the header already signals
+            // mode. `requestClose` still guards against silent edit loss if
+            // Composition/Settings/Design (not yet read-only) were dirtied.
+            <Button
+              variant="ghost"
+              size="m"
+              onClick={requestClose}
+              data-testid="test-editor-cancel"
+            >
+              Закрыть
+            </Button>
+          ) : combinedDirty ? (
             <>
               <div className="tb-changes-anchor">
                 <Button
@@ -528,29 +555,42 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
               >
                 Отменить
               </Button>
+              <Button
+                variant="primary"
+                size="m"
+                disabled={saveDisabled}
+                aria-disabled={saveDisabled ? "true" : "false"}
+                onClick={handleSave}
+                loading={combinedSaving}
+                data-testid="test-editor-save"
+              >
+                {combinedSaving ? "Сохранение…" : "Сохранить"}
+              </Button>
             </>
           ) : (
-            <Button
-              variant="ghost"
-              size="m"
-              onClick={requestClose}
-              disabled={combinedSaving}
-              data-testid="test-editor-cancel"
-            >
-              Закрыть
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                size="m"
+                onClick={requestClose}
+                disabled={combinedSaving}
+                data-testid="test-editor-cancel"
+              >
+                Закрыть
+              </Button>
+              <Button
+                variant="primary"
+                size="m"
+                disabled={saveDisabled}
+                aria-disabled={saveDisabled ? "true" : "false"}
+                onClick={handleSave}
+                loading={combinedSaving}
+                data-testid="test-editor-save"
+              >
+                {combinedSaving ? "Сохранение…" : "Сохранить"}
+              </Button>
+            </>
           )}
-          <Button
-            variant="primary"
-            size="m"
-            disabled={saveDisabled}
-            aria-disabled={saveDisabled ? "true" : "false"}
-            onClick={handleSave}
-            loading={combinedSaving}
-            data-testid="test-editor-save"
-          >
-            {combinedSaving ? "Сохранение…" : "Сохранить"}
-          </Button>
         </footer>
       </aside>
 
