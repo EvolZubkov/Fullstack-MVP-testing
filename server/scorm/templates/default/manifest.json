@@ -10,56 +10,64 @@
       "type": "color",
       "label": "Основной цвет",
       "default": "217 91% 42%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "backgroundColor",
       "type": "color",
       "label": "Цвет фона",
       "default": "225 7% 7%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "foregroundColor",
       "type": "color",
       "label": "Цвет текста",
       "default": "0 0% 98%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "cardColor",
       "type": "color",
       "label": "Цвет карточек",
       "default": "225 14% 14%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "cardBorderColor",
       "type": "color",
       "label": "Граница карточек",
       "default": "0 0% 24%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "borderColor",
       "type": "color",
       "label": "Цвет границ",
       "default": "0 0% 22%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "mutedColor",
       "type": "color",
       "label": "Приглушённый цвет",
       "default": "225 10% 20%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "accentColor",
       "type": "color",
       "label": "Акцентный цвет",
       "default": "225 8% 22%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "fontFamily",
@@ -67,6 +75,7 @@
       "label": "Шрифт",
       "default": "Inter",
       "group": "Оформление",
+      "section": "branding",
       "options": [
         "Inter",
         "Roboto",
@@ -78,7 +87,8 @@
       "type": "image",
       "label": "Логотип",
       "default": null,
-      "group": "Оформление"
+      "group": "Оформление",
+      "section": "branding"
     },
     {
       "key": "progress.mode",
@@ -86,6 +96,7 @@
       "label": "Режим прогресса",
       "default": "questions",
       "group": "Навигация",
+      "section": "progress",
       "options": [
         "questions",
         "pages",
@@ -97,7 +108,8 @@
       "type": "boolean",
       "label": "Показывать прогресс-бар",
       "default": true,
-      "group": "Навигация"
+      "group": "Навигация",
+      "section": "progress"
     }
   ],
   "contentTemplates": [

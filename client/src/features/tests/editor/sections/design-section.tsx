@@ -9,11 +9,14 @@
  *     is left as a placeholder (full gallery deferred to FR-30/31). «Сбросить
  *     до умолчаний» clears all params in the draft and persists empty params
  *     on save.
- *   - Брендирование pane: renders a dynamic form keyed by the template's
- *     `manifest.params`. Supports `text`, `color`, `boolean`, `select`. Other
- *     types (image / asset / number) render a read-only placeholder row —
- *     full media-library + colorpicker integration is deferred.
- *   - Макет / Прогресс и шапка panes: still show «следующий шаг» stubs.
+ *   - Брендирование pane: renders params with `section === "branding"` (or
+ *     without explicit section — fallback to branding). Supports `text`,
+ *     `color`, `boolean`, `select`. Other types render a read-only placeholder
+ *     row — full media-library + colorpicker integration is deferred.
+ *   - Макет pane: renders params with `section === "layout"`.
+ *   - Прогресс и шапка pane: renders params with `section === "progress"`.
+ *   - Each section shows an informational Banner when the template declares no
+ *     params for that section.
  *
  * Save flow:
  *   - Design has its own endpoint (`PUT /api/tests/:id/design`) separate from
@@ -34,6 +37,7 @@ import {
 } from "@universityrt/ui-kit";
 import {
   useDesignSettings,
+  type ParamSection,
   type TemplateParam,
   type UseDesignSettingsResult,
 } from "../use-design-settings";
@@ -100,9 +104,29 @@ export function DesignSection({ testId, design: designProp }: DesignSectionProps
         ) : active === "template" ? (
           <TemplatePane design={design} />
         ) : active === "branding" ? (
-          <BrandingPane design={design} />
+          <SectionPane
+            design={design}
+            section="branding"
+            emptyTitle="В шаблоне нет настраиваемых параметров оформления"
+            emptyDesc={`У выбранного шаблона «${design.template?.manifest.name ?? ""}» в секции «Брендирование» не объявлено ни одного параметра.`}
+            testId="design-branding-pane"
+          />
+        ) : active === "layout" ? (
+          <SectionPane
+            design={design}
+            section="layout"
+            emptyTitle="В шаблоне нет настроек макета"
+            emptyDesc={`У выбранного шаблона «${design.template?.manifest.name ?? ""}» в секции «Макет» не объявлено ни одного параметра. Шаблон поддерживает только встроенный макет.`}
+            testId="design-layout-pane"
+          />
         ) : (
-          <StubPane railKey={active} />
+          <SectionPane
+            design={design}
+            section="progress"
+            emptyTitle="В шаблоне нет настроек прогресса"
+            emptyDesc={`У выбранного шаблона «${design.template?.manifest.name ?? ""}» в секции «Прогресс и шапка» не объявлено ни одного параметра.`}
+            testId="design-progress-pane"
+          />
         )}
       </div>
     </div>
@@ -241,25 +265,54 @@ function TemplatePane({ design }: { design: UseDesignSettingsResult }) {
   );
 }
 
-function BrandingPane({ design }: { design: UseDesignSettingsResult }) {
+/**
+ * Returns params belonging to the given section. Params without an explicit
+ * `section` field fall back to `"branding"` by convention.
+ */
+function paramsBySection(
+  params: TemplateParam[] | undefined,
+  section: ParamSection,
+): TemplateParam[] {
+  return (params ?? []).filter(
+    (p) => (p.section ?? "branding") === section,
+  );
+}
+
+/**
+ * Generic pane that renders template params for a given `ParamSection`.
+ * When no params are declared for the section an informational Banner is shown.
+ */
+function SectionPane({
+  design,
+  section,
+  emptyTitle,
+  emptyDesc,
+  testId,
+}: {
+  design: UseDesignSettingsResult;
+  section: ParamSection;
+  emptyTitle: string;
+  emptyDesc: string;
+  testId: string;
+}) {
   const tpl = design.template;
   if (!tpl) return null;
-  const params = tpl.manifest.params ?? [];
+  const params = paramsBySection(tpl.manifest.params, section);
   if (params.length === 0) {
     return (
-      <div data-testid="design-branding-pane">
+      <div data-testid={testId}>
         <Banner
           tone="info"
-          title="У шаблона нет настраиваемых параметров"
-          description={`Шаблон «${tpl.manifest.name}» не объявляет блок params в манифесте. Перейдите во вкладку «Шаблон», чтобы выбрать другой шаблон.`}
-          data-testid="design-branding-empty"
+          title={emptyTitle}
+          description={emptyDesc}
+          data-testid={`${testId}-empty`}
         />
         <DesignSaveError design={design} />
       </div>
     );
   }
   return (
-    <div data-testid="design-branding-pane">
+    <div data-testid={testId}>
       {params.map((p) => (
         <ParamRow
           key={p.key}
@@ -382,38 +435,6 @@ function DesignSaveError({ design }: { design: UseDesignSettingsResult }) {
       tone="error"
       description={design.saveError.message}
       data-testid="design-save-error"
-    />
-  );
-}
-
-function StubPane({ railKey }: { railKey: DesignRailKey }) {
-  const text: Record<DesignRailKey, { title: string; desc: string }> = {
-    template: {
-      title: "Шаблон — следующий шаг",
-      desc: "",
-    },
-    branding: {
-      title: "Брендирование — следующий шаг",
-      desc: "",
-    },
-    layout: {
-      title: "Макет — следующий шаг",
-      desc:
-        "Настройки макета (расположение блоков, плотность, мобильное представление) реализуются отдельным шагом PRD-7.",
-    },
-    progress: {
-      title: "Прогресс и шапка — следующий шаг",
-      desc:
-        "Параметры шапки и индикатора прогресса (видимость, формат счётчика, breadcrumb) реализуются отдельным шагом PRD-7.",
-    },
-  };
-  const { title, desc } = text[railKey];
-  return (
-    <Banner
-      tone="info"
-      title={title}
-      description={desc || undefined}
-      data-testid={`design-stub-${railKey}`}
     />
   );
 }

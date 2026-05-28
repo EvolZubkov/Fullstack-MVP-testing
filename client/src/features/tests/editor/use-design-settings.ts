@@ -33,12 +33,24 @@ export type DesignParamType =
   | "asset"
   | "number";
 
+/**
+ * PRD-7 S12 G1 / FR-31: rail-section the param is rendered under in the
+ * «Оформление» tab. `branding` is the default fallback for params without an
+ * explicit assignment, mirroring how the design-tab rail keeps three content
+ * sections (Брендирование / Макет / Прогресс и шапка) regardless of which
+ * sections a template populates.
+ */
+export type ParamSection = "branding" | "layout" | "progress";
+
 export type TemplateParam = {
   key: string;
   type: DesignParamType;
   label: string;
   default?: unknown;
+  /** Visual sub-group label rendered inside a section (e.g. "Цвета"). */
   group?: string;
+  /** Rail-section the param belongs to. Defaults to `branding` when absent. */
+  section?: ParamSection;
   options?: string[];
 };
 

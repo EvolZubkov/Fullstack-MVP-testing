@@ -10,16 +10,30 @@
 
 ## 1. Гэпы и привязка к FR
 
-### G1 — Sub-rail группировка параметров (FR-31)
+### G1 — Sub-rail группировка параметров (FR-31) — **CLOSED 2026-05-28**
 
-**Что сейчас.** [design-section.tsx:244-274](../../../client/src/features/tests/editor/sections/design-section.tsx) ренедерит **все** `manifest.params` как плоский список в `BrandingPane`. Sub-rail-пункты «Макет» и «Прогресс и шапка» вернут `StubPane` с текстом «*реализуются отдельным шагом PRD-7*».
+**Что было.** `BrandingPane` рендерил все `manifest.params` плоским списком; sub-rail «Макет» и
+«Прогресс и шапка» возвращали `StubPane` с текстом «*реализуются отдельным шагом PRD-7*».
 
-**Что должно быть.** `manifest.params` распределяются по 4 секциям рейла: `Шаблон` (информация о шаблоне), `Брендирование`, `Макет`, `Прогресс и шапка`. Привязка — через явное поле `section` в схеме `param` (новое; см. §2).
+**Что сделано.**
 
-**Edge cases:**
+1. **TS-тип:** в [use-design-settings.ts](../../../client/src/features/tests/editor/use-design-settings.ts)
+   добавлен enum `ParamSection = "branding" | "layout" | "progress"`; в `TemplateParam` — поле
+   `section?: ParamSection`. Fallback: param без `section` считается `branding`.
+2. **Zod-схема:** `templateManifestSchema` использует `.passthrough()` — изменений не потребовалось.
+   Server-side валидация в [routes/tests.ts:393](../../../server/routes/tests.ts) проверяет только
+   unknown keys, не shape — `section` пропускается прозрачно.
+3. **Манифесты:** все 4 built-in (`default`, `corporate`, `minimal`, `rtk-storyline`) получили
+   `section` per param через Node-скрипт-мутацию: default 10b/0l/2p, corporate 12b/0l/3p,
+   minimal 6b/0l/2p, rtk-storyline 5b/4l/2p.
+4. **UI:** в [design-section.tsx](../../../client/src/features/tests/editor/sections/design-section.tsx)
+   `BrandingPane` и `StubPane` заменены на универсальный `SectionPane` + helper
+   `paramsBySection(params, section)`. Три sub-rail (branding/layout/progress) рендерят свои
+   params. Пустая секция — `Banner tone="info"` с уникальным заголовком/описанием.
+5. **Test:** обновлён тест «shows the «следующий шаг» stub» → «renders empty-section info-banner»
+   (`design-layout-pane-empty` / `design-progress-pane-empty` testid'ы).
 
-- Если в манифесте нет ни одного param для секции — пэйн показывает баннер «У шаблона нет параметров для этой секции», как сейчас делает `BrandingPane` при пустом `params`.
-- Если секция rail-пункта пуста для всех шаблонов реестра — rail-пункт остаётся видимым (порядок UI фиксированный по wireframe, скрывать нельзя).
+**Verification:** `npm run check` 0 ошибок; `vitest run` 1331/1331 зелёный (11/11 design-section).
 
 ### G2 — Кнопка «Предпросмотр шаблона» (FR-30)
 

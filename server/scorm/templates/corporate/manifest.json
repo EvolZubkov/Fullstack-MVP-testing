@@ -10,63 +10,72 @@
       "type": "color",
       "label": "Основной цвет",
       "default": "221 83% 53%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "backgroundColor",
       "type": "color",
       "label": "Цвет фона",
       "default": "220 14% 10%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "foregroundColor",
       "type": "color",
       "label": "Цвет текста",
       "default": "0 0% 96%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "cardColor",
       "type": "color",
       "label": "Цвет карточек",
       "default": "220 13% 16%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "cardBorderColor",
       "type": "color",
       "label": "Граница карточек",
       "default": "220 13% 26%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "borderColor",
       "type": "color",
       "label": "Цвет границ",
       "default": "220 13% 24%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "mutedColor",
       "type": "color",
       "label": "Приглушённый цвет",
       "default": "220 12% 22%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "accentColor",
       "type": "color",
       "label": "Акцентный цвет",
       "default": "220 12% 24%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "sidebarColor",
       "type": "color",
       "label": "Цвет боковой панели",
       "default": "220 18% 8%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "fontFamily",
@@ -78,21 +87,24 @@
         "Inter",
         "Roboto",
         "Arial"
-      ]
+      ],
+      "section": "branding"
     },
     {
       "key": "logoUrl",
       "type": "image",
       "label": "Логотип",
       "default": null,
-      "group": "Оформление"
+      "group": "Оформление",
+      "section": "branding"
     },
     {
       "key": "companyName",
       "type": "text",
       "label": "Название компании",
       "default": "",
-      "group": "Оформление"
+      "group": "Оформление",
+      "section": "branding"
     },
     {
       "key": "progress.mode",
@@ -104,21 +116,24 @@
         "questions",
         "pages",
         "hidden"
-      ]
+      ],
+      "section": "progress"
     },
     {
       "key": "showProgressBar",
       "type": "boolean",
       "label": "Показывать прогресс-бар",
       "default": true,
-      "group": "Навигация"
+      "group": "Навигация",
+      "section": "progress"
     },
     {
       "key": "showTopicNav",
       "type": "boolean",
       "label": "Навигация по темам",
       "default": true,
-      "group": "Навигация"
+      "group": "Навигация",
+      "section": "progress"
     }
   ],
   "contentTemplates": [

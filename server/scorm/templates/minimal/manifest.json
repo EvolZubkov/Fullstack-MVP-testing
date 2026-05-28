@@ -10,35 +10,40 @@
       "type": "color",
       "label": "Основной цвет",
       "default": "221 83% 53%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "backgroundColor",
       "type": "color",
       "label": "Цвет фона",
       "default": "0 0% 97%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "foregroundColor",
       "type": "color",
       "label": "Цвет текста",
       "default": "0 0% 9%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "cardColor",
       "type": "color",
       "label": "Цвет карточек",
       "default": "0 0% 100%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "cardBorderColor",
       "type": "color",
       "label": "Граница карточек",
       "default": "0 0% 88%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "fontFamily",
@@ -50,7 +55,8 @@
         "Inter",
         "Roboto",
         "Arial"
-      ]
+      ],
+      "section": "branding"
     },
     {
       "key": "progress.mode",
@@ -62,14 +68,16 @@
         "questions",
         "pages",
         "hidden"
-      ]
+      ],
+      "section": "progress"
     },
     {
       "key": "showProgressBar",
       "type": "boolean",
       "label": "Показывать прогресс-бар",
       "default": true,
-      "group": "Навигация"
+      "group": "Навигация",
+      "section": "progress"
     }
   ],
   "contentTemplates": [

@@ -116,15 +116,24 @@ describe("<DesignSection /> — rail navigation", () => {
     );
   });
 
-  it("shows the «следующий шаг» stub for Layout and Progress panes", async () => {
+  it("renders empty-section info-banner for Layout and Progress panes when the template declares no params there (S12 G1)", async () => {
+    // Fixture `TEMPLATE` declares params without an explicit `section` — all
+    // fall back to `branding`, so layout and progress panes must render their
+    // own empty-state banners (paramsBySection filters to []).
     renderWithClient(<DesignSection testId={TEST_ID} />);
     await waitFor(() =>
       expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
     );
     fireEvent.click(screen.getByTestId("design-rail-layout"));
-    expect(screen.getByTestId("design-stub-layout")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("design-layout-pane")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("design-layout-pane-empty")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("design-rail-progress"));
-    expect(screen.getByTestId("design-stub-progress")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("design-progress-pane")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("design-progress-pane-empty")).toBeInTheDocument();
   });
 });
 

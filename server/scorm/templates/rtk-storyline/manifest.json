@@ -466,7 +466,8 @@
       "cssVar": "--rtk-accent",
       "validation": {
         "required": true
-      }
+      },
+      "section": "branding"
     },
     {
       "key": "brand.surfaceColor",
@@ -474,7 +475,8 @@
       "label": "Цвет основного экрана",
       "default": "#101828",
       "group": "Бренд",
-      "cssVar": "--rtk-surface"
+      "cssVar": "--rtk-surface",
+      "section": "branding"
     },
     {
       "key": "brand.pageBackground",
@@ -482,7 +484,8 @@
       "label": "Фон плеера",
       "default": "#e2e2e2",
       "group": "Бренд",
-      "cssVar": "--rtk-page-bg"
+      "cssVar": "--rtk-page-bg",
+      "section": "branding"
     },
     {
       "key": "layout.panelRadius",
@@ -494,28 +497,32 @@
       "validation": {
         "min": 0,
         "max": 32
-      }
+      },
+      "section": "layout"
     },
     {
       "key": "layout.heroImage",
       "type": "asset",
       "label": "Передняя иллюстрация титульного экрана",
       "default": "assets/images/hero-mountain.svg",
-      "group": "Макет"
+      "group": "Макет",
+      "section": "layout"
     },
     {
       "key": "layout.heroImageBack",
       "type": "asset",
       "label": "Задняя иллюстрация титульного экрана",
       "default": "assets/images/hero-mountain-back.svg",
-      "group": "Макет"
+      "group": "Макет",
+      "section": "layout"
     },
     {
       "key": "layout.contentDecoration",
       "type": "asset",
       "label": "Декоративная иллюстрация контентных страниц",
       "default": "assets/images/content-cubes.png",
-      "group": "Макет"
+      "group": "Макет",
+      "section": "layout"
     },
     {
       "key": "progress.mode",
@@ -527,7 +534,8 @@
         "hidden"
       ],
       "default": "questions",
-      "group": "Навигация"
+      "group": "Навигация",
+      "section": "progress"
     },
     {
       "key": "navigation.presentation",
@@ -538,21 +546,24 @@
         "sidebar"
       ],
       "default": "bottom",
-      "group": "Навигация"
+      "group": "Навигация",
+      "section": "progress"
     },
     {
       "key": "behavior.duplicateTabWarning",
       "type": "boolean",
       "label": "Предупреждать о нескольких вкладках",
       "default": true,
-      "group": "Поведение"
+      "group": "Поведение",
+      "section": "branding"
     },
     {
       "key": "behavior.commitOnPageEnter",
       "type": "boolean",
       "label": "SCORM commit при входе на страницу",
       "default": true,
-      "group": "Поведение"
+      "group": "Поведение",
+      "section": "branding"
     }
   ],
   "capabilities": {
