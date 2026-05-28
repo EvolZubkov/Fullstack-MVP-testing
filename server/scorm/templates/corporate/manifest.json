@@ -5,21 +5,121 @@
   "templateApiVersion": "1.0",
   "description": "Корпоративный плеер с боковой панелью, навигацией по темам и поддержкой брендинга.",
   "params": [
-    { "key": "primaryColor",    "type": "color",   "label": "Основной цвет",           "default": "221 83% 53%", "group": "Цвета" },
-    { "key": "backgroundColor", "type": "color",   "label": "Цвет фона",               "default": "220 14% 10%", "group": "Цвета" },
-    { "key": "foregroundColor", "type": "color",   "label": "Цвет текста",             "default": "0 0% 96%",    "group": "Цвета" },
-    { "key": "cardColor",       "type": "color",   "label": "Цвет карточек",           "default": "220 13% 16%", "group": "Цвета" },
-    { "key": "cardBorderColor", "type": "color",   "label": "Граница карточек",        "default": "220 13% 26%", "group": "Цвета" },
-    { "key": "borderColor",     "type": "color",   "label": "Цвет границ",             "default": "220 13% 24%", "group": "Цвета" },
-    { "key": "mutedColor",      "type": "color",   "label": "Приглушённый цвет",       "default": "220 12% 22%", "group": "Цвета" },
-    { "key": "accentColor",     "type": "color",   "label": "Акцентный цвет",          "default": "220 12% 24%", "group": "Цвета" },
-    { "key": "sidebarColor",    "type": "color",   "label": "Цвет боковой панели",     "default": "220 18% 8%",  "group": "Цвета" },
-    { "key": "fontFamily",      "type": "select",  "label": "Шрифт",                   "default": "Inter",       "group": "Оформление", "options": ["Inter", "Roboto", "Arial"] },
-    { "key": "logoUrl",         "type": "image",   "label": "Логотип",                 "default": null,          "group": "Оформление" },
-    { "key": "companyName",     "type": "text",    "label": "Название компании",       "default": "",            "group": "Оформление" },
-    { "key": "progress.mode",   "type": "select",  "label": "Режим прогресса",         "default": "questions",   "group": "Навигация",  "options": ["questions", "pages", "hidden"] },
-    { "key": "showProgressBar", "type": "boolean", "label": "Показывать прогресс-бар", "default": true,          "group": "Навигация" },
-    { "key": "showTopicNav",    "type": "boolean", "label": "Навигация по темам",      "default": true,          "group": "Навигация" }
+    {
+      "key": "primaryColor",
+      "type": "color",
+      "label": "Основной цвет",
+      "default": "221 83% 53%",
+      "group": "Цвета"
+    },
+    {
+      "key": "backgroundColor",
+      "type": "color",
+      "label": "Цвет фона",
+      "default": "220 14% 10%",
+      "group": "Цвета"
+    },
+    {
+      "key": "foregroundColor",
+      "type": "color",
+      "label": "Цвет текста",
+      "default": "0 0% 96%",
+      "group": "Цвета"
+    },
+    {
+      "key": "cardColor",
+      "type": "color",
+      "label": "Цвет карточек",
+      "default": "220 13% 16%",
+      "group": "Цвета"
+    },
+    {
+      "key": "cardBorderColor",
+      "type": "color",
+      "label": "Граница карточек",
+      "default": "220 13% 26%",
+      "group": "Цвета"
+    },
+    {
+      "key": "borderColor",
+      "type": "color",
+      "label": "Цвет границ",
+      "default": "220 13% 24%",
+      "group": "Цвета"
+    },
+    {
+      "key": "mutedColor",
+      "type": "color",
+      "label": "Приглушённый цвет",
+      "default": "220 12% 22%",
+      "group": "Цвета"
+    },
+    {
+      "key": "accentColor",
+      "type": "color",
+      "label": "Акцентный цвет",
+      "default": "220 12% 24%",
+      "group": "Цвета"
+    },
+    {
+      "key": "sidebarColor",
+      "type": "color",
+      "label": "Цвет боковой панели",
+      "default": "220 18% 8%",
+      "group": "Цвета"
+    },
+    {
+      "key": "fontFamily",
+      "type": "select",
+      "label": "Шрифт",
+      "default": "Inter",
+      "group": "Оформление",
+      "options": [
+        "Inter",
+        "Roboto",
+        "Arial"
+      ]
+    },
+    {
+      "key": "logoUrl",
+      "type": "image",
+      "label": "Логотип",
+      "default": null,
+      "group": "Оформление"
+    },
+    {
+      "key": "companyName",
+      "type": "text",
+      "label": "Название компании",
+      "default": "",
+      "group": "Оформление"
+    },
+    {
+      "key": "progress.mode",
+      "type": "select",
+      "label": "Режим прогресса",
+      "default": "questions",
+      "group": "Навигация",
+      "options": [
+        "questions",
+        "pages",
+        "hidden"
+      ]
+    },
+    {
+      "key": "showProgressBar",
+      "type": "boolean",
+      "label": "Показывать прогресс-бар",
+      "default": true,
+      "group": "Навигация"
+    },
+    {
+      "key": "showTopicNav",
+      "type": "boolean",
+      "label": "Навигация по темам",
+      "default": true,
+      "group": "Навигация"
+    }
   ],
   "contentTemplates": [
     {
@@ -32,9 +132,16 @@
           "key": "title",
           "type": "text",
           "label": "Заголовок",
-          "required": true,
+          "required": false,
           "maxLength": 120,
-          "textFit": { "mode": "autoFitFont", "defaultFontSize": 36, "minFontSize": 24, "maxFontSize": 36, "allowAuthorFontSize": false, "overflow": "warn" }
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 36,
+            "minFontSize": 24,
+            "maxFontSize": 36,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
         },
         {
           "key": "subtitle",
@@ -42,7 +149,18 @@
           "label": "Подзаголовок",
           "required": false,
           "maxLength": 300,
-          "textFit": { "mode": "fixed", "defaultFontSize": 18, "allowAuthorFontSize": true, "allowedFontSizes": [16, 18, 20, 22], "overflow": "warn" }
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 18,
+            "allowAuthorFontSize": true,
+            "allowedFontSizes": [
+              16,
+              18,
+              20,
+              22
+            ],
+            "overflow": "warn"
+          }
         },
         {
           "key": "heroImage",
@@ -62,9 +180,16 @@
           "key": "title",
           "type": "text",
           "label": "Заголовок",
-          "required": true,
+          "required": false,
           "maxLength": 120,
-          "textFit": { "mode": "autoFitFont", "defaultFontSize": 28, "minFontSize": 20, "maxFontSize": 28, "allowAuthorFontSize": false, "overflow": "warn" }
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
         },
         {
           "key": "lead",
@@ -72,16 +197,33 @@
           "label": "Вводный текст",
           "required": false,
           "maxLength": 200,
-          "textFit": { "mode": "fixed", "defaultFontSize": 18, "allowAuthorFontSize": false, "overflow": "warn" }
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 18,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
         },
         {
           "key": "body",
           "type": "richText",
           "label": "Основной текст",
-          "required": true,
-          "textFit": { "mode": "growBox", "defaultFontSize": 16, "overflow": "warn" },
-          "allowedMarks": ["bold", "italic", "link"],
-          "allowedBlocks": ["paragraph", "bulletedList", "numberedList"]
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          },
+          "allowedMarks": [
+            "bold",
+            "italic",
+            "link"
+          ],
+          "allowedBlocks": [
+            "paragraph",
+            "bulletedList",
+            "numberedList"
+          ]
         },
         {
           "key": "image",
@@ -101,18 +243,31 @@
           "key": "title",
           "type": "text",
           "label": "Заголовок",
-          "required": true,
+          "required": false,
           "maxLength": 120,
-          "textFit": { "mode": "fixed", "defaultFontSize": 28, "allowAuthorFontSize": false, "overflow": "warn" }
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
         },
         {
           "key": "progressChart",
           "type": "resultField",
           "label": "Показатель прогресса",
-          "required": true,
-          "allowedPaths": ["result.scorePercent", "progress.question.percent", "progress.page.percent"],
+          "required": false,
+          "allowedPaths": [
+            "result.scorePercent",
+            "progress.question.percent",
+            "progress.page.percent"
+          ],
           "defaultPath": "result.scorePercent",
-          "allowedRenderers": ["core.ringChart", "core.progressBar", "core.textMetric"],
+          "allowedRenderers": [
+            "core.ringChart",
+            "core.progressBar",
+            "core.textMetric"
+          ],
           "defaultRenderer": "core.ringChart"
         }
       ]
@@ -128,18 +283,41 @@
     "system.blocked": "layouts/system.blocked.html"
   },
   "assets": {
-    "styles": ["styles/theme.css", "styles/base.css"],
-    "scripts": ["scripts/template.js"],
+    "styles": [
+      "styles/theme.css",
+      "styles/base.css"
+    ],
+    "scripts": [
+      "scripts/template.js"
+    ],
     "images": [],
     "preview": "preview.svg"
   },
   "capabilities": {
-    "navigation": ["linear", "locked"],
+    "navigation": [
+      "linear",
+      "locked"
+    ],
     "sidebar": true,
-    "progress": ["questions", "pages", "hidden"],
+    "progress": [
+      "questions",
+      "pages",
+      "hidden"
+    ],
     "timer": true,
-    "contentPages": ["start", "intro", "info", "summary", "html"],
-    "questionTypes": ["single", "multiple", "matching", "ranking"],
+    "contentPages": [
+      "start",
+      "intro",
+      "info",
+      "summary",
+      "html"
+    ],
+    "questionTypes": [
+      "single",
+      "multiple",
+      "matching",
+      "ranking"
+    ],
     "customInteractions": false,
     "runtimeApi": "1.0"
   },
@@ -147,16 +325,56 @@
     "demoData": "demo/course.json",
     "defaultRoute": "start",
     "routes": [
-      { "route": "start",              "label": "Старт" },
-      { "route": "content.intro",      "pageId": "demo-intro",   "templateKey": "intro.hero",           "label": "Введение: заголовок и изображение" },
-      { "route": "content.info",       "pageId": "demo-info",    "templateKey": "info.textWithImage",   "label": "Информация: текст и изображение" },
-      { "route": "question.single",    "questionId": "demo-single",   "label": "Вопрос: одиночный выбор" },
-      { "route": "question.multiple",  "questionId": "demo-multiple", "label": "Вопрос: множественный выбор" },
-      { "route": "question.matching",  "questionId": "demo-matching", "label": "Вопрос: сопоставление" },
-      { "route": "question.ranking",   "questionId": "demo-ranking",  "label": "Вопрос: ранжирование" },
-      { "route": "content.summary",    "pageId": "demo-summary", "templateKey": "summary.progressRing", "label": "Итог: кольцевая диаграмма" },
-      { "route": "results",            "label": "Результаты" },
-      { "route": "system.blocked",     "label": "Системная: доступ ограничен" }
+      {
+        "route": "start",
+        "label": "Старт"
+      },
+      {
+        "route": "content.intro",
+        "pageId": "demo-intro",
+        "templateKey": "intro.hero",
+        "label": "Введение: заголовок и изображение"
+      },
+      {
+        "route": "content.info",
+        "pageId": "demo-info",
+        "templateKey": "info.textWithImage",
+        "label": "Информация: текст и изображение"
+      },
+      {
+        "route": "question.single",
+        "questionId": "demo-single",
+        "label": "Вопрос: одиночный выбор"
+      },
+      {
+        "route": "question.multiple",
+        "questionId": "demo-multiple",
+        "label": "Вопрос: множественный выбор"
+      },
+      {
+        "route": "question.matching",
+        "questionId": "demo-matching",
+        "label": "Вопрос: сопоставление"
+      },
+      {
+        "route": "question.ranking",
+        "questionId": "demo-ranking",
+        "label": "Вопрос: ранжирование"
+      },
+      {
+        "route": "content.summary",
+        "pageId": "demo-summary",
+        "templateKey": "summary.progressRing",
+        "label": "Итог: кольцевая диаграмма"
+      },
+      {
+        "route": "results",
+        "label": "Результаты"
+      },
+      {
+        "route": "system.blocked",
+        "label": "Системная: доступ ограничен"
+      }
     ]
   }
 }

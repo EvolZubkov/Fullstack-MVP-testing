@@ -58,23 +58,39 @@
           "label": "Надзаголовок",
           "required": false,
           "maxLength": 80,
-          "textFit": { "mode": "fixed", "defaultFontSize": 14, "overflow": "warn" }
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 14,
+            "overflow": "warn"
+          }
         },
         {
           "key": "titleLine1",
           "type": "text",
           "label": "Заголовок: строка 1",
-          "required": true,
+          "required": false,
           "maxLength": 40,
-          "textFit": { "mode": "autoFitFont", "defaultFontSize": 56, "minFontSize": 36, "maxFontSize": 56, "overflow": "warn" }
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 56,
+            "minFontSize": 36,
+            "maxFontSize": 56,
+            "overflow": "warn"
+          }
         },
         {
           "key": "titleLine2",
           "type": "text",
           "label": "Заголовок: строка 2",
-          "required": true,
+          "required": false,
           "maxLength": 40,
-          "textFit": { "mode": "autoFitFont", "defaultFontSize": 56, "minFontSize": 36, "maxFontSize": 56, "overflow": "warn" }
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 56,
+            "minFontSize": 36,
+            "maxFontSize": 56,
+            "overflow": "warn"
+          }
         },
         {
           "key": "titleAccent",
@@ -82,7 +98,13 @@
           "label": "Акцент в заголовке",
           "required": false,
           "maxLength": 24,
-          "textFit": { "mode": "autoFitFont", "defaultFontSize": 56, "minFontSize": 36, "maxFontSize": 56, "overflow": "warn" }
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 56,
+            "minFontSize": 36,
+            "maxFontSize": 56,
+            "overflow": "warn"
+          }
         },
         {
           "key": "titleLine3",
@@ -90,24 +112,47 @@
           "label": "Заголовок: строка 3",
           "required": false,
           "maxLength": 40,
-          "textFit": { "mode": "autoFitFont", "defaultFontSize": 56, "minFontSize": 36, "maxFontSize": 56, "overflow": "warn" }
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 56,
+            "minFontSize": 36,
+            "maxFontSize": 56,
+            "overflow": "warn"
+          }
         },
         {
           "key": "subtitle",
           "type": "textarea",
           "label": "Краткое описание",
-          "required": true,
+          "required": false,
           "maxLength": 220,
-          "textFit": { "mode": "fixed", "defaultFontSize": 18, "overflow": "warn" }
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 18,
+            "overflow": "warn"
+          }
         },
         {
           "key": "body",
           "type": "richText",
           "label": "Основной текст",
           "required": false,
-          "textFit": { "mode": "growBox", "defaultFontSize": 16, "maxHeight": 180, "overflow": "warn" },
-          "allowedMarks": ["bold", "italic", "link"],
-          "allowedBlocks": ["paragraph", "bulletedList", "numberedList"]
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "maxHeight": 180,
+            "overflow": "warn"
+          },
+          "allowedMarks": [
+            "bold",
+            "italic",
+            "link"
+          ],
+          "allowedBlocks": [
+            "paragraph",
+            "bulletedList",
+            "numberedList"
+          ]
         }
       ]
     },
@@ -124,15 +169,25 @@
           "label": "Надзаголовок",
           "required": false,
           "maxLength": 80,
-          "textFit": { "mode": "fixed", "defaultFontSize": 14, "overflow": "warn" }
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 14,
+            "overflow": "warn"
+          }
         },
         {
           "key": "title",
           "type": "text",
           "label": "Заголовок",
-          "required": true,
+          "required": false,
           "maxLength": 90,
-          "textFit": { "mode": "autoFitFont", "defaultFontSize": 40, "minFontSize": 28, "maxFontSize": 40, "overflow": "warn" }
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 40,
+            "minFontSize": 28,
+            "maxFontSize": 40,
+            "overflow": "warn"
+          }
         },
         {
           "key": "subtitle",
@@ -140,16 +195,33 @@
           "label": "Вводный текст",
           "required": false,
           "maxLength": 220,
-          "textFit": { "mode": "fixed", "defaultFontSize": 20, "overflow": "warn" }
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 20,
+            "overflow": "warn"
+          }
         },
         {
           "key": "body",
           "type": "richText",
           "label": "Основной текст",
-          "required": true,
-          "textFit": { "mode": "growBox", "defaultFontSize": 18, "maxHeight": 260, "overflow": "warn" },
-          "allowedMarks": ["bold", "italic", "link"],
-          "allowedBlocks": ["paragraph", "bulletedList", "numberedList"]
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 18,
+            "maxHeight": 260,
+            "overflow": "warn"
+          },
+          "allowedMarks": [
+            "bold",
+            "italic",
+            "link"
+          ],
+          "allowedBlocks": [
+            "paragraph",
+            "bulletedList",
+            "numberedList"
+          ]
         }
       ]
     },
@@ -166,15 +238,25 @@
           "label": "Надзаголовок",
           "required": false,
           "maxLength": 80,
-          "textFit": { "mode": "fixed", "defaultFontSize": 14, "overflow": "warn" }
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 14,
+            "overflow": "warn"
+          }
         },
         {
           "key": "title",
           "type": "text",
           "label": "Заголовок",
-          "required": true,
+          "required": false,
           "maxLength": 90,
-          "textFit": { "mode": "autoFitFont", "defaultFontSize": 40, "minFontSize": 28, "maxFontSize": 40, "overflow": "warn" }
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 40,
+            "minFontSize": 28,
+            "maxFontSize": 40,
+            "overflow": "warn"
+          }
         },
         {
           "key": "subtitle",
@@ -182,16 +264,33 @@
           "label": "Вводный текст",
           "required": false,
           "maxLength": 220,
-          "textFit": { "mode": "fixed", "defaultFontSize": 20, "overflow": "warn" }
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 20,
+            "overflow": "warn"
+          }
         },
         {
           "key": "body",
           "type": "richText",
           "label": "Основной текст",
-          "required": true,
-          "textFit": { "mode": "growBox", "defaultFontSize": 18, "maxHeight": 260, "overflow": "warn" },
-          "allowedMarks": ["bold", "italic", "link"],
-          "allowedBlocks": ["paragraph", "bulletedList", "numberedList"]
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 18,
+            "maxHeight": 260,
+            "overflow": "warn"
+          },
+          "allowedMarks": [
+            "bold",
+            "italic",
+            "link"
+          ],
+          "allowedBlocks": [
+            "paragraph",
+            "bulletedList",
+            "numberedList"
+          ]
         }
       ]
     },
@@ -208,72 +307,154 @@
           "label": "Надзаголовок",
           "required": false,
           "maxLength": 80,
-          "textFit": { "mode": "fixed", "defaultFontSize": 14, "overflow": "warn" }
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 14,
+            "overflow": "warn"
+          }
         },
         {
           "key": "title",
           "type": "text",
           "label": "Заголовок",
-          "required": true,
+          "required": false,
           "maxLength": 90,
-          "textFit": { "mode": "autoFitFont", "defaultFontSize": 40, "minFontSize": 28, "maxFontSize": 40, "overflow": "warn" }
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 40,
+            "minFontSize": 28,
+            "maxFontSize": 40,
+            "overflow": "warn"
+          }
         },
         {
           "key": "statusLabel",
           "type": "text",
           "label": "Статус темы",
-          "required": true,
+          "required": false,
           "maxLength": 40,
-          "textFit": { "mode": "fixed", "defaultFontSize": 22, "overflow": "warn" }
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 22,
+            "overflow": "warn"
+          }
         },
         {
           "key": "percent",
           "type": "number",
           "label": "Процент правильных ответов",
-          "required": true,
-          "constraints": { "min": 0, "max": 100 }
+          "required": false,
+          "constraints": {
+            "min": 0,
+            "max": 100
+          }
         },
         {
           "key": "questionCount",
           "type": "number",
           "label": "Количество вопросов",
-          "required": true,
-          "constraints": { "min": 0 }
+          "required": false,
+          "constraints": {
+            "min": 0
+          }
         },
         {
           "key": "body",
           "type": "richText",
           "label": "Пояснение",
           "required": false,
-          "textFit": { "mode": "growBox", "defaultFontSize": 18, "maxHeight": 220, "overflow": "warn" },
-          "allowedMarks": ["bold", "italic", "link"],
-          "allowedBlocks": ["paragraph", "bulletedList", "numberedList"]
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 18,
+            "maxHeight": 220,
+            "overflow": "warn"
+          },
+          "allowedMarks": [
+            "bold",
+            "italic",
+            "link"
+          ],
+          "allowedBlocks": [
+            "paragraph",
+            "bulletedList",
+            "numberedList"
+          ]
         }
       ]
     }
   ],
   "assets": {
-    "styles": ["styles/base.css", "styles/theme.css"],
-    "scripts": ["scripts/template.js"],
-    "images": ["assets/images/hero-mountain-back.svg", "assets/images/hero-mountain.svg", "assets/images/content-cubes.png"],
+    "styles": [
+      "styles/base.css",
+      "styles/theme.css"
+    ],
+    "scripts": [
+      "scripts/template.js"
+    ],
+    "images": [
+      "assets/images/hero-mountain-back.svg",
+      "assets/images/hero-mountain.svg",
+      "assets/images/content-cubes.png"
+    ],
     "preview": "preview.svg"
   },
   "preview": {
     "demoData": "demo/course.json",
     "defaultRoute": "start",
     "routes": [
-      { "route": "start", "pageId": "demo-start", "templateKey": "start.hero", "label": "Стартовая: герой с иллюстрацией" },
-      { "route": "content.intro", "pageId": "demo-intro", "templateKey": "intro.briefing", "label": "Введение: краткий брифинг" },
-      { "route": "content.info", "pageId": "demo-info", "templateKey": "info.text", "label": "Информация: текстовая страница" },
-      { "route": "question.single", "label": "Вопрос: одиночный выбор" },
-      { "route": "question.multiple", "label": "Вопрос: множественный выбор" },
-      { "route": "question.matching", "label": "Вопрос: сопоставление" },
-      { "route": "question.ranking", "label": "Вопрос: ранжирование" },
-      { "route": "content.summary", "pageId": "demo-summary", "templateKey": "summary.topicResult", "label": "Итог: результат темы" },
-      { "route": "results", "label": "Результаты" },
-      { "route": "system.locked", "label": "Системная: доступ ограничен" }
+      {
+        "route": "start",
+        "pageId": "demo-start",
+        "templateKey": "start.hero",
+        "label": "Стартовая: герой с иллюстрацией"
+      },
+      {
+        "route": "content.intro",
+        "pageId": "demo-intro",
+        "templateKey": "intro.briefing",
+        "label": "Введение: краткий брифинг"
+      },
+      {
+        "route": "content.info",
+        "pageId": "demo-info",
+        "templateKey": "info.text",
+        "label": "Информация: текстовая страница"
+      },
+      {
+        "route": "question.single",
+        "label": "Вопрос: одиночный выбор"
+      },
+      {
+        "route": "question.multiple",
+        "label": "Вопрос: множественный выбор"
+      },
+      {
+        "route": "question.matching",
+        "label": "Вопрос: сопоставление"
+      },
+      {
+        "route": "question.ranking",
+        "label": "Вопрос: ранжирование"
+      },
+      {
+        "route": "content.summary",
+        "pageId": "demo-summary",
+        "templateKey": "summary.topicResult",
+        "label": "Итог: результат темы"
+      },
+      {
+        "route": "results",
+        "label": "Результаты"
+      },
+      {
+        "route": "system.locked",
+        "label": "Системная: доступ ограничен"
+      }
     ],
-    "viewports": ["desktop", "mobile"]
+    "viewports": [
+      "desktop",
+      "mobile"
+    ]
   },
   "params": [
     {
@@ -340,7 +521,11 @@
       "key": "progress.mode",
       "type": "select",
       "label": "Режим прогресса",
-      "options": ["questions", "pages", "hidden"],
+      "options": [
+        "questions",
+        "pages",
+        "hidden"
+      ],
       "default": "questions",
       "group": "Навигация"
     },
@@ -348,7 +533,10 @@
       "key": "navigation.presentation",
       "type": "select",
       "label": "Навигация",
-      "options": ["bottom", "sidebar"],
+      "options": [
+        "bottom",
+        "sidebar"
+      ],
       "default": "bottom",
       "group": "Навигация"
     },
@@ -368,12 +556,30 @@
     }
   ],
   "capabilities": {
-    "navigation": ["linear", "locked"],
+    "navigation": [
+      "linear",
+      "locked"
+    ],
     "sidebar": true,
-    "progress": ["questions", "pages", "hidden"],
+    "progress": [
+      "questions",
+      "pages",
+      "hidden"
+    ],
     "timer": true,
-    "contentPages": ["start", "intro", "info", "summary", "html"],
-    "questionTypes": ["single", "multiple", "matching", "ranking"],
+    "contentPages": [
+      "start",
+      "intro",
+      "info",
+      "summary",
+      "html"
+    ],
+    "questionTypes": [
+      "single",
+      "multiple",
+      "matching",
+      "ranking"
+    ],
     "customInteractions": false,
     "runtimeApi": "1.0"
   },
