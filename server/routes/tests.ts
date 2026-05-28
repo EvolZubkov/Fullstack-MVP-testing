@@ -16,6 +16,7 @@ import {
   type AdaptiveTopicPayload,
 } from "../services/test-settings";
 import { RequiredFieldsMissingError } from "../services/required-fields-validator";
+import { FlowPolicyValidationError } from "../services/flow-policy-validator";
 
 // ─── Validation schemas (PRD-7 §5.4) ─────────────────────────────────────────
 
@@ -311,6 +312,12 @@ router.post("/", requireAuthor, async (req, res) => {
     const full = await loadFullTest(test.id);
     res.status(201).json(full ?? test);
   } catch (error) {
+    if (error instanceof FlowPolicyValidationError) {
+      return res.status(422).json({
+        error: "flow_policy_invalid",
+        violations: error.violations,
+      });
+    }
     logger.error("Create test error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to create test" });
   }
@@ -527,6 +534,15 @@ router.put("/:id", requireAuthor, async (req, res) => {
             fieldName,
           })),
         ),
+      });
+    }
+    if (error instanceof FlowPolicyValidationError) {
+      // PRD-4 v1.1 §3.1.2 / L3 server-side guard: (mode × flowMode) is invalid
+      // or adaptive strict gating is breached. Mirrors the client-side
+      // ValidationIssue shape so the UI can surface field-anchored errors.
+      return res.status(422).json({
+        error: "flow_policy_invalid",
+        violations: error.violations,
       });
     }
     const e = error as Error & { status?: number };

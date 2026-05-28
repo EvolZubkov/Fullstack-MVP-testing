@@ -792,7 +792,8 @@ describe("TestSettingsService — adaptive settings persistence", () => {
       test: {
         title: "Adaptive",
         mode: "adaptive",
-        flowPolicyJson: { mode: "linear_flat" },
+        // PRD-4 v1.1: (adaptive, linear_flat) is invalid; use linear_by_topics for adaptive-flow tests.
+        flowPolicyJson: { mode: "linear_by_topics" },
         designSettingsJson: { templateId: "default" },
         overallPassRuleJson: {},
       },
@@ -815,7 +816,13 @@ describe("TestSettingsService — adaptive settings persistence", () => {
     const inserts = captureInserts();
 
     await svc.create({
-      test: { title: "A", mode: "adaptive", designSettingsJson: { templateId: "default" }, overallPassRuleJson: {} },
+      test: {
+        title: "A",
+        mode: "adaptive",
+        flowPolicyJson: { mode: "linear_by_topics" },
+        designSettingsJson: { templateId: "default" },
+        overallPassRuleJson: {},
+      },
       sections: [],
       adaptiveSettings: adaptivePayload,
     });
@@ -844,7 +851,10 @@ describe("TestSettingsService — adaptive settings persistence", () => {
     const inserts = captureInserts();
     const deletes = captureDeletes();
 
-    await svc.save("t1", { test: { mode: "adaptive" }, adaptiveSettings: adaptivePayload });
+    await svc.save("t1", {
+      test: { mode: "adaptive", flowPolicyJson: { mode: "linear_by_topics" } },
+      adaptiveSettings: adaptivePayload,
+    });
 
     // Old rows are removed bottom-up to respect FK order…
     expect(deletes).toContain(adaptiveLevelLinks);
@@ -874,7 +884,10 @@ describe("TestSettingsService — adaptive settings persistence", () => {
     });
 
     await expect(
-      svc.save("t1", { test: { mode: "adaptive" }, adaptiveSettings: adaptivePayload }),
+      svc.save("t1", {
+        test: { mode: "adaptive", flowPolicyJson: { mode: "linear_by_topics" } },
+        adaptiveSettings: adaptivePayload,
+      }),
     ).rejects.toThrow("adaptive level insert failed");
   });
 });

@@ -167,6 +167,21 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
     }
   }
 
+  // PRD-4 v1.1 §3.1.2: (adaptive, linear_flat) is not supported in MVP —
+  // deferred to a future «Flat adaptive» PRD that adds a global difficulty
+  // scale without topic-binding. Block at validation level so neither save
+  // nor publish succeeds with this combination.
+  if (model.mode === "adaptive" && model.flowMode === "linear_flat") {
+    errors.push({
+      field: "flowMode",
+      code: "adaptive_flat_unsupported",
+      message:
+        "Адаптивный режим в плоском сценарии (linear_flat) пока не поддерживается. " +
+        "Выберите «Линейный по темам» или «Через страницу-маршрутизатор».",
+      severity: "error",
+    });
+  }
+
   // FR-17a: adaptive mode requires at least one enabled topic — stop-factor.
   if (model.mode === "adaptive" && model.sections.length > 0) {
     const hasEnabledTopic = model.adaptive.topics.some((t) => t.enabled);
@@ -180,21 +195,34 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
     }
   }
 
-  // FR-17b: in adaptive mode every ENABLED section-topic should have >= 2 levels.
-  // Disabled topics are excluded from test logic so missing levels are not an issue.
+  // PRD-4 v1.1 §3.1.2 strict gating: in adaptive mode every section must have
+  // a corresponding topic with at least one configured level. Mixed mode
+  // («одни темы adaptive, другие standard») is explicitly forbidden by the
+  // PRD-4 contract (clarified 2026-05-28). Stricter than FR-17b: not a
+  // warning, blocks save.
   if (model.mode === "adaptive") {
     for (let i = 0; i < model.sections.length; i++) {
       const section = model.sections[i];
       const topicIdx = model.adaptive.topics.findIndex((t) => t.topicId === section.topicId);
       const topic = topicIdx >= 0 ? model.adaptive.topics[topicIdx] : undefined;
-      if (!topic?.enabled) continue;
-      if (topic.levels.length < 2) {
+      if (!topic || topic.levels.length === 0) {
+        errors.push({
+          field:
+            topicIdx >= 0
+              ? `adaptive.topics[${topicIdx}].levels`
+              : `sections[${i}]`,
+          code: "adaptive_section_no_levels",
+          message: `Тема «${section.topicName}» в адаптивном режиме обязана иметь хотя бы один уровень сложности.`,
+          severity: "error",
+        });
+      } else if (topic.levels.length < 2) {
+        // FR-17b retained as a warning: 1 level technically valid for strict
+        // gating but the UX prompt encourages the author to add a second one
+        // so the adaptive flow has somewhere to scale to/from.
         warnings.push({
           field: `adaptive.topics[${topicIdx}].levels`,
           code: "missing_levels",
-          message: topic.levels.length === 1
-            ? `Topic "${section.topicName}" has only one adaptive level; at least two are recommended.`
-            : `Topic "${section.topicName}" has no adaptive levels configured.`,
+          message: `Topic "${section.topicName}" has only one adaptive level; at least two are recommended.`,
           severity: "warning",
         });
       }

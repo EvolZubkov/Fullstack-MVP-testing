@@ -849,7 +849,12 @@ describe("FR-17b: adaptive topic with fewer than 2 levels produces warning", () 
     expect(missingWarnings).toHaveLength(0);
   });
 
-  it("sad path — enabled adaptive topic with no levels produces missing_levels warning (not error)", () => {
+  it("PRD-4 v1.1: enabled adaptive topic with no levels is now an ERROR (was warning pre-2026-05-28)", () => {
+    // Per PRD-4 v1.1 §3.1.2 strict gating: every section in adaptive mode
+    // must have a non-empty levels[]. Mixed mode is forbidden — a section
+    // without configured levels is not valid for inclusion in an adaptive
+    // test. The old behaviour surfaced this as a warning + only-enabled
+    // check; the new contract surfaces it as a blocking error.
     const model = baseModel({
       mode: "adaptive",
       adaptive: {
@@ -867,13 +872,19 @@ describe("FR-17b: adaptive topic with fewer than 2 levels produces warning", () 
       },
     });
     const result = validateTestEditor(model);
-    expect(result.warnings).toContainEqual(
-      expect.objectContaining({ code: "missing_levels", severity: "warning" }),
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        code: "adaptive_section_no_levels",
+        severity: "error",
+      }),
     );
-    expect(result.errors.filter((e) => e.code === "missing_levels")).toHaveLength(0);
   });
 
-  it("disabled topic with no levels produces no missing_levels warning", () => {
+  it("PRD-4 v1.1: disabled topic with no levels also surfaces strict-gating error", () => {
+    // Pre-2026-05-28 behaviour was «disabled topic skipped». PRD-4 v1.1 ends
+    // mixed-mode entirely: every section in test.sections[] is part of the
+    // adaptive run, regardless of topic.enabled. Without levels[] the topic
+    // is not valid for inclusion.
     const model = baseModel({
       mode: "adaptive",
       adaptive: {
@@ -891,7 +902,12 @@ describe("FR-17b: adaptive topic with fewer than 2 levels produces warning", () 
       },
     });
     const result = validateTestEditor(model);
-    expect(result.warnings.filter((w) => w.code === "missing_levels")).toHaveLength(0);
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        code: "adaptive_section_no_levels",
+        severity: "error",
+      }),
+    );
   });
 
   it("sad path — adaptive topic with exactly one level produces missing_levels warning", () => {
@@ -934,5 +950,116 @@ describe("FR-17b: adaptive topic with fewer than 2 levels produces warning", () 
     const model = baseModel({ mode: "standard" });
     const result = validateTestEditor(model);
     expect(result.warnings.filter((w) => w.code === "missing_levels")).toHaveLength(0);
+  });
+});
+
+// ─── PRD-4 v1.1: (adaptive, linear_flat) is blocked at validation level ──────
+
+describe("PRD-4 v1.1: adaptive + linear_flat blocked (deferred to future PRD)", () => {
+  it("error fires when mode=adaptive AND flowMode=linear_flat", () => {
+    const model = baseModel({
+      mode: "adaptive",
+      flowMode: "linear_flat",
+      adaptive: {
+        showDifficultyLevel: false,
+        testSettings: { showDifficultyLevel: false },
+        topics: [
+          {
+            enabled: true,
+            topicId: "topic-1",
+            topicName: "Topic One",
+            failureFeedback: null,
+            levels: [
+              {
+                levelIndex: 0,
+                levelName: "Базовый",
+                minDifficulty: 0,
+                maxDifficulty: 33,
+                questionsCount: 5,
+                passThreshold: 70,
+                passThresholdType: "percent",
+                links: [],
+              },
+              {
+                levelIndex: 1,
+                levelName: "Средний",
+                minDifficulty: 34,
+                maxDifficulty: 66,
+                questionsCount: 5,
+                passThreshold: 70,
+                passThresholdType: "percent",
+                links: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const result = validateTestEditor(model);
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        code: "adaptive_flat_unsupported",
+        field: "flowMode",
+        severity: "error",
+      }),
+    );
+  });
+
+  it("no error for the other 5 valid combinations", () => {
+    const baseAdaptive = {
+      showDifficultyLevel: false,
+      testSettings: { showDifficultyLevel: false },
+      topics: [
+        {
+          enabled: true,
+          topicId: "topic-1",
+          topicName: "Topic One",
+          failureFeedback: null,
+          levels: [
+            {
+              levelIndex: 0,
+              levelName: "Базовый",
+              minDifficulty: 0,
+              maxDifficulty: 50,
+              questionsCount: 5,
+              passThreshold: 70,
+              passThresholdType: "percent" as const,
+              links: [],
+            },
+            {
+              levelIndex: 1,
+              levelName: "Средний",
+              minDifficulty: 51,
+              maxDifficulty: 100,
+              questionsCount: 5,
+              passThreshold: 70,
+              passThresholdType: "percent" as const,
+              links: [],
+            },
+          ],
+        },
+      ],
+    };
+    const validCombos: Array<{ mode: "standard" | "adaptive"; flowMode: TestEditorModel["flowMode"] }> = [
+      { mode: "standard", flowMode: "linear_flat" },
+      { mode: "standard", flowMode: "linear_by_topics" },
+      { mode: "standard", flowMode: "router_by_topics" },
+      { mode: "adaptive", flowMode: "linear_by_topics" },
+      { mode: "adaptive", flowMode: "router_by_topics" },
+    ];
+    for (const combo of validCombos) {
+      const model = baseModel({
+        ...combo,
+        adaptive: combo.mode === "adaptive" ? baseAdaptive : {
+          showDifficultyLevel: false,
+          testSettings: { showDifficultyLevel: false },
+          topics: [],
+        },
+      });
+      const result = validateTestEditor(model);
+      expect(
+        result.errors.filter((e) => e.code === "adaptive_flat_unsupported"),
+      ).toHaveLength(0);
+    }
   });
 });

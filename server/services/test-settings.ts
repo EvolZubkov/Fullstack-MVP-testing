@@ -30,6 +30,10 @@ import {
   RequiredFieldsMissingError,
   type RequiredFieldsViolation,
 } from "./required-fields-validator";
+import {
+  validateFlowPolicy,
+  FlowPolicyValidationError,
+} from "./flow-policy-validator";
 
 const DEFAULT_TEMPLATE_ID = "default";
 
@@ -174,6 +178,16 @@ export class TestSettingsService {
    * atomic transaction.
    */
   async create(payload: CreatePayload): Promise<Test> {
+    // PRD-4 v1.1 L3 server-side guard: reject invalid (mode × flowMode)
+    // combinations + strict adaptive-section gating before DB write.
+    const violations = validateFlowPolicy(
+      payload.test,
+      payload.sections,
+      payload.adaptiveSettings,
+    );
+    if (violations.length > 0) {
+      throw new FlowPolicyValidationError(violations);
+    }
     return db.transaction(async (tx) => {
       const id = randomUUID();
       const { status, published } = resolveStatus(payload.test);
@@ -223,6 +237,21 @@ export class TestSettingsService {
    * `payload.expectedVersion` is provided.
    */
   async save(testId: string, payload: SavePayload): Promise<Test> {
+    // PRD-4 v1.1 L3 server-side guard: reject invalid (mode × flowMode)
+    // combinations + strict adaptive-section gating before DB write. Skips
+    // when neither sections nor adaptive settings are provided (the partial
+    // patch can't possibly violate strict gating without also touching
+    // adaptive config).
+    if (payload.sections || payload.adaptiveSettings || payload.test.mode || payload.test.flowPolicyJson) {
+      const violations = validateFlowPolicy(
+        payload.test,
+        payload.sections,
+        payload.adaptiveSettings,
+      );
+      if (violations.length > 0) {
+        throw new FlowPolicyValidationError(violations);
+      }
+    }
     return db.transaction(async (tx) => {
       const { status, published } = resolveStatus(payload.test);
 
