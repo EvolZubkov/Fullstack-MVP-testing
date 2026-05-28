@@ -94,6 +94,18 @@ export type StructureSectionProps = {
    * so its footer can reflect content-page validation in the save gate.
    */
   content?: UseContentPagesResult;
+  /**
+   * The `flowMode` from the last saved snapshot (from {@link useTestEditor}).
+   * When it differs from `model.flowMode`, the section renders an info-banner
+   * telling the user the mode change is pending save (G15 / s-mode-change).
+   * `null` in create mode or while the snapshot is not yet loaded.
+   */
+  savedFlowMode?: TestEditorModel["flowMode"] | null;
+  /**
+   * Callback that switches the Drawer to the «Состав» tab. Used for the
+   * empty-topics CTA in router mode (G26).
+   */
+  onGoToComposition?: () => void;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -261,7 +273,7 @@ const structureCollision: CollisionDetection = (args) => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function StructureSection({ model, testId, content: contentProp }: StructureSectionProps) {
+export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition }: StructureSectionProps) {
   // Fallback hook so the section works standalone (component tests) when the
   // drawer has not hoisted the hook. Mirrors design-section's pattern.
   const fallback = useContentPages(contentProp ? undefined : testId);
@@ -281,6 +293,14 @@ export function StructureSection({ model, testId, content: contentProp }: Struct
 
   return (
     <div data-testid="structure-section">
+      {savedFlowMode !== null && savedFlowMode !== undefined && savedFlowMode !== model.flowMode && (
+        <Banner
+          tone="info"
+          title="Режим изменён"
+          description={`Структура показана в новом режиме «${FLOW_LABEL[model.flowMode]}». Изменение применится после сохранения.`}
+          data-testid="structure-mode-change-banner"
+        />
+      )}
       <FlowModeBar mode={model.flowMode} />
 
       {testId === undefined ? (
@@ -290,7 +310,7 @@ export function StructureSection({ model, testId, content: contentProp }: Struct
       ) : cp.error ? (
         <ErrorNotice message={cp.error.message} />
       ) : (
-        <ZonesBlock model={model} handlers={handlers} />
+        <ZonesBlock model={model} handlers={handlers} onGoToComposition={onGoToComposition} />
       )}
 
       {cp.mutationError && (
@@ -370,8 +390,8 @@ type ZoneHandlers = {
   onReplaceVariant: (page: ContentPage) => void;
 };
 
-function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
-  const { model, handlers } = props;
+function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers; onGoToComposition?: () => void }) {
+  const { model, handlers, onGoToComposition } = props;
   const pages = handlers.cp.pages;
 
   // Hooks must run unconditionally, before the «no topics» early return.
@@ -481,6 +501,27 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
   };
 
   if (model.sections.length === 0) {
+    if (model.flowMode === "router_by_topics") {
+      return (
+        <Banner
+          tone="info"
+          title="В тесте нет тем"
+          description="Добавьте темы во вкладке «Состав», и они появятся здесь как ветки маршрутизатора."
+          data-testid="structure-empty"
+        >
+          {onGoToComposition && (
+            <Button
+              variant="secondary"
+              size="s"
+              onClick={onGoToComposition}
+              data-testid="structure-empty-topics-cta"
+            >
+              Перейти к Составу
+            </Button>
+          )}
+        </Banner>
+      );
+    }
     return (
       <Banner
         tone="info"

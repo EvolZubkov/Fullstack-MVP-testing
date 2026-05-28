@@ -486,6 +486,8 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
               model={editor.model}
               testId={editor.model.id}
               content={contentPages}
+              savedFlowMode={editor.savedFlowMode}
+              onGoToComposition={() => setActiveTab("composition")}
             />
           )}
           {!editor.model && <TabPlaceholder tab={activeTab} />}

@@ -19,8 +19,9 @@
 | 1 | PRD-7 | S9 — component + API тесты, regression | Закрыта 2026-05-27 (тесты + FR-20c; полный suite 1375 зелёных, `npm run check` 0 ошибок) | — |
 | 1 | PRD-7 | S10 — удаление legacy UI | Закрыта 2026-05-27 (inline wizard удалён в S5-S8; `tests-list` монтирует `TestEditor`; `ContentPagesDialog` выведен; чтение `start_page_content` удалено из SCORM-export + runtime, контент играется как intro content-page миграции 003 §4.2; golden-guard добавлен) | — |
 | 1 | PRD-7 | S11 — acceptance pass §10 | Закрыта частично 2026-05-27 — **переоткрыта 2026-05-28**: acceptance был выдан преждевременно, вкладка «Оформление» содержит заглушки (см. S12) | — |
-| 1 | PRD-7 | S12 — Design tab closeout | **Open** (reopen 2026-05-28) — FR-30 предпросмотр шаблона, FR-31 группировка params по rail, FR-33 галерея, FR-31a все типы params, удаление orphan `DesignSettingsDialog`. См. [specs/prd-7/s12-design-closeout.md](./specs/prd-7/s12-design-closeout.md) | — |
-| 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | Не начата — **MVP** | Завершение PRD-7 S12 |
+| 1 | PRD-7 | S12 — Design tab closeout | **Open** (2026-05-28) — FR-30 предпросмотр шаблона, FR-31 группировка params по rail, FR-33 галерея, FR-31a все типы params, удаление orphan `DesignSettingsDialog`. См. [specs/prd-7/s12-design-closeout.md](./specs/prd-7/s12-design-closeout.md) | — |
+| 1 | PRD-7 | S13 — Editor parity | **Open** (2026-05-28) — 31 расхождение с wireframes по остальным вкладкам (Drawer-каркас, Настройки, Структура, variant-replace, close-confirm, список тестов, feedback-editor, cleanup). См. [specs/prd-7/s13-editor-parity.md](./specs/prd-7/s13-editor-parity.md) | — |
+| 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | Не начата — **MVP** | Завершение PRD-7 S12 + S13 |
 | 4 | PRD-8 | Router-flow runtime + UI «Структура» в router-режиме | Не начата — **MVP** | PRD-4, PRD-7 |
 | 3 | PRD-6 | Retake gate, eligibility plugins | Не начата — post-MVP | PRD-4 |
 | 5 | PRD-2 | `result.*` показатели результата | Не начата — post-MVP | PRD-4 |
@@ -33,9 +34,13 @@
 
 - Завершённые фазы S0-S8 — см. [specs/prd-7/s0-s8-closed.md](./specs/prd-7/s0-s8-closed.md).
 - Фазы S9-S11 — см. [specs/prd-7/s9-s11-in-progress.md](./specs/prd-7/s9-s11-in-progress.md).
-  S11 переоткрыта 2026-05-28: при формальной приёмке не были замечены заглушки
-  во вкладке «Оформление».
+  S11 переоткрыта 2026-05-28: при формальной приёмке не были замечены ни
+  заглушки во вкладке «Оформление» (закрывает S12), ни 31 расхождение
+  по остальным вкладкам (закрывает S13).
 - **Активная фаза S12 — Design closeout** — см. [specs/prd-7/s12-design-closeout.md](./specs/prd-7/s12-design-closeout.md).
+- **Активная фаза S13 — Editor parity** — см. [specs/prd-7/s13-editor-parity.md](./specs/prd-7/s13-editor-parity.md).
+  S12 и S13 — независимые треки (разные кодовые зоны); PRD-7 закрывается
+  после прохождения acceptance обоих.
 
 Детальный прогресс по PRD-1 — см. [specs/prd-1/implementation-todo.md](./specs/prd-1/implementation-todo.md).
 
@@ -49,8 +54,9 @@ shippable-состояния с главной бизнес-ценностью B
 
 **В MVP входят:**
 
-- **PRD-7** — единый редактор: закрытие S10 (удаление legacy), S11 (acceptance) и **S12
-  (Design closeout, reopen 2026-05-28)** — FR-30/31/31a/33 во вкладке «Оформление».
+- **PRD-7** — единый редактор: закрытие S10 (удаление legacy), S11 (acceptance) и
+  две новые фазы **S12 (Design closeout)** + **S13 (Editor parity)** — открыты 2026-05-28
+  по результатам аудита соответствия wireframes.
 - **PRD-1 closeout** — редактор content-pages в «Структуре» (см. [PRD-1 todo §4](./specs/prd-1/implementation-todo.md)).
 - **PRD-4** — гибкий поток и разделы (`flowPolicy`, `section.*`, `sort_order`).
 - **PRD-8** — сценарий через страницу-маршрутизатор (Storyline-сценарий).
@@ -60,10 +66,11 @@ shippable-состояния с главной бизнес-ценностью B
 | # | Шаг | Зона | Зависит от | Статус |
 | --- | --- | --- | --- | --- |
 | 1 | PRD-7 S10 (удаление legacy) **совмещённо с** closeout PRD-1 шаг 1 | frontend `tests.tsx` + секция «Структура» | S9 (закрыта) | **Выполнен 2026-05-27** |
-| 2 | PRD-7 S11 — acceptance pass §10 | acceptance | шаг 1 | Закрыта частично 2026-05-27 — **переоткрыта 2026-05-28** под S12 |
+| 2 | PRD-7 S11 — acceptance pass §10 | acceptance | шаг 1 | Закрыта частично 2026-05-27 — **переоткрыта 2026-05-28** под S12 + S13 |
 | 2a | **PRD-7 S12 — Design closeout** (FR-30/31/31a/33, удаление orphan `DesignSettingsDialog`) | frontend `design-section.tsx` + manifest schema | S11 (формально), wireframe `prd7-design-tab.html` (согласован 2026-05-21) | **Open** — см. [specs/prd-7/s12-design-closeout.md](./specs/prd-7/s12-design-closeout.md) |
-| 3 | PRD-1 closeout — остаток (manifest validation, приёмка), отметить PRD-1 closed | backend + docs | шаг 2a | Ожидает |
-| 4 | PRD-4 — runtime потока + flow-настройки в редакторе («Сценарий») | backend + frontend | PRD-7 закрыт | Не начата |
+| 2b | **PRD-7 S13 — Editor parity** (31 расхождение: drawer-каркас, settings, structure, variant-replace, close-confirm, tests-list, feedback-editor, cleanup) | frontend test-editor.tsx, basic-settings-section.tsx, start-pages-section.tsx, tests-list.tsx, feedback-editor-modal.tsx | wireframes согласованы 2026-05-21 | **Open** — см. [specs/prd-7/s13-editor-parity.md](./specs/prd-7/s13-editor-parity.md). Независим от S12 (разные кодовые зоны) — можно параллельно |
+| 3 | PRD-1 closeout — остаток (manifest validation, приёмка), отметить PRD-1 closed | backend + docs | шаги 2a + 2b | Ожидает |
+| 4 | PRD-4 — runtime потока + flow-настройки в редакторе («Сценарий») | backend + frontend | PRD-7 закрыт (S12 + S13) | Не начата |
 | 5 | PRD-8 — router-runtime + вкладка «Структура» в router-режиме | backend + frontend | PRD-4, PRD-1 | Не начата |
 
 После шага 5 — **Storyline-MVP shippable.**

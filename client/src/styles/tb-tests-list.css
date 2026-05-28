@@ -409,6 +409,13 @@
   display: block; font: var(--ou-text-body-s); margin-bottom: var(--ou-space-2);
   color: var(--ou-fg-default);
 }
+.tb-tests-list .typed-confirm__name-block {
+  display: block; font: var(--ou-text-body-s); font-weight: 600;
+  color: var(--ou-fg-default);
+  background: var(--ou-bg-subtle); border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-s); padding: var(--ou-space-2) var(--ou-space-3);
+  margin-bottom: var(--ou-space-2); -webkit-user-select: text; user-select: text; cursor: text;
+}
 .tb-tests-list .typed-confirm__hint {
   display: block; font: var(--ou-text-body-xs);
   color: var(--ou-fg-muted); margin-top: var(--ou-space-1);

@@ -94,6 +94,13 @@ export type UseTestEditorResult = {
   isSaving: boolean;
   /** True if the draft differs from the last saved snapshot. */
   isDirty: boolean;
+  /**
+   * The `flowMode` value from the last saved snapshot (persisted on server).
+   * `null` while the snapshot has not yet loaded or in create mode before the
+   * user first saves. Used by {@link StructureSection} to detect an unsaved
+   * mode change and show an info-banner (G15 / prd7-structure-linear-flat s-mode-change).
+   */
+  savedFlowMode: TestEditorModel["flowMode"] | null;
   /** Latest validation result for the draft (debounced). */
   validation: ValidationResult;
   /** Aggregated tab status (dirty/warning/error) keyed by tab id (FR-25b). */
@@ -537,6 +544,7 @@ export function useTestEditor(
     isLoading: isEdit ? query.isLoading : false,
     isSaving: mutation.isPending,
     isDirty,
+    savedFlowMode: snapshot?.flowMode ?? null,
     validation,
     tabStatuses,
     conflict,

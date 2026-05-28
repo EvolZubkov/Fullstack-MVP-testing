@@ -10,11 +10,8 @@
  *                            (standard / adaptive), flowMode select
  *   - «Ограничения»       — timeLimitMinutes, maxAttempts, showCorrectAnswers
  *   - «Интеграция»        — webhookUrl, telemetryEnabled
- *   - «Правила прохождения» — banner stub pointing at the next ticket; full
- *                            pass-rules + per-topic rules + decision policy UI
- *                            is significant and ships separately
- *   - «Адаптивный режим»   — banner stub; full adaptive-levels editor ships
- *                            separately
+ *   - «Правила прохождения» — passDecisionPolicy + per-topic pass rules
+ *   - «Адаптивный режим»   — adaptive levels editor (hidden when mode !== "adaptive")
  *
  * Each editable field is bound to the editor draft via `updateModel`. The
  * Drawer is responsible for save / validation / dirty tracking — this
@@ -350,6 +347,7 @@ function IntegrationPane({ model, updateModel }: SettingsSectionProps) {
           }}
           data-testid="settings-webhook-input"
         />
+        <div className="ou-formfield__desc">Оставьте пустым, если webhook не нужен.</div>
       </div>
 
       <div className="ou-formfield">
@@ -369,8 +367,6 @@ function IntegrationPane({ model, updateModel }: SettingsSectionProps) {
     </>
   );
 }
-
-// ─── Sub-panes: stubs for deferred work ───────────────────────────────────────
 
 // ─── Sub-pane: Правила прохождения ────────────────────────────────────────────
 

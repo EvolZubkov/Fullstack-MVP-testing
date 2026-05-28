@@ -1,0 +1,246 @@
+# PRD-7 S13 — Editor Parity
+
+**Статус:** Open (создан 2026-05-28)
+**Триггер:** аудит 2026-05-28 после переоткрытия acceptance-отчёта S11 выявил 38
+расхождений редактора с утверждёнными wireframes, помимо вкладки «Оформление»
+(её закрывает [S12](./s12-design-closeout.md)). Бизнес явно отказался от заглушек
+и `window.prompt`/`window.alert` в production-коде.
+**Источник истины:** утверждённые wireframes в `docs/wireframes/approved/`
+(согласованы 2026-05-21):
+
+- `prd7-editor-drawer.html` — Drawer-каркас, header, footer, status-indicators,
+  все вкладочные состояния (`s-default`, `s-default-adaptive`, `s-dirty`,
+  `s-error`, `s-saving`, `s-changes`, `s-settings`, `s-feedback-edit`)
+- `prd7-editor-settings-tab.html` — вкладка «Настройки»
+- `prd7-structure-linear-flat.html`, `prd7-structure-linear-by-topics.html`,
+  `prd7-structure-router.html` — вкладка «Структура» для трёх flowMode
+- `prd7-variant-replace.html` — диалог «Сменить вариант» (FR-46)
+- `prd7-editor-close-confirm.html` — confirm при закрытии с dirty (FR-05)
+- `prd7-editor-conflict.html` — диалог 409 conflict (FR-25k)
+- `prd7-tests-list.html`, `prd7-tests-delete-confirm.html` — список тестов
+
+**Зависит от:** S0-S11 закрыты по контракту (модель, mappers, save-flow), S12
+закрывает design-tab (параллельный трек). Контрактные изменения S13 — только в
+UI, без миграций БД и API.
+**Блокирует:** PRD-1 closeout (manifest validation + acceptance), затем PRD-4.
+
+**Out of scope (явно):**
+
+- `prd7-tests-archive.html` — целая страница «Архив» (12 состояний) — остаётся
+  post-MVP per [ROADMAP §0.2](../../ROADMAP.md) (раздел «Архив» с восстановлением).
+- States `s-preview` (side-panel выбранного теста), `s-lazy` (lazy-load
+  pagination), `s-fab-restricted` (ограниченные права на FAB) — deferred per
+  JSDoc `tests-list.tsx`; согласовано с ROADMAP §0.2.
+
+Если бизнес поменяет решение по любому пункту — переводим в S13 ad-hoc.
+
+---
+
+## 1. Гэпы
+
+Группировка по зоне; внутри — порядок по severity (critical → substantial → minor).
+Идентификаторы (G1..G44) сохранены из аудит-отчёта 2026-05-28 для traceability.
+
+### 1.1 Drawer-каркас (`prd7-editor-drawer.html`)
+
+| ID | Severity | Что | Где |
+| --- | --- | --- | --- |
+| G1 | critical | `tb-saving-overlay` со spinner-ом и `inert` на контенте при save не рисуется; есть только `Button loading` | [test-editor.tsx:494-549](../../../client/src/features/tests/editor/test-editor.tsx) (state `s-saving`) |
+| G2 | substantial | `ChangesPopover` показывает только список dirty-вкладок; wireframe требует per-field diff `label / old → new` со счётчиком по полям | [test-editor.tsx:613-668](../../../client/src/features/tests/editor/test-editor.tsx) (state `s-changes`, wf 871-918) |
+| G3 | ~~critical~~ **closed 2026-05-28** | В adaptive-режиме на вкладке «Состав» отсутствовал info-banner «Тест в адаптивном режиме…». Реализовано в [topics-structure-section.tsx](../../../client/src/features/tests/editor/sections/topics-structure-section.tsx) (`data-testid="composition-adaptive-banner"`) | (state `s-default-adaptive`, wf 444-449) |
+| G5 | substantial | `ConflictDialog` — нет table-diff `Поле / На сервере / Ваши изменения`, только параграф | [test-editor.tsx:736-793](../../../client/src/features/tests/editor/test-editor.tsx) (state `s-conflict`) |
+| G6 | ~~verify~~ **ok 2026-05-28** | `ou-drawer__body--flush` — DS-canonical модификатор, используется в 28+ approved wf-состояниях с тем же комментарием. Не gap | — |
+| G44 | ~~verify~~ **ok 2026-05-28** | DS `Tabs` с `hidePanel` — корректная архитектура; разметка `tabpanel` собирается вручную с правильными a11y-атрибутами, покрыто test'ом `test-editor.test.tsx:134-147` | — |
+
+### 1.2 Настройки (`prd7-editor-settings-tab.html`)
+
+| ID | Severity | Что | Где |
+| --- | --- | --- | --- |
+| **G7** | **critical** | **Целиком отсутствует секция «Общая обратная связь теста»** — rich-text body, список ссылок, PDF chip-group + кнопка «Загрузить PDF», `<hr>` + Switch «Показывать правильные ответы» | [basic-settings-section.tsx:165-268](../../../client/src/features/tests/editor/sections/basic-settings-section.tsx) (state `s-basic`, wf 710-839) |
+| G8 | critical | «Показывать правильные ответы» в wireframe находится в «Основное» (нижний Switch), в коде — в «Ограничения». Без основания перенесено | [basic-settings-section.tsx:312-324](../../../client/src/features/tests/editor/sections/basic-settings-section.tsx) |
+| **G9** | **critical** | **per-topic time-limit table** отсутствует: Switch «Индивидуальные лимиты для тем» → таблица тем с NumberInput + suffix «минут» + placeholder-описания «Без ограничения» / «Оставьте пустым…». В коде только два NumberInput на тест целиком | [basic-settings-section.tsx:272-328](../../../client/src/features/tests/editor/sections/basic-settings-section.tsx) (state `s-limits`, wf 3977-4151) |
+| G10 | critical | State `s-limits-no-topics` (для `flow_mode = linear_flat`, без per-topic таблицы) — следствие G9 | (state `s-limits-no-topics`, wf 4167) |
+| G11 | ~~minor~~ **closed 2026-05-28** | В webhook-секции добавлен `ou-formfield__desc` «Оставьте пустым, если webhook не нужен» | (state `s-integration`, wf 4482-4485) |
+| G12 | verify | States `s-basic-warning` (несовместимые настройки сохранены, FR-25d/f), `s-basic-validation` — нужно сверить, что drawer-баннер покрывает по существу | (states wf 1573, 1745) |
+| G13 | ~~cleanup~~ **closed 2026-05-28** | Обманчивый заголовок `// ─── Sub-panes: stubs for deferred work ───` удалён | — |
+| G14 | ~~cleanup~~ **closed 2026-05-28** | JSDoc-шапка `basic-settings-section.tsx` актуализирована — «Правила прохождения» и «Адаптивный режим» больше не помечены как stub'ы | — |
+
+### 1.3 Структура (`prd7-structure-*.html`)
+
+| ID | Severity | Что | Где |
+| --- | --- | --- | --- |
+| G15 | ~~critical~~ **closed 2026-05-28** | `s-mode-change` info-banner («Режим изменён…») при изменении flowMode в draft. Реализовано: `savedFlowMode` пробрасывается из `useTestEditor`, banner с `data-testid="structure-mode-change-banner"` показывается при `savedFlowMode !== model.flowMode` | (state `s-mode-change`, wf 683-716) |
+| G16 | substantial | Add-page modal: нет поиска `variant-search__input`; state `s-page-preview` (modal-предпросмотр страницы) не реализован | [start-pages-section.tsx:893-903](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) (states `s-add-step1`, `s-page-preview`) |
+| **G17** | **critical** | **row-menu**: author-row меню только «Удалить»; wireframe требует «Сменить вариант» (PRD-1 §4.3.3) + «Предпросмотр» (FR-44). Для system-row — то же | [start-pages-section.tsx:961-985](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) (state `s-row-menu-open`) |
+| **G18** | **critical** | После сохранения HTML-вставки не выводится yellow warning `s-sanitize` («HTML санитизирован: …») | (state `s-sanitize`, linear-by-topics, wf 1208-1279) |
+| **G19** | **critical** | **Read-only режим** не реализован: grip dimmed, без insert-rows, action-menu свернуто до eye-icon, footer = «Закрыть». В коде структура всегда editable | (state `s-readonly`, linear-by-topics, wf 790-852) |
+| G20 | substantial | В router-режиме темы под router-row рендерятся плоско, без `tree-branches`/`tree-connectors` визуального паттерна | [start-pages-section.tsx:498-583](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) (state `s-main` router, wf 384-485) |
+| G21 | substantial | При 0 router-вариантов в шаблоне отсутствует yellow-тег «Из стандартного шаблона» в `page-row__meta` | [start-pages-section.tsx:739-746](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) (state `s-main-fallback` router, wf 645-674) |
+| **G22** | **critical** | **Mapping-flow при смене шаблона** не реализован: warning-banner «Новый шаблон не поддерживает все типы страниц» + inline Select per row | (state `s-mapping`, linear-by-topics, wf 857+) |
+| G23 | cleanup | `mixed: "Смешанный (устаревший)"` в `FLOW_LABEL` — dead UI, но **`mixed` всё ещё в TS-типе `FlowMode`** ([test-editor.types.ts:20](../../../client/src/features/tests/editor/test-editor.types.ts)) для legacy-compat в mappers; удаление требует multi-file refactor (тип + mapper + tests-list types — 5 файлов). **Перенесён в S13.4** (не safe one-line cleanup) | [start-pages-section.tsx:106](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) |
+| G24 | verify | Default-fallback fields в page-row-expand: wireframe рисует «Заголовок/Содержимое/Текст «Далее»» даже без variant — сверить, что манифесты их содержат | — |
+| G25 | substantial | Нет различия `page-row--template` vs `page-row--system` с маркером `tpl-page-marker`. Все system-pages выводятся `--system` | [start-pages-section.tsx:692-749](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) (state `s-main` linear-by-topics, wf 559-563) |
+| G26 | ~~substantial~~ **closed 2026-05-28** | Empty-state router без тем теперь содержит CTA-кнопку «Перейти к Составу» (`data-testid="structure-empty-topics-cta"`) с callback'ом `onGoToComposition → setActiveTab("composition")` | (state `s-empty-topics` router, wf 696-761) |
+| G27 | substantial | Router-validation: нет inline `validation-banner` ВНУТРИ expand-формы с перечнем незаполненных полей; row не получает `page-row--error` | [start-pages-section.tsx:1014-1029](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) (state `s-validation` router, wf 807-900) |
+
+### 1.4 Variant-replace (`prd7-variant-replace.html`)
+
+| ID | Severity | Что | Где |
+| --- | --- | --- | --- |
+| **G28** | **critical** | **`ReplaceVariantModal`**: нет поиска `variant-search` и нет `diff-block` warning «Текущие настройки страницы будут потеряны» с перечнем теряемых полей | [start-pages-section.tsx:1307-1383](../../../client/src/features/tests/editor/sections/start-pages-section.tsx) (state `s-replace-modal`, wf 132-213) |
+| G29 | substantial | State `s-replace-no-fields` (пустая schema у нового варианта) не различается | (state `s-replace-no-fields`, wf 263-317) |
+
+### 1.5 Close-confirm (`prd7-editor-close-confirm.html`)
+
+| ID | Severity | Что | Где |
+| --- | --- | --- | --- |
+| G30 | substantial | В modal-body нет `Tag` chips изменённых разделов («Состав», «Настройки» и т.д.) | [test-editor.tsx:670-734](../../../client/src/features/tests/editor/test-editor.tsx) (state `s-dirty`, wf 134-147) |
+| G31 | substantial | State `s-errors`: нет inline `ou-banner--error` ВНУТРИ modal-body с «N ошибок во вкладке X» + линк «Перейти к первой ошибке» | [test-editor.tsx:684-732](../../../client/src/features/tests/editor/test-editor.tsx) (state `s-errors`, wf 184-194) |
+
+### 1.6 Список тестов (`prd7-tests-list.html`)
+
+| ID | Severity | Что | Где |
+| --- | --- | --- | --- |
+| **G32** | **critical** | **`window.prompt("ID папки для перемещения")`** на действии «Переместить в папку». Должен быть folder-pick-modal (как `FabFolderPickModal`) | [tests-list.tsx:603](../../../client/src/features/tests/list/tests-list.tsx) (row-menu, wf 1089, 1181) |
+| G36 | ~~cleanup~~ **closed 2026-05-28** | Sort переведён с нативного `<select>` на DS `Select<SortKey>` (size="s"); testid `tests-list-sort` сохранён | (toolbar) |
+
+### 1.7 Delete-confirm (`prd7-tests-delete-confirm.html`)
+
+| ID | Severity | Что | Где |
+| --- | --- | --- | --- |
+| G38 | ~~minor~~ **closed 2026-05-28** | Название теста вынесено в отдельный `typed-confirm__name-block` блок (новый CSS-класс в `tb-tests-list.css`), под Input добавлен hint «Регистр символов учитывается» | (wf 188-194, 245) |
+
+### 1.8 Feedback-editor (`s-feedback-edit`)
+
+| ID | Severity | Что | Где |
+| --- | --- | --- | --- |
+| **G39** | **critical** | **`window.prompt("URL ссылки")`** для вставки ссылки в rich-text — кастомный link-insert UI не реализован | [feedback-editor-modal.tsx:140](../../../client/src/features/tests/editor/sections/feedback-editor-modal.tsx) |
+| **G40** | **critical** | **`window.alert("Файл(ы) превышают 5 MB…")`** вместо DS Banner/Toast | [feedback-editor-modal.tsx:150](../../../client/src/features/tests/editor/sections/feedback-editor-modal.tsx) |
+
+### 1.9 Общие (cleanup)
+
+| ID | Severity | Что | Где |
+| --- | --- | --- | --- |
+| G41 | ~~cleanup~~ **closed 2026-05-28** | Orphan stub-файл `pass-rules-section.tsx` удалён (grep вне самого файла — 0 совпадений) | — |
+| G42 | ~~cleanup~~ **closed 2026-05-28** | Orphan stub-файл `adaptive-settings-section.tsx` удалён (grep вне самого файла — 0 совпадений) | — |
+
+---
+
+## 2. План реализации (8 sub-фаз)
+
+Порядок выбран по двум принципам:
+
+1. **Quick visible wins первыми** — `window.prompt`/`window.alert` (G32/G39/G40)
+   видны при первой же сессии пользователя.
+2. **Большие блоки** (feedback теста, per-topic limits, read-only, archive)
+   — каждый отдельной sub-фазой; меньше merge-конфликтов и проще
+   review/откат.
+
+| Sub-фаза | Содержание | ID | Зона кода | Эстимейт |
+| --- | --- | --- | --- | --- |
+| **S13.1** | Замена `window.prompt`/`window.alert` на DS-компоненты: folder-pick-modal на «Переместить в папку», link-insert UI в RTE, Banner/Toast для oversize-файлов | G32, G39, G40 | `tests-list.tsx`, `feedback-editor-modal.tsx` + новый `link-insert-modal.tsx` | 2-3ч |
+| **S13.2** | Настройки → «Основное»: реализация секции «Общая обратная связь теста» (rich-text body, links list, PDF chip-group + upload, hr + Switch); перенос «Показывать правильные ответы» из Ограничений в Основное | G7, G8, G13, G14 | `basic-settings-section.tsx`, ~~`feedback-test-section.tsx`~~ (новый компонент) | 5-7ч |
+| **S13.3** | Настройки → «Ограничения»: per-topic time-limit table (Switch «Индивидуальные лимиты» → таблица), state `s-limits-no-topics` для linear_flat; webhook-desc; cleanup устаревших JSDoc/комментариев | G9, G10, G11 | `basic-settings-section.tsx` + новый `per-topic-limits-table.tsx` | 4-5ч |
+| **S13.4** | Структура — критичные row-actions: row-menu (Сменить вариант + Предпросмотр для author/system), sanitize-warning после save HTML, `page-row--template` маркер; cleanup `mixed` в FLOW_LABEL | G17, G18, G23, G25 | `start-pages-section.tsx` + новый `page-preview-modal.tsx` | 4-5ч |
+| **S13.5** | Структура — режимы и состояния: read-only режим (grip dimmed, нет insert-rows, eye-icon вместо menu, footer «Закрыть»); router tree-connectors; router fallback-tag «Из стандартного шаблона»; mapping-flow при смене шаблона; empty-topics CTA; router validation banner внутри expand | G19, G20, G21, G22, G26, G27 | `start-pages-section.tsx` + `tb-components.css` доработки | 6-8ч |
+| **S13.6** | Variant-replace: поиск `variant-search` + `diff-block` warning «Текущие настройки страницы будут потеряны» с перечнем теряемых полей; state `s-replace-no-fields` | G28, G29 | `start-pages-section.tsx` (ReplaceVariantModal) | 3-4ч |
+| **S13.7** | Drawer-каркас + add-page modal: `tb-saving-overlay` со spinner-ом и `inert`; per-field changes-popover; adaptive info-banner на «Состав»; conflict diff-table; close-confirm chips + inline error-banner с «Перейти к первой ошибке»; mode-change info-banner на «Структуре»; search в add-page modal + state `s-page-preview` | G1, G2, G3, G5, G15, G16, G30, G31 | `test-editor.tsx`, `start-pages-section.tsx` + новые компоненты `saving-overlay.tsx`, `changes-popover-detail.tsx`, `conflict-diff-table.tsx`, `add-page-search.tsx`, `page-preview-modal.tsx` | 7-10ч |
+| **S13.8** | Cleanup + visual verification + S13 acceptance: удаление orphan `pass-rules-section.tsx` / `adaptive-settings-section.tsx`; DS Select вместо native для сортировки; `wf-typed-confirm__name-block` + регистр-hint в delete-confirm; визуальная сверка G6/G12/G24/G44 в браузере + axe; полный `vitest run`; обновление ROADMAP + acceptance | G36, G38, G41, G42, G6, G12, G24, G44 | tests-list.tsx, delete-confirm, удаление файлов; визуальный pass | 3-4ч |
+
+**Совокупный эстимейт S13:** 34-46 часов сфокусированной работы.
+
+**Параллелизм:** S13.1 — самый быстрый и независимый, его можно запускать
+параллельно с любой другой sub-фазой. S13.2-S13.3 трогают одну зону
+(basic-settings-section), последовательно. S13.4-S13.6 трогают
+start-pages-section, последовательно. S13.7 трогает test-editor.tsx,
+независимо от Structure. S13.8 — финальный pass.
+
+---
+
+## 3. Контрактные изменения
+
+S13 — UI-only. **Контрактных изменений ни в API, ни в БД нет.** Возможные
+дополнения схем:
+
+- **Per-topic time-limits (G9):** уже в `shared/schema.ts` —
+  `test_sections.time_limit_minutes` есть, миграция 003 (PRD-7 S2). UI просто
+  выводит существующее поле. Проверить, что mapper передаёт значения, а
+  TestSettingsService персистит.
+- **Feedback теста (G7):** уже в `tests.feedback_json` (миграция 003). UI должен
+  читать/писать; проверить mapper и payload.
+- **Sanitize warning (G18):** сервер уже возвращает diagnostics при санитизации
+  (`server/services/sanitize-html.ts`), нужно поднять их в UI как warning-banner.
+
+Если по факту окажется, что schema/API чего-то не хватает (например, sanitize
+возвращает только factor без диагностики) — выделить под-task и обсудить
+расширение API отдельно. По текущим знаниям такого нет.
+
+---
+
+## 4. Definition of Done S13
+
+- [ ] 22 critical/substantial находки закрыты (G1, G2, G3, G5, G7, G8, G9, G10,
+      G15, G16, G17, G18, G19, G20, G21, G22, G25, G26, G27, G28, G29, G30,
+      G31, G32, G39, G40).
+- [ ] 9 cleanup находок закрыты (G11, G13, G14, G23, G36, G38, G41, G42).
+- [ ] 4 «verify» находки проверены и либо закрыты, либо явно подтверждены как
+      ok (G6, G12, G24, G44).
+- [ ] Зод-схемы и mappers не сломаны: `npm run check` 0 ошибок; полный `vitest
+      run` зелёный.
+- [ ] Component-тесты добавлены для всех новых modal-компонентов и состояний:
+      saving-overlay, changes-popover-detail, conflict-diff-table,
+      link-insert-modal, page-preview-modal, per-topic-limits-table,
+      feedback-test-section, mapping-flow.
+- [ ] Acceptance S13: live-browser сверка с каждым approved wireframe-state
+      (Playwright + axe; критерий — pixel-diff в разумных пределах, 0 axe
+      critical).
+- [ ] Обновлены [ROADMAP.md](../../ROADMAP.md), [prd-7-acceptance-report.md](../../prd-7-acceptance-report.md):
+      S13 closed; PRD-7 закрыт после успеха S12 + S13.
+
+---
+
+## 5. Out of scope (явно)
+
+| Что | Почему | Куда |
+| --- | --- | --- |
+| `prd7-tests-archive.html` (G37) — целая страница «Архив» | Уже в [ROADMAP §0.2](../../ROADMAP.md) post-MVP; backend `POST /api/tests/:id/restore` реализован | Post-MVP backlog |
+| State `s-preview` (G33) — side-panel выбранного теста | Per JSDoc `tests-list.tsx`, deferred (separate ticket) | Post-MVP backlog |
+| State `s-lazy` (G34) — lazy-load pagination | Per JSDoc, deferred | Post-MVP backlog |
+| State `s-fab-restricted` (G35) — ограниченные права FAB | Per JSDoc, deferred | Post-MVP backlog |
+
+Если бизнес позже захочет включить любой из этих пунктов в MVP — открываем
+S14 (или расширяем S13 явным change-request).
+
+---
+
+## 6. Связь с S12
+
+S12 (Design tab closeout) и S13 (Editor parity) — **независимые трeки**:
+
+- S12 трогает `design-section.tsx` + manifest schema + 4 built-in manifests.
+- S13 трогает `test-editor.tsx`, `basic-settings-section.tsx`,
+  `start-pages-section.tsx`, `tests-list.tsx`, `feedback-editor-modal.tsx`.
+
+Пересечений нет. PRD-7 закрывается **после прохождения обоих acceptance**
+(сначала S12 либо S13 — не важно; гейт — оба ✓).
+
+---
+
+## 7. Риски
+
+- **Per-topic time-limits (G9)** — нужно расследовать существующий backend mapper
+  и подтвердить, что `time_limit_minutes` per-topic реально работает end-to-end.
+  Если что-то сломано в save-flow — sub-task под backend.
+- **Sanitize warning (G18)** — потребует поднять diagnostics из server-side
+  санитайзера к UI; нужно убедиться, что API уже возвращает их в ответе на
+  save. Если нет — расширение `routes/content-pages.ts`.
+- **Mapping-flow (G22)** — самый сложный UI-flow: при смене дизайна нужно
+  отметить page-rows с несовместимыми типами и предложить замену. Может
+  потребовать backend-валидации совместимости (`POST /api/tests/:id/design`
+  с `dryRun=true`?).
+- **Read-only режим (G19)** — нужно понять источник флага «тест опубликован /
+  нет прав». Если флаг ещё не пробрасывается в UI — будет coupling с
+  auth/permissions.
+
+Все три риска — UI+API мини-расследования, выделить как первый шаг
+соответствующей sub-фазы.

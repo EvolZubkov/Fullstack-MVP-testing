@@ -24,6 +24,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Pencil, Plus, X, Link as LinkIcon, Paperclip } from "lucide-react";
 import type { Topic } from "@shared/schema";
 import {
+  Banner,
   Button,
   EmptyState,
   IconButton,
@@ -124,6 +125,14 @@ export function CompositionSection({ model, updateModel }: CompositionSectionPro
 
   return (
     <>
+      {model.mode === "adaptive" && (
+        <Banner
+          tone="info"
+          title="Тест в адаптивном режиме"
+          description="Настройки уровней сложности и связки тем — во вкладке «Настройки → Адаптивный режим»."
+          data-testid="composition-adaptive-banner"
+        />
+      )}
       <div className="tb-section-label">Темы и выборка вопросов</div>
 
       {model.sections.length === 0 && (

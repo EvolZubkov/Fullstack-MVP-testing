@@ -71,9 +71,9 @@
 
 ### G5 — Удаление orphan `DesignSettingsDialog`
 
-**Что сейчас.** [client/src/components/design-settings-dialog.tsx](../../../client/src/components/design-settings-dialog.tsx) импортируется только своим тестом (grep вне теста — 0 совпадений). Должен был уйти в S10 вместе с `ContentPagesDialog`.
+**Что было.** `client/src/components/design-settings-dialog.tsx` импортировался только своим тестом (grep вне теста — 0 совпадений). Должен был уйти в S10 вместе с `ContentPagesDialog`.
 
-**Что должно быть.** Файл и его тест удалены; зависимости (если есть в дереве) выкорчеваны.
+**Статус:** **закрыто 2026-05-28** (batch parity cleanup). Файл и тест удалены (`git rm`). Полная suite зелёная.
 
 ### G6 — Состояние `wf-template-incompatible`
 

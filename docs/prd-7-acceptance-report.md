@@ -9,8 +9,16 @@
 [decisions.md](./specs/prd-7/decisions.md), [s0-s8-closed.md](./specs/prd-7/s0-s8-closed.md).
 
 > **STATUS UPDATE 2026-05-28 — ACCEPTANCE REVOKED.**
-> Этот отчёт был выдан преждевременно. Вкладка «Оформление» содержит четыре
-> необработанные категории расхождения с wireframe `prd7-design-tab.html`:
+> Этот отчёт был выдан преждевременно. Аудит 2026-05-28 выявил **5 хвостов во
+> вкладке «Оформление»** (закрывает [S12](./specs/prd-7/s12-design-closeout.md))
+> и **ещё 31 расхождение по остальным вкладкам** редактора (Drawer-каркас,
+> Настройки, Структура, variant-replace, close-confirm, tests-list,
+> feedback-editor; закрывает [S13](./specs/prd-7/s13-editor-parity.md)). Ниже
+> ключевые точки только по design-tab — полная сводка по 31 находке S13 в
+> spec-документе фазы.
+>
+> Вкладка «Оформление» содержит четыре необработанные категории расхождения с
+> wireframe `prd7-design-tab.html`:
 >
 > - FR-31: sub-rail «Макет» и «Прогресс и шапка» рендерят `StubPane` со ссылкой
 >   «реализуются отдельным шагом PRD-7» вместо группировки params по секциям
@@ -28,8 +36,10 @@
 > Acceptance §2.6 ошибочно отдал FR-30 «предпросмотр шаблона» в PRD-1, но FR-31 и FR-33
 > — требования самого PRD-7 wireframe и не могли быть отложены.
 >
-> Открыта фаза [PRD-7 S12 — Design closeout](./specs/prd-7/s12-design-closeout.md).
-> PRD-7 будет считаться закрытым после прохождения S12 acceptance.
+> Открыты фазы [PRD-7 S12 — Design closeout](./specs/prd-7/s12-design-closeout.md)
+> и [PRD-7 S13 — Editor parity](./specs/prd-7/s13-editor-parity.md). PRD-7 будет
+> считаться закрытым после прохождения acceptance **обеих** фаз. S12 и S13 —
+> независимые треки (разные кодовые зоны), могут вестись параллельно.
 
 ## 1. Сводка
 

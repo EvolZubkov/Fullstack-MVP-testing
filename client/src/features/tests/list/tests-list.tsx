@@ -727,16 +727,18 @@ function Toolbar(props: {
       {props.showSort && (
         <div className="toolbar-sort">
           <span className="toolbar-sort__label">Сортировка:</span>
-          <select
+          <Select<SortKey>
+            size="s"
             value={props.sortBy}
-            onChange={(e) => props.onSortChange(e.target.value as SortKey)}
+            options={[
+              { value: "created_desc", label: "Новые сначала" },
+              { value: "updated_desc", label: "Недавно изменённые" },
+              { value: "title_asc", label: "По названию (А→Я)" },
+            ]}
+            onChange={(value) => props.onSortChange(value)}
             aria-label="Сортировка тестов"
             data-testid="tests-list-sort"
-          >
-            <option value="created_desc">Новые сначала</option>
-            <option value="updated_desc">Недавно изменённые</option>
-            <option value="title_asc">По названию (А→Я)</option>
-          </select>
+          />
         </div>
       )}
     </div>
@@ -1259,8 +1261,11 @@ function DeleteTestModal(props: {
       }
     >
       <label className="typed-confirm__label" htmlFor="del-test-input">
-        Введите название теста <strong>«{props.state.title}»</strong> для подтверждения:
+        Введите точное название теста для подтверждения:
       </label>
+      <div className="typed-confirm__name-block" aria-hidden="true">
+        {props.state.title}
+      </div>
       <Input
         ref={inputRef}
         id="del-test-input"
@@ -1275,6 +1280,7 @@ function DeleteTestModal(props: {
         error={props.state.error ?? undefined}
         data-testid="delete-test-input"
       />
+      <p className="typed-confirm__hint">Регистр символов учитывается.</p>
     </ModalDialog>
   );
 }
