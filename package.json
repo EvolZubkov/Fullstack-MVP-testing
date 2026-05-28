@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx ./server/index.ts",
-    "build": "tsx script/build.ts",
+    "build": "npm run scorm:previews && tsx script/build.ts",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "db:push": "drizzle-kit push",
@@ -15,6 +15,7 @@
     "scorm:sample": "tsx scripts/generate-sample-scorm.ts",
     "scorm:template": "tsx scripts/generate-template-scorm.ts",
     "scorm:player": "node scripts/scorm-player.mjs",
+    "scorm:previews": "node scripts/generate-prd1-template-previews.mjs",
     "test:watch": "vitest",
     "push:upstream": "git push upstream HEAD"
   },

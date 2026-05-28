@@ -16,8 +16,8 @@
     .pv-main{flex:1;display:flex;flex-direction:column;min-width:0;filter:blur(1px);opacity:.4}
     .pv-topbar{border-bottom:1px solid var(--pv-border);padding:10px 20px;display:flex;align-items:center;gap:12px}
     .pv-test-title{font-size:15px;font-weight:600;flex:1}
-    .pv-overlay{position:absolute;inset:0;background:rgba(0,0,0,.52);display:flex;align-items:stretch;justify-content:center;z-index:50;padding:20px}
-    .pv-dialog{background:var(--pv-bg);border-radius:var(--pv-radius);box-shadow:0 24px 64px rgba(0,0,0,.35);width:100%;max-width:1140px;display:flex;flex-direction:column;overflow:hidden}
+    .pv-overlay{position:absolute;inset:0;background:rgba(0,0,0,.52);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+    .pv-dialog{background:var(--pv-bg);border-radius:var(--pv-radius);box-shadow:0 24px 64px rgba(0,0,0,.35);width:100%;max-width:1140px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden}
     .pv-dialog-head{padding:14px 20px;border-bottom:1px solid var(--pv-border);display:flex;align-items:center;gap:12px;flex-shrink:0}
     .pv-dialog-title{font-size:15px;font-weight:600}
     .pv-dialog-sub{font-size:12px;color:var(--pv-muted-fg)}
@@ -26,8 +26,8 @@
     .pv-nav-item{display:block;width:calc(100% - 12px);margin:0 6px 1px;padding:7px 8px;border:0;border-radius:3px;background:transparent;color:var(--pv-fg);text-align:left;font:inherit;font-size:13px;cursor:pointer;transition:background .12s,color .12s}
     .pv-nav-item:hover{background:var(--pv-muted)}
     .pv-nav-item.pv-active{background:var(--pv-primary);color:#fff}
-    .pv-stage-wrap{flex:1;overflow-y:auto;background:hsl(0 0% 91%);padding:24px;display:flex;flex-direction:column;align-items:center;gap:10px}
-    .pv-stage{width:100%;max-width:860px;border-radius:var(--pv-radius-sm);overflow:hidden;box-shadow:0 2px 18px rgba(0,0,0,.14)}
+    .pv-stage-wrap{flex:1;overflow-y:auto;background:hsl(0 0% 91%);padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:10px}
+    .pv-stage{width:100%;max-width:960px;border-radius:var(--pv-radius-sm);overflow:hidden;box-shadow:0 2px 18px rgba(0,0,0,.14)}
     .pv-caption{font-size:11px;color:hsl(0 0% 55%)}
     .pv-dialog-foot{padding:10px 20px;border-top:1px solid var(--pv-border);display:flex;align-items:center;gap:12px;flex-shrink:0;color:var(--pv-muted-fg);font-size:12px}
     .pv-btn{display:inline-flex;align-items:center;justify-content:center;padding:0 14px;height:32px;border-radius:var(--pv-radius-sm);font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--pv-border);background:var(--pv-bg);color:var(--pv-fg);font-family:inherit;margin-left:auto}
@@ -335,63 +335,72 @@ body {
       "type": "color",
       "label": "Основной цвет",
       "default": "221 83% 53%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "backgroundColor",
       "type": "color",
       "label": "Цвет фона",
       "default": "220 14% 10%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "foregroundColor",
       "type": "color",
       "label": "Цвет текста",
       "default": "0 0% 96%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "cardColor",
       "type": "color",
       "label": "Цвет карточек",
       "default": "220 13% 16%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "cardBorderColor",
       "type": "color",
       "label": "Граница карточек",
       "default": "220 13% 26%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "borderColor",
       "type": "color",
       "label": "Цвет границ",
       "default": "220 13% 24%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "mutedColor",
       "type": "color",
       "label": "Приглушённый цвет",
       "default": "220 12% 22%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "accentColor",
       "type": "color",
       "label": "Акцентный цвет",
       "default": "220 12% 24%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "sidebarColor",
       "type": "color",
       "label": "Цвет боковой панели",
       "default": "220 18% 8%",
-      "group": "Цвета"
+      "group": "Цвета",
+      "section": "branding"
     },
     {
       "key": "fontFamily",
@@ -403,21 +412,24 @@ body {
         "Inter",
         "Roboto",
         "Arial"
-      ]
+      ],
+      "section": "branding"
     },
     {
       "key": "logoUrl",
       "type": "image",
       "label": "Логотип",
       "default": null,
-      "group": "Оформление"
+      "group": "Оформление",
+      "section": "branding"
     },
     {
       "key": "companyName",
       "type": "text",
       "label": "Название компании",
       "default": "",
-      "group": "Оформление"
+      "group": "Оформление",
+      "section": "branding"
     },
     {
       "key": "progress.mode",
@@ -429,34 +441,38 @@ body {
         "questions",
         "pages",
         "hidden"
-      ]
+      ],
+      "section": "progress"
     },
     {
       "key": "showProgressBar",
       "type": "boolean",
       "label": "Показывать прогресс-бар",
       "default": true,
-      "group": "Навигация"
+      "group": "Навигация",
+      "section": "progress"
     },
     {
       "key": "showTopicNav",
       "type": "boolean",
       "label": "Навигация по темам",
       "default": true,
-      "group": "Навигация"
+      "group": "Навигация",
+      "section": "progress"
     }
   ],
   "contentTemplates": [
     {
       "key": "intro.hero",
       "label": "Введение: заголовок и изображение",
+      "kind": "intro",
       "pageKind": "content.intro",
       "placeholders": [
         {
           "key": "title",
           "type": "text",
           "label": "Заголовок",
-          "required": true,
+          "required": false,
           "maxLength": 120,
           "textFit": {
             "mode": "autoFitFont",
@@ -497,13 +513,14 @@ body {
     {
       "key": "info.textWithImage",
       "label": "Информация: текст и изображение",
+      "kind": "info",
       "pageKind": "content.info",
       "placeholders": [
         {
           "key": "title",
           "type": "text",
           "label": "Заголовок",
-          "required": true,
+          "required": false,
           "maxLength": 120,
           "textFit": {
             "mode": "autoFitFont",
@@ -531,7 +548,7 @@ body {
           "key": "body",
           "type": "richText",
           "label": "Основной текст",
-          "required": true,
+          "required": false,
           "textFit": {
             "mode": "growBox",
             "defaultFontSize": 16,
@@ -559,13 +576,14 @@ body {
     {
       "key": "summary.progressRing",
       "label": "Итог: кольцевая диаграмма прогресса",
+      "kind": "summary",
       "pageKind": "content.summary",
       "placeholders": [
         {
           "key": "title",
           "type": "text",
           "label": "Заголовок",
-          "required": true,
+          "required": false,
           "maxLength": 120,
           "textFit": {
             "mode": "fixed",
@@ -578,7 +596,7 @@ body {
           "key": "progressChart",
           "type": "resultField",
           "label": "Показатель прогресса",
-          "required": true,
+          "required": false,
           "allowedPaths": [
             "result.scorePercent",
             "progress.question.percent",

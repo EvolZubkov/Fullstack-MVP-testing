@@ -16,8 +16,8 @@
     .pv-main{flex:1;display:flex;flex-direction:column;min-width:0;filter:blur(1px);opacity:.4}
     .pv-topbar{border-bottom:1px solid var(--pv-border);padding:10px 20px;display:flex;align-items:center;gap:12px}
     .pv-test-title{font-size:15px;font-weight:600;flex:1}
-    .pv-overlay{position:absolute;inset:0;background:rgba(0,0,0,.52);display:flex;align-items:stretch;justify-content:center;z-index:50;padding:20px}
-    .pv-dialog{background:var(--pv-bg);border-radius:var(--pv-radius);box-shadow:0 24px 64px rgba(0,0,0,.35);width:100%;max-width:1140px;display:flex;flex-direction:column;overflow:hidden}
+    .pv-overlay{position:absolute;inset:0;background:rgba(0,0,0,.52);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+    .pv-dialog{background:var(--pv-bg);border-radius:var(--pv-radius);box-shadow:0 24px 64px rgba(0,0,0,.35);width:100%;max-width:1140px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden}
     .pv-dialog-head{padding:14px 20px;border-bottom:1px solid var(--pv-border);display:flex;align-items:center;gap:12px;flex-shrink:0}
     .pv-dialog-title{font-size:15px;font-weight:600}
     .pv-dialog-sub{font-size:12px;color:var(--pv-muted-fg)}
@@ -26,8 +26,8 @@
     .pv-nav-item{display:block;width:calc(100% - 12px);margin:0 6px 1px;padding:7px 8px;border:0;border-radius:3px;background:transparent;color:var(--pv-fg);text-align:left;font:inherit;font-size:13px;cursor:pointer;transition:background .12s,color .12s}
     .pv-nav-item:hover{background:var(--pv-muted)}
     .pv-nav-item.pv-active{background:var(--pv-primary);color:#fff}
-    .pv-stage-wrap{flex:1;overflow-y:auto;background:hsl(0 0% 91%);padding:24px;display:flex;flex-direction:column;align-items:center;gap:10px}
-    .pv-stage{width:100%;max-width:860px;border-radius:var(--pv-radius-sm);overflow:hidden;box-shadow:0 2px 18px rgba(0,0,0,.14)}
+    .pv-stage-wrap{flex:1;overflow-y:auto;background:hsl(0 0% 91%);padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:10px}
+    .pv-stage{width:100%;max-width:960px;border-radius:var(--pv-radius-sm);overflow:hidden;box-shadow:0 2px 18px rgba(0,0,0,.14)}
     .pv-caption{font-size:11px;color:hsl(0 0% 55%)}
     .pv-dialog-foot{padding:10px 20px;border-top:1px solid var(--pv-border);display:flex;align-items:center;gap:12px;flex-shrink:0;color:var(--pv-muted-fg);font-size:12px}
     .pv-btn{display:inline-flex;align-items:center;justify-content:center;padding:0 14px;height:32px;border-radius:var(--pv-radius-sm);font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--pv-border);background:var(--pv-bg);color:var(--pv-fg);font-family:inherit;margin-left:auto}
@@ -1112,7 +1112,7 @@ button[data-state="disabled"] {
           "key": "titleLine1",
           "type": "text",
           "label": "Заголовок: строка 1",
-          "required": true,
+          "required": false,
           "maxLength": 40,
           "textFit": {
             "mode": "autoFitFont",
@@ -1126,7 +1126,7 @@ button[data-state="disabled"] {
           "key": "titleLine2",
           "type": "text",
           "label": "Заголовок: строка 2",
-          "required": true,
+          "required": false,
           "maxLength": 40,
           "textFit": {
             "mode": "autoFitFont",
@@ -1168,7 +1168,7 @@ button[data-state="disabled"] {
           "key": "subtitle",
           "type": "textarea",
           "label": "Краткое описание",
-          "required": true,
+          "required": false,
           "maxLength": 220,
           "textFit": {
             "mode": "fixed",
@@ -1223,7 +1223,7 @@ button[data-state="disabled"] {
           "key": "title",
           "type": "text",
           "label": "Заголовок",
-          "required": true,
+          "required": false,
           "maxLength": 90,
           "textFit": {
             "mode": "autoFitFont",
@@ -1249,7 +1249,7 @@ button[data-state="disabled"] {
           "key": "body",
           "type": "richText",
           "label": "Основной текст",
-          "required": true,
+          "required": false,
           "textFit": {
             "mode": "growBox",
             "defaultFontSize": 18,
@@ -1292,7 +1292,7 @@ button[data-state="disabled"] {
           "key": "title",
           "type": "text",
           "label": "Заголовок",
-          "required": true,
+          "required": false,
           "maxLength": 90,
           "textFit": {
             "mode": "autoFitFont",
@@ -1318,7 +1318,7 @@ button[data-state="disabled"] {
           "key": "body",
           "type": "richText",
           "label": "Основной текст",
-          "required": true,
+          "required": false,
           "textFit": {
             "mode": "growBox",
             "defaultFontSize": 18,
@@ -1361,7 +1361,7 @@ button[data-state="disabled"] {
           "key": "title",
           "type": "text",
           "label": "Заголовок",
-          "required": true,
+          "required": false,
           "maxLength": 90,
           "textFit": {
             "mode": "autoFitFont",
@@ -1375,7 +1375,7 @@ button[data-state="disabled"] {
           "key": "statusLabel",
           "type": "text",
           "label": "Статус темы",
-          "required": true,
+          "required": false,
           "maxLength": 40,
           "textFit": {
             "mode": "fixed",
@@ -1387,7 +1387,7 @@ button[data-state="disabled"] {
           "key": "percent",
           "type": "number",
           "label": "Процент правильных ответов",
-          "required": true,
+          "required": false,
           "constraints": {
             "min": 0,
             "max": 100
@@ -1397,7 +1397,7 @@ button[data-state="disabled"] {
           "key": "questionCount",
           "type": "number",
           "label": "Количество вопросов",
-          "required": true,
+          "required": false,
           "constraints": {
             "min": 0
           }
@@ -1510,7 +1510,8 @@ button[data-state="disabled"] {
       "cssVar": "--rtk-accent",
       "validation": {
         "required": true
-      }
+      },
+      "section": "branding"
     },
     {
       "key": "brand.surfaceColor",
@@ -1518,7 +1519,8 @@ button[data-state="disabled"] {
       "label": "Цвет основного экрана",
       "default": "#101828",
       "group": "Бренд",
-      "cssVar": "--rtk-surface"
+      "cssVar": "--rtk-surface",
+      "section": "branding"
     },
     {
       "key": "brand.pageBackground",
@@ -1526,7 +1528,8 @@ button[data-state="disabled"] {
       "label": "Фон плеера",
       "default": "#e2e2e2",
       "group": "Бренд",
-      "cssVar": "--rtk-page-bg"
+      "cssVar": "--rtk-page-bg",
+      "section": "branding"
     },
     {
       "key": "layout.panelRadius",
@@ -1538,28 +1541,32 @@ button[data-state="disabled"] {
       "validation": {
         "min": 0,
         "max": 32
-      }
+      },
+      "section": "layout"
     },
     {
       "key": "layout.heroImage",
       "type": "asset",
       "label": "Передняя иллюстрация титульного экрана",
       "default": "assets/images/hero-mountain.svg",
-      "group": "Макет"
+      "group": "Макет",
+      "section": "layout"
     },
     {
       "key": "layout.heroImageBack",
       "type": "asset",
       "label": "Задняя иллюстрация титульного экрана",
       "default": "assets/images/hero-mountain-back.svg",
-      "group": "Макет"
+      "group": "Макет",
+      "section": "layout"
     },
     {
       "key": "layout.contentDecoration",
       "type": "asset",
       "label": "Декоративная иллюстрация контентных страниц",
       "default": "assets/images/content-cubes.png",
-      "group": "Макет"
+      "group": "Макет",
+      "section": "layout"
     },
     {
       "key": "progress.mode",
@@ -1571,7 +1578,8 @@ button[data-state="disabled"] {
         "hidden"
       ],
       "default": "questions",
-      "group": "Навигация"
+      "group": "Навигация",
+      "section": "progress"
     },
     {
       "key": "navigation.presentation",
@@ -1582,21 +1590,24 @@ button[data-state="disabled"] {
         "sidebar"
       ],
       "default": "bottom",
-      "group": "Навигация"
+      "group": "Навигация",
+      "section": "progress"
     },
     {
       "key": "behavior.duplicateTabWarning",
       "type": "boolean",
       "label": "Предупреждать о нескольких вкладках",
       "default": true,
-      "group": "Поведение"
+      "group": "Поведение",
+      "section": "branding"
     },
     {
       "key": "behavior.commitOnPageEnter",
       "type": "boolean",
       "label": "SCORM commit при входе на страницу",
       "default": true,
-      "group": "Поведение"
+      "group": "Поведение",
+      "section": "branding"
     }
   ],
   "capabilities": {
