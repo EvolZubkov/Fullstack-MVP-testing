@@ -48,6 +48,7 @@ import {
 } from "./use-test-editor";
 import { useDesignSettings } from "./use-design-settings";
 import { useContentPages, hasStructureErrors, hasStructureWarnings } from "./use-content-pages";
+import { useToast } from "@/hooks/use-toast";
 import { CompositionSection } from "./sections/topics-structure-section";
 import { SettingsSection } from "./sections/basic-settings-section";
 import { DesignSection } from "./sections/design-section";
@@ -147,6 +148,8 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
   // both the test-settings PUT and the design-settings PUT in a single
   // action (per wireframe prd7-design-tab.html — single footer save).
   const design = useDesignSettings(editor.model?.id);
+
+  const { toast } = useToast();
 
   // Hoist content-pages here too so the «Структура» section shares one hook
   // instance with the drawer — letting the tab reflect content-page warnings
@@ -276,10 +279,15 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
     }
     // Content-page mutations are already persisted at the API call site (no
     // draft); clearing the bridge flag deactivates «Сохранить» until the next
-    // structure edit. Done unconditionally — a no-op when the flag is false.
+    // structure edit. The toast confirms the edit cycle is complete — the
+    // rows were saved at mutation time, so the only thing this Save action
+    // actually does for the «Структура» tab is acknowledge them.
+    if (contentPages.hasMutated) {
+      toast({ title: "Изменения структуры сохранены" });
+    }
     contentPages.resetMutated();
     return true;
-  }, [design, editor, contentPages]);
+  }, [design, editor, contentPages, toast]);
 
   const handleSave = useCallback(async () => {
     if (saveDisabled) return;
