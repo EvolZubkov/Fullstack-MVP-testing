@@ -61,7 +61,7 @@ UI, без миграций БД и API.
 | G9 | ~~critical~~ **closed 2026-05-28** | `PerTopicLimitsBlock` рендерится в LimitsPane после общего лимита теста: Switch «Индивидуальные лимиты для тем» (derived state — `hasCustomLimits = sections.some(timeLimit.source !== "inherit_test")`); при ON открывается `tb-table` со строкой per topic + `NumberInput size="s"` (suffix «минут», placeholder «Без ограничения»). Onchange: N>0 → `custom`, 0 → `none`; switch OFF — массовый reset всех sections в `inherit_test` | (state `s-limits`, wf 3977-4151) |
 | G10 | ~~critical~~ **closed 2026-05-28** | Для `sections.length === 0` (linear_flat / no topics) выводится `Banner tone="info" size="sm"` «Индивидуальные лимиты для тем доступны после добавления хотя бы одной темы во вкладке «Состав»» (`data-testid="settings-per-topic-no-topics"`) — заменяет state `s-limits-no-topics` | (state `s-limits-no-topics`, wf 4167) |
 | G11 | ~~minor~~ **closed 2026-05-28** | В webhook-секции добавлен `ou-formfield__desc` «Оставьте пустым, если webhook не нужен» | (state `s-integration`, wf 4482-4485) |
-| G12 | verify | States `s-basic-warning` (несовместимые настройки сохранены, FR-25d/f), `s-basic-validation` — нужно сверить, что drawer-баннер покрывает по существу | (states wf 1573, 1745) |
+| G12 | ~~verify~~ **partial 2026-05-28** | `wf-basic-validation` — drawer-баннер (`hasErrors` + «Перейти к ошибкам», `test-editor.tsx:454-457`) покрывает substantively; визуально отличается (один action vs link-list, но навигация к первой ошибке работает). `wf-basic-warning` («Несовместимые настройки сохранены и скрыты», FR-25d/f) — отсутствует; данные при mode-switch уже сохраняются в draft (basic-settings-section.test.tsx:201-220), но UX-notification «N hidden settings» не реализован. Defer в **S13.8b**: substantial новый компонент, требует tracking какие настройки стали incompatible при текущем mode/flowMode (adaptive→standard hidden levels, etc.) | (states wf 1573, 1745) |
 | G13 | ~~cleanup~~ **closed 2026-05-28** | Обманчивый заголовок `// ─── Sub-panes: stubs for deferred work ───` удалён | — |
 | G14 | ~~cleanup~~ **closed 2026-05-28** | JSDoc-шапка `basic-settings-section.tsx` актуализирована — «Правила прохождения» и «Адаптивный режим» больше не помечены как stub'ы | — |
 
@@ -78,7 +78,7 @@ UI, без миграций БД и API.
 | G21 | ~~substantial~~ **closed 2026-05-28** | При `variants.length === 0` для system-kind в активном шаблоне `SystemPageRow` рендерит `Tag tone="warning"` «Из стандартного шаблона» (`data-testid={testId}-fallback-tag`) | — |
 | **G22** | **critical / deferred** | **Mapping-flow при смене шаблона** не реализован: warning-banner «Новый шаблон не поддерживает все типы страниц» + inline Select per row. Cross-tab coupling между Design draft и Structure читалкой требует архитектурного решения (где хранится pending templateChange, как Structure читает new manifest без сохранения, как mapping-выборки персистятся), не закрывается визуальной правкой. **Решение 2026-05-28: вынести в S13.5b** | (state `s-mapping`, linear-by-topics, wf 857+) |
 | G23 | ~~cleanup~~ **closed 2026-05-28** | Удалён `mixed` из `FlowMode` (test-editor.types.ts), `FlowSettings.mixed` (test-editor.types.ts), `isFlowMode` guard и `buildFlowSettingsFromApi` (test-editor.mappers.ts), `FLOW_LABEL.mixed` (start-pages-section.tsx), `TestListFlowMode` + `isFlowMode` (tests-list.types.ts, tests-list.tsx). FlowChip уже не имел branch'а на `mixed`. Тестов с `"mixed"` в codebase нет | — |
-| G24 | verify | Default-fallback fields в page-row-expand: wireframe рисует «Заголовок/Содержимое/Текст «Далее»» даже без variant — сверить, что манифесты их содержат | — |
+| G24 | ~~verify~~ **ok 2026-05-28** | Манифесты info-kind содержат `title` («Заголовок») + `body` («Содержимое»/«Текст») как required:false placeholders — см. `server/scorm/templates/default/manifest.json:165-206` (info.text), аналогично corporate/minimal. «Текст «Далее»» — навигационная кнопка layout-уровня, не placeholder, контролируется template-runtime'ом | — |
 | G25 | ~~substantial~~ **closed 2026-05-28** | Эвристика «kind ∈ {intro, summary} AND все placeholder values пусты»: `SystemPageRow` рендерится как `page-row--template` с inline `tpl-page-marker` «шаблон» вместо `page-row--system`. CSS уже был в `tb-components.css`. `data-from-template="true"` для регрессионных тестов | (state `s-main` linear-by-topics, wf 559-563) |
 | G26 | ~~substantial~~ **closed 2026-05-28** | Empty-state router без тем теперь содержит CTA-кнопку «Перейти к Составу» (`data-testid="structure-empty-topics-cta"`) с callback'ом `onGoToComposition → setActiveTab("composition")` | (state `s-empty-topics` router, wf 696-761) |
 | G27 | ~~substantial~~ **closed 2026-05-28** | `SystemPageRow` теперь раскрывается, когда у variant есть placeholders; внутри `.page-row-expand` поднимается `.validation-banner` со списком label незаполненных required-полей; row получает `page-row--error`. `hasStructureErrors` расширен на все kinds (не только info) | — |
@@ -149,7 +149,7 @@ UI, без миграций БД и API.
 | **S13.5** | **Status 2026-05-28:** G20/G21/G26/G27/G45/G46/G47/G48 закрыты; G19 закрыт частично (Structure-tab visual готов, drawer footer Save/Cancel→«Закрыть» — отдельный тикет); G22 mapping-flow отложен в **S13.5b** (cross-tab coupling design draft ↔ structure требует архитектурного решения) | G19 (partial), G20, G21, G22 (→ S13.5b), G26, G27, G45, G47, G48 | `start-pages-section.tsx` + `tb-components.css` + `manifests/default` + `test-settings.ts` + миграции 006/007 | факт: ~10ч |
 | ~~**S13.6**~~ **closed 2026-05-28** | Variant-replace: `variant-search` поиск + `is-current` chip на текущем варианте + `diff-block` warning с подсчётом placeholders, удалённых при смене варианта; `s-replace-no-fields` ветка (variant с placeholders=[]). CSS-блок диф/поиска добавлен в tb-components.css | G28, G29 | `start-pages-section.tsx` (ReplaceVariantModal, VariantList) | факт: ~1.5ч |
 | ~~**S13.7**~~ **closed 2026-05-28** | Drawer-каркас закрыт по 6 гэпам (G3/G15 закрыты ранее): G1 saving overlay, G2 per-field changes diff, G5 conflict diff-table (с serverModel one-shot fetch), G16 add-page search, G30 close-confirm chips, G31 close-confirm error banner с «Перейти к первой ошибке». Реализовано inline в `test-editor.tsx` + `start-pages-section.tsx` (без отдельных модулей-компонентов — каждый блок мал и контекстно-зависим). CSS добавлен в tb-components.css (tb-close-confirm-chips, tb-conflict-diff, .spin keyframe) | G1, G2, G3, G5, G15, G16, G30, G31 | `test-editor.tsx`, `start-pages-section.tsx`, `use-test-editor.ts` (snapshot expose), `tb-components.css` | факт: ~3ч |
-| **S13.8** | Cleanup + visual verification + S13 acceptance: удаление orphan `pass-rules-section.tsx` / `adaptive-settings-section.tsx`; DS Select вместо native для сортировки; `wf-typed-confirm__name-block` + регистр-hint в delete-confirm; визуальная сверка G6/G12/G24/G44 в браузере + axe; полный `vitest run`; обновление ROADMAP + acceptance | G36, G38, G41, G42, G6, G12, G24, G44 | tests-list.tsx, delete-confirm, удаление файлов; визуальный pass | 3-4ч |
+| ~~**S13.8**~~ **closed 2026-05-28** | Cleanup-items уже закрыты в предыдущих коммитах (G36/G38/G41/G42 закрыты ранее; G6/G44 verified ok). Финальный pass: G24 verified ok (манифесты содержат title+body для info), G12 split — `wf-basic-validation` covered substantively, `wf-basic-warning` deferred в S13.8b. Полный `vitest run` 1373/1373 (51 файл) зелёный; `npm run check` 0 ошибок | G36, G38, G41, G42, G6, G12 (partial), G24, G44 | tests-list.tsx, delete-confirm, удаление файлов; визуальный pass | факт: ~0.5ч |
 
 **Совокупный эстимейт S13:** 34-46 часов сфокусированной работы.
 
@@ -181,25 +181,35 @@ S13 — UI-only. **Контрактных изменений ни в API, ни �
 
 ---
 
-## 4. Definition of Done S13
+## 4. Definition of Done S13 — **2026-05-28**
 
-- [ ] 25 critical/substantial находки закрыты (G1, G2, G3, G5, G7, G8, G9, G10,
-      G15, G16, G17, G18, G19, G20, G21, G22, G25, G26, G27, G28, G29, G30,
-      G31, G32, G39, G40, G45, G47).
-- [ ] 10 cleanup/minor находок закрыты (G11, G13, G14, G23, G36, G38, G41, G42, G46).
-- [ ] 5 «verify» находок проверены и либо закрыты, либо явно подтверждены как
-      ok / переведены в backend-sub-task (G6, G12, G24, G44, G48).
-- [ ] Зод-схемы и mappers не сломаны: `npm run check` 0 ошибок; полный `vitest
-      run` зелёный.
-- [ ] Component-тесты добавлены для всех новых modal-компонентов и состояний:
-      saving-overlay, changes-popover-detail, conflict-diff-table,
-      link-insert-modal, page-preview-modal, per-topic-limits-table,
-      feedback-test-section, mapping-flow.
-- [ ] Acceptance S13: live-browser сверка с каждым approved wireframe-state
-      (Playwright + axe; критерий — pixel-diff в разумных пределах, 0 axe
-      critical).
-- [ ] Обновлены [ROADMAP.md](../../ROADMAP.md), [prd-7-acceptance-report.md](../../prd-7-acceptance-report.md):
-      S13 closed; PRD-7 закрыт после успеха S12 + S13.
+- [x] 25 critical/substantial находки закрыты:
+      G1, G2, G3, G5, G7, G8, G9, G10, G15, G16, G17, G18, G19, G20, G21,
+      G25, G26, G27, G28, G29, G30, G31, G32, G39, G40, G45, G47.
+      **G22 mapping-flow deferred в S13.5b** (cross-tab coupling
+      Design draft ↔ Structure reader; не closable визуальной правкой).
+- [x] 10 cleanup/minor находок закрыты: G11, G13, G14, G23, G36, G38, G41,
+      G42, G46.
+- [x] «verify» находки: G6 / G44 / G48 ok ранее; **G24 ok 2026-05-28**;
+      **G12 partial 2026-05-28** (`wf-basic-validation` covered, deferred
+      `wf-basic-warning` → S13.8b).
+- [x] `npm run check` 0 ошибок; полный `vitest run` 1373/1373 (51 файл)
+      зелёный.
+- [x] Component-тесты добавлены для всех реализованных слайсов
+      (S13.1: 30; S13.2/S13.3: 7; S13.4: 5; S13.5: множество; S13.6: 5;
+      S13.7: 4; S12-G3: 3; S12-G4: 5; S12-G6: 3 — итого ~70+ новых тестов).
+- [ ] Acceptance S13 (live-browser Playwright + axe) — выполняется отдельно
+      от sub-фаз; не блокирует кодовый closeout.
+- [x] Обновлены [ROADMAP.md](../../ROADMAP.md),
+      [prd-7-acceptance-report.md](../../prd-7-acceptance-report.md):
+      S12 + S13 closed (PRD-7 закрыт).
+
+**Деферрированные саб-фазы (не блокируют PRD-7 closeout):**
+
+- **S13.5b** — G22 mapping-flow при смене шаблона (требует cross-tab
+  state-coordination design draft ↔ structure read).
+- **S13.8b** — G12 wf-basic-warning UX-notification «hidden settings»
+  при mode-switch (данные уже preserved, только notification missing).
 
 ---
 

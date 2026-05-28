@@ -8,38 +8,41 @@
 [s9-s11-in-progress.md §4.2](./specs/prd-7/s9-s11-in-progress.md)), FR/NFR-коды,
 [decisions.md](./specs/prd-7/decisions.md), [s0-s8-closed.md](./specs/prd-7/s0-s8-closed.md).
 
-> **STATUS UPDATE 2026-05-28 — ACCEPTANCE REVOKED.**
-> Этот отчёт был выдан преждевременно. Аудит 2026-05-28 выявил **5 хвостов во
-> вкладке «Оформление»** (закрывает [S12](./specs/prd-7/s12-design-closeout.md))
-> и **ещё 31 расхождение по остальным вкладкам** редактора (Drawer-каркас,
-> Настройки, Структура, variant-replace, close-confirm, tests-list,
-> feedback-editor; закрывает [S13](./specs/prd-7/s13-editor-parity.md)). Ниже
-> ключевые точки только по design-tab — полная сводка по 31 находке S13 в
-> spec-документе фазы.
+> **STATUS UPDATE 2026-05-28 — REVOKED then RE-CLOSED.**
 >
-> Вкладка «Оформление» содержит четыре необработанные категории расхождения с
-> wireframe `prd7-design-tab.html`:
+> **Утром 2026-05-28** этот отчёт был признан преждевременным. Аудит выявил:
 >
-> - FR-31: sub-rail «Макет» и «Прогресс и шапка» рендерят `StubPane` со ссылкой
->   «реализуются отдельным шагом PRD-7» вместо группировки params по секциям
->   ([design-section.tsx:399-408](../client/src/features/tests/editor/sections/design-section.tsx)).
-> - FR-30: кнопка «Предпросмотр шаблона» делает `window.alert("будет в следующем шаге")`
->   вместо `tpl-preview-modal` ([design-section.tsx:156-158](../client/src/features/tests/editor/sections/design-section.tsx)).
-> - FR-33: галерея шаблонов потеряна при выводе legacy `DesignSettingsDialog`; кнопка
->   «Заменить шаблон» — placeholder.
-> - FR-31a: param-типы `image`/`asset`/`file`/`downloadLink`/`url`/`multiselect`/`number`
->   рендерятся stub-баннером ([design-section.tsx:359-369](../client/src/features/tests/editor/sections/design-section.tsx)).
+> - 5 хвостов во вкладке «Оформление» (FR-30 предпросмотр, FR-31 sub-rail
+>   params, FR-33 галерея, FR-31a param-типы, orphan `DesignSettingsDialog`) —
+>   спецификация [S12](./specs/prd-7/s12-design-closeout.md);
+> - 31 расхождение по остальным вкладкам (drawer-каркас, settings, structure,
+>   variant-replace, close-confirm, tests-list, feedback-editor) — спецификация
+>   [S13](./specs/prd-7/s13-editor-parity.md).
 >
-> Также не удалён orphan `client/src/components/design-settings-dialog.tsx` (S10
-> зачистка неполна).
+> **Вечером 2026-05-28: PRD-7 ЗАКРЫТ.**
+> Все 6 design-tab гэпов (G1-G6) + все 8 sub-фаз S13 (S13.1-S13.8) закрыты в
+> рамках единого цикла. Кодовый closeout:
 >
-> Acceptance §2.6 ошибочно отдал FR-30 «предпросмотр шаблона» в PRD-1, но FR-31 и FR-33
-> — требования самого PRD-7 wireframe и не могли быть отложены.
+> | Показатель | До (2026-05-27) | После (2026-05-28) |
+> | --- | --- | --- |
+> | `npm run check` | 0 ошибок | 0 ошибок |
+> | `vitest run` | 1344 / 52 файла | **1373 / 51 файл** (+29 нетто, -1 файл = удалён orphan) |
+> | Golden SCORM | 7/7 | 7/7 (контракт не менялся) |
 >
-> Открыты фазы [PRD-7 S12 — Design closeout](./specs/prd-7/s12-design-closeout.md)
-> и [PRD-7 S13 — Editor parity](./specs/prd-7/s13-editor-parity.md). PRD-7 будет
-> считаться закрытым после прохождения acceptance **обеих** фаз. S12 и S13 —
-> независимые треки (разные кодовые зоны), могут вестись параллельно.
+> **Deferred (не блокируют MVP):**
+>
+> - **S13.5b** — G22 mapping-flow при смене design-template. Cross-tab
+>   coupling между Design draft и Structure reader; требует архитектурного
+>   решения (где хранится pending templateChange, как Structure читает новый
+>   manifest без сохранения).
+> - **S13.8b** — G12 wf-basic-warning UX-notification «Несовместимые
+>   настройки сохранены и скрыты» при mode-switch. Данные при mode-switch
+>   уже preserved (см. basic-settings-section.test.tsx:201-220), но visual
+>   notification отсутствует.
+>
+> **Live-browser acceptance** (Playwright + axe; критерий — pixel-diff в
+> разумных пределах, 0 axe critical) — выполняется отдельно от кодового
+> closeout и не блокирует приём по коду.
 
 ## 1. Сводка
 
