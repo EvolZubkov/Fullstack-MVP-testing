@@ -91,10 +91,22 @@ export type UseDesignSettingsResult = {
   draft: DesignSettings;
   /** True when the draft differs from the persisted settings. */
   isDirty: boolean;
+  /**
+   * PRD-7 S12-G6 / wf-template-incompatible: design loaded, but the
+   * persisted `templateId` cannot be resolved (404). The incompatible
+   * banner replaces the template card and disables the other panes.
+   */
+  templateMissing: boolean;
   /** Patch a single param key in the draft. */
   setParam: (key: string, value: unknown) => void;
   /** Reset the draft to the manifest's defaults (clearing all params). */
   resetToDefaults: () => void;
+  /**
+   * PRD-7 S12-G6: switch the draft to the built-in `default` template,
+   * clearing all params. Used by the «Применить «Стандартный»» action in
+   * the wf-template-incompatible banner.
+   */
+  applyDefaultTemplate: () => void;
   /** Discard pending edits, reverting to the saved snapshot. */
   revert: () => void;
   /** Persist the draft via PUT. */
@@ -180,6 +192,17 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     setDraft((d) => ({ ...d, params: {} }));
   };
 
+  const applyDefaultTemplate = () => {
+    // S12-G6: marks the draft dirty so the Drawer footer's «Сохранить» picks
+    // it up. Clearing templateVersion/templateApiVersion lets the server
+    // re-stamp them from the chosen default during PUT.
+    setDraft((d) => ({
+      templateId: "default",
+      params: {},
+      ...(d.templateVersion ? {} : {}),
+    }));
+  };
+
   const revert = () => {
     if (persisted) {
       setDraft({ ...persisted, params: { ...(persisted.params ?? {}) } });
@@ -193,14 +216,26 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     },
   });
 
+  // S12-G6: differentiate "template lookup 404" from "design fetch errored".
+  // Design loaded successfully, template query has settled (not loading), but
+  // produced no data → the persisted templateId no longer maps to anything.
+  const templateMissing =
+    !designQuery.isLoading &&
+    designQuery.data !== undefined &&
+    !templateQuery.isLoading &&
+    !templateQuery.data &&
+    Boolean(persisted?.templateId);
+
   return {
     isLoading: designQuery.isLoading || templateQuery.isLoading,
     error: (designQuery.error as Error | null) ?? (templateQuery.error as Error | null),
     template: templateQuery.data ?? null,
     draft,
     isDirty,
+    templateMissing,
     setParam,
     resetToDefaults,
+    applyDefaultTemplate,
     revert,
     save: () => saveMutation.mutateAsync(),
     isSaving: saveMutation.isPending,

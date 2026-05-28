@@ -179,14 +179,43 @@ design-section вызывает его и сохраняет `mediaId` в `param
 **Статус:** **закрыто 2026-05-28** (batch parity cleanup). Файл и тест удалены (`git rm`).
 Полная suite зелёная.
 
-### G6 — Состояние `wf-template-incompatible`
+### G6 — Состояние `wf-template-incompatible` — **CLOSED 2026-05-28**
 
-**Что сейчас.** Не реализовано. При невалидном `templateId` UI падает в loading/error без специального баннера.
+**Что было.** При невалидном `templateId` (404 на `/api/templates/:id`) UI падал
+в обобщённый `ErrorNotice`, без отдельных recovery-действий.
 
-**Что должно быть.** Если `template = null` при наличии `design.draft.templateId`, показать
-баннер `ou-banner--error` с действиями «Выбрать шаблон» (открывает галерею) / «Применить
-«Стандартный»» (set templateId = default + clear params). Sub-rail Брендирование/Макет/Прогресс
-— disabled. Status-dot error на табе «Оформление».
+**Что сделано.**
+
+1. **Hook:** в
+   [use-design-settings.ts](../../../client/src/features/tests/editor/use-design-settings.ts)
+   добавлены два поля в `UseDesignSettingsResult`:
+   - `templateMissing: boolean` — derived: design-query успешен AND
+     template-query settled без data AND `persisted.templateId` не пуст.
+     Отделяет «шаблон удалён» от других ошибок (5xx, network).
+   - `applyDefaultTemplate(): void` — патчит draft на
+     `{ templateId: "default", params: {} }`; Drawer footer's «Сохранить»
+     подберёт изменения автоматически.
+2. **UI:** в `DesignSection` приоритет `templateMissing > error`. При флаге
+   активный rail форсится на `template`, остальные (branding/layout/progress)
+   получают `disabled` + `aria-disabled` + `onClick={undefined}`. На
+   rail-кнопке «Шаблон» — `status-dot error` с
+   `aria-label="Шаблон недоступен"`.
+3. **Banner:** новый компонент `TemplateIncompatibleBanner` — DS
+   `Banner tone="error"` с `actions=[...]`. Заголовок «Шаблон недоступен»,
+   описание содержит `<strong>{missingId}</strong>`. Две кнопки: «Выбрать
+   шаблон» (alert-плейсхолдер до закрытия S12-G3) и «Применить «Стандартный»»
+   → вызов `applyDefaultTemplate()`.
+4. **Tests:** 3 новых теста в `design-section.test.tsx` (incompatible-баннер
+   с обоими actions; status-dot + disabled rail; click по «Применить
+   Стандартный» не падает).
+
+**Status-dot на табе «Оформление»** — drawer-level плейсхолдер, отдельный
+тикет: tab-level status уже есть для editor errors (`tabStatuses` в
+`useTestEditor`), но `templateMissing` пока не пробрасывается в этот канал.
+При следующей работе по drawer-каркасу (S13.7) — добавить.
+
+**Verification:** `npm run check` 0 ошибок; `vitest run` 51/51 файл,
+1361 тест зелёные.
 
 ---
 

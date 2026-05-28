@@ -25,7 +25,7 @@
  *     settings as in the rest of the editor.
  */
 import { useState } from "react";
-import { Eye, Layout } from "lucide-react";
+import { AlertTriangle, Eye, Layout } from "lucide-react";
 import {
   Banner,
   Button,
@@ -78,35 +78,70 @@ export function DesignSection({ testId, design: designProp }: DesignSectionProps
   const fallback = useDesignSettings(designProp ? undefined : testId);
   const design = designProp ?? fallback;
 
+  // PRD-7 S12-G6: when the persisted templateId is unresolvable (404), force
+  // the rail back to «Шаблон» (where the incompatible banner lives) and
+  // disable branding / layout / progress — those panes have nothing to bind
+  // to without a template manifest.
+  const effectiveActive: DesignRailKey = design.templateMissing ? "template" : active;
+  const isRailDisabled = (key: DesignRailKey): boolean =>
+    design.templateMissing && key !== "template";
+
   return (
     <>
       <div className="ou-drawer__split" data-testid="design-split">
         <nav className="ou-drawer__rail" aria-label="Подразделы оформления">
-          {RAIL_ITEMS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              className={
-                "ou-drawer__rail-item" + (active === item.key ? " is-active" : "")
-              }
-              aria-current={active === item.key ? "page" : undefined}
-              onClick={() => setActive(item.key)}
-              data-testid={`design-rail-${item.key}`}
-            >
-              {item.label}
-            </button>
-          ))}
+          {RAIL_ITEMS.map((item) => {
+            const disabled = isRailDisabled(item.key);
+            const showError = item.key === "template" && design.templateMissing;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                className={
+                  "ou-drawer__rail-item" +
+                  (effectiveActive === item.key ? " is-active" : "")
+                }
+                aria-current={effectiveActive === item.key ? "page" : undefined}
+                aria-disabled={disabled ? "true" : undefined}
+                disabled={disabled}
+                onClick={disabled ? undefined : () => setActive(item.key)}
+                data-testid={`design-rail-${item.key}`}
+              >
+                {item.label}
+                {showError && (
+                  <span
+                    className="status-dot error"
+                    aria-label="Шаблон недоступен"
+                    data-testid="design-rail-template-error-dot"
+                  />
+                )}
+              </button>
+            );
+          })}
         </nav>
-        <div className="tb-settings-content" data-testid={`design-pane-${active}`}>
+        <div className="tb-settings-content" data-testid={`design-pane-${effectiveActive}`}>
           {testId === undefined ? (
             <CreateModeNotice />
           ) : design.isLoading ? (
             <LoadingNotice />
+          ) : design.templateMissing ? (
+            <TemplateIncompatibleBanner
+              missingId={design.draft.templateId}
+              onApplyDefault={design.applyDefaultTemplate}
+              onOpenGallery={() => {
+                // Gallery (S12-G3) not implemented yet — fall back to an
+                // explanatory alert. When G3 lands, this should open the
+                // template gallery modal pre-filtered to compatible templates.
+                window.alert(
+                  "Галерея шаблонов будет доступна в следующем шаге (S12-G3 / FR-33).",
+                );
+              }}
+            />
           ) : design.error ? (
             <ErrorNotice message={design.error.message} />
-          ) : active === "template" ? (
+          ) : effectiveActive === "template" ? (
             <TemplatePane design={design} onPreview={() => setPreviewOpen(true)} />
-          ) : active === "branding" ? (
+          ) : effectiveActive === "branding" ? (
             <SectionPane
               design={design}
               section="branding"
@@ -114,7 +149,7 @@ export function DesignSection({ testId, design: designProp }: DesignSectionProps
               emptyDesc={`У выбранного шаблона «${design.template?.manifest.name ?? ""}» в секции «Брендирование» не объявлено ни одного параметра.`}
               testId="design-branding-pane"
             />
-          ) : active === "layout" ? (
+          ) : effectiveActive === "layout" ? (
             <SectionPane
               design={design}
               section="layout"
@@ -173,6 +208,44 @@ function ErrorNotice({ message }: { message: string }) {
       title="Не удалось загрузить оформление"
       description={message}
       data-testid="design-error"
+    />
+  );
+}
+
+/**
+ * PRD-7 S12-G6 / wf-template-incompatible: the persisted templateId no longer
+ * resolves to an active template (deleted, renamed, API-version bumped).
+ * Replaces the template card with an error Banner offering two recovery
+ * actions: open the gallery (deferred until S12-G3 lands) or apply «default».
+ */
+function TemplateIncompatibleBanner(props: {
+  missingId: string;
+  onOpenGallery: () => void;
+  onApplyDefault: () => void;
+}) {
+  return (
+    <Banner
+      tone="error"
+      icon={<AlertTriangle width={16} height={16} aria-hidden="true" />}
+      title="Шаблон недоступен"
+      description={
+        <>
+          Сохранённый шаблон «<strong>{props.missingId}</strong>» больше не
+          поддерживается. Выберите другой шаблон или примените шаблон по
+          умолчанию, чтобы продолжить редактирование оформления.
+        </>
+      }
+      actions={[
+        {
+          label: "Выбрать шаблон",
+          onClick: props.onOpenGallery,
+        },
+        {
+          label: "Применить «Стандартный»",
+          onClick: props.onApplyDefault,
+        },
+      ]}
+      data-testid="design-template-incompatible"
     />
   );
 }
