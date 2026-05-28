@@ -105,7 +105,7 @@ UI, без миграций БД и API.
 
 | ID | Severity | Что | Где |
 | --- | --- | --- | --- |
-| **G32** | **critical** | **`window.prompt("ID папки для перемещения")`** на действии «Переместить в папку». Должен быть folder-pick-modal (как `FabFolderPickModal`) | [tests-list.tsx:603](../../../client/src/features/tests/list/tests-list.tsx) (row-menu, wf 1089, 1181) |
+| G32 | ~~critical~~ **closed 2026-05-28** | Реализован `MoveFolderPickModal` (size="s", radio-list папок + «Корень»; preselect текущей папки с Tag «Текущая»; «Переместить» disabled если selected === current). Заменяет `window.prompt`; тест-кейс blocks вызов `window.prompt` | (row-menu, wf 1089, 1181) |
 | G36 | ~~cleanup~~ **closed 2026-05-28** | Sort переведён с нативного `<select>` на DS `Select<SortKey>` (size="s"); testid `tests-list-sort` сохранён | (toolbar) |
 
 ### 1.7 Delete-confirm (`prd7-tests-delete-confirm.html`)
@@ -118,8 +118,8 @@ UI, без миграций БД и API.
 
 | ID | Severity | Что | Где |
 | --- | --- | --- | --- |
-| **G39** | **critical** | **`window.prompt("URL ссылки")`** для вставки ссылки в rich-text — кастомный link-insert UI не реализован | [feedback-editor-modal.tsx:140](../../../client/src/features/tests/editor/sections/feedback-editor-modal.tsx) |
-| **G40** | **critical** | **`window.alert("Файл(ы) превышают 5 MB…")`** вместо DS Banner/Toast | [feedback-editor-modal.tsx:150](../../../client/src/features/tests/editor/sections/feedback-editor-modal.tsx) |
+| G39 | ~~critical~~ **closed 2026-05-28** | Link-insert sub-modal внутри `FeedbackEditorModal`: ловит текущий selection range до открытия модала, поля «URL»+«Текст ссылки», submit восстанавливает selection и вызывает `createLink` (или вставляет `<a>` в курсор при collapsed range). Кнопка «Вставить» disabled пока URL пуст. Тест-кейс blocks вызов `window.prompt` | — |
+| G40 | ~~critical~~ **closed 2026-05-28** | Oversize-файлы выводятся как in-modal `Banner tone="warning"` с заголовком и списком имён файлов; banner dismissible. Тест-кейс blocks вызов `window.alert` | — |
 
 ### 1.9 Общие (cleanup)
 
@@ -142,7 +142,7 @@ UI, без миграций БД и API.
 
 | Sub-фаза | Содержание | ID | Зона кода | Эстимейт |
 | --- | --- | --- | --- | --- |
-| **S13.1** | Замена `window.prompt`/`window.alert` на DS-компоненты: folder-pick-modal на «Переместить в папку», link-insert UI в RTE, Banner/Toast для oversize-файлов | G32, G39, G40 | `tests-list.tsx`, `feedback-editor-modal.tsx` + новый `link-insert-modal.tsx` | 2-3ч |
+| ~~**S13.1**~~ **closed 2026-05-28** | Замена `window.prompt`/`window.alert` на DS-компоненты: `MoveFolderPickModal` для «Переместить в папку», link-insert sub-modal в `FeedbackEditorModal` RTE, `Banner tone="warning"` для oversize-файлов. Все 3 prompt/alert вызова удалены, тестами zafiksирована регрессия | G32, G39, G40 | `tests-list.tsx`, `feedback-editor-modal.tsx` | факт: ~2ч |
 | **S13.2** | Настройки → «Основное»: реализация секции «Общая обратная связь теста» (rich-text body, links list, PDF chip-group + upload, hr + Switch); перенос «Показывать правильные ответы» из Ограничений в Основное | G7, G8, G13, G14 | `basic-settings-section.tsx`, ~~`feedback-test-section.tsx`~~ (новый компонент) | 5-7ч |
 | **S13.3** | Настройки → «Ограничения»: per-topic time-limit table (Switch «Индивидуальные лимиты» → таблица), state `s-limits-no-topics` для linear_flat; webhook-desc; cleanup устаревших JSDoc/комментариев | G9, G10, G11 | `basic-settings-section.tsx` + новый `per-topic-limits-table.tsx` | 4-5ч |
 | **S13.4** | Структура — критичные row-actions: row-menu (Сменить вариант + Предпросмотр для author/system), sanitize-warning после save HTML, `page-row--template` маркер; cleanup `mixed` в FLOW_LABEL; **лейбл `router_by_topics` → «Через страницу-маршрутизатор»** (G46) | G17, G18, G23, G25, G46 | `start-pages-section.tsx` + новый `page-preview-modal.tsx` | 4-5ч |

@@ -225,6 +225,14 @@ export function TestsListPage(): JSX.Element {
     | { kind: "new-folder"; value: string }
   >(null);
 
+  // Move-to-folder picker (S13.1-G32): replaces window.prompt with a radio-list
+  // modal. `current` is the folder the test is in right now (pre-selected and
+  // disabled as a no-op), `selected` is the user's pick.
+  const [moveFolderPick, setMoveFolderPick] = useState<
+    | null
+    | { testId: string; testTitle: string; current: string | null; selected: string | null }
+  >(null);
+
   // Existing dialogs (assign / export) --------------------------------------
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignTest, setAssignTest] = useState<{ id: string; title: string } | null>(null);
@@ -415,6 +423,26 @@ export function TestsListPage(): JSX.Element {
         />
       )}
 
+      {/* Modal: move test to folder (S13.1-G32, replaces window.prompt) ----- */}
+      {moveFolderPick !== null && (
+        <MoveFolderPickModal
+          folders={folders}
+          testTitle={moveFolderPick.testTitle}
+          current={moveFolderPick.current}
+          selected={moveFolderPick.selected}
+          onSelect={(id) =>
+            setMoveFolderPick((s) => (s ? { ...s, selected: id } : s))
+          }
+          onCancel={() => setMoveFolderPick(null)}
+          onMove={() => {
+            if (!moveFolderPick) return;
+            const folderId = moveFolderPick.selected;
+            moveMutation.mutate({ testId: moveFolderPick.testId, folderId });
+            setMoveFolderPick(null);
+          }}
+        />
+      )}
+
       {/* Modal: FAB new-folder (simple name input) -------------------------- */}
       {fabFolderPick?.kind === "new-folder" && (
         <NewFolderModal
@@ -600,13 +628,12 @@ export function TestsListPage(): JSX.Element {
           role="menuitem"
           onClick={() => {
             setTestMenu(null);
-            const target = window.prompt(
-              "ID папки для перемещения (пусто = корень)",
-              test.folderId ?? "",
-            );
-            if (target === null) return;
-            const folderId = target.trim() === "" ? null : target.trim();
-            moveMutation.mutate({ testId: test.id, folderId });
+            setMoveFolderPick({
+              testId: test.id,
+              testTitle: test.title,
+              current: test.folderId ?? null,
+              selected: test.folderId ?? null,
+            });
           }}
           data-testid={`menu-move-${test.id}`}
         >
@@ -1533,6 +1560,93 @@ function DeleteFolderModal(props: {
               </label>
             </div>
           </fieldset>
+    </ModalDialog>
+  );
+}
+
+/**
+ * Move-to-folder picker modal (S13.1-G32). Mirrors {@link FabFolderPickModal}
+ * but binds to an existing test: pre-selects the current folder, disables
+ * «Переместить» until the user picks a different folder, then fires the move
+ * mutation. Replaces the legacy `window.prompt("ID папки для перемещения")`.
+ */
+function MoveFolderPickModal(props: {
+  folders: FolderEntry[];
+  testTitle: string;
+  current: string | null;
+  selected: string | null;
+  onSelect: (id: string | null) => void;
+  onCancel: () => void;
+  onMove: () => void;
+}) {
+  const noChange = props.selected === props.current;
+  return (
+    <ModalDialog
+      open
+      onClose={props.onCancel}
+      size="s"
+      title="Переместить в папку"
+      description={`Выберите папку для теста «${props.testTitle}»`}
+      data-testid="move-folder-pick"
+      footer={
+        <>
+          <Button
+            variant="ghost"
+            size="s"
+            onClick={props.onCancel}
+            data-testid="move-folder-pick-cancel"
+          >
+            Отмена
+          </Button>
+          <Button
+            variant="primary"
+            size="s"
+            onClick={props.onMove}
+            disabled={noChange}
+            title={noChange ? "Тест уже в этой папке" : undefined}
+            data-testid="move-folder-pick-submit"
+          >
+            Переместить
+          </Button>
+        </>
+      }
+    >
+      <div className="fab-folder-list">
+        <label className="fab-folder-item">
+          <input
+            type="radio"
+            name="move-folder-pick"
+            checked={props.selected === null}
+            onChange={() => props.onSelect(null)}
+            data-testid="move-folder-pick-root"
+          />
+          <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
+          Корень (без папки)
+          {props.current === null && (
+            <Tag tone="neutral" variant="outline" size="s">
+              Текущая
+            </Tag>
+          )}
+        </label>
+        {props.folders.map((f) => (
+          <label key={f.id} className="fab-folder-item">
+            <input
+              type="radio"
+              name="move-folder-pick"
+              checked={props.selected === f.id}
+              onChange={() => props.onSelect(f.id)}
+              data-testid={`move-folder-pick-folder-${f.id}`}
+            />
+            <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
+            {f.name}
+            {props.current === f.id && (
+              <Tag tone="neutral" variant="outline" size="s">
+                Текущая
+              </Tag>
+            )}
+          </label>
+        ))}
+      </div>
     </ModalDialog>
   );
 }

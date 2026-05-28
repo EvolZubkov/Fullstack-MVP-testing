@@ -212,6 +212,35 @@ describe("<TestsListPage /> — test more-menu", () => {
   });
 });
 
+describe("<TestsListPage /> — move-to-folder (S13.1-G32)", () => {
+  it("opens MoveFolderPickModal instead of window.prompt", async () => {
+    const promptSpy = vi.spyOn(window, "prompt");
+    mockMany({
+      "/api/tests": [buildApiTestRow()],
+      "/api/test-folders": [buildApiFolder({ id: "f-1", name: "ИБ" })],
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+    fireEvent.click(screen.getByTestId("menu-move-t-1"));
+
+    expect(promptSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId("move-folder-pick-root")).toBeInTheDocument();
+    // Root pre-selected (test.folderId === null) and submit disabled (no change).
+    expect(
+      (screen.getByTestId("move-folder-pick-root") as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(screen.getByTestId("move-folder-pick-submit")).toBeDisabled();
+
+    // Pick a different folder — submit enables.
+    fireEvent.click(screen.getByTestId("move-folder-pick-folder-f-1"));
+    expect(screen.getByTestId("move-folder-pick-submit")).not.toBeDisabled();
+
+    promptSpy.mockRestore();
+  });
+});
+
 describe("<TestsListPage /> — delete confirm (FR-30)", () => {
   it("blocks Delete until input matches the title exactly", async () => {
     mockMany({

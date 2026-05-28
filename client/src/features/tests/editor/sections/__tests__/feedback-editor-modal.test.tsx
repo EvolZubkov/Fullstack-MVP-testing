@@ -130,18 +130,14 @@ describe("<FeedbackEditorModal /> — links", () => {
   });
 });
 
-// ─── Tests: RTE link insert ───────────────────────────────────────────────────
+// ─── Tests: RTE link insert (S13.1-G39 — modal replaces window.prompt) ───────
 
-describe("<FeedbackEditorModal /> — RTE createLink", () => {
-  let promptSpy: ReturnType<typeof vi.spyOn>;
+describe("<FeedbackEditorModal /> — RTE link-insert modal", () => {
   /** Mock for document.execCommand (JSDOM may not expose it as a configurable property). */
   let execCommandMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    promptSpy = vi.spyOn(window, "prompt").mockReturnValue("https://test.example");
     execCommandMock = vi.fn().mockReturnValue(true);
-    // JSDOM stubs execCommand but it may not be spy-able via vi.spyOn.
-    // Use Object.defineProperty to install the mock directly.
     Object.defineProperty(document, "execCommand", {
       value: execCommandMock,
       configurable: true,
@@ -150,8 +146,6 @@ describe("<FeedbackEditorModal /> — RTE createLink", () => {
   });
 
   afterEach(() => {
-    promptSpy.mockRestore();
-    // Remove custom mock so subsequent tests get JSDOM default.
     Object.defineProperty(document, "execCommand", {
       value: undefined,
       configurable: true,
@@ -159,24 +153,33 @@ describe("<FeedbackEditorModal /> — RTE createLink", () => {
     });
   });
 
-  it("«Вставить ссылку» prompts for URL and calls execCommand('createLink')", () => {
+  it("«Вставить ссылку» opens the link-insert modal (no window.prompt)", () => {
+    const promptSpy = vi.spyOn(window, "prompt");
     renderModal({ value: baseValue({ format: "richText" }) });
     fireEvent.click(screen.getByTestId("rte-link"));
-    expect(promptSpy).toHaveBeenCalledWith("URL ссылки");
-    expect(execCommandMock).toHaveBeenCalledWith("createLink", false, "https://test.example");
+    expect(promptSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId("rte-link-url")).toBeInTheDocument();
+    expect(screen.getByTestId("rte-link-text")).toBeInTheDocument();
+    expect(screen.getByTestId("rte-link-submit")).toBeInTheDocument();
+    expect(screen.getByTestId("rte-link-cancel")).toBeInTheDocument();
+    promptSpy.mockRestore();
   });
 
-  it("does not call createLink when prompt returns empty string", () => {
-    promptSpy.mockReturnValue("");
+  it("«Вставить» is disabled until URL field is non-empty", () => {
     renderModal({ value: baseValue({ format: "richText" }) });
     fireEvent.click(screen.getByTestId("rte-link"));
-    expect(execCommandMock).not.toHaveBeenCalledWith("createLink", false, expect.anything());
+    expect(screen.getByTestId("rte-link-submit")).toBeDisabled();
+    fireEvent.change(screen.getByTestId("rte-link-url"), {
+      target: { value: "https://test.example" },
+    });
+    expect(screen.getByTestId("rte-link-submit")).not.toBeDisabled();
   });
 
-  it("does not call createLink when prompt is cancelled (null)", () => {
-    promptSpy.mockReturnValue(null);
+  it("«Отмена» closes the modal without inserting a link", () => {
     renderModal({ value: baseValue({ format: "richText" }) });
     fireEvent.click(screen.getByTestId("rte-link"));
+    fireEvent.click(screen.getByTestId("rte-link-cancel"));
+    expect(screen.queryByTestId("rte-link-url")).not.toBeInTheDocument();
     expect(execCommandMock).not.toHaveBeenCalledWith("createLink", false, expect.anything());
   });
 });
@@ -241,7 +244,7 @@ describe("<FeedbackEditorModal /> — PDF assets", () => {
     expect("file" in emitted.assets[0]).toBe(false);
   });
 
-  it("rejects files over 5 MB with window.alert and does not add them", async () => {
+  it("rejects files over 5 MB with an in-modal Banner (S13.1-G40, no window.alert)", async () => {
     const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
     renderModal();
     const input = screen.getByTestId("feedback-editor-asset-input") as HTMLInputElement;
@@ -249,7 +252,10 @@ describe("<FeedbackEditorModal /> — PDF assets", () => {
     Object.defineProperty(bigFile, "size", { value: 6 * 1024 * 1024, configurable: true });
     await userEvent.upload(input, bigFile);
 
-    expect(alertSpy).toHaveBeenCalledOnce();
+    expect(alertSpy).not.toHaveBeenCalled();
+    const banner = await screen.findByTestId("feedback-editor-oversize-banner");
+    expect(banner).toBeInTheDocument();
+    expect(banner.textContent).toContain("big.pdf");
     expect(screen.queryByRole("list", { name: /Прикреплённые файлы/i })).not.toBeInTheDocument();
     alertSpy.mockRestore();
   });

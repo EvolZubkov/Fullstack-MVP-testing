@@ -30,6 +30,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link as LinkIcon, Paperclip, Plus, Trash2 } from "lucide-react";
 import {
+  Banner,
   Button,
   IconButton,
   Input,
@@ -102,6 +103,19 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
   /** Hidden file input for PDF upload. */
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // S13.1-G39: link-insert modal state. `savedRange` captures the user's
+  // selection inside the RTE before the modal steals focus, so submitting
+  // the form can restore it and `createLink` wraps the original text.
+  const [linkInsert, setLinkInsert] = useState<{
+    url: string;
+    text: string;
+    savedRange: Range | null;
+  } | null>(null);
+
+  // S13.1-G40: list of files rejected for exceeding the 5 MB limit. Rendered
+  // as an in-modal warning banner instead of window.alert. Dismissible.
+  const [oversizedFiles, setOversizedFiles] = useState<string[]>([]);
+
   // Reset draft when the modal re-opens or receives a new value.
   // For richText format: initialize the RTE innerHTML via requestAnimationFrame
   // so the div is guaranteed to be mounted after the re-render triggered by setDraft.
@@ -135,10 +149,65 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     document.execCommand(command, false, value);
   }
 
-  /** Prompt for a URL and insert a hyperlink at the current selection. */
+  /**
+   * Open the link-insert modal (S13.1-G39). Captures the current selection
+   * range so the modal submit can restore it and wrap the original text in
+   * `<a>`. If there is no selection, the modal falls back to using its
+   * «Display text» field as the inserted text.
+   */
   function handleLinkInsert() {
-    const url = window.prompt("URL ссылки");
-    if (url && url.trim()) execRteCommand("createLink", url.trim());
+    const sel = window.getSelection();
+    let savedRange: Range | null = null;
+    let selectedText = "";
+    if (sel && sel.rangeCount > 0 && rteRef.current?.contains(sel.anchorNode)) {
+      savedRange = sel.getRangeAt(0).cloneRange();
+      selectedText = sel.toString();
+    }
+    setLinkInsert({ url: "", text: selectedText, savedRange });
+  }
+
+  /**
+   * Commit the link-insert modal: restore the saved selection (if any) and
+   * either wrap it with `createLink` or insert a new `<a>` element at the
+   * cursor for the empty-selection case.
+   */
+  function handleLinkInsertSubmit() {
+    if (!linkInsert) return;
+    const url = linkInsert.url.trim();
+    if (!url) return;
+    const text = linkInsert.text.trim();
+    rteRef.current?.focus();
+    if (linkInsert.savedRange) {
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(linkInsert.savedRange);
+      if (linkInsert.savedRange.collapsed) {
+        // No selection — insert <a>text</a> at cursor.
+        const a = document.createElement("a");
+        a.href = url;
+        a.textContent = text || url;
+        linkInsert.savedRange.insertNode(a);
+        // Move cursor after the inserted link.
+        const range = document.createRange();
+        range.setStartAfter(a);
+        range.collapse(true);
+        sel?.removeAllRanges();
+        sel?.addRange(range);
+      } else {
+        // Wrap the existing selection.
+        document.execCommand("createLink", false, url);
+      }
+    } else {
+      // Editor was never focused; insert at the end.
+      const a = document.createElement("a");
+      a.href = url;
+      a.textContent = text || url;
+      rteRef.current?.appendChild(a);
+    }
+    if (rteRef.current) {
+      setDraft((d) => ({ ...d, text: rteRef.current!.innerHTML }));
+    }
+    setLinkInsert(null);
   }
 
   /** Handle file picker change: validate size, build draft assets. */
@@ -147,12 +216,16 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
     const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
     const oversized = files.filter((f) => f.size > MAX_BYTES);
     if (oversized.length > 0) {
-      window.alert(
-        `Файл(ы) превышают 5 MB и не были добавлены: ${oversized.map((f) => f.name).join(", ")}`,
-      );
+      // S13.1-G40: surface as an in-modal Banner instead of window.alert.
+      setOversizedFiles(oversized.map((f) => f.name));
+    } else {
+      setOversizedFiles([]);
     }
     const valid = files.filter((f) => f.size <= MAX_BYTES);
-    if (valid.length === 0) return;
+    if (valid.length === 0) {
+      e.target.value = "";
+      return;
+    }
     const newAssets: DraftAsset[] = valid.map((file) => ({
       title: file.name.replace(/\.pdf$/i, ""),
       fileName: file.name,
@@ -178,6 +251,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
   }
 
   return (
+    <>
     <ModalDialog
       open={props.open}
       onClose={props.onCancel}
@@ -207,6 +281,17 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
       data-testid={props.testId ?? "feedback-editor"}
     >
       <div className="tb-feedback-editor">
+        {/* ── S13.1-G40: oversize-file warning banner ─────────────────── */}
+        {oversizedFiles.length > 0 && (
+          <Banner
+            tone="warning"
+            title="Файл(ы) превышают 5 MB и не были добавлены"
+            description={oversizedFiles.join(", ")}
+            onClose={() => setOversizedFiles([])}
+            data-testid="feedback-editor-oversize-banner"
+          />
+        )}
+
         {/* ── Format selector ──────────────────────────────────────────── */}
         <div className="tb-feedback-editor__section tb-feedback-editor__section--inline">
           <span className="tb-feedback-editor__sec-title">Формат</span>
@@ -469,5 +554,66 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
         )}
       </div>
     </ModalDialog>
+
+    {/* ── S13.1-G39: link-insert sub-modal (replaces window.prompt) ─── */}
+    {linkInsert !== null && (
+      <ModalDialog
+        open
+        onClose={() => setLinkInsert(null)}
+        size="s"
+        title="Вставить ссылку"
+        description="Укажите URL и текст, который увидит обучающийся"
+        data-testid="rte-link-modal"
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              size="s"
+              onClick={() => setLinkInsert(null)}
+              data-testid="rte-link-cancel"
+            >
+              Отмена
+            </Button>
+            <Button
+              variant="primary"
+              size="s"
+              onClick={handleLinkInsertSubmit}
+              disabled={linkInsert.url.trim() === ""}
+              data-testid="rte-link-submit"
+            >
+              Вставить
+            </Button>
+          </>
+        }
+      >
+        <div className="tb-link-insert">
+          <Input
+            size="m"
+            fullWidth
+            type="url"
+            label="URL"
+            placeholder="https://…"
+            value={linkInsert.url}
+            autoFocus
+            onChange={(e) =>
+              setLinkInsert((s) => (s ? { ...s, url: e.target.value } : s))
+            }
+            data-testid="rte-link-url"
+          />
+          <Input
+            size="m"
+            fullWidth
+            label="Текст ссылки"
+            placeholder="Оставьте пустым, чтобы показать URL"
+            value={linkInsert.text}
+            onChange={(e) =>
+              setLinkInsert((s) => (s ? { ...s, text: e.target.value } : s))
+            }
+            data-testid="rte-link-text"
+          />
+        </div>
+      </ModalDialog>
+    )}
+    </>
   );
 }
