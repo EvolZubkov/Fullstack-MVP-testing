@@ -16,7 +16,7 @@
  * The design / template queries reuse the same React Query keys as
  * {@link useDesignSettings} so the two hooks share one network round-trip.
  */
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -233,6 +233,15 @@ export type UseContentPagesResult = {
   isRemoving: boolean;
   /** First mutation error (create / update / reorder / delete), if any. */
   mutationError: Error | null;
+  /**
+   * True after the first successful content-page mutation in this drawer
+   * session. Drives the «Сохранить» button: structure mutations are written
+   * directly via the content-pages API (not through the test/design draft),
+   * but the user still expects «Сохранить» to light up after add / drag /
+   * reorder. The Drawer should call {@link resetMutated} after its save flow.
+   */
+  hasMutated: boolean;
+  resetMutated: () => void;
 };
 
 /** True when a placeholder value counts as unfilled for required-field checks. */
@@ -241,23 +250,34 @@ function isPlaceholderEmpty(value: unknown): boolean {
 }
 
 /**
- * Aggregate warning signal for the «Структура» tab: true when any author
- * (`kind: "info"`) page references a missing template variant or leaves a
- * required placeholder unfilled (PRD-1 §4.3.6). Drives the tab's warning dot
- * and complements the server-side publish gate.
+ * Aggregate **error** signal for the «Структура» tab: true when any author
+ * (`kind: "info"`) page leaves a `required: true` placeholder unfilled.
+ * Required-empty is the author's responsibility — Save must be blocked
+ * (PRD-1 §4.3.6, FR-20c). templateKeyMissing is a separate warning.
  */
-export function hasStructureWarnings(
+export function hasStructureErrors(
   pages: ContentPage[],
   contentTemplates: ContentTemplateVariant[],
 ): boolean {
   return pages.some((p) => {
     if (p.kind !== "info") return false;
-    if (p.templateKeyMissing) return true;
     const variant = contentTemplates.find((v) => v.key === p.templateKey);
     if (!variant) return false;
     const values = p.valuesJson?.values ?? {};
     return variant.placeholders.some((ph) => ph.required && isPlaceholderEmpty(values[ph.key]));
   });
+}
+
+/**
+ * Aggregate **warning** signal for the «Структура» tab: true when any author
+ * page's saved templateKey is no longer present in the active template
+ * (variant catalog drift). Surfaced as a yellow tag — does NOT block Save;
+ * the page still exports as the persisted variant or falls back at runtime.
+ */
+export function hasStructureWarnings(
+  pages: ContentPage[],
+): boolean {
+  return pages.some((p) => p.kind === "info" && p.templateKeyMissing === true);
 }
 
 export function useContentPages(testId: string | undefined): UseContentPagesResult {
@@ -289,35 +309,45 @@ export function useContentPages(testId: string | undefined): UseContentPagesResu
     [contentTemplates],
   );
 
-  const invalidate = () =>
+  // `hasMutated` is the Drawer-level dirty signal for the «Структура» tab.
+  // Content-page mutations write directly to the API (no draft), but the user
+  // expects «Сохранить» to light up after add / drag / reorder; this flag is
+  // the bridge between direct-write mutations and the test/design draft dirty
+  // tracking the Drawer footer reads. Reset by the Drawer after save.
+  const [hasMutated, setHasMutated] = useState(false);
+  const resetMutated = useCallback(() => setHasMutated(false), []);
+
+  const onMutationSuccess = () => {
+    setHasMutated(true);
     queryClient.invalidateQueries({ queryKey: ["tests", testId, "content-pages"] });
+  };
 
   const createMutation = useMutation({
     mutationFn: (input: ContentPageInput) => postContentPage(testId!, input),
-    onSuccess: invalidate,
+    onSuccess: onMutationSuccess,
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ pageId, input }: { pageId: string; input: Partial<ContentPageInput> }) =>
       putContentPage(testId!, pageId, input),
-    onSuccess: invalidate,
+    onSuccess: onMutationSuccess,
   });
 
   const reorderMutation = useMutation({
     mutationFn: (updates: Array<{ id: string; sortOrder: number }>) =>
       putReorder(testId!, updates),
-    onSuccess: invalidate,
+    onSuccess: onMutationSuccess,
   });
 
   const replaceVariantMutation = useMutation({
     mutationFn: ({ pageId, newTemplateKey }: { pageId: string; newTemplateKey: string }) =>
       postReplaceVariant(testId!, pageId, newTemplateKey),
-    onSuccess: invalidate,
+    onSuccess: onMutationSuccess,
   });
 
   const removeMutation = useMutation({
     mutationFn: (pageId: string) => deleteContentPage(testId!, pageId),
-    onSuccess: invalidate,
+    onSuccess: onMutationSuccess,
   });
 
   return {
@@ -344,5 +374,7 @@ export function useContentPages(testId: string | undefined): UseContentPagesResu
       (replaceVariantMutation.error as Error | null) ??
       (removeMutation.error as Error | null) ??
       null,
+    hasMutated,
+    resetMutated,
   };
 }

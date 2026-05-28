@@ -47,7 +47,7 @@ import {
   type UseTestEditorResult,
 } from "./use-test-editor";
 import { useDesignSettings } from "./use-design-settings";
-import { useContentPages, hasStructureWarnings } from "./use-content-pages";
+import { useContentPages, hasStructureErrors, hasStructureWarnings } from "./use-content-pages";
 import { CompositionSection } from "./sections/topics-structure-section";
 import { SettingsSection } from "./sections/basic-settings-section";
 import { DesignSection } from "./sections/design-section";
@@ -152,9 +152,15 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
   // instance with the drawer — letting the tab reflect content-page warnings
   // (missing variant / unfilled required fields) in its status dot.
   const contentPages = useContentPages(editor.model?.id);
-  const structureWarn = useMemo(
-    () => hasStructureWarnings(contentPages.pages, contentPages.contentTemplates),
+  // Required-empty in any author page → Save is blocked (error).
+  // templateKeyMissing → status-dot warning only (does not block Save).
+  const structureErr = useMemo(
+    () => hasStructureErrors(contentPages.pages, contentPages.contentTemplates),
     [contentPages.pages, contentPages.contentTemplates],
+  );
+  const structureWarn = useMemo(
+    () => hasStructureWarnings(contentPages.pages),
+    [contentPages.pages],
   );
 
   const queryClient = useQueryClient();
@@ -199,9 +205,11 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
     return () => drawer.removeEventListener("keydown", handleKey);
   }, [open]);
 
-  // Combined dirty / saving flags spanning the test-settings draft and the
-  // design-settings draft.
-  const combinedDirty = editor.isDirty || design.isDirty;
+  // Combined dirty / saving flags spanning the test-settings draft, the
+  // design-settings draft and the content-pages «Структура» tab. Structure
+  // mutations write directly to the API (no draft), so `contentPages.hasMutated`
+  // is the bridge: it lights up «Сохранить» after add / drag / reorder.
+  const combinedDirty = editor.isDirty || design.isDirty || contentPages.hasMutated;
   const combinedSaving = editor.isSaving || design.isSaving;
 
   const requestClose = useCallback(() => {
@@ -213,7 +221,9 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
     onClose();
   }, [combinedDirty, combinedSaving, onClose]);
 
-  const hasErrors = editor.validation.errors.length > 0;
+  // `hasErrors` blocks Save: test-settings validation errors OR a required
+  // placeholder left empty in any author content page (PRD-1 §4.3.6).
+  const hasErrors = editor.validation.errors.length > 0 || structureErr;
   const saveDisabled = !combinedDirty || hasErrors || combinedSaving;
 
   // FR-20c: distinct count of fields carrying a blocking error (for the summary
@@ -264,8 +274,12 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
     if (design.isDirty) {
       await design.save();
     }
+    // Content-page mutations are already persisted at the API call site (no
+    // draft); clearing the bridge flag deactivates «Сохранить» until the next
+    // structure edit. Done unconditionally — a no-op when the flag is false.
+    contentPages.resetMutated();
     return true;
-  }, [design, editor]);
+  }, [design, editor, contentPages]);
 
   const handleSave = useCallback(async () => {
     if (saveDisabled) return;
@@ -294,8 +308,11 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
     setCloseDialogOpen(false);
     editor.reset();
     design.revert();
+    // Content-page mutations are already persisted; clearing the bridge flag
+    // ensures the next open of the drawer doesn't start with a stale dirty.
+    contentPages.resetMutated();
     onClose();
-  }, [design, editor, onClose]);
+  }, [contentPages, design, editor, onClose]);
 
   const statusTag = useMemo(() => deriveStatusTag(editor), [editor]);
 

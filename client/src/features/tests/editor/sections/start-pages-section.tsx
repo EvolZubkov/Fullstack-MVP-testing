@@ -22,8 +22,9 @@
  * classes live in `client/src/styles/tb-components.css`; controls use
  * `@universityrt/ui-kit`.
  */
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, Fragment, useContext, useMemo, useState } from "react";
 import {
+  AlertCircle,
   ChevronRight,
   FileText,
   GripVertical,
@@ -390,6 +391,15 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
   const questionsForTopic = (tid: string) =>
     pages.find((p) => p.kind === "questions" && p.topicId === tid) ?? null;
 
+  // «После теста» order list = author after-pages + the summary («Итоги»), by
+  // sortOrder. Reordering/adding here renumbers this combined list so «Итоги»
+  // stays the pre/post boundary the runtime reads.
+  const afterCombined = (): ContentPage[] => {
+    const s = systemSingleton("summary");
+    const list = infoIn("after", null);
+    return s ? [...list, s].sort((a, b) => a.sortOrder - b.sortOrder) : list;
+  };
+
   const activePage = activeId ? pages.find((p) => p.id === activeId) ?? null : null;
 
   // Resolve the drop target for the current drag. `over` is another page row or
@@ -403,12 +413,25 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
     const overId = String(over.id);
     const zoneRef = parseZoneId(overId);
     const overP = zoneRef ? null : pages.find((p) => p.id === overId);
-    const position = zoneRef ? zoneRef.position : overP?.position;
-    const topicId = zoneRef ? zoneRef.topicId : overP?.topicId;
+    // The «Итоги» (summary) row lives in the «После теста» zone but the system-
+    // page planner stores it with a best-fit `position: "after_topic"` and
+    // `topicId: null` (see server `positionForKind`). A drop on it must target
+    // the after-zone ("after"/null) — inheriting the summary's raw position would
+    // write the page as "after_topic"+null, which NO zone renders (it vanishes).
+    const overIsSummary = overP?.kind === "summary";
+    const position: ContentPagePosition | undefined = zoneRef
+      ? zoneRef.position
+      : overIsSummary
+        ? "after"
+        : overP?.position;
+    const topicId = zoneRef ? zoneRef.topicId : overIsSummary ? null : overP?.topicId;
     if (!position) return null;
     const overPageId = overP ? overId : null;
     const sameZone = position === activeP.position && (topicId ?? null) === activeP.topicId;
-    const targetZone = infoIn(position, topicId ?? null);
+    // «После теста» order list includes «Итоги» (a drop boundary), so a page can
+    // be dropped before/after it; other zones list only their author pages.
+    const isAfter = position === "after" && (topicId ?? null) === null;
+    const targetZone = isAfter ? afterCombined() : infoIn(position, topicId ?? null);
     const side: DropSide = overPageId
       ? sameZone
         ? sideByIndex(targetZone, String(active.id), overPageId)
@@ -437,14 +460,17 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
     const t = resolveTarget(event);
     if (!t) return;
     const activeId = t.activeP.id;
+    // For «После теста», t.targetZone already includes «Итоги» (resolveTarget),
+    // so reordering renumbers the summary too and the pre/post boundary holds.
+    const list = t.targetZone;
     if (t.sameZone) {
       if (!t.overPageId) return;
-      const next = reorderByDrop(t.targetZone, activeId, t.overPageId, t.side);
+      const next = reorderByDrop(list, activeId, t.overPageId, t.side);
       if (next) void handlers.cp.reorder(next);
       return;
     }
-    const insertAt = insertIndexFor(t.targetZone, t.overPageId, t.side);
-    const newOrder = [...t.targetZone];
+    const insertAt = insertIndexFor(list, t.overPageId, t.side);
+    const newOrder = [...list];
     newOrder.splice(insertAt, 0, t.activeP);
     void (async () => {
       await handlers.cp.update(activeId, { position: t.position, topicId: t.topicId });
@@ -533,21 +559,7 @@ function ZonesBlock(props: { model: TestEditorModel; handlers: ZoneHandlers }) {
       )}
 
       <Zone title="После теста" testId="structure-zone-after-test">
-        {summary && (
-          <SystemPageRow
-            page={summary}
-            title={pageTitle(summary)}
-            handlers={handlers}
-            testId="structure-system-summary"
-          />
-        )}
-        <AuthorPageGroup
-          pages={infoIn("after", null)}
-          position="after"
-          topicId={null}
-          zoneLabel="После теста"
-          handlers={handlers}
-        />
+        <AfterTestZone summary={summary} afterPages={infoIn("after", null)} handlers={handlers} />
       </Zone>
     </div>
       <DragOverlay>
@@ -765,13 +777,10 @@ function AuthorPageGroup(props: {
       >
         <InsertRow onClick={() => insert(0)} testId={`structure-insert-${slug}-0`} />
         {pages.map((page, idx) => (
-          <SortablePageItem
-            key={page.id}
-            page={page}
-            handlers={handlers}
-            insertTestId={`structure-insert-${slug}-${idx + 1}`}
-            onInsertAfter={() => insert(idx + 1)}
-          />
+          <Fragment key={page.id}>
+            <SortablePageItem page={page} handlers={handlers} />
+            <InsertRow onClick={() => insert(idx + 1)} testId={`structure-insert-${slug}-${idx + 1}`} />
+          </Fragment>
         ))}
       </div>
     </SortableContext>
@@ -779,19 +788,62 @@ function AuthorPageGroup(props: {
 }
 
 /**
- * One sortable unit = the author page row plus its trailing «+ Добавить» line,
- * so the whole unit is the measured @dnd-kit node (the insert-row lives inside
- * the node, not as an interleaved static sibling, which keeps hit-testing and
- * arbitrary placement correct). Rows do NOT shift while dragging — that
- * confused the drop direction; instead the drop position is shown by an
- * insertion line driven by {@link DropContext}.
+ * The «После теста» zone. Unlike other zones it interleaves the system `summary`
+ * («Итоги») row among the author `after` pages by sortOrder: pages BEFORE «Итоги»
+ * are pre-results (shown before the results screen), pages AFTER are post-results
+ * — matching the content-flow runtime, which uses the summary's sortOrder as the
+ * boundary. Inserts appear in every gap, including before «Итоги». Add/reorder
+ * renumber the WHOLE combined list (incl. «Итоги») so the boundary stays stable.
  */
-function SortablePageItem(props: {
-  page: ContentPage;
+function AfterTestZone(props: {
+  summary: ContentPage | null;
+  afterPages: ContentPage[];
   handlers: ZoneHandlers;
-  insertTestId: string;
-  onInsertAfter: () => void;
 }) {
+  const { summary, afterPages, handlers } = props;
+  // Droppable (for dropping into an empty after-zone / its gap) but WITHOUT the
+  // zone-wide dashed outline: this zone wraps «Итоги» + pages, so a full-zone
+  // outline covered everything. The «Итоги» row and page rows give the precise
+  // drop indicator instead.
+  const { setNodeRef } = useDroppable({ id: zoneDroppableId("after", null) });
+  const combined: ContentPage[] = summary
+    ? [...afterPages, summary].sort((a, b) => a.sortOrder - b.sortOrder)
+    : afterPages;
+  // Insert at combined-position `index`: the modal renumbers `group` (incl. the
+  // summary) so the new page and «Итоги» keep a stable pre/post order.
+  const addAt = (index: number) =>
+    handlers.onAdd({ position: "after", topicId: null, group: combined, index, zoneLabel: "После теста" });
+
+  return (
+    <SortableContext items={afterPages.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+      <div
+        ref={setNodeRef}
+        className="structure-drop-zone"
+        data-testid="structure-dropzone-after-test"
+      >
+        <InsertRow onClick={() => addAt(0)} testId="structure-insert-after-test-0" />
+        {combined.map((item, idx) => (
+          <Fragment key={item.id}>
+            {item.kind === "summary" ? (
+              <SummaryDropRow page={item} handlers={handlers} />
+            ) : (
+              <SortablePageItem page={item} handlers={handlers} />
+            )}
+            <InsertRow onClick={() => addAt(idx + 1)} testId={`structure-insert-after-test-${idx + 1}`} />
+          </Fragment>
+        ))}
+      </div>
+    </SortableContext>
+  );
+}
+
+/**
+ * One sortable author-page row. The surrounding «+ Добавить» insert-rows are
+ * rendered by the parent group/zone (so the summary can be interleaved between
+ * pages with inserts on both sides). Rows do NOT shift while dragging — the drop
+ * position is shown by an insertion line driven by {@link DropContext}.
+ */
+function SortablePageItem(props: { page: ContentPage; handlers: ZoneHandlers }) {
   const { page, handlers } = props;
   const { attributes, listeners, setNodeRef, isDragging } = useSortable({ id: page.id });
   const drop = useContext(DropContext);
@@ -812,7 +864,28 @@ function SortablePageItem(props: {
         dragHandleProps={{ ...attributes, ...listeners }}
         isDragging={isDragging}
       />
-      <InsertRow onClick={props.onInsertAfter} testId={props.insertTestId} />
+    </div>
+  );
+}
+
+/**
+ * «Итоги» rendered inside «После теста» as a non-draggable drop boundary: a page
+ * dragged onto it lands before (pre-results) or after (post-results) by the
+ * combined-list index. Shows the same insertion line as author rows.
+ */
+function SummaryDropRow(props: { page: ContentPage; handlers: ZoneHandlers }) {
+  const { page, handlers } = props;
+  const { setNodeRef } = useDroppable({ id: page.id });
+  const drop = useContext(DropContext);
+  const dropCls = drop && drop.overId === page.id ? ` drop-${drop.side}` : "";
+  return (
+    <div ref={setNodeRef} className={"structure-sortable-item" + dropCls}>
+      <SystemPageRow
+        page={page}
+        title={pageTitle(page)}
+        handlers={handlers}
+        testId="structure-system-summary"
+      />
     </div>
   );
 }
@@ -846,7 +919,11 @@ function AuthorPageRow(props: {
   const variant = cp.contentTemplates.find((v) => v.key === page.templateKey);
   const values = page.valuesJson?.values ?? {};
   const missing = missingRequired(variant, values);
-  const hasWarn = page.templateKeyMissing || missing.length > 0;
+  // Required-empty is an error (red, blocks Save); a missing template variant
+  // is only a warning (yellow, does not block — the page still exports as the
+  // persisted variant or falls back at runtime).
+  const hasErr = missing.length > 0;
+  const hasWarn = page.templateKeyMissing === true;
 
   const title = pageTitle(page);
   const badge = variant?.label ?? KIND_LABEL[page.kind] ?? page.kind;
@@ -856,7 +933,7 @@ function AuthorPageRow(props: {
       <div
         className={
           "page-row" +
-          (hasWarn ? " page-row--warn" : "") +
+          (hasErr ? " page-row--error" : hasWarn ? " page-row--warn" : "") +
           (props.expanded ? " is-expanded" : "") +
           (props.isDragging ? " dragging" : "")
         }
@@ -934,7 +1011,7 @@ function AuthorPageRow(props: {
             </>
           )}
         </div>
-        {hasWarn && (
+        {(hasErr || hasWarn) && (
           <div className="page-row__meta">
             {page.templateKeyMissing && (
               <Tag tone="warning" size="s" data-testid={`structure-page-missing-${page.id}`}>
@@ -943,8 +1020,8 @@ function AuthorPageRow(props: {
               </Tag>
             )}
             {missing.length > 0 && (
-              <Tag tone="warning" size="s" data-testid={`structure-page-required-${page.id}`}>
-                <Info className="h-3 w-3" aria-hidden="true" />
+              <Tag tone="error" size="s" data-testid={`structure-page-required-${page.id}`}>
+                <AlertCircle className="h-3 w-3" aria-hidden="true" />
                 Не заполнено обязательных полей: {missing.length}
               </Tag>
             )}
