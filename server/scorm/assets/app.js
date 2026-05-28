@@ -42,7 +42,7 @@ function generateVariant() {
           }
         }
       }
-      
+
       state.flatQuestions.push({
         question: q,
         topicId: section.topicId,
@@ -50,7 +50,19 @@ function generateVariant() {
       });
     });
   });
-  state.flatQuestions = shuffle(state.flatQuestions);
+  // PRD-4 v1.1: global shuffle only applies to legacy_flat mode. For sectional
+  // modes (linear_by_topics / router_by_topics) the section boundary must be
+  // preserved — questions stay grouped by topic in the order sections were
+  // listed by the author. Questions within a section are still shuffled at
+  // selection time (see `shuffle(available)` above), but no cross-section
+  // mixing.
+  var flowMode =
+    TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode
+      ? TEST_DATA.flowPolicy.mode
+      : 'linear_flat';
+  if (flowMode === 'linear_flat') {
+    state.flatQuestions = shuffle(state.flatQuestions);
+  }
   if (typeof rebuildPageSequence === 'function') {
     rebuildPageSequence();
     goToPageSequenceIndex(0);

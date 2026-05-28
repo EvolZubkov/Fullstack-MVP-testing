@@ -43,11 +43,25 @@ export function buildTestJson(data: ExportData): string {
         ? Math.round((overallPassRule.value / totalQuestions) * 100)
         : 80;
 
+  // PRD-4 v1.1: export `flowPolicy` so the runtime can switch traversal
+  // strategy (legacy_flat / linear_by_topics / router_by_topics). Missing
+  // flowPolicyJson defaults to `{ mode: "linear_flat" }` per FR-40 to keep
+  // legacy SCORMs identical to pre-v1.1 behaviour.
+  const flowPolicyJson = data.test.flowPolicyJson as { mode?: string } | null;
+  const exportedFlowPolicy = {
+    mode:
+      flowPolicyJson?.mode === "linear_by_topics" ||
+      flowPolicyJson?.mode === "router_by_topics"
+        ? flowPolicyJson.mode
+        : "linear_flat",
+  };
+
   const test: any = {
     id: data.test.id,
     title: data.test.title,
     description: data.test.description,
     mode: data.test.mode || "standard",
+    flowPolicy: exportedFlowPolicy,
     showDifficultyLevel: data.test.showDifficultyLevel ?? true,
     overallPassRule: overallPassRule,
     webhookUrl: data.test.webhookUrl,

@@ -260,6 +260,40 @@ describe("buildTestJson — standard mode", () => {
   });
 });
 
+describe("buildTestJson — flowPolicy export (PRD-4 v1.1)", () => {
+  it("defaults to linear_flat when flowPolicyJson is missing", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    expect(data.flowPolicy).toEqual({ mode: "linear_flat" });
+  });
+
+  it("exports linear_by_topics when set in flowPolicyJson", () => {
+    const payload = {
+      ...exportData,
+      test: { ...exportData.test, flowPolicyJson: { mode: "linear_by_topics" } },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.mode).toBe("linear_by_topics");
+  });
+
+  it("exports router_by_topics when set in flowPolicyJson", () => {
+    const payload = {
+      ...exportData,
+      test: { ...exportData.test, flowPolicyJson: { mode: "router_by_topics" } },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.mode).toBe("router_by_topics");
+  });
+
+  it("coerces unknown flowMode values to linear_flat (defensive default)", () => {
+    const payload = {
+      ...exportData,
+      test: { ...exportData.test, flowPolicyJson: { mode: "section_graph" } },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.mode).toBe("linear_flat");
+  });
+});
+
 describe("buildTestJson — adaptive mode", () => {
   const adaptiveLevel: any = {
     id: "lv1", topicId: "t1", levelIndex: 0, levelName: "Beginner",
