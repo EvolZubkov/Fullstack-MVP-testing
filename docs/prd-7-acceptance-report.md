@@ -8,6 +8,29 @@
 [s9-s11-in-progress.md §4.2](./specs/prd-7/s9-s11-in-progress.md)), FR/NFR-коды,
 [decisions.md](./specs/prd-7/decisions.md), [s0-s8-closed.md](./specs/prd-7/s0-s8-closed.md).
 
+> **STATUS UPDATE 2026-05-28 — ACCEPTANCE REVOKED.**
+> Этот отчёт был выдан преждевременно. Вкладка «Оформление» содержит четыре
+> необработанные категории расхождения с wireframe `prd7-design-tab.html`:
+>
+> - FR-31: sub-rail «Макет» и «Прогресс и шапка» рендерят `StubPane` со ссылкой
+>   «реализуются отдельным шагом PRD-7» вместо группировки params по секциям
+>   ([design-section.tsx:399-408](../client/src/features/tests/editor/sections/design-section.tsx)).
+> - FR-30: кнопка «Предпросмотр шаблона» делает `window.alert("будет в следующем шаге")`
+>   вместо `tpl-preview-modal` ([design-section.tsx:156-158](../client/src/features/tests/editor/sections/design-section.tsx)).
+> - FR-33: галерея шаблонов потеряна при выводе legacy `DesignSettingsDialog`; кнопка
+>   «Заменить шаблон» — placeholder.
+> - FR-31a: param-типы `image`/`asset`/`file`/`downloadLink`/`url`/`multiselect`/`number`
+>   рендерятся stub-баннером ([design-section.tsx:359-369](../client/src/features/tests/editor/sections/design-section.tsx)).
+>
+> Также не удалён orphan `client/src/components/design-settings-dialog.tsx` (S10
+> зачистка неполна).
+>
+> Acceptance §2.6 ошибочно отдал FR-30 «предпросмотр шаблона» в PRD-1, но FR-31 и FR-33
+> — требования самого PRD-7 wireframe и не могли быть отложены.
+>
+> Открыта фаза [PRD-7 S12 — Design closeout](./specs/prd-7/s12-design-closeout.md).
+> PRD-7 будет считаться закрытым после прохождения S12 acceptance.
+
 ## 1. Сводка
 
 | Показатель | Результат |
