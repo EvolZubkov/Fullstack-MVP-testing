@@ -1125,6 +1125,17 @@
 }
 .page-row.is-expanded .page-expand-toggle { transform: rotate(90deg); }
 
+/* Read-only mode (PRD-7 G19): drag affordances are visually dimmed and
+   non-interactive on every kind of row. The CSS doubles down on the
+   `useSortable({ disabled })` already neutralising the drag handler — having
+   pointer-events: none on the grip keeps the cursor from suggesting drag. */
+.page-row--readonly .drag-handle,
+.topic-block--readonly .topic-grip {
+  opacity: 0.2;
+  cursor: default;
+  pointer-events: none;
+}
+
 /* Inline validation banner for unfilled required placeholders (PRD-1 §4.3.6 /
    PRD-7 G27). Lives at the top of `.page-row-expand`; pairs with the
    `.page-row--error` border-left modifier on the parent row. */

@@ -114,6 +114,13 @@ export type StructureSectionProps = {
    * topic-grip is omitted entirely — better than a non-functional affordance.
    */
   updateModel?: (updater: (model: TestEditorModel) => TestEditorModel) => void;
+  /**
+   * Renders the tab in read-only mode (PRD-7 G19). Drives: dimmed grips,
+   * hidden insert-rows, row action-menu replaced by an eye-icon (preview),
+   * variant-replace disabled, expand-toggle hidden. Driven from the drawer
+   * by `test.status === "published"`.
+   */
+  readOnly?: boolean;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -281,7 +288,7 @@ const structureCollision: CollisionDetection = (args) => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition, updateModel }: StructureSectionProps) {
+export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition, updateModel, readOnly = false }: StructureSectionProps) {
   // Fallback hook so the section works standalone (component tests) when the
   // drawer has not hoisted the hook. Mirrors design-section's pattern.
   const fallback = useContentPages(contentProp ? undefined : testId);
@@ -297,6 +304,7 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
     setExpandedId,
     onAdd: setAddCtx,
     onReplaceVariant: (page) => setReplaceCtx({ page }),
+    readOnly,
   };
 
   return (
@@ -401,6 +409,8 @@ type ZoneHandlers = {
   setExpandedId: (id: string | null) => void;
   onAdd: (ctx: AddContext) => void;
   onReplaceVariant: (page: ContentPage) => void;
+  /** When true, the tab is rendered without authoring controls (PRD-7 G19). */
+  readOnly: boolean;
 };
 
 function ZonesBlock(props: {
@@ -634,7 +644,8 @@ function ZonesBlock(props: {
               sections={model.sections}
               infoIn={infoIn}
               questionsForTopic={questionsForTopic}
-              dragEnabled={Boolean(updateModel)}
+              dragEnabled={Boolean(updateModel) && !handlers.readOnly}
+              dimGrip={handlers.readOnly}
             />
           ) : (
             model.sections.map((section, idx) => (
@@ -646,7 +657,8 @@ function ZonesBlock(props: {
                 after={infoIn("after_topic", section.topicId)}
                 questions={questionsForTopic(section.topicId)}
                 handlers={handlers}
-                dragEnabled={Boolean(updateModel)}
+                dragEnabled={Boolean(updateModel) && !handlers.readOnly}
+                dimGrip={handlers.readOnly}
               />
             ))
           )}
@@ -705,9 +717,11 @@ function TopicBlock(props: {
   handlers: ZoneHandlers;
   /** When false, no grip is rendered (read-only or test harness without updateModel). */
   dragEnabled?: boolean;
+  /** Render a non-interactive dimmed grip (PRD-7 G19 read-only). */
+  dimGrip?: boolean;
 }) {
   const { section, dragEnabled = false } = props;
-  const sortable = useSortable({ id: "topic:" + section.topicId });
+  const sortable = useSortable({ id: "topic:" + section.topicId, disabled: !dragEnabled });
   // @dnd-kit's verticalListSortingStrategy requires `transform` and `transition`
   // to be applied inline on the sortable node — they come from the hook's
   // current drag state and cannot live in static CSS. Standard library pattern.
@@ -716,21 +730,25 @@ function TopicBlock(props: {
     transition: sortable.transition,
     opacity: sortable.isDragging ? 0.5 : undefined,
   };
+  // In read-only mode (PRD-7 G19) the grip is rendered but dimmed via the
+  // topic-block--readonly modifier; doing it via CSS — not removal — preserves
+  // structural parity with the wireframe.
+  const showGripVisually = props.section && (dragEnabled || props.dimGrip);
   return (
     <section
       ref={sortable.setNodeRef}
       style={dragStyle}
-      className="topic-block"
+      className={"topic-block" + (props.dimGrip ? " topic-block--readonly" : "")}
       data-testid={`structure-zone-topic-${section.topicId}`}
     >
       <div className="topic-header">
-        {dragEnabled && (
+        {showGripVisually && (
           <span
             className="topic-grip"
             data-testid={`structure-topic-grip-${section.topicId}`}
             aria-label={`Переместить тему «${section.topicName}»`}
-            {...sortable.attributes}
-            {...sortable.listeners}
+            {...(dragEnabled ? sortable.attributes : {})}
+            {...(dragEnabled ? sortable.listeners : {})}
           >
             <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
           </span>
@@ -781,8 +799,10 @@ function InsideTestZone(props: {
   infoIn: (position: ContentPagePosition, topicId: string | null) => ContentPage[];
   questionsForTopic: (topicId: string) => ContentPage | null;
   dragEnabled: boolean;
+  /** PRD-7 G19 read-only: dim topic grips without removing them. */
+  dimGrip?: boolean;
 }) {
-  const { router, handlers, sections, infoIn, questionsForTopic, dragEnabled } = props;
+  const { router, handlers, sections, infoIn, questionsForTopic, dragEnabled, dimGrip } = props;
   return (
     <section className="inside-test" data-testid="structure-inside-test">
       <div className="inside-test__label">
@@ -810,6 +830,7 @@ function InsideTestZone(props: {
                 questions={questionsForTopic(section.topicId)}
                 handlers={handlers}
                 dragEnabled={dragEnabled}
+                dimGrip={dimGrip}
               />
             </div>
           ))}
@@ -865,11 +886,11 @@ function SystemPageRow(props: {
   testId: string;
 }) {
   const { page, handlers } = props;
-  const { cp, expandedId, setExpandedId } = handlers;
+  const { cp, expandedId, setExpandedId, readOnly } = handlers;
   const variants = cp.contentTemplates.filter((v) => v.kind === page.kind);
   const variant = variants.find((v) => v.key === page.templateKey);
   const badge = variant?.label ?? KIND_LABEL[page.kind] ?? page.kind;
-  const canSwitch = variants.length > 1;
+  const canSwitch = variants.length > 1 && !readOnly;
   // PRD-7 G21: when the active template declares NO variant of this system
   // kind, the planner falls back to the built-in `default` template. Surface
   // that to the author via a `.page-row__meta` warning tag so the choice of
@@ -968,6 +989,7 @@ function SystemPageRow(props: {
         onDone={() => setExpandedId(null)}
         missingLabels={missing
           .map((k) => variant.placeholders.find((ph) => ph.key === k)?.label ?? k)}
+        readOnly={handlers.readOnly}
       />
     )}
     </>
@@ -1001,11 +1023,15 @@ function AuthorPageGroup(props: {
         className={"structure-drop-zone" + (isOver ? " is-zone-drop-target" : "")}
         data-testid={`structure-dropzone-${slug}`}
       >
-        <InsertRow onClick={() => insert(0)} testId={`structure-insert-${slug}-0`} />
+        {!handlers.readOnly && (
+          <InsertRow onClick={() => insert(0)} testId={`structure-insert-${slug}-0`} />
+        )}
         {pages.map((page, idx) => (
           <Fragment key={page.id}>
             <SortablePageItem page={page} handlers={handlers} />
-            <InsertRow onClick={() => insert(idx + 1)} testId={`structure-insert-${slug}-${idx + 1}`} />
+            {!handlers.readOnly && (
+              <InsertRow onClick={() => insert(idx + 1)} testId={`structure-insert-${slug}-${idx + 1}`} />
+            )}
           </Fragment>
         ))}
       </div>
@@ -1047,7 +1073,9 @@ function AfterTestZone(props: {
         className="structure-drop-zone"
         data-testid="structure-dropzone-after-test"
       >
-        <InsertRow onClick={() => addAt(0)} testId="structure-insert-after-test-0" />
+        {!handlers.readOnly && (
+          <InsertRow onClick={() => addAt(0)} testId="structure-insert-after-test-0" />
+        )}
         {combined.map((item, idx) => (
           <Fragment key={item.id}>
             {item.kind === "summary" ? (
@@ -1055,7 +1083,9 @@ function AfterTestZone(props: {
             ) : (
               <SortablePageItem page={item} handlers={handlers} />
             )}
-            <InsertRow onClick={() => addAt(idx + 1)} testId={`structure-insert-after-test-${idx + 1}`} />
+            {!handlers.readOnly && (
+              <InsertRow onClick={() => addAt(idx + 1)} testId={`structure-insert-after-test-${idx + 1}`} />
+            )}
           </Fragment>
         ))}
       </div>
@@ -1071,7 +1101,8 @@ function AfterTestZone(props: {
  */
 function SortablePageItem(props: { page: ContentPage; handlers: ZoneHandlers }) {
   const { page, handlers } = props;
-  const { attributes, listeners, setNodeRef, isDragging } = useSortable({ id: page.id });
+  const sortable = useSortable({ id: page.id, disabled: handlers.readOnly });
+  const { attributes, listeners, setNodeRef, isDragging } = sortable;
   const drop = useContext(DropContext);
   const dropCls = drop && drop.overId === page.id && !isDragging ? ` drop-${drop.side}` : "";
   return (
@@ -1087,8 +1118,9 @@ function SortablePageItem(props: { page: ContentPage; handlers: ZoneHandlers }) 
         onToggleExpand={() =>
           handlers.setExpandedId(handlers.expandedId === page.id ? null : page.id)
         }
-        dragHandleProps={{ ...attributes, ...listeners }}
+        dragHandleProps={handlers.readOnly ? {} : { ...attributes, ...listeners }}
         isDragging={isDragging}
+        readOnly={handlers.readOnly}
       />
     </div>
   );
@@ -1138,6 +1170,8 @@ function AuthorPageRow(props: {
   /** Spread on the grip handle: @dnd-kit `attributes` + `listeners`. */
   dragHandleProps: Record<string, unknown>;
   isDragging: boolean;
+  /** Render without authoring affordances (PRD-7 G19): grip dimmed, no menu. */
+  readOnly: boolean;
 }) {
   const { page, cp } = props;
   const [confirming, setConfirming] = useState(false);
@@ -1161,7 +1195,8 @@ function AuthorPageRow(props: {
           "page-row" +
           (hasErr ? " page-row--error" : hasWarn ? " page-row--warn" : "") +
           (props.expanded ? " is-expanded" : "") +
-          (props.isDragging ? " dragging" : "")
+          (props.isDragging ? " dragging" : "") +
+          (props.readOnly ? " page-row--readonly" : "")
         }
         data-testid={`structure-page-row-${page.id}`}
       >
@@ -1185,7 +1220,7 @@ function AuthorPageRow(props: {
         <span className="page-variant-badge">{badge}</span>
         <span className="page-title">{title}</span>
         <div className="page-actions">
-          {!confirming ? (
+          {props.readOnly ? null : !confirming ? (
             <MenuTrigger
               placement="bottom-end"
               trigger={
@@ -1256,7 +1291,13 @@ function AuthorPageRow(props: {
       </div>
 
       {props.expanded && (
-        <PageEditForm page={page} variant={variant} cp={cp} onDone={props.onToggleExpand} />
+        <PageEditForm
+          page={page}
+          variant={variant}
+          cp={cp}
+          onDone={props.onToggleExpand}
+          readOnly={props.readOnly}
+        />
       )}
     </>
   );
@@ -1275,10 +1316,13 @@ function PageEditForm(props: {
    * a bulleted list); also drives Save-disabled affordance via {@link hasErr}.
    */
   missingLabels?: string[];
+  /** When true, fields are disabled and Save is replaced by «Закрыть» (G19). */
+  readOnly?: boolean;
 }) {
   const { page, variant, cp } = props;
   const missingLabels = props.missingLabels ?? [];
   const hasErr = missingLabels.length > 0;
+  const readOnly = Boolean(props.readOnly);
   const [values, setValues] = useState<Record<string, unknown>>(
     () => ({ ...(page.valuesJson?.values ?? {}) }),
   );
@@ -1332,37 +1376,56 @@ function PageEditForm(props: {
           </div>
         </div>
       )}
-      {placeholders.map((ph) => (
-        <div className="ou-formfield" key={ph.key}>
-          <PlaceholderControl
-            placeholder={ph}
-            value={values[ph.key]}
-            style={styles[ph.key]}
-            onChange={(v) => setValue(ph.key, v)}
-            onStyleChange={(s) => setStyle(ph.key, s)}
-            testId={`structure-page-field-${page.id}-${ph.key}`}
-          />
-        </div>
-      ))}
+      <fieldset
+        disabled={readOnly}
+        className="page-row-expand__fields"
+        data-testid={`structure-page-edit-fields-${page.id}`}
+      >
+        {placeholders.map((ph) => (
+          <div className="ou-formfield" key={ph.key}>
+            <PlaceholderControl
+              placeholder={ph}
+              value={values[ph.key]}
+              style={styles[ph.key]}
+              onChange={(v) => setValue(ph.key, v)}
+              onStyleChange={(s) => setStyle(ph.key, s)}
+              testId={`structure-page-field-${page.id}-${ph.key}`}
+            />
+          </div>
+        ))}
+      </fieldset>
       <div className="page-row-expand-actions">
-        <Button
-          variant="ghost"
-          size="s"
-          onClick={props.onDone}
-          data-testid={`structure-page-edit-cancel-${page.id}`}
-        >
-          Отмена
-        </Button>
-        <Button
-          variant="primary"
-          size="s"
-          onClick={save}
-          disabled={cp.isUpdating}
-          loading={cp.isUpdating}
-          data-testid={`structure-page-edit-save-${page.id}`}
-        >
-          {cp.isUpdating ? "Сохранение…" : "Сохранить"}
-        </Button>
+        {readOnly ? (
+          <Button
+            variant="ghost"
+            size="s"
+            onClick={props.onDone}
+            data-testid={`structure-page-edit-close-${page.id}`}
+          >
+            Закрыть
+          </Button>
+        ) : (
+          <>
+            <Button
+              variant="ghost"
+              size="s"
+              onClick={props.onDone}
+              data-testid={`structure-page-edit-cancel-${page.id}`}
+            >
+              Отмена
+            </Button>
+            <Button
+              variant="primary"
+              size="s"
+              onClick={save}
+              disabled={cp.isUpdating}
+              loading={cp.isUpdating}
+              data-testid={`structure-page-edit-save-${page.id}`}
+            >
+              {cp.isUpdating ? "Сохранение…" : "Сохранить"}
+            </Button>
+          </>
+        )}
       </div>
     </div>
   );

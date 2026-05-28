@@ -489,6 +489,7 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
               savedFlowMode={editor.savedFlowMode}
               onGoToComposition={() => setActiveTab("composition")}
               updateModel={editor.updateModel}
+              readOnly={editor.model.basic.status === "published"}
             />
           )}
           {!editor.model && <TabPlaceholder tab={activeTab} />}
