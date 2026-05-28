@@ -102,8 +102,7 @@ function isFlowMode(value: unknown): value is TestListFlowMode {
   return (
     value === "linear_flat" ||
     value === "linear_by_topics" ||
-    value === "router_by_topics" ||
-    value === "mixed"
+    value === "router_by_topics"
   );
 }
 

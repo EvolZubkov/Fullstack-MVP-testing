@@ -130,7 +130,6 @@ const FLOW_LABEL: Record<TestEditorModel["flowMode"], string> = {
   linear_flat: "Последовательный",
   linear_by_topics: "Последовательный по темам",
   router_by_topics: "Через страницу-маршрутизатор",
-  mixed: "Смешанный (устаревший)",
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -903,6 +902,14 @@ function SystemPageRow(props: {
   const hasErr = missing.length > 0;
   const isExpandable = (variant?.placeholders.length ?? 0) > 0;
   const expanded = isExpandable && expandedId === page.id;
+  // PRD-7 G25 heuristic: an intro/summary page is "template-driven" until
+  // the author has saved at least one non-empty placeholder value. Rendered
+  // as `.page-row--template` with a small «шаблон» marker per wireframe
+  // `s-main` linear-by-topics (lines 560-563, 649-652). The classification
+  // is purely cosmetic — saving values flips it back to plain `--system`.
+  const isFromTemplate =
+    (page.kind === "intro" || page.kind === "summary") &&
+    Object.values(values).every((v) => v === null || v === undefined || v === "");
 
   const Icon = props.icon === "router" ? Route : props.icon === "questions" ? HelpCircle : FileText;
 
@@ -910,13 +917,15 @@ function SystemPageRow(props: {
     <>
     <div
       className={
-        "page-row page-row--system" +
+        "page-row " +
+        (isFromTemplate ? "page-row--template" : "page-row--system") +
         (page.kind === "questions" ? " page-row--questions" : "") +
         (hasErr ? " page-row--error" : "") +
         (expanded ? " is-expanded" : "")
       }
       data-testid={props.testId}
       data-kind={page.kind}
+      data-from-template={isFromTemplate ? "true" : undefined}
     >
       {isExpandable && (
         <button
@@ -932,7 +941,17 @@ function SystemPageRow(props: {
       )}
       <Icon className="page-icon h-3.5 w-3.5" aria-hidden="true" />
       <span className="page-variant-badge">{badge}</span>
-      <span className="page-title">{props.title}</span>
+      <span className="page-title">
+        {props.title}
+        {isFromTemplate && (
+          <span
+            className="tpl-page-marker"
+            data-testid={`${props.testId}-template-marker`}
+          >
+            шаблон
+          </span>
+        )}
+      </span>
       <div className="page-actions">
         <MenuTrigger
           placement="bottom-end"
@@ -1121,6 +1140,7 @@ function SortablePageItem(props: { page: ContentPage; handlers: ZoneHandlers }) 
         dragHandleProps={handlers.readOnly ? {} : { ...attributes, ...listeners }}
         isDragging={isDragging}
         readOnly={handlers.readOnly}
+        onReplaceVariant={handlers.onReplaceVariant}
       />
     </div>
   );
@@ -1172,6 +1192,8 @@ function AuthorPageRow(props: {
   isDragging: boolean;
   /** Render without authoring affordances (PRD-7 G19): grip dimmed, no menu. */
   readOnly: boolean;
+  /** PRD-7 G17: opens ReplaceVariantModal for this page. */
+  onReplaceVariant: (page: ContentPage) => void;
 }) {
   const { page, cp } = props;
   const [confirming, setConfirming] = useState(false);
@@ -1184,6 +1206,12 @@ function AuthorPageRow(props: {
   // persisted variant or falls back at runtime).
   const hasErr = missing.length > 0;
   const hasWarn = page.templateKeyMissing === true;
+
+  // PRD-7 G17: «Сменить вариант» is shown only when the active template
+  // actually offers more than one variant for this page's kind. For info
+  // pages this is the same logic the system row uses (line 892).
+  const variantsForKind = cp.contentTemplates.filter((v) => v.kind === page.kind);
+  const canReplaceVariant = variantsForKind.length > 1;
 
   const title = pageTitle(page);
   const badge = variant?.label ?? KIND_LABEL[page.kind] ?? page.kind;
@@ -1235,6 +1263,14 @@ function AuthorPageRow(props: {
               }
             >
               <Menu size="sm">
+                {canReplaceVariant && (
+                  <MenuItem
+                    onClick={() => props.onReplaceVariant(page)}
+                    data-testid={`structure-page-replace-${page.id}`}
+                  >
+                    Сменить вариант…
+                  </MenuItem>
+                )}
                 <MenuItem
                   danger
                   onClick={() => setConfirming(true)}

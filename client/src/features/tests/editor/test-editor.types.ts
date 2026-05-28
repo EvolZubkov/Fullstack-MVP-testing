@@ -17,7 +17,6 @@ export type TestStatus = "draft" | "published" | "archived";
 export type FlowMode =
   | "linear_flat"
   | "linear_by_topics"
-  | "mixed"
   | "router_by_topics";
 
 export type PassDecisionPolicy =
@@ -122,7 +121,6 @@ export type FlowRouterSettings = {
 
 export type FlowSettings = {
   linear?: Record<string, never>;
-  mixed?: Record<string, never>;
   router?: FlowRouterSettings;
 };
 

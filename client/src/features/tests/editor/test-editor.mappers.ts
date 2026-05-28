@@ -96,7 +96,6 @@ function isFlowMode(value: unknown): value is FlowMode {
   return (
     value === "linear_flat" ||
     value === "linear_by_topics" ||
-    value === "mixed" ||
     value === "router_by_topics"
   );
 }
@@ -427,8 +426,6 @@ function buildFlowSettingsFromApi(flowMode: FlowMode, api: ApiTestResponse): Flo
     case "linear_flat":
     case "linear_by_topics":
       return { linear: {} };
-    case "mixed":
-      return { mixed: {} };
     case "router_by_topics":
       return { router: buildRouterFlowFromApi(api) };
   }

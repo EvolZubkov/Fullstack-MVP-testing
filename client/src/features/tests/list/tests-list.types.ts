@@ -15,8 +15,7 @@ export type TestListMode = "standard" | "adaptive";
 export type TestListFlowMode =
   | "linear_flat"
   | "linear_by_topics"
-  | "router_by_topics"
-  | "mixed";
+  | "router_by_topics";
 
 /**
  * Flat record describing one row of the test list. Derived from
