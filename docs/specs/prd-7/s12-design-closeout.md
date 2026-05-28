@@ -181,7 +181,47 @@ JSDoc: «*«Заменить шаблон» is left as a placeholder (full galle
 - `wf-template-gallery-empty` — поиск без результатов;
 - `wf-template-gallery-confirm` — confirm-dialog поверх галереи.
 
-### G4 — Поддержка всех param-типов (FR-31a)
+### G4 — Поддержка всех param-типов (FR-31a) — **CLOSED 2026-05-28**
+
+**Что было.** `ParamRow` рендерил только 4 типа (text/color/boolean/select),
+остальные падали в fallback-Banner «Тип «X» поддерживается в следующем шаге
+(медиатека)».
+
+**Что сделано.**
+
+1. **Type enum** — в [use-design-settings.ts](../../../client/src/features/tests/editor/use-design-settings.ts)
+   `DesignParamType` расширен: добавлены `multiselect`, `url`, `file`,
+   `downloadLink` (`image` / `asset` / `number` уже были в enum, но рендера
+   не было). `TemplateParam` дополнен опциональными `accept` / `maxSizeKb`
+   (media), `min` / `max` / `step` (number).
+2. **Media envelope** — новый тип `MediaParamValue`:
+   `{ url, name, mime?, size?, mediaId?, label? }`. Сериализация одна для
+   всех 4 media-типов; `mediaId` зарезервирован под будущую медиатеку.
+3. **ParamRow branches** в [design-section.tsx](../../../client/src/features/tests/editor/sections/design-section.tsx):
+   - `number` — `NumberInput` с `min` / `max` / `step`.
+   - `url` — `Input type="url"` + `suffix` IconButton «Открыть» (отрывается
+     в новой вкладке при валидном `https?://` URL).
+   - `multiselect` — DS `Combobox<string>` с `multiple`, рендерит chips.
+   - `image` / `asset` / `file` / `downloadLink` — общий `MediaParamRow`:
+     DS Button «Загрузить…» (label per kind), hidden file input, chip
+     с именем файла и × для удаления. Upload через `POST /api/media/upload`
+     (multer disk storage, см. `server/routes.ts:91`); ответ
+     `{ url, mime, originalName, size }` → `MediaParamValue`. Валидация:
+     `accept` per type (image → `image/png,...`), `maxSizeKb` (image → 512
+     КБ, остальные → 5 МБ). Ошибки → Banner размера/HTTP.
+4. **Descriptors** — для `image` подсказка «PNG, JPEG, SVG или WebP; до N
+   КБ»; для `downloadLink` — «Файл будет доступен обучающемуся по ссылке
+   после прохождения».
+5. **CSS:** `.design-media-row` + `.design-media-chip` + sub-elements в
+   `tb-components.css`.
+6. **Tests:** 5 новых тестов в `design-section.test.tsx` (NumberInput,
+   url-input с type="url", multiselect rendered без unsupported-banner,
+   image upload-button + accept-фильтр, downloadLink-descriptor).
+
+**Verification:** `npm run check` 0 ошибок; `vitest run` 51/51 файл,
+1373 теста зелёные.
+
+### G4 — Original specification (superseded by CLOSED block above)
 
 **Что сейчас.** [design-section.tsx:359-369](../../../client/src/features/tests/editor/sections/design-section.tsx)
 — fallback `Banner "Тип «X» поддерживается в следующем шаге (медиатека)"`. Не реализованы типы:

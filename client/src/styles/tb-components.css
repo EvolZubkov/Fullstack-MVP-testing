@@ -1279,6 +1279,34 @@
   color: var(--ou-info-on-soft);
 }
 
+/* Design tab — media param row (PRD-7 S12-G4 / FR-31a). Used for `image`,
+   `asset`, `file`, `downloadLink` param types. Upload button + chip with the
+   uploaded file's name + remove (×) action. */
+.design-media-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--ou-space-2);
+}
+.design-media-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wf-space-6, 6px);
+  padding: var(--wf-space-tiny, 2px) var(--wf-space-6, 6px) var(--wf-space-tiny, 2px) var(--ou-space-2);
+  background: var(--ou-bg-surface-3);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--wf-space-1q, 3px);
+  font: var(--ou-text-body-s);
+  max-width: 100%;
+}
+.design-media-chip__ico { color: var(--ou-fg-muted); flex-shrink: 0; }
+.design-media-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+
 /* Template gallery (PRD-7 S12-G3 / FR-33) — modal grid of template cards. */
 .tpl-gallery-modal { /* extends ModalDialog xl size class — width via DS */ }
 .tpl-gallery-search {

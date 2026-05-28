@@ -212,9 +212,11 @@ describe("<DesignSection /> — Брендирование pane", () => {
     expect(screen.getByTestId("design-param-row-primaryColor")).toBeInTheDocument();
     expect(screen.getByTestId("design-param-row-showProgressBar")).toBeInTheDocument();
     expect(screen.getByTestId("design-param-row-fontFamily")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("design-param-unsupported-logoUrl"),
-    ).toBeInTheDocument();
+    // S12-G4 (2026-05-28): image params now render as a media-row with an
+    // upload button + file chip, no longer an «unsupported» banner. The row
+    // wrapper testid stays; the upload button uses the same input testid.
+    expect(screen.getByTestId("design-param-row-logoUrl")).toBeInTheDocument();
+    expect(screen.getByTestId("design-param-input-logoUrl")).toBeInTheDocument();
   });
 
   it("editing a text param updates the draft (input value)", async () => {
@@ -528,5 +530,109 @@ describe("<DesignSection /> — template gallery (S12-G3 / FR-33)", () => {
     // Click another card → Apply enabled.
     fireEvent.click(screen.getByTestId("design-gallery-card-minimal"));
     expect(screen.getByTestId("design-gallery-apply")).not.toBeDisabled();
+  });
+});
+
+// ─── S12-G4 — New param types (FR-31a) ───────────────────────────────────────
+
+const TEMPLATE_WITH_ALL_TYPES = {
+  ...TEMPLATE,
+  id: "all-types",
+  manifest: {
+    ...TEMPLATE.manifest,
+    id: "all-types",
+    params: [
+      { key: "maxStudents", type: "number", label: "Учеников в группе", default: 25, min: 0, max: 200 },
+      { key: "supportUrl", type: "url", label: "Ссылка на поддержку", default: "" },
+      {
+        key: "audience",
+        type: "multiselect",
+        label: "Целевая аудитория",
+        options: ["Junior", "Middle", "Senior"],
+        default: [],
+      },
+      { key: "logoUrl", type: "image", label: "Логотип" },
+      { key: "manualPdf", type: "downloadLink", label: "Руководство" },
+    ],
+  },
+};
+
+describe("<DesignSection /> — new param types (S12-G4 / FR-31a)", () => {
+  beforeEach(() => {
+    mockFetch((url) => {
+      if (url === `/api/tests/${TEST_ID}/design`)
+        return jsonResponse({ templateId: "all-types", params: {} });
+      if (url === `/api/templates/all-types`) return jsonResponse(TEMPLATE_WITH_ALL_TYPES);
+      return jsonResponse({ error: "unexpected" }, 500);
+    });
+  });
+
+  it("renders a NumberInput row for `number` params", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-param-row-maxStudents")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("design-param-input-maxStudents")).toBeInTheDocument();
+  });
+
+  it("renders an url Input row for `url` params", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-param-row-supportUrl")).toBeInTheDocument(),
+    );
+    const input = screen.getByTestId("design-param-input-supportUrl") as HTMLInputElement;
+    expect(input.getAttribute("type")).toBe("url");
+  });
+
+  it("renders a multiselect Combobox row for `multiselect` params", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-param-row-audience")).toBeInTheDocument(),
+    );
+    // Combobox renders an input inside; the row exists, and no «unsupported»
+    // banner is shown — sufficient signal that the multiselect branch fired.
+    expect(screen.queryByTestId("design-param-unsupported-audience")).toBeNull();
+  });
+
+  it("renders an upload button + hidden file input for `image` params", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-param-row-logoUrl")).toBeInTheDocument(),
+    );
+    const fileInput = screen.getByTestId("design-param-input-logoUrl-file") as HTMLInputElement;
+    expect(fileInput.getAttribute("type")).toBe("file");
+    expect(fileInput.getAttribute("accept")).toContain("image/png");
+    // No file chosen yet → no chip.
+    expect(screen.queryByTestId("design-param-chip-logoUrl")).toBeNull();
+  });
+
+  it("renders an upload button + descriptor for `downloadLink` params", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-rail-branding"));
+    await waitFor(() =>
+      expect(screen.getByTestId("design-param-row-manualPdf")).toBeInTheDocument(),
+    );
+    const row = screen.getByTestId("design-param-row-manualPdf");
+    expect(row).toHaveTextContent(/Добавить файл/i);
+    expect(row).toHaveTextContent(/будет доступен обучающемуся/i);
   });
 });

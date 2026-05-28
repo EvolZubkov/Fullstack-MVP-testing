@@ -24,19 +24,34 @@
  *     the mutation; the Drawer footer's primary save stays bound to the test
  *     settings as in the rest of the editor.
  */
-import { useState } from "react";
-import { AlertTriangle, Eye, Layout } from "lucide-react";
+import { useRef, useState } from "react";
+import {
+  AlertTriangle,
+  Download,
+  Eye,
+  ExternalLink,
+  Image as ImageIcon,
+  Layout,
+  Paperclip,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import {
   Banner,
   Button,
   ColorPicker,
+  Combobox,
+  IconButton,
   Input,
+  NumberInput,
   Select,
   Switch,
   Tag,
 } from "@universityrt/ui-kit";
 import {
   useDesignSettings,
+  type MediaParamValue,
   type ParamSection,
   type TemplateParam,
   type UseDesignSettingsResult,
@@ -505,15 +520,275 @@ function ParamRow({
       </div>
     );
   }
+  if (param.type === "number") {
+    const v =
+      typeof value === "number"
+        ? value
+        : typeof param.default === "number"
+          ? param.default
+          : 0;
+    return (
+      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
+        <NumberInput
+          id={fieldId}
+          size="m"
+          label={param.label}
+          value={v}
+          min={param.min}
+          max={param.max}
+          step={param.step}
+          onChange={(next) => onChange(next)}
+          data-testid={`design-param-input-${param.key}`}
+        />
+      </div>
+    );
+  }
+  if (param.type === "url") {
+    const v = typeof value === "string" ? value : (param.default as string) ?? "";
+    return (
+      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
+        <Input
+          id={fieldId}
+          type="url"
+          size="m"
+          fullWidth
+          label={param.label}
+          placeholder="https://…"
+          value={v}
+          onChange={(e) => onChange(e.target.value)}
+          data-testid={`design-param-input-${param.key}`}
+          suffix={
+            v && /^https?:\/\//i.test(v) ? (
+              <IconButton
+                icon={<ExternalLink width={14} height={14} aria-hidden="true" />}
+                aria-label={`Открыть ${v} в новой вкладке`}
+                variant="ghost"
+                size="s"
+                onClick={() => window.open(v, "_blank", "noopener,noreferrer")}
+                data-testid={`design-param-input-${param.key}-open`}
+              />
+            ) : undefined
+          }
+        />
+      </div>
+    );
+  }
+  if (param.type === "multiselect") {
+    const opts = param.options ?? [];
+    const arr = Array.isArray(value)
+      ? (value as string[])
+      : Array.isArray(param.default)
+        ? ((param.default as unknown[]).filter((x) => typeof x === "string") as string[])
+        : [];
+    return (
+      <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
+        <Combobox<string>
+          id={fieldId}
+          size="m"
+          fullWidth
+          multiple
+          label={param.label}
+          values={arr}
+          options={opts.map((o) => ({ value: o, label: o }))}
+          onValuesChange={(next) => onChange(next)}
+          data-testid={`design-param-input-${param.key}`}
+        />
+      </div>
+    );
+  }
+  if (
+    param.type === "image" ||
+    param.type === "asset" ||
+    param.type === "file" ||
+    param.type === "downloadLink"
+  ) {
+    return (
+      <MediaParamRow
+        param={param}
+        value={value}
+        onChange={onChange}
+        fieldId={fieldId}
+      />
+    );
+  }
   return (
     <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
       <label className="ou-formfield__lbl">{param.label}</label>
       <Banner
         tone="info"
         size="sm"
-        description={`Тип «${param.type}» поддерживается в следующем шаге (медиатека).`}
+        description={`Тип «${param.type}» не поддерживается этой версией редактора.`}
         data-testid={`design-param-unsupported-${param.key}`}
       />
+    </div>
+  );
+}
+
+/**
+ * PRD-7 S12-G4: shared row for media-typed params (image / asset / file /
+ * downloadLink). Reads/writes the {@link MediaParamValue} envelope. Upload
+ * goes through `POST /api/media/upload` (multer disk storage) which returns
+ * `{ url, mime, originalName, size }`. The hidden file input is triggered by
+ * a DS Button; the chosen file's name is shown as a chip with a remove (×)
+ * action.
+ */
+function MediaParamRow({
+  param,
+  value,
+  onChange,
+  fieldId,
+}: {
+  param: TemplateParam;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  fieldId: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const stored: MediaParamValue | null =
+    value && typeof value === "object" && (value as MediaParamValue).url
+      ? (value as MediaParamValue)
+      : null;
+
+  const acceptDefault =
+    param.type === "image"
+      ? "image/png,image/jpeg,image/svg+xml,image/webp"
+      : undefined;
+  const accept = param.accept ?? acceptDefault;
+  const maxSizeKb = param.maxSizeKb ?? (param.type === "image" ? 512 : 5 * 1024);
+
+  const buttonLabel: Record<typeof param.type, string> = {
+    image: stored ? "Заменить изображение" : "Загрузить изображение",
+    asset: stored ? "Заменить файл" : "Выбрать из медиатеки",
+    file: stored ? "Заменить файл" : "Загрузить файл",
+    downloadLink: stored ? "Заменить файл" : "Добавить файл",
+    // The four-key record covers the only types this component handles.
+    text: "",
+    color: "",
+    boolean: "",
+    select: "",
+    multiselect: "",
+    number: "",
+    url: "",
+  };
+
+  const Icon =
+    param.type === "image"
+      ? ImageIcon
+      : param.type === "downloadLink"
+        ? Download
+        : Paperclip;
+
+  async function handleFile(file: File) {
+    setError(null);
+    if (file.size > maxSizeKb * 1024) {
+      setError(
+        `Файл превышает ${maxSizeKb < 1024 ? `${maxSizeKb} КБ` : `${Math.round(maxSizeKb / 1024)} МБ`}.`,
+      );
+      return;
+    }
+    const form = new FormData();
+    form.append("file", file);
+    setUploading(true);
+    try {
+      const res = await fetch("/api/media/upload", {
+        method: "POST",
+        credentials: "include",
+        body: form,
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const body = (await res.json()) as {
+        url: string;
+        mime: string;
+        originalName: string;
+        size: number;
+      };
+      const next: MediaParamValue = {
+        url: body.url,
+        name: body.originalName,
+        mime: body.mime,
+        size: body.size,
+      };
+      onChange(next);
+    } catch (err) {
+      setError((err as Error)?.message ?? "Не удалось загрузить файл");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="ou-formfield" data-testid={`design-param-row-${param.key}`}>
+      <label className="ou-formfield__lbl" htmlFor={fieldId}>
+        {param.label}
+      </label>
+      <div className="design-media-row">
+        <Button
+          id={fieldId}
+          variant="secondary"
+          size="s"
+          leadingIcon={<Upload width={12} height={12} aria-hidden="true" />}
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          loading={uploading}
+          data-testid={`design-param-input-${param.key}`}
+        >
+          {uploading ? "Загрузка…" : buttonLabel[param.type]}
+        </Button>
+        {stored && (
+          <span
+            className="design-media-chip"
+            data-testid={`design-param-chip-${param.key}`}
+          >
+            <Icon className="design-media-chip__ico" width={14} height={14} aria-hidden="true" />
+            <span className="design-media-chip__name">{stored.name}</span>
+            <IconButton
+              icon={<X width={12} height={12} aria-hidden="true" />}
+              aria-label={`Удалить файл ${stored.name}`}
+              variant="ghost"
+              size="s"
+              onClick={() => onChange(null)}
+              data-testid={`design-param-chip-${param.key}-remove`}
+            />
+          </span>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept={accept}
+          style={{ display: "none" }}
+          aria-hidden="true"
+          tabIndex={-1}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void handleFile(file);
+            e.target.value = "";
+          }}
+          data-testid={`design-param-input-${param.key}-file`}
+        />
+      </div>
+      {param.type === "image" && (
+        <div className="ou-formfield__desc">
+          PNG, JPEG, SVG или WebP; до {maxSizeKb < 1024 ? `${maxSizeKb} КБ` : `${Math.round(maxSizeKb / 1024)} МБ`}.
+        </div>
+      )}
+      {param.type === "downloadLink" && (
+        <div className="ou-formfield__desc">
+          Файл будет доступен обучающемуся по ссылке после прохождения.
+        </div>
+      )}
+      {error && (
+        <Banner
+          tone="error"
+          size="sm"
+          description={error}
+          data-testid={`design-param-error-${param.key}`}
+        />
+      )}
     </div>
   );
 }

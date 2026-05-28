@@ -29,9 +29,13 @@ export type DesignParamType =
   | "color"
   | "boolean"
   | "select"
+  | "multiselect"
+  | "number"
+  | "url"
   | "image"
   | "asset"
-  | "number";
+  | "file"
+  | "downloadLink";
 
 /**
  * PRD-7 S12 G1 / FR-31: rail-section the param is rendered under in the
@@ -52,6 +56,32 @@ export type TemplateParam = {
   /** Rail-section the param belongs to. Defaults to `branding` when absent. */
   section?: ParamSection;
   options?: string[];
+  /** PRD-7 S12-G4 media params: client-side validation hint, mime/ext list. */
+  accept?: string;
+  /** PRD-7 S12-G4 media params: max upload size in kilobytes. */
+  maxSizeKb?: number;
+  /** PRD-7 S12-G4 number params: validation bounds. */
+  min?: number;
+  max?: number;
+  step?: number;
+};
+
+/**
+ * PRD-7 S12-G4: persisted value shape for media-typed params (image/asset/
+ * file/downloadLink). All four serialise to the same envelope so the
+ * design-tab payload stays simple; the runtime template treats them
+ * uniformly. `mediaId` is reserved for future medialib integration — for
+ * now we only persist the public `url` returned by /api/media/upload.
+ */
+export type MediaParamValue = {
+  url: string;
+  name: string;
+  mime?: string;
+  size?: number;
+  /** Reserved for medialib id (future); currently never set by upload. */
+  mediaId?: string;
+  /** downloadLink only: optional display label shown next to the file. */
+  label?: string;
 };
 
 export type TemplateRow = {
