@@ -270,6 +270,11 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
   // actually persisted — the editor stays open otherwise (so a 400/5xx
   // doesn't get masked by a friendly close + triangle-alert).
   const saveAll = useCallback(async (): Promise<boolean> => {
+    // Snapshot dirty flags BEFORE the saves — by the time we toast, the hooks
+    // have already cleared their own state. The Save button covers all three
+    // sources (test-settings draft, design draft, content-page mutations); the
+    // toast confirms the user's action succeeded for whichever was dirty.
+    const wasDirty = editor.isDirty || design.isDirty || contentPages.hasMutated;
     if (editor.isDirty) {
       const ok = await editor.save();
       if (!ok) return false;
@@ -279,13 +284,11 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
     }
     // Content-page mutations are already persisted at the API call site (no
     // draft); clearing the bridge flag deactivates «Сохранить» until the next
-    // structure edit. The toast confirms the edit cycle is complete — the
-    // rows were saved at mutation time, so the only thing this Save action
-    // actually does for the «Структура» tab is acknowledge them.
-    if (contentPages.hasMutated) {
-      toast({ title: "Изменения структуры сохранены" });
-    }
+    // structure edit.
     contentPages.resetMutated();
+    if (wasDirty) {
+      toast({ title: "Изменения сохранены" });
+    }
     return true;
   }, [design, editor, contentPages, toast]);
 
