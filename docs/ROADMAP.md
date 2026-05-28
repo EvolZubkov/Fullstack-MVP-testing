@@ -87,11 +87,13 @@ shippable-состояния с главной бизнес-ценностью B
 | 2 | PRD-2 | Показатели результата `result.*` | PRD-4 |
 | 3 | PRD-5 | Шкалы и компетенции `scale.*` | PRD-2, PRD-4 |
 | 4 | PRD-3 | Реестр и жизненный цикл внешних шаблонов | PRD-1 |
+| 5 | **PRD-N (Flat adaptive)** | Адаптивная выдача из общего pool без секционных границ — комбинация `(mode=adaptive, flowMode=linear_flat)`, отложена из PRD-4 v1.1 | PRD-4 |
 | — | PRD-9 | Миграция bcrypt → `@vvlad1973/crypto` (tech debt, изолирован) | — |
 
 Отложенные точечные пункты: `showSectionResult` (промежуточные результаты по темам),
-предпросмотр шаблона и text-overflow diagnostics в PRD-1, порог coverage 50%, раздел
-«Архив» с восстановлением в списке тестов.
+text-overflow diagnostics в PRD-1, порог coverage 50%, раздел «Архив» с восстановлением
+в списке тестов, **flat adaptive mode** (`(adaptive, linear_flat)` пара — требует
+общей шкалы сложности на тест без topicId-привязки; см. PRD-4 §3.1.2).
 
 ---
 

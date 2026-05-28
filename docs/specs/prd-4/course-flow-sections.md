@@ -1,8 +1,12 @@
 # PRD-4: Гибкий поток прохождения, разделы и переходы SCORM-пакетов
 
-**Версия:** 1.0  
-**Статус:** Backlog — **MVP** (Storyline-MVP, ROADMAP §0.1); шаг 2, следующий после PRD-7 S10-S11  
-**Дата актуализации:** 2026-05-26  
+**Версия:** 1.1  
+**Статус:** Backlog — **MVP** (Storyline-MVP, ROADMAP §0.1); шаг 4,
+следующий после закрытия PRD-7 + PRD-1 (2026-05-28)  
+**Дата актуализации:** 2026-05-28 (v1.1: модель `flowPolicy` перестроена под
+фактическую кодовую базу — ортогональные `mode × flowMode` вместо плоского
+enum'а; добавлены adaptive+router, матрица совместимости, защитные слои;
+см. §3.1.0)  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-1](../prd-1/templates-content-pages.md), [PRD-2](../prd-2/result-variables.md),
 [PRD-6](../prd-6/retake-cooldown-gate.md), [PRD-8](../prd-8/section-router-flow.md),
@@ -80,19 +84,99 @@ Storyline-подобные сценарии как разные политики
 
 ## 3. Ключевые понятия
 
-### 3.1 `flowPolicy`
+### 3.1.0 Модель «mode × flowMode» (v1.1)
 
-`flowPolicy` определяет, как Core строит runtime-поток.
+Изначально PRD-4 описывал `flowPolicy.mode` как плоский enum из 5 значений
+(`legacy_flat` / `section_linear` / `section_router` / `section_graph` /
+`adaptive_by_section`). По состоянию на 2026-05-28 фактическая кодовая модель —
+двумерная и ортогональная:
 
-| Значение | Назначение |
+```text
+flowPolicy = {
+  mode:      "standard" | "adaptive",       // режим выдачи вопросов
+  flowMode:  "linear_flat" | "linear_by_topics" | "router_by_topics",  // сценарий навигации
+  ...остальные поля (см. §3.1.1)
+}
+```
+
+Два независимых параметра порождают 6 комбинаций — см. матрицу совместимости в
+§3.1.2. PRD-4 v1.1 фиксирует именно эту форму: Core должен принимать
+`(mode, flowMode)` пару, а не одно склеенное значение. Это позволяет:
+
+1. Поддерживать комбинации, которые не фиксируются плоским enum'ом — в частности
+   `adaptive + router_by_topics` (см. §4.7).
+2. Эволюционировать каждое измерение независимо — например, добавить
+   `flowMode: "graph"` в будущем без размножения adaptive-вариантов.
+3. Не ломать существующие тесты — в БД уже хранится двумерная форма через
+   `tests.mode` (TestMode) и `tests.flowPolicyJson.mode` (FlowMode из
+   [test-editor.types.ts:17](../../../client/src/features/tests/editor/test-editor.types.ts)).
+
+Старые plain-enum значения сохраняют ссылочную нагрузку как «алиасы»:
+
+| Алиас (старое значение) | Новая пара `(mode, flowMode)` |
 | --- | --- |
-| `legacy_flat` | Старое поведение: выбрать вопросы из разделов, собрать плоский список, перемешать при настройке |
-| `section_linear` | Проходить разделы последовательно: intro/info, вопросы, summary, следующий раздел |
-| `section_router` | Показывать страницу-маршрутизатор, с которой обучающийся выбирает разделы и возвращается после завершения каждого раздела |
-| `section_graph` | Переходы между разделами и страницами определяются правилами курса |
-| `adaptive_by_section` | Адаптивная выдача вопросов внутри раздела с управляемым переходом к следующему разделу |
+| `legacy_flat` | `(standard, linear_flat)` |
+| `section_linear` | `(standard, linear_by_topics)` |
+| `section_router` | `(standard, router_by_topics)` |
+| `section_graph` | _отложено_ (см. §4.5) — flowMode `graph` появится позже |
+| `adaptive_by_section` | `(adaptive, linear_by_topics)` |
+| **(новое)** | `(adaptive, router_by_topics)` — adaptive+router, см. §4.7 |
+| **(deferred)** | `(adaptive, linear_flat)` — «flat adaptive», вынесено в отдельный PRD |
 
-Если `flowPolicy` отсутствует, Core обязан использовать `legacy_flat`.
+Если `flowPolicy` отсутствует, Core обязан использовать
+`(mode=standard, flowMode=linear_flat)` (эквивалент legacy_flat).
+
+### 3.1.1 Поля `flowPolicy`
+
+```text
+flowPolicy = {
+  mode:      "standard" | "adaptive",
+  flowMode:  "linear_flat" | "linear_by_topics" | "router_by_topics",
+  routerCompletionPolicy?: "all_required_completed" | "all_required_passed",
+  sectionUnlockRules?: { [sectionId]: RouterUnlockRule },
+  questionOrder?: "fixed" | "shuffle" | "draw_random" | "adaptive",
+  sectionOrder?: "fixed" | "shuffle" | "rule_based",
+  globalShuffle?: boolean,  // разрешён только при (standard, linear_flat)
+}
+```
+
+`adaptive`-режим переопределяет `questionOrder` на `"adaptive"` независимо от
+выставленного значения.
+
+### 3.1.2 Матрица совместимости и защитные слои
+
+Не все 6 комбинаций `mode × flowMode` валидны. Матрица:
+
+| `mode` ↓ \\ `flowMode` → | `linear_flat` | `linear_by_topics` | `router_by_topics` |
+| --- | --- | --- | --- |
+| **`standard`** | ✓ supported (legacy_flat) | ✓ supported (section_linear) | ✓ supported (section_router) |
+| **`adaptive`** | ✗ **blocked — deferred future PRD** | ✓ supported (adaptive_by_section) | ✓ supported (adaptive+router, §4.7) |
+
+**`adaptive + linear_flat`** — отложено в отдельный будущий PRD «Flat adaptive».
+Текущая модель `adaptive.topics[].levels[]` требует секционной привязки шкалы
+сложности; общий pool без секционных границ требует другой модели (общая шкала
+на тест, без topicId), которая выходит за рамки PRD-4 v1.1.
+
+**Strict gating для adaptive-режима.** Если `mode === "adaptive"`, **каждая**
+section в `test.sections[]` обязана иметь соответствующий элемент
+`adaptive.topics[]` с непустым `levels[]`. Тема без настроенных уровней
+считается **невалидной** для adaptive-теста — это противоречит самой природе
+adaptive-режима (нечего адаптировать). Mixed-режим («одни темы adaptive, другие
+standard внутри одного теста») явно запрещён.
+
+**4 слоя защиты от невалидных комбинаций:**
+
+| Слой | Где | Что делает |
+| --- | --- | --- |
+| **L1 — UI** | `basic-settings-section.tsx` | В `<Select flowMode>` опция `linear_flat` помечается `disabled` + tooltip при `mode === "adaptive"`. При переключении `mode → adaptive` на `flowMode === "linear_flat"` — info-banner «Адаптивный режим требует разделения по темам. Выберите ...» + auto-suggest `linear_by_topics`. При adaptive-режиме каждая section без `levels[]` показывается с warning-маркером в Состав; publish blocked. |
+| **L2 — Zod schema** | `shared/schema.ts` `testSettingsSchema` | `.superRefine`: блокирует `(adaptive, linear_flat)` и `adaptive` без полного покрытия sections настройками `levels[]`. Draft не валиден, кнопка «Сохранить» disabled, drawer error-banner. |
+| **L3 — API server** | `PUT /api/tests/:id` | Тот же refine на server-side — 422 при попытке прислать невалидное. UI обрабатывает через существующий `saveError`-flow. Защита от curl/scripts/JS-bypass. |
+| **L4 — Mapper / legacy data** | `apiToEditorModel` | При чтении сохранённого теста с невалидной комбинацией (legacy data до v1.1 валидации): auto-fix на ближайшую валидную (`(adaptive, linear_flat) → (adaptive, linear_by_topics)` либо `(adaptive, *) с пустыми levels → (standard, *)`) + warning banner «Конфигурация была авто-исправлена, проверьте настройки» — не блокирует чтение, но дирижит к save. |
+
+**Аргумент к 4-слойной защите:** L1 — UX-первая линия; L2/L3 — single source of
+truth для инвариантов (API публичен через curl/scripts); L4 — для реальных
+legacy-тестов в БД, которые могут иметь невалидную конфигурацию из старых
+кодовых версий до строгого валидатора.
 
 ### 3.2 Раздел как сценарный узел
 
@@ -176,18 +260,31 @@ system.*
 
 ### 4.1 Выбор режима прохождения
 
-Автор в настройках теста выбирает режим:
+Автор настраивает **два независимых параметра** — режим теста (`mode`) и
+сценарий прохождения (`flowMode`):
+
+**Режим теста (`mode`):**
 
 | Режим UI | `flowPolicy.mode` |
 | --- | --- |
-| Как сейчас: случайный общий список вопросов | `legacy_flat` |
-| Разделы по порядку | `section_linear` |
-| Через страницу-маршрутизатор | `section_router` |
-| Разделы с условиями переходов | `section_graph` |
-| Адаптивно по разделам | `adaptive_by_section` |
+| Стандартный | `standard` |
+| Адаптивный | `adaptive` |
 
-Для существующих тестов поле не показывается как обязательное. При первом сохранении можно
-записать явный `legacy_flat`, но экспорт должен работать и без него.
+**Сценарий прохождения (`flowMode`):**
+
+| Сценарий UI | `flowPolicy.flowMode` |
+| --- | --- |
+| Линейный (плоский) | `linear_flat` |
+| Линейный по темам | `linear_by_topics` |
+| Через страницу-маршрутизатор | `router_by_topics` |
+
+Не все 6 комбинаций `(mode × flowMode)` валидны. UI блокирует выбор
+`(adaptive, linear_flat)` (отложено в отдельный будущий PRD) — см. §3.1.2
+матрицу совместимости и защитные слои.
+
+Для существующих тестов поля не обязательны: при отсутствии `flowPolicy` Core
+использует `(standard, linear_flat)` (эквивалент legacy_flat). При первом
+сохранении можно записать явные значения, но экспорт должен работать и без них.
 
 ### 4.1.1 Граница старта попытки
 
@@ -276,15 +373,82 @@ global_shuffle
 next section -> results -> system.error
 ```
 
-### 4.6 `adaptive_by_section`
+### 4.6 `(adaptive, linear_by_topics)` — adaptive-by-section, линейный обход
+
+Алиас старого `adaptive_by_section`. Требования:
+
+- адаптивная логика выбирает вопросы внутри текущего раздела по шкале сложности
+  (`adaptive.topics[i].levels[]`);
+- переход на следующий раздел происходит только после завершения текущего
+  раздела (см. ниже критерий завершения);
+- экран перехода между уровнями и разделами — обычная страница flow или
+  системная interstitial-страница;
+- результат раздела включает достигнутый уровень, количество отвеченных
+  вопросов и рекомендации.
+
+**Критерий завершения adaptive-секции.** Адаптивная сессия раздела продолжается,
+пока обучающийся **продвигается** по шкале (на повышение или на понижение).
+Сессия завершается на стабильности — когда движение прекратилось (например,
+два ответа подряд на одном уровне без изменения направления, либо исчерпан
+банк вопросов соответствующего уровня).
+
+Результат раздела:
+
+- **«успешно»** — обучающийся подтвердил **минимальный** уровень компетенции
+  (т.е. прошёл `level[0]` с его собственным `passThreshold`). Возвращается
+  `achievedLevel: N`, где `N` — последний подтверждённый уровень.
+- **«не успешно»** — не подтверждён даже минимальный уровень. Возвращается
+  `achievedLevel: null`, `passed: false`.
+
+В обоих случаях раздел считается **завершённым** для целей навигации (см.
+§4.7 для router-completionPolicy). Различие — только в `passed` флаге и
+доступе к следующему уровню сценария.
+
+**Strict gating.** При `mode === "adaptive"` каждая section теста обязана
+иметь непустой `adaptive.topics[].levels[]` (см. §3.1.2). Тема без уровней
+**не валидна** для adaptive-теста — это противоречит самой природе
+адаптивного режима.
+
+### 4.7 `(adaptive, router_by_topics)` — adaptive в router-навигации
+
+Комбинация PRD-4 v1.1. Сценарий обучающегося:
+
+```text
+router page → выбор темы → adaptive-сессия темы → результат темы → router page → ...
+```
 
 Требования:
 
-- адаптивная логика выбирает вопросы внутри текущего раздела;
-- переход на следующий раздел происходит только после завершения текущего раздела;
-- экран перехода между уровнями и разделами является обычной страницей flow или системной
-  interstitial-страницей;
-- результат раздела включает достигнутый уровень, количество отвеченных вопросов и рекомендации.
+- маршрутизатор показывает все sections теста (как в `(standard, router_by_topics)`);
+- внутри выбранной темы Core запускает adaptive flow по правилам §4.6;
+- после завершения adaptive-сессии Core возвращает обучающегося на router page;
+- результат темы (`achievedLevel`, `passed`) фиксируется и используется
+  `routerCompletionPolicy` для решения «тест завершён → results».
+
+**Критерий «тема пройдена» для router-completionPolicy.** Тема считается
+«пройденной» в смысле router-навигации, если adaptive-сессия завершилась с
+`passed: true` (т.е. подтверждён минимальный уровень). См. §4.6 для критерия
+успеха adaptive-сессии.
+
+**`routerCompletionPolicy` в adaptive+router:**
+
+| Значение | Когда тест завершается |
+| --- | --- |
+| `all_required_completed` | Все required-темы завершены (любой `achievedLevel`, включая `null`) |
+| `all_required_passed` | Все required-темы со `passed: true` (минимальный уровень подтверждён) |
+
+`sectionUnlockRules` работают как в standard+router: разблокировка темы по
+правилу (например, «тема B доступна после прохождения темы A»). Adaptive
+не меняет правила unlock.
+
+**Strict gating сохраняется.** Все темы теста обязаны иметь
+`adaptive.topics[].levels[]` (§3.1.2). Тема без уровней не валидна — UI
+блокирует publish.
+
+**Router page не адаптируется.** Router page — это контент-страница с
+`kind: "router"`, рендерится как обычно (не зависит от mode). Меню тем,
+прогресс по темам, indicator «текущий уровень» и проч. показываются
+обучающемуся без специальной adaptive-логики на самом router'е.
 
 ---
 
