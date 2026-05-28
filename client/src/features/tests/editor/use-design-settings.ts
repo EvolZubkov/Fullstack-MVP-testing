@@ -102,6 +102,12 @@ export type UseDesignSettingsResult = {
   /** Reset the draft to the manifest's defaults (clearing all params). */
   resetToDefaults: () => void;
   /**
+   * PRD-7 S12-G3 / FR-33: switch the draft to an arbitrary template id,
+   * clearing all params (semantically equivalent to `resetToDefaults` for
+   * the new template). Used by `TemplateGalleryModal`.
+   */
+  setTemplate: (templateId: string) => void;
+  /**
    * PRD-7 S12-G6: switch the draft to the built-in `default` template,
    * clearing all params. Used by the «Применить «Стандартный»» action in
    * the wf-template-incompatible banner.
@@ -192,15 +198,17 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     setDraft((d) => ({ ...d, params: {} }));
   };
 
+  const setTemplate = (templateId: string) => {
+    // S12-G3: clears params on switch (new template's defaults apply via the
+    // manifest hydration). Drops templateVersion/templateApiVersion so the
+    // server re-stamps them from the chosen template during PUT.
+    setDraft(() => ({ templateId, params: {} }));
+  };
+
   const applyDefaultTemplate = () => {
-    // S12-G6: marks the draft dirty so the Drawer footer's «Сохранить» picks
-    // it up. Clearing templateVersion/templateApiVersion lets the server
-    // re-stamp them from the chosen default during PUT.
-    setDraft((d) => ({
-      templateId: "default",
-      params: {},
-      ...(d.templateVersion ? {} : {}),
-    }));
+    // S12-G6: thin wrapper over setTemplate for the wf-template-incompatible
+    // banner's «Применить «Стандартный»» action.
+    setTemplate("default");
   };
 
   const revert = () => {
@@ -235,6 +243,7 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     templateMissing,
     setParam,
     resetToDefaults,
+    setTemplate,
     applyDefaultTemplate,
     revert,
     save: () => saveMutation.mutateAsync(),

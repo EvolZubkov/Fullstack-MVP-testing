@@ -43,6 +43,7 @@ import {
 } from "../use-design-settings";
 import { fromHex, toHex } from "./color-format";
 import { TemplatePreviewModal } from "./template-preview-modal";
+import { TemplateGalleryModal } from "./template-gallery-modal";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -73,6 +74,7 @@ const RAIL_ITEMS: { key: DesignRailKey; label: string }[] = [
 export function DesignSection({ testId, design: designProp }: DesignSectionProps) {
   const [active, setActive] = useState<DesignRailKey>("template");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
   // Fallback hook usage kept so the section still works as a standalone unit
   // (e.g., in component tests) when the parent hasn't hoisted the hook.
   const fallback = useDesignSettings(designProp ? undefined : testId);
@@ -128,19 +130,16 @@ export function DesignSection({ testId, design: designProp }: DesignSectionProps
             <TemplateIncompatibleBanner
               missingId={design.draft.templateId}
               onApplyDefault={design.applyDefaultTemplate}
-              onOpenGallery={() => {
-                // Gallery (S12-G3) not implemented yet — fall back to an
-                // explanatory alert. When G3 lands, this should open the
-                // template gallery modal pre-filtered to compatible templates.
-                window.alert(
-                  "Галерея шаблонов будет доступна в следующем шаге (S12-G3 / FR-33).",
-                );
-              }}
+              onOpenGallery={() => setGalleryOpen(true)}
             />
           ) : design.error ? (
             <ErrorNotice message={design.error.message} />
           ) : effectiveActive === "template" ? (
-            <TemplatePane design={design} onPreview={() => setPreviewOpen(true)} />
+            <TemplatePane
+              design={design}
+              onPreview={() => setPreviewOpen(true)}
+              onOpenGallery={() => setGalleryOpen(true)}
+            />
           ) : effectiveActive === "branding" ? (
             <SectionPane
               design={design}
@@ -173,6 +172,16 @@ export function DesignSection({ testId, design: designProp }: DesignSectionProps
         onClose={() => setPreviewOpen(false)}
         template={design.template}
         params={design.draft.params ?? {}}
+      />
+      <TemplateGalleryModal
+        open={galleryOpen}
+        onClose={() => setGalleryOpen(false)}
+        currentTemplateId={design.draft.templateId}
+        hasDirtyParams={
+          design.draft.params !== undefined &&
+          Object.keys(design.draft.params).length > 0
+        }
+        onApply={(id) => design.setTemplate(id)}
       />
     </>
   );
@@ -253,9 +262,12 @@ function TemplateIncompatibleBanner(props: {
 function TemplatePane({
   design,
   onPreview,
+  onOpenGallery,
 }: {
   design: UseDesignSettingsResult;
   onPreview: () => void;
+  /** PRD-7 S12-G3 / FR-33: opens the TemplateGalleryModal. */
+  onOpenGallery: () => void;
 }) {
   const tpl = design.template;
   if (!tpl) return null;
@@ -329,11 +341,7 @@ function TemplatePane({
               size="s"
               leadingIcon={<Layout className="h-3 w-3" aria-hidden="true" />}
               data-testid="design-template-replace"
-              onClick={() =>
-                window.alert(
-                  "Галерея шаблонов будет доступна в следующем шаге (FR-30/31).",
-                )
-              }
+              onClick={onOpenGallery}
             >
               Заменить шаблон
             </Button>

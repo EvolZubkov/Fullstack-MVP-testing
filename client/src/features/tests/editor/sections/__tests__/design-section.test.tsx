@@ -452,3 +452,81 @@ describe("<DesignSection /> — template-incompatible state (S12-G6)", () => {
     expect(screen.getByTestId("design-template-incompatible")).toBeInTheDocument();
   });
 });
+
+// ─── S12-G3 — Template gallery (FR-33) ───────────────────────────────────────
+
+describe("<DesignSection /> — template gallery (S12-G3 / FR-33)", () => {
+  beforeEach(() => {
+    const TEMPLATES_LIST = [
+      TEMPLATE,
+      {
+        ...TEMPLATE,
+        id: "default",
+        manifest: { ...TEMPLATE.manifest, id: "default", name: "Стандартный" },
+      },
+      {
+        ...TEMPLATE,
+        id: "minimal",
+        manifest: { ...TEMPLATE.manifest, id: "minimal", name: "Минимальный" },
+      },
+    ];
+    mockFetch((url) => {
+      if (url === `/api/tests/${TEST_ID}/design`) return jsonResponse(DESIGN_SETTINGS_DEFAULT);
+      if (url === `/api/templates/corporate`) return jsonResponse(TEMPLATE);
+      if (url === `/api/templates/default`) return jsonResponse(TEMPLATES_LIST[1]);
+      if (url === `/api/templates/minimal`) return jsonResponse(TEMPLATES_LIST[2]);
+      if (url === `/api/templates`) return jsonResponse(TEMPLATES_LIST);
+      return jsonResponse({ error: "unexpected" }, 500);
+    });
+  });
+
+  it("«Заменить шаблон» opens the gallery modal with current template marked", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-template-replace"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("design-gallery-grid")).toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("design-gallery-card-corporate")).toBeInTheDocument();
+    expect(screen.getByTestId("design-gallery-card-default")).toBeInTheDocument();
+    expect(screen.getByTestId("design-gallery-card-minimal")).toBeInTheDocument();
+    // Current is corporate → its «Текущий» chip is present.
+    expect(
+      screen.getByTestId("design-gallery-card-corporate-current"),
+    ).toBeInTheDocument();
+  });
+
+  it("filters the gallery by name", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-template-replace"));
+    await waitFor(() => expect(screen.getByTestId("design-gallery-grid")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByTestId("design-gallery-search"), {
+      target: { value: "минимальный" },
+    });
+
+    expect(screen.queryByTestId("design-gallery-card-corporate")).toBeNull();
+    expect(screen.queryByTestId("design-gallery-card-default")).toBeNull();
+    expect(screen.getByTestId("design-gallery-card-minimal")).toBeInTheDocument();
+  });
+
+  it("«Применить» disabled when selected card equals current", async () => {
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("design-template-replace"));
+    await waitFor(() => expect(screen.getByTestId("design-gallery-grid")).toBeInTheDocument());
+    // Pre-selected to current corporate → Apply is disabled.
+    expect(screen.getByTestId("design-gallery-apply")).toBeDisabled();
+    // Click another card → Apply enabled.
+    fireEvent.click(screen.getByTestId("design-gallery-card-minimal"));
+    expect(screen.getByTestId("design-gallery-apply")).not.toBeDisabled();
+  });
+});

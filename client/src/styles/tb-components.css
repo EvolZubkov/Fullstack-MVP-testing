@@ -1279,6 +1279,97 @@
   color: var(--ou-info-on-soft);
 }
 
+/* Template gallery (PRD-7 S12-G3 / FR-33) — modal grid of template cards. */
+.tpl-gallery-modal { /* extends ModalDialog xl size class — width via DS */ }
+.tpl-gallery-search {
+  position: relative;
+  margin-bottom: var(--ou-space-3);
+}
+.tpl-gallery-empty {
+  margin: var(--ou-space-4) 0;
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  text-align: center;
+}
+.tpl-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--ou-space-3);
+  margin-top: var(--ou-space-3);
+}
+.tpl-gallery-card {
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-elevated);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.tpl-gallery-card:hover { border-color: var(--ou-border-default); }
+.tpl-gallery-card:focus-visible {
+  outline: 2px solid var(--ou-accent-default);
+  outline-offset: 2px;
+}
+.tpl-gallery-card.is-selected {
+  border-color: var(--ou-accent-default);
+  box-shadow: 0 0 0 2px var(--ou-accent-soft) inset;
+}
+.tpl-gallery-card.is-current { opacity: 0.85; }
+.tpl-gallery-card__thumb {
+  aspect-ratio: 16 / 9;
+  background: var(--ou-bg-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+}
+.tpl-gallery-card__thumb .preview-sketch {
+  width: 80%;
+  height: 80%;
+}
+.tpl-gallery-card__body {
+  padding: var(--ou-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--wf-space-6, 6px);
+  flex: 1;
+}
+.tpl-gallery-card__name {
+  font: var(--ou-text-body-m);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+}
+.tpl-gallery-card__desc {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+  flex: 1;
+}
+.tpl-gallery-card__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ou-space-1);
+  align-items: center;
+}
+.tpl-gallery-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: var(--ou-space-3);
+}
+.tpl-gallery-foot__info {
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+.tpl-gallery-foot__actions {
+  display: flex;
+  gap: var(--ou-space-2);
+}
+
 /* Close-confirm chip group (PRD-7 S13.7-G30) — Tag-list of dirty tab labels
    inside the FR-05 close-confirm modal. */
 .tb-close-confirm-chips {

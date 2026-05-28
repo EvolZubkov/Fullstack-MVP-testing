@@ -123,7 +123,43 @@ built-in шаблона.
   читает inlined `window.PRD1_PREVIEW_*` глобалы — full sandbox блокирует
   inline-скрипты. Источник — наш собственный backend, риск приемлем.
 
-### G3 — Галерея шаблонов (FR-33)
+### G3 — Галерея шаблонов (FR-33) — **CLOSED 2026-05-28**
+
+**Что было.** Кнопка «Заменить шаблон» в `TemplatePane` вызывала
+`window.alert("Галерея шаблонов будет доступна в следующем шаге.")`.
+
+**Что сделано.**
+
+1. **Hook:** в [use-design-settings.ts](../../../client/src/features/tests/editor/use-design-settings.ts)
+   добавлен generic `setTemplate(templateId): void` — патчит draft на
+   `{ templateId, params: {} }`. `applyDefaultTemplate` (S12-G6) теперь —
+   тонкая обёртка над ним.
+2. **UI:** новый компонент
+   [TemplateGalleryModal](../../../client/src/features/tests/editor/sections/template-gallery-modal.tsx)
+   (`size="xl"`, `className="tpl-gallery-modal"`):
+   - Lazy-fetch `/api/templates` через React Query (key `["templates","list"]`).
+   - Поиск `variant-search` стиля над сеткой; case-insensitive фильтр по
+     name + description; пустое состояние «Ничего не найдено».
+   - Grid карточек: thumb-sketch + название + описание + теги «Встроенный»/
+     «v{version}»; на текущем шаблоне — чип `Tag tone="accent"` «Текущий».
+   - Footer: info-строка «Выбран: …» + «Отмена» + «Применить шаблон»
+     (disabled при `selected === current`).
+   - **Dirty-confirm (G3 wf-template-gallery-confirm)**: если у draft'а есть
+     params (`draft.params` непустые), Banner-warning «Замена шаблона
+     сбросит текущие параметры» + кнопка becomes `destructive` с лейблом
+     «Заменить и сбросить параметры».
+3. **Wiring:** в `DesignSection` кнопка «Заменить шаблон» (line 337)
+   открывает modal через `setGalleryOpen(true)`. Дополнительно: action
+   «Выбрать шаблон» из `TemplateIncompatibleBanner` (S12-G6) теперь тоже
+   открывает gallery вместо alert-плейсхолдера.
+4. **CSS:** `.tpl-gallery-search/-grid/-card/-foot/__*` в `tb-components.css`.
+5. **Tests:** 3 новых теста в `design-section.test.tsx` (карточки + чип
+   «Текущий», search фильтр, disabled-apply при selected === current).
+
+**Verification:** `npm run check` 0 ошибок; `vitest run` 51/51 файл,
+1368 тестов зелёные.
+
+### G3 — Original specification (superseded by CLOSED block above)
 
 **Что сейчас.** [design-section.tsx:8-9](../../../client/src/features/tests/editor/sections/design-section.tsx)
 JSDoc: «*«Заменить шаблон» is left as a placeholder (full gallery deferred to FR-30/31)*». Кнопка не
