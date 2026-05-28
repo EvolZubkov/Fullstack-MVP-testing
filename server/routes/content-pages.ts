@@ -14,13 +14,20 @@
  * and sanitizes richText/html placeholder values.
  */
 import { Router } from "express";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { eq } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
 import { templates } from "@shared/schema";
 import { requireAuth, requireAuthor } from "../middleware/auth";
 import { logger } from "../logger";
-import { sanitizeValues } from "../utils/html-sanitizer";
+import {
+  sanitizeHtmlWithDiagnostics,
+  sanitizeValuesWithDiagnostics,
+  type SanitizeDiagnostics,
+} from "../utils/html-sanitizer";
+import { encodeJsonForScript, injectIntoPreview } from "../scorm/preview-embed";
 
 const router = Router();
 
@@ -64,19 +71,41 @@ async function getTestContentTemplates(test: { designSettingsJson: unknown }): P
   return manifest.contentTemplates ?? null;
 }
 
-function sanitizeAllStringValues(values: Record<string, unknown> | undefined): Record<string, unknown> {
+/**
+ * Sanitises arbitrary string values without a template manifest (used for
+ * mode='custom' / free-form payloads). Aggregates diagnostics so the PUT
+ * route can surface them to the UI alongside the cleaned payload.
+ */
+function sanitizeAllStringValuesWithDiagnostics(
+  values: Record<string, unknown> | undefined,
+): { values: Record<string, unknown>; diagnostics: SanitizeDiagnostics } {
   const result: Record<string, unknown> = {};
+  const diagnostics: SanitizeDiagnostics = {};
   for (const [key, value] of Object.entries(values ?? {})) {
-    result[key] = typeof value === "string" ? sanitizeValues({ value }, [{ key: "value", type: "html" }]).value : value;
+    if (typeof value === "string") {
+      const { value: cleaned, removed } = sanitizeHtmlWithDiagnostics(value);
+      result[key] = cleaned;
+      if (removed.length > 0) diagnostics[key] = removed;
+    } else {
+      result[key] = value;
+    }
   }
-  return result;
+  return { values: result, diagnostics };
+}
+
+/** Back-compat wrapper - used by POST route that does not yet surface diagnostics. */
+function sanitizeAllStringValues(values: Record<string, unknown> | undefined): Record<string, unknown> {
+  return sanitizeAllStringValuesWithDiagnostics(values).values;
 }
 
 function normalizeValuesForTemplate(
   valuesJson: { values?: Record<string, unknown>; placeholderStyles?: Record<string, unknown> } | undefined,
   placeholders: PlaceholderDefinition[],
-) {
-  const values = sanitizeValues(valuesJson?.values ?? {}, placeholders);
+): { values: Record<string, unknown>; placeholderStyles: Record<string, unknown>; sanitizeDiagnostics: SanitizeDiagnostics } {
+  const { values, diagnostics: sanitizeDiagnostics } = sanitizeValuesWithDiagnostics(
+    valuesJson?.values ?? {},
+    placeholders,
+  );
   const placeholderStyles: Record<string, unknown> = {};
 
   for (const ph of placeholders) {
@@ -111,8 +140,165 @@ function normalizeValuesForTemplate(
     }
   }
 
-  return { values, placeholderStyles };
+  return { values, placeholderStyles, sanitizeDiagnostics };
 }
+
+// ─── GET /api/tests/:id/content-pages/:pageId/preview-page ───────────────────
+
+/**
+ * Whitelist of built-in template directory names, mirrors templates.ts. We
+ * only resolve preview.html for built-in templates - third-party templates
+ * would need their own preview registration before this route serves them.
+ */
+const BUILTIN_TEMPLATE_IDS = new Set([
+  "default",
+  "corporate",
+  "minimal",
+  "rtk-storyline",
+]);
+
+async function resolveBuiltinPreviewPath(id: string): Promise<string | null> {
+  if (!BUILTIN_TEMPLATE_IDS.has(id)) return null;
+  const candidate = path.resolve(
+    process.cwd(),
+    "server",
+    "scorm",
+    "templates",
+    id,
+    "preview.html",
+  );
+  try {
+    await fs.access(candidate);
+    return candidate;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * GET /api/tests/:id/content-pages/:pageId/preview-page (PRD-7 S13.4 / FR-44).
+ *
+ * Serves the test's design-template preview.html with an override script that
+ * skips the demo-navigation bootstrap and renders this single content_page via
+ * the runtime-exposed `renderContentPage(page, contentTemplates)` function
+ * (see preview.html line 1954). Also forwards the test's design params
+ * (designSettingsJson.params) as manifest.params[].default overrides so the
+ * page renders in the same colours/fonts/branding the learner would see.
+ */
+router.get("/:id/content-pages/:pageId/preview-page", requireAuth, async (req, res) => {
+  try {
+    const { id: testId, pageId } = req.params;
+
+    const test = await storage.getTest(testId);
+    if (!test) return res.status(404).type("text/plain").send("Test not found");
+
+    const page = await storage.getContentPage(pageId);
+    if (!page || page.testId !== testId) {
+      return res.status(404).type("text/plain").send("Content page not found");
+    }
+
+    const settings = (test as { designSettingsJson: unknown }).designSettingsJson as
+      | { templateId?: string; params?: Record<string, unknown> }
+      | null;
+    const templateId = settings?.templateId || "default";
+
+    const previewPath = await resolveBuiltinPreviewPath(templateId);
+    if (!previewPath) {
+      return res
+        .status(404)
+        .type("text/plain")
+        .send(`preview.html not found for template "${templateId}"`);
+    }
+
+    const html = await fs.readFile(previewPath, "utf8");
+
+    // The runtime expects: page.kind, page.templateKey, page.values,
+    // page.placeholderStyles; matches the shape contentPage.js consumes.
+    const valuesJson = (page.valuesJson as
+      | { values?: Record<string, unknown>; placeholderStyles?: Record<string, unknown> }
+      | null) ?? {};
+    const previewPage = {
+      id: page.id,
+      kind: page.kind,
+      templateKey: page.templateKey,
+      values: valuesJson.values ?? {},
+      placeholderStyles: valuesJson.placeholderStyles ?? {},
+      autoAdvance: page.autoAdvance ?? false,
+      autoAdvanceDelayMs: page.autoAdvanceDelayMs ?? null,
+    };
+
+    const designOverrides = settings?.params ?? {};
+
+    // Override script does two things AFTER the standalone bootstrap has run
+    // (it is appended just before </body>, so by then PRD1_PREVIEW_MANIFEST is
+    // populated and TestBuilder has initialised CSS vars):
+    //   1) Apply this test's design.params on top of manifest.params[].default
+    //      so the preview reflects the customised branding (re-init via
+    //      TestBuilder._init).
+    //   2) Clear #app and call renderContentPage(previewPage, contentTemplates)
+    //      directly. The navigation that the demo bootstrap built is left in
+    //      place but irrelevant - the embed CSS hides it (.pv-sidebar / .pv-nav).
+    //
+    // requestAnimationFrame ensures the override fires after the bootstrap's
+    // own DOMContentLoaded init that lives in the file's IIFE.
+    const overrideScript = `
+<script id="prd7-page-preview-override">
+(function () {
+  var page = ${encodeJsonForScript(previewPage)};
+  var paramOverrides = ${encodeJsonForScript(designOverrides)};
+
+  function applyDesignOverrides() {
+    var m = window.PRD1_PREVIEW_MANIFEST;
+    if (!m || !Array.isArray(m.params)) return;
+    m.params.forEach(function (p) {
+      if (paramOverrides && Object.prototype.hasOwnProperty.call(paramOverrides, p.key)) {
+        p.default = paramOverrides[p.key];
+      }
+    });
+    var tb = window.TestBuilder;
+    if (tb && typeof tb._init === "function") {
+      tb._init(m.params);
+    }
+  }
+
+  function renderSinglePage() {
+    var m = window.PRD1_PREVIEW_MANIFEST;
+    var app = document.getElementById("app");
+    if (!app || !m) return;
+    var cts = m.contentTemplates || [];
+    if (typeof renderContentPage === "function") {
+      app.innerHTML = "";
+      renderContentPage(page, cts);
+    }
+  }
+
+  function run() {
+    applyDesignOverrides();
+    // Defer one frame so the standalone bootstrap's own DOMContentLoaded
+    // init finishes building TEST_DATA / nav before we replace #app.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(renderSinglePage);
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", run);
+  } else {
+    run();
+  }
+})();
+</script>
+`;
+
+    const out = injectIntoPreview(html, overrideScript);
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store");
+    res.send(out);
+  } catch (error) {
+    logger.error("Page preview error: " + (error as Error).message, "content-pages");
+    res.status(500).type("text/plain").send("page-preview failed");
+  }
+});
 
 // ─── GET /api/tests/:id/content-pages ────────────────────────────────────────
 
@@ -285,7 +471,12 @@ router.put("/:id/content-pages/:pageId", requireAuthor, async (req, res) => {
     }
 
     // Validate and sanitize values if templateKey is being set
-    let normalizedValues: { values: Record<string, unknown>; placeholderStyles: Record<string, unknown> } | undefined;
+    let normalizedValues:
+      | { values: Record<string, unknown>; placeholderStyles: Record<string, unknown> }
+      | undefined;
+    // PRD-7 S13.4-G18: collect what the sanitiser stripped so the UI can show
+    // a per-placeholder warning banner. Empty -> nothing was removed.
+    let sanitizeDiagnostics: SanitizeDiagnostics = {};
     const effectiveMode = mode ?? existing.mode;
     const effectiveTemplateKey = templateKey !== undefined ? templateKey : existing.templateKey;
 
@@ -296,13 +487,14 @@ router.put("/:id/content-pages/:pageId", requireAuthor, async (req, res) => {
         if (!ct) {
           return res.status(422).json({ error: "templateKey not found in current template", field: "templateKey" });
         }
-        normalizedValues = normalizeValuesForTemplate(valuesJson, ct.placeholders ?? []);
+        const normalized = normalizeValuesForTemplate(valuesJson, ct.placeholders ?? []);
+        normalizedValues = { values: normalized.values, placeholderStyles: normalized.placeholderStyles };
+        sanitizeDiagnostics = normalized.sanitizeDiagnostics;
       }
     } else if (valuesJson !== undefined) {
-      normalizedValues = {
-        values: sanitizeAllStringValues(valuesJson.values),
-        placeholderStyles: {},
-      };
+      const { values: cleaned, diagnostics } = sanitizeAllStringValuesWithDiagnostics(valuesJson.values);
+      normalizedValues = { values: cleaned, placeholderStyles: {} };
+      sanitizeDiagnostics = diagnostics;
     }
 
     const updates: Record<string, unknown> = {};
@@ -319,7 +511,9 @@ router.put("/:id/content-pages/:pageId", requireAuthor, async (req, res) => {
     }
 
     const updated = await storage.updateContentPage(pageId, updates as Parameters<typeof storage.updateContentPage>[1]);
-    res.json(updated);
+    // sanitizeDiagnostics is a sibling field, not persisted - the UI consumes
+    // it from the immediate PUT response and clears it on the next edit.
+    res.json({ ...updated, sanitizeDiagnostics });
   } catch (error) {
     const err = error as Error & { status?: number; field?: string };
     if (err.status === 422) {

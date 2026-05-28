@@ -152,7 +152,7 @@ async function putContentPage(
   testId: string,
   pageId: string,
   input: Partial<ContentPageInput>,
-): Promise<ContentPage> {
+): Promise<ContentPage & { sanitizeDiagnostics?: SanitizeDiagnostics }> {
   const res = await fetch(`/api/tests/${testId}/content-pages/${pageId}`, {
     method: "PUT",
     credentials: "include",
@@ -212,6 +212,19 @@ async function deleteContentPage(testId: string, pageId: string): Promise<void> 
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Server-side sanitiser diagnostics from the last successful PUT for a page.
+ * PRD-7 S13.4-G18 / FR-25 sanitize: lets the edit form show the author exactly
+ * which tags / attributes / URIs the server stripped from each placeholder.
+ */
+export type SanitizeRemoval = {
+  kind: "tag" | "attribute" | "uri";
+  /** Display label, e.g. `<script>`, `onclick`, `javascript:`. */
+  label: string;
+  count: number;
+};
+export type SanitizeDiagnostics = Record<string, SanitizeRemoval[]>;
+
 export type UseContentPagesResult = {
   pages: ContentPage[];
   /** Variant catalogue of the active template (`manifest.contentTemplates`). */
@@ -224,6 +237,15 @@ export type UseContentPagesResult = {
   isCreating: boolean;
   update: (pageId: string, input: Partial<ContentPageInput>) => Promise<ContentPage>;
   isUpdating: boolean;
+  /**
+   * Most recent sanitiser diagnostics, keyed by page id. Set on a successful
+   * update that stripped at least one placeholder; cleared by the next update
+   * to that page (so a clean re-save dismisses the banner). Read by
+   * `PageEditForm` to render the `s-sanitize` warning banner.
+   */
+  sanitizeDiagnostics: Record<string, SanitizeDiagnostics>;
+  /** Clears the diagnostics entry for a single page (banner dismiss). */
+  dismissSanitizeDiagnostics: (pageId: string) => void;
   reorder: (updates: Array<{ id: string; sortOrder: number }>) => Promise<void>;
   isReordering: boolean;
   /** Switch a (system or author) page to another variant of the same `kind` (FR-46). */
@@ -328,10 +350,38 @@ export function useContentPages(testId: string | undefined): UseContentPagesResu
     onSuccess: onMutationSuccess,
   });
 
+  const [sanitizeDiagnostics, setSanitizeDiagnostics] = useState<
+    Record<string, SanitizeDiagnostics>
+  >({});
+  const dismissSanitizeDiagnostics = useCallback((pageId: string) => {
+    setSanitizeDiagnostics((prev) => {
+      if (!(pageId in prev)) return prev;
+      const next = { ...prev };
+      delete next[pageId];
+      return next;
+    });
+  }, []);
+
   const updateMutation = useMutation({
     mutationFn: ({ pageId, input }: { pageId: string; input: Partial<ContentPageInput> }) =>
       putContentPage(testId!, pageId, input),
-    onSuccess: onMutationSuccess,
+    onSuccess: (data, vars) => {
+      onMutationSuccess();
+      // Server returns `sanitizeDiagnostics` as a sibling field on the response
+      // when at least one placeholder was stripped. Store keyed by pageId so
+      // the edit form can show the s-sanitize warning banner; absence of any
+      // diagnostics clears any previously-shown banner for that page.
+      const diag = (data as { sanitizeDiagnostics?: SanitizeDiagnostics }).sanitizeDiagnostics;
+      setSanitizeDiagnostics((prev) => {
+        const next = { ...prev };
+        if (diag && Object.keys(diag).length > 0) {
+          next[vars.pageId] = diag;
+        } else {
+          delete next[vars.pageId];
+        }
+        return next;
+      });
+    },
   });
 
   const reorderMutation = useMutation({
@@ -361,6 +411,8 @@ export function useContentPages(testId: string | undefined): UseContentPagesResu
     isCreating: createMutation.isPending,
     update: (pageId, input) => updateMutation.mutateAsync({ pageId, input }),
     isUpdating: updateMutation.isPending,
+    sanitizeDiagnostics,
+    dismissSanitizeDiagnostics,
     reorder: (updates) => reorderMutation.mutateAsync(updates),
     isReordering: reorderMutation.isPending,
     replaceVariant: (pageId, newTemplateKey) =>

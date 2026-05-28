@@ -35,6 +35,7 @@ import {
   MoreHorizontal,
   Plus,
   Route,
+  X,
 } from "lucide-react";
 import {
   Banner,
@@ -84,6 +85,7 @@ import {
   type UseContentPagesResult,
 } from "../use-content-pages";
 import type { TestEditorModel } from "../test-editor.types";
+import { PagePreviewModal } from "./page-preview-modal";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -295,6 +297,7 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
 
   const [addCtx, setAddCtx] = useState<AddContext | null>(null);
   const [replaceCtx, setReplaceCtx] = useState<ReplaceContext | null>(null);
+  const [previewCtx, setPreviewCtx] = useState<{ page: ContentPage } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const handlers: ZoneHandlers = {
@@ -303,6 +306,7 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
     setExpandedId,
     onAdd: setAddCtx,
     onReplaceVariant: (page) => setReplaceCtx({ page }),
+    onPreview: (page) => setPreviewCtx({ page }),
     readOnly,
   };
 
@@ -352,6 +356,15 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
         }}
       />
       <ReplaceVariantModal ctx={replaceCtx} cp={cp} onClose={() => setReplaceCtx(null)} />
+      {previewCtx && testId && (
+        <PagePreviewModal
+          open
+          onClose={() => setPreviewCtx(null)}
+          testId={testId}
+          pageId={previewCtx.page.id}
+          pageTitle={pageTitle(previewCtx.page)}
+        />
+      )}
     </div>
   );
 }
@@ -408,6 +421,8 @@ type ZoneHandlers = {
   setExpandedId: (id: string | null) => void;
   onAdd: (ctx: AddContext) => void;
   onReplaceVariant: (page: ContentPage) => void;
+  /** PRD-7 S13.4-G17 / FR-44: opens the page-preview modal for this page. */
+  onPreview: (page: ContentPage) => void;
   /** When true, the tab is rendered without authoring controls (PRD-7 G19). */
   readOnly: boolean;
 };
@@ -974,6 +989,12 @@ function SystemPageRow(props: {
             >
               Сменить вариант
             </MenuItem>
+            <MenuItem
+              onClick={() => handlers.onPreview(page)}
+              data-testid={`${props.testId}-preview`}
+            >
+              Предпросмотр
+            </MenuItem>
           </Menu>
         </MenuTrigger>
       </div>
@@ -1141,6 +1162,7 @@ function SortablePageItem(props: { page: ContentPage; handlers: ZoneHandlers }) 
         isDragging={isDragging}
         readOnly={handlers.readOnly}
         onReplaceVariant={handlers.onReplaceVariant}
+        onPreview={handlers.onPreview}
       />
     </div>
   );
@@ -1194,6 +1216,8 @@ function AuthorPageRow(props: {
   readOnly: boolean;
   /** PRD-7 G17: opens ReplaceVariantModal for this page. */
   onReplaceVariant: (page: ContentPage) => void;
+  /** PRD-7 G17 / FR-44: opens PagePreviewModal for this page. */
+  onPreview: (page: ContentPage) => void;
 }) {
   const { page, cp } = props;
   const [confirming, setConfirming] = useState(false);
@@ -1271,6 +1295,12 @@ function AuthorPageRow(props: {
                     Сменить вариант…
                   </MenuItem>
                 )}
+                <MenuItem
+                  onClick={() => props.onPreview(page)}
+                  data-testid={`structure-page-preview-${page.id}`}
+                >
+                  Предпросмотр
+                </MenuItem>
                 <MenuItem
                   danger
                   onClick={() => setConfirming(true)}
@@ -1383,6 +1413,13 @@ function PageEditForm(props: {
       ? [{ key: "__html", type: "html", label: "HTML-содержимое" }]
       : variant?.placeholders ?? [];
 
+  // PRD-7 S13.4-G18: when the last successful save stripped placeholder HTML,
+  // show an in-form warning banner listing exactly what the server removed.
+  // The banner clears automatically on the next save with no removals (the
+  // hook drops the entry from `cp.sanitizeDiagnostics`) or via explicit
+  // dismiss. Keyed-by-pageId so unrelated pages do not flash this banner.
+  const sanitizeDiag = cp.sanitizeDiagnostics[page.id];
+
   return (
     <div className="page-row-expand" data-testid={`structure-page-edit-${page.id}`}>
       {!variant && page.mode === "template" && (
@@ -1392,6 +1429,46 @@ function PageEditForm(props: {
           description="Вариант страницы недоступен в текущем шаблоне. Выберите другой шаблон оформления или пересоздайте страницу."
           data-testid={`structure-page-edit-no-variant-${page.id}`}
         />
+      )}
+      {sanitizeDiag && Object.keys(sanitizeDiag).length > 0 && (
+        <div
+          className="validation-banner validation-banner--warning"
+          role="alert"
+          data-testid={`structure-page-edit-sanitize-${page.id}`}
+        >
+          <span className="validation-banner__ico" aria-hidden="true">
+            <AlertTriangle className="h-3.5 w-3.5" />
+          </span>
+          <div className="validation-banner__body">
+            <div className="validation-banner__title">HTML санитизирован</div>
+            <div className="validation-banner__desc">
+              Следующие элементы были удалены как небезопасные:
+              <ul className="validation-banner__list">
+                {Object.entries(sanitizeDiag).flatMap(([phKey, removals]) =>
+                  removals.map((r) => {
+                    const phLabel =
+                      variant?.placeholders.find((p) => p.key === phKey)?.label ?? phKey;
+                    return (
+                      <li key={`${phKey}-${r.label}`}>
+                        <code>{r.label}</code> в поле «{phLabel}»
+                        {r.count > 1 ? ` (×${r.count})` : ""}
+                      </li>
+                    );
+                  }),
+                )}
+              </ul>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s"
+            aria-label="Скрыть предупреждение о санитизации"
+            onClick={() => cp.dismissSanitizeDiagnostics(page.id)}
+            data-testid={`structure-page-edit-sanitize-dismiss-${page.id}`}
+          >
+            <X className="h-3 w-3" aria-hidden="true" />
+          </button>
+        </div>
       )}
       {hasErr && (
         <div

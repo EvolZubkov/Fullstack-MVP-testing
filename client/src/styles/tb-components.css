@@ -1165,6 +1165,24 @@
 }
 .validation-banner__list { margin: 0; padding-left: var(--ou-space-4); }
 .validation-banner__list li { margin-bottom: var(--wf-space-tiny, 2px); }
+.validation-banner__desc { margin-top: var(--wf-space-tiny, 2px); }
+
+/* PRD-7 S13.4-G18 / s-sanitize: warning variant of the same banner used to
+   list HTML tags / attributes the server stripped during sanitisation. Lives
+   inside .page-row-expand alongside the validation banner; dismissible. */
+.validation-banner--warning {
+  background: var(--ou-warning-soft);
+  border-color: var(--ou-warning-default);
+  align-items: flex-start;
+}
+.validation-banner--warning .validation-banner__ico { color: var(--ou-warning-default); }
+.validation-banner--warning .validation-banner__body { color: var(--ou-warning-on-soft); }
+.validation-banner--warning code {
+  font: var(--ou-text-code-s, var(--ou-text-caption));
+  background: var(--ou-bg-surface-3, rgba(0,0,0,.04));
+  padding: 0 var(--wf-space-tiny, 2px);
+  border-radius: var(--wf-space-1q, 3px);
+}
 
 /* Insert-row: a thin guideline with a reveal-on-hover «Добавить страницу» pill. */
 .insert-row {
