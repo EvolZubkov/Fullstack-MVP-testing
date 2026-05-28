@@ -43,6 +43,9 @@ import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
   AdaptiveTopicConfig,
+  FeedbackAsset,
+  FeedbackContent,
+  FeedbackLink,
   FlowMode,
   OverallPassRule,
   OverallPassType,
@@ -160,6 +163,11 @@ export const BasicSettingsSection = SettingsSection;
 // ─── Sub-pane: Основное ───────────────────────────────────────────────────────
 
 function BasicPane({ model, updateModel }: SettingsSectionProps) {
+  // PRD-7 S13.2-G7: «Общая обратная связь теста» card. The model already
+  // carries the underlying fields (basic.feedback / feedbackLinks /
+  // feedbackAssets), populated by the API on load (PRD-7 S2). This UI block
+  // is the missing surface that lets the author edit them via the unified
+  // FeedbackEditorModal, identical to topic-level feedback elsewhere.
   return (
     <>
       <div className="ou-formfield" data-field="basic.title">
@@ -260,6 +268,45 @@ function BasicPane({ model, updateModel }: SettingsSectionProps) {
           data-testid="settings-flow-mode"
         />
       </div>
+
+      <hr className="wf-sep" />
+
+      <Card variant="outlined" data-testid="settings-feedback-card">
+        <CardHeader title="Общая обратная связь теста" />
+        <CardBody>
+          <TestFeedbackTrigger
+            feedback={model.basic.feedback}
+            links={model.basic.feedbackLinks}
+            assets={model.basic.feedbackAssets}
+            onSave={(next) => {
+              updateModel((m) => ({
+                ...m,
+                basic: {
+                  ...m.basic,
+                  feedback: { format: next.format, text: next.text },
+                  feedbackLinks: next.links,
+                  feedbackAssets: next.assets,
+                },
+              }));
+            }}
+          />
+          <hr className="wf-sep" />
+          <div className="ou-formfield">
+            <Switch
+              label="Показывать правильные ответы после прохождения"
+              checked={model.runtime.showCorrectAnswers}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                updateModel((m) => ({
+                  ...m,
+                  runtime: { ...m.runtime, showCorrectAnswers: checked },
+                }));
+              }}
+              data-testid="settings-show-correct-checkbox"
+            />
+          </div>
+        </CardBody>
+      </Card>
     </>
   );
 }
@@ -305,21 +352,133 @@ function LimitsPane({ model, updateModel }: SettingsSectionProps) {
           }
         />
       </div>
+      <hr className="wf-sep" />
+      <PerTopicLimitsBlock model={model} updateModel={updateModel} />
+      {/* PRD-7 S13.2-G8: «Показывать правильные ответы» переехал в Основное
+          → секция «Общая обратная связь теста» (вместе с feedback editor),
+          per wireframe prd7-editor-settings-tab.html lines 820-837. */}
+    </>
+  );
+}
 
+// ─── Per-topic time-limits block (S13.3-G9/G10) ──────────────────────────────
+
+/**
+ * Per-topic time-limit block (PRD-7 S13.3-G9/G10). Renders the
+ * «Индивидуальные лимиты для тем» switch and, when on, a table of NumberInput
+ * rows per `model.sections` topic.
+ *
+ * Model semantics (per {@link SectionTimeLimit}):
+ *   - `inherit_test` — topic uses the test-level limit (default).
+ *   - `none`         — topic is unlimited (overrides the test-level limit).
+ *   - `custom`       — explicit per-topic minutes value.
+ *
+ * Switch state is derived: ON when any section has a non-`inherit_test` limit.
+ * Toggling OFF resets every section to `inherit_test`. Toggling ON leaves
+ * sections alone — they appear in the table with empty inputs (placeholder
+ * «Без ограничения»), which corresponds to `none` (i.e. unlimited). Typing
+ * a positive number switches the section to `custom`. Clearing the field
+ * (NumberInput emits 0) reverts to `none`, matching the wireframe placeholder.
+ *
+ * For `linear_flat` (no per-topic sections) the wireframe state
+ * `s-limits-no-topics` hides the block; we render an info banner explaining
+ * why the per-topic option is unavailable in this flow.
+ */
+function PerTopicLimitsBlock({ model, updateModel }: SettingsSectionProps) {
+  const sections = model.sections;
+  const hasCustomLimits = sections.some((s) => s.timeLimit.source !== "inherit_test");
+
+  if (sections.length === 0) {
+    return (
+      <Banner
+        tone="info"
+        size="sm"
+        description="Индивидуальные лимиты для тем доступны после добавления хотя бы одной темы во вкладке «Состав»."
+        data-testid="settings-per-topic-no-topics"
+      />
+    );
+  }
+
+  function setAllSectionsTo(source: "inherit_test") {
+    updateModel((m) => ({
+      ...m,
+      sections: m.sections.map((s) => ({ ...s, timeLimit: { source } })),
+    }));
+  }
+
+  function setSectionLimit(topicId: string, next: number) {
+    updateModel((m) => ({
+      ...m,
+      sections: m.sections.map((s) =>
+        s.topicId === topicId
+          ? {
+              ...s,
+              timeLimit:
+                next > 0
+                  ? { source: "custom", minutes: next }
+                  : { source: "none" },
+            }
+          : s,
+      ),
+    }));
+  }
+
+  return (
+    <>
       <div className="ou-formfield">
         <Switch
-          label="Показывать правильные ответы после прохождения"
-          checked={model.runtime.showCorrectAnswers}
+          label="Индивидуальные лимиты для тем"
+          description="Если выключено, действует только общий лимит теста (см. выше)."
+          checked={hasCustomLimits}
           onChange={(e) => {
             const checked = e.target.checked;
-            updateModel((m) => ({
-              ...m,
-              runtime: { ...m.runtime, showCorrectAnswers: checked },
-            }));
+            if (!checked) {
+              setAllSectionsTo("inherit_test");
+            }
+            // Switching ON: leave inherit_test rows as-is — the table renders
+            // them with empty inputs (placeholder «Без ограничения»). The
+            // author opts into a custom limit by typing a positive number.
           }}
-          data-testid="settings-show-correct-checkbox"
+          data-testid="settings-per-topic-switch"
         />
       </div>
+      {hasCustomLimits && (
+        <table
+          className="tb-table tb-table--mb"
+          aria-label="Индивидуальные лимиты времени по темам"
+          data-testid="settings-per-topic-table"
+        >
+          <thead>
+            <tr>
+              <th>Тема</th>
+              <th>Лимит</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sections.map((section) => {
+              const current =
+                section.timeLimit.source === "custom" ? section.timeLimit.minutes : 0;
+              return (
+                <tr key={section.topicId}>
+                  <td>{section.topicName}</td>
+                  <td>
+                    <NumberInput
+                      size="s"
+                      aria-label={`Лимит для темы ${section.topicName}`}
+                      value={current}
+                      min={0}
+                      suffix="минут"
+                      placeholder="Без ограничения"
+                      onChange={(next) => setSectionLimit(section.topicId, next)}
+                      data-testid={`settings-per-topic-limit-${section.topicId}`}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
     </>
   );
 }
@@ -1121,6 +1280,92 @@ function AdaptiveLevelCard(props: {
         </div>
       </CardBody>
     </Card>
+  );
+}
+
+/**
+ * Test-level feedback trigger (PRD-7 S13.2-G7, FR-36/FR-37). Opens the unified
+ * FeedbackEditorModal pre-loaded with the test's `basic.feedback` /
+ * `feedbackLinks` / `feedbackAssets`. Differs from {@link FeedbackEditTrigger}
+ * (adaptive use): keeps the rich-text `format` field round-trip and persists
+ * PDF assets - both required at the test scope per the wireframe section
+ * «Общая обратная связь теста» (prd7-editor-settings-tab.html lines 710-839).
+ */
+function TestFeedbackTrigger(props: {
+  feedback: FeedbackContent;
+  links: FeedbackLink[];
+  assets: FeedbackAsset[];
+  onSave: (next: {
+    format: FeedbackContent["format"];
+    text: string;
+    links: FeedbackLink[];
+    assets: FeedbackAsset[];
+  }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const isEmpty =
+    props.feedback.text.trim() === "" &&
+    props.links.length === 0 &&
+    props.assets.length === 0;
+  const preview =
+    props.feedback.text.trim() !== ""
+      ? props.feedback.text.replace(/<[^>]+>/g, "").slice(0, 80)
+      : "Не задано - нажмите для редактирования";
+  // Compact meta line: «N ссыл..., M PDF» rendered alongside the preview.
+  // Pluralisation matches FeedbackEditTrigger for visual consistency.
+  const metaParts: string[] = [];
+  if (props.links.length > 0) {
+    const n = props.links.length;
+    const word = n === 1 ? "ка" : n >= 2 && n <= 4 ? "ки" : "ок";
+    metaParts.push(`${n} ссыл${word}`);
+  }
+  if (props.assets.length > 0) {
+    metaParts.push(`${props.assets.length} PDF`);
+  }
+
+  return (
+    <>
+      <label className="ou-formfield__lbl">Обратная связь после прохождения</label>
+      <button
+        type="button"
+        className={"tb-feedback-preview" + (isEmpty ? " is-empty" : "")}
+        onClick={() => setOpen(true)}
+        aria-label="Редактировать обратную связь теста"
+        data-testid="settings-feedback-trigger"
+      >
+        <span className="tb-feedback-preview__text">
+          <span className="tb-feedback-preview__snippet">{preview}</span>
+          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+        </span>
+        {metaParts.length > 0 && (
+          <span className="tb-feedback-preview__meta">
+            {metaParts.join(" · ")}
+          </span>
+        )}
+      </button>
+      <FeedbackEditorModal
+        open={open}
+        title="Общая обратная связь теста"
+        description="Текст и материалы, которые обучающийся увидит после завершения теста."
+        value={{
+          format: props.feedback.format,
+          text: props.feedback.text,
+          links: props.links,
+          assets: props.assets,
+        }}
+        onCancel={() => setOpen(false)}
+        onSave={(v: FeedbackEditorValue) => {
+          props.onSave({
+            format: v.format,
+            text: v.text,
+            links: v.links,
+            assets: v.assets,
+          });
+          setOpen(false);
+        }}
+        testId="settings-feedback-modal"
+      />
+    </>
   );
 }
 

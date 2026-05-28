@@ -143,6 +143,24 @@ describe("<SettingsSection /> — Основное pane", () => {
     selectOption("settings-flow-mode", "Через страницу-маршрутизатор");
     expect(runUpdater(updateModel, model).flowMode).toBe("router_by_topics");
   });
+
+  // S13.2-G7: «Общая обратная связь теста» card renders in Основное.
+  it("renders the «Общая обратная связь теста» card with feedback trigger", () => {
+    const model = baseModel();
+    render(<SettingsSection model={model} updateModel={vi.fn()} />);
+    expect(screen.getByTestId("settings-feedback-card")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-feedback-trigger")).toBeInTheDocument();
+  });
+
+  // S13.2-G8: «Показывать правильные ответы» switch now lives in Основное
+  // (inside the feedback card), not in Ограничения.
+  it("toggles showCorrectAnswers from the Основное feedback card", () => {
+    const updateModel = vi.fn();
+    const model = baseModel();
+    render(<SettingsSection model={model} updateModel={updateModel} />);
+    fireEvent.click(screen.getByTestId("settings-show-correct-checkbox"));
+    expect(runUpdater(updateModel, model).runtime.showCorrectAnswers).toBe(true);
+  });
 });
 
 // ─── Mode / flowMode switching preserves data (FR-25h/i; checklist §2.2) ────────
@@ -262,13 +280,94 @@ describe("<SettingsSection /> — Ограничения pane", () => {
     expect(runUpdater(updateModel, model).runtime.timeLimitMinutes).toBeNull();
   });
 
-  it("toggles showCorrectAnswers via checkbox", () => {
+  // Note: S13.2-G8 (2026-05-28) moved «Показывать правильные ответы» from
+  // Ограничения to Основное → «Общая обратная связь теста» card. The new
+  // location is covered by the Основное-pane describe block below.
+
+  // S13.3-G9: per-topic «Индивидуальные лимиты» switch + table.
+  it("shows the per-topic switch + no-topics info when sections is empty", () => {
+    const model = baseModel({ sections: [] });
+    render(<SettingsSection model={model} updateModel={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("settings-rail-limits"));
+    expect(screen.getByTestId("settings-per-topic-no-topics")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-per-topic-switch")).toBeNull();
+  });
+
+  it("shows the per-topic switch (OFF) when sections exist but all inherit_test", () => {
+    const model = baseModel({ sections: [sampleSection] });
+    render(<SettingsSection model={model} updateModel={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("settings-rail-limits"));
+    expect(screen.getByTestId("settings-per-topic-switch")).toBeInTheDocument();
+    // Table is hidden until the author opts into a custom limit.
+    expect(screen.queryByTestId("settings-per-topic-table")).toBeNull();
+  });
+
+  it("renders the per-topic table when any section has a non-inherit limit", () => {
+    const model = baseModel({
+      sections: [
+        { ...sampleSection, timeLimit: { source: "custom", minutes: 15 } },
+      ],
+    });
+    render(<SettingsSection model={model} updateModel={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("settings-rail-limits"));
+    expect(screen.getByTestId("settings-per-topic-table")).toBeInTheDocument();
+    expect(
+      screen.getByTestId(`settings-per-topic-limit-${sampleSection.topicId}`),
+    ).toBeInTheDocument();
+  });
+
+  it("typing a positive minutes value switches the section to custom limit", () => {
     const updateModel = vi.fn();
-    const model = baseModel();
+    const model = baseModel({
+      sections: [
+        { ...sampleSection, timeLimit: { source: "custom", minutes: 15 } },
+      ],
+    });
     render(<SettingsSection model={model} updateModel={updateModel} />);
     fireEvent.click(screen.getByTestId("settings-rail-limits"));
-    fireEvent.click(screen.getByTestId("settings-show-correct-checkbox"));
-    expect(runUpdater(updateModel, model).runtime.showCorrectAnswers).toBe(true);
+    fireEvent.change(
+      screen.getByTestId(`settings-per-topic-limit-${sampleSection.topicId}`),
+      { target: { value: "25" } },
+    );
+    const next = runUpdater(updateModel, model);
+    expect(next.sections[0].timeLimit).toEqual({ source: "custom", minutes: 25 });
+  });
+
+  it("clearing the input drops the section to source='none' (unlimited)", () => {
+    const updateModel = vi.fn();
+    const model = baseModel({
+      sections: [
+        { ...sampleSection, timeLimit: { source: "custom", minutes: 15 } },
+      ],
+    });
+    render(<SettingsSection model={model} updateModel={updateModel} />);
+    fireEvent.click(screen.getByTestId("settings-rail-limits"));
+    fireEvent.change(
+      screen.getByTestId(`settings-per-topic-limit-${sampleSection.topicId}`),
+      { target: { value: "" } },
+    );
+    const next = runUpdater(updateModel, model);
+    expect(next.sections[0].timeLimit).toEqual({ source: "none" });
+  });
+
+  it("turning the switch OFF resets every section back to inherit_test", () => {
+    const updateModel = vi.fn();
+    const model = baseModel({
+      sections: [
+        { ...sampleSection, timeLimit: { source: "custom", minutes: 15 } },
+        {
+          ...sampleSection,
+          topicId: "topic-2",
+          topicName: "Topic B",
+          timeLimit: { source: "none" },
+        },
+      ],
+    });
+    render(<SettingsSection model={model} updateModel={updateModel} />);
+    fireEvent.click(screen.getByTestId("settings-rail-limits"));
+    fireEvent.click(screen.getByTestId("settings-per-topic-switch"));
+    const next = runUpdater(updateModel, model);
+    expect(next.sections.every((s) => s.timeLimit.source === "inherit_test")).toBe(true);
   });
 });
 
