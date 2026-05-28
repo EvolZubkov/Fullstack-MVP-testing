@@ -548,3 +548,65 @@ describe("10. editorModelToPayload — hidden draft adaptive excluded from stand
     expect(testPayload).not.toHaveProperty("adaptiveSettings");
   });
 });
+
+// ─── PRD-4 v1.1 L4: legacy auto-fix for (adaptive, linear_flat) ──────────────
+
+describe("PRD-4 v1.1 L4: apiToEditorModel auto-fixes (adaptive, linear_flat) → linear_by_topics", () => {
+  it("rewrites flowMode to linear_by_topics for legacy adaptive+flat tests", () => {
+    const api = {
+      id: "legacy-test",
+      version: 7,
+      mode: "adaptive",
+      // Pre-PRD-4 v1.1 saves could persist this now-invalid combo.
+      flowPolicyJson: { mode: "linear_flat" },
+      title: "Legacy",
+      sections: [],
+      adaptiveSettings: [],
+    };
+    const model = apiToEditorModel(api);
+    expect(model.mode).toBe("adaptive");
+    expect(model.flowMode).toBe("linear_by_topics");
+  });
+
+  it("does not touch (standard, linear_flat) — that combo is valid", () => {
+    const api = {
+      id: "standard-flat",
+      version: 1,
+      mode: "standard",
+      flowPolicyJson: { mode: "linear_flat" },
+      title: "Standard",
+      sections: [],
+    };
+    const model = apiToEditorModel(api);
+    expect(model.mode).toBe("standard");
+    expect(model.flowMode).toBe("linear_flat");
+  });
+
+  it("does not touch (adaptive, linear_by_topics) — already valid", () => {
+    const api = {
+      id: "adaptive-by-topics",
+      version: 1,
+      mode: "adaptive",
+      flowPolicyJson: { mode: "linear_by_topics" },
+      title: "Adaptive",
+      sections: [],
+      adaptiveSettings: [],
+    };
+    const model = apiToEditorModel(api);
+    expect(model.flowMode).toBe("linear_by_topics");
+  });
+
+  it("does not touch (adaptive, router_by_topics) — also valid", () => {
+    const api = {
+      id: "adaptive-router",
+      version: 1,
+      mode: "adaptive",
+      flowPolicyJson: { mode: "router_by_topics" },
+      title: "Adaptive+Router",
+      sections: [],
+      adaptiveSettings: [],
+    };
+    const model = apiToEditorModel(api);
+    expect(model.flowMode).toBe("router_by_topics");
+  });
+});

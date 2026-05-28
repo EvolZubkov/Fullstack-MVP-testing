@@ -508,7 +508,17 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
 
   const status = readStatusFromApi(src);
   const mode: TestMode = isTestMode(src.mode) ? src.mode : "standard";
-  const flowMode = readFlowModeFromApi(src);
+  let flowMode = readFlowModeFromApi(src);
+  // PRD-4 v1.1 L4 legacy auto-fix: tests saved before the v1.1 contract
+  // validator may carry the now-invalid `(adaptive, linear_flat)` pair.
+  // Coerce them to the closest valid alternative (linear_by_topics) so the
+  // editor can open such tests without immediately blocking on save-error.
+  // The mapper is silent — the editor renders the corrected combo and any
+  // resulting dirty state surfaces normally. If the author wants a different
+  // flowMode, they can change it.
+  if (mode === "adaptive" && flowMode === "linear_flat") {
+    flowMode = "linear_by_topics";
+  }
   const flowSettings = buildFlowSettingsFromApi(flowMode, src);
   const feedback = readFeedbackFromApi(src);
   const overall = readOverallPassRuleFromApi(src);
