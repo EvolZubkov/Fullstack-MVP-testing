@@ -1,8 +1,14 @@
 # PRD-8: Сценарий прохождения через страницу-маршрутизатор
 
 **Версия:** 1.0  
-**Статус:** Backlog — **MVP** (Storyline-MVP, ROADMAP §0.1); шаг 4  
-**Дата актуализации:** 2026-05-26  
+**Статус:** **Закрыт 2026-05-29** — реализован cross-PRD (UI в PRD-7,
+runtime + recovery в PRD-4 phases 4c/4f). PRD-8-specific delta:
+FR-18 router lifecycle events (`router:shown`, `router:sectionSelected`,
+`router:finalResultUnlocked`, `router:finalResultOpened`) добавлены в
+[routerFlow.js](../../../server/scorm/template/app/routerFlow.js).
+Acceptance покрыт 19 тестами в
+[prd-4-acceptance.test.ts](../../../tests/prd-4-acceptance.test.ts).  
+**Дата актуализации:** 2026-05-29  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-1](../prd-1/templates-content-pages.md), [PRD-2](../prd-2/result-variables.md),
 [PRD-4](../prd-4/course-flow-sections.md),

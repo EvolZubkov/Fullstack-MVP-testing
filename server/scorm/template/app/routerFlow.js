@@ -225,7 +225,8 @@
     // PRD-4 v1.1 §4.7: «Завершить» is gated by routerCompletionPolicy
     // (all required sections completed, optionally also passed). Optional
     // sections never block.
-    if (isRouterReadyToFinish()) {
+    var ready = isRouterReadyToFinish();
+    if (ready) {
       var finishBtn = document.createElement("button");
       finishBtn.type = "button";
       finishBtn.className = "btn router-finish";
@@ -233,6 +234,39 @@
       finishBtn.textContent = "Завершить тест";
       finishBtn.onclick = finishRouter;
       app.appendChild(finishBtn);
+    }
+
+    // PRD-8 FR-18: emit router lifecycle events for diagnostics + template
+    // extensions. The first time the «Завершить» action becomes available
+    // we additionally emit router:finalResultUnlocked so templates can
+    // highlight the transition (e.g. animate the button into view).
+    emitRouterEvent("router:shown", {
+      sections: (TEST_DATA.sections || []).map(function (s) {
+        return {
+          topicId: s.topicId,
+          topicName: s.topicName,
+          required: s.required !== false,
+          status: state.routerTopicStates[s.topicId] || "notStarted",
+          unlocked: isSectionUnlocked(s),
+        };
+      }),
+      readyToFinish: ready,
+    });
+    if (ready && !state._routerFinalUnlockedFired) {
+      state._routerFinalUnlockedFired = true;
+      emitRouterEvent("router:finalResultUnlocked", {});
+    }
+  }
+
+  /**
+   * PRD-8 FR-18: thin helper around TestBuilder.template.emit that
+   * tolerates missing TestBuilder instance (defensive in case the
+   * runtime bundle skipped templateCore for any reason).
+   */
+  function emitRouterEvent(name, data) {
+    var tb = typeof window !== "undefined" ? window.TestBuilder : null;
+    if (tb && tb.template && typeof tb.template.emit === "function") {
+      tb.template.emit(name, data || {});
     }
   }
 
@@ -257,6 +291,9 @@
     if (state.routerTopicStates[topicId] === "completed") return;
     state.routerTopicStates[topicId] = "inProgress";
     state.currentRouterTopic = topicId;
+    // PRD-8 FR-18: section selection event for diagnostics + template
+    // hooks (e.g. transition animations).
+    emitRouterEvent("router:sectionSelected", { topicId: topicId });
 
     // PRD-4 v1.1 §3.2 (Phase 4e): start the per-section timer on entry.
     // Stopped by returnFromTopic (normal completion) or by the timer's
@@ -373,6 +410,9 @@
     if (!isRouterMode()) return;
     state.routerFinished = true;
     state.currentRouterTopic = null;
+    // PRD-8 FR-18: final-result open event — fires when the learner
+    // actively triggers «Завершить» (after completionPolicy is met).
+    emitRouterEvent("router:finalResultOpened", {});
     var postRouter = buildPostRouterSequence();
     if (postRouter.length === 0) {
       // No test-scope after content (other than maybe a summary) →

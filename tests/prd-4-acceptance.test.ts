@@ -352,4 +352,18 @@ describe("PRD-4 v1.1 acceptance — runtime bundle includes section timer + reco
     expect(appjs).toContain("restoreRouterSession");
     expect(appjs).toContain("restore_router");
   });
+
+  // PRD-8 FR-18 — router lifecycle events.
+  it("router runtime emits the documented events", async () => {
+    const { zip } = await packFixture({ mode: "standard", flowMode: "router_by_topics" });
+    const appjs = await zip.file("app.js")!.async("string");
+    for (const ev of [
+      "router:shown",
+      "router:sectionSelected",
+      "router:finalResultUnlocked",
+      "router:finalResultOpened",
+    ]) {
+      expect(appjs, `router event "${ev}" must be emitted by routerFlow`).toContain(ev);
+    }
+  });
 });
