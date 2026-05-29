@@ -462,10 +462,18 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
             `inert` is a native attribute (HTMLAttributes) supported by React
             and modern browsers; older browsers fall back to a visual block
             via the overlay's pointer-events.
+
+            `display: contents` on the wrapper is critical — without it the
+            div becomes a flex child of .ou-drawer__body (which uses flex
+            column layout), breaking the scroll cascade for direct content
+            children (Composition / Settings / Design tabs lose scroll;
+            Structure works only because it carries its own scroll
+            container). With display:contents the wrapper is removed from
+            layout but `inert` still propagates to its descendants.
           */}
           {/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */}
           {/* @ts-expect-error inert attribute lacks types in older React/dom-lib versions */}
-          <div inert={combinedSaving ? "" : undefined}>
+          <div className="tb-saving-inert-wrap" inert={combinedSaving ? "" : undefined}>
           {hasErrors && (
             <Banner
               tone="error"

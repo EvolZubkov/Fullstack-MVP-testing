@@ -36,6 +36,15 @@
   /* gate-skip-end */
 }
 
+/* ── Drawer body scroll contract ────────────────────────────────────────
+   DS .ou-drawer__body has `overflow-y: auto; padding: var(--ou-space-5)`.
+   In the Drawer flex-column shell the body must be allowed to shrink below
+   its content height; otherwise long tabs expand under the footer instead of
+   becoming scrollable. */
+.ou-drawer__body {
+  min-height: 0;
+}
+
 /* ── Drawer body — flush variant for split layouts ──────────────────────
    DS .ou-drawer__body has `overflow-y: auto; padding: var(--ou-space-5)`.
    When the body's child is a `.ou-drawer__split` (rail + content), we want
@@ -599,8 +608,19 @@
    Используется во время атомарного сохранения теста (PUT /api/tests/:id).
    Host-контейнер (например, ou-drawer__body) должен получить tb-saving-host
    modifier — он переключает positioning, чтобы overlay лёг абсолютом внутри.
-   В client/ — будущий React-компонент <SavingOverlay show={isSaving} />. */
-.tb-saving-host { position: relative; overflow: hidden; }
+   В client/ — будущий React-компонент <SavingOverlay show={isSaving} />.
+   ВНИМАНИЕ: `overflow: hidden` тут НЕ ставим — ou-drawer__body использует
+   собственный overflow-y:auto для вертикальной прокрутки контента, и любой
+   `overflow: hidden` на host'e ломает скролл (regression PRD-4 / S13.7-G1).
+   Overlay с inset:0 уже клиппится содержимым родителя без явного hidden. */
+.tb-saving-host { position: relative; }
+/* PRD-7 S13.7-G1 / scroll regression fix (2026-05-29): the inert wrapper
+   around the body's content must NOT participate in flex layout — otherwise
+   it becomes a flex child without `min-height: 0` and breaks scroll cascade
+   on tabs that don't carry their own internal scroll container (Состав,
+   Настройки, Оформление). `display: contents` removes the wrapper from
+   the layout tree while preserving the inert attribute on descendants. */
+.tb-saving-inert-wrap { display: contents; }
 .tb-saving-overlay { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; }
 .tb-saving-overlay__bd { position: absolute; inset: 0; background: var(--ou-bg-elevated); opacity: 0.88; }
 .tb-saving-overlay__inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); }
