@@ -292,6 +292,78 @@ describe("buildTestJson — flowPolicy export (PRD-4 v1.1)", () => {
     const data = JSON.parse(buildTestJson(payload));
     expect(data.flowPolicy.mode).toBe("linear_flat");
   });
+
+  // PRD-4 v1.1 §4.7: router_by_topics carries optional gating fields.
+
+  it("router_by_topics defaults routerCompletionPolicy to all_required_completed", () => {
+    const payload = {
+      ...exportData,
+      test: { ...exportData.test, flowPolicyJson: { mode: "router_by_topics" } },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.routerCompletionPolicy).toBe("all_required_completed");
+  });
+
+  it("router_by_topics carries explicit routerCompletionPolicy when provided", () => {
+    const payload = {
+      ...exportData,
+      test: {
+        ...exportData.test,
+        flowPolicyJson: {
+          mode: "router_by_topics",
+          routerCompletionPolicy: "all_required_passed",
+        },
+      },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.routerCompletionPolicy).toBe("all_required_passed");
+  });
+
+  it("router_by_topics propagates sectionUnlockRules", () => {
+    const unlockRules = {
+      "t2": { mode: "after_sections_completed", sectionIds: ["t1"] },
+    };
+    const payload = {
+      ...exportData,
+      test: {
+        ...exportData.test,
+        flowPolicyJson: { mode: "router_by_topics", sectionUnlockRules: unlockRules },
+      },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.sectionUnlockRules).toEqual(unlockRules);
+  });
+
+  it("non-router modes do NOT carry routerCompletionPolicy / sectionUnlockRules", () => {
+    const payload = {
+      ...exportData,
+      test: {
+        ...exportData.test,
+        flowPolicyJson: {
+          mode: "linear_by_topics",
+          routerCompletionPolicy: "all_required_passed",
+          sectionUnlockRules: { t1: { mode: "always" } },
+        },
+      },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.mode).toBe("linear_by_topics");
+    expect(data.flowPolicy.routerCompletionPolicy).toBeUndefined();
+    expect(data.flowPolicy.sectionUnlockRules).toBeUndefined();
+  });
+
+  it("section.required is exported (defaults to true when absent)", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    // Default fixture didn't set `required` — exporter coerces to true.
+    expect(data.sections[0].required).toBe(true);
+  });
+
+  it("section.required=false is preserved", () => {
+    const optionalSection = { ...dbSection, required: false };
+    const payload = { ...exportData, sections: [optionalSection] };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.sections[0].required).toBe(false);
+  });
 });
 
 describe("buildTestJson — adaptive mode", () => {

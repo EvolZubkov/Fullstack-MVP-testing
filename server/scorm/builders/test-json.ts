@@ -44,17 +44,38 @@ export function buildTestJson(data: ExportData): string {
         : 80;
 
   // PRD-4 v1.1: export `flowPolicy` so the runtime can switch traversal
-  // strategy (legacy_flat / linear_by_topics / router_by_topics). Missing
-  // flowPolicyJson defaults to `{ mode: "linear_flat" }` per FR-40 to keep
-  // legacy SCORMs identical to pre-v1.1 behaviour.
-  const flowPolicyJson = data.test.flowPolicyJson as { mode?: string } | null;
-  const exportedFlowPolicy = {
+  // strategy (legacy_flat / linear_by_topics / router_by_topics) and apply
+  // router-specific gating (routerCompletionPolicy, sectionUnlockRules).
+  // Missing flowPolicyJson defaults to `{ mode: "linear_flat" }` per FR-40
+  // to keep legacy SCORMs identical to pre-v1.1 behaviour.
+  const flowPolicyJson = data.test.flowPolicyJson as {
+    mode?: string;
+    routerCompletionPolicy?: string;
+    sectionUnlockRules?: Record<string, unknown>;
+  } | null;
+  const exportedFlowPolicy: {
+    mode: "linear_flat" | "linear_by_topics" | "router_by_topics";
+    routerCompletionPolicy?: "all_required_completed" | "all_required_passed";
+    sectionUnlockRules?: Record<string, unknown>;
+  } = {
     mode:
       flowPolicyJson?.mode === "linear_by_topics" ||
       flowPolicyJson?.mode === "router_by_topics"
         ? flowPolicyJson.mode
         : "linear_flat",
   };
+  // PRD-4 v1.1 §4.7: router-specific fields are only meaningful in router
+  // mode. Default routerCompletionPolicy to all_required_completed (the
+  // softer rule — counts any achievedLevel as «pass» for navigation).
+  if (exportedFlowPolicy.mode === "router_by_topics") {
+    exportedFlowPolicy.routerCompletionPolicy =
+      flowPolicyJson?.routerCompletionPolicy === "all_required_passed"
+        ? "all_required_passed"
+        : "all_required_completed";
+    if (flowPolicyJson?.sectionUnlockRules) {
+      exportedFlowPolicy.sectionUnlockRules = flowPolicyJson.sectionUnlockRules;
+    }
+  }
 
   const test: any = {
     id: data.test.id,
@@ -79,6 +100,10 @@ export function buildTestJson(data: ExportData): string {
       topicId: s.topic.id,
       topicName: s.topic.name,
       drawCount: s.drawCount,
+      // PRD-4 v1.1 §4.7: `required` drives routerCompletionPolicy's
+      // «all_required_*» calculation; `false` means optional (the test can
+      // finish even if this section is skipped/incomplete).
+      required: s.required ?? true,
       topicPassRule: (s.topicPassRuleJson as PassRule | null) ?? null,
       topicFeedback: s.topic.feedback || null,
       recommendedCourses: s.courses.map((c) => ({ title: c.title, url: c.url })),

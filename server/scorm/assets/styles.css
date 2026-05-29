@@ -888,3 +888,14 @@ h1 {
   margin-top: 24px;
 }
 
+
+.router-topic-card--locked {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.router-topic-card__optional {
+  font-weight: 400;
+  font-size: 11px;
+  color: hsl(0 0% 50%);
+}
+

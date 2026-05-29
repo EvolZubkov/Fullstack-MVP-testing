@@ -99,11 +99,79 @@
   }
 
   /**
+   * PRD-4 v1.1 §4.7: evaluates whether `section` is unlocked given the
+   * current routerTopicStates. Reads `flowPolicy.sectionUnlockRules`
+   * (per-section rule keyed by topicId). Default rule is `always`.
+   *
+   * Supported rule modes:
+   *   - { mode: "always" }                                   — unconditional
+   *   - { mode: "after_sections_completed", sectionIds: [] } — all listed
+   *     sections must be in 'completed' state (any achievedLevel/result)
+   *   - { mode: "after_sections_passed", sectionIds: [] }    — same, but
+   *     sectionResults[id].passed must be true (or null when the section
+   *     has no pass rule; null is treated as passed in this MVP)
+   */
+  function isSectionUnlocked(section) {
+    var rules =
+      (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.sectionUnlockRules) || {};
+    var rule = rules[section.topicId];
+    if (!rule || !rule.mode || rule.mode === "always") return true;
+    if (rule.mode === "after_sections_completed") {
+      return (rule.sectionIds || []).every(function (id) {
+        return state.routerTopicStates[id] === "completed";
+      });
+    }
+    if (rule.mode === "after_sections_passed") {
+      return (rule.sectionIds || []).every(function (id) {
+        if (state.routerTopicStates[id] !== "completed") return false;
+        var result = state.sectionResults && state.sectionResults[id];
+        // null passed (no passRule) is treated as passed for navigation;
+        // strict pass mode would reject it — see PRD-4 §4.6.
+        return !result || result.passed !== false;
+      });
+    }
+    return true; // Unknown rule mode: fail-open (don't block the learner).
+  }
+
+  /**
+   * PRD-4 v1.1 §4.7: evaluates whether the router can show «Завершить».
+   * Reads `flowPolicy.routerCompletionPolicy` (default
+   * 'all_required_completed'). Optional sections never block completion.
+   */
+  function isRouterReadyToFinish() {
+    var policy =
+      (TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.routerCompletionPolicy) ||
+      "all_required_completed";
+    var requiredSections = (TEST_DATA.sections || []).filter(function (s) {
+      return s.required !== false;
+    });
+    if (requiredSections.length === 0) {
+      // No required sections — learner can finish at any time.
+      return true;
+    }
+    return requiredSections.every(function (s) {
+      if (state.routerTopicStates[s.topicId] !== "completed") return false;
+      if (policy === "all_required_passed") {
+        var result = state.sectionResults && state.sectionResults[s.topicId];
+        // No-result safeguard: treat as not-passed under strict policy.
+        if (!result) return false;
+        // null `passed` (no passRule) → not strictly passed under the
+        // 'all_required_passed' policy; author must define passRules to
+        // use this policy.
+        return result.passed === true;
+      }
+      // all_required_completed: any completion is sufficient.
+      return true;
+    });
+  }
+
+  /**
    * Renders the router page using the existing renderContentPage flow and
    * then augments the resulting DOM with clickable topic cards. The card
    * list reads TEST_DATA.sections (topic order, name) and per-topic state
-   * from state.routerTopicStates. Phase 4c-iv will gate cards by
-   * sectionUnlockRules + add the «Завершить» action.
+   * from state.routerTopicStates. Phase 4c-iv adds `locked` state from
+   * sectionUnlockRules and gates «Завершить» behind
+   * routerCompletionPolicy.
    */
   function renderRouterPage(page) {
     var manifest = state.templateManifest || {};
@@ -122,22 +190,31 @@
 
     (TEST_DATA.sections || []).forEach(function (section) {
       var status = state.routerTopicStates[section.topicId] || "notStarted";
+      var unlocked = isSectionUnlocked(section);
+      var lockedClass = !unlocked && status !== "completed" ? " router-topic-card--locked" : "";
       var card = document.createElement("button");
       card.type = "button";
-      card.className = "router-topic-card router-topic-card--" + status;
+      card.className =
+        "router-topic-card router-topic-card--" + status + lockedClass;
       card.setAttribute("role", "listitem");
       card.setAttribute("data-topic-id", section.topicId);
       card.setAttribute("data-router-status", status);
-      card.disabled = status === "completed";
+      if (!unlocked) card.setAttribute("data-router-locked", "true");
+      // Completed cards stay disabled to prevent re-entry; locked cards are
+      // disabled because their unlock-rule prerequisites aren't met yet.
+      card.disabled = status === "completed" || !unlocked;
       card.innerHTML =
         '<span class="router-topic-card__name">' +
         escapeHtml(section.topicName || section.topicId) +
+        (section.required === false
+          ? ' <span class="router-topic-card__optional">(необязательная)</span>'
+          : "") +
         "</span>" +
         '<span class="router-topic-card__status">' +
-        escapeHtml(statusLabel(status)) +
+        escapeHtml(unlocked ? statusLabel(status) : "Недоступна") +
         "</span>";
       card.onclick = function () {
-        if (status === "completed") return;
+        if (card.disabled) return;
         selectRouterTopic(section.topicId);
       };
       cards.appendChild(card);
@@ -145,13 +222,10 @@
 
     app.appendChild(cards);
 
-    // Phase 4c-iv adds the «Завершить» action and completionPolicy gating.
-    // For now we surface a small hint so the learner sees the unfinished
-    // state and the developer sees the integration point.
-    var allDone = (TEST_DATA.sections || []).every(function (s) {
-      return state.routerTopicStates[s.topicId] === "completed";
-    });
-    if (allDone) {
+    // PRD-4 v1.1 §4.7: «Завершить» is gated by routerCompletionPolicy
+    // (all required sections completed, optionally also passed). Optional
+    // sections never block.
+    if (isRouterReadyToFinish()) {
       var finishBtn = document.createElement("button");
       finishBtn.type = "button";
       finishBtn.className = "btn router-finish";
@@ -245,6 +319,8 @@
     selectRouterTopic: selectRouterTopic,
     returnFromTopic: returnFromTopic,
     finishRouter: finishRouter,
+    isSectionUnlocked: isSectionUnlocked,
+    isRouterReadyToFinish: isRouterReadyToFinish,
   };
   root.selectRouterTopic = selectRouterTopic;
   root.returnFromTopic = returnFromTopic;
