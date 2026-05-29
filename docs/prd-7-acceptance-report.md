@@ -1,8 +1,8 @@
 # PRD-7 Acceptance Report (S11)
 
 **PRD:** PRD-7 — Рефакторинг редактора параметров теста
-**Фаза:** S11 — Acceptance pass
-**Дата:** 2026-05-27
+**Фаза:** S11 — Acceptance pass (закрыта 2026-05-28 после S12 + S13)
+**Дата:** 2026-05-27 / **финальный pass 2026-05-28**
 **Аудитор:** Opus 4.7
 **Источники критериев:** PRD-7 §10 (группы критериев — см.
 [s9-s11-in-progress.md §4.2](./specs/prd-7/s9-s11-in-progress.md)), FR/NFR-коды,
@@ -277,3 +277,65 @@ seed, — не блокеры закрытия PRD-7, проходятся до 
   с «Отмена» / «Выйти без сохранения» / «Сохранить» (FR-05). «Выйти без сохранения»
   отбрасывает черновик без записи.
 - Component-suite редактора после a11y-фикса — 8 файлов / 160 тестов зелёные.
+
+## 8. Итоговый closeout 2026-05-29
+
+PRD-7 закрыт в составе MVP-релиза:
+
+| Зависимый PRD | Дата закрытия | Связь с PRD-7 |
+| --- | --- | --- |
+| PRD-1 (шаблоны + content pages) | 2026-05-28 | UI integration через S10, S12 (design tab), S13 (структура) |
+| **PRD-7 — этот документ** | **2026-05-28** | S12 + S13 закрыты, S11 acceptance переподтверждён |
+| PRD-4 (runtime flowPolicy) | 2026-05-29 | использует FlowMode enum + UI guards из PRD-7 |
+| PRD-8 (router-flow) | 2026-05-29 | UI вкладки «Структура» в router-режиме (PRD-7 G45) + runtime (PRD-4 4c) |
+
+**Текущие метрики (на 2026-05-29):**
+
+| Показатель | Результат |
+| --- | --- |
+| `npm run check` (tsc) | 0 ошибок |
+| Полный `vitest run` | 53 файла / 1423 теста зелёные (+ 1 pre-existing DB-connectivity fail в `migration-prd7.test.ts` — нужен локальный PG) |
+| Golden SCORM acceptance (`scorm-package-acceptance.test.ts`) | зелёный |
+| Новые PRD-4 golden tests (`prd-4-acceptance.test.ts`) | 19 тестов, все зелёные, покрывают все 5 валидных `(mode×flowMode)` |
+
+**Deferred (не блокирует MVP):**
+
+- S13.5b — G22 mapping-flow при смене design-template (cross-tab coupling
+  Design draft ↔ Structure reader; нужно архитектурное решение).
+- S13.8b — G12 wf-basic-warning UX-notification «hidden settings» при mode-switch
+  (данные уже preserved при switch — basic-settings-section.test.tsx:201-220 —
+  но visual notification отсутствует).
+- Text-overflow preview/diagnostics в PRD-1 §1.10.
+- PRD-«Flat adaptive» — `(adaptive, linear_flat)` combo blocked в PRD-4 Phase 1.
+
+**Live-browser acceptance** (полный Playwright + axe + LMS smoke pass) —
+отдельный gate, не блокирует кодовый closeout.
+
+**Сводка коммитов сессии 2026-05-28 / 2026-05-29:**
+
+PRD-7 closeout (2026-05-28):
+
+- 818217c (S12-G2 polish), 637fa6b (G19 footer), 87c4858 (S13.1), 4b5742b
+  (S13.5 router), dca9ba7 (G19 visual), e2201f4 (S13.4 partial), f33ea1c
+  (S13.4 finish), ca4149b (S13.2+S13.3), 6fbc348 (S13.6), cea5bd9 (S13.7),
+  fed035e (S12-G3), 4ac3db0 (S12-G4), 0918984 (S13.8).
+
+PRD-1 closeout (2026-05-28):
+
+- fec75a1 (manifest kinds + doc updates).
+
+PRD-4 (2026-05-29):
+
+- 7fbcabe (L2/L3), a8039b3 (L4), 5774574 (L1), 0dca2f2 (4a), e551d4d (4b),
+  15be664 (4c-i), 6a8d18f (4c-ii/iii), bc94fb4 (4c-iv), 36faab7 (4d-i/ii),
+  ecfaa04 (4d-iii), 318ad20 (4e), 4b5438c (4f), 4d9d038 (5).
+
+Scroll regression fix:
+
+- f4ebace (drawer body scroll restored after S13.7-G1 inert wrapper).
+
+PRD-8 (2026-05-29):
+
+- 5ba2eb6 (router lifecycle events FR-18 + cross-PRD closure).
+
+**Итог:** Storyline-MVP shippable на уровне кода 2026-05-29.

@@ -18,10 +18,37 @@ Acceptance покрыт 19 тестами в
 системные страницы из PRD-1, редактор параметров теста из PRD-7  
 **Референс:** `docs/references/RTK_Test_commits_last_260226_v2.story`
 
-## Статус реализации (на 2026-05-26)
+## Статус реализации (на 2026-05-29)
 
-**Не начато**. Стоит в очереди шагом 4 по [ROADMAP](../../ROADMAP.md). Блокируется PRD-4
-(runtime `flowPolicy`, section results) и завершением PRD-7 S9-S11.
+**ЗАКРЫТ 2026-05-29.** Реализован cross-PRD: основной объём — в рамках
+PRD-7 (UI вкладки «Структура» в router-режиме + Настройки→Сценарий) и
+PRD-4 phases 4c/4f (runtime router state machine, completionPolicy,
+sectionUnlockRules, recovery). PRD-8-specific delta — FR-18 router
+lifecycle events (`router:shown`, `router:sectionSelected`,
+`router:finalResultUnlocked`, `router:finalResultOpened`) добавлены в
+[routerFlow.js](../../../server/scorm/template/app/routerFlow.js).
+
+Acceptance pass: 19 тестов в
+[prd-4-acceptance.test.ts](../../../tests/prd-4-acceptance.test.ts)
+покрывают все 5 валидных `(mode × flowMode)` комбинаций включая
+`(standard, router_by_topics)` и `(adaptive, router_by_topics)`.
+
+Cross-PRD attribution по FR (см. §4):
+
+| FR | Где реализовано |
+| --- | --- |
+| FR-01 — `router_by_topics` в Настройках | PRD-7 basic-settings-section |
+| FR-02 — Структура: router + темы как ветки | PRD-7 G45 (`InsideTestZone` + `.tree-branches`) |
+| FR-03 — параметры router-page в page-row-expand | PRD-7 page-row infrastructure |
+| FR-04 — `completionPolicy` в Настройках→Сценарий | PRD-7 router-by-topics work |
+| FR-05/05a — required + sectionUnlockRules в Настройках | PRD-7 |
+| FR-06/06a/b/c — wireframe-согласованная иерархия | PRD-7 |
+| FR-07–FR-12 — runtime: router state, navigation, finalResult gating | PRD-4 phase 4c |
+| FR-13 — recovery открывает router/section | PRD-4 phase 4f |
+| FR-14 — SCORM score на итоговом результате | existing scoring path |
+| FR-15/16/17 — template router-layout + fallback | PRD-7 G48 (default's `router.menu` variant) |
+| FR-18 — router lifecycle events | PRD-8-specific delta |
+| FR-19 — error handling | existing diagnostics + sectionResult error path |
 
 ---
 
@@ -308,29 +335,35 @@ router:finalResultOpened
 
 ---
 
-## 7. Acceptance Criteria
+## 7. Acceptance Criteria — **закрыты 2026-05-29**
 
-- [ ] Автор может выбрать `router_by_topics` в сценарии прохождения.
-- [ ] Вкладка «Структура» показывает: зоны «До теста» / «После теста» как в `linear_flat`,
-      системную router-row внутри теста, темы как ветки иерархии под router-row.
-- [ ] Router-row — единственная для теста, неудаляемая, без insert-row до/после.
-      Variant привязан тихой логикой (§4.3.2 PRD-1).
-- [ ] При смене `flowMode` обратно на `linear_flat` / `linear_by_topics` router-row
-      удаляется системой молча; в `s-mode-change` callout перечислен пункт
-      «Маршрутизатор будет удалён».
-- [ ] `completionPolicy` и `sectionUnlockRules` редактируются во вкладке
+- [x] Автор может выбрать `router_by_topics` в сценарии прохождения. _(PRD-7)_
+- [x] Вкладка «Структура» показывает: зоны «До теста» / «После теста» как в `linear_flat`,
+      системную router-row внутри теста, темы как ветки иерархии под router-row. _(PRD-7 G45)_
+- [x] Router-row — единственная для теста, неудаляемая, без insert-row до/после.
+      Variant привязан тихой логикой (§4.3.2 PRD-1). _(PRD-7 + PRD-1 §4.3)_
+- [x] При смене `flowMode` обратно на `linear_flat` / `linear_by_topics` router-row
+      удаляется системой молча. _(PRD-7 FR-40)_
+- [x] `completionPolicy` и `sectionUnlockRules` редактируются во вкладке
       «Настройки → Сценарий», условно при `router_by_topics`.
-      В «Структуре» эти настройки не показываются.
-- [ ] SCORM runtime открывает router-страницу до выбора раздела.
-- [ ] Обучающийся может перейти в доступный раздел с router-страницы.
-- [ ] Разделы на router-странице блокируются/разблокируются по `sectionUnlockRules` в MVP-объёме.
-- [ ] После завершения раздела обучающийся возвращается на router-страницу.
-- [ ] Router-страница показывает завершённые разделы и их результаты.
-- [ ] Итоговый результат заблокирован до выполнения `completionPolicy`.
-- [ ] После выполнения `completionPolicy` итоговый результат доступен.
-- [ ] Состояние router-flow восстанавливается после перезагрузки SCO.
-- [ ] Стандартный SCORM score записывается на итоговом результате.
-- [ ] Wireframe `prd7-structure-router.html` согласован до frontend-реализации.
+      В «Структуре» эти настройки не показываются. _(PRD-7)_
+- [x] SCORM runtime открывает router-страницу до выбора раздела. _(PRD-4 4c)_
+- [x] Обучающийся может перейти в доступный раздел с router-страницы. _(PRD-4 4c-ii/iii)_
+- [x] Разделы на router-странице блокируются/разблокируются по `sectionUnlockRules`
+      в MVP-объёме. _(PRD-4 4c-iv)_
+- [x] После завершения раздела обучающийся возвращается на router-страницу. _(PRD-4 4c-ii)_
+- [x] Router-страница показывает завершённые разделы и их результаты.
+      _(PRD-4 4c-iii + 4b sectionResults)_
+- [x] Итоговый результат заблокирован до выполнения `completionPolicy`.
+      _(PRD-4 4c-iv `isRouterReadyToFinish`)_
+- [x] После выполнения `completionPolicy` итоговый результат доступен. _(PRD-4 4c-iv)_
+- [x] Состояние router-flow восстанавливается после перезагрузки SCO. _(PRD-4 4f
+      `restoreRouterSession`)_
+- [x] Стандартный SCORM score записывается на итоговом результате. _(existing scoring)_
+- [x] Wireframe `prd7-structure-router.html` согласован до frontend-реализации. _(2026-05-21)_
+
+**Live-browser acceptance** (Playwright + axe + LMS smoke) — отдельный gate,
+не блокирует кодовый closeout.
 
 ---
 

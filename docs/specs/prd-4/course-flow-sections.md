@@ -19,14 +19,34 @@ enum'а; добавлены adaptive+router, матрица совместимо
 из технической спецификации; retake gate из PRD-6 использует границу внутреннего
 старта попытки
 
-## Статус реализации (на 2026-05-26)
+## Статус реализации (на 2026-05-29)
 
-**Не начато по runtime**. Схема `flowPolicyJson` и часть API готовы (через PRD-7
-backend foundation: commits be8fad9, 0b269fd, 7191d0f), но runtime-логика
-`section_linear` / `section_router` / `section_graph` НЕ реализована.
+**ЗАКРЫТ 2026-05-29.** Все 6 фаз реализованы (1: L2/L3 validation на
+shared/server, 2: L4 mapper auto-fix legacy, 3: L1 UI guards в
+basic-settings-section, 4a: flowPolicy export + section ordering, 4b:
+sectionResult before after_topic + `TEST_DATA.section.current`, 4c: router
+runtime + completionPolicy + sectionUnlockRules, 4d: per-topic adaptive
+sessions для linear+router, 4e: per-section time limits, 4f: sectional
+state recovery, 5: 19 golden acceptance tests).
 
-**Блокер**: завершение PRD-7 S9-S11. Шаг 2 ROADMAP — следующий после PRD-7. Блокирует
-PRD-6, PRD-8, частично PRD-2 и PRD-5.
+Все 5 валидных `(mode × flowMode)` комбинаций имеют runtime support:
+
+| Комбинация | Старое название | Реализация |
+| --- | --- | --- |
+| `(standard, linear_flat)` | `legacy_flat` | Без изменений (backward compat) |
+| `(standard, linear_by_topics)` | `section_linear` | PRD-4 4a/4b |
+| `(standard, router_by_topics)` | `section_router` | PRD-4 4c + PRD-8 |
+| `(adaptive, linear_by_topics)` | `adaptive_by_section` | PRD-4 4d-iii |
+| `(adaptive, router_by_topics)` | новый в v1.1 | PRD-4 4d-ii + PRD-8 |
+| `(adaptive, linear_flat)` | — | **Blocked** Phase 1, deferred в будущий PRD «Flat adaptive» |
+
+**`section_graph`** (rule-based переходы) — оставлен stub'ом в спеке для
+post-MVP `section_graph` PRD.
+
+Acceptance pass на коде: 19 тестов в
+[prd-4-acceptance.test.ts](../../../tests/prd-4-acceptance.test.ts);
+`npm run check` 0 ошибок; `vitest run` 1423/1424 (pre-existing migration
+DB-connectivity fail unrelated).
 
 ---
 

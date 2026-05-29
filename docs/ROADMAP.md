@@ -75,8 +75,13 @@ shippable-состояния с главной бизнес-ценностью B
 
 После шага 5 — **Storyline-MVP shippable.**
 
-**Ускоритель:** шаги 1 и 3 (PRD-7 S10 + closeout PRD-1) делаются в одной сессии/зоне —
-экономит двойной проход по `tests.tsx` и вкладке «Структура».
+**🎉 STORYLINE-MVP SHIPPABLE 2026-05-29** — все 5 шагов критического пути
+закрыты. Сводка коммитов — в [PRD-7 acceptance §8](./prd-7-acceptance-report.md).
+Live-browser acceptance (Playwright + axe + LMS smoke) — отдельный gate,
+не блокирует кодовый closeout.
+
+**Ускоритель:** шаги 1 и 3 (PRD-7 S10 + closeout PRD-1) делались в одной
+сессии/зоне — экономил двойной проход по `tests.tsx` и вкладке «Структура».
 
 ## 0.2 Post-MVP backlog
 
