@@ -3,7 +3,9 @@
 **Версия:** 1.4
 **Статус:** Утверждено
 **Источник:** [BRD](./specs/brd-scorm-enhancements.md), PRD-1...PRD-9
-**Последняя актуализация:** 2026-05-28 (PRD-7 **полностью закрыт** — S12 + S13 закрыты; см. §0)
+**Последняя актуализация:** 2026-05-29 (PRD-4 **полностью закрыт** — 6 фаз
+закрыты, 5 валидных `(mode×flowMode)` комбинаций имеют runtime support;
+см. §0)
 
 ---
 
@@ -21,7 +23,7 @@
 | 1 | PRD-7 | S11 — acceptance pass §10 | **Закрыта 2026-05-28** — финальный acceptance выполнен после закрытия S12 + S13; кодовый closeout подтверждён: `npm run check` 0 ошибок, `vitest run` 1373/1373 зелёные. Live-browser acceptance (Playwright + axe) выполняется отдельно от кодового closeout. | — |
 | 1 | PRD-7 | S12 — Design tab closeout | **Закрыта 2026-05-28** — G1 sub-rail params + G2 iframe preview + G3 gallery + G4 все param-типы (image/asset/file/downloadLink/url/multiselect/number) + G5 orphan dialog + G6 incompatible-banner. См. [specs/prd-7/s12-design-closeout.md](./specs/prd-7/s12-design-closeout.md) | — |
 | 1 | PRD-7 | S13 — Editor parity | **Закрыта 2026-05-28** — все 8 sub-фаз закрыты (S13.1 quick wins / S13.2 feedback / S13.3 per-topic limits / S13.4 row-actions / S13.5 router-mode / S13.6 variant-replace / S13.7 drawer chrome / S13.8 cleanup+acceptance). Deferred: S13.5b (G22 mapping-flow cross-tab coupling) + S13.8b (G12 wf-basic-warning UX notification). См. [specs/prd-7/s13-editor-parity.md](./specs/prd-7/s13-editor-parity.md) | — |
-| 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | Не начата — **MVP** | Завершение PRD-7 S12 + S13 |
+| 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | **Закрыта 2026-05-29** — все 6 фаз (1: validation L2/L3, 2: mapper L4, 3: UI L1, 4a: export, 4b: section results, 4c: router runtime + completionPolicy + unlockRules, 4d: adaptive integration linear+router, 4e: per-section timers, 4f: recovery, 5: golden tests). Все 5 валидных `(mode×flowMode)` комбинаций имеют runtime support; `(adaptive, linear_flat)` blocked в Phase 1, deferred в будущий PRD «Flat adaptive». См. [PRD-4 spec v1.1](./specs/prd-4/course-flow-sections.md). | — |
 | 4 | PRD-8 | Router-flow runtime + UI «Структура» в router-режиме | Не начата — **MVP** | PRD-4, PRD-7 |
 | 3 | PRD-6 | Retake gate, eligibility plugins | Не начата — post-MVP | PRD-4 |
 | 5 | PRD-2 | `result.*` показатели результата | Не начата — post-MVP | PRD-4 |
@@ -69,7 +71,7 @@ shippable-состояния с главной бизнес-ценностью B
 | 2a | **PRD-7 S12 — Design closeout** (FR-30/31/31a/33, удаление orphan `DesignSettingsDialog`) | frontend `design-section.tsx` + manifest schema | S11 (формально), wireframe `prd7-design-tab.html` (согласован 2026-05-21) | **Закрыта 2026-05-28** — см. [specs/prd-7/s12-design-closeout.md](./specs/prd-7/s12-design-closeout.md) |
 | 2b | **PRD-7 S13 — Editor parity** (8 sub-фаз: quick wins, feedback, per-topic limits, row-actions, router-mode, variant-replace, drawer chrome, cleanup) | frontend test-editor.tsx, basic-settings-section.tsx, start-pages-section.tsx, tests-list.tsx, feedback-editor-modal.tsx | wireframes согласованы 2026-05-21 | **Закрыта 2026-05-28** — см. [specs/prd-7/s13-editor-parity.md](./specs/prd-7/s13-editor-parity.md) |
 | 3 | PRD-1 closeout — остаток (manifest validation, приёмка), отметить PRD-1 closed | backend + docs | шаги 2a + 2b | Ожидает |
-| 4 | PRD-4 — runtime потока + flow-настройки в редакторе («Сценарий») | backend + frontend | PRD-7 закрыт (S12 + S13) | Не начата |
+| 4 | PRD-4 — runtime потока + flow-настройки в редакторе («Сценарий») | backend + frontend | PRD-7 закрыт (S12 + S13) | **Закрыта 2026-05-29** — см. [PRD-4 spec v1.1](./specs/prd-4/course-flow-sections.md) |
 | 5 | PRD-8 — router-runtime + вкладка «Структура» в router-режиме | backend + frontend | PRD-4, PRD-1 | Не начата |
 
 После шага 5 — **Storyline-MVP shippable.**

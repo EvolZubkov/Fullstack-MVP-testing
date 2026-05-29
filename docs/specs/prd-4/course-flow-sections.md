@@ -1,8 +1,11 @@
 # PRD-4: Гибкий поток прохождения, разделы и переходы SCORM-пакетов
 
 **Версия:** 1.1  
-**Статус:** Backlog — **MVP** (Storyline-MVP, ROADMAP §0.1); шаг 4,
-следующий после закрытия PRD-7 + PRD-1 (2026-05-28)  
+**Статус:** **Закрыт 2026-05-29** — 6 фаз реализованы (1: L2/L3 validation,
+2: L4 mapper, 3: L1 UI guards, 4a-4f: runtime + recovery, 5: golden tests).
+Все 5 валидных `(mode×flowMode)` комбинаций имеют runtime support;
+`(adaptive, linear_flat)` blocked в Phase 1, deferred в будущий PRD
+«Flat adaptive». 18 acceptance-тестов в [prd-4-acceptance.test.ts](../../../tests/prd-4-acceptance.test.ts) зелёные.  
 **Дата актуализации:** 2026-05-28 (v1.1: модель `flowPolicy` перестроена под
 фактическую кодовую базу — ортогональные `mode × flowMode` вместо плоского
 enum'а; добавлены adaptive+router, матрица совместимости, защитные слои;
