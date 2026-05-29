@@ -70,10 +70,41 @@
   }
 
   /**
+   * Normalises an adaptive topicResults entry into the shape templates
+   * expect via `section.current.result.*` (mirroring computeSectionResult
+   * for standard mode). Adaptive-specific fields (achievedLevelName,
+   * levelsAttempted) are preserved alongside the generic ones; the
+   * `isAdaptive: true` discriminator lets templates branch when needed.
+   */
+  function normalizeAdaptiveTopicResult(topicResult) {
+    if (!topicResult) return null;
+    return {
+      // Generic shape (matches computeSectionResult output).
+      topicId: topicResult.topicId,
+      topicName: topicResult.topicName,
+      correct: topicResult.totalCorrect || 0,
+      total: topicResult.totalQuestionsAnswered || 0,
+      percent: topicResult.levelPercent || 0,
+      // PRD-4 v1.1 §4.6: «passed» in adaptive = minimum level confirmed
+      // (i.e. achievedLevelIndex is not null). The strict-pass variant
+      // (top level reached) is exposed separately via `achievedLevelIndex`.
+      passed: topicResult.achievedLevelIndex !== null && topicResult.achievedLevelIndex !== undefined,
+      // Adaptive-specific fields preserved for templates that branch on them.
+      isAdaptive: true,
+      achievedLevelIndex: topicResult.achievedLevelIndex,
+      achievedLevelName: topicResult.achievedLevelName,
+      levelsAttempted: topicResult.levelsAttempted || [],
+      feedback: topicResult.feedback,
+      recommendedLinks: topicResult.recommendedLinks || [],
+    };
+  }
+
+  /**
    * Called by the adaptive engine when its multi-topic loop hits «all
    * topics completed». In single-topic scope this means OUR topic is
    * done — extract its result, clear adaptiveState, and invoke the
-   * caller's onComplete with the topicResults[0] entry.
+   * caller's onComplete with the topicResults[0] entry normalised to
+   * the standard section-result shape (Phase 4d-iii / Phase 4b parity).
    *
    * Returns true when the engine should NOT continue to its default
    * end-of-test behavior (renderAdaptiveResults). When this returns
@@ -85,10 +116,11 @@
     }
     var onComplete = state.adaptiveState._onComplete;
     var fullResult = state.adaptiveState.result;
-    var topicResult =
+    var rawTopicResult =
       fullResult && fullResult.topicResults && fullResult.topicResults[0];
+    var normalized = normalizeAdaptiveTopicResult(rawTopicResult);
     state.adaptiveState = null;
-    if (typeof onComplete === "function") onComplete(topicResult || null);
+    if (typeof onComplete === "function") onComplete(normalized);
     return true;
   }
 

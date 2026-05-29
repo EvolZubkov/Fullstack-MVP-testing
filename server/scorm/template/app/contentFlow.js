@@ -44,6 +44,35 @@
       return seq;
     }
 
+    // PRD-4 v1.1 §4.6 (adaptive, linear_by_topics): per-topic question stretch
+    // is replaced by a single `{kind: "adaptive-session", topicId}` marker.
+    // syncPhaseToCurrentPage launches AdaptiveSession.runAdaptiveSession on
+    // entry; on completion the callback advances pageSequence past the
+    // marker into that topic's after_topic content. Test-scope «after» is
+    // handled by the same legacy summary-boundary logic.
+    if (flowMode === "linear_by_topics" && TEST_DATA.mode === "adaptive") {
+      (TEST_DATA.sections || []).forEach(function (section) {
+        contentPagesFor(section.topicId, "before_topic").forEach(function (page) {
+          seq.push({ kind: "content", page: page });
+        });
+        seq.push({ kind: "adaptive-session", topicId: section.topicId });
+        contentPagesFor(section.topicId, "after_topic").forEach(function (page) {
+          seq.push({ kind: "content", page: page });
+        });
+      });
+      var seenSummaryAdaptive = false;
+      var postResultsAdaptive = [];
+      contentPagesFor(null, "after").forEach(function (page) {
+        if (page.type === "summary") { seenSummaryAdaptive = true; return; }
+        if (seenSummaryAdaptive) postResultsAdaptive.push(page);
+        else seq.push({ kind: "content", page: page });
+      });
+      state.postResultsPages = postResultsAdaptive;
+      state.pageSequence = seq;
+      state.currentPageIndex = Math.min(state.currentPageIndex || 0, Math.max(seq.length - 1, 0));
+      return seq;
+    }
+
     var remainingByTopic = {};
     var startedTopic = {};
 
@@ -109,8 +138,58 @@
       maybeExposeSectionResult(item);
       return;
     }
+    // PRD-4 v1.1 §4.6 (adaptive, linear_by_topics): adaptive-session marker
+    // — launch the topic's single-topic adaptive session. The engine takes
+    // over rendering (renderAdaptive) until the topic completes; the
+    // onComplete callback freezes sectionResults and advances pageSequence
+    // past the marker so the next page (after_topic content) renders.
+    if (item.kind === "adaptive-session") {
+      state.phase = "adaptive-session";
+      maybeLaunchAdaptiveSession(item);
+      return;
+    }
     state.phase = "question";
     state.currentIndex = item.questionIndex;
+  }
+
+  /**
+   * PRD-4 v1.1 §4.6: starts the single-topic adaptive session for an
+   * adaptive-session marker item. Idempotent — re-entering the same item
+   * (e.g. after a re-render) does not restart a session already in flight
+   * (state.adaptiveState already non-null).
+   */
+  function maybeLaunchAdaptiveSession(item) {
+    if (!item || item.kind !== "adaptive-session") return;
+    if (state.adaptiveState) return; // session already running for this marker
+    if (typeof AdaptiveSession === "undefined" || !AdaptiveSession.runAdaptiveSession) {
+      // No AdaptiveSession loaded — strict gating should prevent this, but
+      // defend in depth by skipping the marker so navigation can continue.
+      advancePageSequence();
+      return;
+    }
+    var topicId = item.topicId;
+    var ok = AdaptiveSession.runAdaptiveSession(topicId, function (topicResult) {
+      // Freeze the per-topic adaptive result for templates bound to
+      // section.current.result.* (consistent with Phase 4b sectionResults).
+      if (topicResult) {
+        if (!state.sectionResults) state.sectionResults = {};
+        state.sectionResults[topicId] = topicResult;
+      }
+      // Advance past the adaptive-session marker into the next page
+      // (typically the topic's first after_topic content page, then the
+      // next topic's before_topic content / adaptive-session, etc).
+      advancePageSequence();
+    });
+    if (!ok) {
+      // Defensive: skip the marker so the learner can still traverse the
+      // rest of the test (after_topic content + next topic).
+      console.warn(
+        "[PRD-4] Adaptive session for topic " +
+          topicId +
+          " failed to start; advancing past marker.",
+      );
+      advancePageSequence();
+    }
   }
 
   /**
