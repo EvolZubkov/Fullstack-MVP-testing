@@ -126,6 +126,12 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/contentFlow.js",
   ]);
 
+  // PRD-4 v1.1 Phase 4c — router_by_topics state machine. Loaded for every
+  // package (idempotent: no-op when flowPolicy.mode !== "router_by_topics").
+  const routerFlowJs = readOneOf([
+    "app/routerFlow.js",
+  ]);
+
   const renderersJs = readOneOf([
     "app/render/renderers.js",
   ]);
@@ -207,6 +213,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     templateCoreJs,
     templateLoaderJs,
     contentFlowJs,
+    routerFlowJs,
     renderersJs,
     timerJs,
     qSingleJs,

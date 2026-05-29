@@ -22,27 +22,26 @@
       "linear_flat";
 
     // Test-scope «До теста» content (intro/info): topicId = null, position 'before'.
-    // Rendered before the question stream (PRD-1 §1.9 / BR-02).
+    // Rendered before the question stream (PRD-1 §1.9 / BR-02). Items with
+    // `page.kind === "router"` carry an `isRouter` flag so the router runtime
+    // can intercept navigation (Phase 4c).
     contentPagesFor(null, "before").forEach(function (page) {
-      seq.push({ kind: "content", page: page });
+      seq.push({
+        kind: "content",
+        page: page,
+        isRouter: page.kind === "router",
+      });
     });
 
-    // PRD-4 v1.1 §4.7: router_by_topics inserts the router content page
-    // (page.kind === "router", typically topicId=null/position=before) as a
-    // recurring navigation node. Phase 4c-i only marks the seq item with
-    // `isRouter: true` so future state-machine work (Phase 4c-ii) can
-    // detect it. Topic-card click handling, per-topic chunk traversal, and
-    // "return to router" transitions land in subsequent slices.
+    // PRD-4 v1.1 §4.7 router_by_topics: in router mode the linear sequence
+    // stops here — the router page becomes the hub. Topic chunks are built
+    // on demand by RouterFlow.selectRouterTopic when the learner picks a
+    // card; test-scope «after» content is built by RouterFlow.finishRouter.
     if (flowMode === "router_by_topics") {
-      seq.forEach(function (item) {
-        if (
-          item.kind === "content" &&
-          item.page &&
-          item.page.kind === "router"
-        ) {
-          item.isRouter = true;
-        }
-      });
+      state.pageSequence = seq;
+      state.currentPageIndex = 0;
+      state.postResultsPages = [];
+      return seq;
     }
 
     var remainingByTopic = {};
@@ -101,7 +100,9 @@
       return;
     }
     if (item.kind === "content") {
-      state.phase = "content";
+      // PRD-4 v1.1 §4.7: router pages enter the dedicated 'router' phase
+      // so mainRender.js routes to RouterFlow.renderRouterPage.
+      state.phase = item.isRouter ? "router" : "content";
       // PRD-4 v1.1 §4.4: when entering the first `after_topic` content page
       // for a topic, compute and freeze that section's result so templates
       // bound to TEST_DATA.section.current.result.* see correct data.
@@ -145,6 +146,19 @@
       state.currentPageIndex += 1;
       syncPhaseToCurrentPage();
       render();
+      return;
+    }
+    // PRD-4 v1.1 §4.7: in router mode the «end» of the current sequence is
+    // either the end of a topic chunk (return to router) or the end of the
+    // post-router test-end sequence (submit). RouterFlow.returnFromTopic
+    // handles both: it marks the topic completed and re-renders the router,
+    // unless the learner has already triggered «Завершить» (routerFinished).
+    if (
+      typeof RouterFlow !== "undefined" &&
+      RouterFlow.isRouterMode() &&
+      state.currentRouterTopic
+    ) {
+      RouterFlow.returnFromTopic();
       return;
     }
     submit(true);

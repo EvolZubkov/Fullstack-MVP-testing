@@ -833,3 +833,58 @@ h1 {
   opacity:.9;
 }
 .qm-fs-btn:hover{ opacity:1; }
+
+/* PRD-4 v1.1 Phase 4c-iii — router topic cards (router_by_topics flow).
+   Rendered by routerFlow.js inside the standard renderContentPage output. */
+.router-topic-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+.router-topic-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid hsl(0 0% 80%);
+  border-radius: 10px;
+  background: hsl(0 0% 99%);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color .15s, background .15s;
+}
+.router-topic-card:hover:not(:disabled) {
+  border-color: hsl(217 91% 50%);
+  background: hsl(217 100% 98%);
+}
+.router-topic-card:disabled {
+  cursor: default;
+  opacity: .85;
+}
+.router-topic-card--completed {
+  border-color: hsl(142 71% 45%);
+  background: hsl(142 76% 96%);
+}
+.router-topic-card--inProgress {
+  border-color: hsl(38 92% 50%);
+  background: hsl(48 96% 96%);
+}
+.router-topic-card__name {
+  font-weight: 600;
+  font-size: 15px;
+}
+.router-topic-card__status {
+  font-size: 12px;
+  color: hsl(0 0% 40%);
+}
+.router-topic-card--completed .router-topic-card__status {
+  color: hsl(142 71% 30%);
+  font-weight: 500;
+}
+.router-finish {
+  margin-top: 24px;
+}
+

@@ -30,6 +30,19 @@ var state = {
   // same shape topicResults entries carry in `calculateResults()` output.
   // Templates bind via `TEST_DATA.section.current.result.*`.
   sectionResults: {},
+
+  // PRD-4 v1.1 §4.7 router_by_topics: state machine for router navigation.
+  // - routerTopicStates: per-topic completion status. 'notStarted' before
+  //   the learner picks the topic from the router; 'inProgress' after pick;
+  //   'completed' after the topic chunk finishes (sectionResult frozen).
+  // - currentRouterTopic: the topicId currently being traversed (null while
+  //   the router itself is on screen).
+  // - routerFinished: true when the learner triggers the «Завершить» action
+  //   from the router (completionPolicy is satisfied). Switches the page
+  //   sequence to the post-router test-after content + results.
+  routerTopicStates: {},
+  currentRouterTopic: null,
+  routerFinished: false,
 };
 
 // SCORM finish guard

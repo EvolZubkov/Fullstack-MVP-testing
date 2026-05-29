@@ -21,10 +21,18 @@ function render() {
         return;
     }
 
-    if (state.phase === 'content') {
+    if (state.phase === 'content' || state.phase === 'router') {
         var item = typeof currentPageItem === 'function' ? currentPageItem() : null;
         var manifest = state.templateManifest || {};
         if (item && item.kind === 'content') {
+            // PRD-4 v1.1 §4.7: router pages get a topic-card overlay on top
+            // of the standard renderContentPage output (handled by
+            // RouterFlow.renderRouterPage). Falls back to plain content
+            // rendering when RouterFlow is unavailable.
+            if (item.isRouter && typeof RouterFlow !== 'undefined') {
+                RouterFlow.renderRouterPage(item.page);
+                return;
+            }
             renderContentPage(item.page, manifest.contentTemplates || []);
             return;
         }
