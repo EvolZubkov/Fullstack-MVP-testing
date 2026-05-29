@@ -23,8 +23,18 @@
           }
         }
 
-        // Сохраняем текущую сессию если тест в процессе (только для тестов без таймера)
-        if (state.phase === 'question' && !state.submitted && state.flatQuestions && state.flatQuestions.length > 0) {
+        // Сохраняем текущую сессию если тест в процессе.
+        // PRD-4 v1.1 / Phase 4f: router-mode sessions persist `routerTopicStates`
+        // + `sectionResults` regardless of phase, so the learner can resume
+        // with completed topics intact. Legacy linear sessions still only
+        // persist mid-question state (timer/adaptive guarded inside save).
+        var _isRouterMode =
+          TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode === 'router_by_topics';
+        var _shouldSave = !state.submitted && (
+          _isRouterMode ||
+          (state.phase === 'question' && state.flatQuestions && state.flatQuestions.length > 0)
+        );
+        if (_shouldSave) {
           saveCurrentSession();
         }
 
@@ -76,6 +86,25 @@
             return item.kind === 'question' && item.questionIndex === qIndex;
           });
           goToPageSequenceIndex(itemIndex >= 0 ? itemIndex : 0);
+        }
+        render();
+      } else if (recovery.action === 'restore_router') {
+        // PRD-4 v1.1 §3.2 / Phase 4f — router-mode recovery: re-apply the
+        // completed-topics snapshot, generate a fresh variant (questions
+        // pool stays section-ordered), build the pageSequence (which in
+        // router mode is just test-before + router page), then render.
+        // The router page now shows previously-completed topics as
+        // «Пройдена» so the learner picks up exactly where they left off.
+        restoreRouterSession(recovery.session);
+        generateVariant();
+        if (typeof rebuildPageSequence === 'function') rebuildPageSequence();
+        // Skip the test-before content the learner has already seen by
+        // jumping to the router page itself, if present.
+        if (state.pageSequence) {
+          var routerIdx = state.pageSequence.findIndex(function (it) {
+            return it && it.isRouter;
+          });
+          if (routerIdx >= 0) goToPageSequenceIndex(routerIdx);
         }
         render();
       } else if (recovery.action === 'show_last_attempt') {

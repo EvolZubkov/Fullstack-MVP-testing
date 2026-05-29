@@ -342,6 +342,11 @@
       state.routerTopicStates[topicId] = "completed";
     }
     state.currentRouterTopic = null;
+    // PRD-4 v1.1 §3.2 / Phase 4f — checkpoint the sectional state on
+    // every section completion so a SCO reload can resume with completed
+    // topics intact (beforeunload also saves, but explicit checkpoints
+    // protect against unexpected browser kills).
+    if (typeof saveCurrentSession === "function") saveCurrentSession();
     // Find and re-enter the router page (typically before/topicId=null).
     var routerPage = (TEST_DATA.contentPages || []).find(function (p) {
       return p.kind === "router";
