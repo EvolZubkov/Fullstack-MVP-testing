@@ -132,6 +132,13 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/routerFlow.js",
   ]);
 
+  // PRD-4 v1.1 Phase 4d — single-topic adaptive session wrapper. Loaded for
+  // every package; only used when mode='adaptive' AND a per-topic session is
+  // launched by routerFlow.selectRouterTopic / contentFlow (linear_by_topics).
+  const adaptiveSessionJs = readOneOf([
+    "app/adaptiveSession.js",
+  ]);
+
   const renderersJs = readOneOf([
     "app/render/renderers.js",
   ]);
@@ -231,6 +238,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     pdfExportJs,
     adaptiveJs,
     adaptiveRenderJs,
+    adaptiveSessionJs,
     contentPageJs,
     mainRenderJs,
     appMain,

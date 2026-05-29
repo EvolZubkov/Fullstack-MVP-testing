@@ -81,7 +81,16 @@
       } else if (recovery.action === 'show_last_attempt') {
         // Показываем результат последней попытки, сбрасываем незавершённую сессию
         clearCurrentSession();
-        if (TEST_DATA.mode === 'adaptive' && TEST_DATA.adaptiveTopics) {
+        // PRD-4 v1.1 §3.1.2 / §4.6: legacy (adaptive, linear_flat) keeps the
+        // multi-topic adaptive auto-init for backward compat. Sectional modes
+        // (linear_by_topics / router_by_topics) launch per-topic adaptive
+        // sessions on demand from contentFlow / routerFlow — auto-init here
+        // would short-circuit those flows and bypass content pages / router.
+        var _adaptiveAutoInit_a =
+          TEST_DATA.mode === 'adaptive' &&
+          TEST_DATA.adaptiveTopics &&
+          ((TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode) || 'linear_flat') === 'linear_flat';
+        if (_adaptiveAutoInit_a) {
           initAdaptiveTest();
         } else {
           generateVariant();
@@ -92,7 +101,11 @@
       } else {
         // start_fresh — обычная инициализация
         clearCurrentSession();
-        if (TEST_DATA.mode === 'adaptive' && TEST_DATA.adaptiveTopics) {
+        var _adaptiveAutoInit_b =
+          TEST_DATA.mode === 'adaptive' &&
+          TEST_DATA.adaptiveTopics &&
+          ((TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode) || 'linear_flat') === 'linear_flat';
+        if (_adaptiveAutoInit_b) {
           initAdaptiveTest();
         } else {
           generateVariant();

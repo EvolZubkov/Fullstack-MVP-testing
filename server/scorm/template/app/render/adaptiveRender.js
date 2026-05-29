@@ -163,6 +163,13 @@ function continueAfterFeedback() {
   state.feedbackShown = false;
   state.lastAdaptiveResult = null;
 
+  // PRD-4 v1.1 §4.7: when a single-topic adaptive session signals isFinished,
+  // AdaptiveSession.maybeFinishSingleTopic already cleared state.adaptiveState
+  // and invoked the caller's onComplete (returnFromTopic / contentFlow next).
+  // Skip the legacy renderAdaptiveResults — adaptiveState is null and the
+  // caller has already re-rendered the next phase (router page or content).
+  if (result && result.singleTopicHandled) return;
+
   // Check for transitions - only show if showDifficultyLevel is enabled
   if (TEST_DATA.showDifficultyLevel && (result.levelTransition || result.topicTransition)) {
     state.pendingTransition = result;
@@ -193,6 +200,11 @@ function submitAdaptiveAnswerAndContinue() {
   }
 
   var result = submitAdaptiveAnswer(qData.id, answer);
+
+  // PRD-4 v1.1 §4.7: single-topic session done — callback already handled
+  // the next phase, don't render adaptive results (state.adaptiveState is
+  // null by now).
+  if (result && result.singleTopicHandled) return;
 
   // Check for transitions - only show if showDifficultyLevel is enabled
   if (TEST_DATA.showDifficultyLevel && (result.levelTransition || result.topicTransition)) {

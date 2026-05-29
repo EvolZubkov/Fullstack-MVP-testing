@@ -243,16 +243,60 @@
   }
 
   /**
-   * Marks the topic as in-progress, swaps pageSequence to that topic's
-   * chunk, resets the index, and re-renders. Called from a router-card
-   * click handler. Idempotent — picking a completed topic is a no-op
-   * (the button is also disabled).
+   * Marks the topic as in-progress and starts the topic's runtime. In
+   * standard mode this is a linear chunk (before_topic content → questions
+   * → after_topic content). In adaptive mode (PRD-4 v1.1 §4.7), a
+   * single-topic adaptive session takes over — content pages around the
+   * adaptive session are NOT rendered in this slice (Phase 4d-iii adds
+   * that for the (adaptive, linear_by_topics) combo; router adaptive
+   * fires the engine directly and returns to router on completion).
+   * Picking a completed topic is a no-op (button also disabled).
    */
   function selectRouterTopic(topicId) {
     if (!isRouterMode()) return;
     if (state.routerTopicStates[topicId] === "completed") return;
     state.routerTopicStates[topicId] = "inProgress";
     state.currentRouterTopic = topicId;
+
+    // PRD-4 v1.1 §4.7: adaptive + router_by_topics — launch a single-topic
+    // adaptive session via the AdaptiveSession wrapper. On completion
+    // (engine's «all topics done» branch fires the callback), freeze the
+    // topic's achievedLevel in sectionResults and return to router.
+    if (
+      TEST_DATA.mode === "adaptive" &&
+      typeof AdaptiveSession !== "undefined" &&
+      AdaptiveSession.runAdaptiveSession
+    ) {
+      var ok = AdaptiveSession.runAdaptiveSession(topicId, function (topicResult) {
+        // topicResult is the adaptive engine's per-topic entry:
+        // { topicId, topicName, finalLevelIndex, finalLevelName,
+        //   answeredQuestions, achievedLevel, passed, ... }
+        // Mirror onto sectionResults for templates that bind
+        // data-path="section.current.result.*" (consistent with Phase 4b).
+        if (topicResult) {
+          if (!state.sectionResults) state.sectionResults = {};
+          state.sectionResults[topicId] = topicResult;
+        }
+        returnFromTopic();
+      });
+      if (!ok) {
+        // Defensive: strict gating (Phase 1 L2/L3) should prevent this,
+        // but if a malformed package reaches the runtime, fall back to a
+        // standard topic chunk so the learner can still navigate.
+        console.warn(
+          "[PRD-4] Adaptive session for topic " +
+            topicId +
+            " failed to start (no levels?). Falling back to standard topic chunk.",
+        );
+        state.pageSequence = buildTopicChunk(topicId);
+        state.currentPageIndex = 0;
+        if (typeof syncPhaseToCurrentPage === "function") syncPhaseToCurrentPage();
+        if (typeof render === "function") render();
+      }
+      return;
+    }
+
+    // Standard mode (mode='standard', router_by_topics): linear topic chunk.
     state.pageSequence = buildTopicChunk(topicId);
     state.currentPageIndex = 0;
     if (typeof syncPhaseToCurrentPage === "function") syncPhaseToCurrentPage();
