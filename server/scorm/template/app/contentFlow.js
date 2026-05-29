@@ -128,6 +128,11 @@
       state.phase = "question";
       return;
     }
+    // PRD-4 v1.1 §3.2: maintain per-section timer alongside phase changes.
+    // Started on topic-entry (first content/question/adaptive-session item
+    // carrying this topicId), stopped when transitioning to a different
+    // topic or to the test-end content / results.
+    maybeUpdateSectionTimer(item);
     if (item.kind === "content") {
       // PRD-4 v1.1 §4.7: router pages enter the dedicated 'router' phase
       // so mainRender.js routes to RouterFlow.renderRouterPage.
@@ -150,6 +155,87 @@
     }
     state.phase = "question";
     state.currentIndex = item.questionIndex;
+  }
+
+  /**
+   * PRD-4 v1.1 §3.2 (Phase 4e) — section timer lifecycle hook.
+   *
+   * Determines whether the current pageSequence item belongs to a section
+   * different from the one we just left, and starts / stops the section
+   * timer accordingly. Reads section.timeLimitMinutes from TEST_DATA.sections.
+   *
+   * Topic detection per item kind:
+   *   - content    → item.page.topicId (null for test-scope pages)
+   *   - question   → state.flatQuestions[item.questionIndex].topicId
+   *   - adaptive-session → item.topicId
+   *
+   * Items without a topicId (router page, test-before, test-after) stop
+   * any running section timer — the learner is no longer inside a section.
+   *
+   * Expiry callback skips past the remaining items of the section so the
+   * learner lands on the next topic's first item (or test-end). Section
+   * result is still computed by maybeExposeSectionResult on the next
+   * after_topic entry; expired sections fall back to whatever partial
+   * answers exist in state.answers / state.adaptiveState.
+   */
+  function maybeUpdateSectionTimer(item) {
+    var currentTopicId = topicIdForItem(item);
+    var runningTopicId =
+      state.sectionTimer && state.sectionTimer.topicId
+        ? state.sectionTimer.topicId
+        : null;
+    if (runningTopicId === currentTopicId) return; // same section — keep running
+    if (typeof stopSectionTimer === "function") stopSectionTimer();
+    if (!currentTopicId) return; // outside any section (test-scope/router page)
+    var section = (TEST_DATA.sections || []).find(function (s) {
+      return s.topicId === currentTopicId;
+    });
+    if (!section || !section.timeLimitMinutes || section.timeLimitMinutes <= 0) {
+      return; // section has no limit (inherit_test or none)
+    }
+    if (typeof startSectionTimer === "function") {
+      startSectionTimer(currentTopicId, section.timeLimitMinutes, function (expiredTopicId) {
+        // Skip forward past the rest of this section's items.
+        skipSectionFromCurrent(expiredTopicId);
+      });
+    }
+  }
+
+  /** Extracts the topicId associated with a pageSequence item, or null. */
+  function topicIdForItem(item) {
+    if (!item) return null;
+    if (item.kind === "content" && item.page) return item.page.topicId || null;
+    if (item.kind === "adaptive-session") return item.topicId || null;
+    if (item.kind === "question") {
+      var fq = state.flatQuestions[item.questionIndex];
+      return fq ? fq.topicId : null;
+    }
+    return null;
+  }
+
+  /**
+   * Advance pageSequence past every item belonging to `topicId`. Used by
+   * the section-timer expiry handler. Stops at the first item of a
+   * different topic (or test-scope) and re-enters that item via
+   * syncPhaseToCurrentPage + render, so its timer / phase logic fires.
+   */
+  function skipSectionFromCurrent(topicId) {
+    if (!state.pageSequence) return;
+    var i = state.currentPageIndex || 0;
+    while (
+      i < state.pageSequence.length &&
+      topicIdForItem(state.pageSequence[i]) === topicId
+    ) {
+      i++;
+    }
+    if (i >= state.pageSequence.length) {
+      // Section was the last in the sequence — submit the attempt.
+      if (typeof submit === "function") submit(true);
+      return;
+    }
+    state.currentPageIndex = i;
+    syncPhaseToCurrentPage();
+    if (typeof render === "function") render();
   }
 
   /**

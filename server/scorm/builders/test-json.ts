@@ -104,6 +104,10 @@ export function buildTestJson(data: ExportData): string {
       // «all_required_*» calculation; `false` means optional (the test can
       // finish even if this section is skipped/incomplete).
       required: s.required ?? true,
+      // PRD-4 v1.1 §3.2 / §4.6 per-section time limit (Phase 4e).
+      // null = inherit_test (section uses the test-wide timer, no extra timer);
+      // number = custom limit in minutes (section timer starts on entry).
+      timeLimitMinutes: s.timeLimitMinutes ?? null,
       topicPassRule: (s.topicPassRuleJson as PassRule | null) ?? null,
       topicFeedback: s.topic.feedback || null,
       recommendedCourses: s.courses.map((c) => ({ title: c.title, url: c.url })),

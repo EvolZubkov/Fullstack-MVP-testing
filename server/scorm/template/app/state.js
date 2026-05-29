@@ -43,6 +43,13 @@ var state = {
   routerTopicStates: {},
   currentRouterTopic: null,
   routerFinished: false,
+
+  // PRD-4 v1.1 §3.2 / Phase 4e: per-section timer. Active when the learner
+  // is inside a section with a non-null section.timeLimitMinutes. Started
+  // by contentFlow / routerFlow at section entry; stopped on section exit
+  // or expiry. Shape: { topicId, limitMinutes, remainingSeconds, expired,
+  // onExpire, intervalId } or null.
+  sectionTimer: null,
 };
 
 // SCORM finish guard

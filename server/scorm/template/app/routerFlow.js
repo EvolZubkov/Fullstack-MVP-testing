@@ -258,6 +258,28 @@
     state.routerTopicStates[topicId] = "inProgress";
     state.currentRouterTopic = topicId;
 
+    // PRD-4 v1.1 §3.2 (Phase 4e): start the per-section timer on entry.
+    // Stopped by returnFromTopic (normal completion) or by the timer's
+    // own expiry handler. Sections without a custom limit (null/inherit_test)
+    // skip startSectionTimer's no-op early return.
+    var section = (TEST_DATA.sections || []).find(function (s) {
+      return s.topicId === topicId;
+    });
+    if (
+      section &&
+      section.timeLimitMinutes &&
+      typeof startSectionTimer === "function"
+    ) {
+      startSectionTimer(topicId, section.timeLimitMinutes, function () {
+        // On expiry mark the topic completed (with whatever was answered)
+        // and return to the router. The completion still feeds the
+        // sectionResults snapshot via Phase 4b on the next render — for
+        // adaptive sessions the AdaptiveSession callback has already
+        // populated it.
+        returnFromTopic();
+      });
+    }
+
     // PRD-4 v1.1 §4.7: adaptive + router_by_topics — launch a single-topic
     // adaptive session via the AdaptiveSession wrapper. On completion
     // (engine's «all topics done» branch fires the callback), freeze the
@@ -311,6 +333,10 @@
    */
   function returnFromTopic() {
     if (!isRouterMode()) return;
+    // PRD-4 v1.1 §3.2 (Phase 4e): tear down the per-section timer regardless
+    // of whether it fired naturally or the learner finished the section
+    // ahead of time. Safe to call when no timer is active.
+    if (typeof stopSectionTimer === "function") stopSectionTimer();
     var topicId = state.currentRouterTopic;
     if (topicId) {
       state.routerTopicStates[topicId] = "completed";

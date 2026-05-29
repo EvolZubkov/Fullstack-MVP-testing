@@ -364,6 +364,20 @@ describe("buildTestJson — flowPolicy export (PRD-4 v1.1)", () => {
     const data = JSON.parse(buildTestJson(payload));
     expect(data.sections[0].required).toBe(false);
   });
+
+  // PRD-4 v1.1 §3.2 / Phase 4e: per-section time limit export.
+
+  it("section.timeLimitMinutes is exported when set", () => {
+    const sectionWithLimit = { ...dbSection, timeLimitMinutes: 15 };
+    const payload = { ...exportData, sections: [sectionWithLimit] };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.sections[0].timeLimitMinutes).toBe(15);
+  });
+
+  it("section.timeLimitMinutes defaults to null when absent (inherit_test)", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    expect(data.sections[0].timeLimitMinutes).toBeNull();
+  });
 });
 
 describe("buildTestJson — adaptive mode", () => {
