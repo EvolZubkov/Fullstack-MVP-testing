@@ -504,7 +504,7 @@ body {
       </div>
 
       <div class="pv-dialog-foot">
-        <span>10 экранов · 4 шаблонов контента · шаблон «Стандартный» v1.0.0</span>
+        <span>10 экранов · 5 шаблонов контента · шаблон «Стандартный» v1.1.0</span>
         <button type="button" class="pv-btn">Закрыть</button>
       </div>
     </div>
@@ -516,7 +516,7 @@ body {
   window.PRD1_PREVIEW_MANIFEST  = {
   "id": "default",
   "name": "Стандартный",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
   "params": [
@@ -763,6 +763,35 @@ body {
       "kind": "questions",
       "isDefault": true,
       "placeholders": []
+    },
+    {
+      "key": "router.menu",
+      "label": "Меню карточек",
+      "kind": "router",
+      "pageKind": "content.router",
+      "isDefault": true,
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок меню",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "instruction",
+          "type": "textarea",
+          "label": "Инструкция",
+          "required": false,
+          "maxLength": 600
+        }
+      ]
     }
   ],
   "rendererPlugins": [],
