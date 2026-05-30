@@ -35,11 +35,34 @@
   /* gate-skip-end */
 }
 
+/* ── Drawer body scroll contract ────────────────────────────────────────
+   DS .ou-drawer__body has `overflow-y: auto; padding: var(--ou-space-5)`.
+   In the Drawer flex-column shell the body must be allowed to shrink below
+   its content height; otherwise long tabs expand under the footer instead of
+   becoming scrollable. */
+.ou-drawer__body {
+  min-height: 0;
+}
+
+/* ── Drawer body — flush variant for split layouts ──────────────────────
+   DS .ou-drawer__body has `overflow-y: auto; padding: var(--ou-space-5)`.
+   When the body's child is a `.ou-drawer__split` (rail + content), we want
+   the split to fill the body's full height with the inner content panel as
+   the single scroll container — not a body-level scroll that wraps both rail
+   and content. Use this modifier on the body element when the tab renders
+   `<div class="ou-drawer__split">…</div>`. */
+.ou-drawer__body--flush {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
 /* ── Settings content container (правая колонка drawer-а Настроек) ──── */
 /* container-type: inline-size — точка отсчёта для @container ниже:
    адаптив реагирует на ширину самой колонки настроек, а не viewport
    (drawer может быть узким даже на широком экране). */
-.tb-settings-content { flex: 1; overflow-y: auto; padding: var(--ou-space-5); container-type: inline-size; }
+.tb-settings-content { flex: 1; min-height: 0; overflow-y: auto; padding: var(--ou-space-5); container-type: inline-size; }
 
 /* Page-level баннеры сверху форм: остаются на виду при прокрутке. Z-index выше
    баннера, чтобы он перекрывал scroll-контент. Закрытие — через .ou-banner__close. */
