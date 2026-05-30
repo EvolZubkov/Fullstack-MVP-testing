@@ -1,18 +1,24 @@
 # PRD-2: Пользовательские показатели результата
 
-**Версия:** 2.0  
-**Статус:** Backlog — post-MVP (ROADMAP §0.2); шаг 5  
-**Дата актуализации:** 2026-05-26  
+**Версия:** 2.1  
+**Статус:** Backlog — post-MVP (ROADMAP §0.2); парный трек с PRD-5  
+**Дата актуализации:** 2026-05-29 (v2.1: DSL расширен `scaleById(...)`, добавлено поле
+`controls_status` для управления `cmi.success_status` / `cmi.completion_status`)  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-1](../prd-1/templates-content-pages.md),
+[PRD-5](../prd-5/scales-competency-measurements.md),
+[Пример: MBI](../prd-5/example-mbi.md),
 [Платформа SCORM-шаблонов](../spec-template-platform.md)  
 **Этап BRD:** BR-04  
-**Зависимость:** результаты Core и runtime шаблона из PRD-1
+**Зависимость:** результаты Core и runtime шаблона из PRD-1, `section.*` из PRD-4,
+`scale.*` из PRD-5
 
-## Статус реализации (на 2026-05-26)
+## Статус реализации (на 2026-05-29)
 
-**Не начато**. Стоит в очереди шагом 5 по [ROADMAP](../../ROADMAP.md). Блокируется PRD-4
-(`section.*` namespace) — формулы `result_variables` должны иметь доступ к section-результатам.
+**Не начато**. Идёт парным треком с PRD-5 (см. [ROADMAP §0.2](../../ROADMAP.md)): DSL
+расширен источниками `scaleById(...)` и helper'ом `countScales(...)`. Реализация PRD-2
+без расширения DSL делает невозможной формулу итоговой категории, агрегированной по
+шкалам (типовой кейс — burnout category в MBI). Блокируется PRD-4 (`section.*`).
 
 ---
 
@@ -107,6 +113,7 @@
 | `formula` | builder/DSL | Синтаксически валидна |
 | `show_to_learner` | boolean | По умолчанию `false` |
 | `scorm_target` | select | `none`, `interaction`, `suspend_data`, `both` |
+| `controls_status` | select | `none` (по умолчанию), `success`, `completion`. См. §7.3 |
 | `sort_order` | integer | Порядок вычисления |
 
 После вычисления переменная `name = "competency_tech"` публикуется как:
@@ -130,9 +137,11 @@ result.competency_tech
 | Агрегат по тегу | `tag("scale:EE").score` |
 | Ссылка на переменную | `var("ee_score")` |
 | Взвешенная сумма | `topicById("t1").percent * 0.4 + topicById("t2").percent * 0.6` |
+| Уровень шкалы | `scaleById("leadership").level` |
+| Итог по шкалам | `IF(countScales(["ee","d","ad"], "high") = 3, "Выгорание", ...)` |
 
-Рекомендация: UI показывает названия тем, но формулы сохраняют ссылки по `topicId`, чтобы
-переименование темы не ломало показатель.
+Рекомендация: UI показывает названия тем и шкал, но формулы сохраняют ссылки по
+`topicId` и `scale.key`, чтобы переименование темы или шкалы не ломало показатель.
 
 ### 4.2 Расширенный DSL
 
@@ -149,12 +158,30 @@ tag("name").percent
 tag("name").score
 tag("name").maxScore
 tag("name").count
+scaleById("key").raw
+scaleById("key").normalized
+scaleById("key").percent
+scaleById("key").level
+scaleById("key").label
+scaleById("key").hasValue
+sectionById("key").percent
+sectionById("key").passed
+sectionById("key").completed
 var("name")
 countPassed()
 countTopics()
 avgPercent()
 countVars(["a","b"], "high")
+countScales(["k1","k2","k3"], "high")
 ```
+
+Источники `scaleById(...)` и `countScales(...)` доступны после публикации `scale.*`
+(см. [PRD-5 §4.5](../prd-5/scales-competency-measurements.md#45-расчёт-шкал)). Core
+гарантирует, что `scale.*` рассчитываются до `result.*`, поэтому формулы `result_variables`
+могут безопасно ссылаться на них.
+
+Источники `sectionById(...)` доступны после публикации `section.*` из PRD-4 и работают
+только в секционных flow-режимах (`linear_by_topics`, `router_by_topics`).
 
 Поддерживаемые операции:
 
@@ -186,8 +213,12 @@ OR
 
 - синтаксис;
 - соответствие возвращаемого значения `type`;
-- ссылки `topicById`;
+- ссылки `topicById` на существующие темы теста;
+- ссылки `scaleById` на существующие шкалы теста (см. [PRD-5 §11](../prd-5/scales-competency-measurements.md#11-валидация));
+- ссылки `sectionById` на существующие секции теста (см. PRD-4);
 - `var()` только на переменные с меньшим `sort_order`;
+- значения второго аргумента `countScales(...)` принадлежат набору `level` из bands
+  соответствующих шкал, иначе предупреждение;
 - деление на ноль как безопасный runtime-кейс;
 - неизвестные теги как предупреждение, а не блокирующую ошибку.
 
@@ -289,7 +320,33 @@ cmi.interactions[n].result           = "neutral"
 Если конкретная LMS не поддерживает `neutral`, Core использует совместимый резервный вариант согласно
 политике SCORM-адаптера.
 
-### 7.3 Зона ответственности SCORM
+### 7.3 Управление статусом завершения
+
+Стандартный путь определения `cmi.success_status` и `cmi.completion_status` — порог
+правильности ответов (`passing_score`). В сценариях, где «успех» определяется
+не баллом, а итоговой категорией по шкалам (например, MBI-сценарий: статус «pass»
+не зависит от score, а отражает категорию выгорания), показатель типа `boolean` может
+управлять SCORM-статусом через поле `controls_status`:
+
+| Значение | Эффект |
+| --- | --- |
+| `none` (по умолчанию) | Core использует стандартный путь по `passing_score` |
+| `success` | Значение `true`/`false` показателя становится `cmi.success_status` (`passed`/`failed`) |
+| `completion` | Значение показателя становится `cmi.completion_status` (`completed`/`incomplete`) |
+
+Ограничения и правила:
+
+- `controls_status` доступен только для показателей с `type = "boolean"`. Валидация
+  при сохранении блокирует комбинацию `controls_status != "none"` с другими типами.
+- В тесте может быть не более одного показателя с `controls_status = "success"` и
+  не более одного с `controls_status = "completion"`.
+- Если формула показателя возвращает `null` в runtime (например, из-за ошибки расчёта),
+  Core откатывается на стандартный путь по `passing_score` и пишет диагностику в
+  `suspend_data.custom.formulaErrors`.
+- Стандартный балл (`cmi.score.*`) этим механизмом не подменяется: показатель влияет
+  только на статус прохождения, score остаётся реальным значением попытки.
+
+### 7.4 Зона ответственности SCORM
 
 Пользовательские показатели не пишут в LMS напрямую. Запись выполняет Core, чтобы избежать
 конфликтов с интерактивами вопросов, правилами курса и `template.js`.
@@ -311,11 +368,21 @@ CREATE TABLE result_variables (
   show_to_learner boolean NOT NULL DEFAULT false,
   scorm_target    text NOT NULL DEFAULT 'both'
                     CHECK (scorm_target IN ('interaction', 'suspend_data', 'both', 'none')),
+  controls_status text NOT NULL DEFAULT 'none'
+                    CHECK (controls_status IN ('none', 'success', 'completion')),
   sort_order      integer NOT NULL DEFAULT 0,
   created_at      timestamp NOT NULL DEFAULT now(),
   updated_at      timestamp NOT NULL DEFAULT now(),
   UNIQUE (test_id, name)
 );
+
+-- Только один boolean-показатель может управлять success_status в тесте
+CREATE UNIQUE INDEX result_variables_one_success_per_test
+  ON result_variables(test_id) WHERE controls_status = 'success';
+
+-- Только один boolean-показатель может управлять completion_status в тесте
+CREATE UNIQUE INDEX result_variables_one_completion_per_test
+  ON result_variables(test_id) WHERE controls_status = 'completion';
 
 CREATE INDEX result_variables_test_id_idx ON result_variables(test_id);
 ```
@@ -395,6 +462,8 @@ POST /api/tests/:id/result-variables/validate-formula
 - [ ] Расширенный DSL с ошибкой показывает inline-валидацию и блокирует сохранение
 - [ ] `topicById("id").percent` не ломается после переименования темы
 - [ ] `tag("scale:EE").score` считает сумму баллов по тегу
+- [ ] `scaleById("ee").level` доступен после публикации `scale.*` и до `result:calculated`
+- [ ] `countScales(["ee","d","ad"], "high")` возвращает корректное число шкал заданного уровня
 - [ ] `var("ee_score")` работает только для переменной выше по `sort_order`
 - [ ] Runtime вычисляет переменные и публикует их в `result.*`
 - [ ] `result:calculated` запускается после публикации `result.*`
@@ -402,7 +471,13 @@ POST /api/tests/:id/result-variables/validate-formula
 - [ ] `scorm_target = "suspend_data"` добавляет данные в `custom.result`
 - [ ] `scorm_target = "interaction"` добавляет pseudo-interaction `var_{name}`
 - [ ] Ошибка формулы даёт `null`, сохраняет стандартный результат и пишет диагностику
-- [ ] Сценарий MBI с score/zone/category вычисляется корректно
+- [ ] Сценарий MBI (см. [example-mbi.md](../prd-5/example-mbi.md)) с
+  score/zone/category вычисляется корректно
+- [ ] `controls_status = "success"` для boolean-показателя записывает `cmi.success_status`
+  на основании значения показателя, не на основании `passing_score`
+- [ ] Валидация блокирует `controls_status != "none"` для не-boolean показателей
+- [ ] Валидация блокирует две boolean-переменные с `controls_status = "success"`
+  в одном тесте
 
 ---
 
@@ -415,3 +490,6 @@ POST /api/tests/:id/result-variables/validate-formula
 | Где отображаются показатели? | В макете результатов, публичном контексте или контролируемом слоте |
 | Кто пишет в LMS? | Core, не шаблон и не формула напрямую |
 | Что делать с ошибками формулы? | `null` + диагностика, без срыва завершения |
+| Может ли показатель использовать шкалы из PRD-5? | Да. DSL поддерживает `scaleById("key").{raw,normalized,percent,level,label,hasValue}` и `countScales([...], level)`. См. §4.2 |
+| Может ли показатель определять статус прохождения вместо `passing_score`? | Да. Boolean-показатель с `controls_status = "success"` или `"completion"` записывает соответствующий `cmi.*_status`. См. §7.3 |
+| Где описан полный сценарий MBI? | [example-mbi.md](../prd-5/example-mbi.md) |

@@ -1,10 +1,11 @@
 # Roadmap реализации SCORM-расширений
 
-**Версия:** 1.4
+**Версия:** 1.5
 **Статус:** Утверждено
 **Источник:** [BRD](./specs/brd-scorm-enhancements.md), PRD-1...PRD-9
-**Последняя актуализация:** 2026-05-29 (PRD-4 + PRD-8 **закрыты** —
-Storyline-MVP shippable; см. §0 и §0.1)
+**Последняя актуализация:** 2026-05-29 (post-MVP переприоритизирован: PRD-2 + PRD-5
+подняты в верх §0.2 как парный трек по бизнес-запросу «шкалы + LMS-передача без
+постобработки», см. §0.2 и §3.4; PRD-4 + PRD-8 закрыты — Storyline-MVP shippable)
 
 ---
 
@@ -24,9 +25,9 @@ Storyline-MVP shippable; см. §0 и §0.1)
 | 1 | PRD-7 | S13 — Editor parity | **Закрыта 2026-05-28** — все 8 sub-фаз закрыты (S13.1 quick wins / S13.2 feedback / S13.3 per-topic limits / S13.4 row-actions / S13.5 router-mode / S13.6 variant-replace / S13.7 drawer chrome / S13.8 cleanup+acceptance). Deferred: S13.5b (G22 mapping-flow cross-tab coupling) + S13.8b (G12 wf-basic-warning UX notification). См. [specs/prd-7/s13-editor-parity.md](./specs/prd-7/s13-editor-parity.md) | — |
 | 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | **Закрыта 2026-05-29** — все 6 фаз (1: validation L2/L3, 2: mapper L4, 3: UI L1, 4a: export, 4b: section results, 4c: router runtime + completionPolicy + unlockRules, 4d: adaptive integration linear+router, 4e: per-section timers, 4f: recovery, 5: golden tests). Все 5 валидных `(mode×flowMode)` комбинаций имеют runtime support; `(adaptive, linear_flat)` blocked в Phase 1, deferred в будущий PRD «Flat adaptive». См. [PRD-4 spec v1.1](./specs/prd-4/course-flow-sections.md). | — |
 | 4 | PRD-8 | Router-flow runtime + UI «Структура» в router-режиме | **Закрыта 2026-05-29** — реализована cross-PRD: UI (Структура + Настройки→Сценарий) в PRD-7 G45/router-by-topics; runtime (router state machine, completionPolicy, sectionUnlockRules, recovery) в PRD-4 phases 4c/4f; PRD-8-specific delta — FR-18 router lifecycle events. См. [PRD-8 spec](./specs/prd-8/section-router-flow.md). | — |
+| 5 | PRD-2 | `result.*` показатели результата | Не начата — post-MVP, парный трек с PRD-5 (см. §0.2) | PRD-4 |
+| 6 | PRD-5 | Шкалы и многомерные измерения | Не начата — post-MVP, парный трек с PRD-2 (см. §0.2) | PRD-2 (DSL), PRD-4 |
 | 3 | PRD-6 | Retake gate, eligibility plugins | Не начата — post-MVP | PRD-4 |
-| 5 | PRD-2 | `result.*` показатели результата | Не начата — post-MVP | PRD-4 |
-| 6 | PRD-5 | Шкалы и многомерные измерения | Не начата — post-MVP | PRD-2, PRD-4 |
 | 7 | PRD-3 | Жизненный цикл шаблонов | Не начата — post-MVP | PRD-1 closeout (отдельный трек) |
 | 8 | PRD-9 | Миграция bcryptjs → `@vvlad1973/crypto` | Не начата — post-MVP (tech debt) | Завершение PRD-7 S10-S11 |
 | — | PRD-1 | Шаблоны и контентные страницы | **Закрыта 2026-05-28** — Backend 100% / Runtime 100% / Frontend 100% (MVP-scope). Закрытие PRD-1 произошло одновременно с PRD-7: остаточные task'и (предпросмотр, галерея, all-param-types, manifest validation, `kind` во встроенных шаблонах) переехали в PRD-7 S12 G2/G3/G4/G6/G48. См. [PRD-1 todo](./specs/prd-1/implementation-todo.md). | Deferred post-MVP: text-overflow preview/diagnostics в content-pages (§1.10) — substantial, не блокирует MVP. |
@@ -85,16 +86,32 @@ Live-browser acceptance (Playwright + axe + LMS smoke) — отдельный ga
 
 ## 0.2 Post-MVP backlog
 
+**Переприоритизирован 2026-05-29:** по бизнес-запросу пользователя пара PRD-2 +
+PRD-5 поднята в верх — целевой сценарий «шкалы и итоговая категория передаются в
+LMS без ручной постобработки Excel-выгрузки» (см. внешний `report_build`
+postprocessor, который должен быть заменён SCORM-пакетом). PRD-2 и PRD-5 ведутся
+**парным треком**, потому что DSL `result_variables` (PRD-2) обязан содержать
+источники `scaleById(...)` и `countScales(...)` до момента сдачи PRD-5; иначе
+формулы итоговых категорий невозможно реализовать без выкатки миграции (см. §3.4
+и [example-mbi.md](./specs/prd-5/example-mbi.md)).
+
 Включается после Storyline-MVP, в порядке ценности/зависимостей:
 
 | Приоритет | PRD | Что даёт | Зависит от |
 | --- | --- | --- | --- |
-| 1 | PRD-6 | Retake gate / cooldown (compliance для корпоративных курсов) | PRD-4 |
-| 2 | PRD-2 | Показатели результата `result.*` | PRD-4 |
-| 3 | PRD-5 | Шкалы и компетенции `scale.*` | PRD-2, PRD-4 |
-| 4 | PRD-3 | Реестр и жизненный цикл внешних шаблонов | PRD-1 |
-| 5 | **PRD-N (Flat adaptive)** | Адаптивная выдача из общего pool без секционных границ — комбинация `(mode=adaptive, flowMode=linear_flat)`, отложена из PRD-4 v1.1 | PRD-4 |
+| 1 | **PRD-2 + PRD-5 (парный трек)** | `result.*` показатели + `scale.*` шкалы + передача итогов в LMS через pseudo-interactions; закрывает бизнес-запрос «без постобработки» | PRD-4 |
+| 2 | PRD-6 | Retake gate / cooldown (compliance для корпоративных курсов) | PRD-4 |
+| 3 | PRD-3 | Реестр и жизненный цикл внешних шаблонов | PRD-1 |
+| 4 | **PRD-N (Flat adaptive)** | Адаптивная выдача из общего pool без секционных границ — комбинация `(mode=adaptive, flowMode=linear_flat)`, отложена из PRD-4 v1.1 | PRD-4 |
 | — | PRD-9 | Миграция bcrypt → `@vvlad1973/crypto` (tech debt, изолирован) | — |
+
+Парный трек PRD-2 + PRD-5 — внутренний порядок:
+
+| Этап | Состав | Обоснование |
+| --- | --- | --- |
+| Этап A | Расширение DSL PRD-2: `scaleById(...)`, `countScales(...)`, поле `controls_status`; миграция `result_variables` | DSL должен знать `scale.*` до того, как Core начнёт публиковать значения шкал |
+| Этап B | Реализация PRD-5: таблицы `scales` + `question_measurements`, runtime расчёта, авторская UI «Шкалы» и блок «Измерения» в карточке вопроса | Опирается на готовый DSL этапа A |
+| Этап C | E2E acceptance по [example-mbi.md](./specs/prd-5/example-mbi.md); golden-тест замены `process_burnout_export.py` | Подтверждает закрытие бизнес-запроса |
 
 Отложенные точечные пункты: `showSectionResult` (промежуточные результаты по темам),
 text-overflow diagnostics в PRD-1, порог coverage 50%, раздел «Архив» с восстановлением
@@ -119,7 +136,9 @@ PRD-1 уже частично реализован (см. [specs/prd-1/implement
 
 > Таблица ниже документирует **зависимости и обоснование** порядка PRD. Фактический
 > порядок **исполнения** — MVP-first (см. §0.1): PRD-7 → closeout PRD-1 → PRD-4 → PRD-8,
-> затем post-MVP PRD-6 → PRD-2 → PRD-5 → PRD-3. То есть для MVP PRD-8 поднят выше PRD-6.
+> затем post-MVP по §0.2: **PRD-2 + PRD-5 (парный трек)** → PRD-6 → PRD-3. То есть для
+> MVP PRD-8 поднят выше PRD-6, а в post-MVP пара PRD-2+PRD-5 поднята выше PRD-6 по
+> бизнес-запросу 2026-05-29 (шкалы + LMS-передача без постобработки).
 
 | Шаг | PRD | Этап BRD | Основная причина выбранного порядка |
 | --- | --- | --- | --- |
@@ -160,6 +179,14 @@ gate-runtime.
 PRD-2 публикует `result.*`. PRD-5 публикует `scale.*` до `result:calculated` и используется
 формулами `result_variables`. PRD-4 публикует `section.*`. Все три пространства имён должны быть
 согласованы до начала PRD-2, чтобы избежать миграции формул при выкатке PRD-5.
+
+**PRD-2 + PRD-5 идут парным треком (см. §0.2).** Расширение DSL PRD-2 источниками
+`scaleById(...).{raw,normalized,percent,level,label,hasValue}` и helper'ом
+`countScales([...], level)` — обязательное условие старта PRD-5: без них формулы
+итоговых категорий по шкалам (типовой кейс — burnout category в [MBI](./specs/prd-5/example-mbi.md))
+неразрешимы. Также PRD-2 v2.1 добавляет поле `controls_status` для управления
+`cmi.success_status` / `cmi.completion_status` boolean-показателем, что нужно для
+сценариев, где «pass» определяется категорией шкал, а не `passing_score`.
 
 ### 3.5 PRD-9 (изолирован)
 
