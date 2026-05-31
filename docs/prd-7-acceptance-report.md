@@ -236,7 +236,10 @@ seed, — не блокеры закрытия PRD-7, проходятся до 
 - [x] Live axe-аудит Drawer (§7): найден + устранён 1 critical; 0 нарушений после фикса.
 - [x] NFR-17 live-замер (§7): 108 мс << 1.5 с.
 - [x] Live smoke: dirty-tracking, close-confirm (FR-05), переключение вкладок.
-- [ ] Full Lighthouse + end-to-end smoke в реальной LMS (остаточный ручной gate §4).
+- [x] Полный live-browser acceptance pass (axe 4 вкладки + E2E smoke §4.4 +
+  SCORM playback в `scorm:player`) — выполнен 2026-05-31, см. §9.
+- [ ] Full Lighthouse (performance/best-practices) + end-to-end smoke в реальной
+  LMS — остаётся ручным gate (axe-часть accessibility закрыта в §7 и §9).
 
 ## 7. Live-аудит браузера (Playwright + axe-core)
 
@@ -339,3 +342,109 @@ PRD-8 (2026-05-29):
 - 5ba2eb6 (router lifecycle events FR-18 + cross-PRD closure).
 
 **Итог:** Storyline-MVP shippable на уровне кода 2026-05-29.
+
+## 9. Полный live-browser acceptance pass (2026-05-31)
+
+**Аудитор:** Opus 4.8. **Окружение:** dev-сервер `localhost:8081` (`npm run dev`),
+dev-БД Postgres в Docker (`test-builder-db`, `localhost:55432`), вход автором
+(учётка-аудитор, role=author), Playwright + axe-core 4.10.2. Закрывает остаточный
+gate §4 в части браузерного прогона (кроме full Lighthouse и реальной LMS).
+
+### 9.1 NFR-17 — открытие Drawer
+
+Программный замер от клика «Редактировать» до отрисовки tabpanel с полями
+(тест «Сетевые атаки и защита», standard `linear_by_topics`, 2 темы), **холодный
+кэш React Query** (сразу после reload, включая сетевой запрос детали теста):
+**516 мс << 1.5 с**. Бюджет соблюдён с запасом. Оговорка та же, что в §7.2:
+worst-case 20 тем не воспроизводится — в seed максимум 2 темы на тест.
+
+### 9.2 axe-core — все 4 вкладки Drawer
+
+| Вкладка | Confirmed violations | Примечание |
+| --- | --- | --- |
+| Состав | 0 | 18 passes |
+| Настройки | 0 | 18 passes |
+| Оформление | 1 (minor) | `color-contrast` на `.ps-title` «СТА» — тот же декоративный кейс превью-шаблона из §7.1 (~4.45 при пороге 4.5, бренд-цвета); не блокер |
+| Структура | **1 → 0 (исправлено)** | см. 9.2.1 |
+
+**9.2.1 Найденное и устранённое нарушение (serious, WCAG 4.1.2).**
+`aria-command-name` — drag-handle страниц контента в «Структуре»
+(`<span class="drag-handle" role="button">` от @dnd-kit) не имели доступного
+имени (4 узла): скринридер озвучивал «button» без названия. Не ловилось на
+code-level S11, т.к. на тот момент «Структура» была read-only-stub; полноценный
+редактор content-pages с drag-handle добавлен позже в closeout PRD-1 / PRD-8.
+**Фикс:** в [start-pages-section.tsx](../client/src/features/tests/editor/sections/start-pages-section.tsx)
+page-grip получил `aria-label="Переместить страницу «<title>»"` + `aria-hidden`
+на иконке — по образцу уже существовавшего topic-grip в том же файле. Повторный
+axe-прогон — **0 violations**, все grip'ы имеют доступные имена. Регрессий нет:
+`start-pages-section.test.tsx` 25/25, `npm run check` 0 ошибок, полный
+`vitest run` **53 файла / 1424 теста зелёные**.
+
+**9.2.2 Needs-review (axe `incomplete`, не нарушения, не блокеры).** Сквозные
+DS-паттерны, рекомендованы как минорные follow-up на уровне `@universityrt/ui-kit`:
+
+- `aria-prohibited-attr` (serious-incomplete) — `aria-label` на `<span
+  class="ou-tag">` (статус-бейдж) и враппере `<div class="ou-tabs">` без
+  собственного role; текст бейджа виден, у табов есть дочерний `role=tablist`.
+- `form-field-multiple-labels` (moderate) — у switch-ей «Обязательная» есть и
+  `<label>`, и `aria-label` (компонент Switch DS).
+- `color-contrast` (incomplete) на «Структуре» — `insert-btn` (reason
+  `bgOverlap`) и `zone-header`/`page-title` (`elmPartiallyObscured`): axe не может
+  вычислить контраст из-за наложения фонов, подтверждённого провала нет.
+
+### 9.3 E2E smoke (§4.4)
+
+| Сценарий | Результат |
+| --- | --- |
+| Список тестов | Все колонки (статус/режим/сценарий/тем/вопросов/назначений), папки, per-row actions; покрыты все режимы (standard/adaptive × linear_flat/by_topics/router) |
+| Create standard | **Реальный POST** через FAB → выбор папки → редактор → название+тема → Save; тест создан в БД (draft/standard/v1) |
+| Edit standard | te-2 открыт, правка дескрипшна → dirty |
+| Edit adaptive | te-3: загрузка adaptive-настроек (показ уровня, per-topic Основы ИБ/Криптография — 2 уровня, включены); router-структура «Внутри теста» со страницей-маршрутизатором «Меню карточек» (PRD-8) |
+| Mode switch standard↔adaptive | Без потери данных (FR-25h/25i): после adaptive→standard→adaptive per-topic adaptive-настройки восстановлены из draft; sub-rail «Адаптивный режим» скрывается/возвращается; title/описание сохранены |
+| flowMode | Рендер всех трёх в «Структуре» (linear_flat/by_topics/router) с баннером «задаётся в Настройки › Сценарий» |
+| Close-confirm (FR-05) | Модал «Есть несохранённые изменения» с «Продолжить / Выйти без сохранения / Сохранить»; discard работает |
+| Optimistic conflict (FR-25k) | Имитация параллельной правки (bump `version` в БД) → 409-модал «Конфликт версий» с field-level diff («Поле / На сервере / Ваши изменения») и «Отмена / Сохранить поверх / Обновить данные»; overwrite корректно заблокирован (правка не сохранилась) |
+| variant.kind | Тихая привязка подтверждена: у info-страницы с 1 вариантом нет «Сменить вариант» (`canReplaceVariant` требует >1); предпросмотр (FR-44) открывает iframe со страницей в стиле SCORM-плеера; смена варианта с >1 вариантом в default-шаблоне не воспроизводима (default даёт 1 вариант на kind) |
+| Архив | «Архивировать» меняет статус → `archived`, тест скрыт из общего списка (excludeArchived); отдельный раздел «Архив» с restore — deferred post-MVP (UI нет; backend `/restore` готов) |
+| Delete (FR-30) | Confirm «Удалить тест навсегда?» с вводом точного названия (регистрозависимо): неверное → кнопка disabled; точное → enabled → тест удалён из БД |
+
+### 9.4 SCORM export + playback (`scorm:player`)
+
+- **Экспорт.** «Экспорт SCORM» в меню карточки → валидный ZIP: `imsmanifest.xml`
+  (`<schemaversion>2004 4th Edition</schemaversion>`, корректные namespaces, SCO
+  resource), `metadata.xml`, runtime (`app.js`), `template/`, `assets/media/`
+  (включая PDF-фоны results-страницы).
+- **Playback.** Пакет проигран в `npm run scorm:player` (port 5050): SCORM RTE
+  `Initialize: true`, recovery `start_fresh`, `registerAttemptStart`. Полный
+  проход: старт → intro content-page → вопрос (single, 3 варианта рендерятся) →
+  «Завершить тест» → results-страница (процент, баллы, разбивка по темам,
+  «Скачать результаты PDF», «Пройти заново»).
+
+**9.4.1 Найденная и устранённая проблема stale-seed (ДАННЫЕ, не код).** Первый
+прогон playback показал «Неизвестный тип вопроса» вместо single-choice. Корень:
+dev-seed содержал legacy-значение `questions.type = 'single_choice'` (10 вопросов),
+которое **не входит в текущий enum схемы** `["single","multiple","matching",
+"ranking"]` ([schema.ts:107](../shared/schema.ts)) — Drizzle text-enum не
+накладывает DB-constraint, поэтому pre-migration значение сохранилось. Код
+(schema/runtime `render/questions/index.js`/exporter `test-json.ts`) согласованно
+использует `single`; рассинхрон был только в seed. **Исправление:** нормализация
+seed `UPDATE questions SET type='single' WHERE type='single_choice'`; после
+переэкспорта вопрос рендерится с вариантами, подсчёт и results-страница работают.
+Не требует правок кода.
+
+### 9.5 Остаётся ручным gate (не блокирует closeout)
+
+1. Full Lighthouse audit (performance/best-practices) — accessibility-часть (axe)
+   закрыта в §7 и §9.2.
+2. NFR-17 на тесте с 20 темами и холодным кэшем (seed-ограничение: ≤2 темы).
+3. Bundling feedback-PDF-ассета — в seed нет теста с PDF в feedback (только пустой
+   `feedback_json` у te-3); путь покрыт golden unit-тестами
+   (`schema-prd7-feedback`, `feedback-editor-modal`).
+4. Запуск пакета в реальной LMS (локальный SCORM-RTE плеер пройден).
+
+**Артефакты:** скриншоты в `.playwright-mcp/` (`scorm-question-rendered.png`,
+`scorm-results-rendered.png`).
+
+**Итог §9:** браузерный live-acceptance gate PRD-7 пройден; найден и устранён
+1 реальный a11y-дефект (код) и 1 stale-seed несоответствие (данные); все
+поведенческие сценарии §4.4 подтверждены вживую.
