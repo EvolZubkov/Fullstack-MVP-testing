@@ -1256,9 +1256,10 @@ function AuthorPageRow(props: {
         <span
           className="drag-handle"
           data-testid={`structure-page-grip-${page.id}`}
+          aria-label={`Переместить страницу «${title}»`}
           {...props.dragHandleProps}
         >
-          <GripVertical className="h-3.5 w-3.5" />
+          <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
         <button
           type="button"
