@@ -135,7 +135,11 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
     );
   }
 
-  return { ...test, sections: sectionsWithDetails, adaptiveSettings };
+  // PRD-2: include result variables so the editor loads them into the draft and
+  // its diff-on-save can reconcile them against this snapshot.
+  const resultVariables = await storage.getResultVariables(test.id);
+
+  return { ...test, sections: sectionsWithDetails, adaptiveSettings, resultVariables };
 }
 
 // GET /api/tests - Список тестов
