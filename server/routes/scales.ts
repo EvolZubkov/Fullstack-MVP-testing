@@ -10,17 +10,26 @@
  * - DELETE /:id/scales/:scaleId
  * - GET    /:id/measurements                  (whole-test matrix)
  * - PUT    /:id/measurements/:questionId       (replace one question's rows)
+ * - POST   /:id/scales/preview                 (debug: compute scale.* on demo answers)
  *
- * Authorization: GET requires auth; all mutations require author role. The
- * reorder route is registered before /:scaleId so "reorder" is not parsed as an
- * id. Measurement rows are validated without testId/questionId — those come from
- * the path.
+ * Authorization: GET requires auth; all mutations and preview require author
+ * role. The reorder and preview routes are registered before /:scaleId so
+ * "reorder"/"preview" are not parsed as an id. Measurement rows are validated
+ * without testId/questionId — those come from the path.
  */
 import { Router } from "express";
 import { storage } from "../storage";
 import { requireAuth, requireAuthor } from "../middleware/auth";
 import { logger } from "../logger";
-import { insertScaleSchema, insertQuestionMeasurementSchema } from "@shared/schema";
+import { insertScaleSchema, insertQuestionMeasurementSchema, type Scale, type QuestionMeasurement } from "@shared/schema";
+import {
+  computeScales,
+  type ScaleSpec,
+  type ScaleBand,
+  type MeasurementSpec,
+  type QuestionType,
+  type Answer,
+} from "@shared/scales/engine";
 
 const router = Router();
 
@@ -31,6 +40,37 @@ async function keyConflict(testId: string, key: string, excludeId?: string): Pro
 }
 
 const measurementRowSchema = insertQuestionMeasurementSchema.omit({ testId: true, questionId: true });
+
+/** DB scale row -> engine {@link ScaleSpec} (bands live in config_json). */
+function toScaleSpec(s: Scale): ScaleSpec {
+  const config = (s.configJson as { bands?: ScaleBand[] }) ?? {};
+  return {
+    key: s.key,
+    aggregation: s.aggregation,
+    normalization: s.normalization,
+    direction: s.direction,
+    bands: Array.isArray(config.bands) ? config.bands : undefined,
+  };
+}
+
+/** DB measurement rows -> engine {@link MeasurementSpec}[] with scaleId resolved to key. */
+function toMeasurementSpecs(measurements: QuestionMeasurement[], scales: Scale[]): MeasurementSpec[] {
+  const scaleKeyById = new Map(scales.map((s) => [s.id, s.key]));
+  const out: MeasurementSpec[] = [];
+  for (const m of measurements) {
+    const scaleKey = scaleKeyById.get(m.scaleId);
+    if (!scaleKey) continue; // orphan row — skip
+    out.push({
+      questionId: m.questionId,
+      scaleKey,
+      sourceType: m.sourceType,
+      sourceKey: m.sourceKey ?? null,
+      value: m.valueJson,
+      weight: m.weight ?? 1,
+    });
+  }
+  return out;
+}
 
 // ─── GET /api/tests/:id/scales ───────────────────────────────────────────────
 router.get("/:id/scales", requireAuth, async (req, res) => {
@@ -173,6 +213,45 @@ router.put("/:id/measurements/:questionId", requireAuthor, async (req, res) => {
   } catch (error) {
     logger.error("Upsert measurements error: " + (error as Error).message, "scales");
     res.status(500).json({ error: "Failed to save measurements" });
+  }
+});
+
+// ─── POST /api/tests/:id/scales/preview ──────────────────────────────────────
+// Debug helper for the editor: run the authoritative shared scale engine over a
+// set of demo answers and return the resulting scale.* values + per-scale
+// errors. Body: { answers: { [questionId]: Answer } } where Answer is the
+// runtime encoding (index | index[] | { left: right } | null). Question types
+// are resolved server-side from the measured questions.
+router.post("/:id/scales/preview", requireAuthor, async (req, res) => {
+  try {
+    const testId = req.params.id;
+    const test = await storage.getTest(testId);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+
+    const body = (req.body ?? {}) as { answers?: Record<string, Answer> };
+    const answers = body.answers ?? {};
+    if (typeof answers !== "object" || Array.isArray(answers)) {
+      return res.status(422).json({ error: "answers must be an object keyed by questionId", field: "answers" });
+    }
+
+    const scales = await storage.getScales(testId);
+    const measurements = await storage.getQuestionMeasurements(testId);
+
+    const questionIds = Array.from(new Set(measurements.map((m) => m.questionId)));
+    const questions = questionIds.length ? await storage.getQuestionsByIds(questionIds) : [];
+    const questionTypes: Record<string, QuestionType> = {};
+    for (const q of questions) questionTypes[q.id] = q.type as QuestionType;
+
+    const { values, errors } = computeScales(
+      scales.map(toScaleSpec),
+      toMeasurementSpecs(measurements, scales),
+      answers,
+      questionTypes,
+    );
+    res.json({ values, errors });
+  } catch (error) {
+    logger.error("Scales preview error: " + (error as Error).message, "scales");
+    res.status(500).json({ error: "Failed to preview scales" });
   }
 });
 

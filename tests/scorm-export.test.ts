@@ -32,6 +32,8 @@ const { storageMock, scormMock, fsMock, isSupportedMock } = vi.hoisted(() => {
     getAdaptiveTopicSettingsByTest: vi.fn(),
     getAdaptiveLevelsByTest: vi.fn(),
     getResultVariables: vi.fn().mockResolvedValue([]),
+    getScales: vi.fn().mockResolvedValue([]),
+    getQuestionMeasurements: vi.fn().mockResolvedValue([]),
   };
 
   const scormMock = { generateScormPackage: vi.fn().mockResolvedValue(Buffer.from("ZIP")) };
@@ -235,6 +237,93 @@ describe("buildTestJson: contentPages and designSettings", () => {
     ];
     const json = JSON.parse(buildTestJson({ ...minimalData, contentPages: pages }));
     expect(json.contentPages[0].values.body).not.toContain("onerror");
+  });
+});
+
+// ─── buildTestJson: scales and measurements (PRD-5 B5) ────────────────────────
+
+describe("buildTestJson: scales and measurements", () => {
+  const minimalData: any = {
+    test: { ...baseTest, mode: "standard" },
+    sections: [],
+    adaptiveSettings: null,
+    telemetry: null,
+  };
+
+  const scaleRow: any = {
+    id: "scale-uuid-1",
+    testId: "test-1",
+    key: "ee",
+    label: "Эмоциональное истощение",
+    description: null,
+    type: "number",
+    aggregation: "sum",
+    normalization: "percent",
+    direction: "inverse",
+    configJson: { bands: [{ min: 0, max: 16, level: "low", label: "Низкий" }] },
+    showToLearner: false,
+    scormTarget: "both",
+    sortOrder: 0,
+  };
+
+  it("includes scales with bands lifted from config_json", () => {
+    const json = JSON.parse(buildTestJson({ ...minimalData, scales: [scaleRow] }));
+    expect(Array.isArray(json.scales)).toBe(true);
+    expect(json.scales).toHaveLength(1);
+    const s = json.scales[0];
+    expect(s.key).toBe("ee");
+    expect(s.aggregation).toBe("sum");
+    expect(s.direction).toBe("inverse");
+    expect(s.bands).toEqual([{ min: 0, max: 16, level: "low", label: "Низкий" }]);
+    // The runtime never sees the uuid id.
+    expect(s.id).toBeUndefined();
+  });
+
+  it("defaults bands to [] when config_json has none", () => {
+    const noBands = { ...scaleRow, configJson: {} };
+    const json = JSON.parse(buildTestJson({ ...minimalData, scales: [noBands] }));
+    expect(json.scales[0].bands).toEqual([]);
+  });
+
+  it("flattens measurements and resolves scaleId to the stable key", () => {
+    const measurements: any[] = [
+      {
+        id: "m-1",
+        testId: "test-1",
+        questionId: "q-1",
+        scaleId: "scale-uuid-1",
+        sourceType: "option",
+        sourceKey: "2",
+        valueJson: 3,
+        weight: 1,
+        conditionJson: null,
+        sortOrder: 0,
+      },
+    ];
+    const json = JSON.parse(buildTestJson({ ...minimalData, scales: [scaleRow], measurements }));
+    expect(json.measurements).toHaveLength(1);
+    const m = json.measurements[0];
+    expect(m.scaleKey).toBe("ee");
+    expect(m.scaleId).toBeUndefined();
+    expect(m.questionId).toBe("q-1");
+    expect(m.sourceType).toBe("option");
+    expect(m.sourceKey).toBe("2");
+    expect(m.value).toBe(3);
+    expect(m.weight).toBe(1);
+  });
+
+  it("drops orphan measurements whose scaleId resolves to no scale", () => {
+    const measurements: any[] = [
+      { id: "m-o", testId: "test-1", questionId: "q-1", scaleId: "missing", sourceType: "question", sourceKey: null, valueJson: 1, weight: 1, conditionJson: null, sortOrder: 0 },
+    ];
+    const json = JSON.parse(buildTestJson({ ...minimalData, scales: [scaleRow], measurements }));
+    expect(json.measurements).toEqual([]);
+  });
+
+  it("omits scales/measurements when no scales are defined", () => {
+    const json = JSON.parse(buildTestJson(minimalData));
+    expect(json.scales).toBeUndefined();
+    expect(json.measurements).toBeUndefined();
   });
 });
 

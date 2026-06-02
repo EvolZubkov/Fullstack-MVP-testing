@@ -1,4 +1,4 @@
-import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable } from "@shared/schema";
+import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable, Scale, QuestionMeasurement } from "@shared/schema";
 import { sanitizeHtml } from "../../utils/html-sanitizer";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
@@ -23,6 +23,8 @@ interface ExportData {
   adaptiveSettings?: AdaptiveSettingsExport | null;
   contentPages?: ContentPage[];
   resultVariables?: ResultVariable[];
+  scales?: Scale[];
+  measurements?: QuestionMeasurement[];
   designSettings?: DesignSettingsExport;
   // Telemetry config
   telemetry?: {
@@ -242,6 +244,47 @@ export function buildTestJson(data: ExportData): string {
       controlsStatus: rv.controlsStatus,
       sortOrder: rv.sortOrder,
     }));
+  }
+
+  // PRD-5 (B5): measurement scales + per-question contributions. The runtime
+  // (scales/engine.js) computes scale.* before result.* at completion; the
+  // interpretation `bands` live in config_json. Measurements are flattened to the
+  // engine's MeasurementSpec shape with scaleId resolved to the stable scale key
+  // — the runtime never sees uuids. Gate on scales: rows without a scale are
+  // meaningless, and a scale with no rows is still valid (empty aggregate).
+  if (data.scales && data.scales.length > 0) {
+    test.scales = data.scales.map((s) => {
+      const config = (s.configJson as { bands?: unknown }) ?? {};
+      return {
+        key: s.key,
+        label: s.label,
+        type: s.type,
+        aggregation: s.aggregation,
+        normalization: s.normalization,
+        direction: s.direction,
+        bands: Array.isArray(config.bands) ? config.bands : [],
+        showToLearner: s.showToLearner,
+        scormTarget: s.scormTarget,
+        sortOrder: s.sortOrder,
+      };
+    });
+
+    const scaleKeyById = new Map(data.scales.map((s) => [s.id, s.key]));
+    test.measurements = (data.measurements ?? [])
+      .map((m) => {
+        const scaleKey = scaleKeyById.get(m.scaleId);
+        // Orphan row (scale was deleted but cascade missed it): skip silently.
+        if (!scaleKey) return null;
+        return {
+          questionId: m.questionId,
+          scaleKey,
+          sourceType: m.sourceType,
+          sourceKey: m.sourceKey ?? null,
+          value: m.valueJson,
+          weight: m.weight ?? 1,
+        };
+      })
+      .filter((m): m is NonNullable<typeof m> => m !== null);
   }
 
   // Add telemetry config if present

@@ -23,6 +23,7 @@ const { storageMock } = vi.hoisted(() => ({
     reorderScales: vi.fn(),
     getQuestionMeasurements: vi.fn(),
     upsertQuestionMeasurements: vi.fn(),
+    getQuestionsByIds: vi.fn(),
   },
 }));
 
@@ -209,5 +210,71 @@ describe("measurements GET/PUT", () => {
     expect(storageMock.upsertQuestionMeasurements).toHaveBeenCalledWith("test-1", "q1", [
       { ...row, testId: "test-1", questionId: "q1" },
     ]);
+  });
+});
+
+// ─── scales: POST preview (PRD-5 B5) ──────────────────────────────────────────
+
+describe("POST /api/tests/:id/scales/preview", () => {
+  const previewScale = {
+    id: "scale-uuid-1",
+    testId: "test-1",
+    key: "ee",
+    label: "Истощение",
+    type: "number",
+    aggregation: "sum",
+    normalization: "none",
+    direction: "positive",
+    configJson: { bands: [{ min: 0, max: 5, level: "low", label: "Низкий" }, { min: 6, max: 100, level: "high", label: "Высокий" }] },
+    showToLearner: false,
+    scormTarget: "both",
+    sortOrder: 0,
+  };
+  const previewMeasurements = [
+    { id: "m1", testId: "test-1", questionId: "q1", scaleId: "scale-uuid-1", sourceType: "option", sourceKey: "1", valueJson: 3, weight: 1, conditionJson: null, sortOrder: 0 },
+    { id: "m2", testId: "test-1", questionId: "q1", scaleId: "scale-uuid-1", sourceType: "option", sourceKey: "0", valueJson: 7, weight: 1, conditionJson: null, sortOrder: 1 },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getTest.mockResolvedValue(baseTest);
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getScales.mockResolvedValue([previewScale]);
+    storageMock.getQuestionMeasurements.mockResolvedValue(previewMeasurements);
+    storageMock.getQuestionsByIds.mockResolvedValue([{ id: "q1", type: "single" }]);
+  });
+
+  it("requires author role", async () => {
+    storageMock.getUser.mockResolvedValue(learnerUser);
+    const res = await request(makeApp("learner")).post("/api/tests/test-1/scales/preview").send({ answers: {} });
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 404 when the test does not exist", async () => {
+    storageMock.getTest.mockResolvedValue(undefined);
+    const res = await request(makeApp()).post("/api/tests/test-1/scales/preview").send({ answers: {} });
+    expect(res.status).toBe(404);
+  });
+
+  it("returns 422 when answers is not an object", async () => {
+    const res = await request(makeApp()).post("/api/tests/test-1/scales/preview").send({ answers: [1, 2] });
+    expect(res.status).toBe(422);
+  });
+
+  it("computes scale.* over the demo answers and applies bands", async () => {
+    // single answer = option index 0 -> value 7 -> raw 7 -> band "Высокий"
+    const res = await request(makeApp()).post("/api/tests/test-1/scales/preview").send({ answers: { q1: 0 } });
+    expect(res.status).toBe(200);
+    expect(res.body.values.ee.raw).toBe(7);
+    expect(res.body.values.ee.hasValue).toBe(true);
+    expect(res.body.values.ee.label).toBe("Высокий");
+    expect(res.body.errors).toEqual([]);
+  });
+
+  it("yields hasValue=false when no measured option is selected", async () => {
+    const res = await request(makeApp()).post("/api/tests/test-1/scales/preview").send({ answers: { q1: 2 } });
+    expect(res.status).toBe(200);
+    expect(res.body.values.ee.raw).toBe(0);
+    expect(res.body.values.ee.hasValue).toBe(false);
   });
 });

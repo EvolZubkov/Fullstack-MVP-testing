@@ -87,6 +87,10 @@ function saveAttemptResult(resultData) {
     // so a recovered session restores the same computed variables (NFR-04).
     resultValues: (resultData.resultComputation && resultData.resultComputation.values) || {},
     formulaErrors: (resultData.resultComputation && resultData.resultComputation.errors) || [],
+    // PRD-5 (B5): persisted scale.* values + per-scale errors for this attempt
+    // (suspend_data.custom.scale, §8.1); recomputed deterministically on recovery.
+    scaleValues: (resultData.scaleComputation && resultData.scaleComputation.values) || {},
+    scaleErrors: (resultData.scaleComputation && resultData.scaleComputation.errors) || [],
     topicResults: resultData.topicResults,
     answers: JSON.parse(JSON.stringify(state.answers)),
     flatQuestions: JSON.parse(JSON.stringify(state.flatQuestions))

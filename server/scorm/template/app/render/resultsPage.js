@@ -1,21 +1,91 @@
 var scormFinished = false;
 
+// ─── PRD-5 (B5): scales ───────────────────────────────────────────────────────
+// Build the scale-engine input from TEST_DATA + the current attempt's answers.
+// `questionTypes` is taken from the full question set (standard sections and
+// adaptive topics) so percent-normalization ranges are correct even for measured
+// questions the learner did not draw; answers come from `state.answers`.
+function buildScaleInputs() {
+  var scales = (typeof TEST_DATA !== 'undefined' && TEST_DATA.scales) || [];
+  var measurements = (typeof TEST_DATA !== 'undefined' && TEST_DATA.measurements) || [];
+  var questionTypes = {};
+  if (typeof TEST_DATA !== 'undefined') {
+    (TEST_DATA.sections || []).forEach(function (sec) {
+      (sec.questions || []).forEach(function (q) { if (q && q.id) questionTypes[q.id] = q.type; });
+    });
+    (TEST_DATA.adaptiveTopics || []).forEach(function (t) {
+      (t.questions || []).forEach(function (q) { if (q && q.id) questionTypes[q.id] = q.type; });
+    });
+  }
+  var answers = (typeof state !== 'undefined' && state.answers) || {};
+  return { scales: scales, measurements: measurements, answers: answers, questionTypes: questionTypes };
+}
+
+// Compute scale.* for this attempt. Deterministic — a recovered attempt with the
+// same answers recomputes identically (NFR-04). No-op (empty) when the test has
+// no scales or the engine is absent.
+function computeTestScales() {
+  if (typeof TEST_DATA === 'undefined' || !TEST_DATA.scales || !TEST_DATA.scales.length) {
+    return { values: {}, errors: [] };
+  }
+  if (typeof ScaleEngine === 'undefined') return { values: {}, errors: [] };
+  var inp = buildScaleInputs();
+  return ScaleEngine.computeScales(inp.scales, inp.measurements, inp.answers, inp.questionTypes);
+}
+
+// Pseudo-interactions for scales published to the LMS report (scorm_target
+// interaction/both, PRD-5 §8.2): `scale_{key}` carries the raw value, and — only
+// for scales with bands — `scale_{key}_level` carries the band label. Mirrors
+// buildResultVarInteractions. Scales default to scorm_target "none" (opt-in).
+function buildScaleInteractions(scaleComputation) {
+  var out = [];
+  var scales = (typeof TEST_DATA !== 'undefined' && TEST_DATA.scales) || [];
+  var values = (scaleComputation && scaleComputation.values) || {};
+  scales.forEach(function (sc) {
+    var target = sc.scormTarget || 'none';
+    if (target !== 'interaction' && target !== 'both') return;
+    var v = values[sc.key];
+    var hasVal = !!(v && v.hasValue);
+    out.push({
+      id: 'scale_' + sc.key,
+      type: 'other',
+      result: 'neutral',
+      response: hasVal ? String(v.raw) : '',
+      correct: '',
+      description: sc.label || sc.key
+    });
+    if (sc.bands && sc.bands.length > 0) {
+      out.push({
+        id: 'scale_' + sc.key + '_level',
+        type: 'other',
+        result: 'neutral',
+        response: hasVal ? String(v.label || v.level || '') : '',
+        correct: '',
+        description: (sc.label || sc.key) + ' — уровень'
+      });
+    }
+  });
+  return out;
+}
+
 // ─── PRD-2 (A7): result variables ────────────────────────────────────────────
 // Build the formula evaluation context from standard scoring. Этап A wires
-// percent + per-topic results; tags/scales/sections resolve to neutral defaults
-// (tag aggregation and PRD-5 scales / PRD-4 section keys come later).
-function buildResultVarContext(results) {
+// percent + per-topic results; PRD-5 scales now fill `scales` (B5);
+// tags/sections resolve to neutral defaults (tag aggregation and PRD-4 section
+// keys come later).
+function buildResultVarContext(results, scaleComputation) {
   var topics = {};
   (results.topicResults || []).forEach(function (tr) {
     topics[tr.topicId] = { percent: tr.percent || 0, passed: tr.passed === true, score: tr.earnedPoints || 0 };
   });
-  return { percent: results.percent || 0, topics: topics, tags: {}, scales: {}, sections: {} };
+  var scales = (scaleComputation && scaleComputation.values) || {};
+  return { percent: results.percent || 0, topics: topics, tags: {}, scales: scales, sections: {} };
 }
 
-function computeTestResultVariables(results) {
+function computeTestResultVariables(results, scaleComputation) {
   var defs = (typeof TEST_DATA !== 'undefined' && TEST_DATA.resultVariables) || [];
   if (!defs.length || typeof FormulaDSL === 'undefined') return { values: {}, errors: [], status: {} };
-  return FormulaDSL.computeResultVariables(defs, buildResultVarContext(results));
+  return FormulaDSL.computeResultVariables(defs, buildResultVarContext(results, scaleComputation));
 }
 
 // Pseudo-interactions var_{name} for variables published to the LMS report
@@ -72,9 +142,14 @@ function finishAndClose() {
     results = calculateResults();
   }
 
+  // PRD-5 (B5): compute scale.* once for this attempt, BEFORE result.*, so
+  // result-variable formulas can read scaleById()/countScales(). Carried into the
+  // suspend_data record and the LMS scale_* pseudo-interactions.
+  results.scaleComputation = computeTestScales();
+
   // PRD-2 (A7): compute result.* once for this attempt; carried into the
   // suspend_data record, the LMS pseudo-interactions and the status override.
-  results.resultComputation = computeTestResultVariables(results);
+  results.resultComputation = computeTestResultVariables(results, results.scaleComputation);
 
   console.log('🎯 Завершение теста (' + (isAdaptive ? 'адаптивный' : 'стандартный') + '), процент:', Math.round(results.percent));
 
@@ -147,14 +222,16 @@ function finishAndClose() {
 
   console.log('📤 Отправляем в LMS:', Math.round(resultsForLms.percent) + '%, passed:', bestPassed);
 
-  // result.* is computed for this attempt; the LMS report carries its var_*
-  // pseudo-interactions regardless of which attempt supplies the headline score.
+  // result.*/scale.* are computed for this attempt; the LMS report carries their
+  // var_*/scale_* pseudo-interactions regardless of which attempt supplies the
+  // headline score.
   var resultComputation = results.resultComputation;
+  var scaleComputation = results.scaleComputation;
 
   // Отправляем в LMS
   if (isAdaptive) {
     console.log('🔵 Адаптивный тест: принудительно passed=true для LMS');
-    finishScormAdaptive(resultsForLms, true, resultComputation);
+    finishScormAdaptive(resultsForLms, true, resultComputation, scaleComputation);
   } else {
     if (bestAttempt && bestAttempt !== results) {
       console.log('🔄 Восстанавливаем state из лучшей попытки для LMS');
@@ -164,12 +241,12 @@ function finishAndClose() {
       state.answers = bestAttempt.answers || {};
       state.flatQuestions = bestAttempt.flatQuestions || [];
 
-      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation);
+      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation, scaleComputation);
 
       state.answers = savedAnswers;
       state.flatQuestions = savedFlatQuestions;
     } else {
-      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation);
+      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation, scaleComputation);
     }
   }
 
@@ -190,7 +267,7 @@ function finishAndClose() {
 /**
  * Finish SCORM for adaptive mode
  */
-function finishScormAdaptive(results, passedForLms, resultComputation) {
+function finishScormAdaptive(results, passedForLms, resultComputation, scaleComputation) {
   var objectives = results.topicResults.map(function (tr) {
     return {
       id: 'topic_' + tr.topicId,
@@ -283,6 +360,8 @@ function finishScormAdaptive(results, passedForLms, resultComputation) {
   });
 
   // Отправляем в LMS
+  // PRD-5 (B5): append scale_{key}[_level] pseudo-interactions for published scales.
+  pushAll(interactions, buildScaleInteractions(scaleComputation));
   // PRD-2 (A7): append var_{name} pseudo-interactions for published variables.
   pushAll(interactions, buildResultVarInteractions(resultComputation));
 
@@ -528,7 +607,7 @@ function collectFailedTopicCourses(results) {
   return courses;
 }
 
-function finishScorm(results, passedForLms, resultComputation) {
+function finishScorm(results, passedForLms, resultComputation, scaleComputation) {
   var objectives = results.topicResults.map(function (tr) {
     return {
       id: 'topic_' + tr.topicId,
@@ -630,6 +709,8 @@ function finishScorm(results, passedForLms, resultComputation) {
     failedTopicCourses: failedTopicCourses
   });
 
+  // PRD-5 (B5): append scale_{key}[_level] pseudo-interactions for published scales.
+  pushAll(interactions, buildScaleInteractions(scaleComputation));
   // PRD-2 (A7): append var_{name} pseudo-interactions for published variables.
   pushAll(interactions, buildResultVarInteractions(resultComputation));
 
@@ -637,7 +718,7 @@ function finishScorm(results, passedForLms, resultComputation) {
 }
 
 // Версия finishScorm БЕЗ отправки телеметрии (используется когда телеметрия уже отправлена)
-function finishScormLmsOnly(results, passedForLms, resultComputation) {
+function finishScormLmsOnly(results, passedForLms, resultComputation, scaleComputation) {
   var objectives = results.topicResults.map(function (tr) {
     return {
       id: 'topic_' + tr.topicId,
@@ -731,6 +812,8 @@ function finishScormLmsOnly(results, passedForLms, resultComputation) {
   var percentScore = Math.round(results.percent);
 
   // НЕ отправляем телеметрию - она уже отправлена в finishAndClose()
+  // PRD-5 (B5): append scale_{key}[_level] pseudo-interactions for published scales.
+  pushAll(interactions, buildScaleInteractions(scaleComputation));
   // PRD-2 (A7): append var_{name} pseudo-interactions for published variables.
   pushAll(interactions, buildResultVarInteractions(resultComputation));
 

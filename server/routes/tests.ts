@@ -139,7 +139,13 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
   // its diff-on-save can reconcile them against this snapshot.
   const resultVariables = await storage.getResultVariables(test.id);
 
-  return { ...test, sections: sectionsWithDetails, adaptiveSettings, resultVariables };
+  // PRD-5 (B4): scales + per-question measurement rows for the «Шкалы» tab. Raw
+  // DB rows (scaleId/valueJson) — the editor's data layer keeps uuids; export
+  // flattening to the engine shape happens later in buildTestJson.
+  const scales = await storage.getScales(test.id);
+  const measurements = await storage.getQuestionMeasurements(test.id);
+
+  return { ...test, sections: sectionsWithDetails, adaptiveSettings, resultVariables, scales, measurements };
 }
 
 // GET /api/tests - Список тестов
@@ -683,6 +689,10 @@ router.get("/:id/export/scorm", requireAuthor, async (req, res) => {
     // Load result variables (PRD-2) for this test
     const resultVariables = await storage.getResultVariables(test.id);
 
+    // Load scales + measurements (PRD-5) for this test
+    const scales = await storage.getScales(test.id);
+    const measurements = await storage.getQuestionMeasurements(test.id);
+
     // Load adaptive settings if test is adaptive
     let adaptiveSettings = null;
     if (test.mode === "adaptive") {
@@ -741,6 +751,8 @@ router.get("/:id/export/scorm", requireAuthor, async (req, res) => {
       adaptiveSettings,
       contentPages,
       resultVariables,
+      scales,
+      measurements,
       designSettings,
       telemetry: telemetryConfig,
     });
