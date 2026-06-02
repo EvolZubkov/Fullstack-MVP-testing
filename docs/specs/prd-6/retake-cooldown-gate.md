@@ -1,8 +1,8 @@
 # PRD-6: Ограничение повторного прохождения и retake gate
 
 **Версия:** 1.0  
-**Статус:** Backlog — post-MVP (ROADMAP §0.2); шаг 3  
-**Дата актуализации:** 2026-05-26  
+**Статус:** Утверждено — post-MVP (ROADMAP §0.2); шаг 3  
+**Дата актуализации:** 2026-06-02 (статус -> «Утверждено» после ревью-прохода)  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-1](../prd-1/templates-content-pages.md), [PRD-4](../prd-4/course-flow-sections.md),
 [Платформа SCORM-шаблонов](../spec-template-platform.md)  
@@ -368,11 +368,11 @@ MVP-plugin `webtutor_cooldown` должен поддерживать конфи�
 6. Plugin `webtutor_cooldown` получает записи курса, выбирает последнюю полноценную попытку и
    рассчитывает решение по календарным датам:
 
-```text
-availableDate = lastAttemptDate + cooldownPeriodDays
-allowed = (todayDate - lastAttemptDate) >= cooldownPeriodDays
-blocked = !allowed
-```
+   ```text
+   availableDate = lastAttemptDate + cooldownPeriodDays
+   allowed = (todayDate - lastAttemptDate) >= cooldownPeriodDays
+   blocked = !allowed
+   ```
 
 7. Если `allowed = false`, Core показывает `blockedPageId`, передаёт туда `availableDate` и не
    запускает SCORM.
