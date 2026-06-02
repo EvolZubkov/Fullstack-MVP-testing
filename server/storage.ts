@@ -7,7 +7,7 @@ import {
   users, topics, topicCourses, topicEvents, questions, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
   groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
-  contentPages,
+  contentPages, resultVariables,
   type User, type InsertUser,
   type Folder, type InsertFolder,
   type TestFolder, type InsertTestFolder,
@@ -30,7 +30,9 @@ import {
   type PasswordResetToken, type InsertPasswordResetToken,
   type AssignmentAccessToken, type InsertAssignmentAccessToken,
   type ContentPage, type InsertContentPage,
+  type ResultVariable, type InsertResultVariable,
 } from "@shared/schema";
+import { validate, type ValidationResult, type ValueType } from "@shared/formula";
 
 /**
  * Normalizes a test row from the DB for backward compatibility (PRD-7 §1.11).
@@ -202,6 +204,19 @@ export interface IStorage {
   updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined>;
   deleteContentPage(id: string): Promise<boolean>;
   reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void>;
+
+  // PRD-2: user-defined result variables (показатели результата).
+  getResultVariables(testId: string): Promise<ResultVariable[]>;
+  createResultVariable(rv: InsertResultVariable): Promise<ResultVariable>;
+  updateResultVariable(id: string, updates: Partial<InsertResultVariable>): Promise<ResultVariable | undefined>;
+  deleteResultVariable(id: string): Promise<boolean>;
+  reorderResultVariables(updates: { id: string; sortOrder: number }[]): Promise<void>;
+  validateResultVariableFormula(
+    testId: string,
+    formula: string,
+    type: ValueType,
+    opts?: { sortOrder?: number; excludeId?: string },
+  ): Promise<ValidationResult>;
 }
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
@@ -1303,6 +1318,63 @@ export class DatabaseStorage implements IStorage {
           .where(eq(contentPages.id, id));
       }
     });
+  }
+
+  // ─── Result variables (PRD-2) ──────────────────────────────────────────────
+  async getResultVariables(testId: string): Promise<ResultVariable[]> {
+    return db.select().from(resultVariables)
+      .where(eq(resultVariables.testId, testId))
+      .orderBy(resultVariables.sortOrder);
+  }
+
+  async createResultVariable(rv: InsertResultVariable): Promise<ResultVariable> {
+    const [created] = await db.insert(resultVariables).values(rv).returning();
+    return created;
+  }
+
+  async updateResultVariable(id: string, updates: Partial<InsertResultVariable>): Promise<ResultVariable | undefined> {
+    const [updated] = await db.update(resultVariables)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(resultVariables.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteResultVariable(id: string): Promise<boolean> {
+    const result = await db.delete(resultVariables).where(eq(resultVariables.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async reorderResultVariables(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      for (const { id, sortOrder } of updates) {
+        await tx.update(resultVariables)
+          .set({ sortOrder, updatedAt: new Date() })
+          .where(eq(resultVariables.id, id));
+      }
+    });
+  }
+
+  /**
+   * Validate a result-variable formula against a test's reference sets using the
+   * shared DSL. `topicById` resolves to the test's topics; `var()` may reference
+   * only variables with a smaller `sort_order` (DAG, scoring-model §10.9).
+   * `scaleById` resolves to warnings while scales are unimplemented (Этап A).
+   */
+  async validateResultVariableFormula(
+    testId: string,
+    formula: string,
+    type: ValueType,
+    opts: { sortOrder?: number; excludeId?: string } = {},
+  ): Promise<ValidationResult> {
+    const sections = await db.select().from(testSections).where(eq(testSections.testId, testId));
+    const topicIds = new Set(sections.map((s) => s.topicId));
+    const existing = await this.getResultVariables(testId);
+    const prior = existing.filter(
+      (rv) => rv.id !== opts.excludeId && (opts.sortOrder === undefined || rv.sortOrder < opts.sortOrder),
+    );
+    const priorVarNames = new Set(prior.map((rv) => rv.name));
+    return validate(formula, type, { topicIds, priorVarNames, scaleKeys: new Set() });
   }
 }
 
