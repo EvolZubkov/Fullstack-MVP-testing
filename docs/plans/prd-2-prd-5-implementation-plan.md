@@ -191,10 +191,14 @@ validation unit; покрытие >= 80%. `npm run check` 0 ошибок, `vites
   (`type`/`aggregation`/`normalization`/`direction`/`bands`/`show_to_learner`/
   `scorm_target`), покрытие вопросами, предупреждения о шкалах без вкладов,
   предпросмотр диапазонов; bands с `level`.
-- `docs/wireframes/prd5-measurements-matrix.html` — матрица «Измерения» внутри вкладки
-  «Шкалы»: выбор вопроса теста -> вклады по шкалам; спец-формы для
-  `single/multiple/matching/ranking`; условия (`equals/includes/matchingPair/
-  rankingPosition/isCorrect/scoreRatio`); предпросмотр расчёта.
+- `docs/wireframes/prd5-measurements-matrix.html` — под-раздел «Вклады вопросов» внутри
+  вкладки «Шкалы»: сетка «вариант × шкала» (строки = варианты/пары/позиции для
+  `single/multiple/matching/ranking`, ячейка = явный `value_json`; пусто = нет вклада,
+  допустимы 0 и отрицательные); корректность — read-only из раздела «Вопросы»;
+  предпросмотр расчёта. Условия (`condition_json`) на первом этапе отложены
+  (`docs/specs/scoring-model.md` §10.5; PRD-5 §4.4) — многошкальность выражается
+  отдельными per-option строками. Содержательная основа — эскиз
+  `docs/wireframes/prd2-prd5-scoring-tabs.html`.
 
 Handbook-first, DS-линтер, согласование, `approved/`.
 
@@ -211,8 +215,8 @@ Handbook-first, DS-линтер, согласование, `approved/`.
   -> публиковать `scale.*` **до** `result.*`; событие `scale:calculated`; псевдо-
   интеракции `scale_{key}`; `suspend_data.custom.scale` + `scaleErrors`; контекст в
   `templateCore.js` + слот `data-slot="scale-results"`.
-- Редактор: вкладка «Шкалы» + матрица «Измерения»; теперь `scaleById`/`countScales`
-  в валидаторе PRD-2 резолвятся к реальным шкалам.
+- Редактор: вкладка «Шкалы» (под-разделы «Список шкал» + «Вклады вопросов»); теперь
+  `scaleById`/`countScales` в валидаторе PRD-2 резолвятся к реальным шкалам.
 - Тесты: inverse-нормализация (`percent`), границы bands, измерения по типам вопросов,
   совместимость старых тестов без шкал.
 
@@ -273,6 +277,12 @@ tests/fixtures/formula-cases.json                    (golden-корпус)
 
 ## 9. Риски и открытые вопросы
 
+- **Пререквизиты до scale-стороны (перед Этапом B):** (1) градуированный `checkAnswer` —
+  сейчас возвращает строго 0/1, нужна рубрика по типам вопросов с дефолтом = текущее
+  бинарное поведение (старые тесты бит-идентичны); (2) durable ID единиц ответа —
+  варианты/пары/позиции адресуются индексом массива, нужны стабильные `source_key` или
+  index-remap миграция до под-вопросной маршрутизации. См. `docs/specs/scoring-model.md`
+  §10.7 и PRD-5 §9.2. Оба не блокируют Этап A (показатели), но обязательны до вкладов шкал.
 - **Детерминизм recovery (NFR-04):** шкалы и показатели пересчитываются из сохранённых
   ответов при восстановлении попытки; значения дублируются в записи попытки.
 - **Рендер test-scope блоков:** известный gap — runtime сейчас играет только
@@ -284,4 +294,3 @@ tests/fixtures/formula-cases.json                    (golden-корпус)
 - **Дублирование DSL (TS + JS-порт):** смягчается обязательным golden-корпусом паритета.
 - **Видимость id псевдо-интеракций в Excel WebTutor** (example-mbi §7) — уточняется на
   первом live-LMS прогоне Этапа C.
-```

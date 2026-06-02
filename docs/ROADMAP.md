@@ -105,6 +105,9 @@ postprocessor, который должен быть заменён SCORM-пак�
 | 4 | **PRD-N (Flat adaptive)** | Адаптивная выдача из общего pool без секционных границ — комбинация `(mode=adaptive, flowMode=linear_flat)`, отложена из PRD-4 v1.1 | PRD-4 |
 | — | PRD-9 | Миграция bcrypt → `@vvlad1973/crypto` (tech debt, изолирован) | — |
 
+Детальный план трека — [docs/plans/prd-2-prd-5-implementation-plan.md](./plans/prd-2-prd-5-implementation-plan.md);
+нормативная сквозная модель расчёта — [scoring-model.md](./specs/scoring-model.md).
+
 Парный трек PRD-2 + PRD-5 — внутренний порядок:
 
 | Этап | Состав | Обоснование |
