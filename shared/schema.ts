@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, uuid } from "drizzle-orm/pg-core"
+import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, uuid, numeric } from "drizzle-orm/pg-core"
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -972,3 +972,61 @@ export const insertResultVariableSchema = createInsertSchema(resultVariables)
 
 export type InsertResultVariable = z.infer<typeof insertResultVariableSchema>;
 export type ResultVariable = typeof resultVariables.$inferSelect;
+
+// PRD-5: measurement scales (шкалы). Test-scoped named aggregates of explicit
+// per-question contributions, normalized (with optional inversion) and banded.
+// Published to scale.* before result.* at completion. See migration 009 for the
+// key-regex CHECK and the enum CHECKs.
+export const scales = pgTable("scales", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  description: text("description"),
+  type: text("type", { enum: ["number", "boolean", "category", "level"] }).notNull(),
+  aggregation: text("aggregation", { enum: ["sum", "avg", "weighted_avg", "max", "min"] }).notNull().default("sum"),
+  normalization: text("normalization", { enum: ["none", "percent", "custom"] }).notNull().default("none"),
+  direction: text("direction", { enum: ["positive", "inverse"] }).notNull().default("positive"),
+  configJson: jsonb("config_json").$type<Record<string, unknown>>().notNull().default({}),
+  showToLearner: boolean("show_to_learner").notNull().default(false),
+  scormTarget: text("scorm_target", { enum: ["none", "suspend_data", "interaction", "both"] }).notNull().default("none"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertScaleSchema = createInsertSchema(scales)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({
+    key: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,63}$/, "key: начинается с буквы; строчные/цифры/подчёркивание; до 64 символов"),
+    label: z.string().min(1).max(120),
+  });
+
+export type InsertScale = z.infer<typeof insertScaleSchema>;
+export type Scale = typeof scales.$inferSelect;
+
+// PRD-5: explicit contribution of one question unit (whole question / option /
+// matching pair / ranking position) into one scale. `value_json` is the explicit
+// numeric contribution (0 and negatives valid); correctness is orthogonal.
+export const questionMeasurements = pgTable("question_measurements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
+  questionId: varchar("question_id", { length: 36 }).notNull().references(() => questions.id, { onDelete: "cascade" }),
+  scaleId: uuid("scale_id").notNull().references(() => scales.id, { onDelete: "cascade" }),
+  sourceType: text("source_type", { enum: ["question", "option", "matching_pair", "ranking_position"] }).notNull(),
+  sourceKey: text("source_key"),
+  valueJson: jsonb("value_json").$type<number>().notNull(),
+  weight: numeric("weight").notNull().default("1"),
+  conditionJson: jsonb("condition_json").$type<Record<string, unknown> | null>(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertQuestionMeasurementSchema = createInsertSchema(questionMeasurements)
+  .omit({ id: true, createdAt: true, updatedAt: true });
+
+export type InsertQuestionMeasurement = z.infer<typeof insertQuestionMeasurementSchema>;
+export type QuestionMeasurement = typeof questionMeasurements.$inferSelect;
