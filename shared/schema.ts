@@ -118,6 +118,8 @@ export const questions = pgTable("questions", {
   feedbackCorrect: text("feedback_correct"),
   feedbackIncorrect: text("feedback_incorrect"),
   contentHash: text("content_hash"),
+  // PRD-2 §8.2: tags feed result-variable aggregate formulas; chip input in the question card.
+  tags: jsonb("tags").$type<string[]>().notNull().default([]),
 });
 
 export const testFolders = pgTable("test_folders", {
@@ -939,3 +941,34 @@ export type Template = typeof templates.$inferSelect;
 
 export type InsertContentPage = z.infer<typeof insertContentPageSchema>;
 export type ContentPage = typeof contentPages.$inferSelect;
+
+// PRD-2: user-defined result variables (показатели результата). Test-scoped,
+// formula-driven values published to result.* at completion. See migration 008
+// for the name-regex CHECK and the partial unique indexes that enforce at most
+// one success / one completion controller per test.
+export const resultVariables = pgTable("result_variables", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  label: text("label").notNull(),
+  type: text("type", { enum: ["boolean", "number", "string"] }).notNull(),
+  formula: text("formula").notNull(),
+  showToLearner: boolean("show_to_learner").notNull().default(false),
+  scormTarget: text("scorm_target", { enum: ["interaction", "suspend_data", "both", "none"] }).notNull().default("both"),
+  controlsStatus: text("controls_status", { enum: ["none", "success", "completion"] }).notNull().default("none"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertResultVariableSchema = createInsertSchema(resultVariables)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({
+    name: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,63}$/, "name: начинается с буквы; строчные/цифры/подчёркивание; до 64 символов"),
+    label: z.string().min(1).max(120),
+  });
+
+export type InsertResultVariable = z.infer<typeof insertResultVariableSchema>;
+export type ResultVariable = typeof resultVariables.$inferSelect;
