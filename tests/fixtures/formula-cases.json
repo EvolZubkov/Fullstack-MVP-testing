@@ -1,0 +1,44 @@
+{
+  "context": {
+    "percent": 80,
+    "topics": {
+      "t1": { "percent": 90, "passed": true, "score": 9 },
+      "t2": { "percent": 50, "passed": false, "score": 5 }
+    },
+    "tags": { "scale:EE": { "percent": 60, "score": 6, "maxScore": 10, "count": 3 } },
+    "scales": {
+      "leadership": { "raw": 12, "normalized": 0.8, "percent": 80, "level": "high", "label": "Высокий", "hasValue": true }
+    },
+    "sections": { "sec1": { "percent": 70, "passed": true, "completed": true } },
+    "vars": { "ee_score": 12, "category": "high", "flag": true }
+  },
+  "cases": [
+    { "formula": "percent", "expected": 80 },
+    { "formula": "percent >= 75", "expected": true },
+    { "formula": "2 + 3 * 4", "expected": 14 },
+    { "formula": "(2 + 3) * 4", "expected": 20 },
+    { "formula": "true OR false AND false", "expected": true },
+    { "formula": "NOT true AND true", "expected": false },
+    { "formula": "1 + 1 = 2", "expected": true },
+    { "formula": "10 / 0", "expected": 0 },
+    { "formula": "-5 + 2", "expected": -3 },
+    { "formula": "topicById(\"t1\").percent", "expected": 90 },
+    { "formula": "topicById(\"t1\").passed", "expected": true },
+    { "formula": "topicById(\"missing\").score", "expected": 0 },
+    { "formula": "tag(\"scale:EE\").count", "expected": 3 },
+    { "formula": "scaleById(\"leadership\").level", "expected": "high" },
+    { "formula": "scaleById(\"leadership\").level = \"high\"", "expected": true },
+    { "formula": "scaleById(\"nope\").hasValue", "expected": false },
+    { "formula": "sectionById(\"sec1\").completed", "expected": true },
+    { "formula": "var(\"ee_score\")", "expected": 12 },
+    { "formula": "var(\"missing\")", "expected": null },
+    { "formula": "countTopics()", "expected": 2 },
+    { "formula": "countPassed()", "expected": 1 },
+    { "formula": "avgPercent()", "expected": 70 },
+    { "formula": "countVars([\"category\"], \"high\")", "expected": 1 },
+    { "formula": "countScales([\"leadership\"], \"high\")", "expected": 1 },
+    { "formula": "countScales([\"leadership\"], \"low\")", "expected": 0 },
+    { "formula": "IF(percent >= 90, \"Expert\", IF(percent >= 70, \"Advanced\", \"Beginner\"))", "expected": "Advanced" },
+    { "formula": "topicById(\"t1\").percent * 0.4 + topicById(\"t2\").percent * 0.6", "expected": 66 }
+  ]
+}

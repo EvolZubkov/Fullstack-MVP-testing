@@ -151,6 +151,12 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/render/startPage.js",
   ]);
 
+  // Result-variable formula DSL — plain-JS port of shared/formula (PRD-2). Must
+  // be joined before resultsPage.js, which evaluates formulas via FormulaDSL.
+  const formulaJs = readOneOf([
+    "app/dsl/formula.js",
+  ]);
+
   const resultsPageJs = readOneOf([
     "app/render/resultsPage.js",
   ]);
@@ -233,6 +239,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     rankingDndJs,
     startPageJs,
     viewResultsJs,
+    formulaJs,
     resultsPageJs,
     questionMediaJs,
     pdfExportJs,
