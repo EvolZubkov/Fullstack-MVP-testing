@@ -1,6 +1,6 @@
 # Пример: MBI Burnout Inventory как PRD-5 + PRD-2 сценарий
 
-**Версия:** 1.1  
+**Версия:** 1.2  
 **Дата:** 2026-06-02 (v1.1: §2.4 переведён на явную сетку «вариант × шкала» —
 `source_type = option`, вклад = `value_json` 0..5; `answer_score` в шкалы не наследуется
 ([scoring-model.md](../scoring-model.md) §10.3); §2.3 — шесть вариантов)  
@@ -188,29 +188,41 @@ formula: |
 
 ### 4.1 `cmi.interactions`
 
-Для `scorm_target = "both"` Core создаёт по одной pseudo-interaction на каждую шкалу
-и каждый result_variable:
+Для `scorm_target = "both"` Core создаёт pseudo-interaction на ЗНАЧЕНИЕ каждой шкалы, а для
+шкал с диапазонами — ещё одну на УРОВЕНЬ (PRD-5 §8.2), плюс по одной на каждый result_variable:
 
 ```text
 cmi.interactions[N].id               = "scale_ee"
 cmi.interactions[N].type             = "other"
 cmi.interactions[N].result           = "neutral"
-cmi.interactions[N].learner_response = "Высокий"     // band.label
+cmi.interactions[N].learner_response = "30"          // raw-значение
 cmi.interactions[N].description      = "Эмоциональное истощение"
 
-cmi.interactions[N+1].id               = "scale_d"
-cmi.interactions[N+1].learner_response = "Средний"
-cmi.interactions[N+1].description      = "Отстранённость"
+cmi.interactions[N+1].id               = "scale_ee_level"
+cmi.interactions[N+1].learner_response = "Высокий"   // band.label
+cmi.interactions[N+1].description      = "Эмоциональное истощение — уровень"
 
-cmi.interactions[N+2].id               = "scale_ad"
-cmi.interactions[N+2].learner_response = "Высокий"
-cmi.interactions[N+2].description      = "Обесценивание достижений"
+cmi.interactions[N+2].id               = "scale_d"
+cmi.interactions[N+2].learner_response = "7"
+cmi.interactions[N+2].description      = "Отстранённость"
 
-cmi.interactions[N+3].id               = "var_burnout_category"
-cmi.interactions[N+3].type             = "other"
-cmi.interactions[N+3].result           = "neutral"
-cmi.interactions[N+3].learner_response = "Возрастающее истощение"
-cmi.interactions[N+3].description      = "Категория выгорания"
+cmi.interactions[N+3].id               = "scale_d_level"
+cmi.interactions[N+3].learner_response = "Средний"
+cmi.interactions[N+3].description      = "Отстранённость — уровень"
+
+cmi.interactions[N+4].id               = "scale_ad"
+cmi.interactions[N+4].learner_response = "20"
+cmi.interactions[N+4].description      = "Обесценивание достижений"
+
+cmi.interactions[N+5].id               = "scale_ad_level"
+cmi.interactions[N+5].learner_response = "Высокий"
+cmi.interactions[N+5].description      = "Обесценивание достижений — уровень"
+
+cmi.interactions[N+6].id               = "var_burnout_category"
+cmi.interactions[N+6].type             = "other"
+cmi.interactions[N+6].result           = "neutral"
+cmi.interactions[N+6].learner_response = "Возрастающее истощение"
+cmi.interactions[N+6].description      = "Категория выгорания"
 ```
 
 ### 4.2 `suspend_data.custom`

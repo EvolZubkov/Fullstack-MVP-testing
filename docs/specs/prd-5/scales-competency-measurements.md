@@ -1,6 +1,6 @@
 # PRD-5: Шкалы, компетенции и многомерные измерения результатов
 
-**Версия:** 1.6  
+**Версия:** 1.7  
 **Статус:** Утверждено 2026-06-02 — post-MVP (ROADMAP §0.2); парный трек с PRD-2  
 **Дата актуализации:** 2026-06-02  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
@@ -489,20 +489,33 @@ B. …  ✓ верный        |    1      |   3   |  (пусто)
 
 ### 8.2 `interactions`
 
-Для `interaction` или `both` Core может создать pseudo-interaction:
+Для `interaction` или `both` Core создаёт pseudo-interaction со ЗНАЧЕНИЕМ шкалы (`raw`):
 
 ```text
 cmi.interactions[n].id               = "scale_leadership"
 cmi.interactions[n].type             = "other"
 cmi.interactions[n].result           = "neutral"
-cmi.interactions[n].learner_response = "Высокий"
+cmi.interactions[n].learner_response = "12"            // raw-значение шкалы
 cmi.interactions[n].description      = "Лидерство"
 ```
 
-`learner_response` несёт отображаемый `label` из band — именно это поле попадает в Excel
-отчёт WebTutor (см. §8.3). `description` несёт `label` шкалы.
+Если у шкалы заданы `bands`, Core ДОПОЛНИТЕЛЬНО создаёт pseudo-interaction с ДИАПАЗОНОМ
+(уровнем), в который попало значение, — чтобы в LMS были доступны и число, и его
+интерпретация:
 
-Стандартный балл SCORM не заменяется шкалами.
+```text
+cmi.interactions[n].id               = "scale_leadership_level"
+cmi.interactions[n].type             = "other"
+cmi.interactions[n].result           = "neutral"
+cmi.interactions[n].learner_response = "Высокий"       // band.label
+cmi.interactions[n].description      = "Лидерство — уровень"
+```
+
+То есть шкала с диапазонами даёт в Excel-выгрузку WebTutor ДВА столбца: `scale_{key}`
+(значение `raw`) и `scale_{key}_level` (метка диапазона `band.label`); шкала без
+диапазонов — один столбец `scale_{key}`. Машинный код уровня (`band.level`) и `percent`
+остаются в `suspend_data.custom.scale.{key}` (§8.1). Стандартный балл SCORM не заменяется
+шкалами.
 
 ### 8.3 Совместимость с LMS-экспортом (WebTutor)
 
@@ -520,8 +533,8 @@ LMS WebTutor выгружает результаты курса в Excel со с
 
 | Сущность | `scorm_target` | Эффект |
 | --- | --- | --- |
-| Шкала с `show_to_learner = false`, нужна только аналитику | `interaction` | Pseudo-interaction `scale_{key}`, label попадает в Excel |
-| Шкала, отображаемая обучающемуся и аналитику | `both` | Pseudo-interaction + полный объект в `suspend_data.custom.scale.{key}` для runtime UI |
+| Шкала с `show_to_learner = false`, нужна только аналитику | `interaction` | Столбцы `scale_{key}` (значение) и, при заданных `bands`, `scale_{key}_level` (диапазон) |
+| Шкала, отображаемая обучающемуся и аналитику | `both` | Те же pseudo-interactions + полный объект в `suspend_data.custom.scale.{key}` для runtime UI |
 | Итоговая категория (`result_variable` в PRD-2) | `both` | Pseudo-interaction `var_{name}`, дублируется в `suspend_data.custom.result.{name}` |
 
 Стабильные id pseudo-interactions, на которые администратор WebTutor может биндить
@@ -529,12 +542,13 @@ LMS WebTutor выгружает результаты курса в Excel со с
 
 | Источник | Id pseudo-interaction |
 | --- | --- |
-| Шкала | `scale_{key}` |
+| Шкала — значение (`raw`) | `scale_{key}` |
+| Шкала — диапазон/уровень (если заданы `bands`) | `scale_{key}_level` |
 | Пользовательский показатель (PRD-2) | `var_{name}` |
 | Раздел теста (PRD-4) | `section_{key}` |
 
 Эта схема позволяет заменить постобработку Excel внешним скриптом: после сдачи PRD-5 +
-PRD-2 LMS-выгрузка уже содержит столбцы с уровнями шкал и итоговой категорией. См.
+PRD-2 LMS-выгрузка уже содержит столбцы со значениями и уровнями шкал и итоговой категорией. См.
 end-to-end сценарий MBI в [example-mbi.md](./example-mbi.md).
 
 ---

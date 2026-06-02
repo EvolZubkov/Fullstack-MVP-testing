@@ -213,7 +213,8 @@ Handbook-first, DS-линтер, согласование, `approved/`.
   (`server/scorm/template/app/scales/` новый модуль): применить measurement-правила ->
   агрегировать -> нормализовать с учётом `direction` -> применить bands -> `level/label`
   -> публиковать `scale.*` **до** `result.*`; событие `scale:calculated`; псевдо-
-  интеракции `scale_{key}`; `suspend_data.custom.scale` + `scaleErrors`; контекст в
+  интеракции `scale_{key}` (+ `scale_{key}_level` для шкал с диапазонами, PRD-5 §8.2);
+  `suspend_data.custom.scale` + `scaleErrors`; контекст в
   `templateCore.js` + слот `data-slot="scale-results"`.
 - Редактор: вкладка «Шкалы» (под-разделы «Список шкал» + «Вклады вопросов»); теперь
   `scaleById`/`countScales` в валидаторе PRD-2 резолвятся к реальным шкалам.
@@ -228,7 +229,7 @@ Handbook-first, DS-линтер, согласование, `approved/`.
 - Golden-тест: категория совпадает с `process_burnout_export.py` по таблице 27
   комбинаций / наборам ответов (PRD-2 §12, example-mbi §5.3 пункт 10).
 - SCORM-экспорт -> player-приёмка (см. память
-  [reference_scorm_acceptance_tooling]): псевдо-интеракции `scale_ee/d/ad` +
+  [reference_scorm_acceptance_tooling]): псевдо-интеракции `scale_{ee,d,ad}` + `scale_{ee,d,ad}_level` +
   `var_burnout_category`; содержимое `suspend_data.custom`.
 - Регрессия: старый тест без шкал/показателей экспортируется и проходится без изменений.
 - Актуализация: ROADMAP §0.2, статусы PRD-2/PRD-5, example-mbi acceptance; зафиксировать
