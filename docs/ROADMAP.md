@@ -103,7 +103,7 @@ postprocessor, который должен быть заменён SCORM-пак�
 | 2 | PRD-6 | Retake gate / cooldown (compliance для корпоративных курсов) | PRD-4 |
 | 3 | PRD-3 | Реестр и жизненный цикл внешних шаблонов | PRD-1 |
 | 4 | **PRD-N (Flat adaptive)** | Адаптивная выдача из общего pool без секционных границ — комбинация `(mode=adaptive, flowMode=linear_flat)`, отложена из PRD-4 v1.1 | PRD-4 |
-| 5 | **PRD-N (Градуированная оценка ответа)** | Частичный балл за `multiple`/`matching`/`ranking`: градуированный `checkAnswer`, `scoreRatio`, условие `answer.scoreRatio`; активирует зарезервированный статус «Частично правильно» (scoring-model §10.10) | — |
+| 5 | **PRD-N (Градуированная оценка ответа)** | Частичный балл за `multiple`/`matching`/`ranking`: градуированный `checkAnswer`, `scoreRatio`, условие `answer.scoreRatio`; активирует зарезервированный статус «Частично правильно» (BRD BR-09, scoring-model §10.10) | — |
 | — | PRD-9 | Миграция bcrypt → `@vvlad1973/crypto` (tech debt, изолирован) | — |
 
 Детальный план трека — [docs/plans/prd-2-prd-5-implementation-plan.md](./plans/prd-2-prd-5-implementation-plan.md);
