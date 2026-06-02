@@ -14,6 +14,7 @@ import logsRouter from "./logs";
 import accessRouter from "./access";
 import templatesRouter from "./templates";
 import contentPagesRouter from "./content-pages";
+import resultVariablesRouter from "./result-variables";
 
 export {
   foldersRouter,
@@ -32,6 +33,7 @@ export {
   accessRouter,
   templatesRouter,
   contentPagesRouter,
+  resultVariablesRouter,
 };
 
 // Конфигурация монтирования роутеров
@@ -39,6 +41,7 @@ export const routerConfig = [
   { path: "/access", router: accessRouter }, // magic link — до session guard
   { path: "/api/templates", router: templatesRouter },
   { path: "/api/tests", router: contentPagesRouter },
+  { path: "/api/tests", router: resultVariablesRouter },
   { path: "/api/folders", router: foldersRouter },
   { path: "/api/test-folders", router: testFoldersRouter },
   { path: "/api/topics", router: topicsRouter },
