@@ -1,7 +1,7 @@
 # PRD-2: Пользовательские показатели результата
 
-**Версия:** 2.1  
-**Статус:** Backlog — post-MVP (ROADMAP §0.2); парный трек с PRD-5  
+**Версия:** 2.2  
+**Статус:** Утверждено 2026-06-02 — post-MVP (ROADMAP §0.2); парный трек с PRD-5  
 **Дата актуализации:** 2026-05-29 (v2.1: DSL расширен `scaleById(...)`, добавлено поле
 `controls_status` для управления `cmi.success_status` / `cmi.completion_status`)  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
@@ -363,7 +363,7 @@ cmi.interactions[n].result           = "neutral"
 CREATE TABLE result_variables (
   id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   test_id         uuid NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
-  name            text NOT NULL CHECK (name ~ '^[a-z][a-z0-9_]*$'),
+  name            text NOT NULL CHECK (name ~ '^[a-z][a-z0-9_]{0,63}$'),
   label           text NOT NULL,
   type            text NOT NULL CHECK (type IN ('boolean', 'number', 'string')),
   formula         text NOT NULL,
