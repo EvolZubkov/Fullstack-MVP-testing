@@ -16,7 +16,7 @@ Acceptance покрыт 19 тестами в
 **Этап BRD:** BR-06  
 **Зависимости:** `flowPolicy` и результаты разделов из PRD-4, content pages и
 системные страницы из PRD-1, редактор параметров теста из PRD-7  
-**Референс:** `docs/references/RTK_Test_commits_last_260226_v2.story`
+**Референс:** сертификационный тест для руководителей (`docs/references/RTK_Test_commits_last.story`)
 
 ## Статус реализации (на 2026-05-29)
 
