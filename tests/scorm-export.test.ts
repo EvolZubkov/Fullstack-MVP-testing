@@ -31,6 +31,7 @@ const { storageMock, scormMock, fsMock, isSupportedMock } = vi.hoisted(() => {
     getContentPages: vi.fn(),
     getAdaptiveTopicSettingsByTest: vi.fn(),
     getAdaptiveLevelsByTest: vi.fn(),
+    getResultVariables: vi.fn().mockResolvedValue([]),
   };
 
   const scormMock = { generateScormPackage: vi.fn().mockResolvedValue(Buffer.from("ZIP")) };
