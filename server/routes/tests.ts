@@ -676,6 +676,9 @@ router.get("/:id/export/scorm", requireAuthor, async (req, res) => {
     // Load content pages for this test
     const contentPages = await storage.getContentPages(test.id);
 
+    // Load result variables (PRD-2) for this test
+    const resultVariables = await storage.getResultVariables(test.id);
+
     // Load adaptive settings if test is adaptive
     let adaptiveSettings = null;
     if (test.mode === "adaptive") {
@@ -733,6 +736,7 @@ router.get("/:id/export/scorm", requireAuthor, async (req, res) => {
       sections: exportSections,
       adaptiveSettings,
       contentPages,
+      resultVariables,
       designSettings,
       telemetry: telemetryConfig,
     });

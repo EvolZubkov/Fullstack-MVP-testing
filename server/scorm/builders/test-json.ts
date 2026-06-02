@@ -1,4 +1,4 @@
-import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage } from "@shared/schema";
+import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable } from "@shared/schema";
 import { sanitizeHtml } from "../../utils/html-sanitizer";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
@@ -22,6 +22,7 @@ interface ExportData {
   sections: (TestSection & { topic: Topic; questions: Question[]; courses: TopicCourse[]; events: TopicEvent[] })[];
   adaptiveSettings?: AdaptiveSettingsExport | null;
   contentPages?: ContentPage[];
+  resultVariables?: ResultVariable[];
   designSettings?: DesignSettingsExport;
   // Telemetry config
   telemetry?: {
@@ -224,6 +225,23 @@ export function buildTestJson(data: ExportData): string {
         autoAdvanceDelayMs: page.autoAdvanceDelayMs,
       };
     });
+  }
+
+  // PRD-2: user-defined result variables, ordered by sort_order. The runtime
+  // (resultsPage.js) evaluates `formula` via FormulaDSL after standard scoring
+  // and publishes result.*; `controlsStatus` may override pass/completion.
+  if (data.resultVariables && data.resultVariables.length > 0) {
+    test.resultVariables = data.resultVariables.map((rv) => ({
+      id: rv.id,
+      name: rv.name,
+      label: rv.label,
+      type: rv.type,
+      formula: rv.formula,
+      showToLearner: rv.showToLearner,
+      scormTarget: rv.scormTarget,
+      controlsStatus: rv.controlsStatus,
+      sortOrder: rv.sortOrder,
+    }));
   }
 
   // Add telemetry config if present
