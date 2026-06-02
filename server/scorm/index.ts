@@ -151,6 +151,12 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/render/startPage.js",
   ]);
 
+  // Scale engine — plain-JS port of shared/scales/engine (PRD-5). Joined before
+  // resultsPage.js, which computes scales (scale.*) before result variables.
+  const scaleEngineJs = readOneOf([
+    "app/scales/engine.js",
+  ]);
+
   // Result-variable formula DSL — plain-JS port of shared/formula (PRD-2). Must
   // be joined before resultsPage.js, which evaluates formulas via FormulaDSL.
   const formulaJs = readOneOf([
@@ -239,6 +245,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     rankingDndJs,
     startPageJs,
     viewResultsJs,
+    scaleEngineJs,
     formulaJs,
     resultsPageJs,
     questionMediaJs,
