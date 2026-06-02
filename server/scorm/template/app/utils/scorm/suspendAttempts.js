@@ -83,6 +83,10 @@ function saveAttemptResult(resultData) {
     earnedPoints: parseFloat(resultData.earnedPoints) || 0,
     possiblePoints: parseFloat(resultData.possiblePoints) || 0,
     passed: resultData.passed,
+    // PRD-2 (A7): persisted result.* values + per-formula errors for this attempt,
+    // so a recovered session restores the same computed variables (NFR-04).
+    resultValues: (resultData.resultComputation && resultData.resultComputation.values) || {},
+    formulaErrors: (resultData.resultComputation && resultData.resultComputation.errors) || [],
     topicResults: resultData.topicResults,
     answers: JSON.parse(JSON.stringify(state.answers)),
     flatQuestions: JSON.parse(JSON.stringify(state.flatQuestions))

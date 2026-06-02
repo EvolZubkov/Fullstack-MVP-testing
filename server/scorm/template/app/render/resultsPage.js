@@ -1,5 +1,48 @@
 var scormFinished = false;
 
+// ─── PRD-2 (A7): result variables ────────────────────────────────────────────
+// Build the formula evaluation context from standard scoring. Этап A wires
+// percent + per-topic results; tags/scales/sections resolve to neutral defaults
+// (tag aggregation and PRD-5 scales / PRD-4 section keys come later).
+function buildResultVarContext(results) {
+  var topics = {};
+  (results.topicResults || []).forEach(function (tr) {
+    topics[tr.topicId] = { percent: tr.percent || 0, passed: tr.passed === true, score: tr.earnedPoints || 0 };
+  });
+  return { percent: results.percent || 0, topics: topics, tags: {}, scales: {}, sections: {} };
+}
+
+function computeTestResultVariables(results) {
+  var defs = (typeof TEST_DATA !== 'undefined' && TEST_DATA.resultVariables) || [];
+  if (!defs.length || typeof FormulaDSL === 'undefined') return { values: {}, errors: [], status: {} };
+  return FormulaDSL.computeResultVariables(defs, buildResultVarContext(results));
+}
+
+// Pseudo-interactions var_{name} for variables published to the LMS report
+// (scorm_target interaction/both). learner_response carries the computed value.
+function buildResultVarInteractions(computation) {
+  var out = [];
+  var defs = (typeof TEST_DATA !== 'undefined' && TEST_DATA.resultVariables) || [];
+  defs.forEach(function (rv) {
+    var target = rv.scormTarget || 'both';
+    if (target !== 'interaction' && target !== 'both') return;
+    var value = (computation && computation.values) ? computation.values[rv.name] : undefined;
+    out.push({
+      id: 'var_' + rv.name,
+      type: 'other',
+      result: 'neutral',
+      response: (value === null || value === undefined) ? '' : String(value),
+      correct: '',
+      description: rv.label || rv.name
+    });
+  });
+  return out;
+}
+
+function pushAll(target, items) {
+  for (var i = 0; i < items.length; i++) target.push(items[i]);
+}
+
 function finishAndClose() {
   if (scormFinished) return;
   scormFinished = true;
@@ -28,6 +71,10 @@ function finishAndClose() {
     // Стандартный режим
     results = calculateResults();
   }
+
+  // PRD-2 (A7): compute result.* once for this attempt; carried into the
+  // suspend_data record, the LMS pseudo-interactions and the status override.
+  results.resultComputation = computeTestResultVariables(results);
 
   console.log('🎯 Завершение теста (' + (isAdaptive ? 'адаптивный' : 'стандартный') + '), процент:', Math.round(results.percent));
 
@@ -89,12 +136,25 @@ function finishAndClose() {
     bestPassed = true;
   }
 
+  // PRD-2 (A7): a boolean controls_status="success" variable overrides the LMS
+  // pass flag (cmi.success_status); completion is applied after SCORM.finish.
+  var rcStatus = (results.resultComputation && results.resultComputation.status) || {};
+  if (typeof rcStatus.success === 'boolean') {
+    console.log('🎚️ controls_status переопределяет passed:', rcStatus.success);
+    bestPassed = rcStatus.success;
+    passedForLms = rcStatus.success;
+  }
+
   console.log('📤 Отправляем в LMS:', Math.round(resultsForLms.percent) + '%, passed:', bestPassed);
+
+  // result.* is computed for this attempt; the LMS report carries its var_*
+  // pseudo-interactions regardless of which attempt supplies the headline score.
+  var resultComputation = results.resultComputation;
 
   // Отправляем в LMS
   if (isAdaptive) {
     console.log('🔵 Адаптивный тест: принудительно passed=true для LMS');
-    finishScormAdaptive(resultsForLms, true);
+    finishScormAdaptive(resultsForLms, true, resultComputation);
   } else {
     if (bestAttempt && bestAttempt !== results) {
       console.log('🔄 Восстанавливаем state из лучшей попытки для LMS');
@@ -104,13 +164,22 @@ function finishAndClose() {
       state.answers = bestAttempt.answers || {};
       state.flatQuestions = bestAttempt.flatQuestions || [];
 
-      finishScormLmsOnly(resultsForLms, bestPassed);
+      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation);
 
       state.answers = savedAnswers;
       state.flatQuestions = savedFlatQuestions;
     } else {
-      finishScormLmsOnly(resultsForLms, bestPassed);
+      finishScormLmsOnly(resultsForLms, bestPassed, resultComputation);
     }
+  }
+
+  // PRD-2 (A7): a boolean controls_status="completion" variable overrides
+  // cmi.completion_status (which SCORM.finish set to completed by default).
+  if (resultComputation && typeof resultComputation.status.completion === 'boolean') {
+    try {
+      SCORM.setValue('cmi.completion_status', resultComputation.status.completion ? 'completed' : 'incomplete');
+      console.log('🎚️ controls_status переопределяет completion:', resultComputation.status.completion);
+    } catch (e) { }
   }
 
   try { SCORM.commit(); } catch (e) { }
@@ -121,7 +190,7 @@ function finishAndClose() {
 /**
  * Finish SCORM for adaptive mode
  */
-function finishScormAdaptive(results, passedForLms) {
+function finishScormAdaptive(results, passedForLms, resultComputation) {
   var objectives = results.topicResults.map(function (tr) {
     return {
       id: 'topic_' + tr.topicId,
@@ -214,6 +283,9 @@ function finishScormAdaptive(results, passedForLms) {
   });
 
   // Отправляем в LMS
+  // PRD-2 (A7): append var_{name} pseudo-interactions for published variables.
+  pushAll(interactions, buildResultVarInteractions(resultComputation));
+
   SCORM.finish(percentScore, 100, passedForLms, objectives, interactions);
 
   // Записываем уровень ПОСЛЕ finish
@@ -456,7 +528,7 @@ function collectFailedTopicCourses(results) {
   return courses;
 }
 
-function finishScorm(results, passedForLms) {
+function finishScorm(results, passedForLms, resultComputation) {
   var objectives = results.topicResults.map(function (tr) {
     return {
       id: 'topic_' + tr.topicId,
@@ -558,11 +630,14 @@ function finishScorm(results, passedForLms) {
     failedTopicCourses: failedTopicCourses
   });
 
+  // PRD-2 (A7): append var_{name} pseudo-interactions for published variables.
+  pushAll(interactions, buildResultVarInteractions(resultComputation));
+
   SCORM.finish(percentScore, 100, passedForLms, objectives, interactions);
 }
 
 // Версия finishScorm БЕЗ отправки телеметрии (используется когда телеметрия уже отправлена)
-function finishScormLmsOnly(results, passedForLms) {
+function finishScormLmsOnly(results, passedForLms, resultComputation) {
   var objectives = results.topicResults.map(function (tr) {
     return {
       id: 'topic_' + tr.topicId,
@@ -656,5 +731,8 @@ function finishScormLmsOnly(results, passedForLms) {
   var percentScore = Math.round(results.percent);
 
   // НЕ отправляем телеметрию - она уже отправлена в finishAndClose()
+  // PRD-2 (A7): append var_{name} pseudo-interactions for published variables.
+  pushAll(interactions, buildResultVarInteractions(resultComputation));
+
   SCORM.finish(percentScore, 100, passedForLms, objectives, interactions);
 }
