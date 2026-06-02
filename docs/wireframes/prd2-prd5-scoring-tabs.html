@@ -77,10 +77,10 @@
       }
       .wf-bands-grid td:nth-child(1) .ou-field,
       .wf-bands-grid td:nth-child(2) .ou-field {
-        width: var(--wf-size-72, 4.5rem);
+        width: var(--wf-size-72);
       }
       .wf-bands-grid td:nth-child(4) .ou-field {
-        width: var(--wf-size-112, 7rem);
+        width: var(--wf-size-110);
       }
       /* Read-only highlight of the correct variant row (edited in «Вопросы»). */
       .wf-row-correct td {
@@ -507,6 +507,98 @@
                 </div>
               </section>
 
+              <!-- Вопрос 15 (matching) — раскрыт: единица = направленная пара -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">15. Сопоставьте ситуацию и верную реакцию</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">сопоставление · <span class="ou-tag ou-tag--neutral ou-tag--outline">КО</span> <span class="ou-tag ou-tag--neutral ou-tag--outline">ОР</span> <span class="ou-tag ou-tag--neutral ou-tag--outline wf-chip-muted">КМ</span></p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Редактировать вопрос</button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть вопрос" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <table class="tb-table wf-num-grid">
+                    <thead>
+                      <tr><th>Пара ответа (левый &rarr; правый)</th><th>КО</th><th>ОР</th><th>КМ</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr class="wf-row-correct">
+                        <td>Конфликт в команде &rarr; Медиация <span class="wf-correct-mark">✓ верная</span></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Вклад пары «Конфликт → Медиация» в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Вклад пары «Конфликт → Медиация» в ОР" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад пары «Конфликт → Медиация» в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                      <tr>
+                        <td>Конфликт в команде &rarr; Игнорирование</td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="-1" aria-label="Вклад пары «Конфликт → Игнорирование» в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад пары «Конфликт → Игнорирование» в ОР (пусто — не влияет)" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад пары «Конфликт → Игнорирование» в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                      <tr class="wf-row-correct">
+                        <td>Срыв срока &rarr; Эскалация <span class="wf-correct-mark">✓ верная</span></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Вклад пары «Срыв срока → Эскалация» в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад пары «Срыв срока → Эскалация» в ОР (пусто — не влияет)" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад пары «Срыв срока → Эскалация» в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">Для сопоставления строка = направленная пара «левый &rarr; правый». Активна каждая фактически составленная пара, независимо от корректности: можно оценить и верное сопоставление, и диагностично неверное (scoring-model §10.11).</div></div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- Вопрос 18 (ranking) — раскрыт: единица = размещение (элемент @ позиция) -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--ok" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">18. Расставьте шаги по приоритету</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">ранжирование · <span class="ou-tag ou-tag--neutral ou-tag--outline">КО</span> <span class="ou-tag ou-tag--neutral ou-tag--outline wf-chip-muted">ОР</span> <span class="ou-tag ou-tag--neutral ou-tag--outline">КМ</span></p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Редактировать вопрос</button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть вопрос" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <table class="tb-table wf-num-grid">
+                    <thead>
+                      <tr><th>Размещение (элемент @ позиция)</th><th>КО</th><th>ОР</th><th>КМ</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>Анализ рисков @ 1</td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="3" aria-label="Вклад «Анализ рисков на позиции 1» в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад «Анализ рисков на позиции 1» в ОР (пусто — не влияет)" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Вклад «Анализ рисков на позиции 1» в КМ" /></div></div></td>
+                      </tr>
+                      <tr>
+                        <td>Анализ рисков @ 3</td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Вклад «Анализ рисков на позиции 3» в КО" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад «Анализ рисков на позиции 3» в ОР (пусто — не влияет)" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад «Анализ рисков на позиции 3» в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                      <tr>
+                        <td>Согласование @ 2</td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад «Согласование на позиции 2» в КО (пусто — не влияет)" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Вклад «Согласование на позиции 2» в ОР" /></div></div></td>
+                        <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" aria-label="Вклад «Согласование на позиции 2» в КМ (пусто — не влияет)" /></div></div></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">Для ранжирования строка = размещение «элемент @ позиция»: один элемент на разных позициях может вкладывать разное. Активно фактическое размещение (scoring-model §10.11).</div></div>
+                  </div>
+                </div>
+              </section>
+
               <!-- Вопрос 7 — свёрнут, без вкладов -->
               <section class="ou-card ou-card--outlined ou-card--sm tb-level-card is-collapsed">
                 <header class="ou-card__header tb-level-card__head">
@@ -834,6 +926,32 @@ IF(countScales(["ee","d","ad"], "high") = 0
                   <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
                     <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
                     <div class="ou-banner__body"><div class="ou-banner__desc">В шкалу не ведёт ни один вклад: ни одна ячейка её столбца не заполнена. Укажите числа-вклады в столбце шкалы в разделе «Вклады вопросов».</div></div>
+                  </div>
+                </div>
+              </section>
+              <!-- Композит с циклической зависимостью — блокирующая ошибка валидации -->
+              <section class="ou-card ou-card--outlined ou-card--sm tb-level-card">
+                <header class="ou-card__header tb-level-card__head">
+                  <span class="tb-status-dot tb-status-dot--err" aria-hidden="true"></span>
+                  <div class="ou-card__heading tb-level-card__heading">
+                    <h5 class="ou-card__title tb-level-card__title">Компетенции руководителя 1 (композит)</h5>
+                    <p class="ou-card__subtitle tb-level-card__summary">источник: другие шкалы · циклическая зависимость</p>
+                  </div>
+                  <div class="ou-card__trail tb-level-card__trail">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s tb-level-card__del" aria-label="Удалить шкалу"><svg width="14" height="14"><use href="#i-trash" /></svg></button>
+                    <button type="button" class="tb-level-card__chev" aria-label="Свернуть шкалу" aria-expanded="true"><svg width="16" height="16"><use href="#i-chevron-down" /></svg></button>
+                  </div>
+                </header>
+                <div class="ou-card__body tb-level-card__body">
+                  <div class="ou-banner ou-banner--subtle ou-banner--error" role="alert">
+                    <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+                    <div class="ou-banner__body"><div class="ou-banner__desc">Циклическая зависимость составных шкал: «leader_comp» &rarr; «leader_comp_2» &rarr; «leader_comp». Граф композиции должен быть ацикличным — уберите шкалу из цепочки дочерних (scoring-model §10.9, PRD-5 §11).</div></div>
+                  </div>
+                  <hr class="wf-sep" />
+                  <div class="ou-formfield">
+                    <label class="ou-formfield__lbl">Дочерние шкалы</label>
+                    <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Критическое мышление</span></span></label>
+                    <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" checked aria-invalid="true" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Компетенции руководителя 2 — создаёт цикл</span></span></label>
                   </div>
                 </div>
               </section>
@@ -1381,9 +1499,10 @@ IF(countScales(["ee","d","ad"], "high") = 0
             <tr><td>Шкала · агрегация</td><td><code>sum/avg/weighted_avg/max/min</code></td><td>По умолчанию <code>sum</code>; в UI доступны все пять операций. <code>avg</code>/<code>weighted_avg</code> — делитель число вкладывающих вопросов / <code>Σ weight</code>; <code>weighted_avg</code> берёт вес с ребра «вопрос × шкала». Каждая операция = ветка движка + golden. <code>threshold/formula</code> убраны: порог = bands, формула = слой «Показатели» (PRD-5 §5.1)</td></tr>
             <tr><td>Шкала · пересчёт итога</td><td><code>none/percent/inverse</code></td><td><code>none/percent</code> на первом этапе; <code>inverse</code> — обратная шкала: percent=(max−raw)/(max−min)·100 (вся шкала). <code>linear/custom</code> — точки расширения, в селекте этапа-1 скрыты; пол (clamp) внутри <code>linear</code>; <code>z_score</code> исключён (PRD-5 §5.2)</td></tr>
             <tr><td>Шкала · источник</td><td>«Вопросы» | «Другие шкалы»</td><td>«Другие шкалы» = композит: агрегация <code>sum</code>/<code>avg</code> дочерних шкал; <code>weighted_avg</code>/<code>max</code>/<code>min</code> — слой «Показатели»</td></tr>
+            <tr><td>Композит · ацикличность</td><td>граф «шкала &rarr; дочерние» — DAG; цикл блокирует сохранение</td><td>Самоссылка и цикл A&rarr;B&rarr;A — блокирующая ошибка валидации (состояние <code>s-scale-error</code>); расчёт композитов в топологическом порядке; runtime-guard от рекурсии (scoring-model §10.9, PRD-5 §11)</td></tr>
             <tr><td>Корректность и базовый балл (где задаётся)</td><td><code>correctJson</code>/<code>answer_score</code> — свойство ВОПРОСА (раздел «Вопросы»)</td><td>Правильность варианта и стандартный балл задаются в самом вопросе (раздел «Вопросы»), НЕ на шкале и НЕ во «Вкладах». Вклады в шкалы — отдельные явные числа (см. сетку), они НЕ наследуют <code>answer_score</code></td></tr>
             <tr><td>Диапазоны → уровень</td><td><code>bands</code> на <code>raw</code></td><td>min/max/label/level; уровень публикуется в <code>scale.{key}.level</code>; диапазоны и <code>percent</code> поддерживают отрицательный <code>raw</code> (вклады могут быть отрицательными) (PRD-5 §5.3)</td></tr>
-            <tr><td>Сетка «вариант × шкала» (главный объект «Вкладов»)</td><td>строки = варианты ответа; столбцы = ВСЕ шкалы теста; ячейка = <code>question_measurements.value_json</code></td><td>Пусто = вариант НЕ влияет на шкалу (ребра нет); число = вклад; допустимы 0 (влияет, вклад 0) и отрицательные (вычитает). Членство вопроса в шкале — производное (есть непустая ячейка в столбце). Один вариант может вкладывать в несколько шкал с разными числами (мультишкальность)</td></tr>
+            <tr><td>Сетка «вариант × шкала» (главный объект «Вкладов»)</td><td>строки = варианты ответа (для <code>matching</code> — пары «левый &rarr; правый»; для <code>ranking</code> — размещения «элемент @ позиция», scoring-model §10.11); столбцы = ВСЕ шкалы теста; ячейка = <code>question_measurements.value_json</code></td><td>Пусто = вариант НЕ влияет на шкалу (ребра нет); число = вклад; допустимы 0 (влияет, вклад 0) и отрицательные (вычитает). Членство вопроса в шкале — производное (есть непустая ячейка в столбце). Один вариант может вкладывать в несколько шкал с разными числами (мультишкальность)</td></tr>
             <tr><td>Чипы шкал в шапке вопроса</td><td>производные от непустых столбцов</td><td>Сначала тип вопроса, затем все шкалы теста чипами: яркий = вопрос вкладывает; блеклый (<code>wf-chip-muted</code>) = не вкладывает. Вопрос-сирота = все чипы блеклые</td></tr>
             <tr><td>Верный вариант</td><td>read-only подсветка строки (<code>wf-row-correct</code>) + «Редактировать вопрос»</td><td>Правильность здесь НЕ редактируется — только показывается; правка — в разделе «Вопросы» по ссылке «Редактировать вопрос». У опросника верного нет → подсветки нет (ортогонально вкладам, scoring-model §10.2)</td></tr>
             <tr><td>Правило вклада в шкалу</td><td>сумма вкладов фактически выбранных единиц</td><td>Одиночный — вклад выбранного варианта; множественный — сумма выбранных; сопоставление/ранжирование — по парам/позициям. Корректность — отдельный слой: неверный ответ не обнуляет вклад (scoring-model §10.1–10.2)</td></tr>
