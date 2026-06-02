@@ -86,13 +86,21 @@ const TYPE_LABEL: Record<ResultVariableType, string> = {
 
 type TopicRef = { id: string; name: string };
 
-/** A stable per-row key: server id when persisted, else a synthesized draft id. */
+let localKeyCounter = 0;
+
+/**
+ * Stable per-row key: the server id once persisted, else the client key assigned
+ * at creation. Must not depend on editable fields, or typing into the row would
+ * remount the card (losing focus and the expanded state).
+ */
 function rowKey(v: ResultVariableModel, index: number): string {
-  return v.id ?? `draft-${index}-${v.name || "new"}`;
+  return v.id ?? v.clientKey ?? `row-${index}`;
 }
 
 function emptyVariable(sortOrder: number): ResultVariableModel {
+  localKeyCounter += 1;
   return {
+    clientKey: `rv-${localKeyCounter}`,
     name: "",
     label: "",
     type: "number",
@@ -173,7 +181,7 @@ export function ResultVariablesSection({
 
   return (
     <div className="tb-settings-content" data-testid="metrics-section">
-      <div className="wf-list-head">
+      <div className="flex items-center justify-between mb-3">
         <div className="tb-section-label">
           Показатели результата{vars.length > 1 ? " · порядок вычисления" : ""}
         </div>
@@ -181,10 +189,11 @@ export function ResultVariablesSection({
           <Button
             variant="ghost"
             size="s"
+            leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
             onClick={addVariable}
             data-testid="metrics-add"
           >
-            <Plus width={16} height={16} aria-hidden="true" /> Добавить показатель
+            Добавить показатель
           </Button>
         )}
       </div>
@@ -339,7 +348,7 @@ function VariableForm({ variable: v, index, topics, testId, readOnly, onChange }
 
   return (
     <>
-      <div className="wf-grid-2">
+      <div className="grid grid-cols-2 gap-3">
         <Input
           size="m"
           fullWidth
@@ -521,7 +530,7 @@ function FormulaBuilder({
       />
 
       {showCondition && (
-        <div className="wf-grid-2">
+        <div className="grid grid-cols-2 gap-3">
           {template === "topic_threshold" && (
             <Select<string>
               size="m"

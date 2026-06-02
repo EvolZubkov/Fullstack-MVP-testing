@@ -182,6 +182,12 @@ export type ResultVariableControlsStatus = "none" | "success" | "completion";
  */
 export type ResultVariableModel = {
   id?: string;
+  /**
+   * Stable client-side key for rows added in the editor before they have a
+   * server `id`. Used only for React keys / drag identity; never sent to the API
+   * and not part of the save diff.
+   */
+  clientKey?: string;
   name: string;
   label: string;
   type: ResultVariableType;
