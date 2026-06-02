@@ -37,6 +37,7 @@ import type {
   OverallPassType,
   PassDecisionPolicy,
   PassRules,
+  ResultVariableModel,
   RouterCompletionPolicy,
   SectionTimeLimit,
   TestEditorModel,
@@ -458,6 +459,45 @@ function emptyToNull(value: string): string | null {
  * The model is intentionally invalid for `save()` until the author fills in
  * `basic.title` and adds at least one section (FR-11, FR-12).
  */
+// ─── Result variables (PRD-2) ─────────────────────────────────────────────────
+
+const RESULT_VAR_TYPES = new Set(["number", "string", "boolean"]);
+const RESULT_VAR_TARGETS = new Set(["none", "suspend_data", "interaction", "both"]);
+const RESULT_VAR_STATUS = new Set(["none", "success", "completion"]);
+
+/**
+ * Map the `resultVariables` array from the API test response into editor models,
+ * ordered by `sortOrder`. Unknown enum values fall back to safe defaults so a
+ * malformed row never throws the whole editor open.
+ */
+function buildResultVariablesFromApi(src: ApiTestResponse): ResultVariableModel[] {
+  const raw = (src as { resultVariables?: unknown }).resultVariables;
+  if (!Array.isArray(raw)) return [];
+  const out: ResultVariableModel[] = [];
+  raw.forEach((item, index) => {
+    if (!isPlainObject(item)) return;
+    const r = item as Record<string, unknown>;
+    out.push({
+      id: typeof r.id === "string" ? r.id : undefined,
+      name: typeof r.name === "string" ? r.name : "",
+      label: typeof r.label === "string" ? r.label : "",
+      type: RESULT_VAR_TYPES.has(r.type as string)
+        ? (r.type as ResultVariableModel["type"])
+        : "number",
+      formula: typeof r.formula === "string" ? r.formula : "",
+      showToLearner: r.showToLearner === true,
+      scormTarget: RESULT_VAR_TARGETS.has(r.scormTarget as string)
+        ? (r.scormTarget as ResultVariableModel["scormTarget"])
+        : "both",
+      controlsStatus: RESULT_VAR_STATUS.has(r.controlsStatus as string)
+        ? (r.controlsStatus as ResultVariableModel["controlsStatus"])
+        : "none",
+      sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : index,
+    });
+  });
+  return out.sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
 export function emptyEditorModel(args: { folderId: string | null }): TestEditorModel {
   return {
     version: 0,
@@ -491,6 +531,7 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
       testSettings: { showDifficultyLevel: true },
       topics: [],
     },
+    resultVariables: [],
   };
 }
 
@@ -567,6 +608,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       testSettings: { showDifficultyLevel },
       topics: adaptiveTopics,
     },
+    resultVariables: buildResultVariablesFromApi(src),
   };
 }
 

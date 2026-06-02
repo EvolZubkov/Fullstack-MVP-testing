@@ -161,6 +161,37 @@ export type EditorSection = {
   feedbackAssets: FeedbackAsset[];
 };
 
+// ─── Result variables (PRD-2) ─────────────────────────────────────────────────
+
+export type ResultVariableType = "number" | "string" | "boolean";
+
+/** How the value is published to the LMS (cmi). Mirrors the `scorm_target` enum. */
+export type ResultVariableScormTarget =
+  | "none"
+  | "suspend_data"
+  | "interaction"
+  | "both";
+
+/** Whether a boolean variable overrides cmi.success_status / completion_status. */
+export type ResultVariableControlsStatus = "none" | "success" | "completion";
+
+/**
+ * One result variable as edited in the «Показатели» tab. `id` is absent for
+ * rows added in the editor and not yet persisted; the save orchestrator creates
+ * them via POST and the refetched snapshot fills in the real id.
+ */
+export type ResultVariableModel = {
+  id?: string;
+  name: string;
+  label: string;
+  type: ResultVariableType;
+  formula: string;
+  showToLearner: boolean;
+  scormTarget: ResultVariableScormTarget;
+  controlsStatus: ResultVariableControlsStatus;
+  sortOrder: number;
+};
+
 // ─── Editor model ─────────────────────────────────────────────────────────────
 
 /**
@@ -201,6 +232,8 @@ export type TestEditorModel = {
     testSettings: AdaptiveTestSettings;
     topics: Array<AdaptiveTopicConfig & { enabled: boolean }>;
   };
+  /** PRD-2 result variables, ordered by evaluation (`sortOrder`). */
+  resultVariables: ResultVariableModel[];
 };
 
 // ─── API DTO payloads ─────────────────────────────────────────────────────────

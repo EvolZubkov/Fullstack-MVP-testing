@@ -325,5 +325,109 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
     }
   }
 
+  validateResultVariables(model, errors);
+
   return { errors, warnings };
+}
+
+/** Result-variable name grammar (PRD-2 §8.1): lower snake_case, ≤64 chars. */
+const RESULT_VAR_NAME_RE = /^[a-z][a-z0-9_]{0,63}$/;
+
+/**
+ * Synchronous structural checks for result variables (PRD-2). Deep formula
+ * validity is enforced server-side by the create/update endpoints (422) and
+ * surfaced live via the validate-formula call in the section; here we cover the
+ * checks the editor can make from the draft alone: name grammar/uniqueness,
+ * required label/formula, and the `controls_status` rules (boolean-only, at most
+ * one success / one completion controller per test).
+ */
+function validateResultVariables(
+  model: TestEditorModel,
+  errors: ValidationIssue[],
+): void {
+  const vars = model.resultVariables ?? [];
+  const seenNames = new Map<string, number>();
+  let successCount = 0;
+  let completionCount = 0;
+
+  vars.forEach((v, i) => {
+    if (!v.name.trim()) {
+      errors.push({
+        field: `resultVariables[${i}].name`,
+        code: "required",
+        message: "Укажите имя показателя.",
+        severity: "error",
+      });
+    } else if (!RESULT_VAR_NAME_RE.test(v.name)) {
+      errors.push({
+        field: `resultVariables[${i}].name`,
+        code: "format",
+        message: "Имя: строчная буква в начале; буквы/цифры/подчёркивание; до 64 символов.",
+        severity: "error",
+      });
+    } else {
+      const prev = seenNames.get(v.name);
+      if (prev !== undefined) {
+        errors.push({
+          field: `resultVariables[${i}].name`,
+          code: "duplicate",
+          message: `Имя «${v.name}» уже используется другим показателем.`,
+          severity: "error",
+        });
+      } else {
+        seenNames.set(v.name, i);
+      }
+    }
+
+    if (!v.label.trim()) {
+      errors.push({
+        field: `resultVariables[${i}].label`,
+        code: "required",
+        message: "Укажите метку показателя.",
+        severity: "error",
+      });
+    }
+
+    if (!v.formula.trim()) {
+      errors.push({
+        field: `resultVariables[${i}].formula`,
+        code: "required",
+        message: "Формула не может быть пустой.",
+        severity: "error",
+      });
+    }
+
+    if (v.controlsStatus !== "none" && v.type !== "boolean") {
+      errors.push({
+        field: `resultVariables[${i}].controlsStatus`,
+        code: "type_mismatch",
+        message:
+          "Управление статусом доступно только для показателей типа «булево». " +
+          "Измените тип или сбросьте в «Нет».",
+        severity: "error",
+      });
+    }
+
+    if (v.controlsStatus === "success") successCount += 1;
+    if (v.controlsStatus === "completion") completionCount += 1;
+  });
+
+  vars.forEach((v, i) => {
+    if (v.controlsStatus === "success" && successCount > 1) {
+      errors.push({
+        field: `resultVariables[${i}].controlsStatus`,
+        code: "duplicate_controller",
+        message: "Только один показатель может управлять статусом «Успех».",
+        severity: "error",
+      });
+    }
+    if (v.controlsStatus === "completion" && completionCount > 1) {
+      errors.push({
+        field: `resultVariables[${i}].controlsStatus`,
+        code: "duplicate_controller",
+        message: "Только один показатель может управлять статусом «Завершение».",
+        severity: "error",
+      });
+    }
+  });
 }
