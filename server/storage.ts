@@ -7,7 +7,7 @@ import {
   users, topics, topicCourses, topicEvents, questions, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
   groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
-  contentPages, resultVariables,
+  contentPages, resultVariables, scales, questionMeasurements,
   type User, type InsertUser,
   type Folder, type InsertFolder,
   type TestFolder, type InsertTestFolder,
@@ -31,6 +31,8 @@ import {
   type AssignmentAccessToken, type InsertAssignmentAccessToken,
   type ContentPage, type InsertContentPage,
   type ResultVariable, type InsertResultVariable,
+  type Scale, type InsertScale,
+  type QuestionMeasurement, type InsertQuestionMeasurement,
 } from "@shared/schema";
 import { validate, type ValidationResult, type ValueType } from "@shared/formula";
 
@@ -217,6 +219,19 @@ export interface IStorage {
     type: ValueType,
     opts?: { sortOrder?: number; excludeId?: string },
   ): Promise<ValidationResult>;
+  // PRD-5: scales and per-question measurements.
+  getScales(testId: string): Promise<Scale[]>;
+  createScale(scale: InsertScale): Promise<Scale>;
+  updateScale(id: string, updates: Partial<InsertScale>): Promise<Scale | undefined>;
+  deleteScale(id: string): Promise<boolean>;
+  reorderScales(updates: { id: string; sortOrder: number }[]): Promise<void>;
+  getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]>;
+  getQuestionMeasurementsByQuestion(testId: string, questionId: string): Promise<QuestionMeasurement[]>;
+  upsertQuestionMeasurements(
+    testId: string,
+    questionId: string,
+    rows: InsertQuestionMeasurement[],
+  ): Promise<QuestionMeasurement[]>;
 }
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
@@ -1359,7 +1374,7 @@ export class DatabaseStorage implements IStorage {
    * Validate a result-variable formula against a test's reference sets using the
    * shared DSL. `topicById` resolves to the test's topics; `var()` may reference
    * only variables with a smaller `sort_order` (DAG, scoring-model §10.9).
-   * `scaleById` resolves to warnings while scales are unimplemented (Этап A).
+   * `scaleById`/`countScales` resolve against the test's scales (PRD-5, B2).
    */
   async validateResultVariableFormula(
     testId: string,
@@ -1374,7 +1389,87 @@ export class DatabaseStorage implements IStorage {
       (rv) => rv.id !== opts.excludeId && (opts.sortOrder === undefined || rv.sortOrder < opts.sortOrder),
     );
     const priorVarNames = new Set(prior.map((rv) => rv.name));
-    return validate(formula, type, { topicIds, priorVarNames, scaleKeys: new Set() });
+    const scaleRows = await db.select().from(scales).where(eq(scales.testId, testId));
+    const scaleKeys = new Set(scaleRows.map((s) => s.key));
+    return validate(formula, type, { topicIds, priorVarNames, scaleKeys });
+  }
+
+  // ─── PRD-5: scales ──────────────────────────────────────────────────────────
+
+  async getScales(testId: string): Promise<Scale[]> {
+    return db.select().from(scales)
+      .where(eq(scales.testId, testId))
+      .orderBy(scales.sortOrder);
+  }
+
+  async createScale(scale: InsertScale): Promise<Scale> {
+    const [created] = await db.insert(scales).values(scale).returning();
+    return created;
+  }
+
+  async updateScale(id: string, updates: Partial<InsertScale>): Promise<Scale | undefined> {
+    const [updated] = await db.update(scales)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(scales.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteScale(id: string): Promise<boolean> {
+    const result = await db.delete(scales).where(eq(scales.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async reorderScales(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      for (const { id, sortOrder } of updates) {
+        await tx.update(scales)
+          .set({ sortOrder, updatedAt: new Date() })
+          .where(eq(scales.id, id));
+      }
+    });
+  }
+
+  // ─── PRD-5: per-question measurements ─────────────────────────────────────────
+
+  async getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]> {
+    return db.select().from(questionMeasurements)
+      .where(eq(questionMeasurements.testId, testId))
+      .orderBy(questionMeasurements.sortOrder);
+  }
+
+  async getQuestionMeasurementsByQuestion(
+    testId: string,
+    questionId: string,
+  ): Promise<QuestionMeasurement[]> {
+    return db.select().from(questionMeasurements)
+      .where(and(
+        eq(questionMeasurements.testId, testId),
+        eq(questionMeasurements.questionId, questionId),
+      ))
+      .orderBy(questionMeasurements.sortOrder);
+  }
+
+  /**
+   * Replace all measurements of one question in one test with `rows`
+   * (delete-then-insert in a transaction). Returns the persisted rows. An empty
+   * `rows` clears the question's contributions.
+   */
+  async upsertQuestionMeasurements(
+    testId: string,
+    questionId: string,
+    rows: InsertQuestionMeasurement[],
+  ): Promise<QuestionMeasurement[]> {
+    return db.transaction(async (tx) => {
+      await tx.delete(questionMeasurements).where(and(
+        eq(questionMeasurements.testId, testId),
+        eq(questionMeasurements.questionId, questionId),
+      ));
+      if (rows.length === 0) return [];
+      return tx.insert(questionMeasurements)
+        .values(rows.map((r) => ({ ...r, testId, questionId })))
+        .returning();
+    });
   }
 }
 

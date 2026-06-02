@@ -1019,14 +1019,18 @@ export const questionMeasurements = pgTable("question_measurements", {
   sourceKey: text("source_key"),
   valueJson: jsonb("value_json").$type<number>().notNull(),
   weight: numeric("weight").notNull().default("1"),
-  conditionJson: jsonb("condition_json").$type<Record<string, unknown> | null>(),
+  conditionJson: jsonb("condition_json"),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const insertQuestionMeasurementSchema = createInsertSchema(questionMeasurements)
-  .omit({ id: true, createdAt: true, updatedAt: true });
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({
+    // The contribution is an explicit numeric value (0 and negatives valid).
+    valueJson: z.number(),
+  });
 
 export type InsertQuestionMeasurement = z.infer<typeof insertQuestionMeasurementSchema>;
 export type QuestionMeasurement = typeof questionMeasurements.$inferSelect;
