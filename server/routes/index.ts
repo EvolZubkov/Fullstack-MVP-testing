@@ -15,6 +15,7 @@ import accessRouter from "./access";
 import templatesRouter from "./templates";
 import contentPagesRouter from "./content-pages";
 import resultVariablesRouter from "./result-variables";
+import scalesRouter from "./scales";
 
 export {
   foldersRouter,
@@ -34,6 +35,7 @@ export {
   templatesRouter,
   contentPagesRouter,
   resultVariablesRouter,
+  scalesRouter,
 };
 
 // Конфигурация монтирования роутеров
@@ -42,6 +44,7 @@ export const routerConfig = [
   { path: "/api/templates", router: templatesRouter },
   { path: "/api/tests", router: contentPagesRouter },
   { path: "/api/tests", router: resultVariablesRouter },
+  { path: "/api/tests", router: scalesRouter },
   { path: "/api/folders", router: foldersRouter },
   { path: "/api/test-folders", router: testFoldersRouter },
   { path: "/api/topics", router: topicsRouter },
