@@ -27,14 +27,19 @@
 | B3 | API `/api/tests/:id/scales` + `/measurements` + 16 route-тестов | Готово |
 | B5 core | Движок шкал `shared/scales/engine.ts` + 13 фикстурных тестов | Готово |
 | B5 port | Рантайм-порт `engine.js` + golden-паритет + включение в сборку | Готово |
-| B5 wiring | Расчёт шкал в `resultsPage.js` + псевдо-интеракции + suspend_data | НЕ начато |
-| B5 export/preview | `test.scales[]` в экспорте + endpoint `scales/preview` | НЕ начато |
-| B4 | Вкладка «Шкалы» (`scales-section.tsx`: список + матрица «Вклады») | НЕ начато |
+| B5 wiring | Расчёт шкал в `resultsPage.js` + псевдо-интеракции + suspend_data | Готово (`fbb496a`) |
+| B5 export/preview | `test.scales[]`/`test.measurements[]` в экспорте + endpoint `scales/preview` | Готово (`fbb496a`) |
+| B4a | Вкладка «Шкалы»: список шкал + bands + LMS-таргет + show + preview | Готово, визуально приёмлено (`4044eb0`) |
+| B4b | Под-раздел «Вклады вопросов»: матрица «вариант × шкала» | НЕ начато |
 
-Верификация на момент паузы: `npm run check` — 0 ошибок; `vitest run` — 1566 зелёных.
+Верификация на момент паузы: `npm run check` — 0 ошибок; `vitest run` — 1597 зелёных
+(тесты проходят; глобальный coverage-гейт 50% был красным ещё ДО трека — клиентский
+UI массово без unit-тестов, отсюда дисциплина wireframes/Playwright-first для UI).
+`npm run build` — зелёный.
 
-Коммиты: `a6e3e32` (A1) … `ce7467e` (A9), затем `29282ab` (B1) … `923db2b` (B5 port).
-Все с префиксом `feat(prd-2)` / `feat(prd-5)`.
+Коммиты: `a6e3e32` (A1) … `ce7467e` (A9), затем `29282ab` (B1) … `923db2b` (B5 port),
+`fbb496a` (B5 wiring+export+preview), `4044eb0` (B4a). Все с префиксом
+`feat(prd-2)` / `feat(prd-5)`.
 
 ## 3. Что готово (опорные файлы)
 
@@ -59,58 +64,43 @@ PRD-5 (Этап B, готовая часть):
 
 ## 4. Что осталось (с указаниями)
 
-### B5 wiring (зеркало A7-обвязки в `resultsPage.js`)
+Готово в этой сессии (`fbb496a`, `4044eb0`): B5 wiring (расчёт `scale.*` до
+`result.*` в `resultsPage.js`, псевдо-интеракции `scale_{key}`/`_level` во всех
+трёх finish-функциях, `scaleValues`/`scaleErrors` в `suspendAttempts.js`), B5
+export (`test.scales[]`/`test.measurements[]` в `test-json.ts`, загрузка в
+`loadFullTest` и экспорте, `scaleKey`-резолв), B5 preview
+(`POST /api/tests/:id/scales/preview`), B4a (вкладка «Шкалы»: список шкал, bands,
+LMS-таргет, show-to-learner, preview-модалка).
 
-Эталон — как сделан PRD-2 в `server/scorm/template/app/render/resultsPage.js`
-(функции `computeTestResultVariables`, `buildResultVarContext`, `buildResultVarInteractions`,
-`pushAll`; вызовы в `finishAndClose` и трёх finish-функциях).
+### B4b (под-раздел «Вклады вопросов», UI) — единственное оставшееся
 
-Шаги:
+Самая тяжёлая часть. Рейл уже есть (`scales-section.tsx`, под-вкладка
+`contributions` — сейчас placeholder). Эскиз — `s-contributions` в
+`docs/wireframes/approved/prd2-prd5-scoring-tabs.html`.
 
-1. Построить вход движка из `TEST_DATA` + `state`:
-   - `scales` (из `TEST_DATA.scales` — появятся после экспорта, см. B5 export),
-   - `measurements` (из `TEST_DATA.measurements`; `scaleKey` уже резолвить при экспорте),
-   - `answers` (`state.answers` по `questionId`),
-   - `questionTypes` (по `state.flatQuestions`).
-2. Вызвать `ScaleEngine.computeScales(...)` ДО расчёта показателей.
-3. Положить результат в контекст DSL: `context.scales = scaleComputation.values`
-   (в `buildResultVarContext` сейчас `scales: {}` — заменить на реальные). Тогда
-   `scaleById()`/`countScales()` в формулах показателей дадут значения.
-4. Псевдо-интеракции (PRD-5 §8.2): `scale_{key}` (raw value) и, для шкал с bands,
-   `scale_{key}_level` (band.label) — во всех трёх finish-функциях, для шкал с
-   `scormTarget` = interaction/both. Зеркало `buildResultVarInteractions`.
-5. `suspend_data.custom.scale` + `scaleErrors` в `saveAttemptResult`
-   (`app/utils/scorm/suspendAttempts.js`) — рядом с `resultValues`/`formulaErrors`.
-6. Детерминированный пересчёт при recovery (движок уже детерминирован).
+- Карточка на вопрос (как в `s-contributions`): свёрнута/раскрыта, статус-dot
+  (ok/warn «не привязан»), подзаголовок с чипами шкал; верх — баннер про
+  непокрытые вопросы.
+- Матрица «единица ответа × шкала» в раскрытой карточке (`tb-table`, НЕ `wf-num-grid`):
+  строки зависят от типа вопроса (option-индексы / направленные пары matching
+  `left:right` / размещения ranking `item:pos`), столбцы = шкалы теста, ячейка =
+  числовой вклад (пусто = нет строки measurement; допустимы 0 и отрицательные);
+  подсветка верных вариантов (есть `wf-row-correct` только в эскизе — в React своя).
+- Данные: нужны вопросы теста с вариантами. Грузить через `GET /api/questions`
+  (фильтровать по темам теста) или новый endpoint. Сохранение — per-вопрос
+  `PUT /api/tests/:id/measurements/:questionId` (массив строк); diff в отдельном
+  оркестраторе или в общем save (как `saveScales`). `model.measurements` в
+  редактор пока НЕ добавлен — добавить в `TestEditorModel` + mappers + use-test-editor.
+- Связать с B4a: подзаголовок шкалы «N вопросов»/«M без вклада» (сейчас
+  `agg · recalc · bands`), статус-dot шкалы по покрытию; полный preview demo-ответа
+  для matching/ranking (B4a поддерживает только single/multiple — см.
+  `loadScalePreviewContext`/`ScalePreviewModal` в `scales-api.ts`/`scales-section.tsx`).
+- Гард (scoring-model §10.7): переупорядочивание/удаление опций вопроса с
+  измерениями ломает индексные `source_key` — предупреждать в редакторе вопросов.
+- ОБЯЗАТЕЛЬНО: Playwright-сверка с эскизом (правило wireframes-first).
 
-Проверка: `node --check` по JS-файлам + рантайм/scorm-тесты (`runtime.*`, `scorm-*`).
-
-### B5 export + preview
-
-- `server/scorm/builders/test-json.ts`: добавить `test.scales[]` и `test.measurements[]`
-  (зеркало блока `resultVariables`, коммит `e046513`). В `measurements` подставить
-  `scaleKey` (по `scaleId` -> `scale.key`), чтобы рантайм не знал про uuid.
-- `server/scorm-exporter.ts` + storage-загрузка scales/measurements при экспорте.
-- `server/routes/tests.ts` `loadFullTest`: добавить `scales` + `measurements` в бандл
-  (как `resultVariables` в коммите `26153e2`) — нужно редактору (B4).
-- Серверный preview: `POST /api/tests/:id/scales/preview` в `server/routes/scales.ts` —
-  принять демо-ответы, импортировать `computeScales` из `shared/scales/engine`
-  напрямую (сервер на TS), вернуть `{values, errors}`. Опц.: `.../validate`
-  (уникальность ключа уже есть; для композитных шкал — проверка ацикличности, §10.9).
-
-### B4 (вкладка «Шкалы», UI)
-
-- Эскиз — состояния в `docs/wireframes/approved/prd2-prd5-scoring-tabs.html`:
-  `s-scales` (список + bands-редактор), `s-contributions` (матрица вариант×шкала),
-  `s-scale-advanced` (композит), `s-scale-error`, `s-scales-empty`, `s-preview-calc`.
-- Новый `client/src/features/tests/editor/sections/scales-section.tsx`. Эталон
-  интеграции — `result-variables-section.tsx` + data-layer A8: модель
-  `TestEditorModel.scales` + diff-on-save оркестратор через A5/B3 CRUD; либо
-  отдельный hook. Для матрицы measurements — отдельный upsert-по-вопросу (PUT
-  `/measurements/:questionId`).
-- Зарегистрировать вкладку «Шкалы» (`EditorTabKey`, `TAB_ORDER`, `TAB_LABELS`,
-  routing, dirty-diff) — как «metrics» в A8.
-- ОБЯЗАТЕЛЬНО: Playwright-сверка с эскизом (правило wireframes-first), как в A8.
+Композит (`s-scale-advanced`, источник «Другие шкалы») движок не считает —
+отдельный будущий слой; в B4a опция показана `disabled`.
 
 ## 5. Ключевые решения (не очевидно из кода)
 
