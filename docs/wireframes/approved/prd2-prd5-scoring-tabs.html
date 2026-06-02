@@ -1538,8 +1538,8 @@ IF(countScales(["ee","d","ad"], "high") = 0
             <tr><td>Матрица вкладов / диапазоны</td><td><code>Table</code></td><td><code>--ou-border-soft</code></td><td></td></tr>
             <tr><td>Пустые состояния</td><td><code>EmptyState</code></td><td><code>--ou-fg-muted</code></td><td></td></tr>
             <tr><td>Загрузка</td><td><code>Skeleton</code></td><td><code>--ou-bg-hover</code></td><td></td></tr>
-            <tr><td>Визуальный конструктор формул</td><td><code>custom</code> (кандидат в DS)</td><td>—</td><td>Уточнить на этапе 3.5 — потенциальный блокер</td></tr>
-            <tr><td>Перетаскивание (DnD порядка)</td><td><code>custom</code> (@dnd-kit)</td><td>—</td><td>Рукоятка <code>grip</code></td></tr>
+            <tr><td>Визуальный конструктор формул</td><td><code>Textarea</code> + <code>Combobox</code>/<code>Select</code> + <code>Tag</code> + <code>Button</code> + <code>Banner</code></td><td><code>--ou-*</code></td><td>DSL-режим = <code>Textarea</code>; режим-конструктор — композиция DS-примитивов (без собственного рендера); как единый виджет — кандидат в DS, escalation на этапе 3.5</td></tr>
+            <tr><td>Перетаскивание (DnD порядка)</td><td><code>Ranking</code></td><td><code>--ou-*</code></td><td>DS-примитив drag-to-reorder (grip + ↑/↓, нумерация); список показателей переиспользует его (строка = имя + сводка). Блокер снят</td></tr>
           </tbody>
         </table>
       </div>
