@@ -9,6 +9,7 @@
 [PRD-5](../prd-5/scales-competency-measurements.md),
 [Пример: MBI](../prd-5/example-mbi.md),
 [Платформа SCORM-шаблонов](../spec-template-platform.md)  
+**Модель скоринга:** [scoring-model.md](../scoring-model.md)  
 **Этап BRD:** BR-04  
 **Зависимость:** результаты Core и runtime шаблона из PRD-1, `section.*` из PRD-4,
 `scale.*` из PRD-5
