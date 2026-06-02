@@ -12,7 +12,12 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parse as tsParse, evaluate as tsEvaluate } from "../shared/formula";
+import {
+  parse as tsParse,
+  evaluate as tsEvaluate,
+  computeResultVariables as tsCompute,
+  type ResultVariableSpec,
+} from "../shared/formula";
 
 const root = process.cwd();
 
@@ -27,6 +32,7 @@ const portSrc = readFileSync(resolve(root, "server/scorm/template/app/dsl/formul
 // eslint-disable-next-line @typescript-eslint/no-implied-eval
 const FormulaPort = new Function(`${portSrc}\n;return FormulaDSL;`)() as {
   evaluate: (src: string, ctx: unknown) => unknown;
+  computeResultVariables: (vars: unknown[], base: unknown) => unknown;
 };
 
 describe("formula runtime port parity (PRD-2 §12)", () => {
@@ -39,4 +45,33 @@ describe("formula runtime port parity (PRD-2 §12)", () => {
       expect(port).toEqual(ts); // and the two implementations agree
     });
   }
+});
+
+describe("computeResultVariables port parity (PRD-2 §5.1; A7 core)", () => {
+  const base = {
+    percent: 80,
+    topics: { t1: { percent: 90, passed: true, score: 9 } },
+    tags: {},
+    scales: {},
+    sections: {},
+  };
+  const scenarios: ResultVariableSpec[][] = [
+    [
+      { name: "a", type: "number", formula: "percent", sortOrder: 0 },
+      { name: "b", type: "number", formula: 'var("a") + 1', sortOrder: 1 },
+    ],
+    [
+      { name: "bad", type: "number", formula: "percent >", sortOrder: 0 },
+      { name: "ok", type: "number", formula: "1 + 1", sortOrder: 1 },
+    ],
+    [{ name: "won", type: "boolean", formula: "percent >= 75", controlsStatus: "success", sortOrder: 0 }],
+    [{ name: "cat", type: "string", formula: 'IF(percent >= 90, "Expert", "Advanced")', sortOrder: 0 }],
+  ];
+  scenarios.forEach((vars, i) => {
+    it(`scenario ${i + 1} — TS ≡ runtime port`, () => {
+      const ts = tsCompute(vars, base);
+      const port = FormulaPort.computeResultVariables(vars, base);
+      expect(port).toEqual(ts);
+    });
+  });
 });

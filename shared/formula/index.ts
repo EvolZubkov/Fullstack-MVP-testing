@@ -20,6 +20,11 @@ export { evaluate } from "./evaluator";
 export { validate } from "./validate";
 export { tokenize } from "./tokens";
 export {
+  computeResultVariables,
+  type ResultVariableSpec,
+  type ResultComputation,
+} from "./result-variables";
+export {
   type Ast,
   type EvalContext,
   type FormulaValue,

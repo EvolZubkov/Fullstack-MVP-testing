@@ -253,9 +253,37 @@ var FormulaDSL = (function () {
     return null;
   }
 
+  // ─── Result-variable computation (PRD-2 §5.1; A7 core) ──────────────────────
+  // Twin of shared/formula computeResultVariables. Evaluates variables in
+  // sort_order so a later var("earlier") resolves; collects per-variable errors
+  // without aborting; derives the controls_status override. Deterministic.
+  function computeResultVariables(vars, base) {
+    var ordered = vars.slice().sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); });
+    var computed = {}, values = {}, errors = [], status = {};
+    for (var i = 0; i < ordered.length; i++) {
+      var v = ordered[i], value = null;
+      try {
+        var ctx = {};
+        for (var k in base) { if (Object.prototype.hasOwnProperty.call(base, k)) ctx[k] = base[k]; }
+        ctx.vars = computed;
+        value = evaluateAst(parse(v.formula), ctx);
+      } catch (e) {
+        errors.push({ name: v.name, message: (e && e.message) || String(e) });
+        value = null;
+      }
+      values[v.name] = value;
+      computed[v.name] = value;
+      if ((v.controlsStatus === "success" || v.controlsStatus === "completion") && typeof value === "boolean") {
+        status[v.controlsStatus] = value;
+      }
+    }
+    return { values: values, errors: errors, status: status };
+  }
+
   return {
     parse: parse,
     evaluateAst: evaluateAst,
     evaluate: function (src, ctx) { return evaluateAst(parse(src), ctx); },
+    computeResultVariables: computeResultVariables,
   };
 })();
