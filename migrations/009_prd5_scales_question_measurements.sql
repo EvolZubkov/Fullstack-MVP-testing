@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS "question_measurements" (
   -- Explicit contribution value (jsonb scalar). 0 and negatives are valid; an
   -- absent row means "no contribution". Correctness is orthogonal (§10.2-10.3).
   "value_json"     jsonb NOT NULL,
-  "weight"         numeric NOT NULL DEFAULT 1,
+  "weight"         real NOT NULL DEFAULT 1,
   -- Reserved for conditional contributions (PRD-5 §4.4); null in the first stage.
   "condition_json" jsonb,
   "sort_order"     integer NOT NULL DEFAULT 0,

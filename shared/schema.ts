@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, uuid, numeric } from "drizzle-orm/pg-core"
+import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, uuid, real } from "drizzle-orm/pg-core"
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1018,7 +1018,7 @@ export const questionMeasurements = pgTable("question_measurements", {
   sourceType: text("source_type", { enum: ["question", "option", "matching_pair", "ranking_position"] }).notNull(),
   sourceKey: text("source_key"),
   valueJson: jsonb("value_json").$type<number>().notNull(),
-  weight: numeric("weight").notNull().default("1"),
+  weight: real("weight").notNull().default(1),
   conditionJson: jsonb("condition_json"),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -1030,6 +1030,11 @@ export const insertQuestionMeasurementSchema = createInsertSchema(questionMeasur
   .extend({
     // The contribution is an explicit numeric value (0 and negatives valid).
     valueJson: z.number(),
+    // Fields with a DB default / nullable are optional in the API payload.
+    weight: z.number().optional(),
+    sourceKey: z.string().nullish(),
+    sortOrder: z.number().optional(),
+    conditionJson: z.unknown().nullish(),
   });
 
 export type InsertQuestionMeasurement = z.infer<typeof insertQuestionMeasurementSchema>;
