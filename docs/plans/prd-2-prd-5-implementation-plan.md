@@ -198,7 +198,7 @@ validation unit; покрытие >= 80%. `npm run check` 0 ошибок, `vites
   предпросмотр расчёта. Условия (`condition_json`) на первом этапе отложены
   (`docs/specs/scoring-model.md` §10.5; PRD-5 §4.4) — многошкальность выражается
   отдельными per-option строками. Содержательная основа — эскиз
-  `docs/wireframes/prd2-prd5-scoring-tabs.html`.
+  `docs/wireframes/approved/prd2-prd5-scoring-tabs.html`.
 
 Handbook-first, DS-линтер, согласование, `approved/`.
 
