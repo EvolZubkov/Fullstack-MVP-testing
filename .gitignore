@@ -21,3 +21,11 @@ coverage/
 
 # SCORM acceptance/debug output (scripts/generate-*-scorm.ts)
 out/
+
+# Large reference binaries (Storyline exports) — keep canonical .story only;
+# ignore byte-identical .zip copies and unpacked extractions
+docs/references/RTK_Test_commits_last.zip
+docs/references/RTK_Test_commits_last/
+docs/references/main/
+docs/references/Обновление сертификации для руководителей.zip
+docs/references/Обновление сертификации для руководителей/
