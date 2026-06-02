@@ -1,7 +1,9 @@
 # Пример: MBI Burnout Inventory как PRD-5 + PRD-2 сценарий
 
-**Версия:** 1.0  
-**Дата:** 2026-05-29  
+**Версия:** 1.1  
+**Дата:** 2026-06-02 (v1.1: §2.4 переведён на явную сетку «вариант × шкала» —
+`source_type = option`, вклад = `value_json` 0..5; `answer_score` в шкалы не наследуется
+([scoring-model.md](../scoring-model.md) §10.3); §2.3 — шесть вариантов)  
 **Статус:** Нормативный пример к [PRD-5](./scales-competency-measurements.md) и
 [PRD-2](../prd-2/result-variables.md)  
 **Источник методики:** Maslach Burnout Inventory General Survey (MBI-GS), 22 вопроса
@@ -72,7 +74,7 @@
 
 ### 2.3 Вопросы
 
-22 вопроса single-choice с пятью вариантами:
+22 вопроса single-choice с шестью вариантами:
 
 | Ответ | Score |
 | --- | --- |
@@ -87,37 +89,40 @@ Note: исходная Likert-шкала MBI имеет 6 градаций (вк
 отдельный уровень). При сохранении тестов авторам показывается готовый набор
 вариантов.
 
-### 2.4 Measurements
+### 2.4 Measurements (вклады вопросов)
 
-Каждый вопрос даёт `source_type = "answer_score"` (см. [PRD-5 §9.2](./scales-competency-measurements.md#92-question_measurements)),
-то есть в шкалу прибавляется ровно score выбранного варианта.
+Каждый вопрос измеряет ровно одну шкалу. Вклады задаются ЯВНО в сетке «вариант × шкала»
+(`source_type = "option"`): шесть вариантов ответа дают в шкалу СВОЕГО вопроса числа
+0..5 (численно равны баллу по Likert, но вписываются явно — `answer_score` в шкалы не
+наследуется, см. [scoring-model.md](../scoring-model.md) §10.3 и
+[PRD-5 §9.2](./scales-competency-measurements.md#92-question_measurements)).
+
+Привязка «вопрос -> шкала» (`scaleKey` строк сетки этого вопроса):
+
+| Шкала | Вопросы |
+| --- | --- |
+| `ee` | 1, 2, 3, 6, 8, 13, 14, 16, 20 |
+| `d` | 5, 10, 11, 15, 22 |
+| `ad` | 4, 7, 9, 12, 17, 18, 19, 21 |
+
+Сетка вкладов одинакова для всех 22 вопросов — по строке на вариант, `value_json` равен
+Likert-значению варианта. Пример строк `question_measurements` для вопроса 1 (шкала `ee`):
 
 ```json
 [
-  { "questionNumber": 1,  "scaleKey": "ee", "source_type": "answer_score" },
-  { "questionNumber": 2,  "scaleKey": "ee", "source_type": "answer_score" },
-  { "questionNumber": 3,  "scaleKey": "ee", "source_type": "answer_score" },
-  { "questionNumber": 4,  "scaleKey": "ad", "source_type": "answer_score" },
-  { "questionNumber": 5,  "scaleKey": "d",  "source_type": "answer_score" },
-  { "questionNumber": 6,  "scaleKey": "ee", "source_type": "answer_score" },
-  { "questionNumber": 7,  "scaleKey": "ad", "source_type": "answer_score" },
-  { "questionNumber": 8,  "scaleKey": "ee", "source_type": "answer_score" },
-  { "questionNumber": 9,  "scaleKey": "ad", "source_type": "answer_score" },
-  { "questionNumber": 10, "scaleKey": "d",  "source_type": "answer_score" },
-  { "questionNumber": 11, "scaleKey": "d",  "source_type": "answer_score" },
-  { "questionNumber": 12, "scaleKey": "ad", "source_type": "answer_score" },
-  { "questionNumber": 13, "scaleKey": "ee", "source_type": "answer_score" },
-  { "questionNumber": 14, "scaleKey": "ee", "source_type": "answer_score" },
-  { "questionNumber": 15, "scaleKey": "d",  "source_type": "answer_score" },
-  { "questionNumber": 16, "scaleKey": "ee", "source_type": "answer_score" },
-  { "questionNumber": 17, "scaleKey": "ad", "source_type": "answer_score" },
-  { "questionNumber": 18, "scaleKey": "ad", "source_type": "answer_score" },
-  { "questionNumber": 19, "scaleKey": "ad", "source_type": "answer_score" },
-  { "questionNumber": 20, "scaleKey": "ee", "source_type": "answer_score" },
-  { "questionNumber": 21, "scaleKey": "ad", "source_type": "answer_score" },
-  { "questionNumber": 22, "scaleKey": "d",  "source_type": "answer_score" }
+  { "questionNumber": 1, "scaleKey": "ee", "source_type": "option", "source_key": "opt:Никогда",     "value_json": 0 },
+  { "questionNumber": 1, "scaleKey": "ee", "source_type": "option", "source_key": "opt:Очень редко", "value_json": 1 },
+  { "questionNumber": 1, "scaleKey": "ee", "source_type": "option", "source_key": "opt:Редко",        "value_json": 2 },
+  { "questionNumber": 1, "scaleKey": "ee", "source_type": "option", "source_key": "opt:Иногда",       "value_json": 3 },
+  { "questionNumber": 1, "scaleKey": "ee", "source_type": "option", "source_key": "opt:Часто",        "value_json": 4 },
+  { "questionNumber": 1, "scaleKey": "ee", "source_type": "option", "source_key": "opt:Постоянно",    "value_json": 5 }
 ]
 ```
+
+Остальные 21 вопрос настраиваются так же; отличается только `scaleKey` (по таблице выше).
+При одиночном выборе в шкалу попадает `value_json` фактически выбранного варианта (правило
+суммы `aggregation = sum`, [scoring-model.md](../scoring-model.md) §10.1). `source_key`
+требует стабильных ID вариантов — пререквизит реализации ([scoring-model.md](../scoring-model.md) §10.7).
 
 ### 2.5 Result variable: итоговая категория
 
