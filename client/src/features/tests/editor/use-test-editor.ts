@@ -39,6 +39,7 @@ import {
   mapEditorSectionsToPayload,
 } from "./test-editor.mappers";
 import { validateTestEditor } from "./test-editor.validation";
+import { saveResultVariables } from "./result-variables-api";
 import type {
   TestEditorModel,
   ValidationResult,
@@ -47,7 +48,12 @@ import type {
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 /** The four primary tabs of the editor Drawer. */
-export type EditorTabKey = "composition" | "settings" | "design" | "structure";
+export type EditorTabKey =
+  | "composition"
+  | "settings"
+  | "design"
+  | "structure"
+  | "metrics";
 
 /** Aggregated status per tab — drives the `status-dot` indicator (FR-25b). */
 export type TabStatus = {
@@ -169,6 +175,7 @@ function tabOfField(field: string): EditorTabKey {
   if (field.startsWith("basic")) return "settings";
   if (field.startsWith("design")) return "design";
   if (field.startsWith("flow") || field.startsWith("structure")) return "structure";
+  if (field.startsWith("resultVariables")) return "metrics";
   return "composition";
 }
 
@@ -182,6 +189,7 @@ function buildTabStatuses(
     settings: { ...EMPTY_TAB_STATUS },
     design: { ...EMPTY_TAB_STATUS },
     structure: { ...EMPTY_TAB_STATUS },
+    metrics: { ...EMPTY_TAB_STATUS },
   };
   for (const tab of dirtyTabs) statuses[tab].dirty = true;
   for (const issue of validation.errors) statuses[tabOfField(issue.field)].error = true;
@@ -217,6 +225,9 @@ function diffDirtyTabs(
     !shallowEqualJson(draft.flowSettings, snapshot.flowSettings)
   ) {
     dirty.add("structure");
+  }
+  if (!shallowEqualJson(draft.resultVariables, snapshot.resultVariables)) {
+    dirty.add("metrics");
   }
   return dirty;
 }
@@ -407,6 +418,7 @@ export function useTestEditor(
         settings: { ...EMPTY_TAB_STATUS },
         design: { ...EMPTY_TAB_STATUS },
         structure: { ...EMPTY_TAB_STATUS },
+        metrics: { ...EMPTY_TAB_STATUS },
       };
     }
     const dirty = diffDirtyTabs(draft, snapshot);
@@ -431,11 +443,27 @@ export function useTestEditor(
     mutationFn: async () => {
       if (!draft) throw new Error("save: editor is not ready");
       const fullPayload = buildSavePayload(draft);
+      const snapVars = snapshot?.resultVariables ?? [];
+      // PRD-2: result variables are a separate CRUD resource. Persist the test
+      // first, then reconcile the variables and refetch so newly created rows
+      // come back with their server ids (the merged-response fast path avoids the
+      // extra GET when nothing in the list changed).
       if (isEdit) {
         if (!editTestId) throw new Error("save: edit mode without testId");
-        return putTest(editTestId, fullPayload);
+        const saved = await putTest(editTestId, fullPayload);
+        if (!shallowEqualJson(draft.resultVariables, snapVars)) {
+          await saveResultVariables(editTestId, draft.resultVariables, snapVars);
+          return fetchTest(editTestId);
+        }
+        return { ...(saved as Record<string, unknown>), resultVariables: draft.resultVariables };
       }
-      return postTest(fullPayload);
+      const created = await postTest(fullPayload);
+      const newId = (created as { id?: string } | null)?.id;
+      if (newId && draft.resultVariables.length > 0) {
+        await saveResultVariables(newId, draft.resultVariables, []);
+        return fetchTest(newId);
+      }
+      return { ...(created as Record<string, unknown>), resultVariables: draft.resultVariables };
     },
     onSuccess: (data) => {
       setConflict(null);

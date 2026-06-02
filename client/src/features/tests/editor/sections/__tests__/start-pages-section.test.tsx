@@ -82,6 +82,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
+    resultVariables: [],
     ...overrides,
   };
 }

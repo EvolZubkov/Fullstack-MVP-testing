@@ -55,6 +55,7 @@ import { CompositionSection } from "./sections/topics-structure-section";
 import { SettingsSection } from "./sections/basic-settings-section";
 import { DesignSection } from "./sections/design-section";
 import { StructureSection } from "./sections/start-pages-section";
+import { ResultVariablesSection } from "./sections/result-variables-section";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ const TAB_ORDER: EditorTabKey[] = [
   "settings",
   "design",
   "structure",
+  "metrics",
 ];
 
 const TAB_LABELS: Record<EditorTabKey, string> = {
@@ -94,6 +96,7 @@ const TAB_LABELS: Record<EditorTabKey, string> = {
   settings: "Настройки",
   design: "Оформление",
   structure: "Структура",
+  metrics: "Показатели",
 };
 
 /**
@@ -105,6 +108,7 @@ function tabForField(field: string): EditorTabKey {
   if (field === "sections" || field.startsWith("sections[") || field.startsWith("sections.")) {
     return "composition";
   }
+  if (field.startsWith("resultVariables")) return "metrics";
   return "settings";
 }
 
@@ -523,6 +527,14 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
               readOnly={editor.model.basic.status === "published"}
             />
           )}
+          {editor.model && activeTab === "metrics" && (
+            <ResultVariablesSection
+              model={editor.model}
+              testId={editor.model.id}
+              updateModel={editor.updateModel}
+              readOnly={editor.model.basic.status === "published"}
+            />
+          )}
           {!editor.model && <TabPlaceholder tab={activeTab} />}
           </div>
           {combinedSaving && (
@@ -696,6 +708,7 @@ function TabPlaceholder({ tab }: { tab: EditorTabKey }) {
     settings: "Параметры прохождения, ограничения, обратная связь.",
     design: "Цвета, шрифты, фоны и логотип.",
     structure: "Порядок вопросов, страницы и секции.",
+    metrics: "Показатели результата — формулы над итогами теста.",
   };
   return (
     <EmptyState
@@ -832,6 +845,7 @@ function collectChangesByTab(
     settings: [],
     design: [],
     structure: [],
+    metrics: [],
   };
 
   const fmtBool = (v: boolean) => (v ? "Да" : "Нет");
