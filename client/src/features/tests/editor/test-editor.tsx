@@ -56,6 +56,7 @@ import { SettingsSection } from "./sections/basic-settings-section";
 import { DesignSection } from "./sections/design-section";
 import { StructureSection } from "./sections/start-pages-section";
 import { ResultVariablesSection } from "./sections/result-variables-section";
+import { ScalesSection } from "./sections/scales-section";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -88,6 +89,7 @@ const TAB_ORDER: EditorTabKey[] = [
   "settings",
   "design",
   "structure",
+  "scales",
   "metrics",
 ];
 
@@ -96,6 +98,7 @@ const TAB_LABELS: Record<EditorTabKey, string> = {
   settings: "Настройки",
   design: "Оформление",
   structure: "Структура",
+  scales: "Шкалы",
   metrics: "Показатели",
 };
 
@@ -108,6 +111,7 @@ function tabForField(field: string): EditorTabKey {
   if (field === "sections" || field.startsWith("sections[") || field.startsWith("sections.")) {
     return "composition";
   }
+  if (field.startsWith("scales")) return "scales";
   if (field.startsWith("resultVariables")) return "metrics";
   return "settings";
 }
@@ -527,6 +531,14 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
               readOnly={editor.model.basic.status === "published"}
             />
           )}
+          {editor.model && activeTab === "scales" && (
+            <ScalesSection
+              model={editor.model}
+              testId={editor.model.id}
+              updateModel={editor.updateModel}
+              readOnly={editor.model.basic.status === "published"}
+            />
+          )}
           {editor.model && activeTab === "metrics" && (
             <ResultVariablesSection
               model={editor.model}
@@ -708,6 +720,7 @@ function TabPlaceholder({ tab }: { tab: EditorTabKey }) {
     settings: "Параметры прохождения, ограничения, обратная связь.",
     design: "Цвета, шрифты, фоны и логотип.",
     structure: "Порядок вопросов, страницы и секции.",
+    scales: "Шкалы и измерения — агрегаты вкладов вопросов.",
     metrics: "Показатели результата — формулы над итогами теста.",
   };
   return (
@@ -845,6 +858,7 @@ function collectChangesByTab(
     settings: [],
     design: [],
     structure: [],
+    scales: [],
     metrics: [],
   };
 

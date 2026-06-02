@@ -40,6 +40,7 @@ import {
 } from "./test-editor.mappers";
 import { validateTestEditor } from "./test-editor.validation";
 import { saveResultVariables } from "./result-variables-api";
+import { saveScales } from "./scales-api";
 import type {
   TestEditorModel,
   ValidationResult,
@@ -53,6 +54,7 @@ export type EditorTabKey =
   | "settings"
   | "design"
   | "structure"
+  | "scales"
   | "metrics";
 
 /** Aggregated status per tab — drives the `status-dot` indicator (FR-25b). */
@@ -175,6 +177,7 @@ function tabOfField(field: string): EditorTabKey {
   if (field.startsWith("basic")) return "settings";
   if (field.startsWith("design")) return "design";
   if (field.startsWith("flow") || field.startsWith("structure")) return "structure";
+  if (field.startsWith("scales")) return "scales";
   if (field.startsWith("resultVariables")) return "metrics";
   return "composition";
 }
@@ -189,6 +192,7 @@ function buildTabStatuses(
     settings: { ...EMPTY_TAB_STATUS },
     design: { ...EMPTY_TAB_STATUS },
     structure: { ...EMPTY_TAB_STATUS },
+    scales: { ...EMPTY_TAB_STATUS },
     metrics: { ...EMPTY_TAB_STATUS },
   };
   for (const tab of dirtyTabs) statuses[tab].dirty = true;
@@ -228,6 +232,9 @@ function diffDirtyTabs(
   }
   if (!shallowEqualJson(draft.resultVariables, snapshot.resultVariables)) {
     dirty.add("metrics");
+  }
+  if (!shallowEqualJson(draft.scales, snapshot.scales)) {
+    dirty.add("scales");
   }
   return dirty;
 }
@@ -418,6 +425,7 @@ export function useTestEditor(
         settings: { ...EMPTY_TAB_STATUS },
         design: { ...EMPTY_TAB_STATUS },
         structure: { ...EMPTY_TAB_STATUS },
+        scales: { ...EMPTY_TAB_STATUS },
         metrics: { ...EMPTY_TAB_STATUS },
       };
     }
@@ -444,26 +452,37 @@ export function useTestEditor(
       if (!draft) throw new Error("save: editor is not ready");
       const fullPayload = buildSavePayload(draft);
       const snapVars = snapshot?.resultVariables ?? [];
-      // PRD-2: result variables are a separate CRUD resource. Persist the test
-      // first, then reconcile the variables and refetch so newly created rows
-      // come back with their server ids (the merged-response fast path avoids the
-      // extra GET when nothing in the list changed).
+      const snapScales = snapshot?.scales ?? [];
+      // PRD-2/PRD-5: result variables and scales are separate CRUD resources.
+      // Persist the test first, then reconcile each list and refetch so newly
+      // created rows come back with their server ids (the merged-response fast
+      // path avoids the extra GET when nothing in either list changed).
       if (isEdit) {
         if (!editTestId) throw new Error("save: edit mode without testId");
         const saved = await putTest(editTestId, fullPayload);
-        if (!shallowEqualJson(draft.resultVariables, snapVars)) {
-          await saveResultVariables(editTestId, draft.resultVariables, snapVars);
-          return fetchTest(editTestId);
-        }
-        return { ...(saved as Record<string, unknown>), resultVariables: draft.resultVariables };
+        const varsChanged = !shallowEqualJson(draft.resultVariables, snapVars);
+        const scalesChanged = !shallowEqualJson(draft.scales, snapScales);
+        if (varsChanged) await saveResultVariables(editTestId, draft.resultVariables, snapVars);
+        if (scalesChanged) await saveScales(editTestId, draft.scales, snapScales);
+        if (varsChanged || scalesChanged) return fetchTest(editTestId);
+        return {
+          ...(saved as Record<string, unknown>),
+          resultVariables: draft.resultVariables,
+          scales: draft.scales,
+        };
       }
       const created = await postTest(fullPayload);
       const newId = (created as { id?: string } | null)?.id;
-      if (newId && draft.resultVariables.length > 0) {
-        await saveResultVariables(newId, draft.resultVariables, []);
+      if (newId && (draft.resultVariables.length > 0 || draft.scales.length > 0)) {
+        if (draft.resultVariables.length > 0) await saveResultVariables(newId, draft.resultVariables, []);
+        if (draft.scales.length > 0) await saveScales(newId, draft.scales, []);
         return fetchTest(newId);
       }
-      return { ...(created as Record<string, unknown>), resultVariables: draft.resultVariables };
+      return {
+        ...(created as Record<string, unknown>),
+        resultVariables: draft.resultVariables,
+        scales: draft.scales,
+      };
     },
     onSuccess: (data) => {
       setConflict(null);

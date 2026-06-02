@@ -46,6 +46,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
     resultVariables: [],
+    scales: [],
     ...overrides,
   };
 }

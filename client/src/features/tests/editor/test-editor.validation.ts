@@ -326,6 +326,7 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
   }
 
   validateResultVariables(model, errors);
+  validateScales(model, errors);
 
   return { errors, warnings };
 }
@@ -429,5 +430,99 @@ function validateResultVariables(
         severity: "error",
       });
     }
+  });
+}
+
+/** Scale key grammar (PRD-5 §9.1): lower snake_case, ≤64 chars. */
+const SCALE_KEY_RE = /^[a-z][a-z0-9_]{0,63}$/;
+
+/**
+ * Synchronous structural checks for scales (PRD-5). The checks the editor can
+ * make from the draft alone: key grammar/uniqueness, required label, and the
+ * interpretation bands' numeric validity, ordering and non-overlap (§5.3 — bands
+ * are entered ascending on raw and must not overlap). Coverage (a scale with no
+ * contributions) is a soft warning surfaced in the section, not a save blocker.
+ */
+function validateScales(model: TestEditorModel, errors: ValidationIssue[]): void {
+  const scales = model.scales ?? [];
+  const seenKeys = new Map<string, number>();
+
+  scales.forEach((s, i) => {
+    if (!s.key.trim()) {
+      errors.push({
+        field: `scales[${i}].key`,
+        code: "required",
+        message: "Укажите ключ шкалы.",
+        severity: "error",
+      });
+    } else if (!SCALE_KEY_RE.test(s.key)) {
+      errors.push({
+        field: `scales[${i}].key`,
+        code: "format",
+        message: "Ключ: строчная буква в начале; буквы/цифры/подчёркивание; до 64 символов.",
+        severity: "error",
+      });
+    } else {
+      const prev = seenKeys.get(s.key);
+      if (prev !== undefined) {
+        errors.push({
+          field: `scales[${i}].key`,
+          code: "duplicate",
+          message: `Ключ «${s.key}» уже используется другой шкалой.`,
+          severity: "error",
+        });
+      } else {
+        seenKeys.set(s.key, i);
+      }
+    }
+
+    if (!s.label.trim()) {
+      errors.push({
+        field: `scales[${i}].label`,
+        code: "required",
+        message: "Укажите метку шкалы.",
+        severity: "error",
+      });
+    }
+
+    // Bands: each row must be numeric with min ≤ max; rows must be ascending and
+    // non-overlapping on raw. A trailing fully-empty row (the "new" row) is
+    // ignored so the author can leave it blank.
+    let prevMax: number | null = null;
+    s.bands.forEach((band, j) => {
+      const minRaw = band.min.trim();
+      const maxRaw = band.max.trim();
+      if (minRaw === "" && maxRaw === "" && band.label.trim() === "" && band.level.trim() === "") {
+        return; // empty draft row
+      }
+      const min = Number(minRaw);
+      const max = Number(maxRaw);
+      if (minRaw === "" || maxRaw === "" || Number.isNaN(min) || Number.isNaN(max)) {
+        errors.push({
+          field: `scales[${i}].bands[${j}]`,
+          code: "band_number",
+          message: `Диапазон ${j + 1}: укажите числовые min и max.`,
+          severity: "error",
+        });
+        return;
+      }
+      if (min > max) {
+        errors.push({
+          field: `scales[${i}].bands[${j}]`,
+          code: "band_order",
+          message: `Диапазон ${j + 1}: min не может быть больше max.`,
+          severity: "error",
+        });
+      }
+      if (prevMax !== null && min <= prevMax) {
+        errors.push({
+          field: `scales[${i}].bands[${j}]`,
+          code: "band_overlap",
+          message: `Диапазон ${j + 1}: пересекается с предыдущим. Вводите по возрастанию raw без пересечений.`,
+          severity: "error",
+        });
+      }
+      prevMax = max;
+    });
   });
 }

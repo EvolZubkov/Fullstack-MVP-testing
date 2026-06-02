@@ -38,6 +38,8 @@ import type {
   PassDecisionPolicy,
   PassRules,
   ResultVariableModel,
+  ScaleBandModel,
+  ScaleModel,
   RouterCompletionPolicy,
   SectionTimeLimit,
   TestEditorModel,
@@ -498,6 +500,67 @@ function buildResultVariablesFromApi(src: ApiTestResponse): ResultVariableModel[
   return out.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+const SCALE_TYPES = new Set(["number", "boolean", "category", "level"]);
+const SCALE_AGGREGATIONS = new Set(["sum", "avg", "weighted_avg", "max", "min"]);
+const SCALE_NORMALIZATIONS = new Set(["none", "percent", "custom"]);
+const SCALE_DIRECTIONS = new Set(["positive", "inverse"]);
+const SCALE_TARGETS = new Set(["none", "suspend_data", "interaction", "both"]);
+
+/** Map the bands stored in a scale's `config_json` into editor band models. */
+function buildScaleBands(configJson: unknown): ScaleBandModel[] {
+  const bands = isPlainObject(configJson) ? (configJson as { bands?: unknown }).bands : undefined;
+  if (!Array.isArray(bands)) return [];
+  const out: ScaleBandModel[] = [];
+  bands.forEach((b) => {
+    if (!isPlainObject(b)) return;
+    const band = b as Record<string, unknown>;
+    out.push({
+      min: typeof band.min === "number" ? String(band.min) : typeof band.min === "string" ? band.min : "",
+      max: typeof band.max === "number" ? String(band.max) : typeof band.max === "string" ? band.max : "",
+      label: typeof band.label === "string" ? band.label : "",
+      level: typeof band.level === "string" ? band.level : "",
+    });
+  });
+  return out;
+}
+
+/**
+ * Map the `scales` array from the API test response into editor models, ordered
+ * by `sortOrder`. Unknown enum values fall back to safe defaults so a malformed
+ * row never throws the whole editor open. Bands live in `config_json`.
+ */
+function buildScalesFromApi(src: ApiTestResponse): ScaleModel[] {
+  const raw = (src as { scales?: unknown }).scales;
+  if (!Array.isArray(raw)) return [];
+  const out: ScaleModel[] = [];
+  raw.forEach((item, index) => {
+    if (!isPlainObject(item)) return;
+    const r = item as Record<string, unknown>;
+    out.push({
+      id: typeof r.id === "string" ? r.id : undefined,
+      key: typeof r.key === "string" ? r.key : "",
+      label: typeof r.label === "string" ? r.label : "",
+      type: SCALE_TYPES.has(r.type as string) ? (r.type as ScaleModel["type"]) : "number",
+      aggregation: SCALE_AGGREGATIONS.has(r.aggregation as string)
+        ? (r.aggregation as ScaleModel["aggregation"])
+        : "sum",
+      normalization: SCALE_NORMALIZATIONS.has(r.normalization as string)
+        ? (r.normalization as ScaleModel["normalization"])
+        : "none",
+      direction: SCALE_DIRECTIONS.has(r.direction as string)
+        ? (r.direction as ScaleModel["direction"])
+        : "positive",
+      bands: buildScaleBands(r.configJson),
+      showToLearner: r.showToLearner === true,
+      scormTarget: SCALE_TARGETS.has(r.scormTarget as string)
+        ? (r.scormTarget as ScaleModel["scormTarget"])
+        : "none",
+      sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : index,
+    });
+  });
+  return out.sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
 export function emptyEditorModel(args: { folderId: string | null }): TestEditorModel {
   return {
     version: 0,
@@ -532,6 +595,7 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
       topics: [],
     },
     resultVariables: [],
+    scales: [],
   };
 }
 
@@ -609,6 +673,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       topics: adaptiveTopics,
     },
     resultVariables: buildResultVariablesFromApi(src),
+    scales: buildScalesFromApi(src),
   };
 }
 

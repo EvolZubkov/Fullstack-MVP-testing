@@ -198,6 +198,56 @@ export type ResultVariableModel = {
   sortOrder: number;
 };
 
+// ─── Scales (PRD-5) ────────────────────────────────────────────────────────────
+
+export type ScaleType = "number" | "boolean" | "category" | "level";
+
+/** Aggregation of the active per-question contributions into the scale's raw. */
+export type ScaleAggregation = "sum" | "avg" | "weighted_avg" | "max" | "min";
+
+export type ScaleNormalization = "none" | "percent" | "custom";
+
+export type ScaleDirection = "positive" | "inverse";
+
+/** How the scale is published to the LMS (cmi). Mirrors the `scorm_target` enum. */
+export type ScaleScormTarget = "none" | "suspend_data" | "interaction" | "both";
+
+/**
+ * One interpretation band applied to the scale's raw value (PRD-5 §5.3). `min`/
+ * `max` are edited as raw text and parsed to numbers on save; `level` is the
+ * machine code published in `scale.{key}.level`, `label` the optional display
+ * text (empty → the learner sees the code).
+ */
+export type ScaleBandModel = {
+  clientKey?: string;
+  min: string;
+  max: string;
+  label: string;
+  level: string;
+};
+
+/**
+ * One scale as edited in the «Шкалы» tab. `id` is absent for rows added in the
+ * editor and not yet persisted; the save orchestrator creates them via POST and
+ * the refetched snapshot fills in the real id. The combined «Пересчёт итога»
+ * control in the UI maps to the `(normalization, direction)` pair.
+ */
+export type ScaleModel = {
+  id?: string;
+  /** Stable client-side key for unsaved rows; never sent to the API. */
+  clientKey?: string;
+  key: string;
+  label: string;
+  type: ScaleType;
+  aggregation: ScaleAggregation;
+  normalization: ScaleNormalization;
+  direction: ScaleDirection;
+  bands: ScaleBandModel[];
+  showToLearner: boolean;
+  scormTarget: ScaleScormTarget;
+  sortOrder: number;
+};
+
 // ─── Editor model ─────────────────────────────────────────────────────────────
 
 /**
@@ -240,6 +290,8 @@ export type TestEditorModel = {
   };
   /** PRD-2 result variables, ordered by evaluation (`sortOrder`). */
   resultVariables: ResultVariableModel[];
+  /** PRD-5 scales, ordered by `sortOrder`. */
+  scales: ScaleModel[];
 };
 
 // ─── API DTO payloads ─────────────────────────────────────────────────────────
