@@ -30,15 +30,18 @@
 | B5 wiring | Расчёт шкал в `resultsPage.js` + псевдо-интеракции + suspend_data | Готово (`fbb496a`) |
 | B5 export/preview | `test.scales[]`/`test.measurements[]` в экспорте + endpoint `scales/preview` | Готово (`fbb496a`) |
 | B4a | Вкладка «Шкалы»: список шкал + bands + LMS-таргет + show + preview | Готово, визуально приёмлено (`4044eb0`) |
-| B4b | Под-раздел «Вклады вопросов»: матрица «вариант × шкала» | НЕ начато |
+| B4b | Под-раздел «Вклады вопросов»: матрица «единица × шкала» | Готово, визуально приёмлено (`a9bbc9a`) |
 
-Верификация на момент паузы: `npm run check` — 0 ошибок; `vitest run` — 1597 зелёных
+Весь Этап B (PRD-5) завершён. Остаётся Этап C (E2E MBI golden) и отложенные пункты
+(см. §4).
+
+Верификация на момент паузы: `npm run check` — 0 ошибок; `vitest run` — 1608 зелёных
 (тесты проходят; глобальный coverage-гейт 50% был красным ещё ДО трека — клиентский
 UI массово без unit-тестов, отсюда дисциплина wireframes/Playwright-first для UI).
 `npm run build` — зелёный.
 
 Коммиты: `a6e3e32` (A1) … `ce7467e` (A9), затем `29282ab` (B1) … `923db2b` (B5 port),
-`fbb496a` (B5 wiring+export+preview), `4044eb0` (B4a). Все с префиксом
+`fbb496a` (B5 wiring+export+preview), `4044eb0` (B4a), `a9bbc9a` (B4b). Все с префиксом
 `feat(prd-2)` / `feat(prd-5)`.
 
 ## 3. Что готово (опорные файлы)
@@ -62,45 +65,40 @@ PRD-5 (Этап B, готовая часть):
 - `shared/scales/engine.ts` (движок) + `server/scorm/template/app/scales/engine.js` (порт),
   подключён в `server/scorm/index.ts` перед `resultsPage.js`.
 
+PRD-5 (Этап B, UI — B4a/B4b, эта сессия):
+
+- `client/src/features/tests/editor/`: `test-editor.types.ts` (`ScaleModel`,
+  `ScaleBandModel`, `QuestionMeasurementModel`, поля `scales`/`measurements`),
+  `test-editor.mappers.ts` (`buildScalesFromApi`/`buildMeasurementsFromApi`,
+  scaleId→key), `test-editor.validation.ts` (`validateScales`), `use-test-editor.ts`
+  (вкладка `scales`, diff/reconcile `saveScales`+`saveMeasurements`, `resolveScaleKeyToId`),
+  `scales-api.ts` (save-оркестраторы, `previewScales`, `loadScalePreviewContext`,
+  `loadContributionQuestions`), `sections/scales-section.tsx` (список шкал + bands +
+  preview-модалка + матрица «Вклады вопросов»), `__tests__/scales.test.ts` (32 теста).
+
 ## 4. Что осталось (с указаниями)
 
-Готово в этой сессии (`fbb496a`, `4044eb0`): B5 wiring (расчёт `scale.*` до
-`result.*` в `resultsPage.js`, псевдо-интеракции `scale_{key}`/`_level` во всех
-трёх finish-функциях, `scaleValues`/`scaleErrors` в `suspendAttempts.js`), B5
-export (`test.scales[]`/`test.measurements[]` в `test-json.ts`, загрузка в
-`loadFullTest` и экспорте, `scaleKey`-резолв), B5 preview
-(`POST /api/tests/:id/scales/preview`), B4a (вкладка «Шкалы»: список шкал, bands,
-LMS-таргет, show-to-learner, preview-модалка).
+Весь Этап B (PRD-5) завершён в этой сессии (`fbb496a` B5 wiring/export/preview,
+`4044eb0` B4a, `a9bbc9a` B4b). Осталось:
 
-### B4b (под-раздел «Вклады вопросов», UI) — единственное оставшееся
+### Этап C — E2E MBI + golden (контур в плане §6)
 
-Самая тяжёлая часть. Рейл уже есть (`scales-section.tsx`, под-вкладка
-`contributions` — сейчас placeholder). Эскиз — `s-contributions` в
-`docs/wireframes/approved/prd2-prd5-scoring-tabs.html`.
+- Фикстура MBI: 3 шкалы (EE/D/AD, AD инверсная), 22 вопроса, `burnout_category`.
+- Golden-тест: категория совпадает с `process_burnout_export.py` по таблице комбинаций.
+- SCORM-экспорт -> player-приёмка: псевдо-интеракции `scale_{ee,d,ad}` +
+  `scale_{*}_level` + `var_burnout_category`; содержимое `suspend_data.custom`.
+- Регрессия: старый тест без шкал/показателей экспортируется и проходится без изменений.
+- Актуализация: ROADMAP §0.2, статусы PRD-2/PRD-5, example-mbi acceptance.
 
-- Карточка на вопрос (как в `s-contributions`): свёрнута/раскрыта, статус-dot
-  (ok/warn «не привязан»), подзаголовок с чипами шкал; верх — баннер про
-  непокрытые вопросы.
-- Матрица «единица ответа × шкала» в раскрытой карточке (`tb-table`, НЕ `wf-num-grid`):
-  строки зависят от типа вопроса (option-индексы / направленные пары matching
-  `left:right` / размещения ranking `item:pos`), столбцы = шкалы теста, ячейка =
-  числовой вклад (пусто = нет строки measurement; допустимы 0 и отрицательные);
-  подсветка верных вариантов (есть `wf-row-correct` только в эскизе — в React своя).
-- Данные: нужны вопросы теста с вариантами. Грузить через `GET /api/questions`
-  (фильтровать по темам теста) или новый endpoint. Сохранение — per-вопрос
-  `PUT /api/tests/:id/measurements/:questionId` (массив строк); diff в отдельном
-  оркестраторе или в общем save (как `saveScales`). `model.measurements` в
-  редактор пока НЕ добавлен — добавить в `TestEditorModel` + mappers + use-test-editor.
-- Связать с B4a: подзаголовок шкалы «N вопросов»/«M без вклада» (сейчас
-  `agg · recalc · bands`), статус-dot шкалы по покрытию; полный preview demo-ответа
-  для matching/ranking (B4a поддерживает только single/multiple — см.
-  `loadScalePreviewContext`/`ScalePreviewModal` в `scales-api.ts`/`scales-section.tsx`).
-- Гард (scoring-model §10.7): переупорядочивание/удаление опций вопроса с
-  измерениями ломает индексные `source_key` — предупреждать в редакторе вопросов.
-- ОБЯЗАТЕЛЬНО: Playwright-сверка с эскизом (правило wireframes-first).
+### Отложенные пункты (не блокируют Этап C)
 
-Композит (`s-scale-advanced`, источник «Другие шкалы») движок не считает —
-отдельный будущий слой; в B4a опция показана `disabled`.
+- Гард опций (scoring-model §10.7): переупорядочивание/удаление опций вопроса с
+  измерениями ломает индексные `source_key` — предупреждать в РЕДАКТОРЕ ВОПРОСОВ
+  (`client/src/pages/author/questions.tsx`, отдельная поверхность, не редактор теста).
+- Полный preview demo-ответа для matching/ranking в B4a-модалке (сейчас
+  single/multiple; см. `loadScalePreviewContext`/`ScalePreviewModal`).
+- Композит (`s-scale-advanced`, источник «Другие шкалы») — движок не считает
+  scale-of-scales; в B4a опция `disabled`; отдельный будущий слой.
 
 ## 5. Ключевые решения (не очевидно из кода)
 
