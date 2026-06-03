@@ -14,12 +14,14 @@
 **Зависимость:** результаты Core и runtime шаблона из PRD-1, `section.*` из PRD-4,
 `scale.*` из PRD-5
 
-## Статус реализации (на 2026-05-29)
+## Статус реализации (на 2026-06-03)
 
-**Не начато**. Идёт парным треком с PRD-5 (см. [ROADMAP §0.2](../../ROADMAP.md)): DSL
-расширен источниками `scaleById(...)` и helper'ом `countScales(...)`. Реализация PRD-2
-без расширения DSL делает невозможной формулу итоговой категории, агрегированной по
-шкалам (типовой кейс — burnout category в MBI). Блокируется PRD-4 (`section.*`).
+**Реализовано** (парный трек с PRD-5, Этапы A-C). DSL (`shared/formula/*` + JS-порт
+`server/scorm/template/app/dsl/formula.js`) с источниками `scaleById(...)`/`countScales(...)`
+и полем `controls_status`; CRUD `result_variables` + вкладка «Показатели»; рантайм-расчёт
+`result.*` в `resultsPage.js` (псевдо-интеракции `var_*`, override статуса). Сквозной
+golden-тест итоговой категории MBI — `tests/mbi-golden.test.ts` (Этап C). `section.*`
+(PRD-4) в формулах пока резолвится в нейтраль — отдельный пункт.
 
 ---
 

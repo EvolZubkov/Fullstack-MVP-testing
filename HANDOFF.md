@@ -31,18 +31,20 @@
 | B5 export/preview | `test.scales[]`/`test.measurements[]` в экспорте + endpoint `scales/preview` | Готово (`fbb496a`) |
 | B4a | Вкладка «Шкалы»: список шкал + bands + LMS-таргет + show + preview | Готово, визуально приёмлено (`4044eb0`) |
 | B4b | Под-раздел «Вклады вопросов»: матрица «единица × шкала» | Готово, визуально приёмлено (`a9bbc9a`) |
+| C | E2E MBI golden — `tests/mbi-golden.test.ts` + актуализация спек | Готово |
 
-Весь Этап B (PRD-5) завершён. Остаётся Этап C (E2E MBI golden) и отложенные пункты
-(см. §4).
+**Весь трек PRD-2 + PRD-5 (Этапы A-C) завершён.** Остались только отложенные точечные
+пункты (см. §4) — ни один не блокирует.
 
-Верификация на момент паузы: `npm run check` — 0 ошибок; `vitest run` — 1608 зелёных
+Верификация на момент паузы: `npm run check` — 0 ошибок; `vitest run` — 1651 зелёный
 (тесты проходят; глобальный coverage-гейт 50% был красным ещё ДО трека — клиентский
 UI массово без unit-тестов, отсюда дисциплина wireframes/Playwright-first для UI).
 `npm run build` — зелёный.
 
 Коммиты: `a6e3e32` (A1) … `ce7467e` (A9), затем `29282ab` (B1) … `923db2b` (B5 port),
-`fbb496a` (B5 wiring+export+preview), `4044eb0` (B4a), `a9bbc9a` (B4b). Все с префиксом
-`feat(prd-2)` / `feat(prd-5)`.
+`fbb496a` (B5 wiring+export+preview), `4044eb0` (B4a), `a9bbc9a` (B4b), Этап C
+(`tests/mbi-golden.test.ts` + актуализация спек). Все с префиксом `feat(prd-2)` /
+`feat(prd-5)` / `test(prd-5)`.
 
 ## 3. Что готово (опорные файлы)
 
@@ -78,19 +80,23 @@ PRD-5 (Этап B, UI — B4a/B4b, эта сессия):
 
 ## 4. Что осталось (с указаниями)
 
-Весь Этап B (PRD-5) завершён в этой сессии (`fbb496a` B5 wiring/export/preview,
-`4044eb0` B4a, `a9bbc9a` B4b). Осталось:
+Весь трек PRD-2 + PRD-5 (Этапы A-C) завершён в этой сессии (`fbb496a` B5
+wiring/export/preview, `4044eb0` B4a, `a9bbc9a` B4b, Этап C `tests/mbi-golden.test.ts`).
+Остались только отложенные точечные пункты — ни один не блокирует.
 
-### Этап C — E2E MBI + golden (контур в плане §6)
+### Этап C — выполнено
 
-- Фикстура MBI: 3 шкалы (EE/D/AD, AD инверсная), 22 вопроса, `burnout_category`.
-- Golden-тест: категория совпадает с `process_burnout_export.py` по таблице комбинаций.
-- SCORM-экспорт -> player-приёмка: псевдо-интеракции `scale_{ee,d,ad}` +
-  `scale_{*}_level` + `var_burnout_category`; содержимое `suspend_data.custom`.
-- Регрессия: старый тест без шкал/показателей экспортируется и проходится без изменений.
-- Актуализация: ROADMAP §0.2, статусы PRD-2/PRD-5, example-mbi acceptance.
+- `tests/mbi-golden.test.ts`: фикстура MBI (3 шкалы EE/D/AD, AD инверсная, 22 вопроса,
+  `burnout_category`) -> пайплайн `shared/scales/engine` -> `shared/formula`; сверка
+  уровней и категории с независимой reference-реализацией таблицы 27 комбинаций
+  (логика отсутствующего в репо `process_burnout_export.py` закодирована из спеки
+  example-mbi §2.5), числовые проверки §5.3, регрессия §5.4. 43 теста.
+- Player-приёмка псевдо-интеракций `scale_{*}[_level]` + `var_*` и `suspend_data.custom`
+  покрыта рантайм-обвязкой B5 (resultsPage.js/suspendAttempts.js) + export-тестами;
+  Excel-видимость WebTutor (acceptance §5.3 #7-#9) — только live-LMS (память
+  `no-live-webtutor-verify-local`).
 
-### Отложенные пункты (не блокируют Этап C)
+### Отложенные точечные пункты (не блокируют)
 
 - Гард опций (scoring-model §10.7): переупорядочивание/удаление опций вопроса с
   измерениями ломает индексные `source_key` — предупреждать в РЕДАКТОРЕ ВОПРОСОВ
@@ -99,6 +105,7 @@ PRD-5 (Этап B, UI — B4a/B4b, эта сессия):
   single/multiple; см. `loadScalePreviewContext`/`ScalePreviewModal`).
 - Композит (`s-scale-advanced`, источник «Другие шкалы») — движок не считает
   scale-of-scales; в B4a опция `disabled`; отдельный будущий слой.
+- Глобальная (test-unscoped) библиотека шкал — будущий PRD (зафиксировано в ROADMAP §0.2).
 
 ## 5. Ключевые решения (не очевидно из кода)
 

@@ -25,8 +25,8 @@
 | 1 | PRD-7 | S13 — Editor parity | **Закрыта 2026-05-28** — все 8 sub-фаз закрыты (S13.1 quick wins / S13.2 feedback / S13.3 per-topic limits / S13.4 row-actions / S13.5 router-mode / S13.6 variant-replace / S13.7 drawer chrome / S13.8 cleanup+acceptance). Deferred: S13.5b (G22 mapping-flow cross-tab coupling) + S13.8b (G12 wf-basic-warning UX notification). См. [specs/prd-7/s13-editor-parity.md](./specs/prd-7/s13-editor-parity.md) | — |
 | 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | **Закрыта 2026-05-29** — все 6 фаз (1: validation L2/L3, 2: mapper L4, 3: UI L1, 4a: export, 4b: section results, 4c: router runtime + completionPolicy + unlockRules, 4d: adaptive integration linear+router, 4e: per-section timers, 4f: recovery, 5: golden tests). Все 5 валидных `(mode×flowMode)` комбинаций имеют runtime support; `(adaptive, linear_flat)` blocked в Phase 1, deferred в будущий PRD «Flat adaptive». См. [PRD-4 spec v1.1](./specs/prd-4/course-flow-sections.md). | — |
 | 4 | PRD-8 | Router-flow runtime + UI «Структура» в router-режиме | **Закрыта 2026-05-29** — реализована cross-PRD: UI (Структура + Настройки→Сценарий) в PRD-7 G45/router-by-topics; runtime (router state machine, completionPolicy, sectionUnlockRules, recovery) в PRD-4 phases 4c/4f; PRD-8-specific delta — FR-18 router lifecycle events. См. [PRD-8 spec](./specs/prd-8/section-router-flow.md). | — |
-| 5 | PRD-2 | `result.*` показатели результата | Спека утверждена 2026-06-02; реализация не начата — post-MVP, парный трек с PRD-5 (см. §0.2) | PRD-4 |
-| 6 | PRD-5 | Шкалы и многомерные измерения | Спека утверждена 2026-06-02; реализация не начата — post-MVP, парный трек с PRD-2 (см. §0.2) | PRD-2 (DSL), PRD-4 |
+| 5 | PRD-2 | `result.*` показатели результата | **Закрыта 2026-06-03** — Этапы A-C (DSL+`controls_status`, CRUD+вкладка «Показатели», рантайм `result.*`, golden MBI). См. [PRD-2 spec](./specs/prd-2/result-variables.md). | PRD-4 |
+| 6 | PRD-5 | Шкалы и многомерные измерения | **Закрыта 2026-06-03** — Этапы A-C (схема+движок+API, рантайм `scale.*`+экспорт, вкладка «Шкалы»+матрица «Вклады», golden MBI). Отложено: гард опций, композитные шкалы, глобальная библиотека шкал (будущий PRD). См. [PRD-5 spec](./specs/prd-5/scales-competency-measurements.md). | PRD-2 (DSL), PRD-4 |
 | 3 | PRD-6 | Retake gate, eligibility plugins | Не начата — post-MVP | PRD-4 |
 | 7 | PRD-3 | Жизненный цикл шаблонов | Не начата — post-MVP | PRD-1 closeout (отдельный трек) |
 | 8 | PRD-9 | Миграция bcryptjs → `@vvlad1973/crypto` | Не начата — post-MVP (tech debt) | Завершение PRD-7 S10-S11 |
@@ -116,6 +116,11 @@ postprocessor, который должен быть заменён SCORM-пак�
 | Этап A | Расширение DSL PRD-2: `scaleById(...)`, `countScales(...)`, поле `controls_status`; миграция `result_variables` | DSL должен знать `scale.*` до того, как Core начнёт публиковать значения шкал |
 | Этап B | Реализация PRD-5: таблицы `scales` + `question_measurements`, runtime расчёта, авторская UI «Шкалы» и блок «Измерения» в карточке вопроса | Опирается на готовый DSL этапа A |
 | Этап C | E2E acceptance по [example-mbi.md](./specs/prd-5/example-mbi.md); golden-тест замены `process_burnout_export.py` | Подтверждает закрытие бизнес-запроса |
+
+**Все три этапа выполнены 2026-06-03** (коммиты `a6e3e32`…`ce7467e` A, `29282ab`…`a9bbc9a` B,
+golden `tests/mbi-golden.test.ts` C). Шкалы test-scoped; **глобальная библиотека шкал** —
+будущий PRD. Композитные шкалы (источник «Другие шкалы») и гард переупорядочивания опций
+с измерениями — отложенные точечные пункты.
 
 Отложенные точечные пункты: `showSectionResult` (промежуточные результаты по темам),
 text-overflow diagnostics в PRD-1, порог coverage 50%, раздел «Архив» с восстановлением
