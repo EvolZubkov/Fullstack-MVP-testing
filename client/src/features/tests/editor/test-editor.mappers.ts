@@ -40,6 +40,8 @@ import type {
   ResultVariableModel,
   ScaleBandModel,
   ScaleModel,
+  QuestionMeasurementModel,
+  MeasurementSourceType,
   RouterCompletionPolicy,
   SectionTimeLimit,
   TestEditorModel,
@@ -561,6 +563,40 @@ function buildScalesFromApi(src: ApiTestResponse): ScaleModel[] {
   return out.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+const MEASUREMENT_SOURCE_TYPES = new Set(["question", "option", "matching_pair", "ranking_position"]);
+
+/**
+ * Map the raw `measurements` rows from the API into editor models, resolving each
+ * row's `scaleId` to the stable scale `key` (the editor references scales by key,
+ * never the uuid). Rows whose scale is missing are dropped. `value` comes from
+ * `valueJson`. Requires the already-mapped scales for the id→key lookup.
+ */
+function buildMeasurementsFromApi(src: ApiTestResponse, scales: ScaleModel[]): QuestionMeasurementModel[] {
+  const raw = (src as { measurements?: unknown }).measurements;
+  if (!Array.isArray(raw)) return [];
+  const keyById = new Map(scales.filter((s) => s.id).map((s) => [s.id as string, s.key]));
+  const out: QuestionMeasurementModel[] = [];
+  raw.forEach((item) => {
+    if (!isPlainObject(item)) return;
+    const r = item as Record<string, unknown>;
+    const scaleKey = typeof r.scaleId === "string" ? keyById.get(r.scaleId) : undefined;
+    if (!scaleKey) return;
+    if (typeof r.questionId !== "string") return;
+    if (typeof r.valueJson !== "number") return;
+    out.push({
+      questionId: r.questionId,
+      scaleKey,
+      sourceType: MEASUREMENT_SOURCE_TYPES.has(r.sourceType as string)
+        ? (r.sourceType as MeasurementSourceType)
+        : "question",
+      sourceKey: typeof r.sourceKey === "string" ? r.sourceKey : null,
+      value: r.valueJson,
+      weight: typeof r.weight === "number" ? r.weight : 1,
+    });
+  });
+  return out;
+}
+
 export function emptyEditorModel(args: { folderId: string | null }): TestEditorModel {
   return {
     version: 0,
@@ -596,6 +632,7 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
     },
     resultVariables: [],
     scales: [],
+    measurements: [],
   };
 }
 
@@ -636,6 +673,9 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
 
   const adaptiveTopics = mode === "adaptive" ? buildAdaptiveFromApi(src) : [];
 
+  // Scales must be mapped before measurements: the latter resolve scaleId→key.
+  const scalesModel = buildScalesFromApi(src);
+
   return {
     id: typeof src.id === "string" ? src.id : undefined,
     version: typeof src.version === "number" ? src.version : 1,
@@ -673,7 +713,8 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       topics: adaptiveTopics,
     },
     resultVariables: buildResultVariablesFromApi(src),
-    scales: buildScalesFromApi(src),
+    scales: scalesModel,
+    measurements: buildMeasurementsFromApi(src, scalesModel),
   };
 }
 

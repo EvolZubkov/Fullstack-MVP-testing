@@ -12,7 +12,7 @@
  * unit choices) plus question type/prompt.
  */
 
-import type { ScaleBandModel, ScaleModel } from "./test-editor.types";
+import type { QuestionMeasurementModel, ScaleBandModel, ScaleModel } from "./test-editor.types";
 
 // ─── Persisted payload + diff ───────────────────────────────────────────────────
 
@@ -119,6 +119,67 @@ export async function saveScales(
     if (!prev || !sameScale(prev, normalized)) {
       await mutate("PUT", `${base}/${s.id}`, toPayload(s, i));
     }
+  }
+}
+
+// ─── Measurements (contributions matrix) ──────────────────────────────────────────
+
+/** Stable signature of one question's contribution rows, for change detection. */
+function measurementSignature(rows: QuestionMeasurementModel[]): string {
+  return rows
+    .map((m) => `${m.scaleKey}|${m.sourceType}|${m.sourceKey ?? ""}|${m.value}|${m.weight}`)
+    .sort()
+    .join(";");
+}
+
+/**
+ * Persist the edited contribution matrix against its last saved snapshot.
+ * Measurements are stored per question (the endpoint replaces all of a question's
+ * rows), so this diffs by `questionId` and PUTs only the questions whose row set
+ * changed — clearing a question with an empty array. Each row's stable `scaleKey`
+ * is resolved to the persisted `scaleId` via `scaleKeyToId`; rows whose scale is
+ * not yet persisted are skipped (the scale save must run first).
+ */
+export async function saveMeasurements(
+  testId: string,
+  draft: QuestionMeasurementModel[],
+  snapshot: QuestionMeasurementModel[],
+  scaleKeyToId: Map<string, string>,
+): Promise<void> {
+  const base = `/api/tests/${testId}/measurements`;
+
+  const groupByQuestion = (rows: QuestionMeasurementModel[]) => {
+    const map = new Map<string, QuestionMeasurementModel[]>();
+    for (const m of rows) {
+      const list = map.get(m.questionId) ?? [];
+      list.push(m);
+      map.set(m.questionId, list);
+    }
+    return map;
+  };
+
+  const draftByQ = groupByQuestion(draft);
+  const snapByQ = groupByQuestion(snapshot);
+  const questionIds = new Set([...draftByQ.keys(), ...snapByQ.keys()]);
+
+  for (const questionId of questionIds) {
+    const draftRows = draftByQ.get(questionId) ?? [];
+    const snapRows = snapByQ.get(questionId) ?? [];
+    if (measurementSignature(draftRows) === measurementSignature(snapRows)) continue;
+    const payload = draftRows
+      .map((m) => {
+        const scaleId = scaleKeyToId.get(m.scaleKey);
+        if (!scaleId) return null;
+        return {
+          scaleId,
+          sourceType: m.sourceType,
+          sourceKey: m.sourceKey,
+          valueJson: m.value,
+          weight: m.weight,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+    await mutate("PUT", `${base}/${questionId}`, payload);
   }
 }
 
@@ -243,4 +304,119 @@ export async function loadScalePreviewContext(testId: string): Promise<PreviewQu
     });
   }
   return out.sort((a, b) => a.prompt.localeCompare(b.prompt));
+}
+
+// ─── Contributions matrix context ──────────────────────────────────────────────
+
+/** One editable row of the contributions matrix: an answer unit of a question. */
+export type ContributionUnit = {
+  sourceType: "option" | "matching_pair" | "ranking_position";
+  sourceKey: string;
+  label: string;
+  /** True when this unit is (part of) the correct answer — surfaced as a marker. */
+  correct: boolean;
+};
+
+/** A measured-capable question: its prompt, type and enumerated answer units. */
+export type ContributionQuestion = {
+  id: string;
+  prompt: string;
+  type: QuestionType;
+  units: ContributionUnit[];
+};
+
+type RawQuestion = {
+  id: string;
+  topicId: string;
+  type: string;
+  prompt?: string;
+  dataJson?: unknown;
+  correctJson?: unknown;
+};
+
+function asStringArray(v: unknown): string[] {
+  return Array.isArray(v) ? v.map((x) => (typeof x === "string" ? x : String(x))) : [];
+}
+
+/**
+ * Enumerate the answer units of a question and mark which are correct:
+ * single/multiple → one row per option; matching → one row per directed pair
+ * (left → right); ranking → one row per placement (item @ position). The index-
+ * based `sourceKey` mirrors the runtime engine's encoding (option index, "l:r",
+ * "item:pos").
+ */
+function buildContributionUnits(q: RawQuestion, type: QuestionType): ContributionUnit[] {
+  const data = (q.dataJson ?? {}) as Record<string, unknown>;
+  const correct = (q.correctJson ?? {}) as Record<string, unknown>;
+
+  if (type === "single" || type === "multiple") {
+    const options = asStringArray(data.options);
+    const correctSet = new Set<number>(
+      type === "single"
+        ? typeof correct.correctIndex === "number"
+          ? [correct.correctIndex]
+          : []
+        : Array.isArray(correct.correctIndices)
+          ? (correct.correctIndices as number[])
+          : [],
+    );
+    return options.map((label, i) => ({
+      sourceType: "option" as const,
+      sourceKey: String(i),
+      label: `${String.fromCharCode(65 + i)}. ${label}`,
+      correct: correctSet.has(i),
+    }));
+  }
+
+  if (type === "matching") {
+    const left = asStringArray(data.left);
+    const right = asStringArray(data.right);
+    const pairs = Array.isArray(correct.pairs) ? (correct.pairs as Array<{ left: number; right: number }>) : [];
+    const correctSet = new Set(pairs.map((p) => `${p.left}:${p.right}`));
+    const units: ContributionUnit[] = [];
+    left.forEach((l, li) => {
+      right.forEach((r, ri) => {
+        units.push({
+          sourceType: "matching_pair",
+          sourceKey: `${li}:${ri}`,
+          label: `${l} → ${r}`,
+          correct: correctSet.has(`${li}:${ri}`),
+        });
+      });
+    });
+    return units;
+  }
+
+  // ranking
+  const items = asStringArray(data.items);
+  const order = Array.isArray(correct.correctOrder) ? (correct.correctOrder as number[]) : [];
+  const units: ContributionUnit[] = [];
+  items.forEach((label, ii) => {
+    items.forEach((_, pos) => {
+      units.push({
+        sourceType: "ranking_position",
+        sourceKey: `${ii}:${pos}`,
+        label: `${label} @ ${pos + 1}`,
+        correct: order[pos] === ii,
+      });
+    });
+  });
+  return units;
+}
+
+/**
+ * Load the test's questions (filtered to its topics) with their enumerated answer
+ * units, for the «Вклады вопросов» matrix. Questions are returned in the order
+ * GET /api/questions yields them, grouped by the test's topics.
+ */
+export async function loadContributionQuestions(topicIds: string[]): Promise<ContributionQuestion[]> {
+  const raw = await fetchJson("/api/questions");
+  const topicSet = new Set(topicIds);
+  const list = Array.isArray(raw) ? (raw as RawQuestion[]) : [];
+  return list
+    .filter((q) => topicSet.has(q.topicId))
+    .map((q) => {
+      const type = (["single", "multiple", "matching", "ranking"].includes(q.type) ? q.type : "single") as QuestionType;
+      return { id: q.id, prompt: q.prompt ?? q.id, type, units: buildContributionUnits(q, type) };
+    });
 }

@@ -248,6 +248,26 @@ export type ScaleModel = {
   sortOrder: number;
 };
 
+/** The answer-unit kind a measurement is bound to (PRD-5 §9.2). */
+export type MeasurementSourceType = "question" | "option" | "matching_pair" | "ranking_position";
+
+/**
+ * One contribution cell of the «Вклады вопросов» matrix: an explicit numeric
+ * contribution of a question's answer unit into one scale. Identified by
+ * (questionId, sourceType, sourceKey, scaleKey) — the scale is referenced by its
+ * stable `key` (not the uuid), resolved to `scaleId` on save once scales are
+ * persisted. `value` is the explicit number (0 and negatives valid); `weight`
+ * defaults to 1 (no UI yet). Rows are replaced per question on save.
+ */
+export type QuestionMeasurementModel = {
+  questionId: string;
+  scaleKey: string;
+  sourceType: MeasurementSourceType;
+  sourceKey: string | null;
+  value: number;
+  weight: number;
+};
+
 // ─── Editor model ─────────────────────────────────────────────────────────────
 
 /**
@@ -292,6 +312,8 @@ export type TestEditorModel = {
   resultVariables: ResultVariableModel[];
   /** PRD-5 scales, ordered by `sortOrder`. */
   scales: ScaleModel[];
+  /** PRD-5 per-question measurement contributions (the «Вклады вопросов» matrix). */
+  measurements: QuestionMeasurementModel[];
 };
 
 // ─── API DTO payloads ─────────────────────────────────────────────────────────

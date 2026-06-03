@@ -32,6 +32,7 @@ import {
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
 
 import type {
+  QuestionMeasurementModel,
   ScaleAggregation,
   ScaleBandModel,
   ScaleModel,
@@ -39,8 +40,11 @@ import type {
   TestEditorModel,
 } from "../test-editor.types";
 import {
+  loadContributionQuestions,
   loadScalePreviewContext,
   previewScales,
+  type ContributionQuestion,
+  type ContributionUnit,
   type PreviewAnswer,
   type PreviewQuestionContext,
   type ScalePreviewResult,
@@ -144,6 +148,14 @@ function pluralBands(n: number): string {
   return `${n} диапазонов`;
 }
 
+function pluralQuestions(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${n} вопрос`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${n} вопроса`;
+  return `${n} вопросов`;
+}
+
 /** The blocking key error for one scale (empty / grammar / duplicate), else null. */
 function keyErrorOf(s: ScaleModel, index: number, scales: ScaleModel[]): string | null {
   if (!s.key.trim()) return "Укажите ключ шкалы.";
@@ -204,13 +216,7 @@ export function ScalesSection({ model, testId, updateModel, readOnly = false }: 
         {subTab === "list" ? (
           <ScalesListPane model={model} testId={testId} updateModel={updateModel} readOnly={readOnly} />
         ) : (
-          <EmptyState
-            layout="inline"
-            well
-            title="Вклады вопросов — скоро"
-            description="Матрица «вариант × шкала» (числовые вклады ответов в шкалы) появится в следующем инкременте. Пока задайте сами шкалы в разделе «Список шкал»."
-            data-testid="scales-contributions-placeholder"
-          />
+          <ContributionsPane model={model} updateModel={updateModel} readOnly={readOnly} />
         )}
       </div>
     </div>
@@ -257,15 +263,33 @@ function ScalesListPane({
 
   const removeScale = useCallback(
     (index: number) => {
-      setScales(scales.filter((_, i) => i !== index).map((s, i) => ({ ...s, sortOrder: i })));
+      const removedKey = scales[index]?.key;
+      updateModel((m) => ({
+        ...m,
+        scales: m.scales.filter((_, i) => i !== index).map((s, i) => ({ ...s, sortOrder: i })),
+        // Drop the deleted scale's contributions so coverage/dirty stay accurate.
+        measurements: removedKey ? m.measurements.filter((x) => x.scaleKey !== removedKey) : m.measurements,
+      }));
     },
-    [scales, setScales],
+    [scales, updateModel],
   );
 
   const anyError = useMemo(
     () => scales.some((s, i) => keyErrorOf(s, i, scales) !== null || bandErrorOf(s) !== null),
     [scales],
   );
+
+  // Coverage: distinct measured questions per scale key (drives the card subtitle
+  // «N вопросов» and the «no contributions» warning dot).
+  const coverageByKey = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const meas of model.measurements) {
+      const set = map.get(meas.scaleKey) ?? new Set<string>();
+      set.add(meas.questionId);
+      map.set(meas.scaleKey, set);
+    }
+    return map;
+  }, [model.measurements]);
 
   if (scales.length === 0) {
     return (
@@ -337,6 +361,7 @@ function ScalesListPane({
               index={index}
               scale={scale}
               scales={scales}
+              coverage={coverageByKey.get(scale.key)?.size ?? 0}
               readOnly={readOnly}
               expanded={expandedKey === key}
               onToggle={() => setExpandedKey((cur) => (cur === key ? null : key))}
@@ -359,6 +384,8 @@ type ScaleCardProps = {
   index: number;
   scale: ScaleModel;
   scales: ScaleModel[];
+  /** Distinct questions contributing to this scale (drives subtitle + warn dot). */
+  coverage: number;
   readOnly: boolean;
   expanded: boolean;
   onToggle: () => void;
@@ -366,7 +393,7 @@ type ScaleCardProps = {
   onRemove: () => void;
 };
 
-function ScaleCard({ index, scale: s, scales, readOnly, expanded, onToggle, onChange, onRemove }: ScaleCardProps) {
+function ScaleCard({ index, scale: s, scales, coverage, readOnly, expanded, onToggle, onChange, onRemove }: ScaleCardProps) {
   const keyError = keyErrorOf(s, index, scales);
   const bandError = bandErrorOf(s);
   const hasError = keyError !== null || bandError !== null;
@@ -377,11 +404,17 @@ function ScaleCard({ index, scale: s, scales, readOnly, expanded, onToggle, onCh
     AGG_LABEL[s.aggregation],
     RECALC_LABEL[recalc],
     s.bands.length > 0 ? pluralBands(s.bands.length) : null,
+    coverage > 0 ? pluralQuestions(coverage) : "без вкладов",
   ]
     .filter(Boolean)
     .join(" · ");
 
-  const dotClass = hasError ? "tb-status-dot--err" : "tb-status-dot--ok";
+  // err blocks save; warn flags a scale with no contributions yet (soft).
+  const dotClass = hasError
+    ? "tb-status-dot--err"
+    : coverage === 0
+      ? "tb-status-dot--warn"
+      : "tb-status-dot--ok";
 
   return (
     <section
@@ -820,4 +853,322 @@ function ScalePreviewModal({ testId, onClose }: { testId: string; onClose: () =>
 
 function round(n: number): string {
   return String(Math.round(n * 100) / 100);
+}
+
+// ─── «Вклады вопросов» pane (contributions matrix) ────────────────────────────────
+
+const UNIT_HEADER: Record<ContributionQuestion["type"], string> = {
+  single: "Вариант ответа",
+  multiple: "Вариант ответа",
+  matching: "Пара ответа (левый → правый)",
+  ranking: "Размещение (элемент @ позиция)",
+};
+
+const QTYPE_LABEL: Record<ContributionQuestion["type"], string> = {
+  single: "один выбор",
+  multiple: "несколько выборов",
+  matching: "сопоставление",
+  ranking: "ранжирование",
+};
+
+const UNIT_HINT: Partial<Record<ContributionQuestion["type"], string>> = {
+  matching:
+    "Строка = направленная пара «левый → правый». Активна каждая фактически составленная пара, независимо от корректности.",
+  ranking:
+    "Строка = размещение «элемент @ позиция»: один элемент на разных позициях может вкладывать разное. Активно фактическое размещение.",
+};
+
+function cellKey(questionId: string, sourceType: string, sourceKey: string, scaleKey: string): string {
+  return `${questionId}|${sourceType}|${sourceKey}|${scaleKey}`;
+}
+
+/**
+ * «Вклады вопросов»: the contribution matrix. Each measured question is a card;
+ * expanded, it shows a «unit × scale» grid where the author types the explicit
+ * numeric contribution of each answer unit into each scale (empty = no row; 0 and
+ * negatives valid). The scale columns are the test's scales (referenced by key);
+ * contributions persist per question on the single «Сохранить».
+ */
+function ContributionsPane({
+  model,
+  updateModel,
+  readOnly,
+}: {
+  model: TestEditorModel;
+  updateModel: ScalesSectionProps["updateModel"];
+  readOnly: boolean;
+}) {
+  const [questions, setQuestions] = useState<ContributionQuestion[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const topicIds = useMemo(() => model.sections.map((s) => s.topicId), [model.sections]);
+  const scales = useMemo(() => model.scales.filter((s) => s.key.trim() !== ""), [model.scales]);
+
+  useEffect(() => {
+    let alive = true;
+    setLoadError(false);
+    loadContributionQuestions(topicIds)
+      .then((qs) => alive && setQuestions(qs))
+      .catch(() => alive && setLoadError(true));
+    return () => {
+      alive = false;
+    };
+  }, [topicIds]);
+
+  const cellMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of model.measurements) {
+      map.set(cellKey(m.questionId, m.sourceType, m.sourceKey ?? "", m.scaleKey), m.value);
+    }
+    return map;
+  }, [model.measurements]);
+
+  const contributedByQ = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const m of model.measurements) {
+      const set = map.get(m.questionId) ?? new Set<string>();
+      set.add(m.scaleKey);
+      map.set(m.questionId, set);
+    }
+    return map;
+  }, [model.measurements]);
+
+  const setCell = useCallback(
+    (questionId: string, unit: ContributionUnit, scaleKey: string, value: number | null) => {
+      updateModel((m) => {
+        const others = m.measurements.filter(
+          (x) =>
+            !(
+              x.questionId === questionId &&
+              x.sourceType === unit.sourceType &&
+              x.sourceKey === unit.sourceKey &&
+              x.scaleKey === scaleKey
+            ),
+        );
+        if (value === null) return { ...m, measurements: others };
+        const row: QuestionMeasurementModel = {
+          questionId,
+          scaleKey,
+          sourceType: unit.sourceType,
+          sourceKey: unit.sourceKey,
+          value,
+          weight: 1,
+        };
+        return { ...m, measurements: [...others, row] };
+      });
+    },
+    [updateModel],
+  );
+
+  if (loadError) {
+    return <Banner tone="error" size="sm" description="Не удалось загрузить вопросы теста." />;
+  }
+  if (questions === null) {
+    return <p className="tb-card-desc">Загрузка вопросов…</p>;
+  }
+  if (questions.length === 0) {
+    return (
+      <EmptyState
+        layout="inline"
+        well
+        title="В тесте пока нет вопросов"
+        description="Добавьте темы и вопросы во вкладке «Состав», затем задайте их вклады в шкалы."
+        data-testid="contributions-no-questions"
+      />
+    );
+  }
+
+  const uncovered = questions.filter((q) => !contributedByQ.has(q.id)).length;
+
+  return (
+    <>
+      {scales.length === 0 ? (
+        <Banner
+          tone="info"
+          size="sm"
+          description="Сначала добавьте хотя бы одну шкалу в разделе «Список шкал» — тогда здесь появятся столбцы для вкладов."
+          data-testid="contributions-no-scales"
+        />
+      ) : (
+        uncovered > 0 && (
+          <Banner
+            tone="warning"
+            size="sm"
+            description={`${pluralQuestions(uncovered)} пока не привязаны ни к одной шкале — проверьте покрытие.`}
+            data-testid="contributions-coverage-banner"
+          />
+        )
+      )}
+
+      {questions.map((q, index) => (
+        <QuestionContribCard
+          key={q.id}
+          index={index}
+          question={q}
+          scales={scales}
+          contributed={contributedByQ.get(q.id) ?? new Set()}
+          cellMap={cellMap}
+          readOnly={readOnly}
+          expanded={expandedId === q.id}
+          onToggle={() => setExpandedId((cur) => (cur === q.id ? null : q.id))}
+          onSetCell={setCell}
+        />
+      ))}
+    </>
+  );
+}
+
+// ─── Per-question contribution card ────────────────────────────────────────────────
+
+function QuestionContribCard({
+  index,
+  question: q,
+  scales,
+  contributed,
+  cellMap,
+  readOnly,
+  expanded,
+  onToggle,
+  onSetCell,
+}: {
+  index: number;
+  question: ContributionQuestion;
+  scales: ScaleModel[];
+  contributed: Set<string>;
+  cellMap: Map<string, number>;
+  readOnly: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onSetCell: (questionId: string, unit: ContributionUnit, scaleKey: string, value: number | null) => void;
+}) {
+  const measured = contributed.size > 0;
+  const dotClass = measured ? "tb-status-dot--ok" : "tb-status-dot--warn";
+  const heading = `${index + 1}. ${q.prompt}`;
+  const hint = UNIT_HINT[q.type];
+
+  return (
+    <section
+      className={"ou-card ou-card--outlined ou-card--sm tb-level-card" + (expanded ? "" : " is-collapsed")}
+      data-testid={`contrib-card-${index}`}
+    >
+      <header className="ou-card__header tb-level-card__head">
+        <span className={"tb-status-dot " + dotClass} aria-hidden="true"></span>
+        <div className="ou-card__heading tb-level-card__heading">
+          <h5 className="ou-card__title tb-level-card__title">{heading}</h5>
+          <p className="ou-card__subtitle tb-level-card__summary">
+            {QTYPE_LABEL[q.type]}
+            {scales
+              .filter((s) => contributed.has(s.key))
+              .map((s) => (
+                <span key={s.key} className="ou-tag ou-tag--neutral ou-tag--outline ml-2" title={s.label}>
+                  {s.key.toUpperCase()}
+                </span>
+              ))}
+            {!measured && " · не привязан"}
+          </p>
+        </div>
+        <div className="ou-card__trail tb-level-card__trail">
+          <button
+            type="button"
+            className="tb-level-card__chev"
+            aria-label={expanded ? "Свернуть вопрос" : "Развернуть вопрос"}
+            aria-expanded={expanded}
+            onClick={onToggle}
+          >
+            <ChevronDown width={16} height={16} aria-hidden="true" />
+          </button>
+        </div>
+      </header>
+
+      {expanded && (
+        <div className="ou-card__body tb-level-card__body">
+          {scales.length === 0 ? (
+            <p className="tb-card-desc">Добавьте шкалы, чтобы задать вклады.</p>
+          ) : q.units.length === 0 ? (
+            <p className="tb-card-desc">У вопроса нет единиц ответа для измерения.</p>
+          ) : (
+            <table className="tb-table tb-table--mb" data-testid={`contrib-grid-${index}`}>
+              <thead>
+                <tr>
+                  <th>{UNIT_HEADER[q.type]}</th>
+                  {scales.map((s) => (
+                    <th key={s.key} title={s.label}>{s.key.toUpperCase()}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {q.units.map((unit) => (
+                  <tr key={`${unit.sourceType}:${unit.sourceKey}`}>
+                    <td>
+                      {unit.label}
+                      {unit.correct && (
+                        <span className="ou-tag ou-tag--success ou-tag--outline ml-2">✓ верный</span>
+                      )}
+                    </td>
+                    {scales.map((s) => (
+                      <td key={s.key}>
+                        <MatrixCell
+                          value={cellMap.get(cellKey(q.id, unit.sourceType, unit.sourceKey, s.key))}
+                          disabled={readOnly}
+                          ariaLabel={`Вклад «${unit.label}» в шкалу ${s.key}`}
+                          onCommit={(v) => onSetCell(q.id, unit, s.key, v)}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {hint && q.units.length > 0 && scales.length > 0 && (
+            <Banner tone="info" size="sm" description={hint} />
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * One numeric contribution cell. Holds local text so intermediate states ("-",
+ * "1.") are typable; commits a parsed number (or null to clear) to the model and
+ * resyncs when the model value changes externally (reset / reload).
+ */
+function MatrixCell({
+  value,
+  disabled,
+  ariaLabel,
+  onCommit,
+}: {
+  value: number | undefined;
+  disabled: boolean;
+  ariaLabel: string;
+  onCommit: (value: number | null) => void;
+}) {
+  const [text, setText] = useState(value === undefined ? "" : String(value));
+
+  useEffect(() => {
+    setText(value === undefined ? "" : String(value));
+  }, [value]);
+
+  return (
+    <Input
+      size="s"
+      value={text}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      onChange={(e) => {
+        const t = e.target.value;
+        setText(t);
+        const trimmed = t.trim();
+        if (trimmed === "") {
+          onCommit(null);
+          return;
+        }
+        const n = Number(trimmed);
+        if (!Number.isNaN(n)) onCommit(n);
+      }}
+    />
+  );
 }

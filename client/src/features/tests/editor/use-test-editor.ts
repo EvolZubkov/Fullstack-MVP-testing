@@ -40,8 +40,9 @@ import {
 } from "./test-editor.mappers";
 import { validateTestEditor } from "./test-editor.validation";
 import { saveResultVariables } from "./result-variables-api";
-import { saveScales } from "./scales-api";
+import { saveScales, saveMeasurements } from "./scales-api";
 import type {
+  ScaleModel,
   TestEditorModel,
   ValidationResult,
 } from "./test-editor.types";
@@ -233,7 +234,10 @@ function diffDirtyTabs(
   if (!shallowEqualJson(draft.resultVariables, snapshot.resultVariables)) {
     dirty.add("metrics");
   }
-  if (!shallowEqualJson(draft.scales, snapshot.scales)) {
+  if (
+    !shallowEqualJson(draft.scales, snapshot.scales) ||
+    !shallowEqualJson(draft.measurements, snapshot.measurements)
+  ) {
     dirty.add("scales");
   }
   return dirty;
@@ -252,6 +256,27 @@ async function fetchTest(testId: string): Promise<unknown> {
     throw new Error(`${res.status}: ${(await res.text()) || res.statusText}`);
   }
   return res.json();
+}
+
+/**
+ * Build the scale `key`→`id` map needed to persist measurements (which reference
+ * scales by key). When a scale was just created/changed, the draft rows lack the
+ * server id, so re-read the persisted scales; otherwise the draft already carries
+ * the ids from the last load.
+ */
+async function resolveScaleKeyToId(
+  testId: string,
+  draftScales: ScaleModel[],
+  scalesChanged: boolean,
+): Promise<Map<string, string>> {
+  if (!scalesChanged) {
+    return new Map(draftScales.filter((s) => s.id).map((s) => [s.key, s.id as string]));
+  }
+  const full = (await fetchTest(testId)) as { scales?: Array<{ id?: string; key?: string }> };
+  const persisted = full.scales ?? [];
+  return new Map(
+    persisted.filter((s) => s.id && s.key).map((s) => [s.key as string, s.id as string]),
+  );
 }
 
 /** Custom error wrapping a non-2xx PUT response so the caller can branch on status. */
@@ -453,35 +478,49 @@ export function useTestEditor(
       const fullPayload = buildSavePayload(draft);
       const snapVars = snapshot?.resultVariables ?? [];
       const snapScales = snapshot?.scales ?? [];
-      // PRD-2/PRD-5: result variables and scales are separate CRUD resources.
-      // Persist the test first, then reconcile each list and refetch so newly
-      // created rows come back with their server ids (the merged-response fast
-      // path avoids the extra GET when nothing in either list changed).
+      const snapMeas = snapshot?.measurements ?? [];
+      // PRD-2/PRD-5: result variables, scales and measurements are separate CRUD
+      // resources. Persist the test first, then reconcile each. Measurements
+      // reference scales by stable key, so they run AFTER scales and resolve
+      // key→id from the persisted scales (re-read when a scale was just created).
       if (isEdit) {
         if (!editTestId) throw new Error("save: edit mode without testId");
         const saved = await putTest(editTestId, fullPayload);
         const varsChanged = !shallowEqualJson(draft.resultVariables, snapVars);
         const scalesChanged = !shallowEqualJson(draft.scales, snapScales);
+        const measChanged = !shallowEqualJson(draft.measurements, snapMeas);
         if (varsChanged) await saveResultVariables(editTestId, draft.resultVariables, snapVars);
         if (scalesChanged) await saveScales(editTestId, draft.scales, snapScales);
-        if (varsChanged || scalesChanged) return fetchTest(editTestId);
+        if (measChanged) {
+          const keyToId = await resolveScaleKeyToId(editTestId, draft.scales, scalesChanged);
+          await saveMeasurements(editTestId, draft.measurements, snapMeas, keyToId);
+        }
+        if (varsChanged || scalesChanged || measChanged) return fetchTest(editTestId);
         return {
           ...(saved as Record<string, unknown>),
           resultVariables: draft.resultVariables,
           scales: draft.scales,
+          measurements: draft.measurements,
         };
       }
       const created = await postTest(fullPayload);
       const newId = (created as { id?: string } | null)?.id;
-      if (newId && (draft.resultVariables.length > 0 || draft.scales.length > 0)) {
+      const hasChildren =
+        draft.resultVariables.length > 0 || draft.scales.length > 0 || draft.measurements.length > 0;
+      if (newId && hasChildren) {
         if (draft.resultVariables.length > 0) await saveResultVariables(newId, draft.resultVariables, []);
         if (draft.scales.length > 0) await saveScales(newId, draft.scales, []);
+        if (draft.measurements.length > 0) {
+          const keyToId = await resolveScaleKeyToId(newId, draft.scales, true);
+          await saveMeasurements(newId, draft.measurements, [], keyToId);
+        }
         return fetchTest(newId);
       }
       return {
         ...(created as Record<string, unknown>),
         resultVariables: draft.resultVariables,
         scales: draft.scales,
+        measurements: draft.measurements,
       };
     },
     onSuccess: (data) => {
