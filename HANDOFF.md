@@ -95,6 +95,19 @@ wiring/export/preview, `4044eb0` B4a, `a9bbc9a` B4b, Этап C `tests/mbi-golde
   покрыта рантайм-обвязкой B5 (resultsPage.js/suspendAttempts.js) + export-тестами;
   Excel-видимость WebTutor (acceptance §5.3 #7-#9) — только live-LMS (память
   `no-live-webtutor-verify-local`).
+- Инструмент приёмки (`6a6aa77`): `scripts/scorm-player.mjs` расширен инспектором —
+  панели «Шкалы»/«Показатели» (живой пересчёт по ходу попытки через same-origin глобали
+  iframe) + «SCORM ↔ LMS» (журнал вызовов RTE с ответами/кодами ошибок, таблица
+  `cmi.interactions.*`, `suspend_data.custom`). `npm run scorm:sample` несёт фикстуру
+  скоринга (2 шкалы + measurements + 3 показателя). Память `reference_scorm_acceptance_tooling`.
+
+### Статус issues (GitHub `vvlad1973/Fullstack-MVP-testing`)
+
+Актуализировано 2026-06-03 (ВСЕГДА `--repo vvlad1973/...`, не upstream-форк). Трек [scoring]:
+закрыто 10 — `#11`,`#13`,`#14`,`#15`,`#16`,`#18`,`#19`,`#20`,`#21`,`#22` (с ссылками на
+коммиты, чек-боксы в теле эпика проставлены). Открыты со статусом 6: доспека/решения
+(`#12`,`#25`), градуированный checkAnswer (`#17`), RTK-слой (`#23`), C2-фастфоллоу (`#24`),
+эпик `#26` (ядро доставлено, остаток отложен).
 
 ### Отложенные точечные пункты (не блокируют)
 
