@@ -221,11 +221,84 @@ const sections = [
   },
 ];
 
+// ─── Scales + measurements + result variables (PRD-5 / PRD-2) ────────────────────
+// A compact scoring fixture so the SCORM player's inspector has live scale.* /
+// result.* to show: `sym` is fed by the three single-choice questions, `asym` by
+// the three multiple-choice ones; the option's index is its explicit contribution.
+
+const SCALE_SYM = "scale-sym";
+const SCALE_ASYM = "scale-asym";
+
+const scales = [
+  {
+    id: SCALE_SYM, testId: TEST_ID, key: "sym", label: "Симметричная криптография",
+    type: "number", aggregation: "sum", normalization: "percent", direction: "positive",
+    configJson: { bands: [
+      { min: 0, max: 1, level: "low", label: "Низкий" },
+      { min: 2, max: 3, level: "mid", label: "Средний" },
+      { min: 4, max: 9, level: "high", label: "Высокий" },
+    ] },
+    showToLearner: true, scormTarget: "both", sortOrder: 0, createdAt: new Date(), updatedAt: new Date(),
+  },
+  {
+    id: SCALE_ASYM, testId: TEST_ID, key: "asym", label: "Асимметричная криптография",
+    type: "number", aggregation: "sum", normalization: "none", direction: "positive",
+    configJson: { bands: [
+      { min: 0, max: 2, level: "low", label: "Низкий" },
+      { min: 3, max: 5, level: "mid", label: "Средний" },
+      { min: 6, max: 99, level: "high", label: "Высокий" },
+    ] },
+    showToLearner: true, scormTarget: "both", sortOrder: 1, createdAt: new Date(), updatedAt: new Date(),
+  },
+];
+
+let mSeq = 0;
+function m(questionId: string, scaleId: string, optionIndex: number, value: number) {
+  mSeq += 1;
+  return {
+    id: `meas-${mSeq}`, testId: TEST_ID, questionId, scaleId,
+    sourceType: "option", sourceKey: String(optionIndex), valueJson: value, weight: 1,
+    conditionJson: null, sortOrder: optionIndex, createdAt: new Date(), updatedAt: new Date(),
+  };
+}
+
+// q-1..q-3 → sym; q-4..q-6 → asym. Option index = its contribution (correct answer
+// carries the most), so the live scale climbs as the learner picks stronger answers.
+const measurements = [
+  m("q-1", SCALE_SYM, 0, 2), m("q-1", SCALE_SYM, 1, 1), m("q-1", SCALE_SYM, 2, 0), m("q-1", SCALE_SYM, 3, 0),
+  m("q-2", SCALE_SYM, 0, 0), m("q-2", SCALE_SYM, 1, 2), m("q-2", SCALE_SYM, 2, 1), m("q-2", SCALE_SYM, 3, 0),
+  m("q-3", SCALE_SYM, 0, 0), m("q-3", SCALE_SYM, 1, 1), m("q-3", SCALE_SYM, 2, 2), m("q-3", SCALE_SYM, 3, 0),
+  m("q-4", SCALE_ASYM, 0, 2), m("q-4", SCALE_ASYM, 1, 0), m("q-4", SCALE_ASYM, 2, 1), m("q-4", SCALE_ASYM, 3, 0),
+  m("q-5", SCALE_ASYM, 0, 2), m("q-5", SCALE_ASYM, 1, 0), m("q-5", SCALE_ASYM, 2, 1), m("q-5", SCALE_ASYM, 3, 1),
+  m("q-6", SCALE_ASYM, 0, 2), m("q-6", SCALE_ASYM, 1, 0), m("q-6", SCALE_ASYM, 2, 1), m("q-6", SCALE_ASYM, 3, 0),
+];
+
+function rv(name: string, label: string, type: string, formula: string, sortOrder: number) {
+  return {
+    id: `rv-${name}`, testId: TEST_ID, name, label, type, formula,
+    showToLearner: true, scormTarget: "both", controlsStatus: "none", sortOrder,
+    createdAt: new Date(), updatedAt: new Date(),
+  };
+}
+
+const resultVariables = [
+  rv("sym_pct", "Симметрия, %", "number", 'scaleById("sym").percent', 10),
+  rv("both_high", "Обе шкалы высокие", "boolean", 'countScales(["sym","asym"], "high") = 2', 20),
+  rv(
+    "profile", "Профиль", "string",
+    'IF(scaleById("sym").level = "high", "Эксперт по симметрии", IF(countScales(["sym","asym"], "high") >= 1, "Уверенный", "Базовый"))',
+    100,
+  ),
+];
+
 const data = {
   test,
   sections,
   adaptiveSettings: null,
   contentPages,
+  scales,
+  measurements,
+  resultVariables,
   designSettings: { templateId: "default", params: {} },
   telemetry: null,
 };
