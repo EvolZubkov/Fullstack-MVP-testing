@@ -36,7 +36,7 @@
          otherwise the trigger renders a double frame in the sketch. */
       .ou-select { padding: 0; border: 0; background: transparent; line-height: inherit; border-radius: 0; }
       .ou-select:not(.is-open) .ou-select__menu { display: none; }
-      .wf-pane { max-width: var(--wf-size-560, 560px); }
+      .wf-pane { max-width: var(--wf-size-560); }
       .wf-stack { display: flex; flex-direction: column; gap: var(--ou-space-4); }
       .wf-fieldrow { display: flex; flex-wrap: wrap; gap: var(--ou-space-4); }
       .wf-muted { color: var(--ou-fg-muted); }
@@ -44,9 +44,9 @@
       /* Date-preview info lines inside an info banner. */
       .wf-calc { display: flex; flex-direction: column; gap: var(--ou-space-1); font: var(--ou-text-body-s); }
       .wf-calc strong { color: var(--ou-fg-default); }
-      /* Learner block-wall — built-in runtime screen sketch. */
+      /* Learner block-wall — sketch of the template system.blocked page. */
       .wf-wall { display: flex; align-items: center; justify-content: center; padding: var(--ou-space-8) var(--ou-space-4); }
-      .wf-wall__card { max-width: var(--wf-size-520, 520px); width: 100%; text-align: center; }
+      .wf-wall__card { max-width: var(--wf-size-520); width: 100%; text-align: center; }
     </style>
 
     <style data-wf-template-overrides>
@@ -69,7 +69,7 @@
       .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
       .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
       .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
-      .wf-state { display: none; padding: var(--wf-size-72, 76px) var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-720, 720px); }
+      .wf-state { display: none; padding: var(--wf-size-72) var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-720); }
       .wf-state.active { display: block; }
       .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
     </style>
@@ -128,7 +128,7 @@
             <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Ограничить повторное прохождение" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
             <span class="ou-switch-field__text">
               <span class="ou-switch-field__label">Ограничить повторное прохождение</span>
-              <span class="ou-switch-field__desc">Допуск проверяется до старта курса (до SCORM Initialize).</span>
+              <span class="ou-switch-field__desc">Допуск проверяется до старта курса.</span>
             </span>
           </label>
 
@@ -147,7 +147,6 @@
             <div class="ou-select ou-field--m ou-field--full" id="rp-plugin" data-ou-options="WebTutor: период охлаждения|SCORM suspend_data (best-effort)">
               <button type="button" class="ou-select__trigger"><span class="ou-select__value">WebTutor: период охлаждения</span><svg class="ou-select__chev" width="16" height="16"><use href="#i-chevron-down" /></svg></button>
             </div>
-            <div class="ou-formfield__msg">Единственная активная конфигурация плагина подставляется автоматически.</div>
           </div>
 
           <div class="ou-banner ou-banner--subtle ou-banner--info" role="note">
@@ -167,7 +166,7 @@
               <button type="button" class="ou-seg__item is-active" aria-pressed="true">Разрешить старт</button>
               <button type="button" class="ou-seg__item" aria-pressed="false">Заблокировать</button>
             </div>
-            <div class="ou-formfield__msg">«Разрешить старт» (fail-open) — при сбое проверки курс открывается; «Заблокировать» (fail-closed) — показывается экран блокировки.</div>
+            <div class="ou-formfield__msg">Если проверку не удалось выполнить — открыть курс или показать экран блокировки.</div>
           </div>
 
           <div class="ou-formfield">
@@ -176,11 +175,7 @@
               <button type="button" class="ou-seg__item is-active" aria-pressed="true">Со статусом</button>
               <button type="button" class="ou-seg__item" aria-pressed="false">Нейтральный</button>
             </div>
-            <div class="ou-formfield__msg">«Со статусом» — passed/failed; «Нейтральный» — completed/unknown (LMS показывает «Завершен»).</div>
-          </div>
-
-          <div class="ou-formfield">
-            <div class="ou-formfield__msg"><svg class="wf-ico-inline" width="13" height="13"><use href="#i-info" /></svg> Экран блокировки — системная страница шаблона (layout system.blocked), с датой следующего доступа. Плагин WebTutor: версия 1.0.0.</div>
+            <div class="ou-formfield__msg">Как показать завершение попытки в журнале LMS.</div>
           </div>
         </div>
       </div>
@@ -195,7 +190,7 @@
             <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Ограничить повторное прохождение" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
             <span class="ou-switch-field__text">
               <span class="ou-switch-field__label">Ограничить повторное прохождение</span>
-              <span class="ou-switch-field__desc">Допуск проверяется до старта курса (до SCORM Initialize).</span>
+              <span class="ou-switch-field__desc">Допуск проверяется до старта курса.</span>
             </span>
           </label>
 
@@ -219,7 +214,7 @@
           <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
             <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-triangle" /></svg></div>
             <div class="ou-banner__body">
-              <div class="ou-banner__desc">Best-effort: suspend_data надёжен только внутри той же SCORM-регистрации. Для строгого cooldown между новыми попытками нужен внешний/LMS-источник (WebTutor).</div>
+              <div class="ou-banner__desc">Надёжно работает только в пределах одной регистрации курса в LMS. Для строгого ограничения между новыми попытками используйте проверку через WebTutor.</div>
             </div>
           </div>
         </div>
@@ -293,13 +288,14 @@
             <tr><td>Поверхность 1</td><td>вкладка «Настройки» → пейн «Повторное прохождение»</td><td><code>basic-settings-section.tsx</code> (ui-kit, rail-пейн как «Ограничения»/«Интеграция»)</td></tr>
             <tr><td>Поверхность 2</td><td>экран блокировки в SCORM-пакете</td><td>Системная страница шаблона — layout <code>system.blocked</code> (ветки cooldown/error/default); гейт заполняет <code>retake.*</code> через path-DSL; встроенный экран — фолбэк</td></tr>
             <tr><td>Свич «Ограничить…»</td><td><code>retakePolicy.enabled</code></td><td>Выкл = легаси-поведение (FR-02, allowed=true)</td></tr>
+            <tr><td>Момент проверки</td><td>до старта курса</td><td>Гейт отрабатывает до SCORM Initialize (NFR-01/02): при блокировке cmi.* не трогается</td></tr>
             <tr><td>Период охлаждения</td><td><code>cooldownPeriodDays</code> (1–3650)</td><td>Календарные дни; <code>allowed = (today − last) ≥ days</code></td></tr>
-            <tr><td>Плагин</td><td><code>eligibilityPlugin.key</code></td><td>Select из активного реестра (Phase 1 — сидируется в коде): webtutor_cooldown / suspend_data_cooldown</td></tr>
+            <tr><td>Плагин</td><td><code>eligibilityPlugin.key</code></td><td>Select из активного реестра (Phase 1 — сидируется в коде): webtutor_cooldown / suspend_data_cooldown; версия плагина WebTutor — 1.0.0</td></tr>
             <tr><td>Конфигурация</td><td><code>eligibilityPlugin.configId</code> — авто</td><td>Phase 1: у плагина один активный конфиг → подставляется неявно, поле скрыто (избыточно). Видимый Select вернётся в Фазе 2 (админ-реестр, ≥2 конфига)</td></tr>
             <tr><td>Превью даты</td><td>вычисляется из примера последней попытки</td><td>Чтобы автор не считал дату вручную (§4.1)</td></tr>
             <tr><td>Политика ошибки</td><td><code>eligibilityPlugin.failPolicy</code></td><td>fail-open (старт) / fail-closed (блок) — SegmentedControl (взаимоисключающий)</td></tr>
-            <tr><td>Завершение в LMS</td><td><code>completionReportMode</code></td><td>scored / completed_neutral (§4.1)</td></tr>
-            <tr><td>Warning suspend_data</td><td>плагин = suspend_data_cooldown</td><td>Best-effort — Banner-предупреждение (§4.6)</td></tr>
+            <tr><td>Завершение в LMS</td><td><code>completionReportMode</code></td><td>«Со статусом» = scored → passed/failed; «Нейтральный» = completed_neutral → completed/unknown (LMS показывает «Завершен»). §4.1</td></tr>
+            <tr><td>Warning suspend_data</td><td>плагин = suspend_data_cooldown</td><td>Best-effort: suspend_data надёжен только внутри одной SCORM-регистрации; строгий cooldown между попытками — через внешний/LMS-источник (WebTutor). Banner-предупреждение (§4.6)</td></tr>
             <tr><td>Блок-экран</td><td><code>retake.availableDate</code></td><td>Дата следующего доступа; ошибка failClosed — Banner error</td></tr>
           </tbody>
         </table>
