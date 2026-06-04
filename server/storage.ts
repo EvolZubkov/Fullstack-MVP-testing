@@ -979,6 +979,7 @@ export class DatabaseStorage implements IStorage {
           required: section.required ?? true,
           timeLimitMinutes: section.timeLimitMinutes ?? null,
           feedbackJson: section.feedbackJson ?? null,
+          drawBlueprintJson: section.drawBlueprintJson ?? null,
         });
       }
 
@@ -1033,6 +1034,7 @@ export class DatabaseStorage implements IStorage {
             required: section.required ?? true,
             timeLimitMinutes: section.timeLimitMinutes ?? null,
             feedbackJson: section.feedbackJson ?? null,
+            drawBlueprintJson: section.drawBlueprintJson ?? null,
           });
         }
       }

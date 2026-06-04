@@ -61,9 +61,17 @@ end-to-end save/round-trip (`scoring_json` пишется/читается, то
 **PRD-10 ЗАВЕРШЁН (Стадии 0–6).** Градуированная оценка работает end-to-end (UI → экспорт → рантайм
 → `Σ s` → порог раздела на `Σ s` → сертификация), подтверждено golden против РТК. Остаточные
 не-ядровые пункты: preview-модалка балла; серверный `check-answer.ts` (веб-попытки) бинарный; CMI
-per-question `scoreRatio`/«Частично правильно» (FR-12). Дальше по треку — **PRD-11** (квоты выдачи
-по тегам): нужен эскиз квота-редактора (Стадия 0b) + согласование, потом схема/логика/экспорт/UI.
-Ниже — исходный план дизайн-фазы (актуален для PRD-11).
+per-question `scoreRatio`/«Частично правильно» (FR-12).
+
+**PRD-11 Стадия 1 выполнена** (схема квот выдачи): миграция `011` (колонка
+`test_sections.draw_blueprint_json`, CHECK на `modeGranularity`/`mode`, применена к dev-БД,
+идемпотентна); zod `drawBlueprintSchema`/`drawStratumSchema` + колонка `drawBlueprintJson`; проброс в
+storage (`_insertSections` test-settings + legacy createTest/updateTest) и `SectionPayload`;
+валидация `Σ count <= drawCount` (FR-05) в `sectionBodySchema`; тесты
+`tests/schema-prd11-blueprint.test.ts`. `check`/`build` зелёные, `vitest` **1813**. Дальше — PRD-11
+**Стадия 2** (логика стратифицированной выдачи в рантайме: `app.js`/`resultsPage`-отбор
+`shuffle(...).slice(0,drawCount)` → страты + дедуп `used` + warning при нехватке, §5 спеки); UI-стадия
+4 — после эскиза квота-редактора (Стадия 0b, не создан). Ниже — исходный план дизайн-фазы.
 
 Сделано в дизайн-фазе (документы):
 

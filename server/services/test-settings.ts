@@ -17,7 +17,7 @@ import {
   contentPages,
   templates,
 } from "@shared/schema";
-import type { Test, TemplateManifest } from "@shared/schema";
+import type { Test, TemplateManifest, DrawBlueprint } from "@shared/schema";
 import {
   planSystemPages,
   SYSTEM_KINDS,
@@ -107,6 +107,8 @@ export interface SectionPayload {
   required?: boolean;
   timeLimitMinutes?: number | null;
   feedbackJson?: unknown;
+  /** PRD-11: optional stratified-draw blueprint; null/absent = uniform draw. */
+  drawBlueprintJson?: DrawBlueprint | null;
 }
 
 export interface AdaptiveLevelPayload {
@@ -572,6 +574,7 @@ export class TestSettingsService {
         required: s.required ?? true,
         timeLimitMinutes: s.timeLimitMinutes ?? null,
         feedbackJson: s.feedbackJson ?? null,
+        drawBlueprintJson: s.drawBlueprintJson ?? null,
         sortOrder: i,
       });
     }

@@ -217,6 +217,33 @@ export const tests = pgTable("tests", {
   designSettingsJson: jsonb("design_settings_json").notNull().default({}),
 });
 
+// ─── PRD-11: tag draw quotas (квоты выдачи по тегам) ─────────────────────────
+// Optional per-section stratified-draw blueprint guaranteeing coverage of
+// sub-topics (tags) within a topic's draw_count sample. Absence = today's
+// uniform draw (FR-02). A delivery mechanism, orthogonal to scoring (PRD-10).
+// Sub-topic = a value in questions.tags; no new entity (PRD-11 §4).
+
+/** One quota: `count` questions tagged `tag`; `mode` per-tag only when granularity is per_tag. */
+export const drawStratumSchema = z.object({
+  tag: z.string().min(1),
+  count: z.number().int().min(1),
+  mode: z.enum(["exact", "min"]).optional(),
+});
+
+/**
+ * Stratified-draw blueprint (scoring-model §2.4; PRD-11 FR-01/03/03a/03b).
+ * `modeGranularity` = uniform (one `mode` for the topic, default) | per_tag
+ * (each stratum's `mode`, default exact). `strata` is non-empty.
+ */
+export const drawBlueprintSchema = z.object({
+  modeGranularity: z.enum(["uniform", "per_tag"]).default("uniform"),
+  mode: z.enum(["exact", "min"]).default("exact"),
+  strata: z.array(drawStratumSchema).min(1),
+});
+
+export type DrawStratum = z.infer<typeof drawStratumSchema>;
+export type DrawBlueprint = z.infer<typeof drawBlueprintSchema>;
+
 export const testSections = pgTable("test_sections", {
   id: varchar("id", { length: 36 }).primaryKey(),
   testId: varchar("test_id", { length: 36 }).notNull(),
@@ -226,6 +253,8 @@ export const testSections = pgTable("test_sections", {
   required: boolean("required").notNull().default(true),
   timeLimitMinutes: integer("time_limit_minutes"),
   feedbackJson: jsonb("feedback_json"),
+  // PRD-11: optional stratified-draw blueprint. Null = uniform draw (FR-02).
+  drawBlueprintJson: jsonb("draw_blueprint_json").$type<DrawBlueprint>(),
   // PRD-7 S13.5 / G47: explicit author-controlled topic order. Persisted on
   // every save as the index of the topic in the editor's sections array, so
   // drag-reorder in Structure round-trips through getTestSections() ORDER BY.
@@ -283,7 +312,10 @@ export const insertQuestionSchema = createInsertSchema(questions)
   // drizzle-zod types jsonb loosely; validate the scoring config explicitly (FR-13).
   .extend({ scoringJson: questionScoringSchema.nullish() });
 export const insertTestSchema = createInsertSchema(tests).omit({ id: true });
-export const insertTestSectionSchema = createInsertSchema(testSections).omit({ id: true });
+export const insertTestSectionSchema = createInsertSchema(testSections)
+  .omit({ id: true })
+  // drizzle-zod types jsonb loosely; validate the draw blueprint explicitly.
+  .extend({ drawBlueprintJson: drawBlueprintSchema.nullish() });
 export const insertAttemptSchema = createInsertSchema(attempts).omit({ id: true });
 
 export const insertAdaptiveTopicSettingsSchema = createInsertSchema(adaptiveTopicSettings).omit({ id: true });

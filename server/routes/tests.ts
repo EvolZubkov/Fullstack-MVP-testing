@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema } from "@shared/schema";
 import { requireAuth, requireAuthor } from "../middleware/auth";
 import { generateScormPackage } from "../scorm-exporter";
 import { isSupportedTemplateApiVersion } from "../template-registry";
@@ -20,14 +20,31 @@ import { FlowPolicyValidationError } from "../services/flow-policy-validator";
 
 // ─── Validation schemas (PRD-7 §5.4) ─────────────────────────────────────────
 
-const sectionBodySchema = z.object({
-  topicId: z.string().min(1),
-  drawCount: z.number().int().min(1),
-  topicPassRuleJson: z.unknown().optional(),
-  required: z.boolean().optional(),
-  timeLimitMinutes: z.number().int().positive().nullable().optional(),
-  feedbackJson: z.unknown().optional(),
-});
+const sectionBodySchema = z
+  .object({
+    topicId: z.string().min(1),
+    drawCount: z.number().int().min(1),
+    topicPassRuleJson: z.unknown().optional(),
+    required: z.boolean().optional(),
+    timeLimitMinutes: z.number().int().positive().nullable().optional(),
+    feedbackJson: z.unknown().optional(),
+    drawBlueprintJson: drawBlueprintSchema.nullish(),
+  })
+  .superRefine((s, ctx) => {
+    // PRD-11 FR-05: the quotas are minimums inside the topic's sample, so their
+    // sum must not exceed draw_count (the per-tag "fewer questions than count"
+    // case is a non-blocking warning handled at draw time, FR-06).
+    if (s.drawBlueprintJson) {
+      const sum = s.drawBlueprintJson.strata.reduce((acc, st) => acc + st.count, 0);
+      if (sum > s.drawCount) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["drawBlueprintJson"],
+          message: `Сумма квот (${sum}) превышает выборку темы drawCount (${s.drawCount})`,
+        });
+      }
+    }
+  });
 
 const testBodyBaseSchema = z.object({
   title: z.string().min(1, "Title is required").optional(),
