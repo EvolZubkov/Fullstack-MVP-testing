@@ -899,3 +899,58 @@ h1 {
   color: hsl(0 0% 50%);
 }
 
+
+/* ===== PRD-6 retake gate: block-wall + neutral start shell ===== */
+.retake-wall,
+.retake-shell {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.retake-wall__card,
+.retake-shell__card {
+  max-width: 520px;
+  width: 100%;
+  background: #fff;
+  border: 1px solid hsl(0 0% 88%);
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+  box-shadow: 0 6px 24px hsl(0 0% 0% / 0.06);
+}
+.retake-wall__title,
+.retake-shell__title {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 700;
+  color: hsl(0 0% 12%);
+}
+.retake-wall__lead,
+.retake-shell__lead {
+  margin: 0 0 8px;
+  color: hsl(0 0% 35%);
+}
+.retake-wall__date {
+  margin: 12px 0 0;
+  font-size: 16px;
+  color: hsl(0 0% 12%);
+}
+.retake-wall__note {
+  margin: 12px 0 0;
+  color: hsl(0 70% 42%);
+  font-size: 13px;
+}
+.retake-shell__btn {
+  margin-top: 20px;
+  padding: 12px 28px;
+  border: 0;
+  border-radius: 8px;
+  background: hsl(211 100% 50%);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.retake-shell__btn:hover { background: hsl(211 100% 44%); }

@@ -1,6 +1,10 @@
 // app/bootstrap/main.js
 (function () {
-  function boot() {
+  // The normal course launch: SCORM.Initialize + telemetry + recovery + render.
+  // For tests without a retake policy this runs immediately on boot (unchanged
+  // behaviour). For gated tests it runs only after the gate allows AND the
+  // learner clicks «Начать курс» (PRD-6 NFR-01).
+  function runCourse() {
     // SCORM runtime должен быть уже загружен (runtime.js)
     SCORM.init();
 
@@ -147,6 +151,17 @@
         syncMatchingHeights();
       });
     });
+  }
+
+  // PRD-6: the retake gate runs BEFORE SCORM.Initialize for tests with a policy
+  // (NFR-01/02). Blocked => block-wall (no init, no cmi). Allowed => «Начать
+  // курс» shell whose click runs the normal course. Non-gated tests run directly.
+  function boot() {
+    if (typeof RetakeGate !== "undefined" && RetakeGate.isGated(TEST_DATA)) {
+      RetakeGate.run(TEST_DATA, runCourse);
+    } else {
+      runCourse();
+    }
   }
 
   // чтобы работало и в обычной загрузке, и если скрипт подцепился поздно

@@ -1,5 +1,6 @@
-import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable, Scale, QuestionMeasurement } from "@shared/schema";
+import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable, Scale, QuestionMeasurement, RetakePolicy } from "@shared/schema";
 import { sanitizeHtml } from "../../utils/html-sanitizer";
+import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibility/registry";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
   links: AdaptiveLevelLink[];
@@ -143,6 +144,31 @@ export function buildTestJson(data: ExportData): string {
       })),
     })),
   };
+
+  // PRD-6: retake gate policy + resolved plugin runtime/config. Included only
+  // when enabled with a plugin so unpolicied packages stay byte-identical (FR-02);
+  // the runtime gate (RetakeGate) reads test.retakePolicy + test.retakePlugin.
+  const rp = data.test.retakePolicyJson as RetakePolicy | null | undefined;
+  if (rp && rp.enabled && rp.eligibilityPlugin?.key) {
+    const plugin = findEligibilityPlugin(rp.eligibilityPlugin.key);
+    if (plugin) {
+      const cfg = findEligibilityConfig(rp.eligibilityPlugin.key, rp.eligibilityPlugin.configId);
+      test.retakePolicy = {
+        enabled: true,
+        cooldownPeriodDays: rp.cooldownPeriodDays,
+        gateMode: rp.gateMode,
+        eligibilityPlugin: rp.eligibilityPlugin,
+        blockedPageId: rp.blockedPageId ?? null,
+        completionReportMode: rp.completionReportMode,
+      };
+      test.retakePlugin = {
+        key: plugin.key,
+        runtimeEntry: plugin.runtimeEntry,
+        bestEffort: plugin.bestEffort,
+        config: cfg?.config ?? {},
+      };
+    }
+  }
 
   // Add adaptive settings if present
   if (data.test.mode === "adaptive" && data.adaptiveSettings) {

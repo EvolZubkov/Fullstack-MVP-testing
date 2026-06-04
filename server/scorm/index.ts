@@ -170,6 +170,14 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/dsl/formula.js",
   ]);
 
+  // PRD-6 retake gate — plain-JS ports of shared/eligibility/* (engine + plugins)
+  // and the runtime gate. Bundled for every package; the gate only runs when the
+  // test carries a retake policy (RetakeGate.isGated), so unpolicied packages are
+  // unaffected at runtime (the bundled bytes differ — see test-json conditional export).
+  const eligibilityEngineJs = readOneOf(["app/eligibility/engine.js"]);
+  const eligibilityPluginsJs = readOneOf(["app/eligibility/plugins.js"]);
+  const eligibilityGateJs = readOneOf(["app/eligibility/gate.js"]);
+
   const resultsPageJs = readOneOf([
     "app/render/resultsPage.js",
   ]);
@@ -265,6 +273,9 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     mainRenderJs,
     appMain,
     feedbackJs,
+    eligibilityEngineJs,
+    eligibilityPluginsJs,
+    eligibilityGateJs,
     bootstrapMainJs,
   ]).replace("__TEST_JSON_B64__", testJsonB64);
   
