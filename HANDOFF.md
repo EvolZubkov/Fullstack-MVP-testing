@@ -63,15 +63,22 @@ end-to-end save/round-trip (`scoring_json` пишется/читается, то
 не-ядровые пункты: preview-модалка балла; серверный `check-answer.ts` (веб-попытки) бинарный; CMI
 per-question `scoreRatio`/«Частично правильно» (FR-12).
 
-**PRD-11 Стадия 1 выполнена** (схема квот выдачи): миграция `011` (колонка
-`test_sections.draw_blueprint_json`, CHECK на `modeGranularity`/`mode`, применена к dev-БД,
-идемпотентна); zod `drawBlueprintSchema`/`drawStratumSchema` + колонка `drawBlueprintJson`; проброс в
-storage (`_insertSections` test-settings + legacy createTest/updateTest) и `SectionPayload`;
-валидация `Σ count <= drawCount` (FR-05) в `sectionBodySchema`; тесты
-`tests/schema-prd11-blueprint.test.ts`. `check`/`build` зелёные, `vitest` **1813**. Дальше — PRD-11
-**Стадия 2** (логика стратифицированной выдачи в рантайме: `app.js`/`resultsPage`-отбор
-`shuffle(...).slice(0,drawCount)` → страты + дедуп `used` + warning при нехватке, §5 спеки); UI-стадия
-4 — после эскиза квота-редактора (Стадия 0b, не создан). Ниже — исходный план дизайн-фазы.
+**PRD-11 Стадии 1-3 выполнены** (квоты выдачи, бэкенд end-to-end):
+
+- Стадия 1 (схема): миграция `011` (колонка `test_sections.draw_blueprint_json` + CHECK, применена,
+  идемпотентна); zod `drawBlueprintSchema`/`drawStratumSchema` + колонка; проброс storage
+  (`_insertSections` + legacy) + `SectionPayload`; валидация `Σ count <= drawCount` (FR-05) в
+  `sectionBodySchema`; тест `schema-prd11-blueprint`.
+- Стадия 2 (выдача): авторитетный `shared/draw/blueprint.ts` `drawSection` (страты + дедуп `used`
+  FR-04 + остаток без `exact`-тегов FR-03a + warning FR-06, `shuffle` инъектируется); JS-порт в
+  `server/scorm/assets/app.js` (`drawSection`, в `generateVariant`); сервер `routes/attempts.ts`
+  использует TS напрямую. Тесты `draw-blueprint` + golden-parity `draw-blueprint-port`.
+- Стадия 3 (экспорт): `buildTestJson` переносит `drawBlueprint` в рантайм-секцию УСЛОВНО (FR-02).
+
+`check`/`build` зелёные, `vitest` **1837**. Прим.: отбор `shuffle(...).slice(0,drawCount)` живёт в
+`server/scorm/assets/app.js` `generateVariant` (НЕ resultsPage). Дальше — **UI-стадия 4**
+(квота-редактор в теме), но сперва **эскиз квота-редактора (Стадия 0b, не создан)** + согласование.
+Ниже — исходный план дизайн-фазы.
 
 Сделано в дизайн-фазе (документы):
 

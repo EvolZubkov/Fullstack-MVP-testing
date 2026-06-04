@@ -112,6 +112,9 @@ export function buildTestJson(data: ExportData): string {
       // number = custom limit in minutes (section timer starts on entry).
       timeLimitMinutes: s.timeLimitMinutes ?? null,
       topicPassRule: (s.topicPassRuleJson as PassRule | null) ?? null,
+      // PRD-11: stratified-draw blueprint. Included only when set so packages
+      // without quotas stay byte-identical (FR-02); runtime reads section.drawBlueprint.
+      ...(s.drawBlueprintJson ? { drawBlueprint: s.drawBlueprintJson } : {}),
       topicFeedback: s.topic.feedback || null,
       recommendedCourses: s.courses.map((c) => ({ title: c.title, url: c.url })),
       recommendedEvents: s.events.map((e) => ({ title: e.title })),

@@ -236,6 +236,19 @@ describe("buildTestJson — standard mode", () => {
     expect(q.scoring).toEqual(scoring);
   });
 
+  // PRD-11 Stage 3: the draw blueprint is exported only when set (FR-02).
+  it("omits drawBlueprint when the section has none", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    expect(data.sections[0].drawBlueprint).toBeUndefined();
+  });
+
+  it("exports drawBlueprint into the runtime section when set", () => {
+    const bp = { modeGranularity: "uniform", mode: "exact", strata: [{ tag: "finance_base", count: 2 }] };
+    const d = { ...exportData, sections: [{ ...dbSection, drawBlueprintJson: bp }] };
+    const s = JSON.parse(buildTestJson(d)).sections[0];
+    expect(s.drawBlueprint).toEqual(bp);
+  });
+
   it("does not include adaptiveTopics for standard mode", () => {
     const data = JSON.parse(buildTestJson(exportData));
     expect(data.adaptiveTopics).toBeUndefined();

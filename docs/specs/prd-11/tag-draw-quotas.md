@@ -24,13 +24,26 @@
 
 ## Статус реализации (на 2026-06-04)
 
-**Стадия 1 выполнена** (схема). Дизайн согласован: подтема = тег; опциональная квота на теме;
-нехватка вопросов → warning. Сделано: миграция `011` (колонка `test_sections.draw_blueprint_json`,
-CHECK на `modeGranularity`/`mode`); zod `drawBlueprintSchema`/`drawStratumSchema` + колонка
-`drawBlueprintJson`; проброс в storage (`_insertSections` + legacy create/update) и `SectionPayload`;
-валидация `Σ count <= drawCount` (FR-05) в `sectionBodySchema` (routes/tests.ts); тесты
-`tests/schema-prd11-blueprint.test.ts`. Дальше — Стадия 2 (логика выдачи, рантайм). UI-стадия 4 —
-после согласования эскиза квота-редактора (Стадия 0b, ещё не создан; NFR-14, BR-08-10).
+**Стадии 1-3 выполнены.** Дизайн согласован: подтема = тег; опциональная квота на теме;
+нехватка вопросов → warning.
+
+- **Стадия 1 (схема):** миграция `011` (колонка `test_sections.draw_blueprint_json`, CHECK на
+  `modeGranularity`/`mode`); zod `drawBlueprintSchema`/`drawStratumSchema` + колонка `drawBlueprintJson`;
+  проброс в storage (`_insertSections` + legacy) и `SectionPayload`; валидация `Σ count <= drawCount`
+  (FR-05) в `sectionBodySchema`; тесты `tests/schema-prd11-blueprint.test.ts`.
+- **Стадия 2 (логика выдачи):** авторитетный движок `shared/draw/blueprint.ts` `drawSection(...)`
+  (страты по порядку, общий `used` для дедупа FR-04, остаток без `exact`-тегов FR-03a, warning при
+  нехватке FR-06, `shuffle` инъектируется); рукописный JS-порт в `server/scorm/assets/app.js`
+  (`drawSection`), подключён в `generateVariant`; серверный отбор `server/routes/attempts.ts` использует
+  авторитетный TS напрямую. Тесты `tests/draw-blueprint.test.ts` + golden-parity
+  `tests/draw-blueprint-port.test.ts`.
+- **Стадия 3 (экспорт):** `buildTestJson` переносит `drawBlueprint` в рантайм-секцию пакета УСЛОВНО
+  (только когда задано → пакеты без квот бит-идентичны, FR-02). Тесты в `tests/scorm-builders.test.ts`.
+
+Бэкенд квот работает end-to-end (схема → валидация → выдача в рантайме и на сервере → экспорт).
+Дальше — **UI-стадия 4** (квота-редактор в теме), но сперва эскиз квота-редактора (Стадия 0b, ещё
+не создан) + согласование (NFR-14, BR-08-10). Стадия 5 — приёмочные тесты выдачи (частично закрыты
+unit/parity в Стадии 2).
 
 ---
 
@@ -187,8 +200,8 @@ questions.tags: string[]                        # подтема = значен�
 | 0a | Этот PRD (план на согласование) | Выполнено |
 | 0b | Эскиз квота-редактора в теме + согласование (DS-handbook first) | Ожидает (нужен для Стадии 4) |
 | 1 | Схема `test_sections.draw_blueprint_json` + миграция + zod | Выполнено (2026-06-04, миграция `011`) |
-| 2 | Логика выдачи (app.js + парный рантайм) с дедупликацией + warning при нехватке | Следующая |
-| 3 | Экспорт блюпринта в SCORM-пакет (`test-json`) | Ожидает |
+| 2 | Логика выдачи (app.js + парный рантайм) с дедупликацией + warning при нехватке | Выполнено (2026-06-04, движок + порт + parity) |
+| 3 | Экспорт блюпринта в SCORM-пакет (`test-json`) | Выполнено (2026-06-04, условно) |
 | 4 | UI квота-редактора в теме (после согласования эскиза) | Ожидает (гейт: эскиз 0b) |
 | 5 | Тесты: выдача по квотам, дедуп, нехватка→warning, обратная совместимость (нет квоты) | Ожидает |
 

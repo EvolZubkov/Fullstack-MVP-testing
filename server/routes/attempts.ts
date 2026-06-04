@@ -3,9 +3,21 @@ import { logger } from "../logger";
 import { storage } from "../storage";
 import { requireLearner } from "../middleware/auth";
 import { checkAnswer } from "../utils/check-answer";
+import { drawSection } from "@shared/draw/blueprint";
 import type { TestVariant, AttemptResult, TopicResult, PassRule } from "@shared/schema";
 
 const router = Router();
+
+/** Fisher-Yates in-place shuffle for the server-side variant draw (PRD-11). */
+function shuffleInPlace<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  }
+  return arr;
+}
 
 // GET /api/learner/tests - Тесты для ученика
 router.get("/learner/tests", requireLearner, async (req, res) => {
@@ -70,8 +82,9 @@ router.post("/tests/:testId/attempts/start", requireLearner, async (req, res) =>
 
     for (const section of sections) {
       const questions = await storage.getQuestionsByTopic(section.topicId);
-      const shuffled = questions.sort(() => Math.random() - 0.5);
-      const selected = shuffled.slice(0, section.drawCount);
+      // PRD-11: stratified draw by tag quotas when a blueprint is set; otherwise
+      // a uniform draw (FR-02). Shared with the SCORM runtime via shared/draw.
+      const { selected } = drawSection(questions, section.drawCount, section.drawBlueprintJson, shuffleInPlace);
       const qIds = selected.map((q) => q.id);
 
       variant.sections.push({
