@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-10 — Градуированная оценка ответа: редактор цены ответа в форме ВОПРОСА.
+    Issue: #17 (рантайм) / #12 (доспека). Спека: docs/specs/prd-10/graded-answer-scoring.md;
+    нормативная модель: docs/specs/scoring-model.md §11.
+    Поверхность: редактор вопроса (client/src/pages/author/questions.tsx) = Modal (DialogContent).
+    Цена ответа — ось ПРАВИЛЬНОСТИ (балл за вопрос), отдельная от «Вкладов в шкалы» (см.
+    prd2-prd5-scoring-tabs.html). Read-only НЕ применим: вопрос не замораживается публикацией
+    теста (BR §2.6 «если применимо»).
+    Состояния:
+      s-exact            — Точное совпадение (дефолт, обратная совместимость 0/1)
+      s-weighted         — Одиночный · веса опций (аддитивно)
+      s-tiered-multiple  — Множественный · конструктор ступеней (неаддитивно)
+      s-tiered-matching  — Сопоставление · конструктор ступеней
+      s-preview          — Предпросмотр балла на демо-ответе
+      s-empty            — Не настроено / неприменимо
+      s-error            — Ошибка валидации цены ответа
+      s-loading          — Загрузка
+      s-docs             — Пояснения + DS Mapping
+    DRAFT — не перенесён в approved/ до согласования.
+    -->
+    <title>PRD-10 — Редактор цены ответа вопроса</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <style>
+      /* WIREFRAME-каркас: только эскизные утилиты и DS-override на токенах. */
+      .wf-sprite { display: none; }
+      /* Override legacy .ou-select fallback из wf-utils.css (двойная рамка). */
+      .ou-select {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        line-height: inherit;
+        cursor: default;
+        border-radius: 0;
+      }
+      .ou-select:not(.is-open) .ou-select__menu { display: none; }
+      .wf-sep {
+        border: none;
+        border-top: var(--wf-border-w) solid var(--ou-border-soft);
+        margin: var(--ou-space-5) 0;
+      }
+      .wf-skel-textarea { height: var(--wf-size-72); }
+      /* Контейнер сопроводительных таблиц (Пояснения + DS Mapping). */
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
+      /* Заголовок секции с тегом/действием справа. */
+      .wf-list-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--ou-space-3);
+        margin-bottom: var(--ou-space-3);
+      }
+      .wf-list-head .tb-section-label { margin-bottom: 0; }
+      /* Recap верхних полей вопроса (контекст, не предмет эскиза). */
+      .wf-recap-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--ou-space-3) var(--ou-space-4);
+      }
+      /* Узкое числовое поле «Балл» в таблицах весов/ступеней. */
+      .wf-weights-grid td:last-child .ou-field,
+      .wf-tier-grid td:nth-child(3) .ou-field { width: var(--ou-space-12); }
+      /* Строка условия в конструкторе ступеней. */
+      .wf-cond-row {
+        display: flex;
+        gap: var(--ou-space-2);
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: var(--ou-space-2);
+      }
+      .wf-cond-row .ou-field--s .ou-field__box { width: var(--wf-size-72); }
+      .wf-row-actions {
+        display: flex;
+        gap: var(--ou-space-2);
+        margin-top: var(--ou-space-3);
+      }
+      /* Подсветка верного варианта (read-only, правится в форме вопроса). */
+      .wf-row-correct td { background: var(--ou-bg-hover); }
+      .wf-correct-mark {
+        color: var(--ou-accent-default);
+        font-weight: 600;
+        margin-left: var(--ou-space-2);
+        font: var(--ou-text-caption);
+      }
+      .wf-muted { color: var(--ou-fg-muted); }
+      /* Аннотационные бейджи: скрыты по умолчанию, показываются тоглом «Аннотации». */
+      .wf-annot-wrap--block { display: block; }
+      .wf-annot { display: none; }
+      body.wf-annots-on .wf-annot {
+        display: inline-block;
+        margin: var(--ou-space-1) 0 0;
+        padding: 0 var(--ou-space-2);
+        border-radius: var(--ou-radius-xs);
+        background: var(--ou-accent-soft);
+        color: var(--ou-accent-default);
+        font: var(--ou-text-caption);
+        font-weight: 600;
+      }
+    </style>
+
+    <style data-wf-template-overrides>
+      /* WIREFRAME.html contract: meta-навигация и state-контейнеры. */
+      .wf-nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs);
+        color: var(--ou-fg-default);
+        flex-wrap: wrap;
+      }
+      .wf-nav-title {
+        font: var(--ou-text-body-s);
+        font-weight: 600;
+        color: var(--ou-fg-muted);
+        margin-right: var(--ou-space-2);
+        white-space: nowrap;
+      }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s);
+        background: transparent;
+        color: var(--ou-fg-default);
+        font: var(--ou-text-body-s);
+        cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active {
+        background: var(--ou-accent-default);
+        color: var(--ou-fg-on-accent);
+        border-color: var(--ou-accent-default);
+      }
+      .wf-nav-sep {
+        width: var(--wf-border-w);
+        height: var(--ou-space-5);
+        background: var(--ou-border-soft);
+        margin: 0 var(--ou-space-2);
+      }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-state {
+        display: none;
+        padding-top: var(--wf-nav-offset, var(--wf-size-52));
+      }
+      .wf-state.active { display: block; }
+      /* Modal-root смещаем под фиксированный навбар. */
+      .wf-state > .ou-modal-root { top: var(--wf-nav-offset, var(--wf-size-52)); }
+      .wf-state > .ou-modal-root .ou-modal {
+        max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)) - var(--ou-space-8));
+      }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+      </symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+      </symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="6 9 12 15 18 9" />
+      </symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+      </symbol>
+      <symbol id="i-alert-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+      </symbol>
+      <symbol id="i-grip" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <circle cx="9" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" />
+        <circle cx="15" cy="6" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="15" cy="18" r="1.4" />
+      </symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Цена ответа:</span>
+      <button type="button" class="active" onclick="showState(this, 'exact')">точное (дефолт)</button>
+      <button type="button" onclick="showState(this, 'weighted')">одиночный · веса</button>
+      <button type="button" onclick="showState(this, 'tiered-multiple')">множ. · ступени</button>
+      <button type="button" onclick="showState(this, 'tiered-matching')">сопост. · ступени</button>
+      <button type="button" onclick="showState(this, 'preview')">предпросмотр</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'empty')">не настроено</button>
+      <button type="button" onclick="showState(this, 'error')">ошибка</button>
+      <button type="button" onclick="showState(this, 'loading')">loading</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <button type="button" onclick="toggleAnnots(this)">Аннотации</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd2-prd5-scoring-tabs.html">&harr; Шкалы / Вклады</a>
+    </nav>
+
+    <!-- ════════════════ s-exact: Точное совпадение (дефолт) ════════════════ -->
+    <div id="wf-exact" class="wf-state active">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--l">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title">Редактирование вопроса</h1>
+              <p class="ou-modal__desc">Раздел «Вопросы» · банк вопросов темы</p>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Множественный выбор</span>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+              <div class="ou-banner__body"><div class="ou-banner__desc">Выше — существующие поля вопроса (текст, варианты, правильный ответ). Ниже — НОВЫЙ блок «Оценивание ответа».</div></div>
+            </div>
+            <hr class="wf-sep" />
+            <div class="wf-list-head">
+              <div class="tb-section-label">Оценивание ответа</div>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 1</span>
+            </div>
+            <span class="wf-annot-wrap wf-annot-wrap--block">
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Цена ответа</label>
+              <div class="ou-seg" role="group" aria-label="Цена ответа">
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Точное совпадение</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'tiered-multiple')">Ступенчато</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'weighted')">Веса опций</button>
+              </div>
+            </div>
+            <span class="wf-annot">FR-01 / FR-02</span>
+            </span>
+            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+              <div class="ou-banner__body"><div class="ou-banner__desc">Балл 0/1: засчитывается только полное совпадение с эталоном (sMax = 1). Это поведение по умолчанию — все существующие тесты считаются так же, без изменений.</div></div>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview')">Предпросмотр балла</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-weighted: Одиночный · веса опций ════════════════ -->
+    <div id="wf-weighted" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--l">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title">Редактирование вопроса</h1>
+              <p class="ou-modal__desc">Ситуационный вопрос · одиночный выбор</p>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Одиночный выбор</span>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="wf-list-head">
+              <div class="tb-section-label">Оценивание ответа</div>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 2</span>
+            </div>
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Цена ответа</label>
+              <div class="ou-seg" role="group" aria-label="Цена ответа">
+                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'exact')">Точное совпадение</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'tiered-multiple')">Ступенчато</button>
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Веса опций</button>
+              </div>
+            </div>
+            <span class="wf-annot-wrap wf-annot-wrap--block">
+            <table class="tb-table wf-weights-grid">
+              <thead><tr><th>Вариант ответа</th><th>Балл</th></tr></thead>
+              <tbody>
+                <tr><td>А. Соберу команду и распределю задачи</td><td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Балл варианта А" /></div></div></td></tr>
+                <tr><td>Б. Согласую с руководителем</td><td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Балл варианта Б" /></div></div></td></tr>
+                <tr><td>В. Подожду указаний</td><td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Балл варианта В" /></div></div></td></tr>
+                <tr><td>Г. Проигнорирую</td><td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="Балл варианта Г" /></div></div></td></tr>
+              </tbody>
+            </table>
+            <span class="wf-annot">FR-03</span>
+            </span>
+            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+              <div class="ou-banner__body"><div class="ou-banner__desc">Балл = вес выбранного варианта; sMax = наибольший вес. У ситуационного вопроса «верного» варианта может не быть — корректность производна от scoreRatio. Аддитивно: совпадает по форме со «Вкладами в шкалы», нового рантайма не требует.</div></div>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview')">Предпросмотр балла</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-tiered-multiple: Множественный · конструктор ступеней ════════════════ -->
+    <div id="wf-tiered-multiple" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title">Редактирование вопроса</h1>
+              <p class="ou-modal__desc">Эталон: А, Б (всего верных T = 2)</p>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Множественный выбор</span>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Цена ответа</label>
+              <div class="ou-seg" role="group" aria-label="Цена ответа">
+                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'exact')">Точное совпадение</button>
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Ступенчато</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'weighted')">Веса опций</button>
+              </div>
+            </div>
+            <div class="wf-list-head">
+              <div class="tb-section-label">Ступени балла · проверяются сверху вниз, первое совпадение</div>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 2</span>
+            </div>
+            <span class="wf-annot-wrap wf-annot-wrap--block">
+            <table class="tb-table wf-tier-grid">
+              <thead><tr><th aria-label="Порядок"></th><th>Если (все условия)</th><th>Балл</th><th aria-label="Действия"></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Перетащить строку"><svg width="14" height="14"><use href="#i-grip" /></svg></button></td>
+                  <td>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s" data-ou-options="Верных (c)|Лишних (x)|Всего верных (T)"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Верных (c)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">=</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="T" aria-label="Значение условия 1" /></div></div>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить условие"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+                    </div>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s" data-ou-options="Верных (c)|Лишних (x)|Всего верных (T)"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Лишних (x)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">=</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="Значение условия 2" /></div></div>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить условие"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+                    </div>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> И условие</button>
+                  </td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Балл строки 1" /></div></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Перетащить строку"><svg width="14" height="14"><use href="#i-grip" /></svg></button></td>
+                  <td>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s" data-ou-options="Верных (c)|Лишних (x)|Всего верных (T)"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Верных (c)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">&ge;</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Значение условия 1" /></div></div>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить условие"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+                    </div>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s" data-ou-options="Верных (c)|Лишних (x)|Всего верных (T)"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Лишних (x)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">&le;</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Значение условия 2" /></div></div>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить условие"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+                    </div>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> И условие</button>
+                  </td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Балл строки 2" /></div></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><svg width="14" height="14" class="wf-muted"><use href="#i-grip" /></svg></td>
+                  <td><em class="wf-muted">Иначе — во всех остальных случаях</em></td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="Балл по умолчанию" /></div></div></td>
+                  <td><span class="wf-muted">—</span></td>
+                </tr>
+              </tbody>
+            </table>
+            <span class="wf-annot">FR-04 / FR-07</span>
+            </span>
+            <div class="wf-row-actions">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> Добавить строку</button>
+            </div>
+            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+              <div class="ou-banner__body"><div class="ou-banner__desc">Правило неаддитивно: лишняя неверная опция понижает ступень. Значение условия — число или токен T (всего верных). Подтверждено эталоном РТК-2026: ответ «А, Б, В» при эталоне «А, Б» (c = 2, x = 1) даёт 1, а не 2.</div></div>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview')">Предпросмотр балла</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-tiered-matching: Сопоставление · конструктор ступеней ════════════════ -->
+    <div id="wf-tiered-matching" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title">Редактирование вопроса</h1>
+              <p class="ou-modal__desc">Эталон: 4 пары (всего пар P = 4) · единица = пара</p>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Сопоставление</span>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Цена ответа</label>
+              <div class="ou-seg" role="group" aria-label="Цена ответа">
+                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'exact')">Точное совпадение</button>
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Ступенчато</button>
+              </div>
+            </div>
+            <div class="wf-list-head">
+              <div class="tb-section-label">Ступени балла · сверху вниз, первое совпадение</div>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 3</span>
+            </div>
+            <table class="tb-table wf-tier-grid">
+              <thead><tr><th aria-label="Порядок"></th><th>Если (все условия)</th><th>Балл</th><th aria-label="Действия"></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Перетащить строку"><svg width="14" height="14"><use href="#i-grip" /></svg></button></td>
+                  <td>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s" data-ou-options="Верных пар (c)|Всего пар (P)"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Верных пар (c)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">=</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="P" aria-label="Значение условия" /></div></div>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить условие"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+                    </div>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> И условие</button>
+                  </td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="3" aria-label="Балл строки 1" /></div></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Перетащить строку"><svg width="14" height="14"><use href="#i-grip" /></svg></button></td>
+                  <td>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s" data-ou-options="Верных пар (c)|Всего пар (P)"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Верных пар (c)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">&ge;</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Значение условия" /></div></div>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить условие"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+                    </div>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> И условие</button>
+                  </td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Балл строки 2" /></div></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Перетащить строку"><svg width="14" height="14"><use href="#i-grip" /></svg></button></td>
+                  <td>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s" data-ou-options="Верных пар (c)|Всего пар (P)"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Верных пар (c)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">=</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Значение условия" /></div></div>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить условие"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+                    </div>
+                  </td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Балл строки 3" /></div></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><svg width="14" height="14" class="wf-muted"><use href="#i-grip" /></svg></td>
+                  <td><em class="wf-muted">Иначе — во всех остальных случаях</em></td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="Балл по умолчанию" /></div></div></td>
+                  <td><span class="wf-muted">—</span></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="wf-row-actions">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> Добавить строку</button>
+            </div>
+            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+              <div class="ou-banner__body"><div class="ou-banner__desc">Единица — составленная пара (matching_pair, scoring-model §10.11). c — число верно составленных пар, P — всего пар. Эталон РТК: 4 пары → все = 3, 2-3 верных = 2, 1 = 1, иначе 0.</div></div>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'preview')">Предпросмотр балла</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-preview: Предпросмотр балла ════════════════ -->
+    <div id="wf-preview" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--m">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title">Предпросмотр балла</h1>
+              <p class="ou-modal__desc">Множественный · ступенчато · эталон А, Б</p>
+            </div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null, 'tiered-multiple')"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl" for="pv-ans">Демо-ответ</label>
+              <div class="ou-select ou-field--m ou-field--full" data-ou-options="А, В|А, Б|А, Б, В|только А|В, Г"><button type="button" class="ou-select__trigger" id="pv-ans"><span class="ou-select__value">А, В</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+            </div>
+            <table class="tb-table">
+              <thead><tr><th>Поле</th><th>Значение</th></tr></thead>
+              <tbody>
+                <tr><td>Эталон</td><td>А, Б (T = 2)</td></tr>
+                <tr><td>Ответ</td><td>А, В &rarr; c = 1, x = 1</td></tr>
+                <tr><td>Сработала строка</td><td>«Верных (c) &ge; 1 и Лишних (x) &le; 1»</td></tr>
+                <tr><td>Балл s</td><td>1</td></tr>
+                <tr><td>sMax</td><td>2</td></tr>
+                <tr><td>scoreRatio</td><td>0.5</td></tr>
+                <tr><td>Статус</td><td><span class="ou-tag ou-tag--warning">Частично правильно</span></td></tr>
+              </tbody>
+            </table>
+            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
+              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
+              <div class="ou-banner__body"><div class="ou-banner__desc">Предпросмотр считает балл движком цены ответа на выбранном демо-ответе. scoreRatio и статус «Частично правильно» уходят в показ обучающемуся и в LMS (CMI 2004).</div></div>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'tiered-multiple')">Назад к цене ответа</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-empty: Не настроено / неприменимо ════════════════ -->
+    <div id="wf-empty" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--l">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title">Редактирование вопроса</h1>
+              <p class="ou-modal__desc">Ранжирование</p>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Ранжирование</span>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="wf-list-head">
+              <div class="tb-section-label">Оценивание ответа</div>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 1</span>
+            </div>
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl">Цена ответа</label>
+              <div class="ou-seg" role="group" aria-label="Цена ответа">
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Точное совпадение</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">Ступенчато</button>
+              </div>
+            </div>
+            <div class="ou-empty ou-empty--page" role="status">
+              <div class="ou-empty__art"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-info" /></svg></div>
+              <div class="ou-empty__content">
+                <div class="ou-empty__title">Градуированная оценка не настроена</div>
+                <div class="ou-empty__desc">Вопрос оценивается точным совпадением (0/1) — как все существующие тесты. Чтобы дать частичный балл за угаданную часть, переключите правило на «Ступенчато» и задайте ступени.</div>
+                <div class="ou-empty__actions">
+                  <button type="button" class="ou-btn ou-btn--primary ou-btn--s">Настроить ступени</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-error: Ошибка валидации цены ответа ════════════════ -->
+    <div id="wf-error" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title">Редактирование вопроса</h1>
+              <p class="ou-modal__desc">Множественный · ступенчато</p>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Множественный выбор</span>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-banner ou-banner--subtle ou-banner--error" role="alert">
+              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+              <div class="ou-banner__body"><div class="ou-banner__desc">Есть ошибки в цене ответа. Сохранение заблокировано до их исправления.</div></div>
+            </div>
+            <div class="wf-list-head">
+              <div class="tb-section-label">Ступени балла</div>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 2</span>
+            </div>
+            <table class="tb-table wf-tier-grid">
+              <thead><tr><th aria-label="Порядок"></th><th>Если (все условия)</th><th>Балл</th><th aria-label="Действия"></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Перетащить строку"><svg width="14" height="14"><use href="#i-grip" /></svg></button></td>
+                  <td>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s" data-ou-options="Верных (c)|Лишних (x)|Всего верных (T)"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Верных (c)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">=</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="T" aria-label="Значение условия" /></div></div>
+                    </div>
+                  </td>
+                  <td>
+                    <div class="ou-field ou-field--s ou-field--error"><div class="ou-field__box"><input class="ou-field__input" type="text" value="-1" aria-invalid="true" aria-describedby="err-score" aria-label="Балл строки 1" /></div></div>
+                    <div class="ou-formfield__msg ou-formfield__msg--error" id="err-score" role="alert">Балл должен быть числом &ge; 0.</div>
+                  </td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Перетащить строку"><svg width="14" height="14"><use href="#i-grip" /></svg></button></td>
+                  <td>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s ou-field--error" data-ou-options="Верных (c)|Лишних (x)|Всего верных (T)"><button type="button" class="ou-select__trigger" aria-invalid="true" aria-describedby="err-cond"><span class="ou-select__value">Верных (c)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">&ge;</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" placeholder="число или T" aria-label="Значение условия" /></div></div>
+                    </div>
+                    <div class="ou-formfield__msg ou-formfield__msg--error" id="err-cond" role="alert">Условие без значения: укажите число или токен T.</div>
+                  </td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Балл строки 2" /></div></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Сохранить</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-loading: Загрузка ════════════════ -->
+    <div id="wf-loading" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--l">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text"><h1 class="ou-modal__title">Редактирование вопроса</h1></div>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body" aria-busy="true">
+            <div class="ou-formfield">
+              <div class="ou-skel ou-skel--line is-caption ou-skel--w-1/4"></div>
+              <div class="ou-skel ou-skel--button ou-skel--w-full"></div>
+            </div>
+            <div class="ou-formfield">
+              <div class="ou-skel ou-skel--line is-caption ou-skel--w-1/4"></div>
+              <div class="ou-skel ou-skel--line ou-skel--w-full wf-skel-textarea"></div>
+            </div>
+            <div class="ou-formfield">
+              <div class="ou-skel ou-skel--line is-caption ou-skel--w-1/4"></div>
+              <div class="ou-skel ou-skel--button ou-skel--w-full"></div>
+            </div>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Сохранить</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ Сопроводительные таблицы (Пояснения + DS Mapping) ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+        <table>
+          <thead>
+            <tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Переключатель состояний</td><td><code>showState(btn, id)</code>, тоглы темы/плотности/аннотаций</td><td>Каркас эскиза; в продукте отсутствует</td></tr>
+            <tr><td>Поверхность</td><td>редактор вопроса (<code>questions.tsx</code>) = Modal</td><td>Цена ответа встроена в форму вопроса (не модалка поверх модалки); верхние поля (текст/варианты/правильный ответ) — существующие, показаны кратко</td></tr>
+            <tr><td>Цена ответа — ось правильности</td><td><code>question.scoring</code> (scoring-model §11)</td><td>Отдельно от «Вкладов в шкалы» (ось измерения). Не наследует и не меняет <code>question_measurements</code> (FR-08, §10.3)</td></tr>
+            <tr><td>Read-only — НЕ применим</td><td>BR §2.6 «если применимо»</td><td>Вопрос правится в банке вопросов и не замораживается публикацией теста (это модель ТЕСТА — версионирование). Целостность попыток — снапшот/версия теста, не блокировка редактора вопроса</td></tr>
+            <tr><td>Цена ответа</td><td><code>scoring.kind</code>: <code>exact</code> / <code>weighted</code> / <code>tiered</code></td><td>Дефолт — <code>exact</code> (точное совпадение), sMax = 1; старые тесты бит-идентичны (FR-02, §11.8)</td></tr>
+            <tr><td>Веса опций (single)</td><td><code>scoring.weights[]</code> по индексам опций</td><td>Балл = вес выбранного варианта; sMax = max(вес). Аддитивно (FR-03, §11.3)</td></tr>
+            <tr><td>Конструктор ступеней</td><td><code>scoring.tiers[] = {when, score}</code></td><td>Сверху вниз, первое совпадение, иначе 0; пол <code>max(0, .)</code>. Неаддитивно (FR-04/05/07, §11.4–11.5)</td></tr>
+            <tr><td>Условие ступени</td><td><code>{lhs: c|x|T(|P|N), op, rhs: число|T|P|N}</code></td><td><code>c</code> — верных выбранных, <code>x</code> — лишних, <code>T</code>/<code>P</code>/<code>N</code> — эталонных (опций/пар/элементов). Строка = конъюнкция условий («И условие»)</td></tr>
+            <tr><td>Порядок строк = приоритет</td><td>рукоятка <code>grip</code> (drag-to-reorder)</td><td>Первое совпадение сверху; «Иначе» закреплена снизу</td></tr>
+            <tr><td>Макс. балл sMax</td><td>выводится: max(вес) | max(tier.score)</td><td>Для <code>exact</code> = 1; равен полю «Баллы» вопроса</td></tr>
+            <tr><td>Предпросмотр балла</td><td>демо-ответ &rarr; s / sMax / scoreRatio / статус</td><td>Считает движком цены ответа; статус <code>partial</code> «Частично правильно» при 0 &lt; ratio &lt; 1 (FR-12, §11.1)</td></tr>
+            <tr><td>Единица matching/ranking</td><td><code>matching_pair</code> / <code>ranking_position</code></td><td>scoring-model §10.11; durable id — пререквизит (§10.7 #2), Стадия 1</td></tr>
+            <tr><td>Ошибка валидации</td><td>балл &lt; 0 / условие без значения / sMax = 0</td><td>Красный баннер <code>alert</code> + поле <code>--error</code>; сохранение заблокировано (FR-13)</td></tr>
+            <tr><td>Loading</td><td><code>aria-busy</code> + скелетоны</td><td>Стандартное состояние формы</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <p class="wf-mapping-sub">Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент — блокер.</p>
+        <table>
+          <thead>
+            <tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Контейнер редактора вопроса</td><td><code>Modal</code> (<code>ou-modal--l</code>)</td><td><code>--ou-*</code></td><td>Существующий <code>DialogContent</code> → миграция на DS Modal</td></tr>
+            <tr><td>Переключатель способа цены ответа</td><td><code>SegmentedControl</code> (<code>ou-seg</code>)</td><td><code>--ou-radius-s</code></td><td>Взаимоисключающий выбор (exact/weighted/tiered) — не Tabs (AI-AGENT)</td></tr>
+            <tr><td>Балл / вес / значение условия</td><td><code>NumberInput</code> (<code>ou-field</code>)</td><td><code>--ou-border-default</code>, <code>--ou-border-focus</code></td><td>Ошибка: <code>ou-field--error</code> + <code>aria-invalid</code></td></tr>
+            <tr><td>Левая часть условия / оператор</td><td><code>Select</code> (<code>ou-select</code>)</td><td><code>--ou-radius-s</code></td><td>c/x/T(/P/N) и <code>=/&ge;/&le;/&lt;/&gt;</code></td></tr>
+            <tr><td>Таблица весов / ступеней</td><td><code>Table</code> (<code>tb-table</code>)</td><td><code>--ou-border-soft</code></td><td>Строки ступеней</td></tr>
+            <tr><td>Переупорядочивание ступеней</td><td><code>Ranking</code> (grip + drag) или ↑/↓</td><td><code>--ou-*</code></td><td>Тот же примитив, что в «Показателях»</td></tr>
+            <tr><td>Подсказки / предпросмотр</td><td><code>Banner</code> (info/warning/error)</td><td><code>--ou-warning-*</code>, <code>--ou-error-*</code></td><td>Реальные сообщения продукта</td></tr>
+            <tr><td>Статус «Частично правильно»</td><td><code>Tag</code> (<code>ou-tag--warning</code>)</td><td><code>--ou-warning-*</code></td><td>Зарезервированный статус (BR-09)</td></tr>
+            <tr><td>Не настроено / неприменимо</td><td><code>EmptyState</code> (<code>ou-empty</code>)</td><td><code>--ou-fg-muted</code></td><td></td></tr>
+            <tr><td>Загрузка</td><td><code>Skeleton</code> (<code>ou-skel</code>)</td><td><code>--ou-bg-hover</code></td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+      </div>
+    </div>
+
+    <script>
+      // Wireframe state switcher (как в approved/prd*). prd7-shared.js затем
+      // дооборачивает window.showState, чтобы пере-инициализировать ou-select.
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el === target);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) {
+          button.classList.toggle('active', button === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+      window.toggleAnnots = function toggleAnnots(btn) {
+        var on = document.body.classList.toggle('wf-annots-on');
+        if (btn) btn.classList.toggle('active', on);
+      };
+    </script>
+  </body>
+</html>
