@@ -51,9 +51,19 @@ end-to-end save/round-trip (`scoring_json` пишется/читается, то
 `checkPassRuleWithPartial` (3 call-site: per-section/per-topic/overall) — решение «Вариант А» (FR-10);
 `percent`-правило уже считало на `Σ s`; для `exact`+1 балл регрессии нет (vitest зелёный). Тест
 `tests/scoring-pass-rule.test.ts`. Сертификация (FR-11) уже работала: PRD-2 `controls_status`
-(success/completion) + DSL `countPassed()==countTopics()` — кода не потребовалось. `check`/`build`
-зелёные, `vitest` **1738**. Дальше — **Стадия 6** (golden против эталона РТК; последняя стадия
-PRD-10). Ниже — исходный план дизайн-фазы (актуален для PRD-11).
+(success/completion) + DSL `countPassed()==countTopics()` — кода не потребовалось. Реализована
+**Стадия 6 PRD-10** (golden РТК): `tests/rtk-golden.test.ts` + фикстура `tests/fixtures/rtk-golden.json`
+(генератор `rtk-golden.gen.py`). Движок `shared/scoring/engine` с РТК-стандартными конфигами
+воспроизводит **все 63 балла** внешнего pandas-обработчика (`key_NEW_15-08-25.xlsx` +
+`report_processed_pandas_*`), **0 расхождений**, по всем 4 типам. Правила взяты из
+`docs/references/main/main.py`. `check`/`build` зелёные, `vitest` **1803**.
+
+**PRD-10 ЗАВЕРШЁН (Стадии 0–6).** Градуированная оценка работает end-to-end (UI → экспорт → рантайм
+→ `Σ s` → порог раздела на `Σ s` → сертификация), подтверждено golden против РТК. Остаточные
+не-ядровые пункты: preview-модалка балла; серверный `check-answer.ts` (веб-попытки) бинарный; CMI
+per-question `scoreRatio`/«Частично правильно» (FR-12). Дальше по треку — **PRD-11** (квоты выдачи
+по тегам): нужен эскиз квота-редактора (Стадия 0b) + согласование, потом схема/логика/экспорт/UI.
+Ниже — исходный план дизайн-фазы (актуален для PRD-11).
 
 Сделано в дизайн-фазе (документы):
 
