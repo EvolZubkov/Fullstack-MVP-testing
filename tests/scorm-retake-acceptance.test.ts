@@ -77,7 +77,6 @@ describe("SCORM package — PRD-6 retake policy export", () => {
         cooldownPeriodDays: 30,
         gateMode: "before_internal_start",
         eligibilityPlugin: { key: "webtutor_cooldown", configId: "webtutor_clientbridge_rt", failPolicy: "failOpen" },
-        completionReportMode: "scored",
       },
       "retake-on",
     );

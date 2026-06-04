@@ -206,7 +206,6 @@ export const eligibilityPluginRefSchema = z.object({
 /**
  * `tests.retake_policy_json`. `cooldownPeriodDays` is whole calendar days
  * (1–3650); legacy `cooldownDays` is accepted on input and normalized.
- * `completionReportMode` controls how a finished attempt is reported to the LMS.
  */
 export const retakePolicySchema = z.preprocess(
   (val) => {
@@ -224,7 +223,6 @@ export const retakePolicySchema = z.preprocess(
     gateMode: z.literal("before_internal_start").default("before_internal_start"),
     eligibilityPlugin: eligibilityPluginRefSchema.nullish(),
     blockedPageId: z.string().optional(),
-    completionReportMode: z.enum(["scored", "completed_neutral"]).default("scored"),
   }),
 );
 

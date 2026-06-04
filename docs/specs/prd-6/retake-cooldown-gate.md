@@ -279,7 +279,6 @@ Plugin registry - общий список доступных eligibility plugins
 | `eligibilityPlugin.failPolicy` | `failOpen` или `failClosed` |
 | `gateMode` | MVP: `before_internal_start` |
 | `blockedPageId` | Системная/контентная страница блокировки |
-| `completionReportMode` | `scored` или `completed_neutral` |
 
 Если `eligibilityPlugin.key` пустой, Core не выполняет проверку и возвращает `allowed = true`.
 Это поведение обязательно для обратной совместимости и для тестов, где ограничение не настроено.
@@ -295,27 +294,20 @@ WebTutor plugin получает дату последней попытки бе
 allowed = (todayDate - lastAttemptDate) >= cooldownPeriodDays
 ```
 
-UI должен показывать пример расчёта, чтобы администратор не считал дату вручную:
-
-```text
-Период охлаждения: 30 календарных дней
-Последняя полноценная попытка: 08.05.2026
-Повторное прохождение доступно с: 07.06.2026
-```
+Эта формула — рантайм-правило гейта. Авторский UI не показывает превью даты следующего
+доступа: «дата последней попытки» — это значение на конкретного учащегося, которое гейт
+получает из WebTutor перед стартом курса, и на этапе настройки теста его не существует.
+Поэтому автор задаёт только `cooldownPeriodDays`, а `availableDate` вычисляется в рантайме.
 
 Для совместимости импорт старого поля `cooldownDays` допускается, но при сохранении оно
 нормализуется в `cooldownPeriodDays`.
 
-`completionReportMode` определяет, как Core завершает полноценную попытку:
-
-| Режим | SCORM запись при завершении |
-| --- | --- |
-| `scored` | `completion_status=completed`, `success_status=passed/failed`, score |
-| `completed_neutral` | `completion_status=completed`, `success_status=unknown`, `progress_measure=1` |
-
-`completed_neutral` нужен для LMS-конфигураций, где требуется получить нейтральный статус вроде
-**"Завершен"**, а не **"Пройден"**/**"Не пройден"**. Core не пишет русские статусы напрямую:
-финальное отображение выполняет WebTutor.
+Завершение полноценной попытки всегда репортится как `scored`
+(`completion_status=completed`, `success_status=passed/failed`, score): это конструктор
+**тестов**, тест обязан оставлять вердикт о прохождении. Нейтральный режим завершения
+(`completed_neutral`) исключён из scope — он относится к информационным модулям без оценки,
+не к ретейк-гейту, и к тому же обнуляет cooldown (WebTutor не ставит отметку «Пройден», по
+которой работает гейт §4.2).
 
 ### 4.2 WebTutor cooldown plugin
 
@@ -456,8 +448,7 @@ WebTutor/LMS-specific или внешнего источника.
     "configId": "webtutor_catalog_default",
     "failPolicy": "failOpen"
   },
-  "blockedPageId": "system.blocked",
-  "completionReportMode": "completed_neutral"
+  "blockedPageId": "system.blocked"
 }
 ```
 
@@ -569,9 +560,7 @@ WebTutor-сессию и same-origin cookies. Серверный test endpoint �
 - поле **"Период охлаждения, календарных дней"**;
 - выбор eligibility plugin из активного registry;
 - выбор конфигурации выбранного plugin;
-- автоматический предпросмотр даты следующего доступного прохождения;
 - выбор страницы блокировки;
-- выбор режима завершения попытки: `scored` / `completed_neutral`;
 - предупреждение, если выбран `suspend_data_cooldown`;
 - readonly-информация о выбранном plugin и версии его конфигурации.
 
@@ -639,7 +628,6 @@ WebTutor-сессию и same-origin cookies. Серверный test endpoint �
 - [ ] `failClosed` показывает блокировку при ошибке plugin.
 - [ ] Администратор может изменить endpoint, параметры, фильтр статусов, regex прогресса и поле даты без изменения Core.
 - [ ] Тестовая проверка plugin показывает сырые записи, отфильтрованные записи, выбранную попытку и итоговое решение.
-- [ ] `completed_neutral` пишет стандартные SCORM-значения `completed`/`unknown`, не русский статус напрямую.
 
 ---
 

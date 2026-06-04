@@ -153,15 +153,6 @@
             </div>
             <div class="ou-formfield__msg">Если проверку не удалось выполнить — открыть курс или показать экран блокировки.</div>
           </div>
-
-          <div class="ou-formfield">
-            <label class="ou-formfield__lbl">Завершение попытки в LMS</label>
-            <div class="ou-seg ou-seg--m" role="group" aria-label="Режим завершения">
-              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Со статусом</button>
-              <button type="button" class="ou-seg__item" aria-pressed="false">Нейтральный</button>
-            </div>
-            <div class="ou-formfield__msg">Как показать завершение попытки в журнале LMS.</div>
-          </div>
         </div>
       </div>
     </div>
@@ -278,7 +269,6 @@
             <tr><td>Плагин</td><td><code>eligibilityPlugin.key</code></td><td>Select из активного реестра (Phase 1 — сидируется в коде): webtutor_cooldown / suspend_data_cooldown; версия плагина WebTutor — 1.0.0</td></tr>
             <tr><td>Конфигурация</td><td><code>eligibilityPlugin.configId</code> — авто</td><td>Phase 1: у плагина один активный конфиг → подставляется неявно, поле скрыто (избыточно). Видимый Select вернётся в Фазе 2 (админ-реестр, ≥2 конфига)</td></tr>
             <tr><td>Политика ошибки</td><td><code>eligibilityPlugin.failPolicy</code></td><td>fail-open (старт) / fail-closed (блок) — SegmentedControl (взаимоисключающий)</td></tr>
-            <tr><td>Завершение в LMS</td><td><code>completionReportMode</code></td><td>«Со статусом» = scored → passed/failed; «Нейтральный» = completed_neutral → completed/unknown (LMS показывает «Завершен»). §4.1</td></tr>
             <tr><td>Warning suspend_data</td><td>плагин = suspend_data_cooldown</td><td>Best-effort: suspend_data надёжен только внутри одной SCORM-регистрации; строгий cooldown между попытками — через внешний/LMS-источник (WebTutor). Banner-предупреждение (§4.6)</td></tr>
             <tr><td>Блок-экран</td><td><code>retake.availableDate</code></td><td>Дата следующего доступа; ошибка failClosed — Banner error</td></tr>
           </tbody>
@@ -295,7 +285,7 @@
             <tr><td>Свич «Ограничить…»</td><td><code>Switch</code> (<code>ou-switch-field</code>)</td><td><code>--ou-accent-*</code></td><td>label + desc</td></tr>
             <tr><td>Период охлаждения</td><td><code>NumberInput</code> (<code>ou-number--split</code>)</td><td><code>--ou-border-default</code></td><td>min/max + ошибка <code>is-invalid</code></td></tr>
             <tr><td>Плагин</td><td><code>Select</code> (<code>ou-select</code>)</td><td><code>--ou-radius-m</code></td><td>Опции из активного реестра; выбор конфига (при >1) — Фаза 2</td></tr>
-            <tr><td>Политика ошибки / Завершение</td><td><code>SegmentedControl</code> (<code>ou-seg</code>)</td><td><code>--ou-radius-s</code></td><td>Взаимоисключающий выбор (не Tabs)</td></tr>
+            <tr><td>Политика ошибки</td><td><code>SegmentedControl</code> (<code>ou-seg</code>)</td><td><code>--ou-radius-s</code></td><td>Взаимоисключающий выбор (не Tabs)</td></tr>
             <tr><td>Warning / ошибка</td><td><code>Banner</code> (warning/error)</td><td><code>--ou-warning-*</code>, <code>--ou-error-*</code></td><td>Реальные сообщения продукта</td></tr>
             <tr><td>Блок-экран</td><td><code>Card</code> + <code>Banner</code></td><td><code>--ou-*</code></td><td>Рантайм-экран SCORM; токены DS (не хардкод)</td></tr>
           </tbody>

@@ -11,7 +11,6 @@ describe("retakePolicySchema", () => {
     const p = retakePolicySchema.parse({ cooldownPeriodDays: 30 });
     expect(p.enabled).toBe(false);
     expect(p.gateMode).toBe("before_internal_start");
-    expect(p.completionReportMode).toBe("scored");
   });
 
   it("normalizes the legacy cooldownDays alias to cooldownPeriodDays", () => {
@@ -35,11 +34,10 @@ describe("retakePolicySchema", () => {
     expect(() => retakePolicySchema.parse({ cooldownPeriodDays: 1.5 })).toThrow();
   });
 
-  it("rejects an unknown failPolicy / completionReportMode", () => {
+  it("rejects an unknown failPolicy", () => {
     expect(() =>
       retakePolicySchema.parse({ cooldownPeriodDays: 30, eligibilityPlugin: { key: "x", failPolicy: "nope" } }),
     ).toThrow();
-    expect(() => retakePolicySchema.parse({ cooldownPeriodDays: 30, completionReportMode: "weird" })).toThrow();
   });
 
   it("nullish() accepts null/undefined (= no retake gate)", () => {

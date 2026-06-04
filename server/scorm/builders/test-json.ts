@@ -159,7 +159,6 @@ export function buildTestJson(data: ExportData): string {
         gateMode: rp.gateMode,
         eligibilityPlugin: rp.eligibilityPlugin,
         blockedPageId: rp.blockedPageId ?? null,
-        completionReportMode: rp.completionReportMode,
       };
       test.retakePlugin = {
         key: plugin.key,
