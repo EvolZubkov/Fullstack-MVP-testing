@@ -227,29 +227,14 @@
             <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
           </header>
           <div class="ou-modal__body">
-            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
-              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
-              <div class="ou-banner__body"><div class="ou-banner__desc">Выше — существующие поля вопроса (текст, варианты, правильный ответ). Ниже — НОВЫЙ блок «Оценивание ответа».</div></div>
-            </div>
-            <hr class="wf-sep" />
             <div class="wf-list-head">
-              <div class="tb-section-label">Оценивание ответа</div>
+              <div class="tb-section-label">Цена ответа</div>
               <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 1</span>
             </div>
-            <span class="wf-annot-wrap wf-annot-wrap--block">
-            <div class="ou-formfield">
-              <label class="ou-formfield__lbl">Цена ответа</label>
-              <div class="ou-seg" role="group" aria-label="Цена ответа">
-                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Точное совпадение</button>
-                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'tiered-multiple')">Ступенчато</button>
-                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'weighted')">Веса опций</button>
-              </div>
-            </div>
-            <span class="wf-annot">FR-01 / FR-02</span>
-            </span>
-            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
-              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
-              <div class="ou-banner__body"><div class="ou-banner__desc">Балл 0/1: засчитывается только полное совпадение с эталоном (sMax = 1). Это поведение по умолчанию — все существующие тесты считаются так же, без изменений.</div></div>
+            <div class="ou-seg" role="group" aria-label="Цена ответа">
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Точное совпадение</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'tiered-multiple')">Ступенчато</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'weighted')">Веса опций</button>
             </div>
           </div>
           <footer class="ou-modal__foot">
@@ -276,18 +261,14 @@
           </header>
           <div class="ou-modal__body">
             <div class="wf-list-head">
-              <div class="tb-section-label">Оценивание ответа</div>
+              <div class="tb-section-label">Цена ответа</div>
               <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 2</span>
             </div>
-            <div class="ou-formfield">
-              <label class="ou-formfield__lbl">Цена ответа</label>
-              <div class="ou-seg" role="group" aria-label="Цена ответа">
-                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'exact')">Точное совпадение</button>
-                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'tiered-multiple')">Ступенчато</button>
-                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Веса опций</button>
-              </div>
+            <div class="ou-seg" role="group" aria-label="Цена ответа">
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'exact')">Точное совпадение</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'tiered-multiple')">Ступенчато</button>
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Веса опций</button>
             </div>
-            <span class="wf-annot-wrap wf-annot-wrap--block">
             <table class="tb-table wf-weights-grid">
               <thead><tr><th>Вариант ответа</th><th>Балл</th></tr></thead>
               <tbody>
@@ -297,12 +278,6 @@
                 <tr><td>Г. Проигнорирую</td><td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="Балл варианта Г" /></div></div></td></tr>
               </tbody>
             </table>
-            <span class="wf-annot">FR-03</span>
-            </span>
-            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
-              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
-              <div class="ou-banner__body"><div class="ou-banner__desc">Балл = вес выбранного варианта; sMax = наибольший вес. У ситуационного вопроса «верного» варианта может не быть — корректность производна от scoreRatio. Аддитивно: совпадает по форме со «Вкладами в шкалы», нового рантайма не требует.</div></div>
-            </div>
           </div>
           <footer class="ou-modal__foot">
             <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
@@ -327,19 +302,18 @@
             <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
           </header>
           <div class="ou-modal__body">
-            <div class="ou-formfield">
-              <label class="ou-formfield__lbl">Цена ответа</label>
-              <div class="ou-seg" role="group" aria-label="Цена ответа">
-                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'exact')">Точное совпадение</button>
-                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Ступенчато</button>
-                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'weighted')">Веса опций</button>
-              </div>
+            <div class="wf-list-head">
+              <div class="tb-section-label">Цена ответа</div>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 2</span>
+            </div>
+            <div class="ou-seg" role="group" aria-label="Цена ответа">
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'exact')">Точное совпадение</button>
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Ступенчато</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'weighted')">Веса опций</button>
             </div>
             <div class="wf-list-head">
               <div class="tb-section-label">Ступени балла · проверяются сверху вниз, первое совпадение</div>
-              <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 2</span>
             </div>
-            <span class="wf-annot-wrap wf-annot-wrap--block">
             <table class="tb-table wf-tier-grid">
               <thead><tr><th aria-label="Порядок"></th><th>Если (все условия)</th><th>Балл</th><th aria-label="Действия"></th></tr></thead>
               <tbody>
@@ -391,14 +365,8 @@
                 </tr>
               </tbody>
             </table>
-            <span class="wf-annot">FR-04 / FR-07</span>
-            </span>
             <div class="wf-row-actions">
               <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> Добавить строку</button>
-            </div>
-            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
-              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
-              <div class="ou-banner__body"><div class="ou-banner__desc">Правило неаддитивно: лишняя неверная опция понижает ступень. Значение условия — число или токен T (всего верных). Подтверждено эталоном РТК-2026: ответ «А, Б, В» при эталоне «А, Б» (c = 2, x = 1) даёт 1, а не 2.</div></div>
             </div>
           </div>
           <footer class="ou-modal__foot">
@@ -424,16 +392,16 @@
             <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
           </header>
           <div class="ou-modal__body">
-            <div class="ou-formfield">
-              <label class="ou-formfield__lbl">Цена ответа</label>
-              <div class="ou-seg" role="group" aria-label="Цена ответа">
-                <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'exact')">Точное совпадение</button>
-                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Ступенчато</button>
-              </div>
+            <div class="wf-list-head">
+              <div class="tb-section-label">Цена ответа</div>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 3</span>
+            </div>
+            <div class="ou-seg" role="group" aria-label="Цена ответа">
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null, 'exact')">Точное совпадение</button>
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Ступенчато</button>
             </div>
             <div class="wf-list-head">
               <div class="tb-section-label">Ступени балла · сверху вниз, первое совпадение</div>
-              <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 3</span>
             </div>
             <table class="tb-table wf-tier-grid">
               <thead><tr><th aria-label="Порядок"></th><th>Если (все условия)</th><th>Балл</th><th aria-label="Действия"></th></tr></thead>
@@ -490,10 +458,6 @@
             <div class="wf-row-actions">
               <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> Добавить строку</button>
             </div>
-            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
-              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
-              <div class="ou-banner__body"><div class="ou-banner__desc">Единица — составленная пара (matching_pair, scoring-model §10.11). c — число верно составленных пар, P — всего пар. Эталон РТК: 4 пары → все = 3, 2-3 верных = 2, 1 = 1, иначе 0.</div></div>
-            </div>
           </div>
           <footer class="ou-modal__foot">
             <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
@@ -533,10 +497,6 @@
                 <tr><td>Статус</td><td><span class="ou-tag ou-tag--warning">Частично правильно</span></td></tr>
               </tbody>
             </table>
-            <div class="ou-banner ou-banner--subtle ou-banner--info" role="status">
-              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-info" /></svg></div>
-              <div class="ou-banner__body"><div class="ou-banner__desc">Предпросмотр считает балл движком цены ответа на выбранном демо-ответе. scoreRatio и статус «Частично правильно» уходят в показ обучающемуся и в LMS (CMI 2004).</div></div>
-            </div>
           </div>
           <footer class="ou-modal__foot">
             <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'tiered-multiple')">Назад к цене ответа</button>
@@ -560,15 +520,12 @@
           </header>
           <div class="ou-modal__body">
             <div class="wf-list-head">
-              <div class="tb-section-label">Оценивание ответа</div>
+              <div class="tb-section-label">Цена ответа</div>
               <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 1</span>
             </div>
-            <div class="ou-formfield">
-              <label class="ou-formfield__lbl">Цена ответа</label>
-              <div class="ou-seg" role="group" aria-label="Цена ответа">
-                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Точное совпадение</button>
-                <button type="button" class="ou-seg__item" aria-pressed="false">Ступенчато</button>
-              </div>
+            <div class="ou-seg" role="group" aria-label="Цена ответа">
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Точное совпадение</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Ступенчато</button>
             </div>
             <div class="ou-empty ou-empty--page" role="status">
               <div class="ou-empty__art"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-info" /></svg></div>
@@ -700,7 +657,7 @@
             <tr><td>Read-only — НЕ применим</td><td>BR §2.6 «если применимо»</td><td>Вопрос правится в банке вопросов и не замораживается публикацией теста (это модель ТЕСТА — версионирование). Целостность попыток — снапшот/версия теста, не блокировка редактора вопроса</td></tr>
             <tr><td>Цена ответа</td><td><code>scoring.kind</code>: <code>exact</code> / <code>weighted</code> / <code>tiered</code></td><td>Дефолт — <code>exact</code> (точное совпадение), sMax = 1; старые тесты бит-идентичны (FR-02, §11.8)</td></tr>
             <tr><td>Веса опций (single)</td><td><code>scoring.weights[]</code> по индексам опций</td><td>Балл = вес выбранного варианта; sMax = max(вес). Аддитивно (FR-03, §11.3)</td></tr>
-            <tr><td>Конструктор ступеней</td><td><code>scoring.tiers[] = {when, score}</code></td><td>Сверху вниз, первое совпадение, иначе 0; пол <code>max(0, .)</code>. Неаддитивно (FR-04/05/07, §11.4–11.5)</td></tr>
+            <tr><td>Конструктор ступеней</td><td><code>scoring.tiers[] = {when, score}</code></td><td>Сверху вниз, первое совпадение, иначе 0; пол <code>max(0, .)</code>. Неаддитивно: РТК-проверка — ответ ABD при эталоне AD даёт 1, не 2 (FR-04/05/07, §11.4–11.5)</td></tr>
             <tr><td>Условие ступени</td><td><code>{lhs: c|x|T(|P|N), op, rhs: число|T|P|N}</code></td><td><code>c</code> — верных выбранных, <code>x</code> — лишних, <code>T</code>/<code>P</code>/<code>N</code> — эталонных (опций/пар/элементов). Строка = конъюнкция условий («И условие»)</td></tr>
             <tr><td>Порядок строк = приоритет</td><td>рукоятка <code>grip</code> (drag-to-reorder)</td><td>Первое совпадение сверху; «Иначе» закреплена снизу</td></tr>
             <tr><td>Макс. балл sMax</td><td>выводится: max(вес) | max(tier.score)</td><td>Для <code>exact</code> = 1; равен полю «Баллы» вопроса</td></tr>
