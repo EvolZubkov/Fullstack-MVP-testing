@@ -1,251 +1,102 @@
-# HANDOFF: «Цена ответа» (PRD-10) + «Квоты выдачи по тегам» (PRD-11)
+# HANDOFF: Ограничение повторного прохождения (PRD-6 retake gate)
 
-> **СТАТУС 2026-06-04: ОБА ТРЕКА ЗАВЕРШЕНЫ И ЗАПУШЕНЫ.** PRD-10 «Цена ответа» (Стадии 0-6,
-> golden против эталона РТК) и PRD-11 «Квоты выдачи по тегам» (квоты + тегирование вопросов + UI +
-> рантайм-фикс экспорта `q.tags`, верифицировано в scorm-player) реализованы end-to-end. Ветка `dev`
-> синхронизирована с `origin`. Ниже — детальный лог реализации и решений (см. блоки «Обновление
-> (сессия N)»). Остаточные не-ядровые пункты перечислены в §2 (PRD-10: FR-12, preview-модалка,
-> серверный `check-answer.ts`). Этот документ — историческая запись закрытого трека.
+> **СТАТУС 2026-06-04: PRD-6 PHASE 1 ЗАВЕРШЁН.** Retake gate end-to-end: ядро (схема `retakePolicy` +
+> eligibility-движок/плагины/реестр с TS↔JS-парити), рантайм-гейт до SCORM `Initialize` (NFR-01/02),
+> блок-экран из системной страницы шаблона `system.blocked`, боевой источник `webtutor_cooldown` через
+> ClientBridge `get_metadata` (вскрыт на живом портале RT), авторский пейн «Повторное прохождение».
+> Эскиз `docs/wireframes/prd6-retake-policy.html` согласован. Отложено в Phase 2: администрируемый
+> реестр конфигов, UI-выбор конфигурации, диагностика плагина. Этот документ — handoff закрытого трека.
+>
+> Предыдущий трек (PRD-10 «Цена ответа» + PRD-11 «Квоты выдачи») закрыт 2026-06-04 и запушен; его
+> детальный handoff — в истории git (этот файл до коммита PRD-6-closeout).
 
-Документ для продолжения работы. Дизайн-фаза обоих треков была закрыта первой; затем выполнена
-реализация (см. статус выше).
+## 1. Что сделано (PRD-6 Phase 1)
 
-## 1. Назначение и контекст
+- **Схема** (`shared/schema.ts`): `retakePolicySchema` (enabled, cooldownPeriodDays 1–3650 с нормализацией
+  legacy `cooldownDays`, gateMode, eligibilityPlugin{key, configId, failPolicy}, blockedPageId); колонка
+  `tests.retake_policy_json` (миграция `013_prd6_retake_policy.sql`, применена к dev-БД).
+- **Eligibility-ядро** (`shared/eligibility/`): `types.ts`, `engine.ts` (cooldownDecision / normalizeVerdict /
+  applyFailPolicy / buildRetakeState / evaluateEligibility), `plugins.ts` (webtutor / suspend + ClientBridge-
+  парсинг: extractSecid / extractCourseCompletionDate), `registry.ts` (read-only, сидируется в коде).
+  Парити: JS-порт `server/scorm/template/app/eligibility/{engine,plugins}.js` + golden
+  `tests/eligibility-engine-port.test.ts`.
+- **Рантайм-гейт** (`server/scorm/template/app/eligibility/gate.js`): запускается в `bootstrap/main.js` ДО
+  `SCORM.init()` (NFR-01/02). Заблокирован → блок-экран (0 SCORM-вызовов); разрешён → «Начать курс» →
+  `runCourse()`. failPolicy (failOpen/failClosed) + таймаут 5с.
+- **Блок-экран из шаблона** (§4.4): гейт грузит layout `system.blocked` (default/corporate/minimal — ветки
+  `data-retake-branch` cooldown/error/default), заполняет `retake.*` через path-DSL; встроенный экран —
+  фолбэк. jsdom-тест `tests/eligibility-gate-blockwall.test.ts`.
+- **webtutor_cooldown — боевой источник** (вскрыт на живом портале RT, см. §3): дата прохождения курса
+  берётся из ClientBridge `get_metadata` SOAP (НЕ каталог-грид, НЕ adl.data).
+- **Экспорт** (`server/scorm/builders/test-json.ts`): `test.retakePolicy` + резолвленный `test.retakePlugin`
+  (runtimeEntry + config из реестра) УСЛОВНО при enabled (FR-02 byte-identical). Acceptance
+  `tests/scorm-retake-acceptance.test.ts`.
+- **Авторский UI** (`client/src/features/tests/editor/sections/basic-settings-section.tsx`): rail-пейн
+  «Повторное прохождение» — Switch enabled → период / Select плагина (из
+  `/api/tests/:id/available-eligibility-plugins`) / SegmentedControl failPolicy / best-effort warning для
+  suspend. Маппер `retakePolicy` ↔ `retake_policy_json` (`test-editor.mappers.ts`, экспортирован
+  `defaultRetakePolicy()`); dirty-tracking в `use-test-editor.ts`. Тесты: round-trip маппера + UI пейна.
+  Верифицировано вживую (off/webtutor/suspend = эскиз; save round-trip PUT→БД→reload).
+- **Локальный тулинг:** WebTutor-мок в `scripts/scorm-player.mjs` (ClientBridge get_metadata + форма даты
+  последней попытки) — проверка гейта без живого WT.
+- **completionReportMode УДАЛЁН** — это конструктор тестов, тест обязан оставлять статус passed/failed;
+  нейтральный режим не бизнес-требование, конфликтовал с cooldown и в рантайме не был реализован.
 
-Два пост-MVP трека под бизнес-запрос «РТК-сертификация руководителей считается внутри SCORM, без
-внешнего Excel-постпроцессора» (второй постпроцессор сверх MBI; РТК идёт на платформу сразу после
-релиза):
+`npm run check` чист, `vitest` **1918 зелёных**, DS-чек эскиза clean.
 
-- **PRD-10 «Цена ответа»** — градуированный (частичный) балл за вопрос.
-- **PRD-11 «Квоты выдачи по тегам»** — стратифицированная выдача (гарантированное покрытие подтем).
+## 2. Отложено в Phase 2
 
-Парный трек **PRD-2 (показатели) + PRD-5 (шкалы) закрыт ранее** (2026-06-03, Этапы A-C; см. ROADMAP
-§0.2 и коммиты `a6e3e32`…`a9bbc9a`, golden `tests/mbi-golden.test.ts`). MBI-постпроцессор уже не нужен.
+- Администрируемый реестр eligibility-конфигов (сейчас read-only, в коде) + UI редактирования
+  endpoint/фильтров/regex (NFR-03).
+- UI-выбор одной из ≥2 конфигураций плагина (сейчас одна активная подставляется неявно).
+- Диагностика «тестовая проверка плагина» (сырые/отфильтрованные записи, выбранная попытка, решение).
+- (Опц.) Семантика completed/failed для маркера WebTutor — сейчас ловится только «пройден» (passed).
 
-## 2. Статус (2026-06-04): эскиз PRD-10 согласован, Стадия 1 реализована
+## 3. Ключевые решения и боевые находки (не очевидны из кода)
 
-**Обновление (сессия 2, 2026-06-04):** эскиз PRD-10 доработан (устранён скачок размера модалки —
-единый стабильный фрейм `xl` + фиксированная высота, скролл только в body) и **согласован** —
-перенесён в `docs/wireframes/approved/prd10-question-scoring.html`. Реализована **Стадия 1 PRD-10**
-(схема): миграция `010_prd10_question_scoring.sql` (колонка `questions.scoring_json` + CHECK на
-`kind`, применена к dev-БД, идемпотентна); zod `questionScoringSchema` (union exact/weighted/tiered)
-и колонка `scoringJson` в `shared/schema.ts`; проброс в `storage.ts` (create/duplicate) и
-`server/routes/questions.ts` (create/update) с валидацией (FR-13); тесты
-`tests/schema-prd10-scoring.test.ts`. OQ-1/OQ-2/OQ-3 закрыты. Реализована **Стадия 2 PRD-10**
-(рантайм SCORM): авторитетный движок `shared/scoring/engine.ts` (`scoreAnswer` →
-`{score, sMax, ratio}`: exact/weighted/tiered, счётчики `c,x,T/P/N`, неаддитивная ступенчатая
-таблица); JS-порт `server/scorm/template/app/scoring/engine.js` (вшит в `index.ts` перед
-`resultsPage.js`); `checkAnswer` в `resultsPage.js` делегирует `ScoringEngine.scoreAnswer(...).ratio`
-(guard + fallback на старое 0/1); golden-parity `tests/scoring-engine-port.test.ts` + юниты
-`tests/scoring-engine.test.ts`. Реализована **Стадия 3 PRD-10** (экспорт): `buildTestJson`
-(`server/scorm/builders/test-json.ts`) переносит `scoring` в рантайм-вопрос пакета — оба блока
-(секции + адаптив), УСЛОВНО (только когда задано → пакеты без цены ответа бит-идентичны, FR-02);
-так `q.scoring` доходит до `checkAnswer` и градуированный путь активен end-to-end; тесты в
-`tests/scorm-builders.test.ts`. `npm run check` чист, `vitest` **1733 зелёных**, `npm run build` ок.
-ВАЖНО: серверный `server/utils/check-answer.ts` (веб-попытки) оставлен бинарным — отдельный шаг
-(не на пути РТК). FR-12 (per-question `scoreRatio`/«Частично правильно» в CMI/learner-рендер) НЕ
-сделан — presentational-слой, балл темы/теста уже градуирован. Уточнение: монолита `assets/app.js`
-с `checkAnswer` НЕТ (§7 ниже неточен). Реализована **Стадия 4 PRD-10** (UI): секция «Цена ответа»
-в редакторе вопроса — `client/src/pages/author/scoring-builder.tsx` (ScoringBuilder + buildScoringJson)
-интегрирована в `questions.tsx` (state/init/reset/save). Режимы: single → exact/weighted (таблица
-весов), multiple/matching/ranking → exact/tiered (конструктор ступеней). На **shadcn** (решение:
-консистентно с формой, которая НЕ на ui-kit; эскиз = спека раскладки). Playwright: все режимы +
-end-to-end save/round-trip (`scoring_json` пишется/читается, токен `T` сохраняется). `check`/`build`
-зелёные. Отложено: preview-модалка, drag-reorder ступеней. ВАЖНО про dev: сервер на `tsx` без watch —
-**после правок route/storage нужно перезапускать `npm run dev`** (иначе старый код пишет `scoring_json`
-= null; ловил это при проверке). Реализована **Стадия 5 PRD-10** (порог + сертификация): `count`-
-правило прохождения раздела/теста переведено на `Σ s` (earnedPoints) в рантайме
-`checkPassRuleWithPartial` (3 call-site: per-section/per-topic/overall) — решение «Вариант А» (FR-10);
-`percent`-правило уже считало на `Σ s`; для `exact`+1 балл регрессии нет (vitest зелёный). Тест
-`tests/scoring-pass-rule.test.ts`. Сертификация (FR-11) уже работала: PRD-2 `controls_status`
-(success/completion) + DSL `countPassed()==countTopics()` — кода не потребовалось. Реализована
-**Стадия 6 PRD-10** (golden РТК): `tests/rtk-golden.test.ts` + фикстура `tests/fixtures/rtk-golden.json`
-(генератор `rtk-golden.gen.py`). Движок `shared/scoring/engine` с РТК-стандартными конфигами
-воспроизводит **все 63 балла** внешнего pandas-обработчика (`key_NEW_15-08-25.xlsx` +
-`report_processed_pandas_*`), **0 расхождений**, по всем 4 типам. Правила взяты из
-`docs/references/main/main.py`. `check`/`build` зелёные, `vitest` **1803**.
+- **WebTutor дата прохождения — ТОЛЬКО через ClientBridge `get_metadata`** (вскрыто на живом портале
+  university.rt.ru через DevTools на запущенном SCO, ≥2 модуля): same-origin POST
+  `/services/ClientBridgeService`, SOAPAction `…datex-soft.com/get_metadata`, нужен per-page SECID (32-hex),
+  скрейпится с course-card. Ответ — XAML course-card; дата в блоке `best_learn_step_success` («Курс был
+  пройден ДД.ММ.ГГГГ»). `adl.data` НЕ поддерживается (err 401), cross-attempt стора нет. Маркер
+  RT-тема-специфичен (admin-config). object_id резолвится из launch-контекста (location/referrer/top/parent,
+  same-origin); паттерны конфигурируемы.
+- **Гейт ДО Initialize** (NFR-01/02): при блокировке `cmi.*` не трогается — проверено в scorm-player
+  (0 SCORM-вызовов). Блок-экран = системная страница шаблона (§4.4), не встроенный HTML.
+- **Эскиз — что убрали по обсуждению:** превью даты (на этапе авторинга «последней попытки» не существует —
+  это рантайм-значение на конкретного учащегося); completionReportMode (см. §1).
 
-**PRD-10 ЗАВЕРШЁН (Стадии 0–6).** Градуированная оценка работает end-to-end (UI → экспорт → рантайм
-→ `Σ s` → порог раздела на `Σ s` → сертификация), подтверждено golden против РТК. Остаточные
-не-ядровые пункты: preview-модалка балла; серверный `check-answer.ts` (веб-попытки) бинарный; CMI
-per-question `scoreRatio`/«Частично правильно» (FR-12).
+## 4. Dev-окружение и проверки
 
-**PRD-11 Стадии 1-3 выполнены** (квоты выдачи, бэкенд end-to-end):
+- **БД:** контейнер `test-builder-postgres` (Docker, `localhost:55432`, см. `.env` в корне; НЕ системный PG
+  на 5432). Память `reference_database`.
+- **Сервер:** `npm run dev` (PORT=8081 из `.env`; tsx БЕЗ watch — после правок server/route/storage
+  перезапускать). Логин автора `admin@test.com` / `admin123` (сид `storage.ts`).
+- **Проверки:** `npm run check` (tsc), `npx vitest run`, `npm run build`. Coverage-гейт 50% краснеет на
+  запусках подмножества (клиентский UI без unit-покрытия) — не регрессия.
+- **SCORM-тулинг:** `npm run scorm:sample`/`scorm:template`/`scorm:player` (плеер + WebTutor-мок для retake);
+  acceptance-тесты. Поведение WebTutor — зондом на реальном SCO (память `feedback_no_live_webtutor_verify_local`).
+- **markdownlint:** `npx markdownlint-cli2 <файл>` — MD013 (120) для прозы (таблицы/код игнорятся).
 
-- Стадия 1 (схема): миграция `011` (колонка `test_sections.draw_blueprint_json` + CHECK, применена,
-  идемпотентна); zod `drawBlueprintSchema`/`drawStratumSchema` + колонка; проброс storage
-  (`_insertSections` + legacy) + `SectionPayload`; валидация `Σ count <= drawCount` (FR-05) в
-  `sectionBodySchema`; тест `schema-prd11-blueprint`.
-- Стадия 2 (выдача): авторитетный `shared/draw/blueprint.ts` `drawSection` (страты + дедуп `used`
-  FR-04 + остаток без `exact`-тегов FR-03a + warning FR-06, `shuffle` инъектируется); JS-порт в
-  `server/scorm/assets/app.js` (`drawSection`, в `generateVariant`); сервер `routes/attempts.ts`
-  использует TS напрямую. Тесты `draw-blueprint` + golden-parity `draw-blueprint-port`.
-- Стадия 3 (экспорт): `buildTestJson` переносит `drawBlueprint` в рантайм-секцию УСЛОВНО (FR-02).
+## 5. Технические паттерны
 
-`check`/`build` зелёные, `vitest` **1837**. Прим.: отбор `shuffle(...).slice(0,drawCount)` живёт в
-`server/scorm/assets/app.js` `generateVariant` (НЕ resultsPage). **Эскиз квота-редактора СОГЛАСОВАН**
-(`docs/wireframes/prd11-draw-quotas.html`): свич + инлайн-блок в реальной строке темы `tb-topic-row`
-(ui-kit), режим Ровно/Не менее НА КАЖДЫЙ тег, реальные теги; выверен Playwright light/dark.
-**Модель финализирована:** `strata: [{tag, count, mode}]` — mode per-страта, дефолт `exact`; без
-`modeGranularity`/топик-mode/тогла «Общий/По тегам». Стадии A1-A3 (схема/движок/тесты) **надо
-упростить** под это (выкинуть `modeGranularity` + топик-`mode`; `effMode = s.mode ?? exact`).
+- **Parity-паттерн:** авторитетная TS (`shared/…`) + рукописный JS-порт (`server/scorm/template/app/…`) +
+  golden через `new Function(portSrc + ';return X;')`. Так сделаны eligibility-движок и плагины.
+- **Рантайм-гейт:** сайд-эффекты (fetch / render / suspend-read) — в `gate.js`; чистая логика — в
+  engine/plugins; гейт грузит шаблон сам (`ensureTemplate`), т.к. до `runCourse` шаблон не загружен.
+- **Секция редактора:** пропсы `{model, updateModel}`; запись в `TestEditorModel`; маппер api↔model;
+  dirty-tracking в `use-test-editor.ts`. testId доступен как `model.id`.
+- **UI — только `@universityrt/ui-kit`** (Switch/NumberInput/Select/SegmentedControl/Banner/…); эскиз — DS
+  `ou-*`/`tb-components.css` + каркас `wf-*`; DS-handbook в `C:\Repositories\ENGINERING_HANDBOOK`.
+- **Push — ТОЛЬКО `origin` (vvlad1973)**, НИКОГДА upstream (EvolZubkov); по имени remote (память
+  `reference_github_repo`).
 
-**ВАЖНО — тегирование вопросов внесено в охват PRD-11** (§3a спеки, под-трек B): поле
-`questions.tags` есть, но **задать тег вопросу нельзя** — нет ни UI (chip-инпут), ни проброса в API
-(`questions.ts`/`storage` поле `tags` игнорируют). Без тегов квота-Select пуст. План B: API (`tags` в
-create/update, как `scoringJson`) → эскиз chip-инпута в редакторе вопроса (shadcn) + согласование →
-UI. Порядок дальше: упростить A1-A3 → B-api → эскиз B0b → UI (B-ui, затем A4 квоты). Ниже — исходный
-план дизайн-фазы.
+## 6. Подводные камни
 
-**Обновление (сессия 3, 2026-06-04): PRD-11 ЗАВЕРШЁН (квоты + тегирование, end-to-end).**
-
-- **A1-A3 упрощены** под финальную модель: `strata: [{tag, count, mode}]` без `modeGranularity`/
-  топик-`mode` (`effMode = s.mode ?? "exact"`); миграция `012` заменила stale CHECK из `011`
-  (валидирует только `strata`-массив, применена к dev-БД). Сопоставление тега в движке (TS +
-  JS-порт) — по нормализованному `tagKey` (регистронезависимо), `shared/draw/blueprint.ts`.
-- **Правила именования тега (§3a, согласовано):** свободные метки — пробелы РАЗРЕШЕНЫ; на сохранении
-  `trim` + схлопывание пробелов, дедуп регистронезависимо, длина 1–50. `shared/tags.ts`
-  (`normalizeTag`/`tagKey`/`normalizeTags`) — единый для zod-схемы, API и движка.
-- **B (тегирование вопросов):** API (`tags` в POST/PUT `routes/questions.ts` + `storage`
-  create/duplicate) + UI `client/.../author/tags-input.tsx` (`TagsInput` — chip-инпут с
-  автодополнением из distinct-тегов банка), встроен в `questions.tsx`. Эскиз
-  `docs/wireframes/prd11-question-tags.html`. Верифицировано вживую (round-trip нормализации на сервере).
-- **A4 (UI квот):** `QuotaEditor` в `tb-topic-row` (вкладка «Состав», `topics-structure-section.tsx`) —
-  свич «Квоты по подтемам» + инлайн-таблица страт (Select РЕАЛЬНЫХ тегов темы, count, режим
-  Ровно/Не менее НА ТЕГ, добавить/удалить), Σ-валидация (FR-05 → error-баннер + блок сохранения в
-  `test-editor.validation.ts`), нехватка → колонка «Доступно» + warning-теги (FR-06); свич disabled,
-  если у темы нет тегов. Маппер `drawBlueprintJson` (`test-editor.mappers.ts`, пустые страты → null).
-  Верифицировано вживую: save → reload round-trip, error/warning/off-состояния.
-- `npm run check` чист, `vitest` **1856** зелёных. Коммиты `f01277f`/`82f25f3`/`28dd5d1`/`b9ea095`/
-  `aa06e53` на ветке `dev` (НЕ запушены в `origin`).
-
-Сделано в дизайн-фазе (документы):
-
-| Артефакт | Состояние |
-| --- | --- |
-| `docs/specs/scoring-model.md` §11 «Цена ответа» | Нормативная модель (v1.9) |
-| `docs/specs/prd-10/graded-answer-scoring.md` | План (13 FR, 6 стадий) |
-| `docs/wireframes/approved/prd10-question-scoring.html` | Эскиз редактора (9 состояний); согласован 2026-06-04, в `approved/` |
-| `docs/specs/prd-11/tag-draw-quotas.md` | План квот выдачи |
-| `docs/specs/brd-scorm-enhancements.md` | BR-09 «Цена ответа» + новый BR-10 «Квоты выдачи», Этап 10/11, модель данных |
-| `docs/ROADMAP.md` §0.2 | PRD-10/PRD-11 подняты перед релизом РТК; источник PRD-1...PRD-11 |
-| Issues `#12`/`#17`/`#23`/`#24`/`#25`/`#26` | Актуализированы (см. §6) |
-
-Коммиты: `db7027c` (scoring §11), `dcb2c34` (PRD-10 + эскиз), `3b3e5e0` (PRD-11), `4b35469`
-(BRD/ROADMAP), `3b59488` (эскиз — убран дубль заголовка + пояснительные баннеры). Ветка `dev`
-запушена в `origin` (vvlad1973) до `4b35469`; `3b59488` — локальный (не запушен).
-
-## 3. Ключевые решения (не очевидны из кода)
-
-- **Терминология (важно):** «**Цена ответа**» (НЕ «рубрика»). «**Тема**» в прозе (НЕ «секция»);
-  поле БД остаётся `test_sections`. «Раздел» — это та же тема в РТК/потоке.
-- **Цена ответа по типам:** `single` обычный — точное совпадение (0/1); `single` с весами — балл =
-  вес выбранной опции (АДДИТИВНО, ложится на сетку «Вклады вопросов», нового рантайма почти не
-  требует); `multiple`/`matching`/`ranking` — СТУПЕНЧАТАЯ таблица «условие → балл» над счётчиками
-  `(c, x, T)` — НЕАДДИТИВНА (лишняя неверная опция понижает ступень), это реальный кодовый пробел.
-  Дефолт — точное совпадение, `sMax = 1`, старые тесты бит-идентичны. Сейчас `checkAnswer`
-  (`resultsPage.js`) БИНАРНЫЙ.
-- **Цена ответа — ось ПРАВИЛЬНОСТИ**, отдельная от вкладов в шкалы (PRD-5) и от квот выдачи (доставка).
-  Балл темы/теста = `Σ s`; пороги прохождения — на теме/тесте (`topic_pass_rule_json`/
-  `overall_pass_rule_json`); сертификация — показатель PRD-2 + `controls_status=success`.
-- **Квоты выдачи:** на теме (`test_sections.draw_blueprint_json`): `strata: [{tag, count, mode}]`;
-  `mode` = `exact` (ровно `count`) / `min` (не менее) — НА КАЖДЫЙ тег, дефолт `exact` (без
-  `modeGranularity`/топик-режима — упрощено 2026-06-04). Общая выборка `drawCount`;
-  `Σ count <= drawCount`; остаток случайно из вопросов БЕЗ `exact`-тегов; нехватка → НЕблокирующий
-  warning; сопоставление тега регистронезависимо (`tagKey`); stateless (без retry-логики).
-- **Подтема = тег** (`questions.tags`); иерархии тем НЕТ; per-tag порогов прохождения НЕТ.
-- **WebTutor НЕ поддерживает `adl.data`** (проверено зондом, `GetValue("adl.data._count")` → err 401;
-  память `reference_webtutor_scorm_runtime`). Cross-attempt стора у автономного пакета НЕТ →
-  «свежесть на retry» / фиксированные формы / anti-repeat в пакете НЕРЕАЛИЗУЕМЫ; сняты (РТК не требует
-  как обязательное; при необходимости — на уровне назначения LMS). Квоты stateless — работают.
-
-## 4. Эталон РТК и проверка
-
-`docs/references/Обновление сертификации для руководителей/.../Обработка серт теста/`:
-`key_NEW_15-08-25.xlsx` (208 вопросов, ключ) + `report_processed_pandas_*.xlsx` (пример обработки).
-Подтверждено: коэффициенты выравнивания убраны (балл против абсолютного порога раздела); два
-тематических уровня — «Раздел» + «Тема» (порог только на разделе); per-question баллы 0/1/2/3
-ступенчатые для multiple/matching, веса опций для single. Это golden-фикстура для PRD-10 Стадии 6
-(парсинг xlsx — `openpyxl` через `python`; кириллица в путях ломает bash — читать через PowerShell
-LiteralPath или python).
-
-## 5. Что дальше — gate и стадии
-
-**GATE (NFR-14):** эскиз PRD-10 — на согласовании; код Стадии 1+ НЕ начинать до явного «ок».
-Для PRD-11 — отдельный эскиз квота-редактора (Стадия 0b) + согласование. UI без согласованных
-эскизов запрещён (память `feedback_wireframes_first_ui`).
-
-**PRD-10:** 1) схема `question.scoring` (`kind: exact|weighted|tiered`) + миграция, durable id единиц
-(оценка) → 2) рантайм: градуированный `checkAnswer` + оценщик ступенчатой таблицы + `Σ s` по теме
-(парити TS↔JS-порт) → 3) экспорт `scoring` в `test-json` → 4) UI редактора цены ответа → 5) порог
-раздела (pass-rule) + показатель-сертификация (источник темы в DSL при нехватке) → 6) golden vs
-`key_NEW`.
-
-**PRD-11:** 1) схема `test_sections.draw_blueprint_json` + миграция + zod → 2) логика выдачи
-(`app.js` + парный рантайм) с дедупликацией + warning при нехватке → 3) экспорт блюпринта → 4) UI
-квота-редактора в теме → 5) тесты (квоты/дедуп/нехватка/обратная совместимость).
-
-Открытые вопросы к Стадии 1: durable id единиц `matching`/`ranking` (сейчас индексные source_key,
-scoring-model §10.7 #2); есть ли в DSL PRD-2 доступ к баллу/прохождению темы для показателя-
-сертификации (PRD-10 OQ-2 — проверить, при нехватке добавить `topicScore`/`topicPassed`).
-
-## 6. Статус issues (GitHub `vvlad1973/Fullstack-MVP-testing`)
-
-ВСЕГДА `--repo vvlad1973/Fullstack-MVP-testing`, не upstream EvolZubkov (память `reference_github_repo`).
-Открыты (scoring-трек):
-
-- `#17` — «Цена ответа» в рантайме = РЕАЛИЗАЦИЯ PRD-10; спека+эскиз готовы.
-- `#12` — доспека: закрыто по «Цене ответа» (§11/PRD-10); остаток — композиция шкал + пересчёт-формула
-  (будущий scales-PRD).
-- `#23` — РТК-слой: фикс-формы/retry СНЯТЫ (WebTutor); остаток — пороги/композиты/сертификация
-  (PRD-2/PRD-10) + квоты (PRD-11).
-- `#25` — в основном закрыто (inverse/band/КР-референс); остаток — learner-рендер (→ #24).
-- `#24` — C2-фастфоллоу (learner-рендер, конструктор формул, окно попыток — пересекается с PRD-6).
-- `#26` — эпик (ядро доставлено; блок «Новые спеки трека» = PRD-10/PRD-11).
-
-## 7. Технические паттерны (повторять при реализации)
-
-- **Parity-паттерн:** авторитетная TS-реализация (`shared/...`) + рукописный JS-порт
-  (`server/scorm/template/app/...`) + golden-тест через `new Function(portSrc + ';return X;')`. Так
-  сделаны DSL и движок шкал; так же делать оценщик ступенчатой таблицы (Стадия 2). Рантайм смешанный:
-  модульные `app/render/*.js` + монолитный `server/scorm/assets/app.js` (там `checkAnswer`,
-  `calculateResults`, отбор вопросов `shuffle(...).slice(0, drawCount)`), всё конкатенируется при экспорте.
-- **Миграции** `migrations/00N_*.sql`: шапка-комментарий, `BEGIN; … COMMIT;`, идемпотентно
-  (`IF NOT EXISTS`), enum/regex CHECK в SQL.
-- **Секция редактора:** пропсы `{ model, updateModel }`; запись в `TestEditorModel`; diff-on-save
-  оркестратор; стабильный React-key через `clientKey` (не из редактируемых полей).
-- **Route-тест:** `vi.hoisted` storageMock + `vi.mock("../server/storage")` + РЕАЛЬНЫЙ
-  `requireAuth`/`requireAuthor` + supertest. Расширение `loadFullTest`/экспорта новым storage-методом
-  требует добавить метод в моки (`tests/routes.tests.test.ts`, `tests/scorm-export.test.ts`).
-- **UI — только `@universityrt/ui-kit`** (NumberInput/Select/Combobox/SegmentedControl/Switch/...);
-  не писать руками `.ou-*` и не оборачивать нативные `<select>`/`<input>` (память
-  `feedback_ds_native_controls_to_components`). Эскиз — только DS `ou-*`/`tb-components.css` (DS-handbook
-  в `C:\Repositories\ENGINERING_HANDBOOK\handbook\design-system\`).
-
-## 8. Dev-окружение и проверки
-
-- **БД:** контейнер `test-builder-postgres` (Docker, `localhost:55432`, см. `.env` в корне; НЕ системный
-  PG на 5432). `docker start test-builder-postgres`; миграции 008/009 применены; `npx drizzle-kit
-  push --force` при расхождении. Память `reference_database`.
-- **Сервер:** `npm run dev` (порт из `.env`, `PORT=8081`). Логин автора `admin@test.com` / `admin123`
-  (форма предзаполняет неработающие `admin@local.test`).
-- **Проверки:** `npm run check` (tsc), `npx vitest run`, `npm run build`. Coverage-гейт 50% был
-  красным ДО трека (клиентский UI без unit-тестов) — не регрессия.
-- **SCORM-инструменты:** `npm run scorm:sample`/`scorm:template`/`scorm:player` (плеер с инспектором
-  шкал/показателей/LMS-трафика); `tests/scorm-package-acceptance.test.ts`. Память
-  `reference_scorm_acceptance_tooling`. Поведение WebTutor проверять зондом на реальных выгрузках
-  (память `feedback_no_live_webtutor_verify_local`).
-- **markdownlint:** `npx markdownlint-cli2 <файл>` — MD013 (120) включён для прозы (таблицы/код игнорит);
-  строки-метаданные в шапке не должны превышать 120.
-
-## 9. Подводные камни
-
-- `id` тестов/вопросов — `varchar(36)`, НЕ uuid (новые PK — uuid `defaultRandom`). drizzle-zod: `uuid`
-  строгий `.uuid()`; `numeric` → string; `jsonb.$type<T>()` может расходиться с zod (уточнять `.extend`).
-- В эскизах: эскизные классы (`wf-list-head` и т. п.) НЕ существуют в CSS приложения — в React Tailwind/
-  `tb-*`/`ou-*`. Кнопки ui-kit: иконка через `leadingIcon`/`icon`, не children.
+- WebTutor-интеграция: дату даёт ТОЛЬКО ClientBridge get_metadata — не уходить в архаику каталога-грид
+  (legacy-функции selectLastAttemptDate/webtutorCooldownDecide в `plugins.ts` оставлены, но рантайм идёт по
+  ClientBridge).
+- Урок `q.tags` (PRD-11): поле может не доезжать в рантайм-`TEST_DATA` — проверять экспорт. Аналогично для
+  retake проверять, что `test-json` кладёт `retakePolicy` + резолвленный `retakePlugin`.
 - НИКОГДА не объявлять визуальный успех UI без Playwright-сверки с эскизом (память
-  `feedback_screenshot_review`, `feedback_wireframes_first_ui`). Скриншоты — в `.playwright-mcp/`, не в
-  корне (память `feedback_no_temp_files_in_root`).
-- `git push` — ТОЛЬКО в `origin` (vvlad1973), НИКОГДА в `upstream` (EvolZubkov); push явно по имени
-  remote (память `reference_github_repo`).
+  `feedback_screenshot_review`, `feedback_wireframes_first_ui`); скриншоты — в `.playwright-mcp/`, не в корне.
