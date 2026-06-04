@@ -142,28 +142,46 @@ app.get("/play/:token/*splat", (req, res) => {
 // from the package iframe. There is no live WebTutor locally, so the player mocks
 // it: a form sets the module's "last completion date" and the endpoint returns a
 // synthetic record (or an empty set => no prior attempt => allowed).
-let webtutorMock = { lastDate: null, state: "Завершен", progress: "100%" };
+// object_id is fixed for the local demo (real WebTutor assigns it on upload);
+// the player injects it into the launch URL so the gate's resolveObjectId picks it up.
+const MOCK_OBJECT_ID = "1234567890";
+let webtutorMock = { lastDate: null };
 
 app.get("/api/mock-webtutor", (_req, res) => res.json({ mock: webtutorMock }));
 
 app.post("/api/mock-webtutor", express.json(), (req, res) => {
   const b = req.body || {};
-  webtutorMock = {
-    lastDate: typeof b.lastDate === "string" && b.lastDate ? b.lastDate : null, // ISO yyyy-mm-dd or null
-    state: typeof b.state === "string" && b.state ? b.state : "Завершен",
-    progress: typeof b.progress === "string" && b.progress ? b.progress : "100%",
-  };
+  webtutorMock = { lastDate: typeof b.lastDate === "string" && b.lastDate ? b.lastDate : null };
   res.json({ ok: true, mock: webtutorMock });
 });
 
-app.get("/pp/Ext5/extjs_json_collection_data.html", (_req, res) => {
-  const data = [];
+// Mock the WebTutor course card — the gate scrapes a 32-hex SECID from it.
+app.get("/view_doc.html", (_req, res) => {
+  res.type("html").send(
+    '<!doctype html><html><head><meta charset="utf-8"></head><body>' +
+    '<div data-secid="ABCDEF0123456789ABCDEF0123456789">course card</div>' +
+    '</body></html>',
+  );
+});
+
+// Mock ClientBridge get_metadata — returns the course-card XAML carrying the
+// «Курс был пройден ДД.ММ.ГГГГ» block when a last-completion date is set.
+app.post("/services/ClientBridgeService", express.text({ type: () => true }), (_req, res) => {
+  let passedBlock = "";
   if (webtutorMock.lastDate) {
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(webtutorMock.lastDate);
-    const ddmmyyyy = m ? `${m[3]}.${m[2]}.${m[1]}` : webtutorMock.lastDate;
-    data.push({ state: webtutorMock.state, progress: webtutorMock.progress, last_usage_date: ddmmyyyy });
+    const dd = m ? `${m[3]}.${m[2]}.${m[1]}` : webtutorMock.lastDate;
+    passedBlock =
+      '&lt;Label Class="XAML-block-best_learn_step_success"&gt;Курс был пройден&lt;/Label&gt;' +
+      '&lt;Button Class="XAML-block-best_learn_step"&gt;' + dd + " &amp;rarr;&lt;/Button&gt;";
   }
-  res.json({ data });
+  const xaml = "&lt;SPXMLScreen&gt;" + passedBlock + "&lt;/SPXMLScreen&gt;";
+  res.type("text/xml").send(
+    '<?xml version="1.0" encoding="utf-8"?>' +
+    '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>' +
+    '<get_metadataResponse xmlns="http://www.datex-soft.com/"><result>' + xaml + "</result>" +
+    "<error>0</error></get_metadataResponse></soap:Body></soap:Envelope>",
+  );
 });
 
 app.get("/", (_req, res) => {
@@ -588,7 +606,7 @@ const PLAYER_HTML = /* html */ `<!doctype html>
     window.__scorm.restore(key);
     lastLoad = { result: result, key: key };
     renderedTraffic = 0; logEl.innerHTML = "";
-    stage.src = "/play/" + result.token + "/" + result.launch;
+    stage.src = "/play/" + result.token + "/" + result.launch + "?object_id=1234567890";
   }
 
   loadBtn.onclick = function () {
@@ -613,7 +631,7 @@ const PLAYER_HTML = /* html */ `<!doctype html>
     if (!lastLoad) return;
     window.__scorm.reset();
     renderedTraffic = 0; logEl.innerHTML = "";
-    stage.src = "/play/" + lastLoad.result.token + "/" + lastLoad.result.launch + "?_=" + Date.now();
+    stage.src = "/play/" + lastLoad.result.token + "/" + lastLoad.result.launch + "?object_id=1234567890&_=" + Date.now();
   };
 
   // ── PRD-6 WebTutor mock controls ──────────────────────────────────────────
