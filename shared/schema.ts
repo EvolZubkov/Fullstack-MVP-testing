@@ -1,6 +1,7 @@
 import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, uuid, real } from "drizzle-orm/pg-core"
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { normalizeTag, normalizeTags, TAG_MAX_LENGTH } from "./tags";
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -223,21 +224,31 @@ export const tests = pgTable("tests", {
 // uniform draw (FR-02). A delivery mechanism, orthogonal to scoring (PRD-10).
 // Sub-topic = a value in questions.tags; no new entity (PRD-11 §4).
 
-/** One quota: `count` questions tagged `tag`; `mode` per-tag only when granularity is per_tag. */
+/**
+ * One quota (stratum): take `count` questions tagged `tag`. `mode` is PER-TAG
+ * (PRD-11 §3a, FR-03b) — "exact" (default, exactly `count`) or "min" (at least
+ * `count`; the remainder may pull more of the same tag). `tag` is normalized
+ * on save (trim + collapse spaces, 1–{@link TAG_MAX_LENGTH} chars); the draw
+ * match is case-insensitive (shared/tags.ts).
+ */
 export const drawStratumSchema = z.object({
-  tag: z.string().min(1),
+  tag: z
+    .string()
+    .transform(normalizeTag)
+    .refine((t) => t.length >= 1 && t.length <= TAG_MAX_LENGTH, {
+      message: `Тег: 1–${TAG_MAX_LENGTH} символов после нормализации`,
+    }),
   count: z.number().int().min(1),
   mode: z.enum(["exact", "min"]).optional(),
 });
 
 /**
- * Stratified-draw blueprint (scoring-model §2.4; PRD-11 FR-01/03/03a/03b).
- * `modeGranularity` = uniform (one `mode` for the topic, default) | per_tag
- * (each stratum's `mode`, default exact). `strata` is non-empty.
+ * Stratified-draw blueprint (scoring-model §2.4; PRD-11 §3a, FR-01/03/03a/03b).
+ * Just a non-empty list of per-tag strata; the mode lives on each stratum, so
+ * there is no topic-level mode/granularity. Absence of a blueprint = uniform
+ * draw (FR-02).
  */
 export const drawBlueprintSchema = z.object({
-  modeGranularity: z.enum(["uniform", "per_tag"]).default("uniform"),
-  mode: z.enum(["exact", "min"]).default("exact"),
   strata: z.array(drawStratumSchema).min(1),
 });
 
@@ -309,8 +320,12 @@ export const insertTopicCourseSchema = createInsertSchema(topicCourses).omit({ i
 export const insertTopicEventSchema = createInsertSchema(topicEvents).omit({ id: true });
 export const insertQuestionSchema = createInsertSchema(questions)
   .omit({ id: true })
-  // drizzle-zod types jsonb loosely; validate the scoring config explicitly (FR-13).
-  .extend({ scoringJson: questionScoringSchema.nullish() });
+  // drizzle-zod types jsonb loosely; validate the scoring config explicitly (FR-13)
+  // and normalize tags on save (PRD-11 §3a: trim/collapse, dedup, length cap).
+  .extend({
+    scoringJson: questionScoringSchema.nullish(),
+    tags: z.array(z.string()).transform(normalizeTags).optional(),
+  });
 export const insertTestSchema = createInsertSchema(tests).omit({ id: true });
 export const insertTestSectionSchema = createInsertSchema(testSections)
   .omit({ id: true })

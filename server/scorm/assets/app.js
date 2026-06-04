@@ -10,15 +10,19 @@ function drawSection(questions, drawCount, blueprint, shuffleFn) {
   var selected = [];
   var used = {};
   var warnings = [];
-  var granularity = blueprint.modeGranularity || 'uniform';
-  var topMode = blueprint.mode || 'exact';
-  function effMode(s) { return granularity === 'uniform' ? topMode : (s.mode || 'exact'); }
-  function hasTag(q, tag) { return !!q.tags && q.tags.indexOf(tag) !== -1; }
-  var exactTags = {};
-  blueprint.strata.forEach(function (s) { if (effMode(s) === 'exact') exactTags[s.tag] = true; });
+  // Per-tag mode, default 'exact' (PRD-11 §3a). Match on the normalized tag key
+  // (trim + collapse spaces + lowercase) so "Финансы" matches "финансы".
+  function tagKey(t) { return String(t).replace(/\s+/g, ' ').trim().toLowerCase(); }
+  function effMode(s) { return s.mode || 'exact'; }
+  var qKeys = {};
+  questions.forEach(function (q) { qKeys[q.id] = (q.tags || []).map(tagKey); });
+  function hasTag(q, key) { return (qKeys[q.id] || []).indexOf(key) !== -1; }
+  var exactKeys = {};
+  blueprint.strata.forEach(function (s) { if (effMode(s) === 'exact') exactKeys[tagKey(s.tag)] = true; });
 
   blueprint.strata.forEach(function (stratum) {
-    var pool = questions.filter(function (q) { return !used[q.id] && hasTag(q, stratum.tag); });
+    var stratumKey = tagKey(stratum.tag);
+    var pool = questions.filter(function (q) { return !used[q.id] && hasTag(q, stratumKey); });
     var take = shuffleFn(pool.slice()).slice(0, stratum.count);
     if (take.length < stratum.count) {
       warnings.push({ tag: stratum.tag, requested: stratum.count, available: take.length });
@@ -29,7 +33,7 @@ function drawSection(questions, drawCount, blueprint, shuffleFn) {
   var remainder = drawCount - selected.length;
   if (remainder > 0) {
     var free = questions.filter(function (q) {
-      return !used[q.id] && !(q.tags && q.tags.some(function (t) { return exactTags[t]; }));
+      return !used[q.id] && !(qKeys[q.id] || []).some(function (k) { return exactKeys[k]; });
     });
     shuffleFn(free.slice()).slice(0, remainder).forEach(function (q) { used[q.id] = true; selected.push(q); });
   }

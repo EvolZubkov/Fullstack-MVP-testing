@@ -243,7 +243,7 @@ describe("buildTestJson — standard mode", () => {
   });
 
   it("exports drawBlueprint into the runtime section when set", () => {
-    const bp = { modeGranularity: "uniform", mode: "exact", strata: [{ tag: "finance_base", count: 2 }] };
+    const bp = { strata: [{ tag: "Базовые понятия", count: 2, mode: "exact" }] };
     const d = { ...exportData, sections: [{ ...dbSection, drawBlueprintJson: bp }] };
     const s = JSON.parse(buildTestJson(d)).sections[0];
     expect(s.drawBlueprint).toEqual(bp);

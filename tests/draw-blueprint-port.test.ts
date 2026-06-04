@@ -29,12 +29,13 @@ const QS = [q("1", "A"), q("2", "A"), q("3", "B"), q("4", "B"), q("5"), q("6", "
 
 const scenarios: Array<{ name: string; qs: DrawableQuestion[]; drawCount: number; bp: DrawBlueprint | null }> = [
   { name: "uniform / no blueprint", qs: QS, drawCount: 3, bp: null },
-  { name: "empty strata -> uniform", qs: QS, drawCount: 2, bp: { modeGranularity: "uniform", mode: "exact", strata: [] } },
-  { name: "exact single stratum", qs: QS, drawCount: 3, bp: { modeGranularity: "uniform", mode: "exact", strata: [{ tag: "A", count: 2 }] } },
-  { name: "exact two strata + dedup", qs: QS, drawCount: 4, bp: { modeGranularity: "uniform", mode: "exact", strata: [{ tag: "A", count: 2 }, { tag: "B", count: 2 }] } },
-  { name: "min stratum grows in remainder", qs: QS, drawCount: 4, bp: { modeGranularity: "uniform", mode: "min", strata: [{ tag: "A", count: 2 }] } },
-  { name: "per_tag mixed modes", qs: QS, drawCount: 4, bp: { modeGranularity: "per_tag", mode: "exact", strata: [{ tag: "A", count: 1, mode: "exact" }, { tag: "B", count: 1, mode: "min" }] } },
-  { name: "shortfall warning", qs: QS, drawCount: 6, bp: { modeGranularity: "uniform", mode: "exact", strata: [{ tag: "A", count: 5 }] } },
+  { name: "empty strata -> uniform", qs: QS, drawCount: 2, bp: { strata: [] } },
+  { name: "exact single stratum", qs: QS, drawCount: 3, bp: { strata: [{ tag: "A", count: 2 }] } },
+  { name: "exact two strata + dedup", qs: QS, drawCount: 4, bp: { strata: [{ tag: "A", count: 2 }, { tag: "B", count: 2 }] } },
+  { name: "min stratum grows in remainder", qs: QS, drawCount: 4, bp: { strata: [{ tag: "A", count: 2, mode: "min" }] } },
+  { name: "per-tag mixed modes", qs: QS, drawCount: 4, bp: { strata: [{ tag: "A", count: 1, mode: "exact" }, { tag: "B", count: 1, mode: "min" }] } },
+  { name: "shortfall warning", qs: QS, drawCount: 6, bp: { strata: [{ tag: "A", count: 5 }] } },
+  { name: "case-insensitive tag match", qs: [q("1", "Финансы"), q("2", " финансы "), q("3", "Прочее")], drawCount: 3, bp: { strata: [{ tag: "финансы", count: 2 }] } },
 ];
 
 describe("stratified draw — TS ↔ JS port parity", () => {

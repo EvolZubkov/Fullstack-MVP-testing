@@ -22,6 +22,7 @@
  */
 
 import type { DrawBlueprint, DrawStratum } from "../schema";
+import { tagKey } from "../tags";
 
 /** A question the draw can see — only id and tags matter for selection. */
 export interface DrawableQuestion {
@@ -43,9 +44,9 @@ export interface DrawResult<Q> {
 
 export type ShuffleFn = <T>(arr: T[]) => T[];
 
-/** Effective mode of a stratum given the blueprint granularity (FR-03b). */
-function effectiveMode(blueprint: DrawBlueprint, stratum: DrawStratum): "exact" | "min" {
-  return blueprint.modeGranularity === "uniform" ? blueprint.mode : stratum.mode ?? "exact";
+/** Effective mode of a stratum — per-tag, defaulting to "exact" (FR-03b). */
+function effectiveMode(stratum: DrawStratum): "exact" | "min" {
+  return stratum.mode ?? "exact";
 }
 
 /**
@@ -65,14 +66,20 @@ export function drawSection<Q extends DrawableQuestion>(
   const selected: Q[] = [];
   const used: Record<string, boolean> = {};
   const warnings: DrawWarning[] = [];
-  const hasTag = (q: Q, tag: string) => Array.isArray(q.tags) && q.tags.indexOf(tag) !== -1;
-  const exactTags = new Set(
-    blueprint.strata.filter((s) => effectiveMode(blueprint, s) === "exact").map((s) => s.tag),
+  // Match case-insensitively on the normalized tag key (PRD-11 §3a): precompute
+  // each question's key set so "Финансы" on a question matches "финансы" in a quota.
+  const keysOf = (q: Q): string[] => (Array.isArray(q.tags) ? q.tags.map(tagKey) : []);
+  const qKeys = new Map<string, string[]>();
+  for (const q of questions) qKeys.set(q.id, keysOf(q));
+  const hasTag = (q: Q, key: string) => (qKeys.get(q.id) ?? []).indexOf(key) !== -1;
+  const exactKeys = new Set(
+    blueprint.strata.filter((s) => effectiveMode(s) === "exact").map((s) => tagKey(s.tag)),
   );
 
   // Step 1: take `count` questions per stratum, in order, sharing `used` (FR-04).
   for (const stratum of blueprint.strata) {
-    const pool = questions.filter((q) => !used[q.id] && hasTag(q, stratum.tag));
+    const stratumKey = tagKey(stratum.tag);
+    const pool = questions.filter((q) => !used[q.id] && hasTag(q, stratumKey));
     const take = shuffle(pool.slice()).slice(0, stratum.count);
     if (take.length < stratum.count) {
       warnings.push({ tag: stratum.tag, requested: stratum.count, available: take.length });
@@ -89,7 +96,7 @@ export function drawSection<Q extends DrawableQuestion>(
   const remainder = drawCount - selected.length;
   if (remainder > 0) {
     const free = questions.filter(
-      (q) => !used[q.id] && !(Array.isArray(q.tags) && q.tags.some((t) => exactTags.has(t))),
+      (q) => !used[q.id] && !(qKeys.get(q.id) ?? []).some((k) => exactKeys.has(k)),
     );
     for (const q of shuffle(free.slice()).slice(0, remainder)) {
       used[q.id] = true;
