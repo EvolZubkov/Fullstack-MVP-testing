@@ -157,9 +157,54 @@ var RetakeGate = (function () {
     return m ? (m[3] + '.' + m[2] + '.' + m[1]) : iso;
   }
 
-  function renderBlockWall(retake, td) {
-    var el = appEl();
-    if (!el) return;
+  // The block page is a SYSTEM PAGE of the design template (PRD-6 §4.4): the gate
+  // renders the template's `system.blocked` layout and fills `retake.*` via the
+  // shared path-DSL. The template manifest/layouts are NOT loaded yet at gate time
+  // (loadDesignTemplate runs inside runCourse, which the blocked path never reaches),
+  // so the gate loads them itself — a pure fetch of package-local files that does NOT
+  // touch SCORM, so NFR-01/02 (no Initialize before the gate decides) still holds.
+  function ensureTemplate() {
+    var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
+    if (layouts) return Promise.resolve(layouts);
+    if (typeof loadDesignTemplate === 'function') {
+      return loadDesignTemplate()
+        .then(function () { return (typeof state !== 'undefined' && state) ? state.templateLayouts : null; })
+        .catch(function () { return null; });
+    }
+    return Promise.resolve(null);
+  }
+
+  function blockedLayoutKey(td) {
+    var rp = td && td.retakePolicy;
+    return (rp && rp.blockedPageId) || 'system.blocked';
+  }
+
+  function tbInternal() {
+    var tb = (typeof window !== 'undefined' && window.TestBuilder) ||
+      (typeof TestBuilder !== 'undefined' ? TestBuilder : null);
+    return (tb && tb._internal) || null;
+  }
+
+  function setShown(node, shown) {
+    if (node) node.style.display = shown ? '' : 'none';
+  }
+
+  // Toggle the layout's `data-retake-branch` blocks to the relevant message:
+  // cooldown (default) or error (failClosed). The unused `availableDate` line is
+  // hidden when the plugin could not report a next-available date.
+  function applyBlockBranches(el, retake) {
+    var isError = !!(retake && retake.reason === 'plugin_error_fail_closed');
+    setShown(el.querySelector('[data-retake-branch="default"]'), false);
+    setShown(el.querySelector('[data-retake-branch="cooldown"]'), !isError);
+    setShown(el.querySelector('[data-retake-branch="error"]'), isError);
+    if (!isError && !(retake && retake.availableDate)) {
+      setShown(el.querySelector('[data-retake-available]'), false);
+    }
+  }
+
+  // Fallback wall used only when the template carries no `system.blocked` layout
+  // (e.g. a template without it) so the learner never sees a blank screen.
+  function renderBlockWallBuiltin(retake, el) {
     var avail = retake.availableDate ? fmtDateHuman(retake.availableDate) : null;
     var errorNote = retake.reason === 'plugin_error_fail_closed'
       ? '<p class="retake-wall__note">Не удалось проверить доступ. Обратитесь к администратору курса.</p>'
@@ -173,6 +218,26 @@ var RetakeGate = (function () {
       (avail ? '<p class="retake-wall__date">Повторный запуск будет доступен с <strong>' + esc(avail) + '</strong>.</p>' : '') +
       errorNote +
       '</div></div>';
+  }
+
+  function renderBlockWall(retake, td) {
+    var el = appEl();
+    if (!el) return;
+    ensureTemplate().then(function (layouts) {
+      var html = layouts && layouts[blockedLayoutKey(td)];
+      if (!html) { renderBlockWallBuiltin(retake, el); return; }
+      el.innerHTML = html;
+      var view = {
+        retake: {
+          cooldownPeriodDays: retake.cooldownPeriodDays,
+          availableDate: retake.availableDate,
+          availableDateHuman: retake.availableDate ? fmtDateHuman(retake.availableDate) : ''
+        }
+      };
+      var internal = tbInternal();
+      if (internal && internal.renderPathOnlyDsl) internal.renderPathOnlyDsl(el, view);
+      applyBlockBranches(el, retake);
+    });
   }
 
   function renderStartShell(retake, td, onStart) {

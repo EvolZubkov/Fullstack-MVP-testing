@@ -1,7 +1,18 @@
 <div class="layout-blocked-wrap">
-  <div class="card blocked-card">
+  <div class="card blocked-card" data-testid="retake-wall">
     <div class="blocked-icon" role="img" aria-label="Заблокировано">&#128274;</div>
-    <h1 class="blocked-title">Доступ ограничен</h1>
-    <p class="blocked-description">Для этого теста больше нет доступных попыток.</p>
+    <div data-retake-branch="default">
+      <h1 class="blocked-title">Доступ ограничен</h1>
+      <p class="blocked-description">Для этого теста больше нет доступных попыток.</p>
+    </div>
+    <div data-retake-branch="cooldown" hidden>
+      <h1 class="blocked-title">Повторное прохождение пока недоступно</h1>
+      <p class="blocked-description">Этот курс можно проходить не чаще, чем раз в <span data-path="retake.cooldownPeriodDays">&mdash;</span> дн.</p>
+      <p class="blocked-description" data-retake-available>Повторный запуск будет доступен с <strong data-path="retake.availableDateHuman">&mdash;</strong>.</p>
+    </div>
+    <div data-retake-branch="error" hidden>
+      <h1 class="blocked-title">Не удалось проверить доступ</h1>
+      <p class="blocked-description">Не удалось проверить доступность повторного прохождения. Обратитесь к администратору курса.</p>
+    </div>
   </div>
 </div>

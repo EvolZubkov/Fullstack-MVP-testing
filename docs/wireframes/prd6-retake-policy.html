@@ -10,8 +10,9 @@
       1) Блок «Повторное прохождение» во вкладке «Настройки» редактора теста
          (client/.../editor/sections/basic-settings-section.tsx — rail-пейн, ui-kit).
       2) Учащийся: экран блокировки (block-wall) внутри SCORM-пакета.
-    Phase 1: реестр плагинов сидируется в коде; режим квоты — на тег; страница
-    блокировки = встроенный рантайм-экран (без content-page связки).
+    Phase 1: реестр плагинов сидируется в коде; страница блокировки =
+    системная страница шаблона (layout system.blocked), retake.* заполняется
+    через path-DSL; встроенный экран остаётся только как фолбэк.
     Состояния:
       s-off            — гейт выключен (легаси-поведение)
       s-on-webtutor    — включён, плагин WebTutor cooldown + превью даты
@@ -179,7 +180,7 @@
           </div>
 
           <div class="ou-formfield">
-            <div class="ou-formfield__msg"><svg class="wf-ico-inline" width="13" height="13"><use href="#i-info" /></svg> Экран блокировки — встроенный (с датой следующего доступа). Плагин WebTutor: версия 1.0.0.</div>
+            <div class="ou-formfield__msg"><svg class="wf-ico-inline" width="13" height="13"><use href="#i-info" /></svg> Экран блокировки — системная страница шаблона (layout system.blocked), с датой следующего доступа. Плагин WebTutor: версия 1.0.0.</div>
           </div>
         </div>
       </div>
@@ -290,7 +291,7 @@
           <tbody>
             <tr><td>Переключатель состояний</td><td><code>showState(btn, id)</code>, тоглы темы/плотности</td><td>Каркас эскиза; в продукте отсутствует</td></tr>
             <tr><td>Поверхность 1</td><td>вкладка «Настройки» → пейн «Повторное прохождение»</td><td><code>basic-settings-section.tsx</code> (ui-kit, rail-пейн как «Ограничения»/«Интеграция»)</td></tr>
-            <tr><td>Поверхность 2</td><td>экран блокировки в SCORM-пакете</td><td>Встроенный рантайм-экран (D3): без связки с content-pages; читает <code>retake.*</code></td></tr>
+            <tr><td>Поверхность 2</td><td>экран блокировки в SCORM-пакете</td><td>Системная страница шаблона — layout <code>system.blocked</code> (ветки cooldown/error/default); гейт заполняет <code>retake.*</code> через path-DSL; встроенный экран — фолбэк</td></tr>
             <tr><td>Свич «Ограничить…»</td><td><code>retakePolicy.enabled</code></td><td>Выкл = легаси-поведение (FR-02, allowed=true)</td></tr>
             <tr><td>Период охлаждения</td><td><code>cooldownPeriodDays</code> (1–3650)</td><td>Календарные дни; <code>allowed = (today − last) ≥ days</code></td></tr>
             <tr><td>Плагин</td><td><code>eligibilityPlugin.key</code></td><td>Select из активного реестра (Phase 1 — сидируется в коде): webtutor_cooldown / suspend_data_cooldown</td></tr>
