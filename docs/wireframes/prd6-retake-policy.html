@@ -30,7 +30,10 @@
     <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
     <style>
       .wf-sprite { display: none; }
-      /* wf-utils renders the .ou-select fallback menu inline — keep it closed in the sketch. */
+      /* Neutralize the legacy .ou-select fallback in wf-utils.css (its own
+         border/padding/bg) so only the DS .ou-select__trigger border shows —
+         otherwise the trigger renders a double frame in the sketch. */
+      .ou-select { padding: 0; border: 0; background: transparent; line-height: inherit; border-radius: 0; }
       .ou-select:not(.is-open) .ou-select__menu { display: none; }
       .wf-pane { max-width: var(--wf-size-560, 560px); }
       .wf-stack { display: flex; flex-direction: column; gap: var(--ou-space-4); }
