@@ -43,27 +43,25 @@ export const ELIGIBILITY_PLUGINS: EligibilityPluginEntry[] = [
     bestEffort: false,
     configs: [
       {
-        id: "webtutor_catalog_default",
-        name: "Основной каталог",
+        id: "webtutor_clientbridge_rt",
+        name: "Ростелеком · ClientBridge (карточка курса)",
         version: "1.0.0",
         isActive: true,
+        // Confirmed against the live RT portal (university.rt.ru): the completion
+        // date is served by the ClientBridge `get_metadata` SOAP of the course
+        // card. SECID is scraped from the course page; object_id from the launch
+        // context. form_url / parent_template_id are portal-specific (admin-tuned).
         config: {
-          sessionIdSource: "url.search.session_id",
-          collectionEndpoint: "/pp/Ext5/extjs_json_collection_data.html",
-          collectionCode: "rostelecom_catalog_data_grid",
-          parametersTemplate:
-            "cur_person_id={{personId}};sSearchWord=;sRoles=all;iCount=;sCatalogName=learning",
-          courseSearchName: "{{test.title}}",
-          limit: 500,
-          attemptFilter: {
-            stateField: "state",
-            stateIn: ["Завершен", "Завершён", "Пройден"],
-            excludeStateIn: ["Не начат"],
-            progressField: "progress",
-            progressCompletePattern: "^100\\b",
-            dateField: "last_usage_date",
-            dateFormat: "dd.MM.yyyy",
-          },
+          source: "client_bridge_metadata",
+          endpoint: "/services/ClientBridgeService",
+          soapAction: "http://www.datex-soft.com/get_metadata",
+          formUrl: "6691716539494374357",
+          parentTemplateId: "6691717076983772556",
+          coursePageUrlTemplate: "/view_doc.html?mode=course&object_id={{oid}}",
+          secidPattern: "[A-F0-9]{32}",
+          objectIdPatterns: ["object_id=(\\d{6,})", "_wt/course/(\\d{6,})", "cplayer2/(\\d{6,})"],
+          completionMarker: "best_learn_step_success",
+          dateFormat: "dd.MM.yyyy",
         },
       },
     ],

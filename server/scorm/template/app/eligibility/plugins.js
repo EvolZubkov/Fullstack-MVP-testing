@@ -71,10 +71,39 @@ var EligibilityPlugins = (function () {
     return cooldownResult(lastCompletedDate, context, 'suspend_data_cooldown');
   }
 
+  function cooldownDecideFromDate(lastAttemptDate, context, source) {
+    return cooldownResult(lastAttemptDate, context, source);
+  }
+
+  function unescapeXml(s) {
+    return String(s || '')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+      .replace(/&#10;/g, ' ').replace(/&#9;/g, ' ').replace(/&amp;/g, '&');
+  }
+
+  function extractSecid(text, pattern) {
+    var m = new RegExp(pattern || '[A-F0-9]{32}').exec(String(text || ''));
+    return m ? m[0] : null;
+  }
+
+  function extractCourseCompletionDate(responseText, opts) {
+    opts = opts || {};
+    var text = unescapeXml(responseText);
+    var marker = opts.completionMarker || 'best_learn_step_success';
+    var at = text.indexOf(marker);
+    if (at < 0) return null;
+    var m = /(\d{1,2}\.\d{1,2}\.\d{4})/.exec(text.slice(at, at + 600));
+    return m ? parseFlexibleDate(m[1], opts.dateFormat || 'dd.MM.yyyy') : null;
+  }
+
   return {
     parseFlexibleDate: parseFlexibleDate,
     selectLastAttemptDate: selectLastAttemptDate,
     webtutorCooldownDecide: webtutorCooldownDecide,
-    suspendDataCooldownDecide: suspendDataCooldownDecide
+    suspendDataCooldownDecide: suspendDataCooldownDecide,
+    cooldownDecideFromDate: cooldownDecideFromDate,
+    unescapeXml: unescapeXml,
+    extractSecid: extractSecid,
+    extractCourseCompletionDate: extractCourseCompletionDate
   };
 })();

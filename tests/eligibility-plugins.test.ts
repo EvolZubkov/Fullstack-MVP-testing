@@ -10,6 +10,8 @@ import {
   selectLastAttemptDate,
   webtutorCooldownDecide,
   suspendDataCooldownDecide,
+  extractCourseCompletionDate,
+  extractSecid,
   type WebtutorAttemptFilter,
 } from "../shared/eligibility/plugins";
 import type { EligibilityContext } from "../shared/eligibility/types";
@@ -78,6 +80,27 @@ describe("webtutorCooldownDecide", () => {
     expect(r.allowed).toBe(true);
     expect(r.reason).toBe("no_prior_attempt");
     expect(r.availableDate).toBeNull();
+  });
+});
+
+describe("ClientBridge parse (PRD-6 webtutor source — confirmed on live RT portal)", () => {
+  const soap =
+    '<result>&lt;Label Class="XAML-block-best_learn_step_success"&gt;Курс был пройден&lt;/Label&gt;' +
+    '&lt;Button Class="XAML-block-best_learn_step"&gt;08.05.2026 &amp;rarr;&lt;/Button&gt;</result>';
+
+  it("extracts the completion date after the «пройден» marker", () => {
+    expect(extractCourseCompletionDate(soap)).toBe("2026-05-08");
+  });
+
+  it("returns null when there is no completion block (course not passed => allowed)", () => {
+    expect(extractCourseCompletionDate("<result>&lt;SPXMLScreen&gt;&lt;/SPXMLScreen&gt;</result>")).toBeNull();
+  });
+
+  it("scrapes a 32-hex SECID from the course card", () => {
+    expect(extractSecid('<div data-secid="90B9DA0B3BFE7DFB94CC23DACDEA27CD">x</div>')).toBe(
+      "90B9DA0B3BFE7DFB94CC23DACDEA27CD",
+    );
+    expect(extractSecid("no token here")).toBeNull();
   });
 });
 

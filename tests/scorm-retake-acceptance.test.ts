@@ -76,7 +76,7 @@ describe("SCORM package — PRD-6 retake policy export", () => {
         enabled: true,
         cooldownPeriodDays: 30,
         gateMode: "before_internal_start",
-        eligibilityPlugin: { key: "webtutor_cooldown", configId: "webtutor_catalog_default", failPolicy: "failOpen" },
+        eligibilityPlugin: { key: "webtutor_cooldown", configId: "webtutor_clientbridge_rt", failPolicy: "failOpen" },
         completionReportMode: "scored",
       },
       "retake-on",
@@ -87,8 +87,11 @@ describe("SCORM package — PRD-6 retake policy export", () => {
       eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
     });
     expect(td.retakePlugin).toMatchObject({ key: "webtutor_cooldown", runtimeEntry: "webtutorCooldown" });
-    // The resolved config carries the attempt filter the runtime needs.
-    expect((td.retakePlugin.config as any).attemptFilter.dateField).toBe("last_usage_date");
+    // The resolved config carries the live ClientBridge source the runtime needs.
+    const cfg = td.retakePlugin.config as Record<string, unknown>;
+    expect(cfg.source).toBe("client_bridge_metadata");
+    expect(cfg.endpoint).toBe("/services/ClientBridgeService");
+    expect(cfg.completionMarker).toBe("best_learn_step_success");
   });
 
   it("omits retakePolicy/retakePlugin when no policy is set (FR-02)", async () => {

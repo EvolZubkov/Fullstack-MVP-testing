@@ -109,4 +109,21 @@ describe("eligibility engine — TS ↔ JS port parity", () => {
       );
     }
   });
+
+  it("ClientBridge parse (extractCourseCompletionDate / extractSecid / unescapeXml) matches", () => {
+    const soap =
+      '<result>&lt;Label Class="XAML-block-best_learn_step_success"&gt;Курс был пройден&lt;/Label&gt;' +
+      '&lt;Button&gt;08.05.2026 &amp;rarr;&lt;/Button&gt;</result>';
+    expect(port.EligibilityPlugins.extractCourseCompletionDate(soap, {})).toEqual(
+      tsPlugins.extractCourseCompletionDate(soap, {}),
+    );
+    expect(port.EligibilityPlugins.extractCourseCompletionDate("<result>nope</result>", {})).toEqual(
+      tsPlugins.extractCourseCompletionDate("<result>nope</result>", {}),
+    );
+    const card = 'x 90B9DA0B3BFE7DFB94CC23DACDEA27CD y';
+    expect(port.EligibilityPlugins.extractSecid(card)).toEqual(tsPlugins.extractSecid(card));
+    expect(port.EligibilityPlugins.unescapeXml("&lt;a&gt;&amp;&#10;b")).toEqual(
+      tsPlugins.unescapeXml("&lt;a&gt;&amp;&#10;b"),
+    );
+  });
 });

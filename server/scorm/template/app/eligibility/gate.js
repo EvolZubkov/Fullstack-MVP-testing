@@ -43,33 +43,72 @@ var RetakeGate = (function () {
     };
   }
 
-  function extractRecords(json) {
-    if (Array.isArray(json)) return json;
-    if (!json || typeof json !== 'object') return [];
-    return json.data || json.rows || json.records || json.items || [];
+  // Resolve the WebTutor course object_id from the launch context (confirmed on
+  // the live portal: present in the course-card referer / launch path).
+  function resolveObjectId(config) {
+    var pats = config.objectIdPatterns || ['object_id=(\\d{6,})', '_wt/course/(\\d{6,})', 'cplayer2/(\\d{6,})'];
+    function safeUrl(getter) { try { return getter() || ''; } catch (e) { return ''; } }
+    // Our SCO runs nested inside WebTutor's cplayer2; object_id lives in the
+    // parent/top URL (confirmed on the live portal across ≥2 modules), and the
+    // frames are same-origin, so top/parent.location are readable.
+    var sources = [
+      typeof location !== 'undefined' ? location.href : '',
+      typeof document !== 'undefined' ? document.referrer : '',
+      safeUrl(function () { return window.top.location.href; }),
+      safeUrl(function () { return window.parent.location.href; })
+    ];
+    for (var i = 0; i < sources.length; i++) {
+      for (var j = 0; j < pats.length; j++) {
+        var m = new RegExp(pats[j]).exec(sources[i] || '');
+        if (m) return m[1];
+      }
+    }
+    return config.objectIdFallback || null;
   }
 
-  function resolveTemplate(tpl, ctx) {
-    return String(tpl == null ? '' : tpl).replace(/\{\{\s*test\.title\s*\}\}/g, ctx.test.title);
-  }
-
-  // webtutor_cooldown adapter — fetch course records, decide by cooldown. The
-  // endpoint is configurable (PRD-6 §4.2); the local scorm-player WebTutor mock
-  // answers it for verification.
+  // webtutor_cooldown adapter — confirmed against the live RT portal. The course
+  // completion date is NOT in SCORM (no adl.data) and NOT in server HTML; it is
+  // served by the ClientBridge `get_metadata` SOAP (the course-card screen), which
+  // needs a per-page SECID scraped from the course card. So the gate, same-origin
+  // with the learner session: (1) GET course card -> scrape SECID; (2) POST SOAP
+  // get_metadata{form_url, wsparams(object_id, SECID)}; (3) parse «Курс был пройден
+  // ДД.ММ.ГГГГ». All endpoints/markers are admin-config (PRD-6 §4.2/NFR-03); the
+  // local scorm-player mock answers both calls for verification.
   function webtutorEvaluate(ctx, config) {
-    var endpoint = config.collectionEndpoint || '';
-    var params = [];
-    if (config.collectionCode) params.push('code=' + encodeURIComponent(config.collectionCode));
-    if (config.courseSearchName) params.push('search=' + encodeURIComponent(resolveTemplate(config.courseSearchName, ctx)));
-    if (config.limit) params.push('limit=' + encodeURIComponent(config.limit));
-    var url = endpoint + (endpoint.indexOf('?') === -1 ? '?' : '&') + params.join('&');
-    return fetch(url, { credentials: 'include', headers: { 'Accept': 'application/json' } })
+    var oid = resolveObjectId(config);
+    if (!oid) return Promise.reject(new Error('object_id_not_resolved'));
+    var origin = typeof location !== 'undefined' ? location.origin : '';
+    var coursePageUrl = (config.coursePageUrlTemplate || '/view_doc.html?mode=course&object_id={{oid}}').replace(/\{\{oid\}\}/g, oid);
+    return fetch(coursePageUrl, { credentials: 'include' })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var secid = EligibilityPlugins.extractSecid(html, config.secidPattern);
+        if (!secid) throw new Error('secid_not_found');
+        var ws = 'PAGEURL=' + encodeURIComponent(origin + '/_wt/course/' + oid)
+          + '&REQUESTURL=' + encodeURIComponent(origin + '/view_doc.html?mode=course&object_id=' + oid)
+          + '&CLIENTWINDOWSIZE=1000,800&SECID=' + secid
+          + '&sysparam=&parent_template_id=' + (config.parentTemplateId || '') + '&playerid=extjs5';
+        var soap = '<?xml version="1.0" encoding="utf-8"?>'
+          + '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>'
+          + '<get_metadata xmlns="http://www.datex-soft.com/"><form_url>' + (config.formUrl || '') + '</form_url>'
+          + '<wsparams>' + ws.replace(/&/g, '&amp;') + '</wsparams></get_metadata></soap:Body></soap:Envelope>';
+        return fetch(config.endpoint || '/services/ClientBridgeService', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'text/xml; charset=UTF-8', 'SOAPAction': config.soapAction || 'http://www.datex-soft.com/get_metadata' },
+          body: soap
+        });
+      })
       .then(function (r) {
         if (!r.ok) throw new Error('webtutor_http_' + r.status);
-        return r.json();
+        return r.text();
       })
-      .then(function (json) {
-        return EligibilityPlugins.webtutorCooldownDecide(extractRecords(json), config.attemptFilter || {}, ctx);
+      .then(function (xml) {
+        var date = EligibilityPlugins.extractCourseCompletionDate(xml, {
+          completionMarker: config.completionMarker,
+          dateFormat: config.dateFormat
+        });
+        return EligibilityPlugins.cooldownDecideFromDate(date, ctx, 'webtutor_cooldown');
       });
   }
 

@@ -131,3 +131,47 @@ export function suspendDataCooldownDecide(
 ): EligibilityResult {
   return cooldownResult(lastCompletedDate, context, "suspend_data_cooldown");
 }
+
+/** Cooldown decision from an already-resolved last-attempt date, any source. */
+export function cooldownDecideFromDate(
+  lastAttemptDate: string | null,
+  context: EligibilityContext,
+  source: string,
+): EligibilityResult {
+  return cooldownResult(lastAttemptDate, context, source);
+}
+
+/** Unescape the HTML/XML entities WebTutor uses inside its SOAP `<result>` XAML. */
+export function unescapeXml(s: string): string {
+  return String(s || "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#10;/g, " ")
+    .replace(/&#9;/g, " ")
+    .replace(/&amp;/g, "&");
+}
+
+/** First 32-hex SECID token in a page (PRD-6: scraped from the course card). */
+export function extractSecid(text: string, pattern?: string): string | null {
+  const m = new RegExp(pattern || "[A-F0-9]{32}").exec(String(text || ""));
+  return m ? m[0] : null;
+}
+
+/**
+ * Completion date from the WebTutor `get_metadata` response (the course-card
+ * XAML). Looks for the «Курс был пройден» block (`completionMarker`) and the
+ * date after it. Absence of the block = no prior completion => null (allowed).
+ */
+export function extractCourseCompletionDate(
+  responseText: string,
+  opts: { completionMarker?: string; dateFormat?: string } = {},
+): string | null {
+  const text = unescapeXml(responseText);
+  const marker = opts.completionMarker || "best_learn_step_success";
+  const at = text.indexOf(marker);
+  if (at < 0) return null;
+  const scope = text.slice(at, at + 600);
+  const m = /(\d{1,2}\.\d{1,2}\.\d{4})/.exec(scope);
+  return m ? parseFlexibleDate(m[1], opts.dateFormat || "dd.MM.yyyy") : null;
+}
