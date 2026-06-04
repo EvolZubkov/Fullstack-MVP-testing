@@ -809,6 +809,7 @@ export class DatabaseStorage implements IStorage {
       feedbackCorrect: question.feedbackCorrect || null,
       feedbackIncorrect: question.feedbackIncorrect || null,
       contentHash: question.contentHash || null,
+      tags: question.tags ?? [],
       scoringJson: question.scoringJson ?? null,
     }).returning();
     return newQuestion;
@@ -835,6 +836,7 @@ export class DatabaseStorage implements IStorage {
       mediaUrl: original.mediaUrl,
       mediaType: original.mediaType,
       shuffleAnswers: original.shuffleAnswers,
+      tags: original.tags,
       scoringJson: original.scoringJson,
     }).returning();
     return newQuestion;
@@ -882,6 +884,7 @@ export class DatabaseStorage implements IStorage {
         feedbackMode: q.feedbackMode,
         feedbackCorrect: q.feedbackCorrect,
         feedbackIncorrect: q.feedbackIncorrect,
+        tags: q.tags,
         scoringJson: q.scoringJson,
       }).returning();
       newQuestions.push(newQ);

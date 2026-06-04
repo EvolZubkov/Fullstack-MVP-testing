@@ -12,6 +12,7 @@ import { storage } from "../storage";
 import { requireAuth, requireAuthor } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
 import { questionScoringSchema, type QuestionScoring } from "@shared/schema";
+import { normalizeTags } from "@shared/tags";
 
 // PRD-10: validate the optional graded-scoring config (FR-13). Null/undefined =
 // exact match (default); a present config must satisfy questionScoringSchema.
@@ -64,6 +65,8 @@ interface CreateQuestionBody {
   feedbackCorrect?: string;
   feedbackIncorrect?: string;
   scoringJson?: QuestionScoring | null;
+  /** PRD-11 §3a: sub-topic tags; normalized on save (trim/collapse, dedup, cap). */
+  tags?: string[];
 }
 
 interface UpdateQuestionBody extends Partial<CreateQuestionBody> {}
@@ -140,6 +143,7 @@ router.post(
         feedbackCorrect,
         feedbackIncorrect,
         scoringJson,
+        tags,
       } = req.body;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
@@ -166,6 +170,7 @@ router.post(
         feedbackCorrect: feedbackCorrect || null,
         feedbackIncorrect: feedbackIncorrect || null,
         scoringJson: scoringJson ?? null,
+        tags: normalizeTags(Array.isArray(tags) ? tags : []),
       } as any);
 
       res.status(201).json(question);
@@ -200,6 +205,7 @@ router.put(
         feedbackCorrect,
         feedbackIncorrect,
         scoringJson,
+        tags,
       } = req.body as UpdateQuestionBody;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
@@ -222,6 +228,8 @@ router.put(
         feedbackCorrect,
         feedbackIncorrect,
         scoringJson,
+        // Only touch tags when the client sent them; otherwise leave unchanged.
+        tags: Array.isArray(tags) ? normalizeTags(tags) : undefined,
       } as any);
 
       if (!updated) {
