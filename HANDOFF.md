@@ -76,9 +76,11 @@ per-question `scoreRatio`/«Частично правильно» (FR-12).
 - Стадия 3 (экспорт): `buildTestJson` переносит `drawBlueprint` в рантайм-секцию УСЛОВНО (FR-02).
 
 `check`/`build` зелёные, `vitest` **1837**. Прим.: отбор `shuffle(...).slice(0,drawCount)` живёт в
-`server/scorm/assets/app.js` `generateVariant` (НЕ resultsPage). Дальше — **UI-стадия 4**
-(квота-редактор в теме), но сперва **эскиз квота-редактора (Стадия 0b, не создан)** + согласование.
-Ниже — исходный план дизайн-фазы.
+`server/scorm/assets/app.js` `generateVariant` (НЕ resultsPage). **Эскиз квота-редактора создан**
+(`docs/wireframes/prd11-draw-quotas.html`, 5 состояний, DS `ou-*`, выверен Playwright light/dark) и
+**на согласовании** — GATE для UI-стадии 4. После явного «ок» — перенести в `approved/` и делать
+Стадию 4 (UI квота-редактора во вкладке «Структура», state/init/reset/save как ScoringBuilder; форма
+на shadcn — решить при старте, как было с PRD-10 Стадией 4). Ниже — исходный план дизайн-фазы.
 
 Сделано в дизайн-фазе (документы):
 
