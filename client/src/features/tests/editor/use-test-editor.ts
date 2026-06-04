@@ -175,6 +175,7 @@ function tabOfField(field: string): EditorTabKey {
   if (field.startsWith("adaptive")) return "settings";
   if (field.startsWith("passRules")) return "settings";
   if (field.startsWith("runtime")) return "settings";
+  if (field.startsWith("retakePolicy")) return "settings";
   if (field.startsWith("basic")) return "settings";
   if (field.startsWith("design")) return "design";
   if (field.startsWith("flow") || field.startsWith("structure")) return "structure";
@@ -221,6 +222,7 @@ function diffDirtyTabs(
     !shallowEqualJson(draft.runtime, snapshot.runtime) ||
     !shallowEqualJson(draft.passRules, snapshot.passRules) ||
     !shallowEqualJson(draft.adaptive, snapshot.adaptive) ||
+    !shallowEqualJson(draft.retakePolicy, snapshot.retakePolicy) ||
     draft.mode !== snapshot.mode
   ) {
     dirty.add("settings");

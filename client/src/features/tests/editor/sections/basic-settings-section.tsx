@@ -18,6 +18,7 @@
  * section just renders inputs and reports changes.
  */
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import {
   Accordion,
@@ -35,6 +36,7 @@ import {
   Switch,
   Textarea,
 } from "@universityrt/ui-kit";
+import type { EligibilityPluginRef, RetakePolicy } from "@shared/schema";
 import {
   FeedbackEditorModal,
   type FeedbackEditorValue,
@@ -64,12 +66,19 @@ export type SettingsSectionProps = {
 /** Backwards-compatible alias: original skeleton lived under this name. */
 export type BasicSettingsSectionProps = SettingsSectionProps;
 
-type RailKey = "basic" | "pass-rules" | "limits" | "integration" | "adaptive";
+type RailKey =
+  | "basic"
+  | "pass-rules"
+  | "limits"
+  | "retake"
+  | "integration"
+  | "adaptive";
 
 const RAIL_ITEMS: { key: RailKey; label: string }[] = [
   { key: "basic", label: "Основное" },
   { key: "pass-rules", label: "Правила прохождения" },
   { key: "limits", label: "Ограничения" },
+  { key: "retake", label: "Повторное прохождение" },
   { key: "integration", label: "Интеграция" },
   { key: "adaptive", label: "Адаптивный режим" },
 ];
@@ -145,6 +154,9 @@ export function SettingsSection({ model, updateModel }: SettingsSectionProps) {
         )}
         {effectiveActive === "limits" && (
           <LimitsPane model={model} updateModel={updateModel} />
+        )}
+        {effectiveActive === "retake" && (
+          <RetakePane model={model} updateModel={updateModel} />
         )}
         {effectiveActive === "integration" && (
           <IntegrationPane model={model} updateModel={updateModel} />
@@ -496,6 +508,158 @@ function PerTopicLimitsBlock({ model, updateModel }: SettingsSectionProps) {
             })}
           </tbody>
         </table>
+      )}
+    </>
+  );
+}
+
+// ─── Sub-pane: Повторное прохождение (PRD-6) ──────────────────────────────────
+
+/** Active eligibility plugin as served by `/api/tests/:id/available-eligibility-plugins`. */
+type EligibilityPluginInfo = {
+  key: string;
+  name: string;
+  version: string;
+  description: string;
+  bestEffort: boolean;
+  configs: { id: string; name: string; version: string }[];
+};
+
+/**
+ * «Повторное прохождение» pane (PRD-6, wireframe `prd6-retake-policy.html`).
+ * Binds `model.retakePolicy`:
+ *   - Switch        → `enabled` (off = legacy behaviour, FR-02)
+ *   - NumberInput   → `cooldownPeriodDays` (1–3650 calendar days)
+ *   - Select        → `eligibilityPlugin.key` (active registry; one config per
+ *                     plugin auto-resolved server-side in Phase 1)
+ *   - SegmentedControl → `eligibilityPlugin.failPolicy` (failOpen / failClosed)
+ *
+ * The plugin list is global; we query it by `model.id` (the test scope is only
+ * for auth). A best-effort plugin (suspend_data) shows the reliability warning.
+ */
+function RetakePane({ model, updateModel }: SettingsSectionProps) {
+  const testId = model.id;
+  const { data } = useQuery<{ plugins: EligibilityPluginInfo[] }>({
+    queryKey: [`/api/tests/${testId}/available-eligibility-plugins`],
+    enabled: Boolean(testId),
+  });
+  const plugins = data?.plugins ?? [];
+
+  const policy = model.retakePolicy;
+  const enabled = policy.enabled;
+  const plugin = policy.eligibilityPlugin ?? null;
+  const currentKey = plugin?.key ?? "";
+  const defaultPluginKey = plugins[0]?.key ?? "webtutor_cooldown";
+  const selectedPlugin = plugins.find((p) => p.key === currentKey);
+  const isBestEffort =
+    selectedPlugin?.bestEffort ?? currentKey === "suspend_data_cooldown";
+
+  const setPolicy = (patch: Partial<RetakePolicy>) =>
+    updateModel((m) => ({ ...m, retakePolicy: { ...m.retakePolicy, ...patch } }));
+
+  const setPlugin = (patch: Partial<EligibilityPluginRef>) =>
+    updateModel((m) => {
+      const base: EligibilityPluginRef =
+        m.retakePolicy.eligibilityPlugin ?? { key: defaultPluginKey, failPolicy: "failOpen" };
+      return {
+        ...m,
+        retakePolicy: { ...m.retakePolicy, eligibilityPlugin: { ...base, ...patch } },
+      };
+    });
+
+  const pluginOptions = plugins.map((p) => ({ value: p.key, label: p.name }));
+  // Keep the saved key selectable even before the list loads / on an unsaved test.
+  if (currentKey && !pluginOptions.some((o) => o.value === currentKey)) {
+    pluginOptions.unshift({ value: currentKey, label: currentKey });
+  }
+
+  return (
+    <>
+      <div className="ou-formfield">
+        <Switch
+          label="Ограничить повторное прохождение"
+          description={
+            enabled
+              ? "Допуск проверяется до старта курса."
+              : "Выключено — учащийся может перезапускать курс без ограничений (как сейчас)."
+          }
+          checked={enabled}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => {
+              const next: RetakePolicy = { ...m.retakePolicy, enabled: checked };
+              // Enabling with no plugin yet → seed the first active plugin so the
+              // Select is never empty (wireframe s-on-webtutor).
+              if (checked && !next.eligibilityPlugin) {
+                next.eligibilityPlugin = { key: defaultPluginKey, failPolicy: "failOpen" };
+              }
+              return { ...m, retakePolicy: next };
+            });
+          }}
+          data-testid="settings-retake-switch"
+        />
+      </div>
+
+      {enabled && (
+        <>
+          <div className="ou-formfield">
+            <NumberInput
+              id="settings-retake-cooldown"
+              size="m"
+              label="Период охлаждения, календарных дней"
+              hint="От 1 до 3650 дней."
+              value={policy.cooldownPeriodDays}
+              min={1}
+              max={3650}
+              data-testid="settings-retake-cooldown-input"
+              onChange={(next) =>
+                setPolicy({ cooldownPeriodDays: Math.min(3650, Math.max(1, next || 1)) })
+              }
+            />
+          </div>
+
+          <div className="ou-formfield">
+            <Select<string>
+              id="settings-retake-plugin"
+              size="m"
+              fullWidth
+              label="Способ проверки (плагин)"
+              value={currentKey}
+              options={pluginOptions}
+              onChange={(value) => setPlugin({ key: value })}
+              data-testid="settings-retake-plugin"
+            />
+          </div>
+
+          {isBestEffort && (
+            <Banner
+              tone="warning"
+              size="sm"
+              description="Надёжно работает только в пределах одной регистрации курса в LMS. Для строгого ограничения между новыми попытками используйте проверку через WebTutor."
+              data-testid="settings-retake-besteffort-warning"
+            />
+          )}
+
+          <div
+            className="ou-formfield"
+            data-testid="settings-retake-failpolicy-group"
+          >
+            <label className="ou-formfield__lbl">При ошибке проверки допуска</label>
+            <SegmentedControl<"failOpen" | "failClosed">
+              size="m"
+              aria-label="Политика при ошибке проверки допуска"
+              value={plugin?.failPolicy ?? "failOpen"}
+              items={[
+                { value: "failOpen", label: "Разрешить старт" },
+                { value: "failClosed", label: "Заблокировать" },
+              ]}
+              onChange={(value) => setPlugin({ failPolicy: value })}
+            />
+            <div className="ou-formfield__desc">
+              Если проверку не удалось выполнить — открыть курс или показать экран блокировки.
+            </div>
+          </div>
+        </>
       )}
     </>
   );

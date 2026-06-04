@@ -17,6 +17,7 @@
 import { describe, expect, it } from "vitest";
 import {
   apiToEditorModel,
+  defaultRetakePolicy,
   editorModelToPayload,
   mapEditorAdaptiveToPayload,
   mapEditorSectionsToPayload,
@@ -88,6 +89,7 @@ function makeStandardModel(overrides: Partial<TestEditorModel> = {}): TestEditor
       testSettings: { showDifficultyLevel: true },
       topics: [],
     },
+    retakePolicy: defaultRetakePolicy(),
     ...overrides,
   };
 }
@@ -434,6 +436,7 @@ describe("7. editorModelToPayload — create standard", () => {
       },
       sections: [],
       adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
+      retakePolicy: defaultRetakePolicy(),
     };
 
     const payload = editorModelToPayload(model);
@@ -690,5 +693,74 @@ describe("PRD-4 v1.1 L4: apiToEditorModel auto-fixes (adaptive, linear_flat) →
     };
     const model = apiToEditorModel(api);
     expect(model.flowMode).toBe("router_by_topics");
+  });
+});
+
+// ─── PRD-6 retake policy round-trip ───────────────────────────────────────────
+
+describe("PRD-6 — retakePolicy mapping", () => {
+  it("defaults to a disabled policy when retakePolicyJson is absent", () => {
+    const model = makeStandardModel();
+    const fresh = apiToEditorModel({ id: "t", mode: "standard", sections: [] });
+    expect(fresh.retakePolicy.enabled).toBe(false);
+    expect(model.retakePolicy.enabled).toBe(false);
+  });
+
+  it("reads an enabled policy with plugin + failPolicy from the API", () => {
+    const model = apiToEditorModel({
+      id: "t",
+      mode: "standard",
+      sections: [],
+      retakePolicyJson: {
+        enabled: true,
+        cooldownPeriodDays: 45,
+        eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failClosed" },
+      },
+    });
+    expect(model.retakePolicy.enabled).toBe(true);
+    expect(model.retakePolicy.cooldownPeriodDays).toBe(45);
+    expect(model.retakePolicy.eligibilityPlugin).toMatchObject({
+      key: "webtutor_cooldown",
+      failPolicy: "failClosed",
+    });
+  });
+
+  it("normalizes the legacy cooldownDays alias and clamps out-of-range days", () => {
+    const legacy = apiToEditorModel({
+      id: "t",
+      mode: "standard",
+      sections: [],
+      retakePolicyJson: { enabled: true, cooldownDays: 14 },
+    });
+    expect(legacy.retakePolicy.cooldownPeriodDays).toBe(14);
+
+    const clamped = apiToEditorModel({
+      id: "t",
+      mode: "standard",
+      sections: [],
+      retakePolicyJson: { enabled: true, cooldownPeriodDays: 99999 },
+    });
+    expect(clamped.retakePolicy.cooldownPeriodDays).toBe(3650);
+  });
+
+  it("persists null when disabled (FR-02) and the full object when enabled", () => {
+    const off = editorModelToPayload(makeStandardModel());
+    expect(off.retakePolicyJson).toBeNull();
+
+    const on = editorModelToPayload(
+      makeStandardModel({
+        retakePolicy: {
+          enabled: true,
+          cooldownPeriodDays: 30,
+          gateMode: "before_internal_start",
+          eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
+        },
+      }),
+    );
+    expect(on.retakePolicyJson).toMatchObject({
+      enabled: true,
+      cooldownPeriodDays: 30,
+      eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" },
+    });
   });
 });

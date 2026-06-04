@@ -18,7 +18,7 @@
  *   - §6.8  empty `description`/`webhookUrl` normalised to `null`
  *   - FR-25h adaptive payload excluded when `mode === "standard"`
  */
-import type { DrawBlueprint } from "@shared/schema";
+import type { DrawBlueprint, EligibilityPluginRef, RetakePolicy } from "@shared/schema";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
@@ -82,6 +82,7 @@ export type ApiTestResponse = {
   folderId?: string | null;
   sections?: unknown[];
   adaptiveSettings?: unknown;
+  retakePolicyJson?: unknown;
 };
 
 // ─── Type guards ──────────────────────────────────────────────────────────────
@@ -617,6 +618,59 @@ function buildMeasurementsFromApi(src: ApiTestResponse, scales: ScaleModel[]): Q
   return out;
 }
 
+/** Clamp a cooldown value into the schema-valid `[1, 3650]` integer range. */
+function clampCooldown(value: number): number {
+  return Math.min(3650, Math.max(1, Math.round(value)));
+}
+
+/** Default (disabled) retake policy — legacy behaviour, no cooldown (PRD-6 FR-02). */
+export function defaultRetakePolicy(): RetakePolicy {
+  return {
+    enabled: false,
+    cooldownPeriodDays: 30,
+    gateMode: "before_internal_start",
+    eligibilityPlugin: null,
+  };
+}
+
+/**
+ * Normalize `tests.retake_policy_json` into the editor's {@link RetakePolicy}.
+ * Tolerates the legacy `cooldownDays` alias and missing/partial fields; an
+ * absent/!object value yields the disabled default (PRD-6 FR-02).
+ */
+function readRetakePolicyFromApi(api: ApiTestResponse): RetakePolicy {
+  const raw = api.retakePolicyJson;
+  if (!isPlainObject(raw)) return defaultRetakePolicy();
+  const r = raw as Record<string, unknown>;
+
+  const cooldownRaw =
+    typeof r.cooldownPeriodDays === "number"
+      ? r.cooldownPeriodDays
+      : typeof r.cooldownDays === "number"
+        ? r.cooldownDays
+        : 30;
+
+  let eligibilityPlugin: EligibilityPluginRef | null = null;
+  if (isPlainObject(r.eligibilityPlugin)) {
+    const p = r.eligibilityPlugin as Record<string, unknown>;
+    if (typeof p.key === "string" && p.key) {
+      eligibilityPlugin = {
+        key: p.key,
+        ...(typeof p.configId === "string" ? { configId: p.configId } : {}),
+        failPolicy: p.failPolicy === "failClosed" ? "failClosed" : "failOpen",
+      };
+    }
+  }
+
+  return {
+    enabled: r.enabled === true,
+    cooldownPeriodDays: clampCooldown(cooldownRaw),
+    gateMode: "before_internal_start",
+    eligibilityPlugin,
+    ...(typeof r.blockedPageId === "string" ? { blockedPageId: r.blockedPageId } : {}),
+  };
+}
+
 export function emptyEditorModel(args: { folderId: string | null }): TestEditorModel {
   return {
     version: 0,
@@ -653,6 +707,7 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
     resultVariables: [],
     scales: [],
     measurements: [],
+    retakePolicy: defaultRetakePolicy(),
   };
 }
 
@@ -735,6 +790,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     resultVariables: buildResultVariablesFromApi(src),
     scales: scalesModel,
     measurements: buildMeasurementsFromApi(src, scalesModel),
+    retakePolicy: readRetakePolicyFromApi(src),
   };
 }
 
@@ -774,6 +830,9 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     feedbackJson,
     webhookUrl: emptyToNull(model.basic.webhookUrl),
     telemetryEnabled: model.basic.telemetryEnabled,
+    // PRD-6 FR-02: a disabled policy persists as `null` so the export stays
+    // byte-identical to legacy tests (the gate is omitted from the package).
+    retakePolicyJson: model.retakePolicy.enabled ? model.retakePolicy : null,
     expectedVersion: model.version,
     folderId: model.folderId,
   };

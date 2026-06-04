@@ -17,6 +17,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CompositionSection } from "../topics-structure-section";
 import type { TestEditorModel, EditorSection } from "../../test-editor.types";
+import { defaultRetakePolicy } from "../../test-editor.mappers";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     resultVariables: [],
     scales: [],
     measurements: [],
+    retakePolicy: defaultRetakePolicy(),
     ...overrides,
   };
 }

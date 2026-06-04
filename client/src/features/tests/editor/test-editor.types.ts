@@ -7,7 +7,7 @@
  * 6.2 and 6.3. Any change here must be reflected in decisions.md first.
  */
 
-import type { DrawBlueprint } from "@shared/schema";
+import type { DrawBlueprint, RetakePolicy } from "@shared/schema";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // All enums are frozen by docs/prd-7-decisions.md section 2.
@@ -321,6 +321,8 @@ export type TestEditorModel = {
   scales: ScaleModel[];
   /** PRD-5 per-question measurement contributions (the «Вклады вопросов» matrix). */
   measurements: QuestionMeasurementModel[];
+  /** PRD-6 retake gate. `enabled: false` = legacy behaviour (no cooldown). */
+  retakePolicy: RetakePolicy;
 };
 
 // ─── API DTO payloads ─────────────────────────────────────────────────────────
@@ -363,6 +365,8 @@ export type TestSettingsPayload = {
   feedbackJson: FeedbackPayload;
   webhookUrl: string | null;
   telemetryEnabled: boolean;
+  /** PRD-6 retake gate; `null` when disabled (= legacy behaviour, FR-02). */
+  retakePolicyJson?: RetakePolicy | null;
   expectedVersion: number;
   /** Only sent on create (FAB folder-pick). PUT path leaves it undefined and
    *  uses the dedicated `/api/test-folders/move/:id` endpoint instead. */

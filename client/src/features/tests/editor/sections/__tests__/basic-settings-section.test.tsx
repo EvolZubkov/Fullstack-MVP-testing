@@ -16,8 +16,10 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SettingsSection } from "../basic-settings-section";
 import type { TestEditorModel } from "../../test-editor.types";
+import { defaultRetakePolicy } from "../../test-editor.mappers";
 
 function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
   return {
@@ -47,6 +49,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     resultVariables: [],
     scales: [],
     measurements: [],
+    retakePolicy: defaultRetakePolicy(),
     ...overrides,
   };
 }
@@ -782,5 +785,73 @@ describe("PRD-4 v1.1 L1: adaptive+linear_flat UI guard", () => {
       ).toBeNull();
       unmount();
     }
+  });
+});
+
+// ─── Повторное прохождение pane (PRD-6) ───────────────────────────────────────
+
+describe("<SettingsSection /> — Повторное прохождение pane (PRD-6)", () => {
+  function renderRetake(model: TestEditorModel, updateModel: () => void = () => {}) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const utils = render(
+      <QueryClientProvider client={qc}>
+        <SettingsSection model={model} updateModel={updateModel} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByTestId("settings-rail-retake"));
+    return utils;
+  }
+
+  const enabledPolicy = (over: Partial<TestEditorModel["retakePolicy"]> = {}) => ({
+    ...baseModel(),
+    retakePolicy: {
+      enabled: true,
+      cooldownPeriodDays: 30,
+      gateMode: "before_internal_start" as const,
+      eligibilityPlugin: { key: "webtutor_cooldown", failPolicy: "failOpen" as const },
+      ...over,
+    },
+  });
+
+  it("shows only the switch when retake is disabled", () => {
+    renderRetake(baseModel());
+    expect(screen.getByTestId("settings-retake-switch")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-retake-cooldown-input")).toBeNull();
+    expect(screen.queryByTestId("settings-retake-plugin")).toBeNull();
+  });
+
+  it("enabling seeds an eligibility plugin (failOpen) and reveals the fields", () => {
+    const updateModel = vi.fn();
+    const model = baseModel();
+    renderRetake(model, updateModel);
+    fireEvent.click(screen.getByTestId("settings-retake-switch"));
+    const next = runUpdater(updateModel, model);
+    expect(next.retakePolicy.enabled).toBe(true);
+    expect(next.retakePolicy.eligibilityPlugin?.key).toBeTruthy();
+    expect(next.retakePolicy.eligibilityPlugin?.failPolicy).toBe("failOpen");
+  });
+
+  it("renders cooldown / plugin / failPolicy and no warning for webtutor", () => {
+    renderRetake(enabledPolicy());
+    expect(screen.getByTestId("settings-retake-cooldown-input")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-retake-plugin")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-retake-failpolicy-group")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings-retake-besteffort-warning")).toBeNull();
+  });
+
+  it("shows the best-effort warning for the suspend_data plugin", () => {
+    renderRetake(
+      enabledPolicy({ eligibilityPlugin: { key: "suspend_data_cooldown", failPolicy: "failOpen" } }),
+    );
+    expect(screen.getByTestId("settings-retake-besteffort-warning")).toBeInTheDocument();
+  });
+
+  it("toggles failPolicy to failClosed via the segmented control", () => {
+    const updateModel = vi.fn();
+    const model = enabledPolicy();
+    renderRetake(model, updateModel);
+    fireEvent.click(screen.getByRole("button", { name: "Заблокировать" }));
+    const next = runUpdater(updateModel, model);
+    expect(next.retakePolicy.eligibilityPlugin?.failPolicy).toBe("failClosed");
   });
 });
