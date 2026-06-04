@@ -141,6 +141,7 @@ export interface TestPayload {
   feedback?: string | null;
   feedbackJson?: unknown;
   flowPolicyJson?: unknown;
+  retakePolicyJson?: unknown;
   telemetryEnabled?: boolean;
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
@@ -205,6 +206,7 @@ export class TestSettingsService {
         telemetryEnabled: payload.test.telemetryEnabled ?? false,
         feedbackJson: payload.test.feedbackJson ?? null,
         flowPolicyJson: payload.test.flowPolicyJson ?? null,
+        retakePolicyJson: (payload.test.retakePolicyJson as never) ?? null,
         showCorrectAnswers: payload.test.showCorrectAnswers ?? false,
         timeLimitMinutes: payload.test.timeLimitMinutes ?? null,
         maxAttempts: payload.test.maxAttempts ?? null,

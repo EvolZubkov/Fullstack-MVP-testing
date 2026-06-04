@@ -4,7 +4,8 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, retakePolicySchema } from "@shared/schema";
+import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { requireAuth, requireAuthor } from "../middleware/auth";
 import { generateScormPackage } from "../scorm-exporter";
 import { isSupportedTemplateApiVersion } from "../template-registry";
@@ -66,6 +67,8 @@ const testBodyBaseSchema = z.object({
   telemetryEnabled: z.boolean().optional(),
   feedbackJson: feedbackContentSchema.nullable().optional(),
   flowPolicyJson: z.unknown().optional(),
+  retakePolicyJson: retakePolicySchema.nullish(), // PRD-6
+
   /** Destination folder for create (PRD-7 §5.5 — FAB folder-pick modal). */
   folderId: z.string().nullable().optional(),
 });
@@ -274,6 +277,23 @@ router.get("/:id", requireAuthor, async (req, res) => {
   }
 });
 
+// PRD-6 §6.2: read-only list of active eligibility plugins + configs for the
+// author's retake-policy picker. Phase 1 serves the seeded in-code registry
+// (trimmed — no raw endpoints); a DB-backed admin registry is Phase 2.
+router.get("/:id/available-eligibility-plugins", requireAuthor, (_req, res) => {
+  const plugins = listActiveEligibilityPlugins().map((p) => ({
+    key: p.key,
+    name: p.name,
+    version: p.version,
+    description: p.description,
+    bestEffort: p.bestEffort,
+    configs: p.configs
+      .filter((c) => c.isActive)
+      .map((c) => ({ id: c.id, name: c.name, version: c.version })),
+  }));
+  res.json({ plugins });
+});
+
 // POST /api/tests - Создать тест
 router.post("/", requireAuthor, async (req, res) => {
   try {
@@ -302,6 +322,7 @@ router.post("/", requireAuthor, async (req, res) => {
       telemetryEnabled,
       feedbackJson,
       flowPolicyJson,
+      retakePolicyJson,
       folderId,
     } = parsed.data;
 
@@ -328,6 +349,7 @@ router.post("/", requireAuthor, async (req, res) => {
         telemetryEnabled,
         feedbackJson: feedbackJson ?? null,
         flowPolicyJson: flowPolicyJson ?? null,
+        retakePolicyJson: retakePolicyJson ?? null,
         folderId: folderId ?? null,
       },
       sections: (sections ?? []) as SectionPayload[],
@@ -507,6 +529,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
       telemetryEnabled,
       feedbackJson,
       flowPolicyJson,
+      retakePolicyJson,
     } = parsed.data;
 
     const expectedVersion = typeof (req.body as { expectedVersion?: unknown })?.expectedVersion === "number"
@@ -531,6 +554,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
         telemetryEnabled,
         feedbackJson: feedbackJson ?? undefined,
         flowPolicyJson: flowPolicyJson ?? undefined,
+        retakePolicyJson: retakePolicyJson ?? undefined,
       },
       // PRD-7 §6.3: sections live with the standard mode only. For adaptive,
       // sections come from the adaptive levels instead.
