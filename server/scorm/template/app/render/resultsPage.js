@@ -409,7 +409,7 @@ function computeSectionResult(topicId) {
 
   var percent = possiblePoints > 0 ? (earnedPoints / possiblePoints) * 100 : 0;
   var passRule = section ? section.topicPassRule : null;
-  var passed = passRule ? checkPassRuleWithPartial(passRule, percent, fullyCorrect) : null;
+  var passed = passRule ? checkPassRuleWithPartial(passRule, percent, earnedPoints) : null;
 
   var result = {
     topicId: topicId,
@@ -471,7 +471,7 @@ function calculateResults() {
   });
 
   var overallPercent = totalPossiblePoints > 0 ? (totalEarnedPoints / totalPossiblePoints) * 100 : 0;
-  var overallPassed = checkPassRuleWithPartial(TEST_DATA.overallPassRule, overallPercent, totalFullyCorrect);
+  var overallPassed = checkPassRuleWithPartial(TEST_DATA.overallPassRule, overallPercent, totalEarnedPoints);
 
   var topicResults = [];
   var allTopicsPassed = true;
@@ -480,7 +480,7 @@ function calculateResults() {
     var td = topicData[tid];
     td.percent = td.possiblePoints > 0 ? (td.earnedPoints / td.possiblePoints) * 100 : 0;
     if (td.passRule) {
-      td.passed = checkPassRuleWithPartial(td.passRule, td.percent, td.correct);
+      td.passed = checkPassRuleWithPartial(td.passRule, td.percent, td.earnedPoints);
       if (!td.passed) allTopicsPassed = false;
     } else {
       td.passed = null;
@@ -572,12 +572,16 @@ function checkPassRule(rule, correct, total) {
   return correct >= rule.value;
 }
 
-function checkPassRuleWithPartial(rule, percent, fullyCorrectCount) {
+function checkPassRuleWithPartial(rule, percent, earnedScore) {
   if (!rule) return true;
   if (rule.type === 'percent') {
     return percent >= rule.value;
   }
-  return fullyCorrectCount >= rule.value;
+  // PRD-10 FR-10: the count threshold is compared against the section score Σs
+  // (earned points), not the number of fully-correct questions. For exact
+  // scoring with 1 point per question Σs equals the correct count, so legacy
+  // tests are unaffected; with graded/weighted scoring it tracks earned points.
+  return earnedScore >= rule.value;
 }
 
 // Собирает уникальные рекомендованные курсы для проваленных тем
