@@ -30,6 +30,7 @@ import {
   type ScoringMode,
   type TierDraft,
 } from "./scoring-builder";
+import { TagsInput } from "./tags-input";
 
 const questionTypes = [
   { value: "single", label: t.questions.singleChoice },
@@ -88,6 +89,8 @@ export default function QuestionsPage() {
   const [feedback, setFeedback] = useState<string>("");
   const [feedbackCorrect, setFeedbackCorrect] = useState<string>("");
   const [feedbackIncorrect, setFeedbackIncorrect] = useState<string>("");
+  // PRD-11 §3a: sub-topic tags (chip input). By these tags the author sets draw quotas.
+  const [tags, setTags] = useState<string[]>([]);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(new Set());
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -103,6 +106,11 @@ export default function QuestionsPage() {
   const { data: questions, isLoading: questionsLoading } = useQuery<QuestionWithTopic[]>({
     queryKey: ["/api/questions"],
   });
+
+  // PRD-11 §3a: distinct tags across the bank, offered as autocomplete suggestions.
+  const tagSuggestions = Array.from(
+    new Set((questions ?? []).flatMap((q) => (Array.isArray(q.tags) ? q.tags : []))),
+  );
 
   const { data: topics } = useQuery<Topic[]>({
     queryKey: ["/api/topics"],
@@ -359,6 +367,7 @@ export default function QuestionsPage() {
     setFeedback("");
     setFeedbackCorrect("");
     setFeedbackIncorrect("");
+    setTags([]);
     setMediaFileName("");
     if (mediaFileInputRef.current) {
       mediaFileInputRef.current.value = "";
@@ -422,6 +431,7 @@ export default function QuestionsPage() {
     setFeedback(question.feedback || "");
     setFeedbackCorrect(question.feedbackCorrect || "");
     setFeedbackIncorrect(question.feedbackIncorrect || "");
+    setTags(Array.isArray(question.tags) ? question.tags : []);
 
     setIsDialogOpen(true);
   };
@@ -500,6 +510,7 @@ export default function QuestionsPage() {
       feedbackCorrect: feedbackMode === "conditional" ? (feedbackCorrect.trim() || null) : null,
       feedbackIncorrect: feedbackMode === "conditional" ? (feedbackIncorrect.trim() || null) : null,
       scoringJson: buildScoringJson(selectedType, singleOptions, scoringMode, scoringWeights, scoringTiers),
+      tags,
     };
 
     if (editingQuestion) {
@@ -1121,6 +1132,8 @@ export default function QuestionsPage() {
                 tiers={scoringTiers}
                 setTiers={setScoringTiers}
               />
+
+              <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={handleCloseDialog}>
