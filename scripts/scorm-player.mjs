@@ -137,6 +137,35 @@ app.get("/play/:token/*splat", (req, res) => {
   res.send(buf);
 });
 
+// ── PRD-6 WebTutor mock (local tooling) ──────────────────────────────────────
+// The webtutor_cooldown plugin fetches WebTutor's collection endpoint same-origin
+// from the package iframe. There is no live WebTutor locally, so the player mocks
+// it: a form sets the module's "last completion date" and the endpoint returns a
+// synthetic record (or an empty set => no prior attempt => allowed).
+let webtutorMock = { lastDate: null, state: "Завершен", progress: "100%" };
+
+app.get("/api/mock-webtutor", (_req, res) => res.json({ mock: webtutorMock }));
+
+app.post("/api/mock-webtutor", express.json(), (req, res) => {
+  const b = req.body || {};
+  webtutorMock = {
+    lastDate: typeof b.lastDate === "string" && b.lastDate ? b.lastDate : null, // ISO yyyy-mm-dd or null
+    state: typeof b.state === "string" && b.state ? b.state : "Завершен",
+    progress: typeof b.progress === "string" && b.progress ? b.progress : "100%",
+  };
+  res.json({ ok: true, mock: webtutorMock });
+});
+
+app.get("/pp/Ext5/extjs_json_collection_data.html", (_req, res) => {
+  const data = [];
+  if (webtutorMock.lastDate) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(webtutorMock.lastDate);
+    const ddmmyyyy = m ? `${m[3]}.${m[2]}.${m[1]}` : webtutorMock.lastDate;
+    data.push({ state: webtutorMock.state, progress: webtutorMock.progress, last_usage_date: ddmmyyyy });
+  }
+  res.json({ data });
+});
+
 app.get("/", (_req, res) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.send(PLAYER_HTML);
@@ -166,7 +195,10 @@ const PLAYER_HTML = /* html */ `<!doctype html>
   button.primary { background: #3b82f6; border-color: #3b82f6; color: #fff; }
   button:disabled { opacity: .5; cursor: default; }
   .spacer { flex: 1; }
-  #stageWrap { display: flex; height: calc(100vh - 53px); }
+  #mockBar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 12px; background: #0e1117; border-bottom: 1px solid #1a1e26; }
+  #mockBar input { background: #11141a; border: 1px solid #2a2f3a; color: #cbd5e1; border-radius: 4px; padding: 3px 6px; font-size: 12px; }
+  #mockBar #mockStatus { color: #6ee7b7; }
+  #stageWrap { display: flex; height: calc(100vh - 92px); }
   #stage { flex: 1; border: 0; background: #fff; }
   .hint { color: #8b93a4; }
 
@@ -215,6 +247,15 @@ const PLAYER_HTML = /* html */ `<!doctype html>
   <button id="reloadAttempt" title="Сбросить cmi и перезапустить">Сброс попытки</button>
   <button id="toggleLog">Инспектор</button>
 </header>
+<div id="mockBar" title="PRD-6: локальный мок WebTutor для retake-гейта">
+  <span class="hint">WebTutor-мок · дата посл. прохождения:</span>
+  <input id="mockDate" type="date" />
+  <input id="mockState" type="text" value="Завершен" size="10" title="статус записи" />
+  <input id="mockProgress" type="text" value="100%" size="6" title="прогресс" />
+  <button id="mockApply">Применить + перезапустить</button>
+  <button id="mockClear" title="Нет прошлой попытки (доступ разрешён)">Очистить</button>
+  <span class="hint" id="mockStatus"></span>
+</div>
 <div id="stageWrap">
   <iframe id="stage" title="SCORM content"></iframe>
   <aside id="inspector">
@@ -574,6 +615,35 @@ const PLAYER_HTML = /* html */ `<!doctype html>
     renderedTraffic = 0; logEl.innerHTML = "";
     stage.src = "/play/" + lastLoad.result.token + "/" + lastLoad.result.launch + "?_=" + Date.now();
   };
+
+  // ── PRD-6 WebTutor mock controls ──────────────────────────────────────────
+  var mockDate = document.getElementById("mockDate");
+  var mockState = document.getElementById("mockState");
+  var mockProgress = document.getElementById("mockProgress");
+  var mockStatus = document.getElementById("mockStatus");
+
+  function reloadStage() {
+    if (!lastLoad) return;
+    stage.src = "/play/" + lastLoad.result.token + "/" + lastLoad.result.launch + "?_=" + Date.now();
+  }
+  function postMock(body, label) {
+    return fetch("/api/mock-webtutor", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function () { mockStatus.textContent = label; reloadStage(); });
+  }
+  document.getElementById("mockApply").onclick = function () {
+    postMock(
+      { lastDate: mockDate.value || "", state: mockState.value, progress: mockProgress.value },
+      mockDate.value ? "посл. прохождение: " + mockDate.value + " — гейт перезапущен" : "дата не задана — доступ разрешён",
+    );
+  };
+  document.getElementById("mockClear").onclick = function () {
+    mockDate.value = "";
+    postMock({ lastDate: "" }, "нет прошлой попытки — доступ разрешён");
+  };
+  fetch("/api/mock-webtutor").then(function (r) { return r.json(); }).then(function (j) {
+    if (j && j.mock && j.mock.lastDate) mockDate.value = j.mock.lastDate;
+  });
 
   refreshPackages();
 })();
