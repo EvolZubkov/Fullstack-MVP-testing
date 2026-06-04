@@ -76,11 +76,19 @@ per-question `scoreRatio`/«Частично правильно» (FR-12).
 - Стадия 3 (экспорт): `buildTestJson` переносит `drawBlueprint` в рантайм-секцию УСЛОВНО (FR-02).
 
 `check`/`build` зелёные, `vitest` **1837**. Прим.: отбор `shuffle(...).slice(0,drawCount)` живёт в
-`server/scorm/assets/app.js` `generateVariant` (НЕ resultsPage). **Эскиз квота-редактора создан**
-(`docs/wireframes/prd11-draw-quotas.html`, 5 состояний, DS `ou-*`, выверен Playwright light/dark) и
-**на согласовании** — GATE для UI-стадии 4. После явного «ок» — перенести в `approved/` и делать
-Стадию 4 (UI квота-редактора во вкладке «Структура», state/init/reset/save как ScoringBuilder; форма
-на shadcn — решить при старте, как было с PRD-10 Стадией 4). Ниже — исходный план дизайн-фазы.
+`server/scorm/assets/app.js` `generateVariant` (НЕ resultsPage). **Эскиз квота-редактора СОГЛАСОВАН**
+(`docs/wireframes/prd11-draw-quotas.html`): свич + инлайн-блок в реальной строке темы `tb-topic-row`
+(ui-kit), режим Ровно/Не менее НА КАЖДЫЙ тег, реальные теги; выверен Playwright light/dark.
+**Модель финализирована:** `strata: [{tag, count, mode}]` — mode per-страта, дефолт `exact`; без
+`modeGranularity`/топик-mode/тогла «Общий/По тегам». Стадии A1-A3 (схема/движок/тесты) **надо
+упростить** под это (выкинуть `modeGranularity` + топик-`mode`; `effMode = s.mode ?? exact`).
+
+**ВАЖНО — тегирование вопросов внесено в охват PRD-11** (§3a спеки, под-трек B): поле
+`questions.tags` есть, но **задать тег вопросу нельзя** — нет ни UI (chip-инпут), ни проброса в API
+(`questions.ts`/`storage` поле `tags` игнорируют). Без тегов квота-Select пуст. План B: API (`tags` в
+create/update, как `scoringJson`) → эскиз chip-инпута в редакторе вопроса (shadcn) + согласование →
+UI. Порядок дальше: упростить A1-A3 → B-api → эскиз B0b → UI (B-ui, затем A4 квоты). Ниже — исходный
+план дизайн-фазы.
 
 Сделано в дизайн-фазе (документы):
 
