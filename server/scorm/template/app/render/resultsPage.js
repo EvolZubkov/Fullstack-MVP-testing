@@ -505,6 +505,15 @@ function calculateResults() {
 function checkAnswer(q, answer) {
   if (answer === undefined || answer === null) return 0;
 
+  // PRD-10: delegate to the graded scoring engine when joined (package runtime).
+  // Returns s/sMax in [0,1]; absent q.scoring => exact 0/1 (FR-02). Falls back to
+  // the inline exact logic when the engine is not present (e.g. isolated tests).
+  if (typeof ScoringEngine !== 'undefined') {
+    return ScoringEngine.scoreAnswer({
+      type: q.type, correct: q.correct || {}, answer: answer, scoring: q.scoring,
+    }).ratio;
+  }
+
   var correct = q.correct || {};
 
   if (q.type === 'single') {

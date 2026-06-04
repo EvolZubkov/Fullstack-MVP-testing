@@ -157,6 +157,13 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/scales/engine.js",
   ]);
 
+  // Graded-answer scoring engine — plain-JS port of shared/scoring/engine
+  // (PRD-10). Joined before resultsPage.js, whose checkAnswer delegates to
+  // ScoringEngine.scoreAnswer for weighted/tiered scoring.
+  const scoringEngineJs = readOneOf([
+    "app/scoring/engine.js",
+  ]);
+
   // Result-variable formula DSL — plain-JS port of shared/formula (PRD-2). Must
   // be joined before resultsPage.js, which evaluates formulas via FormulaDSL.
   const formulaJs = readOneOf([
@@ -246,6 +253,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     startPageJs,
     viewResultsJs,
     scaleEngineJs,
+    scoringEngineJs,
     formulaJs,
     resultsPageJs,
     questionMediaJs,

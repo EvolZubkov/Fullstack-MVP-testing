@@ -31,13 +31,26 @@
 
 ## Статус реализации (на 2026-06-04)
 
-**Стадия 1 выполнена** (схема). Эскиз редактора согласован (Стадия 0b) и перенесён в
-`docs/wireframes/approved/prd10-question-scoring.html`. Сделано: миграция `010` (колонка
-`questions.scoring_json`, CHECK на `kind`); zod `questionScoringSchema` + колонка `scoringJson`
-в `shared/schema.ts`; проброс в storage/routes с валидацией (FR-13); unit-тесты
-`tests/schema-prd10-scoring.test.ts`. OQ-1/OQ-2/OQ-3 закрыты (см. §12). Дальше — Стадия 2
-(градуированный `checkAnswer` + оценщик ступенчатой таблицы, parity TS↔JS). Нормативная модель —
-[scoring-model.md](../scoring-model.md) §11.
+**Стадии 1-2 выполнены.** Эскиз согласован (Стадия 0b, в `approved/`).
+
+- **Стадия 1 (схема):** миграция `010` (колонка `questions.scoring_json`, CHECK на `kind`);
+  zod `questionScoringSchema` + колонка `scoringJson`; проброс в storage/routes с валидацией
+  (FR-13); тесты `tests/schema-prd10-scoring.test.ts`. OQ-1/OQ-2/OQ-3 закрыты (§12).
+- **Стадия 2 (рантайм SCORM):** авторитетный движок `shared/scoring/engine.ts`
+  (`scoreAnswer` → `{score, sMax, ratio}`: exact/weighted/tiered, счётчики `c,x,T/P/N`,
+  неаддитивная ступенчатая таблица); рукописный JS-порт `server/scorm/template/app/scoring/engine.js`
+  (вшит в сборку перед `resultsPage.js`); `checkAnswer` в `resultsPage.js` делегирует
+  `ScoringEngine.scoreAnswer(...).ratio` (guard `typeof ScoringEngine`, fallback — старое 0/1);
+  golden-parity `tests/scoring-engine-port.test.ts` + юниты `tests/scoring-engine.test.ts`.
+  Агрегация `Σ s` готова заранее (`earnedPoints += points × ratio`).
+
+**Не сделано в Стадии 2 (отдельный шаг):** серверный скорер `server/utils/check-answer.ts`
+(подсчёт веб-попыток в приложении) остаётся бинарным 0/1 — на критическом пути РТК (SCORM) он не
+участвует; для градуированного подсчёта веб-попыток его нужно перевести на `shared/scoring/engine`
+отдельно (есть тонкое расхождение matching-семантики — выверить).
+
+Дальше — **Стадия 3** (экспорт `scoring` в `test-json`, чтобы рантайм пакета получил `q.scoring`).
+Нормативная модель — [scoring-model.md](../scoring-model.md) §11.
 
 ---
 
@@ -142,10 +155,15 @@ Predicate (конъюнкция условий над счётчиками от�
 
 ## 5. Рантайм и конвейер
 
-- `checkAnswer(q, answer)` возвращает `s ∈ [0, sMax]` вместо `0`/`1`; при отсутствии цены ответа
-  — текущее поведение «точное совпадение» (FR-02). Изменение в обоих представлениях парити:
-  монолитный `server/scorm/assets/app.js` и/или модульный
-  [resultsPage.js](../../../server/scorm/template/app/render/resultsPage.js).
+- Реализовано (Стадия 2): авторитетный движок
+  [shared/scoring/engine.ts](../../../shared/scoring/engine.ts) `scoreAnswer(...)` возвращает
+  `{score, sMax, ratio}` (`ratio = s/sMax`); рукописный JS-порт
+  [engine.js](../../../server/scorm/template/app/scoring/engine.js), вшитый в сборку перед
+  `resultsPage.js`. Единственный рантайм-`checkAnswer`
+  ([resultsPage.js](../../../server/scorm/template/app/render/resultsPage.js)) делегирует движку и
+  возвращает `ratio`; при отсутствии цены ответа — «точное совпадение» (FR-02). Парити-порт сверяется
+  golden-тестом (как DSL/шкалы). Прим.: монолита `server/scorm/assets/app.js` с `checkAnswer` нет
+  (была неточность в раннем плане).
 - Оценщик ступенчатой таблицы: вычислить счётчики `(c, x, T/P/N)` по типу, пройти `tiers` сверху
   вниз, вернуть `score` первого совпадения, иначе `0`, затем пол `max(0, ·)`.
 - Агрегация `Σ s` по теме включается в существующий расчёт результата; правило прохождения
@@ -210,8 +228,8 @@ Predicate (конъюнкция условий над счётчиками от�
 | 0a | Этот PRD (план на согласование) | Выполнено |
 | 0b | Эскизы редактора цены ответа + согласование (DS-handbook first) | Выполнено (2026-06-04, в `approved/`) |
 | 1 | Схема `question.scoring`, дефолт «точное совпадение», миграция, durable id (оценка) | Выполнено (2026-06-04, миграция `010`) |
-| 2 | Рантайм: градуированный `checkAnswer` + оценщик ступенчатой таблицы; `Σ s` по теме | Следующая |
-| 3 | Экспорт `scoring` в SCORM-пакет (`test-json`) | Ожидает |
+| 2 | Рантайм: градуированный `checkAnswer` + оценщик ступенчатой таблицы; `Σ s` по теме | Выполнено (2026-06-04, движок + порт + parity) |
+| 3 | Экспорт `scoring` в SCORM-пакет (`test-json`) | Следующая |
 | 4 | UI редактора цены ответа (после согласования эскизов) | Ожидает |
 | 5 | Порог раздела + показатель-сертификация (источник темы в DSL при нехватке) | Ожидает |
 | 6 | Golden-тест против эталона РТК | Ожидает |

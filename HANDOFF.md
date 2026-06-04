@@ -24,9 +24,17 @@
 `kind`, применена к dev-БД, идемпотентна); zod `questionScoringSchema` (union exact/weighted/tiered)
 и колонка `scoringJson` в `shared/schema.ts`; проброс в `storage.ts` (create/duplicate) и
 `server/routes/questions.ts` (create/update) с валидацией (FR-13); тесты
-`tests/schema-prd10-scoring.test.ts`. `npm run check` чист, `vitest` 1679 зелёных. OQ-1/OQ-2/OQ-3
-закрыты. Дальше — **Стадия 2** (градуированный `checkAnswer` + оценщик ступенчатой таблицы,
-parity TS↔JS). Ниже — исходный план дизайн-фазы (актуален для PRD-11).
+`tests/schema-prd10-scoring.test.ts`. OQ-1/OQ-2/OQ-3 закрыты. Реализована **Стадия 2 PRD-10**
+(рантайм SCORM): авторитетный движок `shared/scoring/engine.ts` (`scoreAnswer` →
+`{score, sMax, ratio}`: exact/weighted/tiered, счётчики `c,x,T/P/N`, неаддитивная ступенчатая
+таблица); JS-порт `server/scorm/template/app/scoring/engine.js` (вшит в `index.ts` перед
+`resultsPage.js`); `checkAnswer` в `resultsPage.js` делегирует `ScoringEngine.scoreAnswer(...).ratio`
+(guard + fallback на старое 0/1); golden-parity `tests/scoring-engine-port.test.ts` + юниты
+`tests/scoring-engine.test.ts`. `npm run check` чист, `vitest` **1731 зелёный**, `npm run build`
+ок. ВАЖНО: серверный `server/utils/check-answer.ts` (веб-попытки) оставлен бинарным — отдельный
+шаг (не на пути РТК). Уточнение: монолита `assets/app.js` с `checkAnswer` НЕТ (§7 ниже неточен).
+Дальше — **Стадия 3** (экспорт `scoring` в `test-json`, чтобы `q.scoring` дошёл до рантайма пакета).
+Ниже — исходный план дизайн-фазы (актуален для PRD-11).
 
 Сделано в дизайн-фазе (документы):
 
