@@ -147,6 +147,88 @@ describe("1. apiToEditorModel — standard test with sections", () => {
   });
 });
 
+// ─── PRD-11: draw blueprint (de)serialization ────────────────────────────────
+
+describe("PRD-11 draw blueprint mapping", () => {
+  const blueprintModel = (drawBlueprint: unknown) =>
+    makeStandardModel({
+      sections: [
+        {
+          topicId: "a",
+          topicName: "A",
+          maxQuestions: 10,
+          drawCount: 5,
+          required: true,
+          timeLimit: { source: "inherit_test" },
+          feedback: { format: "plain", text: "" },
+          feedbackLinks: [],
+          feedbackAssets: [],
+          drawBlueprint: drawBlueprint as never,
+        },
+      ],
+    });
+
+  it("apiToEditorModel parses a valid blueprint and drops malformed strata", () => {
+    const api = {
+      id: "t",
+      version: 1,
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sections: [
+        apiSection({
+          topicId: "topic-math",
+          drawBlueprintJson: {
+            strata: [
+              { tag: "Базовые понятия", count: 2, mode: "exact" },
+              { tag: "Протоколы", count: 1, mode: "min" },
+              { tag: "", count: 3 }, // dropped — empty tag
+              { tag: "x", count: 0 }, // dropped — count < 1
+            ],
+          },
+        }),
+        apiSection({ topicId: "topic-history", topicName: "История", drawBlueprintJson: null }),
+      ],
+    };
+    const model = apiToEditorModel(api);
+    expect(model.sections[0].drawBlueprint).toEqual({
+      strata: [
+        { tag: "Базовые понятия", count: 2, mode: "exact" },
+        { tag: "Протоколы", count: 1, mode: "min" },
+      ],
+    });
+    expect(model.sections[1].drawBlueprint).toBeNull();
+  });
+
+  it("apiToEditorModel returns null for non-object / empty-strata blueprints", () => {
+    const api = {
+      id: "t",
+      version: 1,
+      title: "T",
+      mode: "standard",
+      status: "draft",
+      overallPassRuleJson: { type: "percent", value: 70 },
+      sections: [
+        apiSection({ topicId: "a", drawBlueprintJson: { strata: [] } }),
+        apiSection({ topicId: "b", topicName: "B", drawBlueprintJson: "nope" }),
+      ],
+    };
+    const model = apiToEditorModel(api);
+    expect(model.sections[0].drawBlueprint).toBeNull();
+    expect(model.sections[1].drawBlueprint).toBeNull();
+  });
+
+  it("mapEditorSectionsToPayload serializes a blueprint, collapsing empty/null to null", () => {
+    expect(
+      mapEditorSectionsToPayload(blueprintModel({ strata: [{ tag: "T", count: 2, mode: "min" }] }))[0]
+        .drawBlueprintJson,
+    ).toEqual({ strata: [{ tag: "T", count: 2, mode: "min" }] });
+    expect(mapEditorSectionsToPayload(blueprintModel({ strata: [] }))[0].drawBlueprintJson).toBeNull();
+    expect(mapEditorSectionsToPayload(blueprintModel(null))[0].drawBlueprintJson).toBeNull();
+  });
+});
+
 // ─── 2. apiToEditorModel — adaptive test ─────────────────────────────────────
 
 describe("2. apiToEditorModel — adaptive test", () => {

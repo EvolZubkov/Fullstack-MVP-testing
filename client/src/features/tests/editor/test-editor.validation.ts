@@ -139,6 +139,25 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
     }
   }
 
+  // PRD-11 FR-05: when a draw blueprint is set, the quota sum must not exceed
+  // drawCount (quotas are slices inside the topic's sample). Mirrors the server
+  // section-body refine so the save is blocked client-side with a clear message.
+  for (let i = 0; i < model.sections.length; i++) {
+    const section = model.sections[i];
+    const bp = section.drawBlueprint;
+    if (bp && bp.strata.length > 0) {
+      const sum = bp.strata.reduce((acc, s) => acc + (s.count || 0), 0);
+      if (sum > section.drawCount) {
+        errors.push({
+          field: `sections[${i}].drawBlueprintJson`,
+          code: "range",
+          message: `Сумма квот (${sum}) для темы «${section.topicName}» превышает «Вопросов в тест» (${section.drawCount}).`,
+          severity: "error",
+        });
+      }
+    }
+  }
+
   // FR-15c-f: absolute pass rules must not exceed available questions
   const totalQuestions = getTotalQuestionsCount(model.sections);
   if (

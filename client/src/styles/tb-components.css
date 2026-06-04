@@ -561,6 +561,29 @@
    `--adaptive` modifier добавляет flex-wrap, поскольку link-tail длиннее number-input. */
 .tb-draw-count-row--adaptive { flex-wrap: wrap; }
 
+/* ── PRD-11 draw quotas: toggle row + inline strata block in the topic body ──
+   Switch enables an inline per-tag quota table (no modal — the config is small).
+   Mirrors docs/wireframes/prd11-draw-quotas.html (approved). */
+.tb-quota-toggle {
+  display: flex; align-items: center; gap: var(--ou-space-3);
+  margin-top: var(--ou-space-4);
+  cursor: pointer;
+}
+.tb-quota-toggle .tb-section-label { margin: 0; }
+.tb-quota-block {
+  margin-top: var(--ou-space-3);
+  padding-left: var(--ou-space-4);
+  border-left: var(--wf-border-w) solid var(--ou-border-soft);
+}
+.tb-quota-block__avail { color: var(--ou-fg-muted); font-variant-numeric: tabular-nums; }
+.tb-quota-actions { margin-top: var(--ou-space-3); }
+.tb-quota-sum {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--ou-space-3); margin-top: var(--ou-space-3);
+  font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+}
+.tb-quota-sum.is-error { color: var(--ou-error-default); font-weight: 600; }
+
 /* Feedback preview (read-only) — clickable card со snippet'ом и meta-row.
    Edit-форма — отдельный паттерн `.tb-feedback-block` (см. выше).
    `.is-empty` — placeholder-вариант («Не задано — нажмите для редактирования»).

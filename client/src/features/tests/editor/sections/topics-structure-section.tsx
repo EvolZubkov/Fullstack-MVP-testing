@@ -21,8 +21,9 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Pencil, Plus, X, Link as LinkIcon, Paperclip } from "lucide-react";
-import type { Topic } from "@shared/schema";
+import { Layers, Pencil, Plus, Trash2, X, Link as LinkIcon, Paperclip } from "lucide-react";
+import type { DrawBlueprint, Topic } from "@shared/schema";
+import { tagKey } from "@shared/tags";
 import {
   Banner,
   Button,
@@ -31,7 +32,10 @@ import {
   Input,
   ModalDialog,
   NumberInput,
+  Select,
+  SegmentedControl,
   Switch,
+  Tag,
 } from "@universityrt/ui-kit";
 import { FeedbackEditorModal } from "./feedback-editor-modal";
 import type {
@@ -68,6 +72,11 @@ export function CompositionSection({ model, updateModel }: CompositionSectionPro
     queryKey: ["/api/topics"],
     queryFn: fetchTopicsWithCount,
   });
+  // PRD-11: real sub-topic tags per topic, for the draw-quota Select (FR-07).
+  const { data: allQuestions = [] } = useQuery<QuestionTagRow[]>({
+    queryKey: ["/api/questions"],
+  });
+  const tagsByTopic = useMemo(() => buildTagsByTopic(allQuestions), [allQuestions]);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const usedTopicIds = useMemo(
@@ -117,6 +126,7 @@ export function CompositionSection({ model, updateModel }: CompositionSectionPro
           feedback: { format: "plain", text: "" },
           feedbackLinks: [],
           feedbackAssets: [],
+          drawBlueprint: null,
         },
       ],
     }));
@@ -150,10 +160,13 @@ export function CompositionSection({ model, updateModel }: CompositionSectionPro
           key={section.topicId}
           index={index}
           section={section}
+          topicTags={tagsByTopic.get(section.topicId)?.tags ?? []}
+          availByKey={tagsByTopic.get(section.topicId)?.availByKey ?? {}}
           onChangeDrawCount={(n) => updateSection(section.topicId, { drawCount: n })}
           onToggleRequired={(required) =>
             updateSection(section.topicId, { required })
           }
+          onChangeBlueprint={(bp) => updateSection(section.topicId, { drawBlueprint: bp })}
           onRemove={() => removeSection(section.topicId)}
           onSaveFeedback={(patch) => updateSection(section.topicId, patch)}
         />
@@ -190,8 +203,14 @@ function TopicRow(props: {
   /** Position in `model.sections`; feeds the `sections[i]` FR-20c anchor. */
   index: number;
   section: EditorSection;
+  /** Distinct sub-topic tags of this topic's questions (PRD-11 quota Select). */
+  topicTags: string[];
+  /** How many questions carry each tag key (shortfall indicator). */
+  availByKey: Record<string, number>;
   onChangeDrawCount: (n: number) => void;
   onToggleRequired: (required: boolean) => void;
+  /** Replace this section's draw blueprint (`null` = uniform draw). */
+  onChangeBlueprint: (bp: DrawBlueprint | null) => void;
   onRemove: () => void;
   /** Called with a partial EditorSection patch when feedback is saved. */
   onSaveFeedback: (patch: Partial<EditorSection>) => void;
@@ -240,6 +259,17 @@ function TopicRow(props: {
             />
             <span className="tb-draw-count-row__max">из {section.maxQuestions}</span>
           </div>
+
+          <QuotaEditor
+            topicId={section.topicId}
+            topicName={section.topicName}
+            drawCount={section.drawCount}
+            blueprint={section.drawBlueprint ?? null}
+            topicTags={props.topicTags}
+            availByKey={props.availByKey}
+            onChange={props.onChangeBlueprint}
+          />
+
           <div className="tb-card-desc">Обратная связь по теме</div>
           {/* Clicking the preview opens FeedbackEditorModal (FR-36 / FR-37). */}
           <FeedbackPreview
@@ -269,6 +299,211 @@ function TopicRow(props: {
         }}
         testId={`feedback-editor-topic-${section.topicId}`}
       />
+    </>
+  );
+}
+
+/**
+ * PRD-11 draw-quota editor inside a topic row. A switch enables an inline per-tag
+ * quota table (no modal — the config is small). The tag Select offers the topic's
+ * REAL question tags (FR-07); `count` is a NumberInput capped at `drawCount`; the
+ * per-tag mode is a SegmentedControl (Ровно=exact / Не менее=min). Σ quota counts
+ * must not exceed `drawCount` (FR-05 → error, blocks save); a per-tag shortfall
+ * (available < count) is a non-blocking warning (FR-06). Absence of a blueprint =
+ * uniform draw (FR-02). Mirrors docs/wireframes/prd11-draw-quotas.html (approved).
+ */
+function QuotaEditor(props: {
+  topicId: string;
+  topicName: string;
+  drawCount: number;
+  blueprint: DrawBlueprint | null;
+  topicTags: string[];
+  availByKey: Record<string, number>;
+  onChange: (bp: DrawBlueprint | null) => void;
+}) {
+  const { topicId, topicName, drawCount, blueprint, topicTags, availByKey, onChange } = props;
+  const enabled = blueprint != null;
+  const noTags = topicTags.length === 0;
+  const strata = blueprint?.strata ?? [];
+
+  const usedKeys = new Set(strata.map((s) => tagKey(s.tag)));
+  const unusedTags = topicTags.filter((t) => !usedKeys.has(tagKey(t)));
+  const availOf = (tag: string) => availByKey[tagKey(tag)] ?? 0;
+  const sum = strata.reduce((acc, s) => acc + (s.count || 0), 0);
+  const remainder = Math.max(0, drawCount - sum);
+  const overflow = sum > drawCount;
+  const anyShortfall = strata.some((s) => s.count > availOf(s.tag));
+
+  const setStrata = (next: DrawBlueprint["strata"]) => onChange({ strata: next });
+  const toggle = (on: boolean) => {
+    if (!on) return onChange(null);
+    if (noTags) return;
+    onChange({ strata: [{ tag: topicTags[0], count: 1, mode: "exact" }] });
+  };
+  const addStratum = () => {
+    if (unusedTags.length === 0) return;
+    setStrata([...strata, { tag: unusedTags[0], count: 1, mode: "exact" }]);
+  };
+  const updateStratum = (i: number, patch: Partial<DrawBlueprint["strata"][number]>) =>
+    setStrata(strata.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  const removeStratum = (i: number) => setStrata(strata.filter((_, idx) => idx !== i));
+
+  return (
+    <>
+      <label className="tb-quota-toggle">
+        <Switch
+          checked={enabled}
+          disabled={noTags}
+          onChange={(e) => toggle(e.target.checked)}
+          aria-label={`Квоты по подтемам: ${topicName}`}
+          data-testid={`topic-quota-toggle-${topicId}`}
+        />
+        <span className="tb-section-label">
+          <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+          Квоты по подтемам (тегам)
+        </span>
+      </label>
+
+      {noTags && (
+        <div className="tb-card-desc" data-testid={`topic-quota-notags-${topicId}`}>
+          У вопросов темы нет тегов — добавьте теги в разделе «Вопросы», чтобы задавать квоты по подтемам.
+        </div>
+      )}
+      {!noTags && !enabled && (
+        <div className="tb-card-desc">
+          Выключено — выдача равномерная (случайные вопросы из всей темы). Включите, чтобы гарантировать покрытие подтем.
+        </div>
+      )}
+
+      {enabled && (
+        <div className="tb-quota-block" data-testid={`topic-quota-block-${topicId}`}>
+          {overflow && (
+            <Banner
+              tone="error"
+              variant="subtle"
+              role="alert"
+              description={`Сумма квот (${sum}) превышает «Вопросов в тест» (${drawCount}). Квоты — это срезы внутри выборки. Сохранение заблокировано до исправления.`}
+              data-testid={`topic-quota-error-${topicId}`}
+            />
+          )}
+          {!overflow && anyShortfall && (
+            <Banner
+              tone="warning"
+              variant="subtle"
+              role="status"
+              description="Для некоторых подтем вопросов меньше квоты — выдастся сколько есть, это не блокирует сохранение."
+              data-testid={`topic-quota-warning-${topicId}`}
+            />
+          )}
+
+          <table className="tb-table">
+            <thead>
+              <tr>
+                <th>Подтема (тег вопроса)</th>
+                <th>Сколько</th>
+                <th>Режим</th>
+                {anyShortfall && <th>Доступно</th>}
+                <th aria-label="Действия" />
+              </tr>
+            </thead>
+            <tbody>
+              {strata.map((s, i) => {
+                const avail = availOf(s.tag);
+                const short = s.count > avail;
+                const options = topicTags
+                  .filter((t) => tagKey(t) === tagKey(s.tag) || !usedKeys.has(tagKey(t)))
+                  .map((t) => ({ value: t, label: t }));
+                return (
+                  <tr key={`${tagKey(s.tag)}-${i}`}>
+                    <td>
+                      <Select
+                        size="m"
+                        fullWidth
+                        value={s.tag}
+                        options={options}
+                        onChange={(v) => updateStratum(i, { tag: v })}
+                        aria-label={`Подтема для квоты ${i + 1}`}
+                        data-testid={`quota-tag-${topicId}-${i}`}
+                      />
+                    </td>
+                    <td>
+                      <NumberInput
+                        size="s"
+                        value={s.count}
+                        min={1}
+                        max={drawCount}
+                        invalid={overflow}
+                        onChange={(n) => updateStratum(i, { count: n })}
+                        aria-label={`Сколько вопросов для подтемы «${s.tag}»`}
+                        data-testid={`quota-count-${topicId}-${i}`}
+                      />
+                    </td>
+                    <td>
+                      <SegmentedControl<"exact" | "min">
+                        size="s"
+                        value={s.mode ?? "exact"}
+                        items={[
+                          { value: "exact", label: "Ровно" },
+                          { value: "min", label: "Не менее" },
+                        ]}
+                        onChange={(v) => updateStratum(i, { mode: v })}
+                        aria-label={`Режим квоты для подтемы «${s.tag}»`}
+                      />
+                    </td>
+                    {anyShortfall && (
+                      <td>
+                        {short ? (
+                          <Tag tone="warning" size="s">{avail}</Tag>
+                        ) : (
+                          <span className="tb-quota-block__avail">{avail}</span>
+                        )}
+                      </td>
+                    )}
+                    <td>
+                      <IconButton
+                        icon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                        variant="ghost"
+                        size="s"
+                        aria-label={`Удалить квоту «${s.tag}»`}
+                        onClick={() => removeStratum(i)}
+                        data-testid={`quota-remove-${topicId}-${i}`}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+
+          <div className="tb-quota-actions">
+            <Button
+              variant="ghost"
+              size="s"
+              leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+              disabled={unusedTags.length === 0}
+              onClick={addStratum}
+              data-testid={`quota-add-${topicId}`}
+            >
+              Добавить квоту
+            </Button>
+          </div>
+
+          <div className={`tb-quota-sum${overflow ? " is-error" : ""}`}>
+            <span>
+              {overflow
+                ? `Σ квот: ${sum} из ${drawCount} — превышение на ${sum - drawCount}`
+                : `Σ квот: ${sum} из ${drawCount} · остаток ${remainder}`}
+            </span>
+            {overflow ? (
+              <Tag tone="error" size="s">ошибка</Tag>
+            ) : anyShortfall ? (
+              <Tag tone="warning" size="s">нехватка по тегу</Tag>
+            ) : (
+              <Tag tone="success" size="s">в пределах выборки</Tag>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -456,6 +691,41 @@ function TopicPickerModal(props: {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Minimal shape of `/api/questions` rows the quota editor needs. */
+type QuestionTagRow = { topicId: string; tags?: string[] };
+
+/** Per-topic tag index: distinct display tags + how many questions carry each key. */
+type TopicTagInfo = { tags: string[]; availByKey: Record<string, number> };
+
+/**
+ * Build a `topicId -> {tags, availByKey}` index from the question bank. `tags`
+ * holds the distinct display forms (deduped case-insensitively) sorted for a
+ * stable Select order; `availByKey` counts how many questions carry each tag key
+ * (a question with several tags counts once per distinct key) — the per-tag
+ * availability used for the shortfall indicator (FR-06).
+ */
+function buildTagsByTopic(questions: QuestionTagRow[]): Map<string, TopicTagInfo> {
+  const map = new Map<string, TopicTagInfo>();
+  for (const q of questions) {
+    if (!q || typeof q.topicId !== "string") continue;
+    let info = map.get(q.topicId);
+    if (!info) {
+      info = { tags: [], availByKey: {} };
+      map.set(q.topicId, info);
+    }
+    const seen = new Set<string>();
+    for (const raw of Array.isArray(q.tags) ? q.tags : []) {
+      const key = tagKey(raw);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      info.availByKey[key] = (info.availByKey[key] ?? 0) + 1;
+      if (!info.tags.some((x) => tagKey(x) === key)) info.tags.push(raw);
+    }
+  }
+  for (const info of map.values()) info.tags.sort((a, b) => a.localeCompare(b, "ru"));
+  return map;
+}
 
 function plural(
   n: number,

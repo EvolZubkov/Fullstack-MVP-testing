@@ -7,6 +7,8 @@
  * 6.2 and 6.3. Any change here must be reflected in decisions.md first.
  */
 
+import type { DrawBlueprint } from "@shared/schema";
+
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // All enums are frozen by docs/prd-7-decisions.md section 2.
 
@@ -159,6 +161,11 @@ export type EditorSection = {
   feedback: FeedbackContent;
   feedbackLinks: FeedbackLink[];
   feedbackAssets: FeedbackAsset[];
+  /**
+   * PRD-11: optional per-tag draw quotas. Absent/`null` = uniform draw (FR-02).
+   * When present, `strata` lists per-sub-topic quotas (tag + count + per-tag mode).
+   */
+  drawBlueprint?: DrawBlueprint | null;
 };
 
 // ─── Result variables (PRD-2) ─────────────────────────────────────────────────
@@ -369,6 +376,8 @@ export type TestSectionPayload = {
   topicPassRuleJson: TopicPassRule;
   timeLimitMinutes: number | null;
   feedbackJson: FeedbackPayload;
+  /** PRD-11: per-tag draw quotas; `null` = uniform draw (FR-02). */
+  drawBlueprintJson: DrawBlueprint | null;
 };
 
 export type AdaptiveSettingsPayload = {

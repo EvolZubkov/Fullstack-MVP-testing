@@ -264,7 +264,7 @@ ui-kit). Стартует ПОСЛЕ тегирования (§3a, под-тре
 | A1 | Схема `draw_blueprint_json` + миграция + zod | **Выполнено + упрощено 2026-06-04** (`strata:[{tag,count,mode}]` без `modeGranularity`/топик-mode; миграция `012` заменила stale CHECK) |
 | A2 | Логика выдачи (движок + порт + parity) | **Выполнено + упрощено** (`effMode = s.mode ?? exact`; сопоставление по нормализованному `tagKey`, регистронезависимо) |
 | A3 | Экспорт блюпринта в пакет | Выполнено |
-| A4 | UI квота-редактора в строке темы (после A0b + B) | Ожидает (гейт: эскиз согласован; нужен B-ui) |
+| A4 | UI квота-редактора в строке темы (после A0b + B) | **Выполнено 2026-06-04** (`topics-structure-section.tsx` — свич + инлайн-таблица страт, Select реальных тегов, count, режим Ровно/Не менее, Σ-валидация + warning «Доступно»; маппер `drawBlueprintJson`; верифицировано вживую round-trip) |
 | A5 | Тесты: квоты, дедуп, нехватка→warning, бэкомпат, регистр | **Выполнено** (`draw-blueprint*.test.ts`, `schema-prd11-blueprint.test.ts`, `tags.test.ts`) |
 | B-api | API: `tags` в create/update вопроса (route + storage + нормализация) | **Выполнено 2026-06-04** (`questions.ts`, `storage.ts` create/duplicate, `shared/tags.ts`) |
 | B0b | Эскиз chip-инпута тегов в редакторе вопроса + согласование | **Согласовано 2026-06-04** (`docs/wireframes/prd11-question-tags.html`) |

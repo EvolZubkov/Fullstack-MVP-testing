@@ -65,6 +65,51 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
   };
 }
 
+// ─── PRD-11 FR-05: Σ quota counts must not exceed drawCount ───────────────────
+
+describe("PRD-11 FR-05: quota sum vs drawCount", () => {
+  const withBlueprint = (
+    strata: Array<{ tag: string; count: number; mode?: "exact" | "min" }>,
+  ) =>
+    baseModel({
+      sections: [
+        {
+          topicId: "topic-1",
+          topicName: "Topic One",
+          maxQuestions: 10,
+          drawCount: 5,
+          required: true,
+          timeLimit: { source: "inherit_test" },
+          feedback: { format: "plain", text: "" },
+          feedbackLinks: [],
+          feedbackAssets: [],
+          drawBlueprint: { strata },
+        },
+      ],
+    });
+
+  it("happy path — Σ <= drawCount passes", () => {
+    const result = validateTestEditor(
+      withBlueprint([{ tag: "a", count: 2 }, { tag: "b", count: 3 }]),
+    );
+    expect(result.errors.filter((e) => e.field.includes("drawBlueprintJson"))).toHaveLength(0);
+  });
+
+  it("sad path — Σ > drawCount produces a section error", () => {
+    const result = validateTestEditor(
+      withBlueprint([{ tag: "a", count: 3 }, { tag: "b", count: 3 }]),
+    );
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({ field: "sections[0].drawBlueprintJson", code: "range" }),
+    );
+  });
+
+  it("no blueprint — no quota error", () => {
+    const result = validateTestEditor(baseModel());
+    expect(result.errors.filter((e) => e.field.includes("drawBlueprintJson"))).toHaveLength(0);
+  });
+});
+
 // ─── FR-11: title required ────────────────────────────────────────────────────
 
 describe("FR-11: title required", () => {

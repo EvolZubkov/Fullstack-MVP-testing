@@ -18,6 +18,7 @@
  *   - §6.8  empty `description`/`webhookUrl` normalised to `null`
  *   - FR-25h adaptive payload excluded when `mode === "standard"`
  */
+import type { DrawBlueprint } from "@shared/schema";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
@@ -263,6 +264,24 @@ function readSectionTimeLimitFromApi(minutes: number | null | undefined): Sectio
 }
 
 /**
+ * Read a draw blueprint (PRD-11) from the API jsonb. Returns `null` for absence
+ * or any malformed shape so the editor degrades to a uniform draw (FR-02).
+ */
+function readDrawBlueprintFromApi(raw: unknown): DrawBlueprint | null {
+  if (!isPlainObject(raw) || !Array.isArray(raw.strata)) return null;
+  const strata: DrawBlueprint["strata"] = [];
+  for (const s of raw.strata) {
+    if (!isPlainObject(s)) continue;
+    const tag = typeof s.tag === "string" ? s.tag : "";
+    const count = typeof s.count === "number" ? s.count : 0;
+    if (!tag || count < 1) continue;
+    const mode = s.mode === "min" ? "min" : s.mode === "exact" ? "exact" : undefined;
+    strata.push(mode ? { tag, count, mode } : { tag, count });
+  }
+  return strata.length > 0 ? { strata } : null;
+}
+
+/**
  * Map editor `SectionTimeLimit` back to the DB integer.
  * Both `inherit_test` and `none` are encoded as `null`.
  */
@@ -313,6 +332,7 @@ function buildSectionsFromApi(src: ApiTestResponse): {
       feedback: fb.content,
       feedbackLinks: fb.links,
       feedbackAssets: fb.assets,
+      drawBlueprint: readDrawBlueprintFromApi(raw.drawBlueprintJson),
     });
   }
 
@@ -785,6 +805,14 @@ export function mapEditorSectionsToPayload(model: TestEditorModel): TestSectionP
       assets: stripScormHref(section.feedbackAssets),
     };
 
+    // PRD-11: send the blueprint only when it has at least one stratum; an empty
+    // list collapses to null = uniform draw (FR-02) and avoids the empty-strata
+    // schema rejection.
+    const drawBlueprintJson =
+      section.drawBlueprint && section.drawBlueprint.strata.length > 0
+        ? section.drawBlueprint
+        : null;
+
     return {
       topicId: section.topicId,
       drawCount: section.drawCount,
@@ -792,6 +820,7 @@ export function mapEditorSectionsToPayload(model: TestEditorModel): TestSectionP
       topicPassRuleJson,
       timeLimitMinutes: timeLimitToMinutes(section.timeLimit),
       feedbackJson,
+      drawBlueprintJson,
     };
   });
 }
