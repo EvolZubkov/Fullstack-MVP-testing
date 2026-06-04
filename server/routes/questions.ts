@@ -11,6 +11,22 @@ import {
 import { storage } from "../storage";
 import { requireAuth, requireAuthor } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
+import { questionScoringSchema, type QuestionScoring } from "@shared/schema";
+
+// PRD-10: validate the optional graded-scoring config (FR-13). Null/undefined =
+// exact match (default); a present config must satisfy questionScoringSchema.
+function validateScoring(
+  scoringJson: unknown,
+  res: Response,
+): scoringJson is QuestionScoring | null | undefined {
+  if (scoringJson == null) return true;
+  const parsed = questionScoringSchema.safeParse(scoringJson);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid scoring config", details: parsed.error.flatten() });
+    return false;
+  }
+  return true;
+}
 
 // SHA-256 от type + prompt + нормализованные варианты ответов
 function computeQuestionHash(type: string, prompt: string, dataJson: unknown): string {
@@ -47,6 +63,7 @@ interface CreateQuestionBody {
   feedbackMode?: "general" | "conditional";
   feedbackCorrect?: string;
   feedbackIncorrect?: string;
+  scoringJson?: QuestionScoring | null;
 }
 
 interface UpdateQuestionBody extends Partial<CreateQuestionBody> {}
@@ -122,6 +139,7 @@ router.post(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
+        scoringJson,
       } = req.body;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
@@ -129,6 +147,8 @@ router.post(
       if (!topicId || !type || !prompt) {
         return res.status(400).json({ error: "TopicId, type and prompt required" });
       }
+
+      if (!validateScoring(scoringJson, res)) return;
 
       const question = await storage.createQuestion({
         topicId,
@@ -145,6 +165,7 @@ router.post(
         feedbackMode: feedbackMode || "general",
         feedbackCorrect: feedbackCorrect || null,
         feedbackIncorrect: feedbackIncorrect || null,
+        scoringJson: scoringJson ?? null,
       } as any);
 
       res.status(201).json(question);
@@ -178,9 +199,12 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
+        scoringJson,
       } = req.body as UpdateQuestionBody;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
+
+      if (!validateScoring(scoringJson, res)) return;
 
       const updated = await storage.updateQuestion(req.params.id, {
         topicId,
@@ -197,6 +221,7 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
+        scoringJson,
       } as any);
 
       if (!updated) {

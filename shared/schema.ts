@@ -101,6 +101,65 @@ export const topicEvents = pgTable("topic_events", {
   title: text("title").notNull(),
 });
 
+// ─── PRD-10: graded answer scoring (цена ответа) ─────────────────────────────
+// Per-question scoring config on the correctness axis (how many points an answer
+// earns), orthogonal to scale contributions (PRD-5, question_measurements).
+// Absence (null) = exact match, sMax = 1 — legacy tests stay bit-identical
+// (scoring-model §11; PRD-10 FR-02). Stored in its own nullable `scoring_json`
+// column, NOT mixed into correct_json (which the answer checker parses). Unit
+// identity is index-based (option index / matching pair / ranking position),
+// consistent with the PRD-5 source_key convention — no durable ids (PRD-10 OQ-3).
+
+/** Counter token in a tier predicate: total correct units (T), pairs (P) or items (N). */
+export const scoringCounterTokenSchema = z.enum(["T", "P", "N"]);
+
+/** One condition of a tier predicate (scoring-model §11.2): `lhs op rhs`. */
+export const scoringConditionSchema = z.object({
+  /** Left counter: correctly selected (c) or wrongly selected (x). */
+  lhs: z.enum(["c", "x"]),
+  op: z.enum(["==", ">=", "<=", "<", ">"]),
+  /** Right side: a literal number or a counter token (T/P/N). */
+  rhs: z.union([z.number(), scoringCounterTokenSchema]),
+});
+
+/** Tier predicate: conjunction of conditions — all must hold (scoring-model §11.2). */
+export const scoringPredicateSchema = z.object({
+  all: z.array(scoringConditionSchema).min(1),
+});
+
+/** A graduated tier: when `when` holds, award `score` (floored at 0). */
+export const scoringTierSchema = z.object({
+  when: scoringPredicateSchema,
+  score: z.number().min(0),
+});
+
+/**
+ * Question scoring config, discriminated by `kind`:
+ * - `exact`    — exact match (0/1), sMax = 1; same as null (default).
+ * - `weighted` — single choice: score = weight of the chosen option (additive).
+ * - `tiered`   — multiple/matching/ranking: first matching tier wins, else 0
+ *                (non-additive step table over the answer counters).
+ * `sMax` is optional and otherwise derived: max(weights) | max(tier.score).
+ */
+export const questionScoringSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("exact") }),
+  z.object({
+    kind: z.literal("weighted"),
+    weights: z.array(z.number().min(0)).min(1),
+    sMax: z.number().positive().optional(),
+  }),
+  z.object({
+    kind: z.literal("tiered"),
+    tiers: z.array(scoringTierSchema).min(1),
+    sMax: z.number().positive().optional(),
+  }),
+]);
+
+export type ScoringCondition = z.infer<typeof scoringConditionSchema>;
+export type ScoringPredicate = z.infer<typeof scoringPredicateSchema>;
+export type ScoringTier = z.infer<typeof scoringTierSchema>;
+export type QuestionScoring = z.infer<typeof questionScoringSchema>;
+
 export const questions = pgTable("questions", {
   id: varchar("id", { length: 36 }).primaryKey(),
   topicId: varchar("topic_id", { length: 36 }).notNull(),
@@ -120,6 +179,8 @@ export const questions = pgTable("questions", {
   contentHash: text("content_hash"),
   // PRD-2 §8.2: tags feed result-variable aggregate formulas; chip input in the question card.
   tags: jsonb("tags").$type<string[]>().notNull().default([]),
+  // PRD-10: graded answer scoring (correctness axis). Null = exact match (FR-02).
+  scoringJson: jsonb("scoring_json").$type<QuestionScoring>(),
 });
 
 export const testFolders = pgTable("test_folders", {
@@ -217,7 +278,10 @@ export const insertFolderSchema = createInsertSchema(folders).omit({ id: true })
 export const insertTopicSchema = createInsertSchema(topics).omit({ id: true });
 export const insertTopicCourseSchema = createInsertSchema(topicCourses).omit({ id: true });
 export const insertTopicEventSchema = createInsertSchema(topicEvents).omit({ id: true });
-export const insertQuestionSchema = createInsertSchema(questions).omit({ id: true });
+export const insertQuestionSchema = createInsertSchema(questions)
+  .omit({ id: true })
+  // drizzle-zod types jsonb loosely; validate the scoring config explicitly (FR-13).
+  .extend({ scoringJson: questionScoringSchema.nullish() });
 export const insertTestSchema = createInsertSchema(tests).omit({ id: true });
 export const insertTestSectionSchema = createInsertSchema(testSections).omit({ id: true });
 export const insertAttemptSchema = createInsertSchema(attempts).omit({ id: true });
