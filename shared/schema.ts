@@ -191,6 +191,46 @@ export const testFolders = pgTable("test_folders", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ─── PRD-6: retake gate / cooldown (ограничение повторного прохождения) ──────
+// Optional per-test policy that gates a new attempt before the SCORM `Initialize`
+// (FR-01/02). Absence / `enabled !== true` / no plugin = legacy behaviour
+// (`allowed = true`). Eligibility is decided by a pluggable rule (PRD-6 §3.4).
+
+/** Reference to a chosen eligibility plugin + its admin-managed config (PRD-6 §3.1). */
+export const eligibilityPluginRefSchema = z.object({
+  key: z.string().min(1),
+  configId: z.string().optional(),
+  failPolicy: z.enum(["failOpen", "failClosed"]).default("failOpen"),
+});
+
+/**
+ * `tests.retake_policy_json`. `cooldownPeriodDays` is whole calendar days
+ * (1–3650); legacy `cooldownDays` is accepted on input and normalized.
+ * `completionReportMode` controls how a finished attempt is reported to the LMS.
+ */
+export const retakePolicySchema = z.preprocess(
+  (val) => {
+    if (val && typeof val === "object") {
+      const v = val as Record<string, unknown>;
+      if (v.cooldownPeriodDays == null && typeof v.cooldownDays === "number") {
+        return { ...v, cooldownPeriodDays: v.cooldownDays };
+      }
+    }
+    return val;
+  },
+  z.object({
+    enabled: z.boolean().default(false),
+    cooldownPeriodDays: z.number().int().min(1).max(3650),
+    gateMode: z.literal("before_internal_start").default("before_internal_start"),
+    eligibilityPlugin: eligibilityPluginRefSchema.nullish(),
+    blockedPageId: z.string().optional(),
+    completionReportMode: z.enum(["scored", "completed_neutral"]).default("scored"),
+  }),
+);
+
+export type EligibilityPluginRef = z.infer<typeof eligibilityPluginRefSchema>;
+export type RetakePolicy = z.infer<typeof retakePolicySchema>;
+
 export const tests = pgTable("tests", {
   id: varchar("id", { length: 36 }).primaryKey(),
   folderId: varchar("folder_id", { length: 36 }),
@@ -216,6 +256,8 @@ export const tests = pgTable("tests", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   designSettingsJson: jsonb("design_settings_json").notNull().default({}),
+  // PRD-6: optional retake gate / cooldown policy. Null = legacy (no gate).
+  retakePolicyJson: jsonb("retake_policy_json").$type<RetakePolicy>(),
 });
 
 // ─── PRD-11: tag draw quotas (квоты выдачи по тегам) ─────────────────────────
@@ -326,7 +368,10 @@ export const insertQuestionSchema = createInsertSchema(questions)
     scoringJson: questionScoringSchema.nullish(),
     tags: z.array(z.string()).transform(normalizeTags).optional(),
   });
-export const insertTestSchema = createInsertSchema(tests).omit({ id: true });
+export const insertTestSchema = createInsertSchema(tests)
+  .omit({ id: true })
+  // drizzle-zod types jsonb loosely; validate the retake policy explicitly (PRD-6).
+  .extend({ retakePolicyJson: retakePolicySchema.nullish() });
 export const insertTestSectionSchema = createInsertSchema(testSections)
   .omit({ id: true })
   // drizzle-zod types jsonb loosely; validate the draw blueprint explicitly.
