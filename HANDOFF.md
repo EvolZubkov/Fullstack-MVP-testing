@@ -30,11 +30,16 @@
 таблица); JS-порт `server/scorm/template/app/scoring/engine.js` (вшит в `index.ts` перед
 `resultsPage.js`); `checkAnswer` в `resultsPage.js` делегирует `ScoringEngine.scoreAnswer(...).ratio`
 (guard + fallback на старое 0/1); golden-parity `tests/scoring-engine-port.test.ts` + юниты
-`tests/scoring-engine.test.ts`. `npm run check` чист, `vitest` **1731 зелёный**, `npm run build`
-ок. ВАЖНО: серверный `server/utils/check-answer.ts` (веб-попытки) оставлен бинарным — отдельный
-шаг (не на пути РТК). Уточнение: монолита `assets/app.js` с `checkAnswer` НЕТ (§7 ниже неточен).
-Дальше — **Стадия 3** (экспорт `scoring` в `test-json`, чтобы `q.scoring` дошёл до рантайма пакета).
-Ниже — исходный план дизайн-фазы (актуален для PRD-11).
+`tests/scoring-engine.test.ts`. Реализована **Стадия 3 PRD-10** (экспорт): `buildTestJson`
+(`server/scorm/builders/test-json.ts`) переносит `scoring` в рантайм-вопрос пакета — оба блока
+(секции + адаптив), УСЛОВНО (только когда задано → пакеты без цены ответа бит-идентичны, FR-02);
+так `q.scoring` доходит до `checkAnswer` и градуированный путь активен end-to-end; тесты в
+`tests/scorm-builders.test.ts`. `npm run check` чист, `vitest` **1733 зелёных**, `npm run build` ок.
+ВАЖНО: серверный `server/utils/check-answer.ts` (веб-попытки) оставлен бинарным — отдельный шаг
+(не на пути РТК). FR-12 (per-question `scoreRatio`/«Частично правильно» в CMI/learner-рендер) НЕ
+сделан — presentational-слой, балл темы/теста уже градуирован. Уточнение: монолита `assets/app.js`
+с `checkAnswer` НЕТ (§7 ниже неточен). Дальше — **Стадия 4** (UI редактора цены ответа; эскиз
+согласован). Ниже — исходный план дизайн-фазы (актуален для PRD-11).
 
 Сделано в дизайн-фазе (документы):
 

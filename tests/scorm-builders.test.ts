@@ -217,6 +217,25 @@ describe("buildTestJson — standard mode", () => {
     expect(q.correct.correctIndex).toBe(0);
   });
 
+  // PRD-10 Stage 3: graded scoring is exported only when set (FR-02 byte-identical).
+  it("omits scoring when the question has no scoringJson", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    expect(data.sections[0].questions[0].scoring).toBeUndefined();
+  });
+
+  it("exports scoring into the runtime question when set", () => {
+    const scoring = {
+      kind: "tiered",
+      tiers: [{ when: { all: [{ lhs: "c", op: "==", rhs: "T" }] }, score: 2 }],
+    };
+    const d = {
+      ...exportData,
+      sections: [{ ...dbSection, questions: [{ ...dbQuestion, scoringJson: scoring }] }],
+    };
+    const q = JSON.parse(buildTestJson(d)).sections[0].questions[0];
+    expect(q.scoring).toEqual(scoring);
+  });
+
   it("does not include adaptiveTopics for standard mode", () => {
     const data = JSON.parse(buildTestJson(exportData));
     expect(data.adaptiveTopics).toBeUndefined();

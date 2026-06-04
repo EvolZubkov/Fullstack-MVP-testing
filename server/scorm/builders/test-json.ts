@@ -129,6 +129,9 @@ export function buildTestJson(data: ExportData): string {
         feedbackMode: q.feedbackMode || "general",
         feedbackCorrect: q.feedbackCorrect || null,
         feedbackIncorrect: q.feedbackIncorrect || null,
+        // PRD-10: graded answer scoring. Included only when set so packages for
+        // unscored questions stay byte-identical (FR-02); runtime reads q.scoring.
+        ...(q.scoringJson ? { scoring: q.scoringJson } : {}),
       })),
     })),
   };
@@ -184,6 +187,8 @@ export function buildTestJson(data: ExportData): string {
           feedbackMode: q.feedbackMode || "general",
           feedbackCorrect: q.feedbackCorrect || null,
           feedbackIncorrect: q.feedbackIncorrect || null,
+          // PRD-10: graded answer scoring (see standard-section map above).
+          ...(q.scoringJson ? { scoring: q.scoringJson } : {}),
         })),
       };
     });
