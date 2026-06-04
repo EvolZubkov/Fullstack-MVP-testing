@@ -141,19 +141,12 @@
             <span class="ou-number__hint">От 1 до 3650 дней.</span>
           </div>
 
-          <div class="wf-fieldrow">
-            <div class="ou-formfield">
-              <label class="ou-formfield__lbl" for="rp-plugin">Способ проверки (плагин)</label>
-              <div class="ou-select ou-field--m" id="rp-plugin" data-ou-options="WebTutor: период охлаждения|SCORM suspend_data (best-effort)">
-                <button type="button" class="ou-select__trigger"><span class="ou-select__value">WebTutor: период охлаждения</span><svg class="ou-select__chev" width="16" height="16"><use href="#i-chevron-down" /></svg></button>
-              </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="rp-plugin">Способ проверки (плагин)</label>
+            <div class="ou-select ou-field--m ou-field--full" id="rp-plugin" data-ou-options="WebTutor: период охлаждения|SCORM suspend_data (best-effort)">
+              <button type="button" class="ou-select__trigger"><span class="ou-select__value">WebTutor: период охлаждения</span><svg class="ou-select__chev" width="16" height="16"><use href="#i-chevron-down" /></svg></button>
             </div>
-            <div class="ou-formfield">
-              <label class="ou-formfield__lbl" for="rp-config">Конфигурация</label>
-              <div class="ou-select ou-field--m" id="rp-config" data-ou-options="Основной каталог|Сертификации">
-                <button type="button" class="ou-select__trigger"><span class="ou-select__value">Основной каталог</span><svg class="ou-select__chev" width="16" height="16"><use href="#i-chevron-down" /></svg></button>
-              </div>
-            </div>
+            <div class="ou-formfield__msg">Единственная активная конфигурация плагина подставляется автоматически.</div>
           </div>
 
           <div class="ou-banner ou-banner--subtle ou-banner--info" role="note">
@@ -301,7 +294,7 @@
             <tr><td>Свич «Ограничить…»</td><td><code>retakePolicy.enabled</code></td><td>Выкл = легаси-поведение (FR-02, allowed=true)</td></tr>
             <tr><td>Период охлаждения</td><td><code>cooldownPeriodDays</code> (1–3650)</td><td>Календарные дни; <code>allowed = (today − last) ≥ days</code></td></tr>
             <tr><td>Плагин</td><td><code>eligibilityPlugin.key</code></td><td>Select из активного реестра (Phase 1 — сидируется в коде): webtutor_cooldown / suspend_data_cooldown</td></tr>
-            <tr><td>Конфигурация</td><td><code>eligibilityPlugin.configId</code></td><td>Конфиги выбранного плагина (endpoints/фильтр — у админа)</td></tr>
+            <tr><td>Конфигурация</td><td><code>eligibilityPlugin.configId</code> — авто</td><td>Phase 1: у плагина один активный конфиг → подставляется неявно, поле скрыто (избыточно). Видимый Select вернётся в Фазе 2 (админ-реестр, ≥2 конфига)</td></tr>
             <tr><td>Превью даты</td><td>вычисляется из примера последней попытки</td><td>Чтобы автор не считал дату вручную (§4.1)</td></tr>
             <tr><td>Политика ошибки</td><td><code>eligibilityPlugin.failPolicy</code></td><td>fail-open (старт) / fail-closed (блок) — SegmentedControl (взаимоисключающий)</td></tr>
             <tr><td>Завершение в LMS</td><td><code>completionReportMode</code></td><td>scored / completed_neutral (§4.1)</td></tr>
@@ -320,7 +313,7 @@
             <tr><td>Пейн настроек</td><td><code>Card</code> (<code>ou-card--outlined</code>) + <code>CardHeader</code></td><td><code>--ou-bg-elevated</code>, <code>--ou-radius-l</code></td><td>Как существующие пейны «Настроек»</td></tr>
             <tr><td>Свич «Ограничить…»</td><td><code>Switch</code> (<code>ou-switch-field</code>)</td><td><code>--ou-accent-*</code></td><td>label + desc</td></tr>
             <tr><td>Период охлаждения</td><td><code>NumberInput</code> (<code>ou-number--split</code>)</td><td><code>--ou-border-default</code></td><td>min/max + ошибка <code>is-invalid</code></td></tr>
-            <tr><td>Плагин / Конфигурация</td><td><code>Select</code> (<code>ou-select</code>)</td><td><code>--ou-radius-m</code></td><td>Опции из реестра</td></tr>
+            <tr><td>Плагин</td><td><code>Select</code> (<code>ou-select</code>)</td><td><code>--ou-radius-m</code></td><td>Опции из активного реестра; выбор конфига (при >1) — Фаза 2</td></tr>
             <tr><td>Политика ошибки / Завершение</td><td><code>SegmentedControl</code> (<code>ou-seg</code>)</td><td><code>--ou-radius-s</code></td><td>Взаимоисключающий выбор (не Tabs)</td></tr>
             <tr><td>Превью даты / warning / ошибка</td><td><code>Banner</code> (info/warning/error)</td><td><code>--ou-warning-*</code>, <code>--ou-error-*</code></td><td>Реальные сообщения продукта</td></tr>
             <tr><td>Блок-экран</td><td><code>Card</code> + <code>Banner</code></td><td><code>--ou-*</code></td><td>Рантайм-экран SCORM; токены DS (не хардкод)</td></tr>
