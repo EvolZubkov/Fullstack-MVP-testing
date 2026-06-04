@@ -15,7 +15,7 @@
     через path-DSL; встроенный экран остаётся только как фолбэк.
     Состояния:
       s-off            — гейт выключен (легаси-поведение)
-      s-on-webtutor    — включён, плагин WebTutor cooldown + превью даты
+      s-on-webtutor    — включён, плагин WebTutor cooldown
       s-on-suspend     — включён, suspend_data (best-effort) + warning
       s-error          — период вне диапазона (валидация)
       s-blockwall      — экран блокировки (учащийся): cooldown активен
@@ -41,9 +41,6 @@
       .wf-fieldrow { display: flex; flex-wrap: wrap; gap: var(--ou-space-4); }
       .wf-muted { color: var(--ou-fg-muted); }
       .wf-ico-inline { vertical-align: -2px; }
-      /* Date-preview info lines inside an info banner. */
-      .wf-calc { display: flex; flex-direction: column; gap: var(--ou-space-1); font: var(--ou-text-body-s); }
-      .wf-calc strong { color: var(--ou-fg-default); }
       /* Learner block-wall — sketch of the template system.blocked page. */
       .wf-wall { display: flex; align-items: center; justify-content: center; padding: var(--ou-space-8) var(--ou-space-4); }
       .wf-wall__card { max-width: var(--wf-size-520); width: 100%; text-align: center; }
@@ -82,7 +79,6 @@
       <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></symbol>
       <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></symbol>
       <symbol id="i-alert-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></symbol>
-      <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></symbol>
     </svg>
 
     <nav class="wf-nav" aria-label="Wireframe state switcher">
@@ -146,17 +142,6 @@
             <label class="ou-formfield__lbl" for="rp-plugin">Способ проверки (плагин)</label>
             <div class="ou-select ou-field--m ou-field--full" id="rp-plugin" data-ou-options="WebTutor: период охлаждения|SCORM suspend_data (best-effort)">
               <button type="button" class="ou-select__trigger"><span class="ou-select__value">WebTutor: период охлаждения</span><svg class="ou-select__chev" width="16" height="16"><use href="#i-chevron-down" /></svg></button>
-            </div>
-          </div>
-
-          <div class="ou-banner ou-banner--subtle ou-banner--info" role="note">
-            <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-clock" /></svg></div>
-            <div class="ou-banner__body">
-              <div class="ou-banner__desc wf-calc">
-                <span>Период охлаждения: <strong>30 календарных дней</strong></span>
-                <span>Последняя полноценная попытка: <strong>08.05.2026</strong></span>
-                <span>Повторное прохождение доступно с: <strong>07.06.2026</strong></span>
-              </div>
             </div>
           </div>
 
@@ -292,7 +277,6 @@
             <tr><td>Период охлаждения</td><td><code>cooldownPeriodDays</code> (1–3650)</td><td>Календарные дни; <code>allowed = (today − last) ≥ days</code></td></tr>
             <tr><td>Плагин</td><td><code>eligibilityPlugin.key</code></td><td>Select из активного реестра (Phase 1 — сидируется в коде): webtutor_cooldown / suspend_data_cooldown; версия плагина WebTutor — 1.0.0</td></tr>
             <tr><td>Конфигурация</td><td><code>eligibilityPlugin.configId</code> — авто</td><td>Phase 1: у плагина один активный конфиг → подставляется неявно, поле скрыто (избыточно). Видимый Select вернётся в Фазе 2 (админ-реестр, ≥2 конфига)</td></tr>
-            <tr><td>Превью даты</td><td>вычисляется из примера последней попытки</td><td>Чтобы автор не считал дату вручную (§4.1)</td></tr>
             <tr><td>Политика ошибки</td><td><code>eligibilityPlugin.failPolicy</code></td><td>fail-open (старт) / fail-closed (блок) — SegmentedControl (взаимоисключающий)</td></tr>
             <tr><td>Завершение в LMS</td><td><code>completionReportMode</code></td><td>«Со статусом» = scored → passed/failed; «Нейтральный» = completed_neutral → completed/unknown (LMS показывает «Завершен»). §4.1</td></tr>
             <tr><td>Warning suspend_data</td><td>плагин = suspend_data_cooldown</td><td>Best-effort: suspend_data надёжен только внутри одной SCORM-регистрации; строгий cooldown между попытками — через внешний/LMS-источник (WebTutor). Banner-предупреждение (§4.6)</td></tr>
@@ -312,7 +296,7 @@
             <tr><td>Период охлаждения</td><td><code>NumberInput</code> (<code>ou-number--split</code>)</td><td><code>--ou-border-default</code></td><td>min/max + ошибка <code>is-invalid</code></td></tr>
             <tr><td>Плагин</td><td><code>Select</code> (<code>ou-select</code>)</td><td><code>--ou-radius-m</code></td><td>Опции из активного реестра; выбор конфига (при >1) — Фаза 2</td></tr>
             <tr><td>Политика ошибки / Завершение</td><td><code>SegmentedControl</code> (<code>ou-seg</code>)</td><td><code>--ou-radius-s</code></td><td>Взаимоисключающий выбор (не Tabs)</td></tr>
-            <tr><td>Превью даты / warning / ошибка</td><td><code>Banner</code> (info/warning/error)</td><td><code>--ou-warning-*</code>, <code>--ou-error-*</code></td><td>Реальные сообщения продукта</td></tr>
+            <tr><td>Warning / ошибка</td><td><code>Banner</code> (warning/error)</td><td><code>--ou-warning-*</code>, <code>--ou-error-*</code></td><td>Реальные сообщения продукта</td></tr>
             <tr><td>Блок-экран</td><td><code>Card</code> + <code>Banner</code></td><td><code>--ou-*</code></td><td>Рантайм-экран SCORM; токены DS (не хардкод)</td></tr>
           </tbody>
         </table>
