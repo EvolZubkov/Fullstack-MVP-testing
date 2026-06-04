@@ -90,6 +90,28 @@ create/update, как `scoringJson`) → эскиз chip-инпута в ред�
 UI. Порядок дальше: упростить A1-A3 → B-api → эскиз B0b → UI (B-ui, затем A4 квоты). Ниже — исходный
 план дизайн-фазы.
 
+**Обновление (сессия 3, 2026-06-04): PRD-11 ЗАВЕРШЁН (квоты + тегирование, end-to-end).**
+
+- **A1-A3 упрощены** под финальную модель: `strata: [{tag, count, mode}]` без `modeGranularity`/
+  топик-`mode` (`effMode = s.mode ?? "exact"`); миграция `012` заменила stale CHECK из `011`
+  (валидирует только `strata`-массив, применена к dev-БД). Сопоставление тега в движке (TS +
+  JS-порт) — по нормализованному `tagKey` (регистронезависимо), `shared/draw/blueprint.ts`.
+- **Правила именования тега (§3a, согласовано):** свободные метки — пробелы РАЗРЕШЕНЫ; на сохранении
+  `trim` + схлопывание пробелов, дедуп регистронезависимо, длина 1–50. `shared/tags.ts`
+  (`normalizeTag`/`tagKey`/`normalizeTags`) — единый для zod-схемы, API и движка.
+- **B (тегирование вопросов):** API (`tags` в POST/PUT `routes/questions.ts` + `storage`
+  create/duplicate) + UI `client/.../author/tags-input.tsx` (`TagsInput` — chip-инпут с
+  автодополнением из distinct-тегов банка), встроен в `questions.tsx`. Эскиз
+  `docs/wireframes/prd11-question-tags.html`. Верифицировано вживую (round-trip нормализации на сервере).
+- **A4 (UI квот):** `QuotaEditor` в `tb-topic-row` (вкладка «Состав», `topics-structure-section.tsx`) —
+  свич «Квоты по подтемам» + инлайн-таблица страт (Select РЕАЛЬНЫХ тегов темы, count, режим
+  Ровно/Не менее НА ТЕГ, добавить/удалить), Σ-валидация (FR-05 → error-баннер + блок сохранения в
+  `test-editor.validation.ts`), нехватка → колонка «Доступно» + warning-теги (FR-06); свич disabled,
+  если у темы нет тегов. Маппер `drawBlueprintJson` (`test-editor.mappers.ts`, пустые страты → null).
+  Верифицировано вживую: save → reload round-trip, error/warning/off-состояния.
+- `npm run check` чист, `vitest` **1856** зелёных. Коммиты `f01277f`/`82f25f3`/`28dd5d1`/`b9ea095`/
+  `aa06e53` на ветке `dev` (НЕ запушены в `origin`).
+
 Сделано в дизайн-фазе (документы):
 
 | Артефакт | Состояние |
@@ -120,9 +142,10 @@ UI. Порядок дальше: упростить A1-A3 → B-api → эски
   Балл темы/теста = `Σ s`; пороги прохождения — на теме/тесте (`topic_pass_rule_json`/
   `overall_pass_rule_json`); сертификация — показатель PRD-2 + `controls_status=success`.
 - **Квоты выдачи:** на теме (`test_sections.draw_blueprint_json`): `strata: [{tag, count, mode}]`;
-  `mode` = `exact` (ровно `count`) / `min` (не менее); гранулярность `modeGranularity` = `uniform`
-  (общий, дефолт) / `per_tag`. Общая выборка `drawCount`; `Σ count <= drawCount`; остаток случайно из
-  вопросов БЕЗ `exact`-тегов; нехватка → НЕблокирующий warning; stateless (без retry-логики).
+  `mode` = `exact` (ровно `count`) / `min` (не менее) — НА КАЖДЫЙ тег, дефолт `exact` (без
+  `modeGranularity`/топик-режима — упрощено 2026-06-04). Общая выборка `drawCount`;
+  `Σ count <= drawCount`; остаток случайно из вопросов БЕЗ `exact`-тегов; нехватка → НЕблокирующий
+  warning; сопоставление тега регистронезависимо (`tagKey`); stateless (без retry-логики).
 - **Подтема = тег** (`questions.tags`); иерархии тем НЕТ; per-tag порогов прохождения НЕТ.
 - **WebTutor НЕ поддерживает `adl.data`** (проверено зондом, `GetValue("adl.data._count")` → err 401;
   память `reference_webtutor_scorm_runtime`). Cross-attempt стора у автономного пакета НЕТ →
