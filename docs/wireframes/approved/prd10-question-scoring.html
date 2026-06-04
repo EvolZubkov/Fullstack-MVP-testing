@@ -21,7 +21,7 @@
       s-error            — Ошибка валидации цены ответа
       s-loading          — Загрузка
       s-docs             — Пояснения + DS Mapping
-    DRAFT — не перенесён в approved/ до согласования.
+    Согласовано 2026-06-04 (jump-фикс модалки: единый стабильный фрейм xl + фиксированная высота). В approved/.
     -->
     <title>PRD-10 — Редактор цены ответа вопроса</title>
     <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
@@ -158,11 +158,24 @@
         padding-top: var(--wf-nav-offset, var(--wf-size-52));
       }
       .wf-state.active { display: block; }
-      /* Modal-root смещаем под фиксированный навбар. */
-      .wf-state > .ou-modal-root { top: var(--wf-nav-offset, var(--wf-size-52)); }
+      /* Modal-root смещаем под фиксированный навбар; прижимаем к верху (по горизонтали
+         центр), чтобы рост контента шёл вниз, а не пере-центрировал модалку. */
+      .wf-state > .ou-modal-root {
+        top: var(--wf-nav-offset, var(--wf-size-52));
+        place-items: start center;
+      }
       .wf-state > .ou-modal-root .ou-modal {
         max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)) - var(--ou-space-8));
       }
+      /* PRD-10 fix: редактор цены ответа — единый стабильный фрейм для всех режимов
+         (одна ширина --xl + фиксированная высота). Переключение способа цены ответа
+         меняет только содержимое body; ширина, позиция, хедер и футер неподвижны
+         (нет layout shift). Высота фрейма отражает полный редактор вопроса — верхние
+         поля (текст/варианты) в эскизе опущены. Body — единственная зона скролла. */
+      .wf-state > .ou-modal-root .ou-modal--xl {
+        height: min(680px, calc(100vh - var(--wf-nav-offset, var(--wf-size-52)) - var(--ou-space-8)));
+      }
+      .wf-state > .ou-modal-root .ou-modal--xl .ou-modal__body { flex: 1 1 auto; min-height: 0; }
     </style>
   </head>
   <body class="ou ou--light ou--normal">
@@ -217,7 +230,7 @@
     <div id="wf-exact" class="wf-state active">
       <div class="ou-modal-root" role="dialog" aria-modal="true">
         <div class="ou-modal__backdrop"></div>
-        <div class="ou-modal ou-modal--l">
+        <div class="ou-modal ou-modal--xl">
           <header class="ou-modal__head">
             <div class="ou-modal__head-text">
               <h1 class="ou-modal__title">Редактирование вопроса</h1>
@@ -250,7 +263,7 @@
     <div id="wf-weighted" class="wf-state">
       <div class="ou-modal-root" role="dialog" aria-modal="true">
         <div class="ou-modal__backdrop"></div>
-        <div class="ou-modal ou-modal--l">
+        <div class="ou-modal ou-modal--xl">
           <header class="ou-modal__head">
             <div class="ou-modal__head-text">
               <h1 class="ou-modal__title">Редактирование вопроса</h1>
@@ -509,7 +522,7 @@
     <div id="wf-empty" class="wf-state">
       <div class="ou-modal-root" role="dialog" aria-modal="true">
         <div class="ou-modal__backdrop"></div>
-        <div class="ou-modal ou-modal--l">
+        <div class="ou-modal ou-modal--xl">
           <header class="ou-modal__head">
             <div class="ou-modal__head-text">
               <h1 class="ou-modal__title">Редактирование вопроса</h1>
@@ -527,7 +540,7 @@
               <button type="button" class="ou-seg__item is-active" aria-pressed="true">Точное совпадение</button>
               <button type="button" class="ou-seg__item" aria-pressed="false">Ступенчато</button>
             </div>
-            <div class="ou-empty ou-empty--page" role="status">
+            <div class="ou-empty" role="status">
               <div class="ou-empty__art"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-info" /></svg></div>
               <div class="ou-empty__content">
                 <div class="ou-empty__title">Градуированная оценка не настроена</div>
@@ -614,7 +627,7 @@
     <div id="wf-loading" class="wf-state">
       <div class="ou-modal-root" role="dialog" aria-modal="true">
         <div class="ou-modal__backdrop"></div>
-        <div class="ou-modal ou-modal--l">
+        <div class="ou-modal ou-modal--xl">
           <header class="ou-modal__head">
             <div class="ou-modal__head-text"><h1 class="ou-modal__title">Редактирование вопроса</h1></div>
             <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
@@ -653,6 +666,7 @@
           <tbody>
             <tr><td>Переключатель состояний</td><td><code>showState(btn, id)</code>, тоглы темы/плотности/аннотаций</td><td>Каркас эскиза; в продукте отсутствует</td></tr>
             <tr><td>Поверхность</td><td>редактор вопроса (<code>questions.tsx</code>) = Modal</td><td>Цена ответа встроена в форму вопроса (не модалка поверх модалки); верхние поля (текст/варианты/правильный ответ) — существующие, показаны кратко</td></tr>
+            <tr><td>Стабильный фрейм</td><td>единая ширина <code>ou-modal--xl</code> + фиксированная высота, скролл только в body</td><td>Переключение способа цены ответа меняет лишь содержимое body; ширина, позиция, хедер и футер неподвижны (нет layout shift). Высота фрейма отражает полный редактор вопроса — верхние поля в эскизе опущены, оттого «воздух» в exact/weighted</td></tr>
             <tr><td>Цена ответа — ось правильности</td><td><code>question.scoring</code> (scoring-model §11)</td><td>Отдельно от «Вкладов в шкалы» (ось измерения). Не наследует и не меняет <code>question_measurements</code> (FR-08, §10.3)</td></tr>
             <tr><td>Read-only — НЕ применим</td><td>BR §2.6 «если применимо»</td><td>Вопрос правится в банке вопросов и не замораживается публикацией теста (это модель ТЕСТА — версионирование). Целостность попыток — снапшот/версия теста, не блокировка редактора вопроса</td></tr>
             <tr><td>Цена ответа</td><td><code>scoring.kind</code>: <code>exact</code> / <code>weighted</code> / <code>tiered</code></td><td>Дефолт — <code>exact</code> (точное совпадение), sMax = 1; старые тесты бит-идентичны (FR-02, §11.8)</td></tr>
