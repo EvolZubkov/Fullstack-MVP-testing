@@ -135,6 +135,11 @@ export function buildTestJson(data: ExportData): string {
         // PRD-10: graded answer scoring. Included only when set so packages for
         // unscored questions stay byte-identical (FR-02); runtime reads q.scoring.
         ...(q.scoringJson ? { scoring: q.scoringJson } : {}),
+        // PRD-11: sub-topic tags drive the stratified draw (drawSection matches a
+        // stratum tag against q.tags). Included only when non-empty so packages
+        // for untagged questions stay byte-identical (FR-02); the draw blueprint
+        // is useless without them.
+        ...(Array.isArray(q.tags) && q.tags.length ? { tags: q.tags } : {}),
       })),
     })),
   };

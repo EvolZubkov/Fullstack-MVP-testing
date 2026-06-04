@@ -249,6 +249,22 @@ describe("buildTestJson — standard mode", () => {
     expect(s.drawBlueprint).toEqual(bp);
   });
 
+  // PRD-11 Stage 3: question tags must reach the runtime — drawSection matches a
+  // stratum tag against q.tags, so without them the draw blueprint is inert.
+  it("omits tags when the question has none", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    expect(data.sections[0].questions[0].tags).toBeUndefined();
+  });
+
+  it("exports tags into the runtime question when set", () => {
+    const d = {
+      ...exportData,
+      sections: [{ ...dbSection, questions: [{ ...dbQuestion, tags: ["Базовые понятия", "Протоколы"] }] }],
+    };
+    const q = JSON.parse(buildTestJson(d)).sections[0].questions[0];
+    expect(q.tags).toEqual(["Базовые понятия", "Протоколы"]);
+  });
+
   it("does not include adaptiveTopics for standard mode", () => {
     const data = JSON.parse(buildTestJson(exportData));
     expect(data.adaptiveTopics).toBeUndefined();
