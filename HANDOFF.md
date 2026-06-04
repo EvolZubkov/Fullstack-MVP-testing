@@ -38,8 +38,16 @@
 ВАЖНО: серверный `server/utils/check-answer.ts` (веб-попытки) оставлен бинарным — отдельный шаг
 (не на пути РТК). FR-12 (per-question `scoreRatio`/«Частично правильно» в CMI/learner-рендер) НЕ
 сделан — presentational-слой, балл темы/теста уже градуирован. Уточнение: монолита `assets/app.js`
-с `checkAnswer` НЕТ (§7 ниже неточен). Дальше — **Стадия 4** (UI редактора цены ответа; эскиз
-согласован). Ниже — исходный план дизайн-фазы (актуален для PRD-11).
+с `checkAnswer` НЕТ (§7 ниже неточен). Реализована **Стадия 4 PRD-10** (UI): секция «Цена ответа»
+в редакторе вопроса — `client/src/pages/author/scoring-builder.tsx` (ScoringBuilder + buildScoringJson)
+интегрирована в `questions.tsx` (state/init/reset/save). Режимы: single → exact/weighted (таблица
+весов), multiple/matching/ranking → exact/tiered (конструктор ступеней). На **shadcn** (решение:
+консистентно с формой, которая НЕ на ui-kit; эскиз = спека раскладки). Playwright: все режимы +
+end-to-end save/round-trip (`scoring_json` пишется/читается, токен `T` сохраняется). `check`/`build`
+зелёные. Отложено: preview-модалка, drag-reorder ступеней. ВАЖНО про dev: сервер на `tsx` без watch —
+**после правок route/storage нужно перезапускать `npm run dev`** (иначе старый код пишет `scoring_json`
+= null; ловил это при проверке). Дальше — **Стадия 5** (порог раздела + показатель-сертификация).
+Ниже — исходный план дизайн-фазы (актуален для PRD-11).
 
 Сделано в дизайн-фазе (документы):
 

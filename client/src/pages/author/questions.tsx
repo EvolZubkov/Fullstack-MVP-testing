@@ -24,6 +24,12 @@ import { EmptyState } from "@/components/empty-state";
 import { LoadingState, LoadingSpinner } from "@/components/loading-state";
 import { t, formatPoints } from "@/lib/i18n";
 import type { Question, Topic } from "@shared/schema";
+import {
+  ScoringBuilder,
+  buildScoringJson,
+  type ScoringMode,
+  type TierDraft,
+} from "./scoring-builder";
 
 const questionTypes = [
   { value: "single", label: t.questions.singleChoice },
@@ -66,6 +72,11 @@ export default function QuestionsPage() {
   const [matchingPairs, setMatchingPairs] = useState<{ left: number; right: number }[]>([]);
 
   const [rankingItems, setRankingItems] = useState<string[]>(["", "", "", ""]);
+
+  // PRD-10: graded answer scoring (цена ответа) draft state.
+  const [scoringMode, setScoringMode] = useState<ScoringMode>("exact");
+  const [scoringWeights, setScoringWeights] = useState<string[]>([]);
+  const [scoringTiers, setScoringTiers] = useState<TierDraft[]>([]);
 
   const [mediaUrl, setMediaUrl] = useState<string>("");
   const [mediaType, setMediaType] = useState<"image" | "audio" | "video" | "">("");
@@ -337,6 +348,9 @@ export default function QuestionsPage() {
     setMatchingRight(["", "", ""]);
     setMatchingPairs([]);
     setRankingItems(["", "", "", ""]);
+    setScoringMode("exact");
+    setScoringWeights([]);
+    setScoringTiers([]);
     setMediaUrl("");
     setMediaType("");
     setShuffleAnswers(true);
@@ -385,6 +399,20 @@ export default function QuestionsPage() {
     } else if (question.type === "ranking") {
       setRankingItems(data.items || ["", "", "", ""]);
     }
+
+    const scoring = question.scoringJson as any;
+    setScoringMode(scoring?.kind ?? "exact");
+    setScoringWeights(
+      scoring?.kind === "weighted" ? (scoring.weights as number[]).map(String) : [],
+    );
+    setScoringTiers(
+      scoring?.kind === "tiered"
+        ? (scoring.tiers as any[]).map((tier) => ({
+            conds: (tier.when?.all ?? []).map((c: any) => ({ lhs: c.lhs, op: c.op, rhs: String(c.rhs) })),
+            score: String(tier.score),
+          }))
+        : [],
+    );
 
     setMediaUrl(question.mediaUrl || "");
     setMediaType((question.mediaType as "image" | "audio" | "video" | "") || "");
@@ -471,6 +499,7 @@ export default function QuestionsPage() {
       feedback: feedbackMode === "general" ? (feedback.trim() || null) : null,
       feedbackCorrect: feedbackMode === "conditional" ? (feedbackCorrect.trim() || null) : null,
       feedbackIncorrect: feedbackMode === "conditional" ? (feedbackIncorrect.trim() || null) : null,
+      scoringJson: buildScoringJson(selectedType, singleOptions, scoringMode, scoringWeights, scoringTiers),
     };
 
     if (editingQuestion) {
@@ -1081,6 +1110,17 @@ export default function QuestionsPage() {
                   setItems={setRankingItems}
                 />
               )}
+
+              <ScoringBuilder
+                type={selectedType}
+                options={selectedType === "single" ? singleOptions : []}
+                mode={scoringMode}
+                setMode={setScoringMode}
+                weights={scoringWeights}
+                setWeights={setScoringWeights}
+                tiers={scoringTiers}
+                setTiers={setScoringTiers}
+              />
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={handleCloseDialog}>
