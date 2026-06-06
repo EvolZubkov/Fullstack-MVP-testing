@@ -56,6 +56,12 @@ export type TemplateParam = {
   /** Rail-section the param belongs to. Defaults to `branding` when absent. */
   section?: ParamSection;
   options?: string[];
+  /**
+   * Human-readable labels for `options`, keyed by option value. Falls back to
+   * the raw value when an option has no entry. Lets the manifest localise enum
+   * choices (e.g. progress.mode `questions` → «По вопросам»).
+   */
+  optionLabels?: Record<string, string>;
   /** PRD-7 S12-G4 media params: client-side validation hint, mime/ext list. */
   accept?: string;
   /** PRD-7 S12-G4 media params: max upload size in kilobytes. */

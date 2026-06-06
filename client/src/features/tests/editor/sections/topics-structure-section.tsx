@@ -42,6 +42,7 @@ import type {
   EditorSection,
   TestEditorModel,
 } from "../test-editor.types";
+import { EMPTY_FIELD_ERRORS, type FieldErrorIndex } from "../field-errors";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -50,6 +51,8 @@ export type CompositionSectionProps = {
   model: TestEditorModel;
   /** Editor draft mutator (forwarded from {@link useTestEditor}). */
   updateModel: (updater: (m: TestEditorModel) => TestEditorModel) => void;
+  /** FR-20c: per-field validation errors for inline highlighting. */
+  fieldErrors?: FieldErrorIndex;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -67,7 +70,7 @@ async function fetchTopicsWithCount(): Promise<TopicWithQuestionCount[]> {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function CompositionSection({ model, updateModel }: CompositionSectionProps) {
+export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: CompositionSectionProps) {
   const { data: allTopics = [] } = useQuery<TopicWithQuestionCount[]>({
     queryKey: ["/api/topics"],
     queryFn: fetchTopicsWithCount,
@@ -121,6 +124,7 @@ export function CompositionSection({ model, updateModel }: CompositionSectionPro
           topicName: topic.name,
           maxQuestions: topic.questionCount,
           drawCount,
+          drawAll: false,
           required: false,
           timeLimit: { source: "inherit_test" },
           feedback: { format: "plain", text: "" },
@@ -160,9 +164,21 @@ export function CompositionSection({ model, updateModel }: CompositionSectionPro
           key={section.topicId}
           index={index}
           section={section}
+          adaptive={model.mode === "adaptive"}
+          drawCountError={fieldErrors.get(`sections[${index}].drawCount`)}
+          blueprintError={fieldErrors.get(`sections[${index}].drawBlueprintJson`)}
           topicTags={tagsByTopic.get(section.topicId)?.tags ?? []}
           availByKey={tagsByTopic.get(section.topicId)?.availByKey ?? {}}
           onChangeDrawCount={(n) => updateSection(section.topicId, { drawCount: n })}
+          onToggleDrawAll={(drawAll) =>
+            updateSection(section.topicId, {
+              drawAll,
+              // Turning "all" on snapshots the current max into drawCount so the
+              // (disabled) number field reads sensibly and the persisted value is
+              // valid; the real "all" is resolved dynamically at export time.
+              ...(drawAll ? { drawCount: Math.max(section.maxQuestions, 1) } : {}),
+            })
+          }
           onToggleRequired={(required) =>
             updateSection(section.topicId, { required })
           }
@@ -203,11 +219,19 @@ function TopicRow(props: {
   /** Position in `model.sections`; feeds the `sections[i]` FR-20c anchor. */
   index: number;
   section: EditorSection;
+  /** Test runs in adaptive mode — forces "draw all" on + locks the controls. */
+  adaptive: boolean;
+  /** FR-20c: validation message for this section's draw count (red state). */
+  drawCountError?: string;
+  /** FR-20c: validation message for this section's draw blueprint quotas. */
+  blueprintError?: string;
   /** Distinct sub-topic tags of this topic's questions (PRD-11 quota Select). */
   topicTags: string[];
   /** How many questions carry each tag key (shortfall indicator). */
   availByKey: Record<string, number>;
   onChangeDrawCount: (n: number) => void;
+  /** Toggle the manual "draw the whole topic" flag. */
+  onToggleDrawAll: (drawAll: boolean) => void;
   onToggleRequired: (required: boolean) => void;
   /** Replace this section's draw blueprint (`null` = uniform draw). */
   onChangeBlueprint: (bp: DrawBlueprint | null) => void;
@@ -218,6 +242,11 @@ function TopicRow(props: {
   const { section } = props;
   const maxQ = Math.max(section.maxQuestions, 1);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+
+  // Adaptive mode forces "draw all" on every topic (the per-level questionsCount
+  // governs how many are shown); the stored manual `drawAll` is preserved so
+  // leaving adaptive restores it. The switch + count field lock while adaptive.
+  const effectiveDrawAll = props.adaptive || section.drawAll;
 
   return (
     <>
@@ -246,29 +275,57 @@ function TopicRow(props: {
           />
         </div>
         <div className="tb-topic-row__body">
-          <div className="tb-draw-count-row" data-field={`sections[${props.index}].drawCount`}>
+          <label className="tb-draw-all-row">
+            <Switch
+              checked={effectiveDrawAll}
+              disabled={props.adaptive}
+              onChange={(e) => props.onToggleDrawAll(e.target.checked)}
+              aria-label={`Все вопросы темы: ${section.topicName}`}
+              data-testid={`topic-drawall-${section.topicId}`}
+            />
+            <span className="tb-draw-all-row__lbl">Все вопросы темы</span>
+            {props.adaptive && (
+              <span className="tb-draw-all-row__hint">включено адаптивным режимом</span>
+            )}
+          </label>
+          <div
+            className="tb-draw-count-row"
+            data-field={`sections[${props.index}].drawCount`}
+            data-invalid={!effectiveDrawAll && props.drawCountError ? "true" : undefined}
+          >
             <span className="tb-draw-count-row__label">Вопросов в тест</span>
             <NumberInput
               size="s"
-              value={section.drawCount}
+              value={effectiveDrawAll ? maxQ : section.drawCount}
               min={1}
               max={maxQ}
+              disabled={effectiveDrawAll}
+              invalid={!effectiveDrawAll && Boolean(props.drawCountError)}
               aria-label={`Количество вопросов из темы ${section.topicName}`}
               data-testid={`topic-drawcount-${section.topicId}`}
               onChange={(next) => props.onChangeDrawCount(next)}
             />
             <span className="tb-draw-count-row__max">из {section.maxQuestions}</span>
           </div>
+          {!effectiveDrawAll && props.drawCountError && (
+            <p className="tb-field-error" role="alert" data-testid={`topic-drawcount-error-${section.topicId}`}>
+              {props.drawCountError}
+            </p>
+          )}
 
-          <QuotaEditor
-            topicId={section.topicId}
-            topicName={section.topicName}
-            drawCount={section.drawCount}
-            blueprint={section.drawBlueprint ?? null}
-            topicTags={props.topicTags}
-            availByKey={props.availByKey}
-            onChange={props.onChangeBlueprint}
-          />
+          {/* Quotas slice a partial draw — meaningless when the whole topic is
+              drawn, so the quota editor is hidden while "draw all" is effective. */}
+          {!effectiveDrawAll && (
+            <QuotaEditor
+              topicId={section.topicId}
+              topicName={section.topicName}
+              drawCount={section.drawCount}
+              blueprint={section.drawBlueprint ?? null}
+              topicTags={props.topicTags}
+              availByKey={props.availByKey}
+              onChange={props.onChangeBlueprint}
+            />
+          )}
 
           <div className="tb-card-desc">Обратная связь по теме</div>
           {/* Clicking the preview opens FeedbackEditorModal (FR-36 / FR-37). */}

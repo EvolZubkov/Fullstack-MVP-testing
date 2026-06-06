@@ -60,6 +60,7 @@ function buildSection(over: Partial<EditorSection> = {}): EditorSection {
     topicName: "Основы ИБ",
     maxQuestions: 10,
     drawCount: 3,
+    drawAll: false,
     required: false,
     timeLimit: { source: "inherit_test" },
     feedback: { format: "plain", text: "" },

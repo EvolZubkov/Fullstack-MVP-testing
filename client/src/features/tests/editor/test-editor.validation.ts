@@ -10,15 +10,16 @@
  * FR-17 (adaptive questions count), FR-18 (adaptive pass threshold), FR-19
  * (adaptive link completeness), FR-20 (webhook URL format).
  */
-import type {
-  AdaptiveLevelConfig,
-  AdaptiveTopicConfig,
-  EditorSection,
-  PassDecisionPolicy,
-  TestEditorModel,
-  TopicPassRule,
-  ValidationIssue,
-  ValidationResult,
+import {
+  sectionDrawsAll,
+  type AdaptiveLevelConfig,
+  type AdaptiveTopicConfig,
+  type EditorSection,
+  type PassDecisionPolicy,
+  type TestEditorModel,
+  type TopicPassRule,
+  type ValidationIssue,
+  type ValidationResult,
 } from "./test-editor.types";
 
 const VALID_PASS_DECISION_POLICIES: PassDecisionPolicy[] = [
@@ -126,9 +127,12 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
     });
   }
 
-  // FR-13: drawCount must be between 1 and maxQuestions for each section
+  // FR-13: drawCount must be between 1 and maxQuestions for each section.
+  // Skipped when the topic draws its whole pool (manual "all" or adaptive mode),
+  // where drawCount is unused — the count is the full pool / per-level questionsCount.
   for (let i = 0; i < model.sections.length; i++) {
     const section = model.sections[i];
+    if (sectionDrawsAll(section.drawAll, model.mode)) continue;
     if (section.drawCount < 1 || section.drawCount > section.maxQuestions) {
       errors.push({
         field: `sections[${i}].drawCount`,
@@ -144,6 +148,7 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
   // section-body refine so the save is blocked client-side with a clear message.
   for (let i = 0; i < model.sections.length; i++) {
     const section = model.sections[i];
+    if (sectionDrawsAll(section.drawAll, model.mode)) continue; // quotas moot when drawing all
     const bp = section.drawBlueprint;
     if (bp && bp.strata.length > 0) {
       const sum = bp.strata.reduce((acc, s) => acc + (s.count || 0), 0);
@@ -175,13 +180,19 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
   for (const [topicId, rule] of Object.entries(model.passRules.byTopic)) {
     if (rule.source === "custom" && rule.type === "absolute") {
       const section = getSectionByTopicId(model.sections, topicId);
-      if (section && rule.value > section.drawCount) {
-        errors.push({
-          field: `passRules.byTopic[${topicId}].value`,
-          code: "range",
-          message: `Topic absolute pass threshold (${rule.value}) cannot exceed draw count (${section.drawCount}).`,
-          severity: "error",
-        });
+      if (section) {
+        // Effective draw: the full pool when drawing all, else drawCount.
+        const effectiveDraw = sectionDrawsAll(section.drawAll, model.mode)
+          ? section.maxQuestions
+          : section.drawCount;
+        if (rule.value > effectiveDraw) {
+          errors.push({
+            field: `passRules.byTopic[${topicId}].value`,
+            code: "range",
+            message: `Topic absolute pass threshold (${rule.value}) cannot exceed draw count (${effectiveDraw}).`,
+            severity: "error",
+          });
+        }
       }
     }
   }

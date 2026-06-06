@@ -547,6 +547,15 @@
 .tb-topic-row__required-lbl { -webkit-user-select: none; user-select: none; }
 .tb-topic-row__body { padding: var(--ou-space-3) var(--ou-space-4); }
 
+/* «Все вопросы темы» toggle row — sits above the draw-count row in the body. */
+.tb-draw-all-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+  cursor: pointer;
+}
+.tb-draw-all-row__lbl { font: var(--ou-text-body-s); }
+.tb-draw-all-row__hint { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
 /* Draw-count row: «Вопросов в тест [ N ] из M» — standard mode. */
 .tb-draw-count-row {
   display: flex; align-items: center; gap: var(--ou-space-2);
@@ -560,6 +569,16 @@
 /* Adaptive mode: draw_count заменяется bag-таггом + ссылкой на уровни (FR-36).
    `--adaptive` modifier добавляет flex-wrap, поскольку link-tail длиннее number-input. */
 .tb-draw-count-row--adaptive { flex-wrap: wrap; }
+
+/* FR-20c: inline field-error state. The row label turns to the DS error colour
+   when its control is invalid; the message renders below the row. Mirrors the
+   tone of the ui-kit field error so highlighting is consistent editor-wide. */
+.tb-draw-count-row[data-invalid="true"] .tb-draw-count-row__label { color: var(--ou-error-default); }
+.tb-field-error {
+  font: var(--ou-text-body-s);
+  color: var(--ou-error-default);
+  margin: calc(var(--ou-space-1) * -1) 0 var(--ou-space-2);
+}
 
 /* ── PRD-11 draw quotas: toggle row + inline strata block in the topic body ──
    Switch enables an inline per-tag quota table (no modal — the config is small).

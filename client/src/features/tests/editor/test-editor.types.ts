@@ -156,6 +156,13 @@ export type EditorSection = {
   topicName: string;
   maxQuestions: number;
   drawCount: number;
+  /**
+   * When true the topic draws its ENTIRE current question pool (ignoring
+   * drawCount). Holds the author's manual intent; adaptive mode overrides the
+   * effective behaviour to "all" without mutating this flag (see
+   * {@link sectionDrawsAll}). Default false = legacy fixed draw.
+   */
+  drawAll: boolean;
   required: boolean;
   timeLimit: SectionTimeLimit;
   feedback: FeedbackContent;
@@ -167,6 +174,15 @@ export type EditorSection = {
    */
   drawBlueprint?: DrawBlueprint | null;
 };
+
+/**
+ * Effective "draw all questions" for a section. Adaptive mode forces every
+ * topic to contribute its full pool (the per-level `questionsCount` then drives
+ * how many are shown), so it overrides the stored manual `drawAll` flag.
+ */
+export function sectionDrawsAll(drawAll: boolean, mode: TestMode): boolean {
+  return mode === "adaptive" || drawAll;
+}
 
 // ─── Result variables (PRD-2) ─────────────────────────────────────────────────
 
@@ -376,6 +392,8 @@ export type TestSettingsPayload = {
 export type TestSectionPayload = {
   topicId: string;
   drawCount: number;
+  /** Author's manual "draw the whole topic" flag (adaptive overrides effect). */
+  drawAll: boolean;
   required: boolean;
   topicPassRuleJson: TopicPassRule;
   timeLimitMinutes: number | null;

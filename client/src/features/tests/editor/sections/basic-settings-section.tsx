@@ -55,12 +55,15 @@ import type {
   TestEditorModel,
   TopicPassRule,
 } from "../test-editor.types";
+import { EMPTY_FIELD_ERRORS, type FieldErrorIndex } from "../field-errors";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export type SettingsSectionProps = {
   model: TestEditorModel;
   updateModel: (updater: (m: TestEditorModel) => TestEditorModel) => void;
+  /** FR-20c: per-field validation errors for inline highlighting. */
+  fieldErrors?: FieldErrorIndex;
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -85,7 +88,17 @@ const RAIL_ITEMS: { key: RailKey; label: string }[] = [
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function SettingsSection({ model, updateModel }: SettingsSectionProps) {
+/** FR-20c: which validated field paths live under each settings sub-pane. */
+const RAIL_ERROR_PREFIXES: Record<RailKey, string[]> = {
+  basic: ["basic.title", "flowMode"],
+  "pass-rules": ["passRules"],
+  limits: [],
+  retake: [],
+  integration: ["basic.webhookUrl"],
+  adaptive: ["adaptive"],
+};
+
+export function SettingsSection({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
   const [active, setActive] = useState<RailKey>("basic");
   // Per requirements: «Адаптивный режим» sub-section is only relevant when
   // the test itself runs in adaptive mode. Hide the rail item in standard
@@ -127,13 +140,22 @@ export function SettingsSection({ model, updateModel }: SettingsSectionProps) {
             data-testid={`settings-rail-${item.key}`}
           >
             {item.label}
-            {item.key === "adaptive" && hasAdaptiveError && (
+            {/* FR-20c: error dot when any validated field in this pane is invalid.
+                Adaptive keeps its dedicated stop-factor check below. */}
+            {item.key !== "adaptive" &&
+              RAIL_ERROR_PREFIXES[item.key].some((p) => fieldErrors.has(p)) && (
+                <span
+                  className="tb-status-dot tb-status-dot--err"
+                  aria-label="Ошибка"
+                />
+              )}
+            {item.key === "adaptive" && (hasAdaptiveError || fieldErrors.has("adaptive")) && (
               <span
                 className="tb-status-dot tb-status-dot--err"
                 aria-label="Ошибка"
               />
             )}
-            {item.key === "adaptive" && hasAdaptiveWarning && (
+            {item.key === "adaptive" && hasAdaptiveWarning && !fieldErrors.has("adaptive") && (
               <span
                 className="tb-status-dot tb-status-dot--warn"
                 aria-label="Требует внимания"
@@ -147,22 +169,22 @@ export function SettingsSection({ model, updateModel }: SettingsSectionProps) {
         data-testid={`settings-pane-${effectiveActive}`}
       >
         {effectiveActive === "basic" && (
-          <BasicPane model={model} updateModel={updateModel} />
+          <BasicPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
         )}
         {effectiveActive === "pass-rules" && (
-          <PassRulesPane model={model} updateModel={updateModel} />
+          <PassRulesPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
         )}
         {effectiveActive === "limits" && (
-          <LimitsPane model={model} updateModel={updateModel} />
+          <LimitsPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
         )}
         {effectiveActive === "retake" && (
-          <RetakePane model={model} updateModel={updateModel} />
+          <RetakePane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
         )}
         {effectiveActive === "integration" && (
-          <IntegrationPane model={model} updateModel={updateModel} />
+          <IntegrationPane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
         )}
         {effectiveActive === "adaptive" && isAdaptive && (
-          <AdaptivePane model={model} updateModel={updateModel} />
+          <AdaptivePane model={model} updateModel={updateModel} fieldErrors={fieldErrors} />
         )}
       </div>
     </div>
@@ -174,7 +196,7 @@ export const BasicSettingsSection = SettingsSection;
 
 // ─── Sub-pane: Основное ───────────────────────────────────────────────────────
 
-function BasicPane({ model, updateModel }: SettingsSectionProps) {
+function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
   // PRD-7 S13.2-G7: «Общая обратная связь теста» card. The model already
   // carries the underlying fields (basic.feedback / feedbackLinks /
   // feedbackAssets), populated by the API on load (PRD-7 S2). This UI block
@@ -191,6 +213,7 @@ function BasicPane({ model, updateModel }: SettingsSectionProps) {
           value={model.basic.title}
           placeholder="Введите название теста"
           required
+          error={fieldErrors.get("basic.title")}
           onChange={(e) => {
             const value = e.target.value;
             updateModel((m) => ({
@@ -667,7 +690,7 @@ function RetakePane({ model, updateModel }: SettingsSectionProps) {
 
 // ─── Sub-pane: Интеграция ─────────────────────────────────────────────────────
 
-function IntegrationPane({ model, updateModel }: SettingsSectionProps) {
+function IntegrationPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
   return (
     <>
       <div className="ou-formfield" data-field="basic.webhookUrl">
@@ -679,6 +702,7 @@ function IntegrationPane({ model, updateModel }: SettingsSectionProps) {
           type="url"
           value={model.basic.webhookUrl}
           placeholder="https://example.com/webhook"
+          error={fieldErrors.get("basic.webhookUrl")}
           onChange={(e) => {
             const value = e.target.value;
             updateModel((m) => ({
@@ -722,7 +746,7 @@ const DECISION_POLICIES: { value: PassDecisionPolicy; label: string }[] = [
   { value: "all_topics_passed", label: "пройдена каждая выбранная тема" },
 ];
 
-function PassRulesPane({ model, updateModel }: SettingsSectionProps) {
+function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
   return (
     <>
       <Card
@@ -787,6 +811,7 @@ function PassRulesPane({ model, updateModel }: SettingsSectionProps) {
                   min={0}
                   max={model.passRules.overall.type === "percent" ? 100 : undefined}
                   suffix={model.passRules.overall.type === "percent" ? "%" : undefined}
+                  error={fieldErrors.get("passRules.overall.value")}
                   data-testid="pass-overall-value"
                   onChange={(next) =>
                     updateModel((m) => ({

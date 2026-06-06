@@ -474,6 +474,16 @@ export function useTestEditor(
   const [saveError, setSaveError] = useState<{ status: number; message: string } | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
 
+  // Reset transient save/conflict/required-field errors when switching tests.
+  // The session-load effect above only resets draft/snapshot (and runs before
+  // these setters are declared), so without this a save-error banner from one
+  // test would bleed into every test opened afterwards.
+  useEffect(() => {
+    setSaveError(null);
+    setConflict(null);
+    setRequiredFieldsMissing([]);
+  }, [sessionKey]);
+
   const mutation = useMutation({
     mutationFn: async () => {
       if (!draft) throw new Error("save: editor is not ready");

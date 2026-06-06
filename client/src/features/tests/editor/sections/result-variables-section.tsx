@@ -46,6 +46,7 @@ import type {
   ResultVariableType,
   TestEditorModel,
 } from "../test-editor.types";
+import { EMPTY_FIELD_ERRORS, type FieldErrorIndex } from "../field-errors";
 import {
   validateResultVariableFormula,
   type ResultVariableFormulaValidation,
@@ -57,6 +58,8 @@ export type ResultVariablesSectionProps = {
   testId?: string;
   updateModel: (updater: (model: TestEditorModel) => TestEditorModel) => void;
   readOnly?: boolean;
+  /** FR-20c: per-field validation errors for inline highlighting. */
+  fieldErrors?: FieldErrorIndex;
 };
 
 const TYPE_OPTIONS: Array<{ value: ResultVariableType; label: string }> = [
@@ -117,6 +120,7 @@ export function ResultVariablesSection({
   testId,
   updateModel,
   readOnly = false,
+  fieldErrors = EMPTY_FIELD_ERRORS,
 }: ResultVariablesSectionProps) {
   const vars = model.resultVariables;
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -220,6 +224,7 @@ export function ResultVariablesSection({
                   topics={topics}
                   testId={testId}
                   readOnly={readOnly}
+                  fieldErrors={fieldErrors}
                   expanded={expandedKey === key}
                   onToggle={() => setExpandedKey((cur) => (cur === key ? null : key))}
                   onChange={(patch) => updateVar(index, patch)}
@@ -243,6 +248,7 @@ type CardProps = {
   topics: TopicRef[];
   testId?: string;
   readOnly: boolean;
+  fieldErrors: FieldErrorIndex;
   expanded: boolean;
   onToggle: () => void;
   onChange: (patch: Partial<ResultVariableModel>) => void;
@@ -322,6 +328,7 @@ function SortableVariableCard(props: CardProps) {
             topics={props.topics}
             testId={props.testId}
             readOnly={readOnly}
+            fieldErrors={props.fieldErrors}
             onChange={props.onChange}
           />
         </div>
@@ -338,10 +345,11 @@ type FormProps = {
   topics: TopicRef[];
   testId?: string;
   readOnly: boolean;
+  fieldErrors: FieldErrorIndex;
   onChange: (patch: Partial<ResultVariableModel>) => void;
 };
 
-function VariableForm({ variable: v, index, topics, testId, readOnly, onChange }: FormProps) {
+function VariableForm({ variable: v, index, topics, testId, readOnly, fieldErrors, onChange }: FormProps) {
   const validation = useFormulaValidation(testId, v, index);
   const statusTypeError = v.controlsStatus !== "none" && v.type !== "boolean";
   const [formulaMode, setFormulaMode] = useState<"builder" | "dsl">("dsl");
@@ -356,6 +364,7 @@ function VariableForm({ variable: v, index, topics, testId, readOnly, onChange }
           value={v.name}
           disabled={readOnly}
           placeholder="напр. burnout_category"
+          error={fieldErrors.get(`resultVariables[${index}].name`)}
           onChange={(e) => onChange({ name: e.target.value })}
           data-testid={`metrics-name-${index}`}
         />
@@ -365,6 +374,7 @@ function VariableForm({ variable: v, index, topics, testId, readOnly, onChange }
           label="Метка"
           value={v.label}
           disabled={readOnly}
+          error={fieldErrors.get(`resultVariables[${index}].label`)}
           onChange={(e) => onChange({ label: e.target.value })}
           data-testid={`metrics-label-${index}`}
         />

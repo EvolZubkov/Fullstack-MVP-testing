@@ -513,7 +513,7 @@ function ParamRow({
           fullWidth
           label={param.label}
           value={v}
-          options={opts.map((o) => ({ value: o, label: o }))}
+          options={opts.map((o) => ({ value: o, label: param.optionLabels?.[o] ?? o }))}
           onChange={(next) => onChange(next)}
           data-testid={`design-param-input-${param.key}`}
         />
@@ -589,7 +589,7 @@ function ParamRow({
           multiple
           label={param.label}
           values={arr}
-          options={opts.map((o) => ({ value: o, label: o }))}
+          options={opts.map((o) => ({ value: o, label: param.optionLabels?.[o] ?? o }))}
           onValuesChange={(next) => onChange(next)}
           data-testid={`design-param-input-${param.key}`}
         />

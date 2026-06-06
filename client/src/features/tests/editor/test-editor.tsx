@@ -48,6 +48,7 @@ import {
 } from "./use-test-editor";
 import { apiToEditorModel, type ApiTestResponse } from "./test-editor.mappers";
 import type { TestEditorModel } from "./test-editor.types";
+import { buildFieldErrorIndex } from "./field-errors";
 import { useDesignSettings } from "./use-design-settings";
 import { useContentPages, hasStructureErrors, hasStructureWarnings } from "./use-content-pages";
 import { useToast } from "@/hooks/use-toast";
@@ -254,6 +255,13 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
     [editor.validation.errors],
   );
 
+  // FR-20c: per-field error index passed to every section so the exact
+  // offending control is marked invalid (not just the tab badge / banner).
+  const fieldErrors = useMemo(
+    () => buildFieldErrorIndex(editor.validation.errors),
+    [editor.validation.errors],
+  );
+
   /**
    * FR-20c: switch to the tab owning `field`, then scroll/focus the matching
    * input. Anchors are `data-field` attributes on the section formfields; an
@@ -454,7 +462,10 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
           aria-labelledby={`tab-${activeTab}`}
           className={
             "ou-drawer__body tb-saving-host" +
-            (activeTab === "settings" || activeTab === "design"
+            // Tabs that render an `ou-drawer__split` (rail + content) need the
+            // flush body so the split fills the full height — otherwise a short
+            // pane (e.g. the Scales empty state) leaves a gap below.
+            (activeTab === "settings" || activeTab === "design" || activeTab === "scales"
               ? " ou-drawer__body--flush"
               : "")
           }
@@ -509,12 +520,14 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
             <CompositionSection
               model={editor.model}
               updateModel={editor.updateModel}
+              fieldErrors={fieldErrors}
             />
           )}
           {editor.model && activeTab === "settings" && (
             <SettingsSection
               model={editor.model}
               updateModel={editor.updateModel}
+              fieldErrors={fieldErrors}
             />
           )}
           {editor.model && activeTab === "design" && (
@@ -537,6 +550,7 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
               testId={editor.model.id}
               updateModel={editor.updateModel}
               readOnly={editor.model.basic.status === "published"}
+              fieldErrors={fieldErrors}
             />
           )}
           {editor.model && activeTab === "metrics" && (
@@ -545,6 +559,7 @@ export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
               testId={editor.model.id}
               updateModel={editor.updateModel}
               readOnly={editor.model.basic.status === "published"}
+              fieldErrors={fieldErrors}
             />
           )}
           {!editor.model && <TabPlaceholder tab={activeTab} />}

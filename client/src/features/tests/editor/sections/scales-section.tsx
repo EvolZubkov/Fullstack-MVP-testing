@@ -49,6 +49,7 @@ import {
   type PreviewQuestionContext,
   type ScalePreviewResult,
 } from "../scales-api";
+import type { FieldErrorIndex } from "../field-errors";
 
 export type ScalesSectionProps = {
   model: TestEditorModel;
@@ -56,6 +57,12 @@ export type ScalesSectionProps = {
   testId?: string;
   updateModel: (updater: (model: TestEditorModel) => TestEditorModel) => void;
   readOnly?: boolean;
+  /**
+   * FR-20c: accepted for a uniform section contract, but unused — Scales
+   * already surfaces field errors locally via {@link validateScale}
+   * (`keyError` → `Input error`). The central index would duplicate it.
+   */
+  fieldErrors?: FieldErrorIndex;
 };
 
 type ScalesSubTab = "list" | "contributions";

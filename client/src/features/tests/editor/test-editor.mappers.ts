@@ -313,6 +313,7 @@ function buildSectionsFromApi(src: ApiTestResponse): {
     const topicName = typeof raw.topicName === "string" ? raw.topicName : "";
     const maxQuestions = typeof raw.maxQuestions === "number" ? raw.maxQuestions : 0;
     const drawCount = typeof raw.drawCount === "number" ? raw.drawCount : 1;
+    const drawAll = typeof raw.drawAll === "boolean" ? raw.drawAll : false;
     const required = typeof raw.required === "boolean" ? raw.required : true;
     const timeLimit = readSectionTimeLimitFromApi(
       raw.timeLimitMinutes as number | null | undefined,
@@ -328,6 +329,7 @@ function buildSectionsFromApi(src: ApiTestResponse): {
       topicName,
       maxQuestions,
       drawCount,
+      drawAll,
       required,
       timeLimit,
       feedback: fb.content,
@@ -875,6 +877,7 @@ export function mapEditorSectionsToPayload(model: TestEditorModel): TestSectionP
     return {
       topicId: section.topicId,
       drawCount: section.drawCount,
+      drawAll: section.drawAll,
       required: section.required,
       topicPassRuleJson,
       timeLimitMinutes: timeLimitToMinutes(section.timeLimit),
