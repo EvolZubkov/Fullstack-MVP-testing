@@ -1,113 +1,183 @@
 #!/bin/bash
-set -e
+# =============================================================================
+# Server-side deploy script for test-builder.
+# Uploaded and executed on the target server by build-docker.bat / deploy-docker.bat.
+#
+# Usage: sudo deploy.sh <project_name> <port> <image_tar>
+#
+# Host directory structure created:
+#   /srv/app/<project>/                       - working directory (docker compose runs here)
+#   /srv/app/<project>/docker-compose.yml     - generated compose file
+#   /srv/app/<project>/env/.env               - app env file (:ro mount)
+#   /srv/logs/<project>/                      - application logs
+#   /srv/data/<project>/uploads/media/        - media uploads
+#   /srv/data/<project>/uploads/scorm/        - SCORM packages
+# =============================================================================
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+set -euo pipefail
 
-# Find archive next to script
-ARCHIVE=$(ls -t "$SCRIPT_DIR"/test_builder_deploy_*.tar.gz 2>/dev/null | head -1)
+PROJECT_NAME="${1:?Usage: sudo deploy.sh <project_name> <port> <image_tar>}"
+SERVICE_PORT="${2:?Missing port argument}"
+IMAGE_TAR="${3:?Missing image tar path}"
 
-if [ -z "$ARCHIVE" ]; then
-    echo "Error: archive test_builder_deploy_*.tar.gz not found in $SCRIPT_DIR"
-    exit 1
-fi
-
-echo "=== Extracting $(basename "$ARCHIVE") ==="
-DEPLOY_DIR=$(mktemp -d)
-tar -xzf "$ARCHIVE" -C "$DEPLOY_DIR"
-
-find "$DEPLOY_DIR" -type f \( -name "*.sh" -o -name "*.env" -o -name "*.yml" -o -name "*.yaml" -o -name "Dockerfile" \) -exec sed -i 's/\r$//' {} +
-
-# Load configuration
-source "$DEPLOY_DIR/config/deploy.env"
-
-# Derived paths
-APP_DIR="${SRV_APP_BASE}/${PROJECT_NAME}"
-DATA_DIR="${SRV_DATA_BASE}/${PROJECT_NAME}"
-ENV_DIR="${APP_DIR}/env"
-UPLOADS_DIR="${DATA_DIR}/uploads"
-CONTAINER_NAME="${PROJECT_NAME}"
 IMAGE_NAME="${PROJECT_NAME}"
 
-echo "=== Deploy ${PROJECT_NAME} ==="
-echo "APP_DIR: $APP_DIR"
-echo "DATA_DIR: $DATA_DIR"
+APP_DIR="/srv/app/${PROJECT_NAME}"
+LOG_DIR="/srv/logs/${PROJECT_NAME}"
+DATA_DIR="/srv/data/${PROJECT_NAME}"
 
-# Create directory structure
-echo "Creating directories..."
-mkdir -p "$APP_DIR" "$ENV_DIR"
-mkdir -p "$UPLOADS_DIR/media" "$UPLOADS_DIR/scorm"
+APP_UID=1500
+APP_GROUP="botadmins"
 
-# Check .env
-if [ ! -f "$ENV_DIR/.env" ]; then
-    echo "Copying .env template..."
-    cp "$DEPLOY_DIR/env/.env.example" "$ENV_DIR/.env"
-    echo ""
-    echo "!!! WARNING: Edit $ENV_DIR/.env before starting !!!"
-    echo "nano $ENV_DIR/.env"
-    echo ""
-    read -p "Press Enter after editing .env..."
+PACKAGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+cd "${PACKAGE_DIR}"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+info()  { echo -e "${BLUE}[deploy]${NC} $*"; }
+ok()    { echo -e "${GREEN}[deploy]${NC} $*"; }
+warn()  { echo -e "${YELLOW}[deploy]${NC} $*"; }
+error() { echo -e "${RED}[deploy]${NC} $*"; exit 1; }
+
+if [ "$EUID" -ne 0 ]; then
+    error "Run with root privileges: sudo $0 $*"
 fi
 
-# Generate docker-compose.yml with variable substitution
-echo "Generating docker-compose.yml..."
-export IMAGE_NAME CONTAINER_NAME EXPOSE_PORT INTERNAL_PORT UPLOADS_DIR ENV_DIR
-envsubst < "$DEPLOY_DIR/config/docker-compose.yml" > "$APP_DIR/docker-compose.yml"
+info "========================================"
+info "Project:  ${PROJECT_NAME}"
+info "Port:     ${SERVICE_PORT}"
+info "Image:    ${IMAGE_NAME}:latest"
+info "========================================"
 
-# Set ownership
-chown -R "${DIR_OWNER}:${DIR_GROUP}" "$APP_DIR"
-chown -R "${DIR_OWNER}:${DIR_GROUP}" "$DATA_DIR"
+# ---------------------------------------------------------------------------
+# 1. Load Docker image (pre-built locally — no build on server)
+# ---------------------------------------------------------------------------
+info "Loading Docker image..."
+[ -f "${IMAGE_TAR}" ] || error "Image tar not found: ${IMAGE_TAR}"
+docker load -i "${IMAGE_TAR}"
+ok "Image loaded: ${IMAGE_NAME}:latest"
 
-# Stop old container (if exists)
-if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-    echo "Stopping old container..."
-    docker stop "$CONTAINER_NAME" || true
-    docker rm "$CONTAINER_NAME" || true
+info "Validating Docker image entrypoint..."
+docker run --rm --entrypoint /bin/sh "${IMAGE_NAME}:latest" -c \
+    'test -f /app/docker/entrypoint.sh &&
+     test -x /app/docker/entrypoint.sh &&
+     ! head -n 1 /app/docker/entrypoint.sh | grep -q "$(printf "\r")"' \
+    || error "Image has missing/non-executable/CRLF entrypoint. Rebuild with docker\\scripts\\build-docker.bat."
+ok "Docker image entrypoint is valid"
+
+# ---------------------------------------------------------------------------
+# 2. Ensure application group exists
+# ---------------------------------------------------------------------------
+if ! getent group "${APP_GROUP}" > /dev/null 2>&1; then
+    info "Creating group '${APP_GROUP}'..."
+    groupadd "${APP_GROUP}"
+    ok "Group '${APP_GROUP}' created. Add users: sudo usermod -aG ${APP_GROUP} <username>"
+else
+    ok "Group '${APP_GROUP}' exists"
 fi
 
-# Remove old image to force full rebuild (no stale cache)
-if docker image inspect "$IMAGE_NAME:latest" &>/dev/null; then
-    echo "Removing old image..."
-    docker rmi "$IMAGE_NAME:latest" || true
+# ---------------------------------------------------------------------------
+# 3. Create host directory structure with proper permissions
+# ---------------------------------------------------------------------------
+info "Creating host directories..."
+mkdir -p \
+    "${APP_DIR}/env" \
+    "${LOG_DIR}" \
+    "${DATA_DIR}/uploads/media" \
+    "${DATA_DIR}/uploads/scorm"
+
+chown -R root:"${APP_GROUP}" "${APP_DIR}"
+chmod 2750 "${APP_DIR}"
+chmod -R g+rX "${APP_DIR}"
+
+chown "${APP_UID}":"${APP_GROUP}" "${LOG_DIR}"
+chmod 2770 "${LOG_DIR}"
+
+chown -R "${APP_UID}":"${APP_GROUP}" "${DATA_DIR}"
+chmod -R 2770 "${DATA_DIR}"
+
+ok "Directories ready:"
+ok "  app:     ${APP_DIR}  (root:${APP_GROUP} 2750)"
+ok "  logs:    ${LOG_DIR}  (${APP_UID}:${APP_GROUP} 2770)"
+ok "  data:    ${DATA_DIR}  (${APP_UID}:${APP_GROUP} 2770)"
+
+# ---------------------------------------------------------------------------
+# 4. Deploy .env file (preserve existing edits)
+# ---------------------------------------------------------------------------
+info "Deploying .env..."
+
+ENV_SRC="${PACKAGE_DIR}/env/.env"
+ENV_DEST="${APP_DIR}/env/.env"
+
+if [ -f "${ENV_SRC}" ]; then
+    if [ ! -f "${ENV_DEST}" ]; then
+        cp "${ENV_SRC}" "${ENV_DEST}"
+        chown root:"${APP_GROUP}" "${ENV_DEST}"
+        chmod 640 "${ENV_DEST}"
+        ok ".env deployed (new)"
+        echo ""
+        warn "!!! Edit ${ENV_DEST} with real credentials before starting !!!"
+        echo "    nano ${ENV_DEST}"
+        echo ""
+        read -r -p "Press Enter after editing .env..."
+    else
+        warn ".env already exists — skipping (preserving edits)"
+    fi
+else
+    warn "env/.env not found in deploy package — skipping"
 fi
 
-# Build image from temp directory
-echo "Building Docker image..."
-cd "$DEPLOY_DIR/source"
-docker build --no-cache -t "$IMAGE_NAME:latest" .
+# ---------------------------------------------------------------------------
+# 5. Generate docker-compose.yml from template
+# ---------------------------------------------------------------------------
+info "Generating docker-compose.yml..."
 
-# Start new container
-echo "Starting container..."
-cd "$APP_DIR"
+COMPOSE_TEMPLATE="${PACKAGE_DIR}/docker-compose.yml"
+[ -f "${COMPOSE_TEMPLATE}" ] || error "docker-compose.yml template not found in deploy package"
+
+sed \
+    -e "s/PROJECT_NAME_PLACEHOLDER/${PROJECT_NAME}/g" \
+    -e "s/SERVICE_PORT_PLACEHOLDER/${SERVICE_PORT}/g" \
+    "${COMPOSE_TEMPLATE}" > "${APP_DIR}/docker-compose.yml"
+
+ok "docker-compose.yml generated at ${APP_DIR}/docker-compose.yml"
+
+# ---------------------------------------------------------------------------
+# 6. Start service via docker compose
+# ---------------------------------------------------------------------------
+info "Starting service with docker compose..."
+cd "${APP_DIR}"
+docker compose down --remove-orphans 2>/dev/null || true
 docker compose up -d
+ok "Service started"
 
-# Cleanup temp directory
-rm -rf "$DEPLOY_DIR"
-
-# Wait for container to be ready
-echo "Waiting for container to start..."
+# ---------------------------------------------------------------------------
+# 7. Run DB migrations
+# ---------------------------------------------------------------------------
+info "Waiting for container to be ready..."
 for i in $(seq 1 15); do
-    if docker exec "$CONTAINER_NAME" echo "ok" &>/dev/null; then
+    if docker compose exec -T app echo "ok" &>/dev/null 2>&1; then
         break
     fi
-    echo "  attempt $i/15..."
+    echo "  attempt ${i}/15..."
     sleep 2
 done
 
-# Run DB migrations — always on deploy to apply schema changes
-echo ""
-echo "=== Applying DB migrations (db:push) ==="
-docker exec "$CONTAINER_NAME" npx drizzle-kit push --force
-echo "=== Migrations done ==="
-
-# Check status
-echo ""
-echo "=== Status ==="
-docker ps --filter "name=$CONTAINER_NAME"
+info "Applying DB schema (drizzle-kit push)..."
+docker compose exec -T app npx drizzle-kit push --force
+ok "DB schema up to date"
 
 echo ""
-echo "=== Deploy complete ==="
-echo "Logs:  docker logs -f $CONTAINER_NAME"
-echo "URL:   http://$(hostname -I | awk '{print $1}'):${EXPOSE_PORT}"
+docker compose ps
+
 echo ""
-echo "Management:"
-echo "  cd $APP_DIR && docker compose stop|start|restart"
+info "========================================"
+info "Deployment complete: ${PROJECT_NAME}"
+info "Logs:  docker compose -p ${PROJECT_NAME} logs -f"
+info "URL:   http://$(hostname -I | awk '{print $1}'):${SERVICE_PORT}"
+info "========================================"

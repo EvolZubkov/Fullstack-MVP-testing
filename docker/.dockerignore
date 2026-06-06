@@ -1,9 +1,49 @@
-node_modules/
-dist/
-.git/
+# =============================================================================
+# Docker build context exclusions for test-builder.
+#
+# .env and uploads/ are intentionally excluded from the image.
+# They are deployed separately and mounted as volumes from the host:
+#   /srv/data/<project>/uploads -> /app/uploads (rw)
+#   /srv/logs/<project>         -> /app/logs     (rw)
+#   /srv/app/<project>/env/.env -> /app/.env     (ro)
+# =============================================================================
+
+# ---- Application environment (deployed via build-docker.bat) ---------------
 .env
-*.zip
+.env.*
+
+# ---- Node dependencies (rebuilt inside Docker via npm ci) ------------------
+node_modules/
+
+# ---- Frontend + backend source (dist/ is what gets copied) -----------------
+client/
+# Exclude all of server/ EXCEPT server/scorm/templates — the built-in design
+# template manifests/previews are read from disk at runtime by
+# server/template-registry.ts (process.cwd()/server/scorm/templates).
+# Docker forbids re-including a path whose parent dir is excluded, so we descend
+# level by level instead of a blanket `server/`.
+server/*
+!server/scorm
+server/scorm/*
+!server/scorm/templates
+
+# ---- Runtime data (mounted as volumes at container start) ------------------
 uploads/
+logs/
+tmp/
+
+# ---- Build and test artifacts -----------------------------------------------
+docker/build/
+coverage/
+*.tar
+*.tar.gz
+*.zip
+
+# ---- IDE and version control ------------------------------------------------
+.git/
+.gitignore
 .vscode/
+
+# ---- Documentation and local tooling ----------------------------------------
 docs/
 *.md

@@ -1,17 +1,43 @@
+# Docker Compose for test-builder.
+# Placed at /srv/app/<project>/docker-compose.yml by deploy.sh.
+# PROJECT_NAME_PLACEHOLDER and SERVICE_PORT_PLACEHOLDER are substituted by deploy.sh.
+#
+# Usage (on server):
+#   cd /srv/app/<project>
+#   docker compose up -d
+#   docker compose logs -f
+#   docker compose down
+
 services:
-  app:
-    image: ${IMAGE_NAME}:latest
-    container_name: ${CONTAINER_NAME}
+  PROJECT_NAME_PLACEHOLDER:
+    image: PROJECT_NAME_PLACEHOLDER:latest
+    container_name: PROJECT_NAME_PLACEHOLDER
+    hostname: PROJECT_NAME_PLACEHOLDER
     restart: unless-stopped
+    user: root
+
     ports:
-      - "${EXPOSE_PORT}:${INTERNAL_PORT}"
+      - "${BIND_IP:-0.0.0.0}:SERVICE_PORT_PLACEHOLDER:SERVICE_PORT_PLACEHOLDER"
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     volumes:
-      - ${UPLOADS_DIR}:/app/uploads
-    env_file:
-      - ${ENV_DIR}/.env
+      # Application logs
+      - /srv/logs/PROJECT_NAME_PLACEHOLDER:/app/logs
+      # Media and SCORM uploads
+      - /srv/data/PROJECT_NAME_PLACEHOLDER/uploads:/app/uploads
+      # Env file (read-only)
+      - ./env/.env:/app/.env:ro
+
+    environment:
+      PORT: SERVICE_PORT_PLACEHOLDER
+      TZ: ${TZ:-Europe/Moscow}
+      NODE_ENV: production
+
     healthcheck:
-      test: ["CMD", "sh", "-c", "wget -q --spider http://127.0.0.1:${PORT}/api/me"]
+      test: ["CMD-SHELL", "curl -f http://localhost:SERVICE_PORT_PLACEHOLDER/api/me || exit 1"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 40s
+      start_period: 60s
