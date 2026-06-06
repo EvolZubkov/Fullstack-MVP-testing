@@ -181,6 +181,8 @@ export function buildManifest(test: Test, data: ExportData, extraFiles: string[]
       <file href="styles.css"/>
       <file href="runtime.js"/>
       <file href="app.js"/>
+      <file href="vendor/html2canvas.min.js"/>
+      <file href="vendor/jspdf.umd.min.js"/>
 ${extraFileTags ? extraFileTags + "\n" : ""}    </resource>
   </resources>
 </manifest>`;

@@ -329,6 +329,12 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   };
   const stylesCss = readStyle("theme.css") + "\n" + readStyle("base.css");
 
+  // Vendored PDF-export libraries (no CDN — the package must work offline inside the LMS).
+  // html2canvas + jsPDF are shipped in the package (from server/scorm/assets/vendor/) and
+  // loaded by index.html as window globals consumed by app/utils/pdfExport.js.
+  const html2canvasJs = readAsset("vendor/html2canvas.min.js");
+  const jspdfJs = readAsset("vendor/jspdf.umd.min.js");
+
   const files: Record<string, string | Buffer> = {
     "imsmanifest.xml": buildManifest(data.test, data, manifestHrefs),
     "metadata.xml": buildMetadataXml(data.test),
@@ -336,6 +342,8 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "styles.css": stylesCss,
     "runtime.js": runtimeJs,
     "app.js": appJs,
+    "vendor/html2canvas.min.js": html2canvasJs,
+    "vendor/jspdf.umd.min.js": jspdfJs,
     ...templateFiles,
   };
   
