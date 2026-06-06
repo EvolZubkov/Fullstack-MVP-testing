@@ -48,11 +48,14 @@ export function TemplateScreen({ layout, context, css, slots, content, onAction,
       // Template CSS targets :root / body (light DOM). Inside the shadow root those
       // selectors don't match, so map them to :host and seed the theme basics — the
       // design CSS variables (theme.css :root) and base body styles then apply in
-      // isolation.
+      // isolation. Tokens are HSL COMPONENTS (unified convention, PRD-12), so colors
+      // wrap them as hsl(var(--x)). The mapped `body` rule may carry page padding
+      // meant for the SCORM document; neutralise it on the embedded :host below.
       style.textContent =
-        ":host{display:block;background:var(--background);color:var(--foreground);" +
-        "font-family:var(--font-sans);line-height:1.55;min-height:100%;}\n" +
-        css.replace(/:root/g, ":host").replace(/\bbody\b(?=\s*\{)/g, ":host");
+        ":host{display:block;background:hsl(var(--background));color:hsl(var(--foreground));" +
+        "font-family:var(--font-sans);line-height:1.55;min-height:100%;padding:0;}\n" +
+        css.replace(/:root/g, ":host").replace(/\bbody\b(?=\s*\{)/g, ":host") +
+        "\n:host{padding:0;}";
       shadow.appendChild(style);
     }
     const screen = document.createElement("div");

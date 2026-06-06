@@ -72,8 +72,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
 
   const indexHtml = readAsset("index.html").replace("__TITLE__", escapeXml(data.test.title));
   const runtimeJs = readAsset("runtime.js");
-  const stylesCss = readAsset("styles.css");
-  
+
   const testObj = JSON.parse(testJson);
   const { testObj: patchedTestObj, assets } = extractEmbeddedMediaIntoAssets(testObj);
 
@@ -311,6 +310,24 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   const templateFiles: Record<string, string | Buffer> = {};
   addTemplateFilesToZip(templateId, getTemplatesRootDir(), templateFiles);
   const manifestHrefs = mediaHrefs.concat(Object.keys(templateFiles));
+
+  // PRD-12 CSS unification: the package stylesheet is the SINGLE template CSS source
+  // (theme.css tokens + base.css), the SAME files the web host loads — no separate
+  // hand-maintained runtime stylesheet to drift out of sync.
+  const stylesRoot = getTemplatesRootDir();
+  const stylesDir = path.join(
+    stylesRoot,
+    fs.existsSync(path.join(stylesRoot, templateId)) ? templateId : "default",
+    "styles",
+  );
+  const readStyle = (f: string): string => {
+    try {
+      return fs.readFileSync(path.join(stylesDir, f), "utf8");
+    } catch {
+      return "";
+    }
+  };
+  const stylesCss = readStyle("theme.css") + "\n" + readStyle("base.css");
 
   const files: Record<string, string | Buffer> = {
     "imsmanifest.xml": buildManifest(data.test, data, manifestHrefs),
