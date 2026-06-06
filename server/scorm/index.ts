@@ -7,6 +7,7 @@ import { escapeXml } from "./utils/escape";
 import { readAsset } from "./assets/read-asset";
 import { extractEmbeddedMediaIntoAssets } from "./builders/media-assets";
 import { addTemplateFilesToZip, getTemplatesRootDir } from "./builders/template-copy";
+import { getSharedRuntimeBundle } from "./builders/shared-runtime";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -236,7 +237,13 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     ? tryReadAsset(["app/telemetry/telemetry.js"])
     : "";
 
+  // PRD-12 (2-7): shared template runtime bundled from `@shared` and exposed as the
+  // `TBTemplate` global — the same renderer the web host uses. Prepended so every
+  // package part can consume it.
+  const sharedRuntimeJs = await getSharedRuntimeBundle();
+
   let appJs = joinJsParts([
+    sharedRuntimeJs,
     escapeHtmlJs,
     telemetryJs,
     shuffleJs,

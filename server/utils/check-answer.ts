@@ -1,62 +1,35 @@
+/**
+ * @module server/utils/check-answer
+ *
+ * Server-side answer scoring for the web learner runtime. Delegates to the
+ * authoritative graded-scoring engine (`@shared/scoring/engine`, PRD-10) instead
+ * of keeping a private copy of the answer-checking logic — this is the single
+ * scoring module shared with the SCORM runtime (PRD-12 §3.5; the SCORM package
+ * runs the same logic via its compiled/ported twin, kept in parity by golden
+ * tests).
+ *
+ * When a question has no `scoringJson` the result is the legacy exact 0/1
+ * (bit-identical to the pre-PRD-10 behaviour, FR-02); when it carries
+ * weighted/tiered scoring the returned ratio reflects partial credit
+ * ("цена ответа"). The standard finish route multiplies this ratio by the
+ * question's points, so graded scoring now flows through the web result.
+ */
+
+import { scoreAnswer, type QuestionType, type CorrectData, type Answer } from "@shared/scoring/engine";
 import type { Question } from "@shared/schema";
 
 /**
- * Проверяет ответ пользователя на вопрос.
- * @returns Число от 0 до 1 (0 = неверно, 1 = верно)
+ * Scores a learner's answer to a question.
+ *
+ * @param question The question (its `correctJson` and optional `scoringJson`).
+ * @param answer   The learner's answer in the runtime encoding for the type.
+ * @returns Earned ratio in [0, 1] (0 = wrong / unanswered, 1 = full credit).
  */
 export function checkAnswer(question: Question, answer: unknown): number {
-  if (answer === undefined || answer === null) return 0;
-
-  const correct = question.correctJson as any;
-
-  if (question.type === "single") {
-    return answer === correct.correctIndex ? 1 : 0;
-  }
-
-  if (question.type === "multiple") {
-    const correctIndices = new Set(correct.correctIndices as number[]);
-    const answerList = (answer || []) as number[];
-    const answerSet = new Set(answerList);
-
-    if (correctIndices.size !== answerSet.size) return 0;
-
-    for (const idx of correctIndices) {
-      if (!answerSet.has(idx)) return 0;
-    }
-
-    return 1;
-  }
-
-  if (question.type === "matching") {
-    const pairs = answer || {};
-    const correctPairs = correct.pairs || [];
-
-    if (correctPairs.length === 0) return 0;
-
-    for (const p of correctPairs) {
-      if ((pairs as any)[p.left] !== p.right) {
-        return 0;
-      }
-    }
-
-    return 1;
-  }
-
-  if (question.type === "ranking") {
-    const order = (answer || []) as number[];
-    const correctOrder = correct.correctOrder as number[];
-
-    if (correctOrder.length === 0) return 0;
-    if (order.length !== correctOrder.length) return 0;
-
-    for (let i = 0; i < correctOrder.length; i++) {
-      if (order[i] !== correctOrder[i]) {
-        return 0;
-      }
-    }
-
-    return 1;
-  }
-
-  return 0;
+  return scoreAnswer({
+    type: question.type as QuestionType,
+    correct: (question.correctJson ?? {}) as CorrectData,
+    answer: answer as Answer,
+    scoring: question.scoringJson ?? null,
+  }).ratio;
 }

@@ -4,7 +4,12 @@ import { storage } from "../storage";
 import { requireLearner } from "../middleware/auth";
 import { checkAnswer } from "../utils/check-answer";
 import { drawSection } from "@shared/draw/blueprint";
-import type { TestVariant, AttemptResult, TopicResult, PassRule } from "@shared/schema";
+import { loadScoringConfig } from "../services/scoring-config";
+import { computeAttemptResult } from "../services/result-compute";
+import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
+import { readResultsRenderPayload } from "../services/template-render";
+import type { QuestionType } from "@shared/scales/engine";
+import type { TestVariant, AttemptResult, TopicResult, PassRule, RetakePolicy } from "@shared/schema";
 
 const router = Router();
 
@@ -63,12 +68,25 @@ router.post("/tests/:testId/attempts/start", requireLearner, async (req, res) =>
       return res.status(404).json({ error: "Test not found" });
     }
 
-    // Проверяем ограничение попыток
-    if (test.maxAttempts !== null) {
+    // Attempt gates: retake cooldown (PRD-6, web) + max attempts. Load the user's
+    // attempts once and reuse for both checks.
+    const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
+    if (retakePolicy?.enabled === true || test.maxAttempts !== null) {
       const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
-      const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
+      const completed = userAttempts.filter((a) => a.finishedAt !== null);
 
-      if (completedAttempts >= test.maxAttempts) {
+      // PRD-12: retake cooldown — date sourced from the server's own completed
+      // attempts (no LMS plugin; the web is the authoritative date source).
+      const gate = decideRetake(
+        retakePolicy,
+        lastCompletedAttemptDate(completed.map((a) => a.finishedAt)),
+        toIsoDateUTC(new Date()),
+      );
+      if (!gate.allowed) {
+        return res.status(403).json({ error: "Retake cooldown active", code: "RETAKE_COOLDOWN", ...gate });
+      }
+
+      if (test.maxAttempts !== null && completed.length >= test.maxAttempts) {
         return res.status(403).json({ error: "Attempts exhausted", code: "ATTEMPTS_EXHAUSTED" });
       }
     }
@@ -134,12 +152,25 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
       return res.status(404).json({ error: "Test not found" });
     }
 
-    // Проверяем ограничение попыток
-    if (test.maxAttempts !== null) {
+    // Attempt gates: retake cooldown (PRD-6, web) + max attempts. Load the user's
+    // attempts once and reuse for both checks.
+    const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
+    if (retakePolicy?.enabled === true || test.maxAttempts !== null) {
       const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
-      const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
+      const completed = userAttempts.filter((a) => a.finishedAt !== null);
 
-      if (completedAttempts >= test.maxAttempts) {
+      // PRD-12: retake cooldown — date sourced from the server's own completed
+      // attempts (no LMS plugin; the web is the authoritative date source).
+      const gate = decideRetake(
+        retakePolicy,
+        lastCompletedAttemptDate(completed.map((a) => a.finishedAt)),
+        toIsoDateUTC(new Date()),
+      );
+      if (!gate.allowed) {
+        return res.status(403).json({ error: "Retake cooldown active", code: "RETAKE_COOLDOWN", ...gate });
+      }
+
+      if (test.maxAttempts !== null && completed.length >= test.maxAttempts) {
         return res.status(403).json({ error: "Attempts exhausted", code: "ATTEMPTS_EXHAUSTED" });
       }
     }
@@ -560,6 +591,8 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
     let totalEarnedPoints = 0;
     let totalPossiblePoints = 0;
     const topicResults: TopicResult[] = [];
+    // PRD-12: question types for the scale engine's percent-normalization.
+    const questionTypes: Record<string, QuestionType> = {};
 
     for (const variantSection of variant.sections) {
       const section = sectionMap.get(variantSection.topicId);
@@ -572,6 +605,7 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
       const sectionTotal = questions.length;
 
       for (const q of questions) {
+        questionTypes[q.id] = q.type as QuestionType;
         const answer = answers?.[q.id];
         const scoreRatio = checkAnswer(q, answer);
         const qPoints = q.points || 1;
@@ -631,6 +665,31 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
       }
     }
 
+    // PRD-12: graded namespaces (scales PRD-5 + result variables PRD-2) via the
+    // shared engines, mirroring the SCORM runtime. No-op when the test has none.
+    const scoringConfig = await loadScoringConfig(test.id);
+    let scaleResults: AttemptResult["scaleResults"];
+    let resultVariables: AttemptResult["resultVariables"];
+    let status: AttemptResult["status"];
+    if (scoringConfig.scales.length > 0 || scoringConfig.resultVariables.length > 0) {
+      const computation = computeAttemptResult(
+        scoringConfig,
+        answers ?? {},
+        questionTypes,
+        { percent: overallPercent, topicResults },
+      );
+      if (Object.keys(computation.scaleResults).length > 0) scaleResults = computation.scaleResults;
+      if (Object.keys(computation.resultVariables).length > 0) resultVariables = computation.resultVariables;
+      if (computation.status.success !== undefined || computation.status.completion !== undefined) {
+        status = computation.status;
+      }
+      // A boolean controls_status="success" variable overrides the pass flag
+      // (parity with the SCORM runtime, resultsPage.js).
+      if (typeof computation.status.success === "boolean") {
+        overallPassed = computation.status.success;
+      }
+    }
+
     const result: AttemptResult = {
       totalCorrect,
       totalQuestions,
@@ -639,6 +698,9 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
       totalPossiblePoints,
       overallPassed,
       topicResults,
+      ...(scaleResults ? { scaleResults } : {}),
+      ...(resultVariables ? { resultVariables } : {}),
+      ...(status ? { status } : {}),
     };
 
     await storage.updateAttempt(attempt.id, {
@@ -673,11 +735,22 @@ router.get("/attempts/:attemptId/result", requireLearner, async (req, res) => {
     const maxAttempts = test?.maxAttempts || null;
     const canRetake = maxAttempts === null || completedAttempts < maxAttempts;
 
+    // PRD-12 web-host: render payload (template layout + css + context) for the
+    // results screen of a standard attempt. Null for adaptive/legacy results — the
+    // client then falls back to its React markup.
+    const resultJson = attempt.resultJson as (AttemptResult & { mode?: string }) | null;
+    let render = null;
+    if (resultJson && Array.isArray(resultJson.topicResults)) {
+      const templateId = ((test?.designSettingsJson as any)?.templateId as string) || "default";
+      render = readResultsRenderPayload(templateId, resultJson, test?.title || "");
+    }
+
     res.json({
       ...attempt,
       testTitle: test?.title || "Unknown Test",
       result: attempt.resultJson as AttemptResult,
       canRetake,
+      render,
       attemptsInfo:
         maxAttempts !== null
           ? {

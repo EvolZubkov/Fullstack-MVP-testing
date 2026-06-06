@@ -6,6 +6,7 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, retakePolicySchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
+import { readScreenTemplate } from "../services/template-render";
 import { requireAuth, requireAuthor } from "../middleware/auth";
 import { generateScormPackage } from "../scorm-exporter";
 import { isSupportedTemplateApiVersion } from "../template-registry";
@@ -24,7 +25,13 @@ import { FlowPolicyValidationError } from "../services/flow-policy-validator";
 const sectionBodySchema = z
   .object({
     topicId: z.string().min(1),
-    drawCount: z.number().int().min(1),
+    // min(0): `drawAll` sections (and legacy adaptive sections) carry a draw_count
+    // of 0 that the runtime ignores. The client's FR-13 validation enforces
+    // `>= 1` for fixed-draw sections; this schema is only a backstop.
+    drawCount: z.number().int().min(0),
+    // Author's manual "draw the whole topic" flag; adaptive mode overrides the
+    // effective behaviour without changing this stored value.
+    drawAll: z.boolean().optional(),
     topicPassRuleJson: z.unknown().optional(),
     required: z.boolean().optional(),
     timeLimitMinutes: z.number().int().positive().nullable().optional(),
@@ -34,8 +41,9 @@ const sectionBodySchema = z
   .superRefine((s, ctx) => {
     // PRD-11 FR-05: the quotas are minimums inside the topic's sample, so their
     // sum must not exceed draw_count (the per-tag "fewer questions than count"
-    // case is a non-blocking warning handled at draw time, FR-06).
-    if (s.drawBlueprintJson) {
+    // case is a non-blocking warning handled at draw time, FR-06). Quotas are
+    // moot when the whole topic is drawn, so skip the check for drawAll sections.
+    if (!s.drawAll && s.drawBlueprintJson) {
       const sum = s.drawBlueprintJson.strata.reduce((acc, st) => acc + st.count, 0);
       if (sum > s.drawCount) {
         ctx.addIssue({
@@ -227,6 +235,29 @@ router.get("/", requireAuth, async (req, res) => {
   } catch (error) {
     logger.error("Get tests error: " + (error as Error).message, "tests")
     res.status(500).json({ error: "Failed to fetch tests" });
+  }
+});
+
+// GET /api/tests/:id/screen-template/:screen — template assets (layout+css+theme)
+// for a learner-facing screen the client renders itself (PRD-12 web-host).
+const SCREEN_LAYOUTS: Record<string, string> = {
+  start: "start.html",
+  blocked: "system.blocked.html",
+  question: "question.html",
+};
+router.get("/:id/screen-template/:screen", requireAuth, async (req, res) => {
+  try {
+    const layoutFile = SCREEN_LAYOUTS[req.params.screen];
+    if (!layoutFile) return res.status(400).json({ error: "Unknown screen" });
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    const templateId = ((test.designSettingsJson as any)?.templateId as string) || "default";
+    const payload = readScreenTemplate(templateId, layoutFile);
+    if (!payload) return res.status(404).json({ error: "Template not found" });
+    res.json(payload);
+  } catch (error) {
+    logger.error("Get screen template error: " + (error as Error).message, "tests");
+    res.status(500).json({ error: "Failed to fetch screen template" });
   }
 });
 
