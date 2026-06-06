@@ -454,9 +454,11 @@ describe("PUT /api/tests/:id — Zod validation", () => {
   });
 
   it("400 — invalid section drawCount (non-integer) returns structured error", async () => {
+    // drawCount is z.number().int().min(0): 0 is valid ("draw all"); a non-integer
+    // is the invalid case the schema's .int() rejects.
     const res = await asAuthor(request(app).put("/api/tests/test1").send({
       title: "T",
-      sections: [{ topicId: "t1", drawCount: 0 }],
+      sections: [{ topicId: "t1", drawCount: 1.5 }],
     }));
     expect(res.status).toBe(400);
     expect(res.body.fields.length).toBeGreaterThan(0);

@@ -18,7 +18,12 @@ vi.mock("../server/logger", () => ({
 import { isSupportedTemplateApiVersion } from "../server/template-registry";
 
 const TEMPLATES_DIR = path.resolve(process.cwd(), "server", "scorm", "templates");
-const BUILTIN_IDS = ["default", "corporate", "minimal"] as const;
+// Validate whatever built-in templates actually ship (derived from disk) so adding
+// or retiring a template does not require editing this list.
+const BUILTIN_IDS = fs
+  .readdirSync(TEMPLATES_DIR, { withFileTypes: true })
+  .filter((d) => d.isDirectory() && fs.existsSync(path.join(TEMPLATES_DIR, d.name, "manifest.json")))
+  .map((d) => d.name);
 
 function loadManifest(id: string): Record<string, unknown> {
   const p = path.join(TEMPLATES_DIR, id, "manifest.json");

@@ -1,157 +1,31 @@
 /**
  * @module tests/mbi-golden
  * @description Stage C end-to-end golden test for the MBI burnout scenario
- * (PRD-5 + PRD-2). Builds the normative MBI fixture from
- * docs/specs/prd-5/example-mbi.md — 3 scales (EE/D/AD, AD inverse), 22
- * single-choice questions (option value 0..5), and the `burnout_category`
- * result variable — then drives the authoritative pipeline (shared scale engine
- * → shared formula DSL) and asserts the computed scale levels and burnout
- * category match an INDEPENDENT reference implementation of the spec's 27-level
- * combination table (the logic the external `process_burnout_export.py` encodes).
+ * (PRD-5 + PRD-2). Drives the authoritative pipeline (shared scale engine →
+ * shared formula DSL) over the shared MBI fixture (tests/fixtures/mbi) and asserts
+ * the computed scale levels and burnout category match an INDEPENDENT reference
+ * implementation of the spec's 27-level combination table (the logic the external
+ * `process_burnout_export.py` encodes).
  *
  * This proves the package replaces the external post-processor: the same answers
  * yield the same category through test-builder's Core, with no manual Excel step.
  */
 import { describe, it, expect } from "vitest";
-import {
-  computeScales,
-  type ScaleSpec,
-  type MeasurementSpec,
-  type QuestionType,
-  type Answer,
-} from "../shared/scales/engine";
-import { computeResultVariables, type ResultVariableSpec } from "../shared/formula";
+import { computeScales, type Answer } from "../shared/scales/engine";
+import { computeResultVariables } from "../shared/formula";
 import type { EvalContext } from "../shared/formula/types";
-
-type ScaleKey = "ee" | "d" | "ad";
-
-// ─── Fixture (example-mbi.md §2) ──────────────────────────────────────────────
-
-const QUESTIONS_OF_SCALE: Record<ScaleKey, number[]> = {
-  ee: [1, 2, 3, 6, 8, 13, 14, 16, 20],
-  d: [5, 10, 11, 15, 22],
-  ad: [4, 7, 9, 12, 17, 18, 19, 21],
-};
-
-const SCALE_OF_QUESTION: Record<number, ScaleKey> = {};
-(Object.keys(QUESTIONS_OF_SCALE) as ScaleKey[]).forEach((scale) => {
-  for (const n of QUESTIONS_OF_SCALE[scale]) SCALE_OF_QUESTION[n] = scale;
-});
-
-const MBI_SCALES: ScaleSpec[] = [
-  {
-    key: "ee",
-    aggregation: "sum",
-    normalization: "percent",
-    direction: "positive",
-    bands: [
-      { min: 0, max: 14, level: "low", label: "Низкий" },
-      { min: 15, max: 24, level: "mid", label: "Средний" },
-      { min: 25, max: 45, level: "high", label: "Высокий" },
-    ],
-  },
-  {
-    key: "d",
-    aggregation: "sum",
-    normalization: "percent",
-    direction: "positive",
-    bands: [
-      { min: 0, max: 4, level: "low", label: "Низкий" },
-      { min: 5, max: 9, level: "mid", label: "Средний" },
-      { min: 10, max: 25, level: "high", label: "Высокий" },
-    ],
-  },
-  {
-    key: "ad",
-    aggregation: "sum",
-    normalization: "percent",
-    direction: "inverse",
-    bands: [
-      { min: 0, max: 27, level: "high", label: "Высокий" },
-      { min: 28, max: 32, level: "mid", label: "Средний" },
-      { min: 33, max: 40, level: "low", label: "Низкий" },
-    ],
-  },
-];
-
-// Every question is single-choice with six options whose explicit contribution
-// equals the option index 0..5 (example-mbi §2.3/§2.4).
-const MBI_MEASUREMENTS: MeasurementSpec[] = [];
-const MBI_QUESTION_TYPES: Record<string, QuestionType> = {};
-for (let n = 1; n <= 22; n++) {
-  const questionId = `q${n}`;
-  MBI_QUESTION_TYPES[questionId] = "single";
-  const scaleKey = SCALE_OF_QUESTION[n];
-  for (let opt = 0; opt <= 5; opt++) {
-    MBI_MEASUREMENTS.push({
-      questionId,
-      scaleKey,
-      sourceType: "option",
-      sourceKey: String(opt),
-      value: opt,
-      weight: 1,
-    });
-  }
-}
-
-const BURNOUT_VAR: ResultVariableSpec = {
-  name: "burnout_category",
-  type: "string",
-  sortOrder: 100,
-  formula: `
-    IF(countScales(["ee","d","ad"], "high") = 3, "Выгорание",
-    IF(countScales(["ee","d","ad"], "high") = 2, "Возрастающее истощение",
-    IF(countScales(["ee","d","ad"], "high") = 1
-       AND countScales(["ee","d","ad"], "mid") <= 1, "Начинающееся истощение",
-    IF(countScales(["ee","d","ad"], "high") = 1
-       AND countScales(["ee","d","ad"], "mid") = 2, "Возрастающее истощение",
-    IF(countScales(["ee","d","ad"], "high") = 0
-       AND countScales(["ee","d","ad"], "mid") = 0, "Вовлечённость",
-    "Снижающаяся вовлечённость")))))
-  `,
-};
-
-// ─── Independent reference (the external post-processor's logic) ─────────────────
-
-type Level = "low" | "mid" | "high";
-
-/** Map a scale's raw to its level via the spec thresholds (example-mbi §2.2). */
-function referenceLevel(scale: ScaleKey, raw: number): Level {
-  if (scale === "ee") return raw <= 14 ? "low" : raw <= 24 ? "mid" : "high";
-  if (scale === "d") return raw <= 4 ? "low" : raw <= 9 ? "mid" : "high";
-  // ad: bands are ascending on raw but the level semantics are inverse.
-  return raw <= 27 ? "high" : raw <= 32 ? "mid" : "low";
-}
-
-/** The 27-combination category table (example-mbi §2.5). */
-function referenceCategory(highCount: number, midCount: number): string {
-  if (highCount === 3) return "Выгорание";
-  if (highCount === 2) return "Возрастающее истощение";
-  if (highCount === 1) return midCount === 2 ? "Возрастающее истощение" : "Начинающееся истощение";
-  // highCount === 0
-  return midCount === 0 ? "Вовлечённость" : "Снижающаяся вовлечённость";
-}
-
-function referenceRun(answers: Record<string, number>): {
-  raws: Record<ScaleKey, number>;
-  levels: Record<ScaleKey, Level>;
-  category: string;
-} {
-  const raws: Record<ScaleKey, number> = { ee: 0, d: 0, ad: 0 };
-  for (const [questionId, opt] of Object.entries(answers)) {
-    const n = Number(questionId.slice(1));
-    raws[SCALE_OF_QUESTION[n]] += opt;
-  }
-  const levels: Record<ScaleKey, Level> = {
-    ee: referenceLevel("ee", raws.ee),
-    d: referenceLevel("d", raws.d),
-    ad: referenceLevel("ad", raws.ad),
-  };
-  const list = [levels.ee, levels.d, levels.ad];
-  const highCount = list.filter((l) => l === "high").length;
-  const midCount = list.filter((l) => l === "mid").length;
-  return { raws, levels, category: referenceCategory(highCount, midCount) };
-}
+import {
+  MBI_SCALES,
+  MBI_MEASUREMENTS,
+  MBI_QUESTION_TYPES,
+  BURNOUT_VAR,
+  QUESTIONS_OF_SCALE,
+  SCALE_OF_QUESTION,
+  RAW_FOR_LEVEL,
+  answersForRaw,
+  referenceRun,
+  type Level,
+} from "./fixtures/mbi";
 
 // ─── Pipeline runner (authoritative: shared engine → shared DSL) ──────────────────
 
@@ -172,41 +46,6 @@ function pipelineRun(answers: Record<string, Answer>) {
     formulaErrors: result.errors,
   };
 }
-
-// ─── Answer builders ──────────────────────────────────────────────────────────
-
-/** Distribute a target raw across `n` single-choice questions (each option 0..5). */
-function distribute(target: number, n: number): number[] {
-  if (target > n * 5) throw new Error(`unreachable raw ${target} for ${n} questions`);
-  const out: number[] = [];
-  let remaining = target;
-  for (let i = 0; i < n; i++) {
-    const v = Math.min(5, remaining);
-    out.push(v);
-    remaining -= v;
-  }
-  return out;
-}
-
-/** Build a full 22-answer set hitting the given raw per scale. */
-function answersForRaw(raw: Partial<Record<ScaleKey, number>>): Record<string, number> {
-  const answers: Record<string, number> = {};
-  (Object.keys(QUESTIONS_OF_SCALE) as ScaleKey[]).forEach((scale) => {
-    const qs = QUESTIONS_OF_SCALE[scale];
-    const dist = distribute(raw[scale] ?? 0, qs.length);
-    qs.forEach((n, i) => {
-      answers[`q${n}`] = dist[i];
-    });
-  });
-  return answers;
-}
-
-/** A representative raw inside each scale's level band (for the combination sweep). */
-const RAW_FOR_LEVEL: Record<ScaleKey, Record<Level, number>> = {
-  ee: { low: 10, mid: 20, high: 30 },
-  d: { low: 2, mid: 7, high: 15 },
-  ad: { high: 10, mid: 30, low: 36 },
-};
 
 // ─── Tests ──────────────────────────────────────────────────────────────────────
 
