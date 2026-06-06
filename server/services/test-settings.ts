@@ -103,6 +103,8 @@ export class VersionConflictError extends Error {
 export interface SectionPayload {
   topicId: string;
   drawCount: number;
+  /** Author's manual "draw the whole topic" flag (adaptive overrides effect). */
+  drawAll?: boolean;
   topicPassRuleJson?: unknown;
   required?: boolean;
   timeLimitMinutes?: number | null;
@@ -572,6 +574,7 @@ export class TestSettingsService {
         testId,
         topicId: s.topicId,
         drawCount: s.drawCount,
+        drawAll: s.drawAll ?? false,
         topicPassRuleJson: s.topicPassRuleJson ?? null,
         required: s.required ?? true,
         timeLimitMinutes: s.timeLimitMinutes ?? null,

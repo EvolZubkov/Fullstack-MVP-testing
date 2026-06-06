@@ -300,6 +300,11 @@ export const testSections = pgTable("test_sections", {
   testId: varchar("test_id", { length: 36 }).notNull(),
   topicId: varchar("topic_id", { length: 36 }).notNull(),
   drawCount: integer("draw_count").notNull(),
+  // When true the topic contributes its ENTIRE current question pool to the
+  // test, ignoring drawCount. Stores the author's manual intent; adaptive mode
+  // overrides the effective behaviour to "all" without touching this flag, so
+  // leaving adaptive restores the manual setting. Default false = legacy draw.
+  drawAll: boolean("draw_all").notNull().default(false),
   topicPassRuleJson: jsonb("topic_pass_rule_json"),
   required: boolean("required").notNull().default(true),
   timeLimitMinutes: integer("time_limit_minutes"),
@@ -439,8 +444,13 @@ export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertAssignmentAccessToken = z.infer<typeof insertAssignmentAccessTokenSchema>;
 export type AssignmentAccessToken = typeof assignmentAccessTokens.$inferSelect;
 
+// `none` = no overall/topic pass threshold (pass is governed elsewhere, e.g.
+// adaptive levels or scales). The read mapper and SCORM/attempt consumers
+// already treat `none` as "skip percent/absolute gating"; the write schema
+// must accept it too, otherwise existing tests stored with `type: "none"`
+// fail to save (HTTP 400 on overallPassRuleJson.type).
 export const passRuleSchema = z.object({
-  type: z.enum(["percent", "absolute"]),
+  type: z.enum(["percent", "absolute", "none"]),
   value: z.number(),
 });
 
@@ -561,6 +571,12 @@ export const attemptResultSchema = z.object({
   totalPossiblePoints: z.number(),
   overallPassed: z.boolean(),
   topicResults: z.array(topicResultSchema),
+  // PRD-12 (web parity): graded namespaces computed via @shared engines, present
+  // only when the test defines scales (PRD-5) / result variables (PRD-2). Absence
+  // keeps the legacy result shape and old stored results valid (back-compat).
+  scaleResults: z.record(z.string(), z.unknown()).optional(),
+  resultVariables: z.record(z.string(), z.unknown()).optional(),
+  status: z.object({ success: z.boolean().optional(), completion: z.boolean().optional() }).optional(),
 });
 
 export type TopicResult = z.infer<typeof topicResultSchema>;
