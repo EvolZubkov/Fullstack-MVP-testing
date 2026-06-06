@@ -736,8 +736,10 @@ router.get("/attempts/:attemptId/result", requireLearner, async (req, res) => {
     const canRetake = maxAttempts === null || completedAttempts < maxAttempts;
 
     // PRD-12 web-host: render payload (template layout + css + context) for the
-    // results screen of a standard attempt. Null for adaptive/legacy results — the
-    // client then falls back to its React markup.
+    // results screen. Covers BOTH standard (results.html) and adaptive
+    // (results.adaptive.html) — readResultsRenderPayload branches on result.mode.
+    // Null only when the layout is missing or the result lacks topic rows, in which
+    // case the client falls back to its React markup.
     const resultJson = attempt.resultJson as (AttemptResult & { mode?: string }) | null;
     let render = null;
     if (resultJson && Array.isArray(resultJson.topicResults)) {
