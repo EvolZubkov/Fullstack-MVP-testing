@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
+import { buildStartState } from "@shared/template/start-state";
 import { t } from "@/lib/i18n";
 import type { Question, Attempt, Test } from "@shared/schema";
 
@@ -111,6 +112,9 @@ export default function TakeTestPage() {
     startPageContent: string | null;
     passPercent: number | null;
     hasInProgress: boolean;
+    resumeIndex: number | null;
+    resumeTotal: number | null;
+    lastCompletedAttemptId: string | null;
   } | null>(null);
   // PRD-12 web-host: start screen template assets (null -> legacy React markup).
   const [startTpl, setStartTpl] = useState<{
@@ -311,6 +315,9 @@ export default function TakeTestPage() {
           startPageContent: test.startPageContent || null,
           passPercent,
           hasInProgress,
+          resumeIndex: test.resumeIndex ?? null,
+          resumeTotal: test.resumeTotal ?? null,
+          lastCompletedAttemptId: test.lastCompletedAttemptId ?? null,
         });
 
         // PRD-12 web-host: fetch the start screen template (best-effort; null ->
@@ -1097,11 +1104,14 @@ export default function TakeTestPage() {
   }
 
   // Start page — render via the design template (standard mode) when available.
+  // Context comes from the SHARED start-state builder (PRD-12 §10) — the same model
+  // the SCORM host produces: resume-with-position, "Начать заново" and "Мой результат"
+  // now appear on the web start too (parity), gated by the same flags.
   if (phase === "start" && testInfo && testMetadata && testMode === "standard" && startTpl) {
     const exhausted =
       testMetadata.maxAttempts !== null && testMetadata.completedAttempts >= testMetadata.maxAttempts;
-    const startContext = {
-      course: {
+    const startContext = buildStartState({
+      info: {
         title: testInfo.title,
         description: testInfo.description || "",
         questionCount: testMetadata.totalQuestions,
@@ -1110,17 +1120,16 @@ export default function TakeTestPage() {
         maxAttempts: testMetadata.maxAttempts,
         startPageContent: testMetadata.startPageContent || "",
       },
-      state: {
-        exhausted,
-        canResume: testMetadata.hasInProgress && !exhausted,
-        resumeLabel: "Продолжить тест",
-        canStart: !exhausted,
-        startLabel: testMetadata.completedAttempts > 0 ? "Начать заново" : "Начать тестирование",
-        // Web-only: the back-to-list action. The SCORM host (no test list) omits it;
-        // the layout gates it on this flag so both hosts share one start layout.
-        showBack: true,
-      },
-    };
+      maxAttempts: testMetadata.maxAttempts,
+      completedAttempts: testMetadata.completedAttempts,
+      resume:
+        testMetadata.hasInProgress && !exhausted
+          ? { index: testMetadata.resumeIndex ?? 0, total: testMetadata.resumeTotal ?? 0 }
+          : null,
+      hasCompletedResults: testMetadata.completedAttempts > 0,
+      canStartNew: !exhausted,
+      showBack: true,
+    });
     return (
       <div
         className="min-h-screen select-none"
@@ -1135,8 +1144,10 @@ export default function TakeTestPage() {
           css={startTpl.css}
           context={startContext}
           onAction={(action) => {
-            if (action === "start-test") handleStartTest();
+            if (action === "start-test" || action === "restart") handleStartTest();
             else if (action === "resume") handleResumeTest();
+            else if (action === "view-results" && testMetadata.lastCompletedAttemptId)
+              navigate(`/learner/result/${testMetadata.lastCompletedAttemptId}`);
             else if (action === "back") navigate("/learner");
           }}
         />

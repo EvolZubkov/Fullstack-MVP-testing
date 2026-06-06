@@ -41,14 +41,34 @@ router.get("/learner/tests", requireLearner, async (req, res) => {
         }));
 
         const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
-        const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
+        const completed = userAttempts.filter((a) => a.finishedAt !== null);
+        const completedAttempts = completed.length;
         const inProgressAttempt = userAttempts.find((a) => a.finishedAt === null);
+
+        // Resume position from the in-progress variant (PRD-12 §10 start parity):
+        // index = saved currentIndex, total = drawn question count.
+        let resumeIndex: number | null = null;
+        let resumeTotal: number | null = null;
+        if (inProgressAttempt) {
+          const v = inProgressAttempt.variantJson as { currentIndex?: number; sections?: Array<{ questionIds?: string[] }> } | null;
+          resumeIndex = v?.currentIndex || 0;
+          resumeTotal = Array.isArray(v?.sections)
+            ? v!.sections.reduce((n, s) => n + (s.questionIds?.length || 0), 0)
+            : 0;
+        }
+        // Most recent completed attempt — target of the start screen's "Мой результат".
+        const lastCompleted = completed
+          .slice()
+          .sort((a, b) => new Date(b.finishedAt as Date).getTime() - new Date(a.finishedAt as Date).getTime())[0];
 
         return {
           ...test,
           sections: sectionsWithNames,
           completedAttempts,
           inProgressAttemptId: inProgressAttempt?.id || null,
+          resumeIndex,
+          resumeTotal,
+          lastCompletedAttemptId: lastCompleted?.id || null,
         };
       })
     );

@@ -20,3 +20,4 @@ export {
 } from "./dnd/matching-model";
 export { attachPointerDnd } from "./dnd/pointer-dnd";
 export { buildResultContext, buildAdaptiveResultContext } from "./result-context";
+export { buildStartState } from "./start-state";
