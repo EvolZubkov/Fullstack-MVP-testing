@@ -13,6 +13,7 @@ import scormTelemetryRouter from "./scorm-telemetry";
 import logsRouter from "./logs";
 import accessRouter from "./access";
 import templatesRouter from "./templates";
+import adminTemplatesRouter from "./admin-templates";
 import contentPagesRouter from "./content-pages";
 import resultVariablesRouter from "./result-variables";
 import scalesRouter from "./scales";
@@ -33,6 +34,7 @@ export {
   logsRouter,
   accessRouter,
   templatesRouter,
+  adminTemplatesRouter,
   contentPagesRouter,
   resultVariablesRouter,
   scalesRouter,
@@ -42,6 +44,7 @@ export {
 export const routerConfig = [
   { path: "/access", router: accessRouter }, // magic link — до session guard
   { path: "/api/templates", router: templatesRouter },
+  { path: "/api/admin/templates", router: adminTemplatesRouter },
   { path: "/api/tests", router: contentPagesRouter },
   { path: "/api/tests", router: resultVariablesRouter },
   { path: "/api/tests", router: scalesRouter },

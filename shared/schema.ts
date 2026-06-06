@@ -981,8 +981,24 @@ export const templates = pgTable("templates", {
   templateApiVersion: text("template_api_version").notNull().default("1.0"),
   isBuiltin: boolean("is_builtin").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
+  // PRD-3 §5.1: explicit lifecycle state. `is_active` stays as the author-facing
+  // visibility flag; `status` is the admin lifecycle FSM (draft/active/inactive/invalid).
+  status: text("status", { enum: ["draft", "active", "inactive", "invalid"] })
+    .notNull()
+    .default("active"),
+  // PRD-3 §6: source adapter. Built-ins sync from disk; uploaded come from an admin ZIP.
+  sourceType: text("source_type", { enum: ["builtin", "uploaded"] })
+    .notNull()
+    .default("builtin"),
+  // Absolute/relative path to the template root: the on-disk built-in dir, or the
+  // extracted uploads/templates/<id> dir for uploaded packages.
+  sourcePath: text("source_path"),
   manifest: jsonb("manifest").notNull(),
   previewPath: text("preview_path"),
+  // PRD-3 §4: persisted structural-validation and browser smoke-test reports.
+  validationJson: jsonb("validation_json"),
+  smokeTestJson: jsonb("smoke_test_json"),
+  installedAt: timestamp("installed_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -1087,6 +1103,18 @@ export const defaultTemplateManifestSchema = templateManifestSchema.superRefine(
 
 export type TemplateManifest = z.infer<typeof templateManifestSchema>;
 
+/**
+ * Template platform API versions this build accepts (PRD-3 §4.1). Kept here,
+ * free of any server/db import, so the pure template validator can use it.
+ * Re-exported from server/template-registry for backward-compatible imports.
+ */
+export const SUPPORTED_TEMPLATE_API_VERSIONS = ["1.0"] as const;
+
+/** Returns true when the given templateApiVersion is accepted by this build. */
+export function isSupportedTemplateApiVersion(version: string): boolean {
+  return (SUPPORTED_TEMPLATE_API_VERSIONS as readonly string[]).includes(version);
+}
+
 export const designSettingsSchema = z.object({
   templateId: z.string(),
   templateVersion: z.string(),
@@ -1103,11 +1131,19 @@ export const contentPageValuesSchema = z.object({
 
 export type ContentPageValues = z.infer<typeof contentPageValuesSchema>;
 
-export const insertTemplateSchema = createInsertSchema(templates).omit({ createdAt: true, updatedAt: true });
+export const insertTemplateSchema = createInsertSchema(templates).omit({ createdAt: true, updatedAt: true, installedAt: true });
 export const insertContentPageSchema = createInsertSchema(contentPages).omit({ id: true, createdAt: true, updatedAt: true });
 
 export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
 export type Template = typeof templates.$inferSelect;
+
+/** PRD-3 §5.1: lifecycle states of a template in the admin registry. */
+export const templateStatusSchema = z.enum(["draft", "active", "inactive", "invalid"]);
+export type TemplateStatus = z.infer<typeof templateStatusSchema>;
+
+/** PRD-3 §6: where a template came from (single registry, two source adapters). */
+export const templateSourceTypeSchema = z.enum(["builtin", "uploaded"]);
+export type TemplateSourceType = z.infer<typeof templateSourceTypeSchema>;
 
 export type InsertContentPage = z.infer<typeof insertContentPageSchema>;
 export type ContentPage = typeof contentPages.$inferSelect;

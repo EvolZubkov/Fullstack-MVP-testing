@@ -5,7 +5,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./storage";
-import { syncBuiltinTemplates } from "./template-registry";
+import { syncBuiltinTemplates, reconcileUploadedTemplates } from "./template-registry";
 import {
   waitForDatabase,
   closeDatabaseConnection,
@@ -113,6 +113,7 @@ app.use((req, res, next) => {
   await waitForDatabase();
   await seedDatabase();
   await syncBuiltinTemplates();
+  await reconcileUploadedTemplates();
 
   // Health check endpoint
   app.get("/api/health", async (_req, res) => {

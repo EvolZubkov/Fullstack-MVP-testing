@@ -5,25 +5,27 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { eq } from "drizzle-orm";
 import { db } from "./db";
 import {
   templates,
   templateManifestSchema,
   defaultTemplateManifestSchema,
+  SUPPORTED_TEMPLATE_API_VERSIONS,
+  isSupportedTemplateApiVersion,
 } from "@shared/schema";
 import { logger } from "./logger";
 
-/** API versions this server accepts. Reject templates with any other version. */
-export const SUPPORTED_TEMPLATE_API_VERSIONS = ["1.0"] as const;
+// API-version helpers live in @shared/schema (db-free, shared with the validator);
+// re-exported here so existing `../template-registry` import sites keep working.
+export { SUPPORTED_TEMPLATE_API_VERSIONS, isSupportedTemplateApiVersion };
 
 const TEMPLATES_DIR = path.resolve(process.cwd(), "server", "scorm", "templates");
-const BUILTIN_IDS = ["default", "corporate", "minimal"] as const;
+// Only `default` ships on disk. `corporate`/`minimal` were never bundled and
+// were dead entries (skipped at sync) — removed in PRD-3. Uploaded templates are
+// not synced from disk: they live in the DB from the moment of a successful upload.
+const BUILTIN_IDS = ["default"] as const;
 const DEFAULT_TEMPLATE_ID = "default";
-
-/** Returns true when the given templateApiVersion is accepted by this server. */
-export function isSupportedTemplateApiVersion(version: string): boolean {
-  return (SUPPORTED_TEMPLATE_API_VERSIONS as readonly string[]).includes(version);
-}
 
 /**
  * Validates a parsed manifest object against the variant-binding contract
@@ -86,8 +88,14 @@ export async function syncBuiltinTemplates(): Promise<void> {
         templateApiVersion: apiVersion,
         isBuiltin: true,
         isActive: true,
+        status: "active",
+        sourceType: "builtin",
+        sourcePath: path.join(TEMPLATES_DIR, id),
         manifest,
       })
+      // status/is_active are intentionally NOT in the conflict-update set: an
+      // admin may have deactivated a built-in (PRD-3 §5.3), and a re-sync on
+      // restart must not silently re-activate it.
       .onConflictDoUpdate({
         target: templates.id,
         set: {
@@ -95,11 +103,33 @@ export async function syncBuiltinTemplates(): Promise<void> {
           description: manifest.description != null ? String(manifest.description) : null,
           version: String(manifest.version),
           templateApiVersion: apiVersion,
+          sourceType: "builtin",
+          sourcePath: path.join(TEMPLATES_DIR, id),
           manifest,
           updatedAt: new Date(),
         },
       });
 
     logger.info(`Synced built-in template: ${id} v${manifest.version}`);
+  }
+}
+
+/**
+ * Startup integrity check for uploaded templates (PRD-3): uploaded packages live
+ * in the DB and on disk under their `source_path`. If the extracted files have
+ * gone missing, the template can no longer be exported or rendered, so it is
+ * flagged `invalid` and hidden from authors. Safe to call repeatedly.
+ */
+export async function reconcileUploadedTemplates(): Promise<void> {
+  const rows = await db.select().from(templates).where(eq(templates.sourceType, "uploaded"));
+  for (const row of rows) {
+    const present = !!row.sourcePath && fs.existsSync(row.sourcePath);
+    if (!present && row.status !== "invalid") {
+      await db
+        .update(templates)
+        .set({ status: "invalid", isActive: false, updatedAt: new Date() })
+        .where(eq(templates.id, row.id));
+      logger.warn(`Uploaded template "${row.id}" marked invalid: source path missing (${row.sourcePath})`);
+    }
   }
 }

@@ -203,48 +203,42 @@ describe("syncBuiltinTemplates", () => {
     dbMock.onConflictDoUpdate.mockResolvedValue(undefined);
   });
 
-  it("upserts all three built-in templates when manifests are valid", async () => {
+  // PRD-3: only `default` ships on disk; `corporate`/`minimal` dead refs removed.
+  it("upserts the single built-in template when its manifest is valid", async () => {
     fsMock.existsSync.mockReturnValue(true);
     fsMock.readFileSync.mockReturnValue(JSON.stringify(validManifest));
 
     await syncBuiltinTemplates();
 
-    expect(dbMock.insert).toHaveBeenCalledTimes(3);
-    expect(dbMock.onConflictDoUpdate).toHaveBeenCalledTimes(3);
+    expect(dbMock.insert).toHaveBeenCalledTimes(1);
+    expect(dbMock.onConflictDoUpdate).toHaveBeenCalledTimes(1);
   });
 
-  it("skips a template when manifest file is missing", async () => {
-    fsMock.existsSync
-      .mockReturnValueOnce(false) // default — missing
-      .mockReturnValue(true);
+  it("skips the template when its manifest file is missing", async () => {
+    fsMock.existsSync.mockReturnValue(false);
     fsMock.readFileSync.mockReturnValue(JSON.stringify(validManifest));
 
     await syncBuiltinTemplates();
 
-    expect(dbMock.insert).toHaveBeenCalledTimes(2);
+    expect(dbMock.insert).toHaveBeenCalledTimes(0);
   });
 
-  it("skips a template with unsupported templateApiVersion", async () => {
-    const badManifest = { ...validManifest, id: "corporate", templateApiVersion: "9.9" };
+  it("skips the template with an unsupported templateApiVersion", async () => {
+    const badManifest = { ...validManifest, templateApiVersion: "9.9" };
     fsMock.existsSync.mockReturnValue(true);
-    fsMock.readFileSync
-      .mockReturnValueOnce(JSON.stringify(validManifest))
-      .mockReturnValueOnce(JSON.stringify(badManifest))
-      .mockReturnValueOnce(JSON.stringify({ ...validManifest, id: "minimal" }));
+    fsMock.readFileSync.mockReturnValue(JSON.stringify(badManifest));
 
     await syncBuiltinTemplates();
 
-    expect(dbMock.insert).toHaveBeenCalledTimes(2);
+    expect(dbMock.insert).toHaveBeenCalledTimes(0);
   });
 
-  it("skips a template when manifest JSON is malformed", async () => {
+  it("skips the template when its manifest JSON is malformed", async () => {
     fsMock.existsSync.mockReturnValue(true);
-    fsMock.readFileSync
-      .mockReturnValueOnce("not-json")
-      .mockReturnValue(JSON.stringify(validManifest));
+    fsMock.readFileSync.mockReturnValue("not-json");
 
     await syncBuiltinTemplates();
 
-    expect(dbMock.insert).toHaveBeenCalledTimes(2);
+    expect(dbMock.insert).toHaveBeenCalledTimes(0);
   });
 });
