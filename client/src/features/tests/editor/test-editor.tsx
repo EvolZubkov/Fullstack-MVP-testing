@@ -27,6 +27,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type * as React from "react";
 import { AlertTriangle, Loader2, X, XCircle } from "lucide-react";
 import {
   Banner,
@@ -124,7 +125,7 @@ function tabForField(field: string): EditorTabKey {
  * {@link useTestEditor} hook and delegates rendering to
  * {@link TestEditorView}.
  */
-export function TestEditor(props: TestEditorProps): JSX.Element | null {
+export function TestEditor(props: TestEditorProps): React.JSX.Element | null {
   const { testId, createMode, open, onClose } = props;
   const options = useMemo<UseTestEditorOptions | null>(() => {
     if (!open) return null;
@@ -149,7 +150,7 @@ export function TestEditor(props: TestEditorProps): JSX.Element | null {
  * Exported separately so tests can render a single shared editor instance
  * while exercising both `updateModel` and the Drawer's UI side-effects.
  */
-export function TestEditorView(props: TestEditorViewProps): JSX.Element | null {
+export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | null {
   const { open, onClose, editor } = props;
   const [activeTab, setActiveTab] = useState<EditorTabKey>("composition");
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);

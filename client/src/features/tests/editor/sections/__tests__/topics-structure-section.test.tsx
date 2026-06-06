@@ -12,6 +12,7 @@
  *   - Clicking tb-feedback-preview opens FeedbackEditorModal.
  *   - Saving in FeedbackEditorModal patches the section feedback via updateModel.
  */
+import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -85,7 +86,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-function renderWithClient(ui: JSX.Element) {
+function renderWithClient(ui: React.JSX.Element) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }

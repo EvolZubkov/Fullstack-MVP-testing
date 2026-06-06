@@ -23,6 +23,7 @@
 import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type * as React from "react";
 import { useState } from "react";
 import { TestEditor, TestEditorView } from "../test-editor";
 import { useTestEditor } from "../use-test-editor";
@@ -68,7 +69,7 @@ function makeClient() {
   });
 }
 
-function withClient(client: QueryClient, ui: JSX.Element) {
+function withClient(client: QueryClient, ui: React.JSX.Element) {
   return <QueryClientProvider client={client}>{ui}</QueryClientProvider>;
 }
 

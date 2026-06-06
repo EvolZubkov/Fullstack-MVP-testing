@@ -125,7 +125,7 @@ const EMPTY_FOLDERS: TestFolder[] = [];
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function TestsListPage(): JSX.Element {
+export function TestsListPage(): React.JSX.Element {
   const { toast } = useToast();
 
   // Data ----------------------------------------------------------------------
@@ -797,8 +797,8 @@ function DefaultTree(props: {
   onOpenFolderMore: (id: string) => void;
   testMenu: { id: string } | null;
   folderMenu: { id: string } | null;
-  renderTestMenu: (test: TestListEntry) => JSX.Element;
-  renderFolderMenu: (folder: FolderEntry) => JSX.Element;
+  renderTestMenu: (test: TestListEntry) => React.JSX.Element;
+  renderFolderMenu: (folder: FolderEntry) => React.JSX.Element;
 }) {
   return (
     <div className="tree-area" role="tree" aria-label="Список тестов" data-testid="tests-list-tree">
@@ -864,7 +864,7 @@ function SearchTree(props: {
   onOpenMore: (id: string) => void;
   testMenu: { id: string } | null;
   entriesById: Map<string, TestListEntry>;
-  renderTestMenu: (test: TestListEntry) => JSX.Element;
+  renderTestMenu: (test: TestListEntry) => React.JSX.Element;
 }) {
   return (
     <div className="tree-area" role="list" aria-label="Результаты поиска" data-testid="tests-list-search">
@@ -906,7 +906,7 @@ function FolderRow(props: {
   onToggle: () => void;
   onMore: (e: React.MouseEvent) => void;
   menuOpen: boolean;
-  menu: JSX.Element | null;
+  menu: React.JSX.Element | null;
 }) {
   return (
     <div
@@ -957,7 +957,7 @@ function TestRow(props: {
   onAssign: () => void;
   onMore: (e: React.MouseEvent) => void;
   menuOpen: boolean;
-  menu: JSX.Element | null;
+  menu: React.JSX.Element | null;
 }) {
   const e = props.entry;
   // Reactive subscription to warning state written by the editor after save.
