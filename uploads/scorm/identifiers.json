@@ -82,5 +82,9 @@
   "te-1": {
     "code": "20260531_Osnovy_informatsionnoy_bezopasnosti",
     "createdAt": "20260531"
+  },
+  "quota-acceptance-test": {
+    "code": "20260605_Quota_acceptance",
+    "createdAt": "20260605"
   }
 }
