@@ -309,6 +309,37 @@ function validateAdaptiveAnswer(question, answer) {
  */
 function renderAdaptiveTransition(result) {
   var app = document.getElementById('app');
+  var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts['system.transition'];
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (layout && TB && TB.renderScreenInto && TB.buildTransitionContext) {
+    renderAdaptiveTransitionTemplated(app, result);
+  } else {
+    renderAdaptiveTransitionFallback(app, result);
+  }
+  // Auto-continue after delay (both paths).
+  setTimeout(function () {
+    if (state.pendingTransition) continueAfterTransition();
+  }, 2500);
+}
+
+/** Render the transition via the shared `system.transition` layout. */
+function renderAdaptiveTransitionTemplated(app, result) {
+  var ctx = window.TBTemplate.buildTransitionContext({
+    isCorrect: result.isCorrect,
+    levelTransition: result.levelTransition || null,
+    topicTransition: result.topicTransition || null,
+    showContinue: true
+  });
+  app.innerHTML = '';
+  var wrap = document.createElement('div');
+  app.appendChild(wrap);
+  window.TBTemplate.renderScreenInto(wrap, { layout: state.templateLayouts['system.transition'], context: ctx });
+  var cont = wrap.querySelector('[data-action="continue"]');
+  if (cont) cont.onclick = continueAfterTransition;
+}
+
+function renderAdaptiveTransitionFallback(app, result) {
   var isCorrect = result.isCorrect;
   var transition = result.levelTransition;
   var topicTransition = result.topicTransition;
@@ -366,13 +397,6 @@ function renderAdaptiveTransition(result) {
   html += '</div>';
 
   app.innerHTML = html;
-
-  // Auto-continue after delay
-  setTimeout(function () {
-    if (state.pendingTransition) {
-      continueAfterTransition();
-    }
-  }, 2500);
 }
 
 /**

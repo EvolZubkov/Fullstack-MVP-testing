@@ -122,6 +122,28 @@ export interface CtxState {
   showBack?: boolean;
 }
 
+/** Adaptive inter-level/topic transition interstitial (`transition.*`). */
+export interface CtxTransition {
+  isCorrect: boolean;
+  /** Core-prepared icon class: `is-pass` / `is-fail`. */
+  iconClass: string;
+  /** Core-prepared status label: `Правильно!` / `Неправильно`. */
+  title: string;
+  /** Level change, when present. */
+  level?: {
+    /** Core-prepared class: `is-up` / `is-down` / `is-complete`. */
+    class: string;
+    isUp: boolean;
+    isDown: boolean;
+    isComplete: boolean;
+    message: string;
+  };
+  /** Topic change, when present. */
+  topic?: { toTopic: string };
+  /** Whether to render an explicit "Продолжить" action (SCORM) vs auto-advance (web). */
+  showContinue?: boolean;
+}
+
 /** Retake gate data for the block screen (`retake.*`, PRD-6). */
 export interface CtxRetake {
   cooldownPeriodDays?: number;
@@ -141,4 +163,5 @@ export interface PublicRenderContext {
   result?: CtxResult;
   state?: CtxState;
   retake?: CtxRetake;
+  transition?: CtxTransition;
 }

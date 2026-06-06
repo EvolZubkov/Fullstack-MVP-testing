@@ -954,3 +954,29 @@ h1 {
   cursor: pointer;
 }
 .retake-shell__btn:hover { background: hsl(211 100% 44%); }
+
+/* PRD-12: shared-template screens — classes also present in templates/default
+   styles/base.css (web host). Kept in sync here for the SCORM runtime, which
+   serves this stylesheet (not the template base.css). */
+.transition-page { max-width: 480px; margin: 80px auto; padding: 0 18px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.transition-icon { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.transition-icon.is-pass { background: hsl(var(--success) / 0.18); color: hsl(var(--success)); }
+.transition-icon.is-fail { background: hsl(var(--destructive) / 0.18); color: hsl(var(--destructive)); }
+.transition-title { font-size: 26px; font-weight: 800; }
+.transition-level { width: 100%; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 18px 22px; border-radius: 16px; border: 2px solid hsl(var(--border)); font-size: 16px; font-weight: 600; }
+.transition-level.is-up { border-color: hsl(var(--success)); color: hsl(var(--success)); background: hsl(var(--success) / 0.12); }
+.transition-level.is-down { border-color: hsl(var(--destructive)); color: hsl(var(--destructive)); background: hsl(var(--destructive) / 0.12); }
+.transition-level.is-complete { border-color: hsl(var(--primary)); color: hsl(var(--primary)); background: hsl(var(--primary) / 0.12); }
+.transition-level-icon { flex-shrink: 0; }
+.transition-topic { font-size: 15px; color: hsl(var(--muted-foreground)); }
+.transition-actions { margin-top: 8px; }
+
+/* Start screen: in-progress resume note (SCORM Case 2 / web parity). */
+.start-resume-note { width: 100%; max-width: 360px; text-align: center; background: hsl(var(--muted)); border: 1px solid hsl(var(--border)); border-radius: 12px; padding: 12px 16px; font-size: 14px; font-weight: 600; color: hsl(var(--foreground)); }
+
+/* Results: recommended courses/events for failed topics (gated). */
+.results-rec-list { display: flex; flex-direction: column; gap: 8px; }
+.results-rec-item { display: block; padding: 10px 12px; background: hsl(var(--muted)); border-radius: 8px; font-size: 14px; font-weight: 500; color: hsl(var(--foreground)); text-decoration: none; }
+a.results-rec-item { color: hsl(var(--primary)); }
+a.results-rec-item:hover { text-decoration: underline; }
+.topic-feedback-text { font-size: 13px; }

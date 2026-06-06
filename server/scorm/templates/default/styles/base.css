@@ -393,6 +393,20 @@ a.results-rec-item:hover { text-decoration: underline; }
 .topic-link { font-size: 13px; color: var(--primary); text-decoration: none; }
 .topic-link:hover { text-decoration: underline; }
 
+/* Adaptive transition interstitial (level/topic change between questions) */
+.transition-page { max-width: 480px; margin: 80px auto; padding: 0 18px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.transition-icon { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.transition-icon.is-pass { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
+.transition-icon.is-fail { background: color-mix(in srgb, var(--destructive) 18%, transparent); color: var(--destructive); }
+.transition-title { font-size: 26px; font-weight: 800; }
+.transition-level { width: 100%; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 18px 22px; border-radius: 16px; border: 2px solid var(--border); font-size: 16px; font-weight: 600; }
+.transition-level.is-up { border-color: var(--success); color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); }
+.transition-level.is-down { border-color: var(--destructive); color: var(--destructive); background: color-mix(in srgb, var(--destructive) 12%, transparent); }
+.transition-level.is-complete { border-color: var(--primary); color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.transition-level-icon { flex-shrink: 0; }
+.transition-topic { font-size: 15px; color: var(--muted-foreground); }
+.transition-actions { margin-top: 8px; }
+
 /* Blocked page */
 .blocked-card { padding: 40px; text-align: center; }
 .blocked-icon { display: flex; justify-content: center; margin-bottom: 16px; color: var(--muted-foreground); }

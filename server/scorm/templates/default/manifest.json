@@ -292,7 +292,8 @@
     "question": "layouts/question.html",
     "results": "layouts/results.html",
     "results.adaptive": "layouts/results.adaptive.html",
-    "system.blocked": "layouts/system.blocked.html"
+    "system.blocked": "layouts/system.blocked.html",
+    "system.transition": "layouts/system.transition.html"
   },
   "assets": {
     "styles": [
