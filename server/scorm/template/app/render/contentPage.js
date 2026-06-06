@@ -145,7 +145,16 @@ function fillContentPagePlaceholders(root, contentTemplate, values, placeholderS
     var el = root.querySelector('[data-placeholder="' + phDef.key + '"]');
     if (el) fillResultFieldPlaceholder(el, phDef, values[phDef.key], contentTemplate);
   });
-  tb._internal.renderPathOnlyDsl(root, typeof TEST_DATA !== "undefined" ? TEST_DATA : {});
+  // §10: bind data-path against a PUBLIC context, not the internal TEST_DATA. The
+  // default template's content has no data-path bindings (author content flows via
+  // placeholders/resultField above), so a minimal `course` context suffices; extend
+  // with result/sectionResult here if a content template ever binds those.
+  tb._internal.renderPathOnlyDsl(root, contentPublicContext());
+}
+
+/** Minimal public context for content-page data-path bindings (no raw TEST_DATA). */
+function contentPublicContext() {
+  return { course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") } };
 }
 
 function renderContentPage(page, contentTemplates) {

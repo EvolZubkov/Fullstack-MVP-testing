@@ -414,41 +414,37 @@ function renderAdaptiveResults() {
   renderAdaptiveResultsFallback(app, result);
 }
 
-/** Map an adaptive topic result to the results.adaptive layout topic view. */
-function adaptiveTopicView(tr) {
-  var achieved = tr.achievedLevelIndex !== null && tr.achievedLevelIndex !== undefined;
-  var links = (tr.recommendedLinks || []).map(function (l) { return { title: l.title, url: l.url }; });
-  return {
-    topicName: tr.topicName || '',
-    levelLabel: achieved ? tr.achievedLevelName : 'Не достигнут',
-    levelClass: achieved ? 'is-info' : 'is-fail',
-    feedback: tr.feedback || '',
-    hasFeedback: !!(tr.feedback && String(tr.feedback).trim()),
-    hasLinks: links.length > 0,
-    links: links
-  };
-}
-
-/** Build the adaptive results context and mount the shared layout. */
+/**
+ * Build the adaptive results context via the SHARED builder
+ * (TBTemplate.buildAdaptiveResultContext) and mount the shared layout. SCORM adapts
+ * its runtime result into the normalized input; the SCORM action flags (PDF / retry
+ * / finish — gated layout blocks the web omits) go through opts.
+ */
 function renderAdaptiveResultsTemplated(app, result) {
   var hasLimit = !!TEST_DATA.maxAttempts;
   var canRetry = hasAttemptsLeft();
-  var ctxResult = {
-    adaptive: true,
-    topicResults: (result.topicResults || []).map(adaptiveTopicView),
-    // SCORM-only action set (the web context omits these → it shows "Пройти снова").
+  var input = {
+    passed: !!result.overallPassed,
+    topicResults: (result.topicResults || []).map(function (tr) {
+      return {
+        topicName: tr.topicName,
+        achievedLevelIndex: (tr.achievedLevelIndex === undefined ? null : tr.achievedLevelIndex),
+        achievedLevelName: tr.achievedLevelName,
+        feedback: tr.feedback,
+        recommendedLinks: tr.recommendedLinks
+      };
+    })
+  };
+  var ctx = window.TBTemplate.buildAdaptiveResultContext(input, TEST_DATA.title || '', {
     hasScormActions: true,
     showPdf: true,
     canRetry: (!hasLimit) || canRetry,
     showFinish: (!hasLimit) || (!canRetry)
-  };
+  });
   app.innerHTML = '';
   var wrap = document.createElement('div');
   app.appendChild(wrap);
-  window.TBTemplate.renderScreenInto(wrap, {
-    layout: state.templateLayouts['results.adaptive'],
-    context: { course: { title: TEST_DATA.title || '' }, result: ctxResult }
-  });
+  window.TBTemplate.renderScreenInto(wrap, { layout: state.templateLayouts['results.adaptive'], context: ctx });
   var pdf = wrap.querySelector('[data-action="download-pdf"]');
   if (pdf) pdf.onclick = function () { if (typeof downloadPDF === 'function') downloadPDF(); };
   var retry = wrap.querySelector('[data-action="restart-adaptive"]');

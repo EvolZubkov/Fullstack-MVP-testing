@@ -25,29 +25,13 @@ function renderViewResults() {
   renderViewResultsFallback();
 }
 
-/** One decimal place (points display). */
-function vrRound1(n) { return Math.round((parseFloat(n) || 0) * 10) / 10; }
-
-/** Map a saved topic result to the results-layout topic view (+ SCORM extras). */
-function vrTopicView(tr) {
-  var passed = (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed;
-  var view = {
-    topicName: tr.topicName || '',
-    percent: Math.round(tr.percent || 0),
-    correct: (tr.correct != null ? tr.correct : 0),
-    total: tr.total,
-    passClass: passed === true ? 'is-pass' : passed === false ? 'is-fail' : '',
-    statusLabel: passed === true ? 'Пройден' : passed === false ? 'Не пройден' : '',
-    pointsLabel: vrRound1(tr.earnedPoints) + ' / ' + vrRound1(tr.possiblePoints)
-  };
-  var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+/** Per-topic pass threshold label from the section's pass rule (SCORM-extra). */
+function vrRequiredLabel(topicId) {
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === topicId; });
   if (section && section.topicPassRule && section.topicPassRule.type === 'percent') {
-    view.requiredLabel = 'Требуется: ' + section.topicPassRule.value + '%';
+    return 'Требуется: ' + section.topicPassRule.value + '%';
   }
-  if (tr.topicFeedback && String(tr.topicFeedback).trim()) {
-    view.topicFeedback = tr.topicFeedback;
-  }
-  return view;
+  return undefined;
 }
 
 /** Deduped recommended courses/events across failed topics (failed-topic guidance). */
@@ -64,35 +48,47 @@ function vrRecommended(results) {
   return { courses: courses, events: events };
 }
 
-/** Build the results render context and mount the shared layout. */
+/**
+ * Build the results context via the SHARED builder (TBTemplate.buildResultContext)
+ * and mount the shared layout. SCORM adapts its runtime result into the builder's
+ * normalized input; the shaping (passClass/ring/topic rows) lives in shared/.
+ */
 function renderViewResultsTemplated(app, results) {
-  var pct = Math.round(results.percent);
-  var passed = !!results.passed;
-  var result = {
-    passed: passed,
-    passClass: passed ? 'is-pass' : 'is-fail',
-    statusLabel: passed ? 'Пройден' : 'Не пройден',
-    scorePercent: pct,
-    ringDashoffset: Math.round((2 * Math.PI * 63) * (1 - pct / 100)),
+  var rec = vrRecommended(results);
+  var input = {
+    passed: !!results.passed,
+    percent: results.percent,
     totalQuestions: results.totalQuestions,
     correct: (results.totalCorrect != null ? results.totalCorrect : results.correct),
-    earnedPoints: vrRound1(results.earnedPoints),
-    possiblePoints: vrRound1(results.possiblePoints),
-    topicResults: (results.topicResults || []).map(vrTopicView),
+    earnedPoints: results.earnedPoints,
+    possiblePoints: results.possiblePoints,
+    topicResults: (results.topicResults || []).map(function (tr) {
+      return {
+        topicId: tr.topicId,
+        topicName: tr.topicName,
+        correct: tr.correct,
+        total: tr.total,
+        percent: tr.percent,
+        earnedPoints: tr.earnedPoints,
+        possiblePoints: tr.possiblePoints,
+        passed: (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed,
+        requiredLabel: vrRequiredLabel(tr.topicId),
+        topicFeedback: tr.topicFeedback
+      };
+    })
+  };
+  var ctx = window.TBTemplate.buildResultContext(input, TEST_DATA.title || '', {
+    withTopicPoints: true,
+    recommendedCourses: rec.courses,
+    recommendedEvents: rec.events,
     backAction: 'back-to-start',
     backLabel: 'Вернуться к тесту'
-  };
-  var rec = vrRecommended(results);
-  if (rec.courses.length) result.recommendedCourses = rec.courses;
-  if (rec.events.length) result.recommendedEvents = rec.events;
+  });
 
   app.innerHTML = '';
   var wrap = document.createElement('div');
   app.appendChild(wrap);
-  window.TBTemplate.renderScreenInto(wrap, {
-    layout: state.templateLayouts['results'],
-    context: { course: { title: TEST_DATA.title || '' }, result: result }
-  });
+  window.TBTemplate.renderScreenInto(wrap, { layout: state.templateLayouts['results'], context: ctx });
   var backBtn = wrap.querySelector('[data-action="back-to-start"]');
   if (backBtn) backBtn.onclick = backToStart;
 }

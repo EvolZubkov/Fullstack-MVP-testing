@@ -1,197 +1,144 @@
 /**
  * @module shared/template/context
  *
- * The public render context contract (PRD-12 Phase 0, task 0-3;
- * spec-template-platform §10). This is the single typed surface that BOTH runtime
- * hosts must produce and feed to the DSL renderer ({@link module:shared/template/dsl}):
+ * The public render context contract (PRD-12; spec-template-platform §10). This is
+ * the single typed surface that BOTH runtime hosts produce and feed to the unified
+ * renderer ({@link module:shared/template/render-screen}); layouts read only from
+ * it (spec §10.1: templates get no direct access to the internal `TEST_DATA`).
  *
- *   - SCORM host — builds it on the client from the package state (client compute);
- *   - Web host  — builds it on the server from `@shared` engines (server compute,
- *                 PRD-12 §3.3) and ships it over REST.
+ * The namespaces below — `course` / `result` / `state` / `retake` — are the ones
+ * the real default-template layouts bind against (`data-path="course.title"`,
+ * `{{ result.scorePercent }}`, `{{#if state.canResume}}`). Fields named
+ * `*Class`/`statusLabel`/`ringDashoffset` are Core-prepared presentational values
+ * (spec §10: the DSL computes no classes/labels via expressions — the builder does).
  *
- * Layouts read only from this context (spec §10.1: templates get no direct access
- * to internal `TEST_DATA`). Fields named `*ClassName`/`*Class`/`statusLabel` are
- * Core-prepared presentational values (spec §10: "Core подготавливает классы
- * состояния … DSL шаблона не вычисляет классы через выражения").
- *
- * Type-only module: it defines the contract, not behaviour. The host-specific
- * builders (SCORM client / web server) are implemented in later phases and must
- * conform to {@link PublicRenderContext}.
+ * Type-only module. The shared builders that produce conforming values live in
+ * {@link module:shared/template/result-context} and
+ * {@link module:shared/template/start-state}; each host adapts its own data shape
+ * into the builders' normalized inputs.
  */
 
-/** A progress reading: numerator, denominator and the derived percent (0..100). */
-export interface ProgressMetric {
-  current: number;
-  total: number;
-  percent: number;
-}
-
-/** Effective navigation mode after intersecting test policy with template caps (spec §11). */
-export type NavMode = "linear" | "free" | "locked";
-
-/** Result/section lifecycle status used by layouts and renderers (spec §8.2.1.2). */
-export type ResultStatus = "notStarted" | "inProgress" | "passed" | "failed" | "partial";
-
-/** Test-level metadata (spec §10 `test.*`). */
-export interface CtxTest {
-  id: string;
+/** Test-level info shown on the start screen and as the screen title (`course.*`). */
+export interface CtxCourse {
   title: string;
-  description: string;
-  navigationPolicy: NavMode;
+  description?: string;
+  questionCount?: number;
+  passPercent?: number | null;
+  timeLimitMinutes?: number | null;
+  maxAttempts?: number | null;
+  /** Legacy intro text; migrated to a content page, normally empty (PRD-7 S10). */
+  startPageContent?: string;
 }
 
-/** The current question's public projection (no correct-answer key unless allowed). */
-export interface CtxQuestion {
-  id: string;
-  type: "single" | "multiple" | "matching" | "ranking";
-  media: unknown | null;
-}
-
-/** Answer/feedback gating for the current page (spec §10.1). */
-export interface CtxAnswerState {
-  hasAnswer: boolean;
-  locked: boolean;
-  feedbackVisible: boolean;
-  /** Present only after submit when feedback may be shown. */
-  scoreRatio?: number;
-  status?: ResultStatus;
-}
-
-/** Feedback payload; `correctAnswerPublic` appears only when policy allows (spec §10.1). */
-export interface CtxFeedback {
-  text?: string;
-  correctAnswerPublic?: Record<string, unknown>;
-}
-
-/** The page currently being rendered (spec §10 `page.*`). */
-export interface CtxPage {
-  id: string;
-  /** Coarse page family: question | content | results | system | router. */
-  type: string;
-  /** Specific layout key, e.g. `question.single`, `content.intro`, `results`. */
-  kind: string;
-  title: string;
-  question?: CtxQuestion;
-  answerState?: CtxAnswerState;
-  feedback?: CtxFeedback | null;
-  /** Author-filled placeholder values for content pages (spec §8.2.2). */
-  values?: Record<string, unknown>;
-}
-
-/** A topic/section nav entry with Core-prepared state class (spec §10 `sections[]`). */
-export interface CtxSection {
-  id: string;
-  title: string;
-  isActive: boolean;
-  isPassed: boolean;
-  className: string;
-}
-
-/** The three progress readings (spec §6 `progress.mode`, §10 `progress.*`). */
-export interface CtxProgress {
-  /** Active reading per the template's `progress.mode` (mirrors question or page). */
-  active: ProgressMetric;
-  question: ProgressMetric;
-  page: ProgressMetric;
-}
-
-/** Navigation state + labels + Core-prepared classes (spec §10 `nav.*`). */
-export interface CtxNav {
-  mode: NavMode;
-  canPrev: boolean;
-  canNext: boolean;
-  canSubmitAnswer: boolean;
-  canFinish: boolean;
-  nextLabel: string;
-  prevLabel?: string;
-  submitAnswerLabel: string;
-  finishLabel: string;
-  nextClassName?: string;
-  prevClassName?: string;
-}
-
-/** A per-topic result row for the results layout. */
-export interface CtxTopicResult {
+/** A per-topic result row for the standard results layout (`result.topicResults[]`). */
+export interface CtxTopicResultView {
   topicId?: string;
   topicName: string;
   correct: number;
   total: number;
   percent: number;
-  passed?: boolean | null;
-  /** Core-prepared presentational class, e.g. `is-pass`/`is-fail`. */
-  passClass?: string;
-  /** Core-prepared status label, e.g. `Пройдено`. */
-  statusLabel?: string;
-  earnedPoints?: number;
-  possiblePoints?: number;
+  /** Core-prepared class, e.g. `is-pass` / `is-fail` / `""`. */
+  passClass: string;
+  /** Core-prepared label, e.g. `Пройдено` / `Не пройдено` / `""`. */
+  statusLabel: string;
+  /** SCORM-extra (gated layout blocks; web omits): formatted points "x / y". */
+  pointsLabel?: string;
+  /** SCORM-extra: per-topic pass threshold, e.g. "Требуется: 70%". */
+  requiredLabel?: string;
+  /** SCORM-extra: per-topic feedback text. */
+  topicFeedback?: string;
 }
 
-/** A scale's public projection (PRD-5; mirrors `@shared/formula/types` ScaleResult). */
-export interface CtxScale {
-  raw: number;
-  normalized: number;
-  percent: number;
-  level: string | null;
-  label: string | null;
-  hasValue: boolean;
+/** A per-topic row for the adaptive results layout (level-based, no score). */
+export interface CtxAdaptiveTopicView {
+  topicName: string;
+  /** Achieved level name or "Не достигнут". */
+  levelLabel: string;
+  /** Core-prepared class: `is-info` (achieved) / `is-fail` (not). */
+  levelClass: string;
+  feedback?: string;
+  hasFeedback: boolean;
+  hasLinks: boolean;
+  links: Array<{ title: string; url: string }>;
+}
+
+/** A recommended course/event link for failed-topic guidance (SCORM-extra). */
+export interface CtxRecommendation {
+  title: string;
+  url?: string;
 }
 
 /**
- * The computed result namespace (spec §8.2.1.2 `result.*`, §13). Standard fields
- * are typed; PRD-2 custom result variables (`result.{name}`) and Core-prepared
- * presentational fields (e.g. `passClass`, `statusLabel`, `ringDashoffset`) are
- * accessed by layouts via the index signature.
+ * The computed result namespace (`result.*`). Standard fields are always present;
+ * adaptive results set `adaptive: true` and use the adaptive `topicResults` shape.
+ * SCORM-richer fields (recommendations, back action, adaptive action flags) are
+ * gated layout blocks the web context simply omits. The index signature carries
+ * PRD-2 custom result variables and any other Core-prepared field.
  */
 export interface CtxResult {
-  scoreRaw: number;
-  scoreMax: number;
-  scorePercent: number;
-  status: ResultStatus;
   passed: boolean;
-  topicResults?: CtxTopicResult[];
-  /** PRD-5 scales by key (also addressable via the top-level `scale.*` namespace). */
-  scales?: Record<string, CtxScale>;
+  /** Core-prepared class `is-pass`/`is-fail`. */
+  passClass?: string;
+  statusLabel?: string;
+  scorePercent?: number;
+  /** Core-prepared SVG ring dash offset (precomputed; layout binds it directly). */
+  ringDashoffset?: number;
+  totalQuestions?: number;
+  correct?: number;
+  earnedPoints?: number;
+  possiblePoints?: number;
+  topicResults?: Array<CtxTopicResultView | CtxAdaptiveTopicView>;
+  // Adaptive variant:
+  adaptive?: boolean;
+  // SCORM-extras (web omits → gated layout blocks render nothing):
+  recommendedCourses?: CtxRecommendation[];
+  recommendedEvents?: CtxRecommendation[];
+  backAction?: string;
+  backLabel?: string;
+  showPdf?: boolean;
+  canRetry?: boolean;
+  showFinish?: boolean;
+  hasScormActions?: boolean;
   [key: string]: unknown;
 }
 
-/** Result of the current section/topic for `content.summary` (spec §8.2.4). */
-export interface CtxSectionResult {
-  scoreRaw: number;
-  scoreMax: number;
-  percent: number;
-  status: ResultStatus;
+/**
+ * Per-screen UI state (`state.*`): the question counter label and the start-screen
+ * action flags. The flags are a host superset — the web sets a subset (no saved-
+ * results review / resume-position / restart-anew), so those gated buttons never
+ * appear on the web.
+ */
+export interface CtxState {
+  questionCounterLabel?: string;
+  exhausted?: boolean;
+  canStart?: boolean;
+  startLabel?: string;
+  canResume?: boolean;
+  resumeLabel?: string;
+  resumeNote?: string;
+  canRestart?: boolean;
+  canViewResults?: boolean;
+  /** Web-only: show the "back to list" action (the SCORM host omits it). */
+  showBack?: boolean;
 }
 
-/** Retake gate data for the block screen (spec §8.2.1.2 `retake.availableDate`). */
+/** Retake gate data for the block screen (`retake.*`, PRD-6). */
 export interface CtxRetake {
+  cooldownPeriodDays?: number;
   availableDate?: string;
+  availableDateHuman?: string;
   reason?: string;
 }
 
-/** Runtime metadata exposed to layouts (spec §10 `runtime.*`). */
-export interface CtxRuntime {
-  templateApiVersion: string;
-}
-
 /**
- * The complete public render context handed to the DSL renderer for any screen.
- * Optional namespaces are present only on the screens that need them (e.g.
- * `result`/`sectionResult` on results/summary, `retake` on the block screen).
+ * The public render context handed to the unified renderer for any screen. Every
+ * namespace is optional — present only on the screens that use it (`course` on
+ * start/question/results; `result` on results; `state` on start/question; `retake`
+ * on the block screen).
  */
 export interface PublicRenderContext {
-  test: CtxTest;
-  page: CtxPage;
-  sections: CtxSection[];
-  progress: CtxProgress;
-  nav: CtxNav;
-  /** Effective template params (also surfaced as CSS variables, spec §6). */
-  params: Record<string, unknown>;
-  /** Computed result namespace; present once `result:calculated`. */
+  course?: CtxCourse;
   result?: CtxResult;
-  /** Scales namespace `scale.*` (PRD-5), present once computed. */
-  scale?: Record<string, CtxScale>;
-  sectionResult?: CtxSectionResult;
+  state?: CtxState;
   retake?: CtxRetake;
-  assets?: Record<string, unknown>;
-  runtime?: CtxRuntime;
 }

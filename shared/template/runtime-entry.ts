@@ -19,3 +19,4 @@ export {
   returnToPool,
 } from "./dnd/matching-model";
 export { attachPointerDnd } from "./dnd/pointer-dnd";
+export { buildResultContext, buildAdaptiveResultContext } from "./result-context";
