@@ -4,6 +4,7 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+*.tar
 server/scorm-exporter_rab.ts.bak
 server/scorm-exporter.ts.bak
 components.zip
