@@ -1,6 +1,7 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
-import { rm, readFile, mkdir, cp } from "fs/promises";
+import { rm, readFile, mkdir, cp, writeFile } from "fs/promises";
+import { buildSharedRuntimeBundle, SHARED_RUNTIME_FILENAME } from "../server/scorm/builders/shared-runtime";
 
 
 // server deps to bundle to reduce openat(2) syscalls
@@ -75,6 +76,12 @@ async function buildAll() {
   console.log("copying scorm template...");
   await mkdir("dist/scorm/template", { recursive: true });
   await cp("server/scorm/template", "dist/scorm/template", { recursive: true });
+
+  // PRD-12 (2-7): pre-bundle the shared template runtime so the production
+  // exporter reads it as a static asset (no esbuild at request time in prod).
+  console.log("bundling shared template runtime...");
+  const sharedRuntime = await buildSharedRuntimeBundle();
+  await writeFile(`dist/scorm/assets/${SHARED_RUNTIME_FILENAME}`, sharedRuntime, "utf8");
 
 }
 
