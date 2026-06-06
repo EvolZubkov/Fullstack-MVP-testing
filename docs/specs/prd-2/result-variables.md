@@ -1,9 +1,8 @@
 # PRD-2: Пользовательские показатели результата
 
 **Версия:** 2.2  
-**Статус:** Утверждено 2026-06-02 — post-MVP (ROADMAP §0.2); парный трек с PRD-5  
-**Дата актуализации:** 2026-05-29 (v2.1: DSL расширен `scaleById(...)`, добавлено поле
-`controls_status` для управления `cmi.success_status` / `cmi.completion_status`)  
+**Статус:** реализовано, 2026-06-03 (парный трек с PRD-5)  
+**Дата актуализации:** 2026-06-06  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-1](../prd-1/templates-content-pages.md),
 [PRD-5](../prd-5/scales-competency-measurements.md),
@@ -13,17 +12,6 @@
 **Этап BRD:** BR-04  
 **Зависимость:** результаты Core и runtime шаблона из PRD-1, `section.*` из PRD-4,
 `scale.*` из PRD-5
-
-## Статус реализации (на 2026-06-03)
-
-**Реализовано** (парный трек с PRD-5, Этапы A-C). DSL (`shared/formula/*` + JS-порт
-`server/scorm/template/app/dsl/formula.js`) с источниками `scaleById(...)`/`countScales(...)`
-и полем `controls_status`; CRUD `result_variables` + вкладка «Показатели»; рантайм-расчёт
-`result.*` в `resultsPage.js` (псевдо-интеракции `var_*`, override статуса). Сквозной
-golden-тест итоговой категории MBI — `tests/mbi-golden.test.ts` (Этап C). `section.*`
-(PRD-4) в формулах пока резолвится в нейтраль — отдельный пункт.
-
----
 
 ## 1. Обзор
 

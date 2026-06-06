@@ -1,64 +1,12 @@
 # PRD-1: Платформа макетов шаблонов и контентные страницы SCORM-пакетов
 
 **Версия:** 2.1  
-**Статус:** **ЗАКРЫТ 2026-05-28** (Backend 100% / Runtime 100% /
-Frontend 100% — MVP-scope). Остаточные задачи MVP-блока (предпросмотр
-шаблона FR-30, галерея FR-33, all-param-types FR-31a, manifest
-validation, `kind` field в built-in шаблонах) переехали в PRD-7 S12
-G2/G3/G4/G6/G48 и закрыты 2026-05-28. Frontend интеграция
-content-pages в новый редактор PRD-7 — закрыта в S10 (см. §4).  
-**Дата актуализации:** 2026-05-29  
+**Статус:** реализовано, 2026-05-28 (MVP-scope: backend, runtime, frontend)  
+**Дата актуализации:** 2026-06-06  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md), [PRD-6](../prd-6/retake-cooldown-gate.md),
 [Платформа SCORM-шаблонов](../spec-template-platform.md)  
-**Реализация:** [TODO](./implementation-todo.md), [Issues](../../issues/prd-1-issues.md)  
 **Этапы BRD:** BR-01, BR-02  
 **Зависимости:** технический контракт шаблонов определяется только в `specs/spec-template-platform.md`
-
-## Статус реализации (на 2026-05-29)
-
-**ЗАКРЫТ 2026-05-28** (Backend 100% / Runtime 100% / Frontend 100% —
-MVP-scope).
-
-**Backend / Runtime / Model** (закрыто ранее):
-
-- §4.1-4.2 контентные страницы, граница шаблона и контента
-- §4.3 модель `variant.kind` (commits 9e3606e, d227900, efe47cb, caeb4a9)
-- §4.3.1-4.3.2 тихая привязка системных вариантов
-- §4.3.4-4.3.5 lifecycle и дрейф системных вариантов при смене шаблона
-- §4.3.6 server-side `required-fields` валидация (commit d445861)
-- §4.4-4.7 page templates, placeholders, сценарий создания, summary, HTML escape hatch
-- §7 БД-схема (`templates`, `content_pages`, `designSettingsJson`)
-- §8 все 8 API endpoints (templates, content-pages, design-settings, replace-variant)
-- §10 NFR-01...NFR-04
-- Runtime: template-loader, contentFlow, renderer plugins, system.blocked, autoAdvance
-
-**Frontend** — закрыто в рамках PRD-7 S10/S12/S13 (2026-05-28):
-
-- §4.3.3 row-menu «Сменить вариант» — PRD-7 S13.4-G17a (`ReplaceVariantModal`,
-  с поиском + diff-block в S13.6 G28/G29).
-- §4.3.6 frontend inline-alert + error-индикатор для required-fields —
-  PRD-7 S13.5 G27 (validation-banner в `PageEditForm`).
-- §4.3.7 severity-rail — PRD-7 (`page-row--error/--warn/--readonly` модификаторы).
-- §4.8 DnD перестановка тем — PRD-7 G47 + миграция 007 (`test_sections.sort_order`).
-- §9 UI Оформление — PRD-7 S12 (G1 sub-rail group, G2 preview, G3 gallery, G4
-  все param-типы, G5 orphan dialog cleanup, G6 incompatible banner).
-- §9 UI Структура (новый Drawer-редактор) — PRD-7 S10 + S13.4/S13.5/S13.6.
-- Template preview в Drawer «Оформление» — PRD-7 S12-G2 (`template-preview-modal.tsx`
-  iframe + brand-font polish commit 818217c).
-- Manifest validation (default требует все 4 system-kind) — PRD-7 G48
-  через `defaultTemplateManifestSchema.superRefine`.
-- `kind` field во всех 4 встроенных шаблонах (default/corporate/minimal/rtk-storyline)
-  — commit fec75a1.
-
-**Deferred post-MVP** (не блокирует PRD-1 closure):
-
-- Text-overflow preview/diagnostics для textFit modes (§1.10 в
-  implementation-todo) — substantial feature, runtime уже применяет
-  text-fit при render'е SCORM-пакета.
-
-См. также [PRD-1 implementation-todo](./implementation-todo.md).
-
----
 
 ## 1. Обзор
 
@@ -493,8 +441,7 @@ Schema варианта (`variant.schema.fields`) может содержать 
 - Кнопка **«Сохранить»** в footer Drawer'а **disabled**; tooltip объясняет
   «Заполните обязательные поля на вкладке Структура».
 - Действие **«Закрыть Drawer»** при таком состоянии показывает confirm-диалог
-  «Сохранить с ошибками нельзя; выйти без сохранения?» (см. PRD-7 § Drawer
-  confirmation dialogs).
+  «Сохранить с ошибками нельзя; выйти без сохранения?».
 
 Это правило применяется ко всем `kind` без исключения: `info` / `intro` /
 `summary` / `router` / `questions`. Валидация на стороне сервера в API
@@ -656,7 +603,7 @@ inline font-size внутри richText не входит в MVP.
 3. Автор выбирает variant из списка (имя варианта = контракт между шаблонами).
 4. Выбирает режим: **по шаблону**, **стандартная**, **HTML**.
 5. В режиме **по шаблону** UI показывает форму placeholders выбранного варианта.
-6. Автор заполняет значения inline в `page-row-expand` (см. PRD-7).
+6. Автор заполняет значения inline в `page-row-expand`.
 7. Автор открывает предпросмотр в текущем шаблоне (модал `s-page-preview`).
 8. Сохраняет страницу.
 

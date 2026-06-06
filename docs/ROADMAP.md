@@ -30,8 +30,8 @@ PRD-3, который сужен до админ-реестра внешних Z
 | 1 | PRD-7 | S9 — component + API тесты, regression | Закрыта 2026-05-27 (тесты + FR-20c; полный suite 1375 зелёных, `npm run check` 0 ошибок) | — |
 | 1 | PRD-7 | S10 — удаление legacy UI | Закрыта 2026-05-27 (inline wizard удалён в S5-S8; `tests-list` монтирует `TestEditor`; `ContentPagesDialog` выведен; чтение `start_page_content` удалено из SCORM-export + runtime, контент играется как intro content-page миграции 003 §4.2; golden-guard добавлен) | — |
 | 1 | PRD-7 | S11 — acceptance pass §10 | **Закрыта 2026-05-28** — финальный acceptance выполнен после закрытия S12 + S13; кодовый closeout подтверждён: `npm run check` 0 ошибок, `vitest run` 1373/1373 зелёные. Live-browser acceptance (Playwright + axe) выполняется отдельно от кодового closeout. | — |
-| 1 | PRD-7 | S12 — Design tab closeout | **Закрыта 2026-05-28** — G1 sub-rail params + G2 iframe preview + G3 gallery + G4 все param-типы (image/asset/file/downloadLink/url/multiselect/number) + G5 orphan dialog + G6 incompatible-banner. См. [specs/prd-7/s12-design-closeout.md](./specs/prd-7/s12-design-closeout.md) | — |
-| 1 | PRD-7 | S13 — Editor parity | **Закрыта 2026-05-28** — все 8 sub-фаз закрыты (S13.1 quick wins / S13.2 feedback / S13.3 per-topic limits / S13.4 row-actions / S13.5 router-mode / S13.6 variant-replace / S13.7 drawer chrome / S13.8 cleanup+acceptance). Deferred: S13.5b (G22 mapping-flow cross-tab coupling) + S13.8b (G12 wf-basic-warning UX notification). См. [specs/prd-7/s13-editor-parity.md](./specs/prd-7/s13-editor-parity.md) | — |
+| 1 | PRD-7 | S12 — Design tab closeout | **Закрыта 2026-05-28** — G1 sub-rail params + G2 iframe preview + G3 gallery + G4 все param-типы (image/asset/file/downloadLink/url/multiselect/number) + G5 orphan dialog + G6 incompatible-banner. Контракты — [test-editor-contracts.md](./architecture/test-editor-contracts.md) | — |
+| 1 | PRD-7 | S13 — Editor parity | **Закрыта 2026-05-28** — все 8 sub-фаз закрыты (S13.1 quick wins / S13.2 feedback / S13.3 per-topic limits / S13.4 row-actions / S13.5 router-mode / S13.6 variant-replace / S13.7 drawer chrome / S13.8 cleanup+acceptance). Deferred: S13.5b (G22 mapping-flow cross-tab coupling) + S13.8b (G12 wf-basic-warning UX notification). | — |
 | 2 | PRD-4 | Runtime `flowPolicy`, `section.*` | **Закрыта 2026-05-29** — все 6 фаз (1: validation L2/L3, 2: mapper L4, 3: UI L1, 4a: export, 4b: section results, 4c: router runtime + completionPolicy + unlockRules, 4d: adaptive integration linear+router, 4e: per-section timers, 4f: recovery, 5: golden tests). Все 5 валидных `(mode×flowMode)` комбинаций имеют runtime support; `(adaptive, linear_flat)` blocked в Phase 1, deferred в будущий PRD «Flat adaptive». См. [PRD-4 spec v1.1](./specs/prd-4/course-flow-sections.md). | — |
 | 4 | PRD-8 | Router-flow runtime + UI «Структура» в router-режиме | **Закрыта 2026-05-29** — реализована cross-PRD: UI (Структура + Настройки→Сценарий) в PRD-7 G45/router-by-topics; runtime (router state machine, completionPolicy, sectionUnlockRules, recovery) в PRD-4 phases 4c/4f; PRD-8-specific delta — FR-18 router lifecycle events. См. [PRD-8 spec](./specs/prd-8/section-router-flow.md). | — |
 | 5 | PRD-2 | `result.*` показатели результата | **Закрыта 2026-06-03** — Этапы A-C (DSL+`controls_status`, CRUD+вкладка «Показатели», рантайм `result.*`, golden MBI). См. [PRD-2 spec](./specs/prd-2/result-variables.md). | PRD-4 |
@@ -40,20 +40,14 @@ PRD-3, который сужен до админ-реестра внешних Z
 | 7 | PRD-3 | Жизненный цикл шаблонов (СУЖЕН 2026-06-05: только админ-реестр внешних ZIP; платформенная часть → PRD-12) | Не начата — post-MVP | PRD-1 closeout; PRD-12 |
 | 9 | PRD-12 | Единый шаблонный рантайм рендера (L2): один DSL-рендерер + публичный контекст для SCORM и веб; серверный расчёт `@shared`; поглощает платформу PRD-3 | **Закрыта 2026-06-06** — Фаза 0 (DSL-движок + публичный контекст + `renderScreenInto`), Фаза 2 (серверный расчёт `@shared`: PRD-10/5/2 + retake-гейт PRD-6), Фаза 1 (все ученические экраны SCORM на общих layouts) и веб-хост (React-обёртка + Shadow DOM) закрыты; единый DnD-движок (`shared/template/dnd`) + CSS-унификация (один компонентный источник на оба хоста). Открыт только опц. буквальный ренейм namespace `test/page` (Вариант 2 — не делаем). См. [PRD-12 spec](./specs/prd-12/web-runtime-parity.md). | PRD-2/4/5/6/10/11; spec-template-platform |
 | 8 | PRD-9 | Миграция bcryptjs → `@vvlad1973/crypto` | Не начата — post-MVP (tech debt) | Завершение PRD-7 S10-S11 |
-| — | PRD-1 | Шаблоны и контентные страницы | **Закрыта 2026-05-28** — Backend 100% / Runtime 100% / Frontend 100% (MVP-scope). Закрытие PRD-1 произошло одновременно с PRD-7: остаточные task'и (предпросмотр, галерея, all-param-types, manifest validation, `kind` во встроенных шаблонах) переехали в PRD-7 S12 G2/G3/G4/G6/G48. См. [PRD-1 todo](./specs/prd-1/implementation-todo.md). | Deferred post-MVP: text-overflow preview/diagnostics в content-pages (§1.10) — substantial, не блокирует MVP. |
+| — | PRD-1 | Шаблоны и контентные страницы | **Закрыта 2026-05-28** — Backend 100% / Runtime 100% / Frontend 100% (MVP-scope). Закрытие PRD-1 произошло одновременно с PRD-7: остаточные task'и (предпросмотр, галерея, all-param-types, manifest validation, `kind` во встроенных шаблонах) переехали в PRD-7 S12 G2/G3/G4/G6/G48. См. [PRD-1 spec](./specs/prd-1/templates-content-pages.md). | Deferred post-MVP: text-overflow preview/diagnostics в content-pages (§1.10) — substantial, не блокирует MVP. |
 
-Детальный прогресс по PRD-7:
-
-- Завершённые фазы S0-S8 — см. [specs/prd-7/s0-s8-closed.md](./specs/prd-7/s0-s8-closed.md).
-- Фазы S9-S11 — см. [specs/prd-7/s9-s11-in-progress.md](./specs/prd-7/s9-s11-in-progress.md).
-- **S12 — Design closeout** — **закрыта 2026-05-28**, см. [specs/prd-7/s12-design-closeout.md](./specs/prd-7/s12-design-closeout.md).
-- **S13 — Editor parity** — **закрыта 2026-05-28**, см. [specs/prd-7/s13-editor-parity.md](./specs/prd-7/s13-editor-parity.md).
-- **PRD-7 полностью закрыт 2026-05-28**: единый редактор тестов готов к
-  приёмке (`npm run check` 0 ошибок; `vitest run` 1373/1373 зелёные).
-  Deferred (не блокируют MVP): S13.5b (G22 mapping-flow при смене design
-  template) и S13.8b (G12 wf-basic-warning UX-notification).
-
-Детальный прогресс по PRD-1 — см. [specs/prd-1/implementation-todo.md](./specs/prd-1/implementation-todo.md).
+**PRD-7 полностью закрыт 2026-05-28**: единый редактор тестов (фазы S0-S13).
+Текущая модель и контракты редактора — в
+[architecture/test-settings-parameter-structure.md](./architecture/test-settings-parameter-structure.md)
+и [architecture/test-editor-contracts.md](./architecture/test-editor-contracts.md).
+История реализации фаз — в git. Deferred (не блокируют MVP): S13.5b (G22
+mapping-flow при смене design template) и S13.8b (G12 wf-basic-warning UX-notification).
 
 ---
 
@@ -68,7 +62,7 @@ shippable-состояния с главной бизнес-ценностью B
 - **PRD-7** — единый редактор: закрытие S10 (удаление legacy), S11 (acceptance) и
   две новые фазы **S12 (Design closeout)** + **S13 (Editor parity)** — открыты 2026-05-28
   по результатам аудита соответствия wireframes.
-- **PRD-1 closeout** — редактор content-pages в «Структуре» (см. [PRD-1 todo §4](./specs/prd-1/implementation-todo.md)).
+- **PRD-1 closeout** — редактор content-pages в «Структуре» (см. [PRD-1 spec](./specs/prd-1/templates-content-pages.md)).
 - **PRD-4** — гибкий поток и разделы (`flowPolicy`, `section.*`, `sort_order`).
 - **PRD-8** — сценарий через страницу-маршрутизатор (Storyline-сценарий).
 
@@ -78,18 +72,17 @@ shippable-состояния с главной бизнес-ценностью B
 | --- | --- | --- | --- | --- |
 | 1 | PRD-7 S10 (удаление legacy) **совмещённо с** closeout PRD-1 шаг 1 | frontend `tests.tsx` + секция «Структура» | S9 (закрыта) | **Выполнен 2026-05-27** |
 | 2 | PRD-7 S11 — acceptance pass §10 | acceptance | шаг 1 | **Закрыта 2026-05-28** после успешного closeout S12 + S13 |
-| 2a | **PRD-7 S12 — Design closeout** (FR-30/31/31a/33, удаление orphan `DesignSettingsDialog`) | frontend `design-section.tsx` + manifest schema | S11 (формально), wireframe `prd7-design-tab.html` (согласован 2026-05-21) | **Закрыта 2026-05-28** — см. [specs/prd-7/s12-design-closeout.md](./specs/prd-7/s12-design-closeout.md) |
-| 2b | **PRD-7 S13 — Editor parity** (8 sub-фаз: quick wins, feedback, per-topic limits, row-actions, router-mode, variant-replace, drawer chrome, cleanup) | frontend test-editor.tsx, basic-settings-section.tsx, start-pages-section.tsx, tests-list.tsx, feedback-editor-modal.tsx | wireframes согласованы 2026-05-21 | **Закрыта 2026-05-28** — см. [specs/prd-7/s13-editor-parity.md](./specs/prd-7/s13-editor-parity.md) |
+| 2a | **PRD-7 S12 — Design closeout** (FR-30/31/31a/33, удаление orphan `DesignSettingsDialog`) | frontend `design-section.tsx` + manifest schema | S11 (формально), wireframe `prd7-design-tab.html` (согласован 2026-05-21) | **Закрыта 2026-05-28** |
+| 2b | **PRD-7 S13 — Editor parity** (8 sub-фаз: quick wins, feedback, per-topic limits, row-actions, router-mode, variant-replace, drawer chrome, cleanup) | frontend test-editor.tsx, basic-settings-section.tsx, start-pages-section.tsx, tests-list.tsx, feedback-editor-modal.tsx | wireframes согласованы 2026-05-21 | **Закрыта 2026-05-28** |
 | 3 | PRD-1 closeout — остаток (manifest validation, приёмка), отметить PRD-1 closed | backend + docs | шаги 2a + 2b | Ожидает |
 | 4 | PRD-4 — runtime потока + flow-настройки в редакторе («Сценарий») | backend + frontend | PRD-7 закрыт (S12 + S13) | **Закрыта 2026-05-29** — см. [PRD-4 spec v1.1](./specs/prd-4/course-flow-sections.md) |
 | 5 | PRD-8 — router-runtime + вкладка «Структура» в router-режиме | backend + frontend | PRD-4, PRD-1 | **Закрыта 2026-05-29** — cross-PRD реализация |
 
 После шага 5 — **Storyline-MVP shippable.**
 
-**🎉 STORYLINE-MVP SHIPPABLE 2026-05-29** — все 5 шагов критического пути
-закрыты. Сводка коммитов — в [PRD-7 acceptance §8](./prd-7-acceptance-report.md).
-Live-browser acceptance (Playwright + axe + LMS smoke) — отдельный gate,
-не блокирует кодовый closeout.
+**STORYLINE-MVP SHIPPABLE 2026-05-29** — все 5 шагов критического пути
+закрыты. Сводка коммитов — в git-истории. Live-browser acceptance
+(Playwright + axe + LMS smoke) — отдельный gate, не блокирует кодовый closeout.
 
 **Ускоритель:** шаги 1 и 3 (PRD-7 S10 + closeout PRD-1) делались в одной
 сессии/зоне — экономил двойной проход по `tests.tsx` и вкладке «Структура».
@@ -118,8 +111,7 @@ postprocessor, который должен быть заменён SCORM-пак�
 | 6 | **PRD-N (Flat adaptive)** | Адаптивная выдача из общего pool без секционных границ — комбинация `(mode=adaptive, flowMode=linear_flat)`, отложена из PRD-4 v1.1 | PRD-4 |
 | — | PRD-9 | Миграция bcrypt → `@vvlad1973/crypto` (tech debt, изолирован) | — |
 
-Детальный план трека — [docs/plans/prd-2-prd-5-implementation-plan.md](./plans/prd-2-prd-5-implementation-plan.md);
-нормативная сквозная модель расчёта — [scoring-model.md](./specs/scoring-model.md).
+Нормативная сквозная модель расчёта — [scoring-model.md](./specs/scoring-model.md).
 
 Парный трек PRD-2 + PRD-5 — внутренний порядок:
 
@@ -143,7 +135,7 @@ golden `tests/mbi-golden.test.ts` C). Шкалы test-scoped; **глобальн
 (`key_NEW_15-08-25.xlsx` + pandas, 63/63 балла, 0 расхождений). **PRD-11:** стратифицированная выдача
 (модель `strata:[{tag,count,mode}]`, режим на тег) + тегирование вопросов (chip-инпут с правилами
 именования) + UI квот в строке темы; рантайм-фикс экспорта `q.tags` в `TEST_DATA` + верификация в
-scorm-player (100/100 выдач соблюдают квоты). Подробный closeout — [HANDOFF.md](../HANDOFF.md).
+scorm-player (100/100 выдач соблюдают квоты).
 
 Отложенные точечные пункты: `showSectionResult` (промежуточные результаты по темам),
 text-overflow diagnostics в PRD-1, порог coverage 50%, раздел «Архив» с восстановлением
@@ -159,7 +151,7 @@ text-overflow diagnostics в PRD-1, порог coverage 50%, раздел «Ар
 зависимости контрактов, риск двойного рефакторинга UI и стоимость переделок при добавлении
 новых настроек теста.
 
-PRD-1 уже частично реализован (см. [specs/prd-1/implementation-todo.md](./specs/prd-1/implementation-todo.md))
+PRD-1 закрыт 2026-05-28 (см. [specs/prd-1/templates-content-pages.md](./specs/prd-1/templates-content-pages.md))
 и считается фундаментом для остальных PRD.
 
 ---
@@ -174,7 +166,7 @@ PRD-1 уже частично реализован (см. [specs/prd-1/implement
 
 | Шаг | PRD | Этап BRD | Основная причина выбранного порядка |
 | --- | --- | --- | --- |
-| 1 | PRD-7 Рефакторинг редактора параметров теста: [S0-S8 closed](./specs/prd-7/s0-s8-closed.md), [S9-S11 in progress](./specs/prd-7/s9-s11-in-progress.md) | Этап 9 | Контракт `TestEditorModel`, DTO, `passDecisionPolicy` и `flowMode` нужны как поверхность для всех последующих PRD. Если сначала добавлять flow/retake/scales в текущий god-component `TestsPage`, потребуется повторный переписать UI. |
+| 1 | PRD-7 Рефакторинг редактора параметров теста ([контракты](./architecture/test-editor-contracts.md)) | Этап 9 | Контракт `TestEditorModel`, DTO, `passDecisionPolicy` и `flowMode` нужны как поверхность для всех последующих PRD. Если сначала добавлять flow/retake/scales в текущий god-component `TestsPage`, потребуется повторный переписать UI. |
 | 2 | [PRD-4](./specs/prd-4/course-flow-sections.md) Гибкий поток прохождения и разделы | Этап 4 | Базовый runtime: `flowPolicy`, расчёт `section.*`, граница «внутреннего старта попытки», `sort_order` для `test_sections`. Без него PRD-6, PRD-8 и часть формул PRD-2/PRD-5 нечем питать. |
 | 3 | [PRD-6](./specs/prd-6/retake-cooldown-gate.md) Ограничение повторного прохождения и retake gate | Этап 5 | Использует только границу старта попытки из PRD-4 и системную страницу из PRD-1. Лёгкая интеграция, даёт compliance-ценность для корпоративных курсов. |
 | 4 | [PRD-8](./specs/prd-8/section-router-flow.md) Сценарий через страницу-маршрутизатор | Этап 4 расширение | Зависит от PRD-4 (`flowPolicy`, section results, completion policy), PRD-7 (вкладка «Структура» в новом редакторе) и PRD-1 (системная router-страница). Закрывает Storyline-сценарий полностью. |

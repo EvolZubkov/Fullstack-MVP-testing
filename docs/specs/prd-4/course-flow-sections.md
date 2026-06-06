@@ -1,15 +1,6 @@
 # PRD-4: Гибкий поток прохождения, разделы и переходы SCORM-пакетов
 
-**Версия:** 1.1  
-**Статус:** **Закрыт 2026-05-29** — 6 фаз реализованы (1: L2/L3 validation,
-2: L4 mapper, 3: L1 UI guards, 4a-4f: runtime + recovery, 5: golden tests).
-Все 5 валидных `(mode×flowMode)` комбинаций имеют runtime support;
-`(adaptive, linear_flat)` blocked в Phase 1, deferred в будущий PRD
-«Flat adaptive». 18 acceptance-тестов в [prd-4-acceptance.test.ts](../../../tests/prd-4-acceptance.test.ts) зелёные.  
-**Дата актуализации:** 2026-05-28 (v1.1: модель `flowPolicy` перестроена под
-фактическую кодовую базу — ортогональные `mode × flowMode` вместо плоского
-enum'а; добавлены adaptive+router, матрица совместимости, защитные слои;
-см. §3.1.0)  
+**Статус:** Реализовано (2026-05-29)  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-1](../prd-1/templates-content-pages.md), [PRD-2](../prd-2/result-variables.md),
 [PRD-6](../prd-6/retake-cooldown-gate.md), [PRD-8](../prd-8/section-router-flow.md),
@@ -18,37 +9,6 @@ enum'а; добавлены adaptive+router, матрица совместимо
 **Зависимости:** шаблонная платформа и контентные страницы из PRD-1, правила курса
 из технической спецификации; retake gate из PRD-6 использует границу внутреннего
 старта попытки
-
-## Статус реализации (на 2026-05-29)
-
-**ЗАКРЫТ 2026-05-29.** Все 6 фаз реализованы (1: L2/L3 validation на
-shared/server, 2: L4 mapper auto-fix legacy, 3: L1 UI guards в
-basic-settings-section, 4a: flowPolicy export + section ordering, 4b:
-sectionResult before after_topic + `TEST_DATA.section.current`, 4c: router
-runtime + completionPolicy + sectionUnlockRules, 4d: per-topic adaptive
-sessions для linear+router, 4e: per-section time limits, 4f: sectional
-state recovery, 5: 19 golden acceptance tests).
-
-Все 5 валидных `(mode × flowMode)` комбинаций имеют runtime support:
-
-| Комбинация | Старое название | Реализация |
-| --- | --- | --- |
-| `(standard, linear_flat)` | `legacy_flat` | Без изменений (backward compat) |
-| `(standard, linear_by_topics)` | `section_linear` | PRD-4 4a/4b |
-| `(standard, router_by_topics)` | `section_router` | PRD-4 4c + PRD-8 |
-| `(adaptive, linear_by_topics)` | `adaptive_by_section` | PRD-4 4d-iii |
-| `(adaptive, router_by_topics)` | новый в v1.1 | PRD-4 4d-ii + PRD-8 |
-| `(adaptive, linear_flat)` | — | **Blocked** Phase 1, deferred в будущий PRD «Flat adaptive» |
-
-**`section_graph`** (rule-based переходы) — оставлен stub'ом в спеке для
-post-MVP `section_graph` PRD.
-
-Acceptance pass на коде: 19 тестов в
-[prd-4-acceptance.test.ts](../../../tests/prd-4-acceptance.test.ts);
-`npm run check` 0 ошибок; `vitest run` 1423/1424 (pre-existing migration
-DB-connectivity fail unrelated).
-
----
 
 ## 1. Обзор
 
@@ -107,12 +67,10 @@ Storyline-подобные сценарии как разные политики
 
 ## 3. Ключевые понятия
 
-### 3.1.0 Модель «mode × flowMode» (v1.1)
+### 3.1.0 Модель «mode × flowMode»
 
-Изначально PRD-4 описывал `flowPolicy.mode` как плоский enum из 5 значений
-(`legacy_flat` / `section_linear` / `section_router` / `section_graph` /
-`adaptive_by_section`). По состоянию на 2026-05-28 фактическая кодовая модель —
-двумерная и ортогональная:
+`flowPolicy` использует двумерную ортогональную модель: режим выдачи вопросов
+(`mode`) и сценарий навигации (`flowMode`) задаются независимо.
 
 ```text
 flowPolicy = {
@@ -123,8 +81,8 @@ flowPolicy = {
 ```
 
 Два независимых параметра порождают 6 комбинаций — см. матрицу совместимости в
-§3.1.2. PRD-4 v1.1 фиксирует именно эту форму: Core должен принимать
-`(mode, flowMode)` пару, а не одно склеенное значение. Это позволяет:
+§3.1.2. Core принимает `(mode, flowMode)` пару, а не одно склеенное значение.
+Это позволяет:
 
 1. Поддерживать комбинации, которые не фиксируются плоским enum'ом — в частности
    `adaptive + router_by_topics` (см. §4.7).
@@ -143,8 +101,8 @@ flowPolicy = {
 | `section_router` | `(standard, router_by_topics)` |
 | `section_graph` | _отложено_ (см. §4.5) — flowMode `graph` появится позже |
 | `adaptive_by_section` | `(adaptive, linear_by_topics)` |
-| **(новое)** | `(adaptive, router_by_topics)` — adaptive+router, см. §4.7 |
-| **(deferred)** | `(adaptive, linear_flat)` — «flat adaptive», вынесено в отдельный PRD |
+| — | `(adaptive, router_by_topics)` — adaptive+router, см. §4.7 |
+| _отложено_ | `(adaptive, linear_flat)` — «flat adaptive», вынесено в отдельный PRD |
 
 Если `flowPolicy` отсутствует, Core обязан использовать
 `(mode=standard, flowMode=linear_flat)` (эквивалент legacy_flat).
@@ -178,7 +136,7 @@ flowPolicy = {
 **`adaptive + linear_flat`** — отложено в отдельный будущий PRD «Flat adaptive».
 Текущая модель `adaptive.topics[].levels[]` требует секционной привязки шкалы
 сложности; общий pool без секционных границ требует другой модели (общая шкала
-на тест, без topicId), которая выходит за рамки PRD-4 v1.1.
+на тест, без topicId), которая выходит за рамки PRD-4.
 
 **Strict gating для adaptive-режима.** Если `mode === "adaptive"`, **каждая**
 section в `test.sections[]` обязана иметь соответствующий элемент
@@ -194,7 +152,7 @@ standard внутри одного теста») явно запрещён.
 | **L1 — UI** | `basic-settings-section.tsx` | В `<Select flowMode>` опция `linear_flat` помечается `disabled` + tooltip при `mode === "adaptive"`. При переключении `mode → adaptive` на `flowMode === "linear_flat"` — info-banner «Адаптивный режим требует разделения по темам. Выберите ...» + auto-suggest `linear_by_topics`. При adaptive-режиме каждая section без `levels[]` показывается с warning-маркером в Состав; publish blocked. |
 | **L2 — Zod schema** | `shared/schema.ts` `testSettingsSchema` | `.superRefine`: блокирует `(adaptive, linear_flat)` и `adaptive` без полного покрытия sections настройками `levels[]`. Draft не валиден, кнопка «Сохранить» disabled, drawer error-banner. |
 | **L3 — API server** | `PUT /api/tests/:id` | Тот же refine на server-side — 422 при попытке прислать невалидное. UI обрабатывает через существующий `saveError`-flow. Защита от curl/scripts/JS-bypass. |
-| **L4 — Mapper / legacy data** | `apiToEditorModel` | При чтении сохранённого теста с невалидной комбинацией (legacy data до v1.1 валидации): auto-fix на ближайшую валидную (`(adaptive, linear_flat) → (adaptive, linear_by_topics)` либо `(adaptive, *) с пустыми levels → (standard, *)`) + warning banner «Конфигурация была авто-исправлена, проверьте настройки» — не блокирует чтение, но дирижит к save. |
+| **L4 — Mapper / legacy data** | `apiToEditorModel` | При чтении сохранённого теста с невалидной комбинацией (legacy data до строгой валидации): auto-fix на ближайшую валидную (`(adaptive, linear_flat) → (adaptive, linear_by_topics)` либо `(adaptive, *) с пустыми levels → (standard, *)`) + warning banner «Конфигурация была авто-исправлена, проверьте настройки» — не блокирует чтение, но дирижит к save. |
 
 **Аргумент к 4-слойной защите:** L1 — UX-первая линия; L2/L3 — single source of
 truth для инвариантов (API публичен через curl/scripts); L4 — для реальных
@@ -434,7 +392,7 @@ next section -> results -> system.error
 
 ### 4.7 `(adaptive, router_by_topics)` — adaptive в router-навигации
 
-Комбинация PRD-4 v1.1. Сценарий обучающегося:
+Adaptive в router-навигации. Сценарий обучающегося:
 
 ```text
 router page → выбор темы → adaptive-сессия темы → результат темы → router page → ...
