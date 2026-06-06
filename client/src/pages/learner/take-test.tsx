@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { LoadingState } from "@/components/loading-state";
+import { TemplateScreen } from "@/components/template-screen";
+import { TemplateQuestionScreen } from "./template-question-screen";
 import { t } from "@/lib/i18n";
 import type { Question, Attempt, Test } from "@shared/schema";
 
@@ -70,7 +72,7 @@ export default function TakeTestPage() {
   const [isStarting, setIsStarting] = useState(true);
   const [testMode, setTestMode] = useState<"standard" | "adaptive" | null>(null);
   const [testInfo, setTestInfo] = useState<Test | null>(null);
-  const [phase, setPhase] = useState<"loading" | "start" | "question" | "finished">("loading");
+  const [phase, setPhase] = useState<"loading" | "start" | "question" | "finished" | "blocked">("loading");
   const [testMetadata, setTestMetadata] = useState<{
     totalQuestions: number;
     completedAttempts: number;
@@ -79,6 +81,25 @@ export default function TakeTestPage() {
     startPageContent: string | null;
     passPercent: number | null;
     hasInProgress: boolean;
+  } | null>(null);
+  // PRD-12 web-host: start screen template assets (null -> legacy React markup).
+  const [startTpl, setStartTpl] = useState<{
+    layout: string;
+    css: string;
+    theme?: { background: string; foreground: string };
+  } | null>(null);
+  // PRD-12 / PRD-6: retake block-wall template + cooldown data (set on 403).
+  const [blockedTpl, setBlockedTpl] = useState<{
+    layout: string;
+    css: string;
+    theme?: { background: string; foreground: string };
+  } | null>(null);
+  const [blockData, setBlockData] = useState<{ cooldownPeriodDays?: number; availableDate?: string | null } | null>(null);
+  // PRD-12 #3: question screen template assets (null -> legacy React markup).
+  const [questionTpl, setQuestionTpl] = useState<{
+    layout: string;
+    css: string;
+    theme?: { background: string; foreground: string };
   } | null>(null);
 
   // Standard mode state
@@ -262,6 +283,17 @@ export default function TakeTestPage() {
           hasInProgress,
         });
 
+        // PRD-12 web-host: fetch the start screen template (best-effort; null ->
+        // legacy React markup).
+        try {
+          const tplRes = await fetch(`/api/tests/${testId}/screen-template/start`, { credentials: "include" });
+          if (tplRes.ok) setStartTpl(await tplRes.json());
+          const qRes = await fetch(`/api/tests/${testId}/screen-template/question`, { credentials: "include" });
+          if (qRes.ok) setQuestionTpl(await qRes.json());
+        } catch {
+          /* fall back to React markup */
+        }
+
         // Показываем стартовую страницу
         setPhase("start");
       } catch (err) {
@@ -293,6 +325,18 @@ export default function TakeTestPage() {
       }
       setPhase("question");
     } catch (err) {
+      const retake = (err as { retake?: { cooldownPeriodDays?: number; availableDate?: string | null } }).retake;
+      if ((err as Error)?.message === "RETAKE_COOLDOWN") {
+        try {
+          const r = await fetch(`/api/tests/${testId}/screen-template/blocked`, { credentials: "include" });
+          if (r.ok) setBlockedTpl(await r.json());
+        } catch {
+          /* render falls back to a minimal block message below */
+        }
+        setBlockData(retake ?? {});
+        setPhase("blocked");
+        return;
+      }
       console.error("Start test error:", err);
       toast({
         variant: "destructive",
@@ -445,6 +489,13 @@ export default function TakeTestPage() {
         });
         navigate("/learner");
         return;
+      }
+      if (error.code === "RETAKE_COOLDOWN") {
+        const e = new Error("RETAKE_COOLDOWN") as Error & {
+          retake?: { cooldownPeriodDays?: number; availableDate?: string | null };
+        };
+        e.retake = { cooldownPeriodDays: error.cooldownPeriodDays, availableDate: error.availableDate };
+        throw e;
       }
       throw new Error("Failed to start attempt");
     }
@@ -985,6 +1036,84 @@ export default function TakeTestPage() {
     return <LoadingState message={t.common.preparingTest} />;
   }
 
+  // Retake block-wall (PRD-6 / PRD-12) — rendered from system.blocked.html. The
+  // cooldown branch is revealed via injected CSS (the layout uses data-retake-branch
+  // toggling, which the SCORM gate.js drives with its own JS — we keep it intact).
+  if (phase === "blocked" && blockedTpl && blockData) {
+    const availableDateHuman = blockData.availableDate
+      ? new Date(blockData.availableDate + "T00:00:00")
+          .toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" })
+          .replace(/\s*г\.?$/, "") // layout already adds the trailing period
+      : "—";
+    const blockCss =
+      blockedTpl.css +
+      '\n[data-retake-branch="default"],[data-retake-branch="error"]{display:none}[data-retake-branch="cooldown"]{display:block}';
+    return (
+      <div className="min-h-screen flex flex-col" style={{ background: blockedTpl.theme?.background }}>
+        <TemplateScreen
+          className="flex-1 w-full"
+          layout={blockedTpl.layout}
+          css={blockCss}
+          context={{ retake: { cooldownPeriodDays: blockData.cooldownPeriodDays, availableDateHuman } }}
+        />
+        <div className="flex items-center justify-center pb-10">
+          <Button variant="outline" onClick={() => navigate("/learner")}>
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            К списку тестов
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Start page — render via the design template (standard mode) when available.
+  if (phase === "start" && testInfo && testMetadata && testMode === "standard" && startTpl) {
+    const exhausted =
+      testMetadata.maxAttempts !== null && testMetadata.completedAttempts >= testMetadata.maxAttempts;
+    const startContext = {
+      course: {
+        title: testInfo.title,
+        description: testInfo.description || "",
+        questionCount: testMetadata.totalQuestions,
+        passPercent: testMetadata.passPercent,
+        timeLimitMinutes: testMetadata.timeLimitMinutes,
+        maxAttempts: testMetadata.maxAttempts,
+        startPageContent: testMetadata.startPageContent || "",
+      },
+      state: {
+        exhausted,
+        canResume: testMetadata.hasInProgress && !exhausted,
+        resumeLabel: "Продолжить тест",
+        canStart: !exhausted,
+        startLabel: testMetadata.completedAttempts > 0 ? "Начать заново" : "Начать тестирование",
+        // Web-only: the back-to-list action. The SCORM host (no test list) omits it;
+        // the layout gates it on this flag so both hosts share one start layout.
+        showBack: true,
+      },
+    };
+    return (
+      <div
+        className="min-h-screen select-none"
+        style={{ background: startTpl.theme?.background }}
+        onCopy={(e) => e.preventDefault()}
+        onCut={(e) => e.preventDefault()}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        <TemplateScreen
+          className="w-full"
+          layout={startTpl.layout}
+          css={startTpl.css}
+          context={startContext}
+          onAction={(action) => {
+            if (action === "start-test") handleStartTest();
+            else if (action === "resume") handleResumeTest();
+            else if (action === "back") navigate("/learner");
+          }}
+        />
+      </div>
+    );
+  }
+
   // Start page
   if (phase === "start" && testInfo && testMetadata) {
     const attemptsExhausted = testMetadata.maxAttempts !== null &&
@@ -1372,6 +1501,41 @@ export default function TakeTestPage() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // Standard mode — question screen via the design template (PRD-12 #3): all question
+  // types (single/multiple/ranking/matching). The per-question feedback mode
+  // (showCorrectAnswers) still uses the React markup below.
+  if (
+    testMode === "standard" &&
+    attempt &&
+    flatQuestions.length > 0 &&
+    questionTpl &&
+    !showCorrectAnswers
+  ) {
+    const currentQ = flatQuestions[currentIndex];
+    return (
+      <TemplateQuestionScreen
+        tpl={questionTpl}
+        testTitle={attempt.testTitle}
+        counterLabel={`Вопрос ${currentIndex + 1} из ${flatQuestions.length}`}
+        progressPercent={((currentIndex + 1) / flatQuestions.length) * 100}
+        question={currentQ.question}
+        answer={answers[currentQ.question.id]}
+        shuffleMapping={shuffleMappings[currentQ.question.id]}
+        onAnswer={(a) => handleAnswer(currentQ.question.id, a)}
+        canPrev={currentIndex > 0}
+        onPrev={() => {
+          setStandardFeedbackShown(false);
+          setStandardAnswerResult(null);
+          setCurrentIndex((i) => Math.max(0, i - 1));
+        }}
+        isLast={currentIndex === flatQuestions.length - 1}
+        isSubmitting={isSubmitting}
+        onNext={handleNext}
+        onSubmit={handleSubmit}
+      />
     );
   }
 
