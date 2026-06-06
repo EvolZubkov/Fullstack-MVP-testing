@@ -26,132 +26,44 @@ function bindRankingClicksOnce() {
   });
 }
 
-var __rankDndBound = false;
-function bindRankingDnDOnce(){
-  if (__rankDndBound) return;
-  __rankDndBound = true;
-
-  var dragPayload = null; // { qid, fromPos, itemIdx }
-  var __rankOverEl = null;
-
-  function closestByClass(node, cls) {
-    var el = node;
-    while (el && el !== document) {
-      if (el.classList && el.classList.contains(cls)) return el;
-      el = el.parentNode;
-    }
-    return null;
-  }
-
-  function clearRankOver() {
-    if (__rankOverEl) {
-      __rankOverEl.classList.remove('is-over');
-    }
-    __rankOverEl = null;
-  }
-
-  function setRankOver(el) {
-    if (__rankOverEl && __rankOverEl !== el) {
-      __rankOverEl.classList.remove('is-over');
-    }
-    __rankOverEl = el;
-    if (__rankOverEl) {
-      __rankOverEl.classList.add('is-over');
-    }
-  }
-
-  function getPayload(e){
-    try {
-      var raw = e.dataTransfer.getData('application/json');
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch (err) { return null; }
-  }
-
-  function moveInArray(arr, from, to){
-    if (from === to) return arr;
-    var copy = arr.slice();
-    var item = copy.splice(from, 1)[0];
-    copy.splice(to, 0, item);
-    return copy;
-  }
-
-  document.addEventListener('dragstart', function(e){
-    var el = closestByClass(e.target, 'rank-draggable');
-    if (!el) return;
-
-    // блокируем DnD после принятия
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) {
-      e.preventDefault();
-      return;
-    }
-
-    var qid = el.getAttribute('data-qid');
-    var fromPos = parseInt(el.getAttribute('data-pos'), 10);
-    var itemIdx = parseInt(el.getAttribute('data-item'), 10);
-    if (!qid || Number.isNaN(fromPos) || Number.isNaN(itemIdx)) return;
-
-    dragPayload = { qid: qid, fromPos: fromPos, itemIdx: itemIdx };
-    el.classList.add('dragging');
-
-    try{
-      e.dataTransfer.setData('application/json', JSON.stringify(dragPayload));
-      e.dataTransfer.effectAllowed = 'move';
-    }catch(err){}
-  });
-
-  document.addEventListener('dragend', function(e){
-    var el = closestByClass(e.target, 'rank-draggable');
-    if (el) el.classList.remove('dragging');
-    dragPayload = null;
-    clearRankOver();
-  });
-
-  document.addEventListener('dragover', function(e){
-    var over = closestByClass(e.target, 'rank-item');
-    if (!over) return;
-
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
-
-    e.preventDefault();
-    setRankOver(over);
-
-    try{ e.dataTransfer.dropEffect = 'move'; }catch(err){}
-  });
-
-  document.addEventListener('dragleave', function(e){
-    var over = closestByClass(e.target, 'rank-item');
-    if (!over) return;
-
-    // снимаем подсветку только если реально вышли из текущего drop
-    if (__rankOverEl === over && (!e.relatedTarget || !over.contains(e.relatedTarget))) {
-      clearRankOver();
-    }
-  });
-
-  document.addEventListener('drop', function(e){
-    clearRankOver();
-    var over = closestByClass(e.target, 'rank-item');
-    if (!over) return;
-
-    if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
-
-    e.preventDefault();
-    over.classList.remove('is-over');
-
-    var p = getPayload(e) || dragPayload;
-    if (!p) return;
-
-    var qid = over.getAttribute('data-qid');
-    if (!qid || qid !== p.qid) return;
-
-    var toPos = parseInt(over.getAttribute('data-pos'), 10);
-    if (Number.isNaN(toPos)) return;
-
-    var current = state.answers[qid];
-    if (!Array.isArray(current)) return;
-
-    state.answers[qid] = moveInArray(current, p.fromPos, toPos);
-    rerenderCurrentQuestionInput();
-  });
+function __rankMoveInArray(arr, from, to) {
+  if (from === to) return arr;
+  var copy = arr.slice();
+  var item = copy.splice(from, 1)[0];
+  copy.splice(to, 0, item);
+  return copy;
 }
+
+// The ranking question currently on screen (standard or adaptive).
+function __rankCurrentQuestion() {
+  if (TEST_DATA.mode === 'adaptive' && state.adaptiveState) {
+    var qd = (typeof getCurrentAdaptiveQuestion === 'function') ? getCurrentAdaptiveQuestion() : null;
+    return qd ? qd.question : null;
+  }
+  var fq = state.flatQuestions && state.flatQuestions[state.currentIndex];
+  return fq ? fq.question : null;
+}
+
+/**
+ * Ranking drop handler invoked by the SHARED pointer engine (mounted once in
+ * dnd/matching.js). `dragId`/`dropId` are the source/target positions; reorders the
+ * answer from→to. Ignores non-ranking questions and the feedback-locked state, so
+ * it can be called unconditionally alongside the matching handler.
+ */
+function applyRankingDrop(dropId, dragId) {
+  if (TEST_DATA.showCorrectAnswers && state.feedbackShown) return;
+  var q = __rankCurrentQuestion();
+  if (!q || q.type !== 'ranking') return;
+  var from = parseInt(dragId, 10);
+  var to = parseInt(dropId, 10);
+  if (Number.isNaN(from) || Number.isNaN(to)) return;
+  var current = state.answers[q.id];
+  if (!Array.isArray(current)) return;
+  state.answers[q.id] = __rankMoveInArray(current, from, to);
+  if (typeof rerenderCurrentQuestionInput === 'function') rerenderCurrentQuestionInput();
+}
+
+// Ranking drag now runs on the shared pointer engine (TBTemplate.attachPointerDnd),
+// mounted once by bindMatchingDnDOnce which routes drops here via applyRankingDrop.
+// This hook is kept (bootstrap calls it) but no longer binds native HTML5 DnD.
+function bindRankingDnDOnce() {}

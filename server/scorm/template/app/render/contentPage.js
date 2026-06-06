@@ -128,6 +128,26 @@ function getPagePlaceholderStyles(page) {
  * @param {object} page             Entry from TEST_DATA.contentPages
  * @param {Array}  contentTemplates Array from the design template manifest
  */
+/**
+ * Fills the content-page placeholders within `root`: plain placeholders via
+ * TestBuilder.fillPlaceholders (by type + textFit), resultField placeholders via
+ * the renderer registry, then the path-only DSL bindings. Scoped to `root` so the
+ * same logic works whether the skeleton lives directly in #app or inside the
+ * shared `content` layout's page-content slot.
+ */
+function fillContentPagePlaceholders(root, contentTemplate, values, placeholderStyles, tb) {
+  if (!contentTemplate || !tb || !tb._internal) return;
+  var nonResult = (contentTemplate.placeholders || []).filter(function (ph) { return ph.type !== "resultField"; });
+  var resultPh = (contentTemplate.placeholders || []).filter(function (ph) { return ph.type === "resultField"; });
+  var syntheticCt = Object.assign({}, contentTemplate, { placeholders: nonResult });
+  tb._internal.fillPlaceholders(root, syntheticCt, values, placeholderStyles);
+  resultPh.forEach(function (phDef) {
+    var el = root.querySelector('[data-placeholder="' + phDef.key + '"]');
+    if (el) fillResultFieldPlaceholder(el, phDef, values[phDef.key], contentTemplate);
+  });
+  tb._internal.renderPathOnlyDsl(root, typeof TEST_DATA !== "undefined" ? TEST_DATA : {});
+}
+
 function renderContentPage(page, contentTemplates) {
   var app = document.getElementById("app");
   if (!app) return;
@@ -139,34 +159,38 @@ function renderContentPage(page, contentTemplates) {
   var contentTemplate = findContentTemplate(page, contentTemplates);
   var values = getPageValues(page);
   var placeholderStyles = getPagePlaceholderStyles(page);
+  var skeleton = buildContentPageSkeleton(page, contentTemplate);
 
-  app.innerHTML = buildContentPageSkeleton(page, contentTemplate);
-
-  if (contentTemplate && tb && tb._internal) {
-    // Handle resultField separately; delegate rest to fillPlaceholders
-    var nonResultPlaceholders = (contentTemplate.placeholders || []).filter(
-      function (ph) {
-        return ph.type !== "resultField";
-      }
-    );
-    var resultPlaceholders = (contentTemplate.placeholders || []).filter(
-      function (ph) {
-        return ph.type === "resultField";
-      }
-    );
-
-    var syntheticCt = Object.assign({}, contentTemplate, {
-      placeholders: nonResultPlaceholders
+  // Primary path: render the shared `content` layout (wrapper + nav) and fill the
+  // page-content slot with the placeholder skeleton — the SAME layout/renderer the
+  // web host uses. Falls back to mounting the skeleton directly when absent.
+  var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts["content"];
+  var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+  var host;
+  if (layout && TB && TB.renderScreenInto) {
+    app.innerHTML = "";
+    var wrap = document.createElement("div");
+    app.appendChild(wrap);
+    TB.renderScreenInto(wrap, {
+      layout: layout,
+      context: { course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") } },
+      slots: { "page-content": skeleton }
     });
-    tb._internal.fillPlaceholders(app, syntheticCt, values, placeholderStyles);
-
-    resultPlaceholders.forEach(function (phDef) {
-      var el = app.querySelector('[data-placeholder="' + phDef.key + '"]');
-      if (el) fillResultFieldPlaceholder(el, phDef, values[phDef.key], contentTemplate);
-    });
-
-    tb._internal.renderPathOnlyDsl(app, typeof TEST_DATA !== "undefined" ? TEST_DATA : {});
+    host = wrap.querySelector('[data-slot="page-content"]') || wrap;
+    var navBtn = wrap.querySelector('.navigation [data-nav="next"]');
+    if (navBtn) navBtn.onclick = function () { if (typeof advancePageSequence === "function") advancePageSequence(); };
+  } else {
+    app.innerHTML = skeleton;
+    host = app;
+    var nav = document.createElement("div");
+    nav.className = "navigation";
+    nav.style.justifyContent = "flex-end";
+    nav.innerHTML = '<button class="btn" data-nav="next" onclick="advancePageSequence()">Далее</button>';
+    app.appendChild(nav);
   }
+
+  fillContentPagePlaceholders(host, contentTemplate, values, placeholderStyles, tb);
 
   // autoAdvance
   if (page.autoAdvance && page.autoAdvanceDelayMs && tb && tb._internal) {
@@ -175,12 +199,6 @@ function renderContentPage(page, contentTemplates) {
       else if (typeof next === "function") next();
     });
   }
-
-  var nav = document.createElement("div");
-  nav.className = "navigation";
-  nav.style.justifyContent = "flex-end";
-  nav.innerHTML = '<button class="btn" data-nav="next" onclick="advancePageSequence()">Далее</button>';
-  app.appendChild(nav);
 
   // Template lifecycle event
   if (tb && tb.template) {

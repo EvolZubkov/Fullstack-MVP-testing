@@ -101,7 +101,12 @@
         "questions",
         "pages",
         "hidden"
-      ]
+      ],
+      "optionLabels": {
+        "questions": "По вопросам",
+        "pages": "По страницам",
+        "hidden": "Не показывать"
+      }
     },
     {
       "key": "showProgressBar",
@@ -286,6 +291,7 @@
     "content": "layouts/content.html",
     "question": "layouts/question.html",
     "results": "layouts/results.html",
+    "results.adaptive": "layouts/results.adaptive.html",
     "system.blocked": "layouts/system.blocked.html"
   },
   "assets": {

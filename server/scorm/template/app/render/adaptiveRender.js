@@ -7,41 +7,105 @@
 function renderAdaptiveQuestion() {
   var app = document.getElementById('app');
   var qData = getCurrentAdaptiveQuestion();
-
   if (!qData) {
-    // No more questions - show results
     renderAdaptiveResults();
     return;
   }
+  ensureAdaptiveShuffleMapping(qData.question);
 
-  var q = qData.question;
+  var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts['question'];
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (layout && TB && TB.renderScreenInto) {
+    renderAdaptiveQuestionTemplated(app, qData);
+    return;
+  }
+  renderAdaptiveQuestionFallback(app, qData);
+}
 
-  // Generate shuffle mapping for this question if not exists
-  if (!state.shuffleMappings[q.id]) {
-    if (q.type === 'single' || q.type === 'multiple') {
-      var optCount = q.data.options ? q.data.options.length : 0;
-      if (optCount > 0) {
-        state.shuffleMappings[q.id] = createShuffleMapping(optCount);
-      }
-    } else if (q.type === 'matching') {
-      var leftCount = q.data.left ? q.data.left.length : 0;
-      var rightCount = q.data.right ? q.data.right.length : 0;
-      if (leftCount > 0 && rightCount > 0) {
-        state.shuffleMappings[q.id] = {
-          left: createShuffleMapping(leftCount),
-          right: createShuffleMapping(rightCount)
-        };
-      }
-    } else if (q.type === 'ranking') {
-      var itemCount = q.data.items ? q.data.items.length : 0;
-      if (itemCount > 0) {
-        state.shuffleMappings[q.id] = createShuffleMapping(itemCount);
-        if (!state.answers[q.id]) {
-          state.answers[q.id] = state.shuffleMappings[q.id].slice();
-        }
-      }
+/** Seed the per-question shuffle mapping for an adaptive question (idempotent). */
+function ensureAdaptiveShuffleMapping(q) {
+  if (state.shuffleMappings[q.id]) return;
+  if (q.type === 'single' || q.type === 'multiple') {
+    var optCount = q.data.options ? q.data.options.length : 0;
+    if (optCount > 0) state.shuffleMappings[q.id] = createShuffleMapping(optCount);
+  } else if (q.type === 'matching') {
+    var leftCount = q.data.left ? q.data.left.length : 0;
+    var rightCount = q.data.right ? q.data.right.length : 0;
+    if (leftCount > 0 && rightCount > 0) {
+      state.shuffleMappings[q.id] = { left: createShuffleMapping(leftCount), right: createShuffleMapping(rightCount) };
+    }
+  } else if (q.type === 'ranking') {
+    var itemCount = q.data.items ? q.data.items.length : 0;
+    if (itemCount > 0) {
+      state.shuffleMappings[q.id] = createShuffleMapping(itemCount);
+      if (!state.answers[q.id]) state.answers[q.id] = state.shuffleMappings[q.id].slice();
     }
   }
+}
+
+/** Adaptive feedback block HTML (uses lastAdaptiveResult; binary, no partial credit). */
+function buildAdaptiveFeedbackHtml(q) {
+  var isCorrect = state.lastAdaptiveResult.isCorrect;
+  var statusColor = isCorrect ? '#16a34a' : '#dc2626';
+  var statusText = isCorrect ? 'Правильно!' : 'Неправильно';
+  var html = '<div class="feedback-block" style="margin-top:16px;padding:12px;border-radius:8px;background:' + (isCorrect ? '#dcfce7' : '#fee2e2') + ';border:1px solid ' + statusColor + ';">';
+  html += '<div style="font-weight:600;color:' + statusColor + ';margin-bottom:4px;">' + statusText + '</div>';
+  var feedbackText = (q.feedbackMode === 'conditional') ? (isCorrect ? q.feedbackCorrect : q.feedbackIncorrect) : q.feedback;
+  if (feedbackText) html += '<div style="color:#333;font-size:14px;">' + escapeHtml(feedbackText) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+/** Adaptive navigation HTML (Принять / Далее), onclick-wired. */
+function buildAdaptiveNavHtml() {
+  var html = '<div class="navigation" style="justify-content:flex-end">';
+  if (TEST_DATA.showCorrectAnswers) {
+    if (!state.feedbackShown) html += '<button class="btn" data-action="answer-submit" onclick="confirmAdaptiveAnswer()">Принять</button>';
+    else html += '<button class="btn" data-nav="next" onclick="continueAfterFeedback()">Далее</button>';
+  } else {
+    html += '<button class="btn" data-nav="next" onclick="submitAdaptiveAnswerAndContinue()">Далее</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+/** Render the adaptive question via the shared `question` layout (mirrors the standard path). */
+function renderAdaptiveQuestionTemplated(app, qData) {
+  var q = qData.question;
+  var showFeedback = TEST_DATA.showCorrectAnswers && state.feedbackShown && state.lastAdaptiveResult;
+  var counter = 'Тема: ' + qData.topicName + ' · Вопрос ' + qData.questionNumber + ' из ' + qData.totalInLevel;
+  if (TEST_DATA.showDifficultyLevel && qData.levelName) counter += ' · ' + qData.levelName;
+  var slots = {
+    'question-text': escapeHtml(q.prompt),
+    'question-media': renderQuestionMedia(q),
+    'question-interaction': '<div id="question-input">' + renderQuestionInput(q) + '</div>',
+    'question-feedback': showFeedback ? buildAdaptiveFeedbackHtml(q) : ''
+  };
+  app.innerHTML = '';
+  var wrap = document.createElement('div');
+  app.appendChild(wrap);
+  window.TBTemplate.renderScreenInto(wrap, {
+    layout: state.templateLayouts['question'],
+    context: { course: { title: TEST_DATA.title }, state: { questionCounterLabel: counter } },
+    slots: slots
+  });
+  var fill = wrap.querySelector('#q-progress-fill');
+  if (fill) fill.style.width = ((qData.questionNumber / qData.totalInLevel) * 100) + '%';
+  var timerEl = wrap.querySelector('#timer-display');
+  if (timerEl && state.remainingSeconds !== null) {
+    timerEl.classList.remove('q-timer--hidden');
+    timerEl.textContent = formatTime(state.remainingSeconds);
+    if (state.remainingSeconds <= 60) { timerEl.style.color = '#dc2626'; timerEl.style.fontWeight = 'bold'; }
+  }
+  var navWrap = document.createElement('div');
+  navWrap.innerHTML = buildAdaptiveNavHtml();
+  if (navWrap.firstChild) app.appendChild(navWrap.firstChild);
+  syncMatchingHeights();
+}
+
+function renderAdaptiveQuestionFallback(app, qData) {
+  var q = qData.question;
 
   var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">';
   html += '<h1 style="margin:0">' + escapeHtml(TEST_DATA.title) + '</h1>';
@@ -325,17 +389,75 @@ function continueAfterTransition() {
 }
 
 /**
- * Render adaptive test results
+ * Render adaptive test results. Primary path renders the shared `results.adaptive`
+ * layout via the SHARED renderer (the SAME layout the web host mounts) from a public
+ * context matching the web's buildAdaptiveResultContext (per-topic level pill +
+ * feedback + links); the SCORM-richer actions (Скачать PDF / Пройти заново /
+ * Завершить) are gated layout blocks the web context does not set. Falls back to
+ * the bespoke chrome when the design template is absent.
  */
 function renderAdaptiveResults() {
   var app = document.getElementById('app');
   var result = state.adaptiveState.result;
-
   if (!result) {
     result = buildAdaptiveResult();
     state.adaptiveState.result = result;
   }
 
+  var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts['results.adaptive'];
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (layout && TB && TB.renderScreenInto) {
+    renderAdaptiveResultsTemplated(app, result);
+    return;
+  }
+  renderAdaptiveResultsFallback(app, result);
+}
+
+/** Map an adaptive topic result to the results.adaptive layout topic view. */
+function adaptiveTopicView(tr) {
+  var achieved = tr.achievedLevelIndex !== null && tr.achievedLevelIndex !== undefined;
+  var links = (tr.recommendedLinks || []).map(function (l) { return { title: l.title, url: l.url }; });
+  return {
+    topicName: tr.topicName || '',
+    levelLabel: achieved ? tr.achievedLevelName : 'Не достигнут',
+    levelClass: achieved ? 'is-info' : 'is-fail',
+    feedback: tr.feedback || '',
+    hasFeedback: !!(tr.feedback && String(tr.feedback).trim()),
+    hasLinks: links.length > 0,
+    links: links
+  };
+}
+
+/** Build the adaptive results context and mount the shared layout. */
+function renderAdaptiveResultsTemplated(app, result) {
+  var hasLimit = !!TEST_DATA.maxAttempts;
+  var canRetry = hasAttemptsLeft();
+  var ctxResult = {
+    adaptive: true,
+    topicResults: (result.topicResults || []).map(adaptiveTopicView),
+    // SCORM-only action set (the web context omits these → it shows "Пройти снова").
+    hasScormActions: true,
+    showPdf: true,
+    canRetry: (!hasLimit) || canRetry,
+    showFinish: (!hasLimit) || (!canRetry)
+  };
+  app.innerHTML = '';
+  var wrap = document.createElement('div');
+  app.appendChild(wrap);
+  window.TBTemplate.renderScreenInto(wrap, {
+    layout: state.templateLayouts['results.adaptive'],
+    context: { course: { title: TEST_DATA.title || '' }, result: ctxResult }
+  });
+  var pdf = wrap.querySelector('[data-action="download-pdf"]');
+  if (pdf) pdf.onclick = function () { if (typeof downloadPDF === 'function') downloadPDF(); };
+  var retry = wrap.querySelector('[data-action="restart-adaptive"]');
+  if (retry) retry.onclick = restartAdaptive;
+  var finish = wrap.querySelector('[data-action="finish"]');
+  if (finish) finish.onclick = finishAndClose;
+}
+
+function renderAdaptiveResultsFallback(app, result) {
   var html = '<div class="results-page">';
 
   // Hero section

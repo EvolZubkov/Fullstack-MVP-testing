@@ -1,4 +1,108 @@
+/**
+ * Renders the start screen. Primary path renders the shared `start` layout via the
+ * SHARED renderer (the SAME layout + renderer the web host mounts) from a public
+ * context; the SCORM-richer actions (resume-with-position, "Начать заново", "Мой
+ * результат") are gated layout blocks the web context does not set, and the
+ * web-only "back to list" action is likewise gated off here. Falls back to the
+ * bespoke chrome for adaptive mode or when the design template is absent.
+ */
 function renderStartPage() {
+  var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts['start'];
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (layout && TB && TB.renderScreenInto && TEST_DATA.mode !== 'adaptive') {
+    renderStartPageTemplated();
+    return;
+  }
+  renderStartPageFallback();
+}
+
+/**
+ * Computes the start-screen action state (the four cases of the bespoke chrome)
+ * as gated context flags: exhausted / canStart+startLabel / canResume+resumeLabel
+ * +resumeNote / canRestart / canViewResults.
+ */
+function computeStartState() {
+  var used = getAttemptsUsed();
+  var hasLimit = !!TEST_DATA.maxAttempts;
+  var left = hasLimit ? Math.max(0, TEST_DATA.maxAttempts - used) : null;
+  var noAttempts = hasLimit && left <= 0;
+  var hasCompleted = !!getAllAttempts() && getAllAttempts().length > 0;
+  var canStartNew = hasAttemptsLeft();
+
+  var suspendObj = readSuspendObj();
+  var pendingSession = suspendObj.currentSession;
+  var canResume = !!(
+    pendingSession &&
+    !TEST_DATA.timeLimitMinutes &&
+    TEST_DATA.mode !== 'adaptive' &&
+    pendingSession.flatQuestions &&
+    pendingSession.flatQuestions.length > 0 &&
+    !isSessionStale(pendingSession)
+  );
+  var resumeIndex = canResume ? (pendingSession.currentIndex || 0) : 0;
+  var resumeTotal = canResume ? pendingSession.flatQuestions.length : 0;
+
+  var st = {
+    exhausted: false, canStart: false, startLabel: '', canResume: false,
+    resumeLabel: '', resumeNote: '', canRestart: false, canViewResults: false
+  };
+
+  if (noAttempts && !hasCompleted) {            // no attempts, nothing to review
+    st.exhausted = true;
+  } else if (noAttempts && hasCompleted) {       // Case 1: only "Мой результат"
+    st.canViewResults = true;
+  } else if (canResume) {                        // Case 2: continue / restart / review
+    st.canResume = true;
+    st.resumeLabel = 'Продолжить с места остановки';
+    st.resumeNote = 'Незавершённый тест — вопрос ' + (resumeIndex + 1) + ' из ' + resumeTotal;
+    st.canRestart = true;
+    st.canViewResults = hasCompleted;
+  } else if (canStartNew && hasCompleted) {      // Case 3: restart anew / review
+    st.canStart = true;
+    st.startLabel = 'Начать тестирование заново';
+    st.canViewResults = true;
+  } else {                                       // Case 4: first entry / exhausted
+    if (noAttempts) st.exhausted = true;
+    else { st.canStart = true; st.startLabel = 'Начать тестирование'; }
+  }
+  return st;
+}
+
+/** Wire a data-action button (if present) to a runtime handler. */
+function wireStartAction(root, action, fn) {
+  var btn = root.querySelector('[data-action="' + action + '"]');
+  if (btn) btn.onclick = fn;
+}
+
+/** Build the start context and mount the shared layout (standard mode). */
+function renderStartPageTemplated() {
+  var app = document.getElementById('app');
+  var st = computeStartState();
+  var course = {
+    title: TEST_DATA.title,
+    description: TEST_DATA.description || '',
+    questionCount: TEST_DATA.totalQuestions,
+    passPercent: TEST_DATA.passPercent,
+    timeLimitMinutes: TEST_DATA.timeLimitMinutes,
+    maxAttempts: TEST_DATA.maxAttempts,
+    // PRD-7 S10: startPageContent migrated to an intro content page; not shown here.
+    startPageContent: ''
+  };
+  app.innerHTML = '';
+  var wrap = document.createElement('div');
+  app.appendChild(wrap);
+  window.TBTemplate.renderScreenInto(wrap, {
+    layout: state.templateLayouts['start'],
+    context: { course: course, state: st }
+  });
+  wireStartAction(wrap, 'start-test', startTest);
+  wireStartAction(wrap, 'resume', continueSession);
+  wireStartAction(wrap, 'restart', startTest);
+  wireStartAction(wrap, 'view-results', viewSavedResults);
+}
+
+function renderStartPageFallback() {
   var app = document.getElementById('app');
   var used = getAttemptsUsed();
   var hasLimit = !!TEST_DATA.maxAttempts;

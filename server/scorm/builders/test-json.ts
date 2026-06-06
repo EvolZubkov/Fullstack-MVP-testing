@@ -37,7 +37,16 @@ interface ExportData {
 }
 
 export function buildTestJson(data: ExportData): string {
-  const totalQuestions = data.sections.reduce((sum, s) => sum + s.drawCount, 0);
+  const testMode = data.test.mode || "standard";
+  // Effective per-topic draw count. `drawAll` (or adaptive mode, which always
+  // feeds the whole pool to the level engine) means "draw every question the
+  // topic currently has" — resolved dynamically here, not from the stored
+  // drawCount, so adding questions after save still draws all of them.
+  const effectiveDraw = (
+    s: ExportData["sections"][number],
+  ): number => (testMode === "adaptive" || s.drawAll ? s.questions.length : s.drawCount);
+
+  const totalQuestions = data.sections.reduce((sum, s) => sum + effectiveDraw(s), 0);
   const overallPassRule = data.test.overallPassRuleJson as PassRule;
 
   const passPercent =
@@ -103,7 +112,7 @@ export function buildTestJson(data: ExportData): string {
     sections: data.sections.map((s) => ({
       topicId: s.topic.id,
       topicName: s.topic.name,
-      drawCount: s.drawCount,
+      drawCount: effectiveDraw(s),
       // PRD-4 v1.1 §4.7: `required` drives routerCompletionPolicy's
       // «all_required_*» calculation; `false` means optional (the test can
       // finish even if this section is skipped/incomplete).

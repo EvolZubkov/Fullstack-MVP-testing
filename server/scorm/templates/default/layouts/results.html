@@ -20,7 +20,7 @@
     <div class="results-main-title" data-path="course.title"></div>
     <div class="results-main-sub">Результаты теста</div>
 
-    <div class="results-ring" data-ring-offset="{{ result.ringDashoffset }}">
+    <div class="results-ring" data-ring-offset="{{ result.ringDashoffset }}" style="--ring-offset: {{ result.ringDashoffset }}">
       <svg viewBox="0 0 140 140" width="140" height="140">
         <circle cx="70" cy="70" r="63" class="ring-bg" stroke-width="14" fill="none"></circle>
         <circle cx="70" cy="70" r="63" class="ring-fg {{ result.passClass }}" stroke-width="14" fill="none" stroke-linecap="round"></circle>
@@ -57,17 +57,39 @@
         <div class="topic-name">{{topicName}}</div>
         <div class="results-pill {{passClass}}">{{statusLabel}}</div>
       </div>
-      <div class="topic-bar {{passClass}}" data-bar-width="{{percent}}"><div class="topic-bar-fill"></div></div>
+      <div class="topic-bar {{passClass}}" data-bar-width="{{percent}}"><div class="topic-bar-fill" style="width: {{percent}}%"></div></div>
       <div class="topic-row">
         <div class="k">Правильно</div>
         <div class="val">{{correct}} / {{total}}</div>
       </div>
+      {{#if pointsLabel}}
+      <div class="topic-row">
+        <div class="k">Баллов</div>
+        <div class="val">{{pointsLabel}}</div>
+      </div>
+      {{/if}}
+      {{#if requiredLabel}}<div class="topic-required">{{requiredLabel}}</div>{{/if}}
+      {{#if topicFeedback}}<div class="topic-feedback"><div class="topic-feedback-text">{{topicFeedback}}</div></div>{{/if}}
     </div>
     {{/each}}
   </div>
   {{/if}}
 
+  {{#if result.recommendedCourses}}
+  <div class="results-section-title">Рекомендуемые курсы</div>
+  <div class="results-rec-list">
+    {{#each result.recommendedCourses}}<a class="results-rec-item" href="{{url}}" target="_blank" rel="noopener noreferrer">{{title}}</a>{{/each}}
+  </div>
+  {{/if}}
+  {{#if result.recommendedEvents}}
+  <div class="results-section-title">Рекомендуемые мероприятия</div>
+  <div class="results-rec-list">
+    {{#each result.recommendedEvents}}<div class="results-rec-item">{{title}}</div>{{/each}}
+  </div>
+  {{/if}}
+
   <div class="results-actions">
-    <button type="button" class="btn" data-action="restart">Пройти снова</button>
+    {{#if result.backAction}}<button type="button" class="btn" data-action="{{result.backAction}}">{{result.backLabel}}</button>{{/if}}
+    {{#unless result.backAction}}<button type="button" class="btn" data-action="restart">Пройти снова</button>{{/unless}}
   </div>
 </div>

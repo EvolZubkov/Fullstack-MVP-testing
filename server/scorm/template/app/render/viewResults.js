@@ -1,9 +1,106 @@
 // app/render/viewResults.js
 
+/**
+ * Renders the saved-results view ("Мой результат"). Primary path renders the
+ * shared `results` layout via the SHARED renderer (TBTemplate.renderScreenInto) —
+ * the SAME layout + renderer the web host mounts — from a public context; the
+ * recommended courses/events, per-topic points/threshold/feedback and the
+ * "back" action are gated layout blocks the web context simply does not set.
+ * Falls back to the original hardcoded chrome if the design template is absent.
+ */
 function renderViewResults() {
   var app = document.getElementById('app');
   var attempt = state.viewedAttempt;
-  
+  if (!attempt) {
+    app.innerHTML = '<div style="padding:20px;"><p>Нет данных о попытке</p></div>';
+    return;
+  }
+  var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts['results'];
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (layout && TB && TB.renderScreenInto) {
+    renderViewResultsTemplated(app, attempt);
+    return;
+  }
+  renderViewResultsFallback();
+}
+
+/** One decimal place (points display). */
+function vrRound1(n) { return Math.round((parseFloat(n) || 0) * 10) / 10; }
+
+/** Map a saved topic result to the results-layout topic view (+ SCORM extras). */
+function vrTopicView(tr) {
+  var passed = (tr.passed === null || tr.passed === undefined) ? null : !!tr.passed;
+  var view = {
+    topicName: tr.topicName || '',
+    percent: Math.round(tr.percent || 0),
+    correct: (tr.correct != null ? tr.correct : 0),
+    total: tr.total,
+    passClass: passed === true ? 'is-pass' : passed === false ? 'is-fail' : '',
+    statusLabel: passed === true ? 'Пройден' : passed === false ? 'Не пройден' : '',
+    pointsLabel: vrRound1(tr.earnedPoints) + ' / ' + vrRound1(tr.possiblePoints)
+  };
+  var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+  if (section && section.topicPassRule && section.topicPassRule.type === 'percent') {
+    view.requiredLabel = 'Требуется: ' + section.topicPassRule.value + '%';
+  }
+  if (tr.topicFeedback && String(tr.topicFeedback).trim()) {
+    view.topicFeedback = tr.topicFeedback;
+  }
+  return view;
+}
+
+/** Deduped recommended courses/events across failed topics (failed-topic guidance). */
+function vrRecommended(results) {
+  var seenC = {}, seenE = {}, courses = [], events = [];
+  results.topicResults.forEach(function (tr) {
+    if (tr.passed !== false) return;
+    var section = TEST_DATA.sections.find(function (s) { return s.topicId === tr.topicId; });
+    var cs = (section && section.recommendedCourses && section.recommendedCourses.length > 0) ? section.recommendedCourses : (tr.recommendedCourses || []);
+    var es = (section && section.recommendedEvents) ? section.recommendedEvents : [];
+    cs.forEach(function (c) { if (!seenC[c.title]) { seenC[c.title] = true; courses.push({ title: c.title, url: c.url }); } });
+    es.forEach(function (e) { if (!seenE[e.title]) { seenE[e.title] = true; events.push({ title: e.title }); } });
+  });
+  return { courses: courses, events: events };
+}
+
+/** Build the results render context and mount the shared layout. */
+function renderViewResultsTemplated(app, results) {
+  var pct = Math.round(results.percent);
+  var passed = !!results.passed;
+  var result = {
+    passed: passed,
+    passClass: passed ? 'is-pass' : 'is-fail',
+    statusLabel: passed ? 'Пройден' : 'Не пройден',
+    scorePercent: pct,
+    ringDashoffset: Math.round((2 * Math.PI * 63) * (1 - pct / 100)),
+    totalQuestions: results.totalQuestions,
+    correct: (results.totalCorrect != null ? results.totalCorrect : results.correct),
+    earnedPoints: vrRound1(results.earnedPoints),
+    possiblePoints: vrRound1(results.possiblePoints),
+    topicResults: (results.topicResults || []).map(vrTopicView),
+    backAction: 'back-to-start',
+    backLabel: 'Вернуться к тесту'
+  };
+  var rec = vrRecommended(results);
+  if (rec.courses.length) result.recommendedCourses = rec.courses;
+  if (rec.events.length) result.recommendedEvents = rec.events;
+
+  app.innerHTML = '';
+  var wrap = document.createElement('div');
+  app.appendChild(wrap);
+  window.TBTemplate.renderScreenInto(wrap, {
+    layout: state.templateLayouts['results'],
+    context: { course: { title: TEST_DATA.title || '' }, result: result }
+  });
+  var backBtn = wrap.querySelector('[data-action="back-to-start"]');
+  if (backBtn) backBtn.onclick = backToStart;
+}
+
+function renderViewResultsFallback() {
+  var app = document.getElementById('app');
+  var attempt = state.viewedAttempt;
+
   if (!attempt) {
     app.innerHTML = '<div style="padding:20px;"><p>Нет данных о попытке</p></div>';
     return;
