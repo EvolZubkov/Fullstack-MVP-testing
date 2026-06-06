@@ -13,7 +13,7 @@
  * the same engine the SCORM host runs — so both hosts compute drops identically.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { TemplateScreen } from "@/components/template-screen";
 import type { Question } from "@shared/schema";
 import {
@@ -226,12 +226,19 @@ export interface TemplateQuestionScreenProps {
   answer: unknown;
   shuffleMapping?: ShuffleMapping;
   onAnswer: (answer: unknown) => void;
-  canPrev: boolean;
-  onPrev: () => void;
-  isLast: boolean;
-  isSubmitting: boolean;
-  onNext: () => void;
-  onSubmit: () => void;
+  /** Controlled HTML for the `question-feedback` slot (e.g. after-answer feedback). */
+  feedbackHtml?: string;
+  /** When true, the interaction is read-only (clicks/drags don't change the answer). */
+  locked?: boolean;
+  /** Custom footer; when provided, replaces the default standard Назад/Далее nav. */
+  footer?: ReactNode;
+  // Standard-mode nav (used only when `footer` is not provided):
+  canPrev?: boolean;
+  onPrev?: () => void;
+  isLast?: boolean;
+  isSubmitting?: boolean;
+  onNext?: () => void;
+  onSubmit?: () => void;
 }
 
 export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
@@ -257,7 +264,7 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
     "question-text": esc(question.prompt),
     "question-media": mediaHtml(question),
     "question-interaction": interactionHtml(question, answer, shuffleMapping, poolOrder),
-    "question-feedback": "",
+    "question-feedback": props.feedbackHtml ?? "",
   };
 
   /** Apply a matching drop through the shared rich model, persisting pool + answer. */
@@ -307,6 +314,7 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
         context={{ course: { title: testTitle }, state: { questionCounterLabel: counterLabel } }}
         slots={slots}
         onAction={(action) => {
+          if (props.locked) return; // read-only while feedback is shown
           if (action.startsWith("select:")) {
             const i = Number(action.slice("select:".length));
             if (!Number.isNaN(i)) onAnswer(nextAnswer(question, answer, i));
@@ -334,23 +342,29 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
         className="flex items-center justify-between gap-4 px-6 pb-10 mx-auto w-full max-w-3xl"
         style={{ color: tpl.theme?.foreground }}
       >
-        <button
-          type="button"
-          onClick={props.onPrev}
-          disabled={!props.canPrev}
-          className="inline-flex items-center gap-2 text-sm opacity-80 hover:opacity-100 disabled:opacity-30 transition-opacity"
-        >
-          ← Назад
-        </button>
-        <button
-          type="button"
-          onClick={props.isLast ? props.onSubmit : props.onNext}
-          disabled={props.isSubmitting}
-          className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-          style={{ background: "#2563eb" }}
-        >
-          {props.isLast ? (props.isSubmitting ? "Отправка..." : "Завершить тест") : "Далее →"}
-        </button>
+        {props.footer !== undefined ? (
+          props.footer
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={props.onPrev}
+              disabled={!props.canPrev}
+              className="inline-flex items-center gap-2 text-sm opacity-80 hover:opacity-100 disabled:opacity-30 transition-opacity"
+            >
+              ← Назад
+            </button>
+            <button
+              type="button"
+              onClick={props.isLast ? props.onSubmit : props.onNext}
+              disabled={props.isSubmitting}
+              className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              style={{ background: "#2563eb" }}
+            >
+              {props.isLast ? (props.isSubmitting ? "Отправка..." : "Завершить тест") : "Далее →"}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

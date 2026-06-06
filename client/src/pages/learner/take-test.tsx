@@ -63,6 +63,36 @@ interface AdaptiveState {
   questionsAnswered: number;
 }
 
+/** Escape text for safe injection into a template slot. */
+function escSlot(s: unknown): string {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/**
+ * After-answer feedback HTML for the adaptive question's question-feedback slot:
+ * status + (single/multiple) correct-answer text + the question's feedback.
+ * Mirrors the SCORM adaptive feedback block (binary correctness, no partial).
+ */
+function adaptiveFeedbackHtml(question: any, result: any): string {
+  const ok = !!result.isCorrect;
+  const color = ok ? "#16a34a" : "#dc2626";
+  const bg = ok ? "#dcfce7" : "#fee2e2";
+  let html = `<div class="feedback-block" style="margin-top:16px;padding:12px;border-radius:8px;background:${bg};border:1px solid ${color};">`;
+  html += `<div style="font-weight:600;color:${color};margin-bottom:4px;">${ok ? "Правильно!" : "Неправильно"}</div>`;
+  const opts = (question.dataJson as any)?.options as unknown[] | undefined;
+  if (!ok && result.correctAnswer && opts) {
+    if (question.type === "single" && typeof result.correctAnswer.correctIndex === "number") {
+      html += `<div style="font-size:14px;margin-bottom:2px;"><b>Правильный ответ:</b> ${escSlot(opts[result.correctAnswer.correctIndex])}</div>`;
+    } else if (question.type === "multiple" && Array.isArray(result.correctAnswer.correctIndices)) {
+      const txt = result.correctAnswer.correctIndices.map((i: number) => opts[i]).join(", ");
+      html += `<div style="font-size:14px;margin-bottom:2px;"><b>Правильный ответ:</b> ${escSlot(txt)}</div>`;
+    }
+  }
+  if (result.feedback) html += `<div style="color:#333;font-size:14px;">${escSlot(result.feedback)}</div>`;
+  html += "</div>";
+  return html;
+}
+
 export default function TakeTestPage() {
   const { testId } = useParams<{ testId: string }>();
   const [, navigate] = useLocation();
@@ -1374,8 +1404,63 @@ export default function TakeTestPage() {
 
   // Adaptive mode - question
   if (testMode === "adaptive" && adaptiveState?.currentQuestion) {
-    const { currentQuestion, showDifficultyLevel, testTitle, questionsAnswered } = adaptiveState;
+    const { currentQuestion, showDifficultyLevel, testTitle } = adaptiveState;
     const currentQ = currentQuestion.question;
+
+    // Templated path (PRD-12): the adaptive question renders via the shared
+    // question.html — same engine/layout as standard — with adaptive nav and the
+    // after-answer feedback in the question-feedback slot. Falls back to the React
+    // markup below when the template is unavailable.
+    if (questionTpl) {
+      const counter =
+        `Тема: ${currentQuestion.topicName} · Вопрос ${currentQuestion.questionNumber} из ${currentQuestion.totalInLevel}` +
+        (showDifficultyLevel && currentQuestion.levelName ? ` · ${currentQuestion.levelName}` : "");
+      const fbHtml = feedbackShown && lastAnswerResult ? adaptiveFeedbackHtml(currentQ, lastAnswerResult) : "";
+      const btnCls =
+        "ml-auto inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50";
+      const footer = adaptiveState.showCorrectAnswers ? (
+        feedbackShown ? (
+          <button type="button" className={btnCls} style={{ background: "#2563eb" }} onClick={handleAdaptiveContinue}>
+            Далее →
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={btnCls}
+            style={{ background: "#2563eb" }}
+            onClick={handleAdaptiveConfirm}
+            disabled={isAnswering || adaptiveState.answer === null}
+          >
+            {isAnswering ? "Отправка..." : "Принять"}
+          </button>
+        )
+      ) : (
+        <button
+          type="button"
+          className={btnCls}
+          style={{ background: "#2563eb" }}
+          onClick={handleAdaptiveSubmit}
+          disabled={isAnswering || adaptiveState.answer === null}
+        >
+          {isAnswering ? "Отправка..." : "Далее →"}
+        </button>
+      );
+      return (
+        <TemplateQuestionScreen
+          tpl={questionTpl}
+          testTitle={testTitle}
+          counterLabel={counter}
+          progressPercent={(currentQuestion.questionNumber / currentQuestion.totalInLevel) * 100}
+          question={currentQ}
+          answer={adaptiveState.answer}
+          shuffleMapping={shuffleMappings[currentQ.id]}
+          onAnswer={feedbackShown ? () => {} : handleAdaptiveAnswer}
+          locked={feedbackShown}
+          feedbackHtml={fbHtml}
+          footer={footer}
+        />
+      );
+    }
 
     return (
       <div className="min-h-screen bg-background select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
