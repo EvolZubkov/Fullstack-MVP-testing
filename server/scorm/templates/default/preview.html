@@ -35,144 +35,1025 @@
   </style>
   <style id="tpl-styles">/* styles/theme.css */
 :root {
-  --background: hsl(225 7% 7%);
-  --foreground: hsl(0 0% 98%);
-  --border: hsl(0 0% 22%);
-  --card: hsl(225 14% 14%);
-  --card-foreground: hsl(0 0% 98%);
-  --card-border: hsl(0 0% 24%);
-  --primary: hsl(217 91% 42%);
-  --primary-foreground: hsl(0 0% 98%);
-  --muted: hsl(225 10% 20%);
-  --muted-foreground: hsl(0 0% 65%);
-  --accent: hsl(225 8% 22%);
-  --destructive: hsl(0 84% 52%);
-  --success: hsl(142 76% 36%);
+  --background: 225 7% 7%;
+  --foreground: 0 0% 98%;
+  --border: 0 0% 22%;
+  --card: 225 14% 14%;
+  --card-foreground: 0 0% 98%;
+  --card-border: 0 0% 24%;
+  --primary: 217 91% 42%;
+  --primary-foreground: 0 0% 98%;
+  --muted: 225 10% 20%;
+  --muted-foreground: 0 0% 65%;
+  --accent: 225 8% 22%;
+  --destructive: 0 84% 52%;
+  --success: 142 76% 36%;
   --font-sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --radius: 12px;
   --shadow: 0px 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 /* styles/base.css */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* UNIFIED stylesheet (PRD-12 CSS unification): SCORM runtime canon (styles.css)
+   + layout-wrapper classes merged from the web base.css, component convention.
+   Tokens live in theme.css. Loaded by BOTH hosts. */
+
+/* ===== Modern Dark Theme SCORM Package ===== */
+
+
+/* ===== Base Styles ===== */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+}
 
 body {
   font-family: var(--font-sans);
-  background: var(--background);
-  color: var(--foreground);
-  line-height: 1.55;
-  font-size: 15px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  min-height: 100vh;
+  padding: 24px;
+  line-height: 1.6;
 }
 
-::-webkit-scrollbar { width: 12px; }
-::-webkit-scrollbar-track { background: var(--background); }
-::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 6px; border: 2px solid var(--background); }
-::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+}
 
-/* Player shell */
+h1 {
+  font-size: 28px;
+  margin: 0 0 24px;
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+
+/* ===== Card System ===== */
+.card {
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--card-border));
+  border-radius: var(--radius);
+  padding: 32px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
+}
+
+/* ===== Results Page - Summary Card ===== */
+.summary-card {
+  text-align: center;
+  padding: 40px 32px;
+}
+
+.summary-head {
+  margin-bottom: 32px;
+}
+
+.hero-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: hsl(var(--foreground));
+}
+
+.hero-subtitle {
+  font-size: 16px;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ===== Ring Progress Circle ===== */
+.ring-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.ring {
+  position: relative;
+  width: 200px;
+  height: 200px;
+  margin: 0 auto;
+}
+
+.ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.ring circle {
+  transition: stroke-dashoffset 0.6s ease;
+}
+
+.ring .center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.ring .pct {
+  font-size: 52px;
+  font-weight: 700;
+  color: hsl(var(--foreground));
+  line-height: 1;
+}
+
+.ring .label {
+  font-size: 14px;
+  color: hsl(var(--muted-foreground));
+  margin-top: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ===== Pass/Fail Pill ===== */
+.pill {
+  display: inline-block;
+  padding: 10px 24px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.pill.pass {
+  background: hsl(var(--success) / 0.2);
+  color: hsl(var(--success));
+  border: 2px solid hsl(var(--success) / 0.4);
+}
+
+.pill.fail {
+  background: hsl(var(--destructive) / 0.2);
+  color: hsl(var(--destructive));
+  border: 2px solid hsl(var(--destructive) / 0.4);
+}
+
+/* ===== Stats Row ===== */
+.stats-row {
+  display: flex;
+  justify-content: center;
+  gap: 56px;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid hsl(var(--border));
+}
+
+.stat {
+  text-align: center;
+}
+
+.stat .v {
+  font-size: 36px;
+  font-weight: 700;
+  color: hsl(var(--foreground));
+  line-height: 1;
+}
+
+.stat .l {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  margin-top: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ===== Section Title ===== */
+.section-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 40px 0 20px;
+  color: hsl(var(--foreground));
+}
+
+/* ===== Topic Grid ===== */
+.topic-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.topic-card {
+  padding: 24px 28px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--card-border));
+  border-radius: var(--radius);
+}
+
+.topic-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.topic-name {
+  font-size: 17px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.topic-meta {
+  font-size: 14px;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 12px;
+}
+
+/* ===== Topic Progress Bar ===== */
+.topic-bar {
+  height: 10px;
+  background: hsl(var(--muted));
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.topic-bar > div {
+  height: 100%;
+  background: hsl(var(--muted-foreground));
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 999px;
+}
+
+.topic-bar.pass > div {
+  background: hsl(var(--success));
+}
+
+/* ===== Course Links ===== */
+.course-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: hsl(var(--accent));
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  margin-top: 14px;
+  color: hsl(var(--primary));
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.course-link:hover {
+  background: hsl(var(--accent) / 0.7);
+  border-color: hsl(var(--primary));
+  transform: translateY(-1px);
+}
+
+/* ===== Footer Actions ===== */
+.footer-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 40px;
+}
+
+/* ===== Questions Page ===== */
+.question-text {
+  font-size: 18px;
+  margin-bottom: 28px;
+  color: hsl(var(--foreground));
+  line-height: 1.7;
+}
+
+.question-hint {
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+  margin: -16px 0 16px;
+  line-height: 1.5;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  padding: 18px 22px;
+  border: 2px solid hsl(var(--border));
+  border-radius: 10px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: hsl(var(--card));
+}
+
+.option:hover {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--accent));
+  transform: translateX(2px);
+}
+
+.option.selected {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.12);
+}
+
+.option.correct-answer {
+  border-color: hsl(var(--success));
+  background: hsl(var(--success) / 0.15);
+}
+
+.option.incorrect-answer {
+  border-color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.15);
+}
+
+.option input {
+  margin-right: 14px;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+/* ===== Progress Bar ===== */
+.progress-bar {
+  height: 10px;
+  background: hsl(var(--muted));
+  border-radius: 999px;
+  margin-bottom: 28px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: hsl(var(--primary));
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===== Buttons ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 28px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: 2px solid hsl(var(--primary));
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.btn:hover {
+  background: hsl(var(--primary) / 0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,.3);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-outline {
+  background: transparent;
+  color: hsl(var(--foreground));
+  border: 2px solid hsl(var(--border));
+}
+
+.btn-outline:hover {
+  background: hsl(var(--accent));
+  border-color: hsl(var(--primary));
+}
+
+.navigation {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 32px;
+}
+
+/* ===== Matching DnD (MATCHING) ===== */
+/* Новый формат: строка = левый слот + gap + правый ответ, при совпадении "склеиваются" в одну плашку */
+.matching-board{
+  --matchRowH: auto;
+  display:flex;
+  flex-direction:column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.matching-line{
+  display:flex;
+  align-items:stretch;
+}
+
+.matching-gap{
+  flex: 0 0 18px;
+}
+
+.match-tile{
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  box-shadow: var(--shadow);
+  display:flex;
+  align-items:center;
+  height: var(--matchRowH);
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.match-left-slot{
+  justify-content:flex-start;
+  gap: 10px;
+}
+
+.match-right-tile{
+  color: hsl(var(--foreground));
+  opacity: .92;
+  white-space: normal;
+}
+
+.match-empty{
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: transparent;
+  border: 1px dashed hsl(var(--border));
+  display:flex;
+  align-items:center;
+  height: var(--matchRowH);
+}
+
+.match-chip{
+  user-select:none;
+  width: 100%;
+  padding: 10px 12px;
+  /* border-radius: 12px;
+  background: hsl(var(--muted) / .35);
+  border: 1px solid hsl(var(--border)); */
+  color: hsl(var(--foreground));
+  cursor: grab;
+  font-size: 14px;
+  line-height: 1.25;
+  white-space: normal;
+}
+.match-chip:active{ cursor: grabbing; }
+
+/* dragover подсветка */
+.match-drop-right.is-over,
+.match-drop-left.is-over{
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+/* Joined state */
+.matching-line.is-joined{
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow:hidden;
+}
+
+.matching-line.is-joined .match-tile,
+.matching-line.is-joined .match-empty{
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+.matching-line.is-joined .match-left-slot{
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+}
+
+.matching-line.is-joined .match-right-tile{
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+/* Результаты */
+.matching-line.correct-answer{
+  border-color: hsl(var(--success));
+  background: color-mix(in oklab, hsl(var(--success)) 12%, hsl(var(--card)));
+}
+.matching-line.incorrect-answer{
+  border-color: hsl(var(--destructive));
+  background: color-mix(in oklab, hsl(var(--destructive)) 10%, hsl(var(--card)));
+}
+
+.slot-placeholder{
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+}
+  
+.match-left-stack{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.match-wrong-hint{
+  font-size: 12px;
+  line-height: 1.2;
+  color: hsl(var(--muted-foreground));
+  opacity: .9;
+}
+
+
+/* ===== Ranking DnD (RANKING) ===== */
+.ranking-board{
+  display:flex;
+  flex-direction:column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.rank-item{
+  user-select:none;
+  padding: 14px;
+  border-radius: 12px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  box-shadow: var(--shadow);
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  cursor: grab;
+  min-width: 0;
+}
+
+.rank-item:active{ cursor: grabbing; }
+
+.rank-grip{
+  flex: 0 0 auto;
+  display:flex;
+  align-items:center;
+  opacity: .85;
+}
+
+.rank-text{
+  min-width: 0;
+  white-space: normal;
+  color: hsl(var(--foreground));
+  opacity: .92;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.rank-item.dragging{ opacity: .7; }
+
+.rank-item.is-over{
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+
+/* (необязательно) подсветка после проверки */
+.rank-item.correct-answer{
+  border-color: hsl(var(--success));
+  background: color-mix(in oklab, hsl(var(--success)) 12%, hsl(var(--card)));
+}
+.rank-item.incorrect-answer{
+  border-color: hsl(var(--destructive));
+  background: color-mix(in oklab, hsl(var(--destructive)) 10%, hsl(var(--card)));
+}
+
+/* ===== Loading State ===== */
+#loading {
+  text-align: center;
+  padding: 100px 20px;
+  color: hsl(var(--muted-foreground));
+  font-size: 18px;
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted));
+  border-radius: 6px;
+  border: 2px solid hsl(var(--background));
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
+/* ===== Animations ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.card {
+  animation: fadeIn 0.4s ease-out;
+}
+/* ===== Results page (match app) ===== */
+.results-page{
+  max-width: 980px;
+  margin: 28px auto 40px;
+  padding: 0 18px;
+}
+
+.results-hero{
+  text-align:center;
+  margin: 10px 0 22px;
+}
+.results-hero-icon{
+  width: 56px; height: 56px;
+  border-radius: 999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  box-shadow: 0 18px 50px rgba(0,0,0,.35);
+  margin-bottom: 12px;
+}
+.results-hero-icon.is-pass{ color: hsl(var(--success)); background: hsl(var(--success)/.12); border-color: hsl(var(--success)/.25); }
+.results-hero-icon.is-fail{ color: hsl(var(--destructive)); background: hsl(var(--destructive)/.12); border-color: hsl(var(--destructive)/.25); }
+
+.results-hero-title{ font-size: 40px; font-weight: 800; margin: 0; }
+.results-hero-sub{ margin-top: 8px; color: hsl(var(--muted-foreground)); font-size: 16px; }
+
+.results-main-card{
+  padding: 22px 22px 18px;
+  text-align:center;
+}
+.results-main-title{ font-size: 18px; font-weight: 800; margin: 0; }
+.results-main-sub{ margin-top: 8px; color: hsl(var(--muted-foreground)); font-size: 14px; }
+
+.results-ring{
+  width: 140px; height: 140px;
+  margin: 18px auto 10px;
+  position: relative;
+}
+.results-ring svg{
+  width: 140px; height: 140px;
+  transform: rotate(-90deg);
+}
+.ring-bg{ stroke: rgba(47, 47, 47, 1); }
+.ring-fg{ transition: stroke-dashoffset .35s ease; }
+.ring-fg.is-pass{ stroke: hsl(var(--success)); }
+.ring-fg.is-fail{ stroke: hsl(var(--destructive)); }
+
+.results-ring-center{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  transform: translateY(2px);
+}
+.results-ring-pct{ font-size: 38px; font-weight: 900; line-height: 1; }
+.results-ring-label{ margin-top: 4px; font-size: 13px; color: hsl(var(--muted-foreground)); }
+
+.results-stats{
+  display:flex;
+  justify-content:center;
+  align-items:flex-end;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.results-stat{ min-width: 90px; }
+.results-stat .v{ font-size: 22px; font-weight: 900; }
+.results-stat .l{ margin-top: 4px; font-size: 12px; color: hsl(var(--muted-foreground)); }
+
+.results-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 12px;
+  border: 1px solid hsl(var(--border));
+  height: 28px;
+}
+.results-pill.is-pass{ background: hsl(var(--success)/.18); border-color: hsl(var(--success)/.35); color: hsl(var(--success)); }
+.results-pill.is-fail{ background: hsl(var(--destructive)/.18); border-color: hsl(var(--destructive)/.35); color: hsl(var(--destructive)); }
+
+.results-section-title{
+  margin: 28px 0 14px;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.results-topics-grid{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1100px){
+  .results-topics-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px){
+  .results-topics-grid{ grid-template-columns: 1fr; }
+}
+
+
+
+.topic-card{ padding: 18px; text-align:left; }
+.topic-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.topic-left{ display:flex; align-items:flex-start; gap: 10px; }
+.topic-icon{
+  width: 26px; height: 26px;
+  min-width: 26px; 
+  min-height: 26px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border: 1px solid hsl(var(--border));
+}
+.topic-icon.is-pass{ color: hsl(var(--success)); background: hsl(var(--success)/.12); border-color: hsl(var(--success)/.25); }
+.topic-icon.is-fail{ color: hsl(var(--destructive)); background: hsl(var(--destructive)/.12); border-color: hsl(var(--destructive)/.25); }
+.topic-name{ font-weight: 900; }
+
+.topic-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.topic-row .k{ color: hsl(var(--muted-foreground)); }
+.topic-row .val{ font-weight: 700; }
+
+.topic-bar{
+  height: 8px;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+  overflow:hidden;
+  margin-top: 12px;
+}
+.topic-bar > div{ height:100%; }
+.topic-bar.is-pass > div{ background: hsl(var(--success)); }
+.topic-bar.is-fail > div{ background: hsl(var(--destructive)); }
+
+.topic-required{
+  margin-top: 10px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+
+.results-actions{
+  display:flex;
+  justify-content:center;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+/* ===== Recommended Courses ===== */
+.course-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: hsl(var(--muted) / 0.5);
+  border-radius: 8px;
+  margin-top: 8px;
+  text-decoration: none;
+  color: hsl(var(--primary));
+  font-weight: 500;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.course-link:hover {
+  background: hsl(var(--muted));
+  transform: translateX(4px);
+}
+
+.question-media { position: relative; }
+.qm-fs-btn{
+  position:absolute;
+  top:10px;
+  right:10px;
+  border:0;
+  border-radius:10px;
+  padding:8px 10px;
+  cursor:pointer;
+  font-size:16px;
+  line-height:1;
+  opacity:.9;
+}
+.qm-fs-btn:hover{ opacity:1; }
+
+/* PRD-4 v1.1 Phase 4c-iii — router topic cards (router_by_topics flow).
+   Rendered by routerFlow.js inside the standard renderContentPage output. */
+.router-topic-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+.router-topic-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid hsl(0 0% 80%);
+  border-radius: 10px;
+  background: hsl(0 0% 99%);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: border-color .15s, background .15s;
+}
+.router-topic-card:hover:not(:disabled) {
+  border-color: hsl(217 91% 50%);
+  background: hsl(217 100% 98%);
+}
+.router-topic-card:disabled {
+  cursor: default;
+  opacity: .85;
+}
+.router-topic-card--completed {
+  border-color: hsl(142 71% 45%);
+  background: hsl(142 76% 96%);
+}
+.router-topic-card--inProgress {
+  border-color: hsl(38 92% 50%);
+  background: hsl(48 96% 96%);
+}
+.router-topic-card__name {
+  font-weight: 600;
+  font-size: 15px;
+}
+.router-topic-card__status {
+  font-size: 12px;
+  color: hsl(0 0% 40%);
+}
+.router-topic-card--completed .router-topic-card__status {
+  color: hsl(142 71% 30%);
+  font-weight: 500;
+}
+.router-finish {
+  margin-top: 24px;
+}
+
+
+.router-topic-card--locked {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.router-topic-card__optional {
+  font-weight: 400;
+  font-size: 11px;
+  color: hsl(0 0% 50%);
+}
+
+
+/* ===== PRD-6 retake gate: block-wall + neutral start shell ===== */
+.retake-wall,
+.retake-shell {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.retake-wall__card,
+.retake-shell__card {
+  max-width: 520px;
+  width: 100%;
+  background: #fff;
+  border: 1px solid hsl(0 0% 88%);
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+  box-shadow: 0 6px 24px hsl(0 0% 0% / 0.06);
+}
+.retake-wall__title,
+.retake-shell__title {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 700;
+  color: hsl(0 0% 12%);
+}
+.retake-wall__lead,
+.retake-shell__lead {
+  margin: 0 0 8px;
+  color: hsl(0 0% 35%);
+}
+.retake-wall__date {
+  margin: 12px 0 0;
+  font-size: 16px;
+  color: hsl(0 0% 12%);
+}
+.retake-wall__note {
+  margin: 12px 0 0;
+  color: hsl(0 70% 42%);
+  font-size: 13px;
+}
+.retake-shell__btn {
+  margin-top: 20px;
+  padding: 12px 28px;
+  border: 0;
+  border-radius: 8px;
+  background: hsl(211 100% 50%);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.retake-shell__btn:hover { background: hsl(211 100% 44%); }
+
+/* PRD-12: shared-template screens — classes also present in templates/default
+   styles/base.css (web host). Kept in sync here for the SCORM runtime, which
+   serves this stylesheet (not the template base.css). */
+.transition-page { max-width: 480px; margin: 80px auto; padding: 0 18px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.transition-icon { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.transition-icon.is-pass { background: hsl(var(--success) / 0.18); color: hsl(var(--success)); }
+.transition-icon.is-fail { background: hsl(var(--destructive) / 0.18); color: hsl(var(--destructive)); }
+.transition-title { font-size: 26px; font-weight: 800; }
+.transition-level { width: 100%; display: flex; align-items: center; justify-content: center; gap: 12px; padding: 18px 22px; border-radius: 16px; border: 2px solid hsl(var(--border)); font-size: 16px; font-weight: 600; }
+.transition-level.is-up { border-color: hsl(var(--success)); color: hsl(var(--success)); background: hsl(var(--success) / 0.12); }
+.transition-level.is-down { border-color: hsl(var(--destructive)); color: hsl(var(--destructive)); background: hsl(var(--destructive) / 0.12); }
+.transition-level.is-complete { border-color: hsl(var(--primary)); color: hsl(var(--primary)); background: hsl(var(--primary) / 0.12); }
+.transition-level-icon { flex-shrink: 0; }
+.transition-topic { font-size: 15px; color: hsl(var(--muted-foreground)); }
+.transition-actions { margin-top: 8px; }
+
+/* Start screen: in-progress resume note (SCORM Case 2 / web parity). */
+.start-resume-note { width: 100%; max-width: 360px; text-align: center; background: hsl(var(--muted)); border: 1px solid hsl(var(--border)); border-radius: 12px; padding: 12px 16px; font-size: 14px; font-weight: 600; color: hsl(var(--foreground)); }
+
+/* Results: recommended courses/events for failed topics (gated). */
+.results-rec-list { display: flex; flex-direction: column; gap: 8px; }
+.results-rec-item { display: block; padding: 10px 12px; background: hsl(var(--muted)); border-radius: 8px; font-size: 14px; font-weight: 500; color: hsl(var(--foreground)); text-decoration: none; }
+a.results-rec-item { color: hsl(var(--primary)); }
+a.results-rec-item:hover { text-decoration: underline; }
+.topic-feedback-text { font-size: 13px; }
+
+
+/* === Layout-wrapper/variant classes (merged from web base.css → component convention) === */
 .tb-player {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: var(--background);
-  color: var(--foreground);
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
 }
-
-.tb-progress-wrap { height: 4px; background: var(--muted); }
-.tb-progress-bar { height: 100%; background: var(--primary); width: 0; transition: width 0.3s; }
-
+.tb-progress-wrap { height: 4px; background: hsl(var(--muted)); }
+.tb-progress-bar { height: 100%; background: hsl(var(--primary)); width: 0; transition: width 0.3s; }
 .tb-content {
   flex: 1;
   overflow-y: auto;
   padding: 0;
 }
-
 .tb-footer { display: none; }
 .tb-spacer { flex: 1; }
 .tb-btn--hidden { display: none; }
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-/* Cards */
-.card {
-  background: var(--card);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius);
-  padding: 32px;
-  margin-bottom: 24px;
-  box-shadow: var(--shadow);
-  will-change: transform, opacity;
-  animation: fadeIn 0.4s ease-out forwards;
-}
-
-/* Buttons */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 14px 28px;
-  height: auto;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  border: 2px solid var(--primary);
-  font-family: var(--font-sans);
-  white-space: nowrap;
-  background: var(--primary);
-  color: var(--primary-foreground);
-  transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s;
-}
-.btn:hover {
-  opacity: 0.9;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-}
-.btn:active { transform: translateY(0); box-shadow: none; }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
 .btn--ghost {
   background: transparent;
-  color: var(--muted-foreground);
-  border-color: var(--border);
+  color: hsl(var(--muted-foreground));
+  border-color: hsl(var(--border));
 }
 .btn--outline {
   background: transparent;
-  color: var(--foreground);
-  border-color: var(--border);
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
 }
-
-/* Progress bar */
-.progress-bar {
-  height: 10px;
-  border-radius: 999px;
-  background: var(--muted);
-  overflow: hidden;
-  margin-bottom: 28px;
-}
-.progress-fill {
-  height: 100%;
-  background: var(--primary);
-  border-radius: 999px;
-  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Hide shell progress bar on question/content pages (the layout has its own) */
 .tb-progress-wrap { display: none; }
-
-/* Navigation row */
-.navigation {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
-}
-
-/* Question header */
 .q-header {
   display: flex;
   align-items: center;
@@ -182,149 +1063,28 @@ body {
 .q-title {
   font-size: 24px;
   font-weight: 600;
-  color: var(--foreground);
+  color: hsl(var(--foreground));
   margin: 0;
 }
-.q-timer { font-size: 16px; color: var(--muted-foreground); }
+.q-timer { font-size: 16px; color: hsl(var(--muted-foreground)); }
 .q-timer--hidden { display: none; }
-
-/* Question layout */
 .question-card {
-  background: var(--card);
-  border: 1px solid var(--card-border);
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--card-border));
   border-radius: var(--radius);
   padding: 28px 32px;
   box-shadow: var(--shadow);
 }
-
 .question-meta {
   font-size: 13px;
-  color: var(--muted-foreground);
+  color: hsl(var(--muted-foreground));
   margin-bottom: 10px;
 }
-
-.question-text {
-  font-size: 18px;
-  font-weight: 400;
-  line-height: 1.7;
-  color: var(--foreground);
-  margin-bottom: 28px;
-}
-
-/* Answer options */
-.option {
-  display: flex;
-  align-items: center;
-  padding: 18px 22px;
-  border: 2px solid var(--border);
-  border-radius: 10px;
-  margin-bottom: 12px;
-  cursor: pointer;
-  font-size: 15px;
-  color: var(--foreground);
-  background: var(--card);
-  transition: border-color 0.15s, background 0.15s, transform 0.15s;
-}
-.option:hover {
-  border-color: var(--primary);
-  background: var(--accent);
-  transform: translateX(2px);
-}
-.option.selected {
-  border-color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-}
-.option input[type="radio"],
-.option input[type="checkbox"] {
-  flex-shrink: 0;
-  margin-right: 14px;
-  width: 20px;
-  height: 20px;
-  accent-color: var(--primary);
-  pointer-events: none;
-}
-
-/* Ranking: grip-based drag-and-drop */
-.ranking-board { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
-.rank-item {
-  -webkit-user-select: none;
-  user-select: none;
-  padding: 14px;
-  border-radius: 12px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: grab;
-  min-width: 0;
-}
-.rank-item:active { cursor: grabbing; }
-.rank-item.dragging { opacity: .7; }
-.rank-item.is-over { outline: 2px solid var(--primary); outline-offset: 2px; }
 .rank-draggable { cursor: grab; }
-.rank-grip { flex: 0 0 auto; display: flex; align-items: center; opacity: .85; }
-.rank-text { min-width: 0; white-space: normal; color: var(--foreground); opacity: .92; font-size: 14px; line-height: 1.35; }
-
-/* Matching: chip-based drag-and-drop */
-.matching-board { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
-.matching-line { display: flex; align-items: stretch; }
-.matching-gap { flex: 0 0 18px; }
-.match-tile {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 14px;
-  border-radius: 12px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  display: flex;
-  align-items: center;
-  font-size: 14px;
-  line-height: 1.35;
-  color: var(--foreground);
-}
-.match-left-slot { justify-content: flex-start; gap: 10px; }
-.match-right-tile { opacity: .92; white-space: normal; }
-.match-empty {
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 14px;
-  border-radius: 12px;
-  background: transparent;
-  border: 1px dashed var(--border);
-  display: flex;
-  align-items: center;
-}
-.slot-placeholder { color: var(--muted-foreground); font-size: 13px; }
-.match-chip {
-  -webkit-user-select: none;
-  user-select: none;
-  width: 100%;
-  padding: 10px 12px;
-  color: var(--foreground);
-  cursor: grab;
-  font-size: 14px;
-  line-height: 1.25;
-  white-space: normal;
-}
-.match-chip:active { cursor: grabbing; }
-.match-drop-right.is-over,
-.match-drop-left.is-over { outline: 2px solid var(--primary); outline-offset: 2px; }
-.matching-line.is-joined {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  overflow: hidden;
-}
-.matching-line.is-joined .match-tile,
-.matching-line.is-joined .match-empty { background: transparent; border: 0; box-shadow: none; border-radius: 0; }
-.matching-line.is-joined .match-left-slot { border-top-left-radius: 12px; border-bottom-left-radius: 12px; }
-.matching-line.is-joined .match-right-tile { border-top-right-radius: 12px; border-bottom-right-radius: 12px; }
-
-/* Start page */
+.match-grip { flex: 0 0 auto; display: inline-flex; align-items: center; opacity: .55; }
+.match-chip:hover .match-grip { opacity: .85; }
+.match-chip-text { min-width: 0; }
+.rank-draggable, .match-chip { touch-action: none; }
 .start-page { max-width: 600px; margin: 40px auto; padding: 0 18px; }
 .start-header { padding: 32px; text-align: center; margin-bottom: 24px; }
 .start-title { color: hsl(var(--foreground)); margin: 0; font-size: 28px; font-weight: 700; }
@@ -341,85 +1101,27 @@ body {
 .info-row-body { flex: 1; }
 .info-row-label { font-weight: 600; color: hsl(var(--foreground)); font-size: 14px; }
 .info-row-value { color: hsl(var(--muted-foreground)); font-size: 13px; margin-top: 2px; }
-.start-actions { text-align: center; margin-top: 24px; }
+.start-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 24px; }
 .start-btn { padding: 14px 40px; font-size: 16px; font-weight: 600; height: auto; }
-
-/* Layout wrappers */
+.start-actions-note { color: hsl(var(--destructive)); font-weight: 600; font-size: 14px; }
+.start-note { padding: 16px 20px; margin-bottom: 24px; border-left: 4px solid hsl(var(--primary)); background: hsl(var(--muted)); border-radius: 8px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; text-align: left; }
 .layout-content-wrap { max-width: 680px; margin: 0 auto; padding: 36px 24px; }
 .layout-question-wrap { max-width: 680px; margin: 0 auto; padding: 36px 24px; }
 .layout-results-wrap { max-width: 600px; margin: 40px auto; padding: 0 18px; }
 .layout-blocked-wrap { max-width: 560px; margin: 60px auto; padding: 0 18px; text-align: center; }
-
-/* Results page */
-.results-page { max-width: 980px; margin: 28px auto 40px; padding: 0 18px; }
-
-.results-hero { text-align: center; margin: 10px 0 22px; }
-.results-hero-icon {
-  width: 56px; height: 56px;
-  border-radius: 999px;
-  display: inline-flex; align-items: center; justify-content: center;
-  background: var(--card); border: 1px solid var(--border);
-  box-shadow: 0 18px 50px rgba(0,0,0,.35);
-  margin-bottom: 12px;
-}
-.results-hero-icon.is-pass { color: var(--success); background: color-mix(in srgb, var(--success) 12%, transparent); border-color: color-mix(in srgb, var(--success) 25%, transparent); }
-.results-hero-icon.is-fail { color: var(--destructive); background: color-mix(in srgb, var(--destructive) 12%, transparent); border-color: color-mix(in srgb, var(--destructive) 25%, transparent); }
-.results-hero-title { font-size: 40px; font-weight: 800; margin: 0; }
-.results-hero-sub { margin-top: 8px; color: var(--muted-foreground); font-size: 16px; }
-
-.results-main-card { padding: 22px 22px 18px; text-align: center; }
-.results-main-title { font-size: 18px; font-weight: 800; margin: 0; }
-.results-main-sub { margin-top: 8px; color: var(--muted-foreground); font-size: 14px; }
-
-.results-ring { width: 140px; height: 140px; margin: 18px auto 10px; position: relative; }
-.results-ring svg { width: 140px; height: 140px; transform: rotate(-90deg); }
-.ring-bg { stroke: var(--muted); }
-.ring-fg { stroke-dasharray: 395.84; stroke-dashoffset: var(--ring-offset, 0); transition: stroke-dashoffset .35s ease; }
-.ring-fg.is-pass { stroke: var(--success); }
-.ring-fg.is-fail { stroke: var(--destructive); }
-.results-ring-center { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; transform: translateY(2px); }
-.results-ring-pct { font-size: 38px; font-weight: 900; line-height: 1; }
-.results-ring-label { margin-top: 4px; font-size: 13px; color: var(--muted-foreground); }
-
-.results-stats { display: flex; justify-content: center; align-items: flex-end; gap: 22px; flex-wrap: wrap; margin-top: 10px; }
-.results-stat { min-width: 90px; text-align: center; }
-.results-stat .v { font-size: 22px; font-weight: 900; }
-.results-stat .l { margin-top: 4px; font-size: 12px; color: var(--muted-foreground); }
-
-.results-pill {
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 6px 12px; border-radius: 999px;
-  font-weight: 800; font-size: 12px;
-  border: 1px solid var(--border); height: 28px;
-}
-.results-pill.is-pass { background: color-mix(in srgb, var(--success) 18%, transparent); border-color: color-mix(in srgb, var(--success) 35%, transparent); color: var(--success); }
-.results-pill.is-fail { background: color-mix(in srgb, var(--destructive) 18%, transparent); border-color: color-mix(in srgb, var(--destructive) 35%, transparent); color: var(--destructive); }
-
-.results-section-title { margin: 28px 0 14px; font-size: 22px; font-weight: 900; }
-.results-topics-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-@media (max-width: 900px) { .results-topics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 600px) { .results-topics-grid { grid-template-columns: 1fr; } }
-
-.topic-card { padding: 18px; }
-.topic-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.topic-name { font-weight: 900; font-size: 14px; }
-.topic-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; font-size: 13px; }
-.topic-row .k { color: var(--muted-foreground); }
-.topic-row .val { font-weight: 700; }
-.topic-bar { height: 8px; border-radius: 999px; background: var(--muted); overflow: hidden; margin-top: 12px; }
 .topic-bar-fill { height: 100%; }
-.topic-bar.is-pass .topic-bar-fill { background: var(--success); }
-.topic-bar.is-fail .topic-bar-fill { background: var(--destructive); }
-
-.results-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 28px; }
-
-/* Blocked page */
+.topic-bar.is-pass .topic-bar-fill { background: hsl(var(--success)); }
+.topic-bar.is-fail .topic-bar-fill { background: hsl(var(--destructive)); }
+.results-hero-icon.is-info { color: hsl(var(--primary)); background: hsl(var(--primary) / 0.12); border-color: hsl(var(--primary) / 0.25); }
+.results-pill.is-info { background: hsl(var(--primary) / 0.18); border-color: hsl(var(--primary) / 0.35); color: hsl(var(--primary)); }
+.topic-feedback { margin-top: 12px; font-size: 13px; color: hsl(var(--muted-foreground)); background: hsl(var(--muted)); border-radius: 8px; padding: 10px 12px; }
+.topic-links { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.topic-link { font-size: 13px; color: hsl(var(--primary)); text-decoration: none; }
+.topic-link:hover { text-decoration: underline; }
 .blocked-card { padding: 40px; text-align: center; }
-.blocked-icon { display: flex; justify-content: center; margin-bottom: 16px; color: var(--muted-foreground); }
-.blocked-title { font-size: 22px; font-weight: 700; color: var(--foreground); margin: 0 0 12px; }
-.blocked-description { color: var(--muted-foreground); font-size: 15px; margin: 0; }
-
-/* Content pages */
+.blocked-icon { display: flex; justify-content: center; margin-bottom: 16px; color: hsl(var(--muted-foreground)); }
+.blocked-title { font-size: 22px; font-weight: 700; color: hsl(var(--foreground)); margin: 0 0 12px; }
+.blocked-description { color: hsl(var(--muted-foreground)); font-size: 15px; margin: 0; }
 .content-page {
   display: flex;
   flex-direction: column;
@@ -429,17 +1131,17 @@ body {
   font-size: 28px;
   font-weight: 700;
   line-height: 1.2;
-  color: var(--foreground);
+  color: hsl(var(--foreground));
 }
 .content-placeholder--subtitle,
 .content-placeholder--lead {
   font-size: 17px;
-  color: var(--muted-foreground);
+  color: hsl(var(--muted-foreground));
   line-height: 1.55;
 }
 .content-placeholder--body {
   font-size: 15px;
-  color: var(--foreground);
+  color: hsl(var(--foreground));
   line-height: 1.65;
 }
 .content-placeholder--body p { margin-bottom: 12px; }
@@ -449,23 +1151,21 @@ body {
   width: 100%;
   height: 220px;
   border-radius: 8px;
-  background: var(--muted);
+  background: hsl(var(--muted));
   overflow: hidden;
   display: grid;
   place-items: center;
 }
 .content-placeholder--heroImage img,
 .content-placeholder--image img { width: 100%; height: 100%; object-fit: cover; }
-
-/* Renderer styles */
 .renderer--text-metric { display: flex; flex-direction: column; gap: 4px; }
-.renderer__label { font-size: 13px; color: var(--muted-foreground); }
-.renderer__value { font-size: 42px; font-weight: 700; color: var(--foreground); line-height: 1; }
-.renderer__suffix { font-size: 24px; color: var(--muted-foreground); margin-left: 2px; }
-.renderer__track { height: 8px; border-radius: 999px; background: var(--muted); overflow: hidden; }
-.renderer__fill { height: 100%; background: var(--primary); }
-.renderer__ring-track { stroke: var(--muted); }
-.renderer__ring-fill { stroke: var(--primary); }
+.renderer__label { font-size: 13px; color: hsl(var(--muted-foreground)); }
+.renderer__value { font-size: 42px; font-weight: 700; color: hsl(var(--foreground)); line-height: 1; }
+.renderer__suffix { font-size: 24px; color: hsl(var(--muted-foreground)); margin-left: 2px; }
+.renderer__track { height: 8px; border-radius: 999px; background: hsl(var(--muted)); overflow: hidden; }
+.renderer__fill { height: 100%; background: hsl(var(--primary)); }
+.renderer__ring-track { stroke: hsl(var(--muted)); }
+.renderer__ring-fill { stroke: hsl(var(--primary)); }
 </style>
   <style id="pv-fixes">
     /* Undo template global resets that break the preview chrome */
@@ -806,7 +1506,9 @@ body {
     "content": "layouts/content.html",
     "question": "layouts/question.html",
     "results": "layouts/results.html",
-    "system.blocked": "layouts/system.blocked.html"
+    "results.adaptive": "layouts/results.adaptive.html",
+    "system.blocked": "layouts/system.blocked.html",
+    "system.transition": "layouts/system.transition.html"
   },
   "assets": {
     "styles": [
@@ -1156,11 +1858,13 @@ body {
 };
   window.PRD1_PREVIEW_LAYOUTS   = {
   "shell": "<div class=\"tb-player\" data-template=\"default\">\n  <div class=\"tb-progress-wrap\">\n    <div class=\"tb-progress-bar\" id=\"tb-progress-fill\"></div>\n  </div>\n  <main id=\"app\" class=\"tb-content\" data-slot=\"page\" tabindex=\"-1\"></main>\n</div>\n",
-  "start": "<div class=\"start-page\">\n  <div class=\"card start-header\">\n    <h1 class=\"start-title\" data-path=\"course.title\">Тест</h1>\n    <p class=\"start-description\" data-path=\"course.description\"></p>\n  </div>\n  <div class=\"card start-info\">\n    <h2 class=\"start-info-heading\">Информация о тесте</h2>\n    <div class=\"start-info-grid\">\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--blue\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z\"/><polyline points=\"14 2 14 8 20 8\"/><line x1=\"16\" y1=\"13\" x2=\"8\" y2=\"13\"/><line x1=\"16\" y1=\"17\" x2=\"8\" y2=\"17\"/><line x1=\"10\" y1=\"9\" x2=\"8\" y2=\"9\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Количество вопросов</div>\n          <div class=\"info-row-value\" data-path=\"course.questionCount\"></div>\n        </div>\n      </div>\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--green\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 11.08V12a10 10 0 1 1-5.93-9.14\"/><polyline points=\"22 4 12 14.01 9 11.01\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Проходной балл</div>\n          <div class=\"info-row-value\"><span data-path=\"course.passPercent\"></span>%</div>\n        </div>\n      </div>\n      {{#if course.timeLimitMinutes}}\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--amber\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Ограничение времени</div>\n          <div class=\"info-row-value\"><span data-path=\"course.timeLimitMinutes\"></span> мин</div>\n        </div>\n      </div>\n      {{/if}}\n      {{#if course.maxAttempts}}\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--purple\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"1 4 1 10 7 10\"/><path d=\"M3.51 15a9 9 0 1 0 .49-3.5\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Попыток разрешено</div>\n          <div class=\"info-row-value\" data-path=\"course.maxAttempts\"></div>\n        </div>\n      </div>\n      {{/if}}\n    </div>\n  </div>\n  <div class=\"start-actions\">\n    <button type=\"button\" class=\"btn start-btn\" data-action=\"start-test\">Начать тестирование</button>\n  </div>\n</div>\n",
+  "start": "<div class=\"start-page\">\n  <div class=\"card start-header\">\n    <h1 class=\"start-title\" data-path=\"course.title\">Тест</h1>\n    <p class=\"start-description\" data-path=\"course.description\"></p>\n  </div>\n  <div class=\"card start-info\">\n    <h2 class=\"start-info-heading\">Информация о тесте</h2>\n    <div class=\"start-info-grid\">\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--blue\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z\"/><polyline points=\"14 2 14 8 20 8\"/><line x1=\"16\" y1=\"13\" x2=\"8\" y2=\"13\"/><line x1=\"16\" y1=\"17\" x2=\"8\" y2=\"17\"/><line x1=\"10\" y1=\"9\" x2=\"8\" y2=\"9\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Количество вопросов</div>\n          <div class=\"info-row-value\" data-path=\"course.questionCount\"></div>\n        </div>\n      </div>\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--green\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M22 11.08V12a10 10 0 1 1-5.93-9.14\"/><polyline points=\"22 4 12 14.01 9 11.01\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Проходной балл</div>\n          <div class=\"info-row-value\"><span data-path=\"course.passPercent\"></span>%</div>\n        </div>\n      </div>\n      {{#if course.timeLimitMinutes}}\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--amber\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Ограничение времени</div>\n          <div class=\"info-row-value\"><span data-path=\"course.timeLimitMinutes\"></span> мин</div>\n        </div>\n      </div>\n      {{/if}}\n      {{#if course.maxAttempts}}\n      <div class=\"info-row\">\n        <span class=\"info-icon info-icon--purple\" aria-hidden=\"true\">\n          <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"1 4 1 10 7 10\"/><path d=\"M3.51 15a9 9 0 1 0 .49-3.5\"/></svg>\n        </span>\n        <div class=\"info-row-body\">\n          <div class=\"info-row-label\">Попыток разрешено</div>\n          <div class=\"info-row-value\" data-path=\"course.maxAttempts\"></div>\n        </div>\n      </div>\n      {{/if}}\n    </div>\n  </div>\n  {{#if course.startPageContent}}\n  <div class=\"card start-note\">{{course.startPageContent}}</div>\n  {{/if}}\n  <div class=\"start-actions\">\n    {{#if state.resumeNote}}<div class=\"start-resume-note\">{{state.resumeNote}}</div>{{/if}}\n    {{#if state.exhausted}}<div class=\"start-actions-note\">Попытки закончились</div>{{/if}}\n    {{#if state.canResume}}<button type=\"button\" class=\"btn start-btn\" data-action=\"resume\">{{state.resumeLabel}}</button>{{/if}}\n    {{#if state.canStart}}<button type=\"button\" class=\"btn start-btn\" data-action=\"start-test\">{{state.startLabel}}</button>{{/if}}\n    {{#if state.canRestart}}<button type=\"button\" class=\"btn btn--outline start-btn\" data-action=\"restart\">Начать заново</button>{{/if}}\n    {{#if state.canViewResults}}<button type=\"button\" class=\"btn btn--outline start-btn\" data-action=\"view-results\">Мой результат</button>{{/if}}\n    {{#if state.showBack}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"back\">К списку тестов</button>{{/if}}\n  </div>\n</div>\n",
   "content": "<div class=\"layout-content-wrap\">\n  <div data-slot=\"page-content\"></div>\n  <div class=\"navigation\">\n    <button type=\"button\" class=\"btn\" data-nav=\"next\">Далее</button>\n  </div>\n</div>\n",
   "question": "<div class=\"layout-question-wrap\">\n  <div class=\"q-header\">\n    <h1 class=\"q-title\" data-path=\"course.title\"></h1>\n    <div class=\"q-timer q-timer--hidden\" id=\"timer-display\"></div>\n  </div>\n  <div class=\"progress-bar\">\n    <div class=\"progress-fill\" id=\"q-progress-fill\"></div>\n  </div>\n  <div class=\"question-card\">\n    <div class=\"question-meta\" data-path=\"state.questionCounterLabel\"></div>\n    <div class=\"question-text\" data-slot=\"question-text\"></div>\n    <div data-slot=\"question-media\"></div>\n    <div data-slot=\"question-interaction\"></div>\n    <div data-slot=\"question-feedback\"></div>\n  </div>\n</div>\n",
-  "results": "<div class=\"results-page\">\n  <div class=\"results-hero\">\n    {{#if result.passed}}\n    <div class=\"results-hero-icon is-pass\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M8 21h8\"/><path d=\"M12 17v4\"/><path d=\"M7 4h10\"/><path d=\"M17 4v5a5 5 0 0 1-10 0V4\"/><path d=\"M5 6h2\"/><path d=\"M17 6h2\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Поздравляем!</div>\n    <div class=\"results-hero-sub\">Вы успешно прошли тест.</div>\n    {{/if}}\n    {{#unless result.passed}}\n    <div class=\"results-hero-icon is-fail\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M9 9l6 6\"/><path d=\"M15 9l-6 6\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Тест не пройден</div>\n    <div class=\"results-hero-sub\">Попробуйте ещё раз.</div>\n    {{/unless}}\n  </div>\n\n  <div class=\"card results-main-card\">\n    <div class=\"results-main-title\" data-path=\"course.title\"></div>\n    <div class=\"results-main-sub\">Результаты теста</div>\n\n    <div class=\"results-ring\" data-ring-offset=\"{{ result.ringDashoffset }}\">\n      <svg viewBox=\"0 0 140 140\" width=\"140\" height=\"140\">\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-bg\" stroke-width=\"14\" fill=\"none\"></circle>\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-fg {{ result.passClass }}\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\"></circle>\n      </svg>\n      <div class=\"results-ring-center\">\n        <div class=\"results-ring-pct\"><span data-path=\"result.scorePercent\"></span>%</div>\n        <div class=\"results-ring-label\">Баллы</div>\n      </div>\n    </div>\n\n    <div class=\"results-stats\">\n      <div class=\"results-stat\">\n        <div class=\"v\" data-path=\"result.totalQuestions\"></div>\n        <div class=\"l\">Вопросов</div>\n      </div>\n      <div class=\"results-stat\">\n        <div class=\"v\"><span data-path=\"result.correct\"></span>/<span data-path=\"result.totalQuestions\"></span></div>\n        <div class=\"l\">Верно</div>\n      </div>\n      <div class=\"results-stat\">\n        <div class=\"v\" data-path=\"result.earnedPoints\"></div>\n        <div class=\"l\">Баллов</div>\n      </div>\n      <div class=\"results-pill {{ result.passClass }}\" data-path=\"result.statusLabel\"></div>\n    </div>\n  </div>\n\n  {{#if result.topicResults}}\n  <div class=\"results-section-title\">Результаты по темам</div>\n  <div class=\"results-topics-grid\">\n    {{#each result.topicResults}}\n    <div class=\"card topic-card\">\n      <div class=\"topic-head\">\n        <div class=\"topic-name\">{{topicName}}</div>\n        <div class=\"results-pill {{passClass}}\">{{statusLabel}}</div>\n      </div>\n      <div class=\"topic-bar {{passClass}}\" data-bar-width=\"{{percent}}\"><div class=\"topic-bar-fill\"></div></div>\n      <div class=\"topic-row\">\n        <div class=\"k\">Правильно</div>\n        <div class=\"val\">{{correct}} / {{total}}</div>\n      </div>\n    </div>\n    {{/each}}\n  </div>\n  {{/if}}\n\n  <div class=\"results-actions\">\n    <button type=\"button\" class=\"btn\" data-action=\"restart\">Пройти снова</button>\n  </div>\n</div>\n",
-  "system.blocked": "<div class=\"layout-blocked-wrap\">\n  <div class=\"card blocked-card\" data-testid=\"retake-wall\">\n    <div class=\"blocked-icon\" role=\"img\" aria-label=\"Доступ заблокирован\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"36\" height=\"36\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"/></svg>\n    </div>\n    <div data-retake-branch=\"default\">\n      <h1 class=\"blocked-title\">Доступ к тесту ограничен</h1>\n      <p class=\"blocked-description\">Для этого теста больше нет доступных попыток.</p>\n    </div>\n    <div data-retake-branch=\"cooldown\" hidden>\n      <h1 class=\"blocked-title\">Повторное прохождение пока недоступно</h1>\n      <p class=\"blocked-description\">Этот курс можно проходить не чаще, чем раз в <span data-path=\"retake.cooldownPeriodDays\">&mdash;</span> дн.</p>\n      <p class=\"blocked-description\" data-retake-available>Повторный запуск будет доступен с <strong data-path=\"retake.availableDateHuman\">&mdash;</strong>.</p>\n    </div>\n    <div data-retake-branch=\"error\" hidden>\n      <h1 class=\"blocked-title\">Не удалось проверить доступ</h1>\n      <p class=\"blocked-description\">Не удалось проверить доступность повторного прохождения. Обратитесь к администратору курса.</p>\n    </div>\n  </div>\n</div>\n"
+  "results": "<div class=\"results-page\">\n  <div class=\"results-hero\">\n    {{#if result.passed}}\n    <div class=\"results-hero-icon is-pass\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M8 21h8\"/><path d=\"M12 17v4\"/><path d=\"M7 4h10\"/><path d=\"M17 4v5a5 5 0 0 1-10 0V4\"/><path d=\"M5 6h2\"/><path d=\"M17 6h2\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Поздравляем!</div>\n    <div class=\"results-hero-sub\">Вы успешно прошли тест.</div>\n    {{/if}}\n    {{#unless result.passed}}\n    <div class=\"results-hero-icon is-fail\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M9 9l6 6\"/><path d=\"M15 9l-6 6\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Тест не пройден</div>\n    <div class=\"results-hero-sub\">Попробуйте ещё раз.</div>\n    {{/unless}}\n  </div>\n\n  <div class=\"card results-main-card\">\n    <div class=\"results-main-title\" data-path=\"course.title\"></div>\n    <div class=\"results-main-sub\">Результаты теста</div>\n\n    <div class=\"results-ring\" data-ring-offset=\"{{ result.ringDashoffset }}\" style=\"--ring-offset: {{ result.ringDashoffset }}\">\n      <svg viewBox=\"0 0 140 140\" width=\"140\" height=\"140\">\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-bg\" stroke-width=\"14\" fill=\"none\"></circle>\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-fg {{ result.passClass }}\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\"></circle>\n      </svg>\n      <div class=\"results-ring-center\">\n        <div class=\"results-ring-pct\"><span data-path=\"result.scorePercent\"></span>%</div>\n        <div class=\"results-ring-label\">Баллы</div>\n      </div>\n    </div>\n\n    <div class=\"results-stats\">\n      <div class=\"results-stat\">\n        <div class=\"v\" data-path=\"result.totalQuestions\"></div>\n        <div class=\"l\">Вопросов</div>\n      </div>\n      <div class=\"results-stat\">\n        <div class=\"v\"><span data-path=\"result.correct\"></span>/<span data-path=\"result.totalQuestions\"></span></div>\n        <div class=\"l\">Верно</div>\n      </div>\n      <div class=\"results-stat\">\n        <div class=\"v\" data-path=\"result.earnedPoints\"></div>\n        <div class=\"l\">Баллов</div>\n      </div>\n      <div class=\"results-pill {{ result.passClass }}\" data-path=\"result.statusLabel\"></div>\n    </div>\n  </div>\n\n  {{#if result.topicResults}}\n  <div class=\"results-section-title\">Результаты по темам</div>\n  <div class=\"results-topics-grid\">\n    {{#each result.topicResults}}\n    <div class=\"card topic-card\">\n      <div class=\"topic-head\">\n        <div class=\"topic-name\">{{topicName}}</div>\n        <div class=\"results-pill {{passClass}}\">{{statusLabel}}</div>\n      </div>\n      <div class=\"topic-bar {{passClass}}\" data-bar-width=\"{{percent}}\"><div class=\"topic-bar-fill\" style=\"width: {{percent}}%\"></div></div>\n      <div class=\"topic-row\">\n        <div class=\"k\">Правильно</div>\n        <div class=\"val\">{{correct}} / {{total}}</div>\n      </div>\n      {{#if pointsLabel}}\n      <div class=\"topic-row\">\n        <div class=\"k\">Баллов</div>\n        <div class=\"val\">{{pointsLabel}}</div>\n      </div>\n      {{/if}}\n      {{#if requiredLabel}}<div class=\"topic-required\">{{requiredLabel}}</div>{{/if}}\n      {{#if topicFeedback}}<div class=\"topic-feedback\"><div class=\"topic-feedback-text\">{{topicFeedback}}</div></div>{{/if}}\n    </div>\n    {{/each}}\n  </div>\n  {{/if}}\n\n  {{#if result.recommendedCourses}}\n  <div class=\"results-section-title\">Рекомендуемые курсы</div>\n  <div class=\"results-rec-list\">\n    {{#each result.recommendedCourses}}<a class=\"results-rec-item\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>{{/each}}\n  </div>\n  {{/if}}\n  {{#if result.recommendedEvents}}\n  <div class=\"results-section-title\">Рекомендуемые мероприятия</div>\n  <div class=\"results-rec-list\">\n    {{#each result.recommendedEvents}}<div class=\"results-rec-item\">{{title}}</div>{{/each}}\n  </div>\n  {{/if}}\n\n  <div class=\"results-actions\">\n    {{#if result.backAction}}<button type=\"button\" class=\"btn\" data-action=\"{{result.backAction}}\">{{result.backLabel}}</button>{{/if}}\n    {{#unless result.backAction}}<button type=\"button\" class=\"btn\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n  </div>\n</div>\n",
+  "results.adaptive": "<div class=\"results-page\">\n  <div class=\"results-hero\">\n    <div class=\"results-hero-icon is-info\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M8 21h8\"/><path d=\"M12 17v4\"/><path d=\"M7 4h10\"/><path d=\"M17 4v5a5 5 0 0 1-10 0V4\"/><path d=\"M5 6h2\"/><path d=\"M17 6h2\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Тест завершён</div>\n    <div class=\"results-hero-sub\" data-path=\"course.title\"></div>\n  </div>\n\n  <div class=\"results-section-title\">Результаты по темам</div>\n  <div class=\"results-topics-grid\">\n    {{#each result.topicResults}}\n    <div class=\"card topic-card\">\n      <div class=\"topic-head\">\n        <div class=\"topic-name\">{{topicName}}</div>\n        <div class=\"results-pill {{levelClass}}\">{{levelLabel}}</div>\n      </div>\n      {{#if hasFeedback}}\n      <div class=\"topic-feedback\">{{feedback}}</div>\n      {{/if}}\n      {{#if hasLinks}}\n      <div class=\"topic-links\">\n        {{#each links}}\n        <a class=\"topic-link\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>\n        {{/each}}\n      </div>\n      {{/if}}\n    </div>\n    {{/each}}\n  </div>\n\n  <div class=\"results-actions\">\n    {{#if result.showPdf}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-pdf\">Скачать PDF</button>{{/if}}\n    {{#if result.canRetry}}<button type=\"button\" class=\"btn\" data-action=\"restart-adaptive\">Пройти заново</button>{{/if}}\n    {{#if result.showFinish}}<button type=\"button\" class=\"btn\" data-action=\"finish\">Завершить тест</button>{{/if}}\n    {{#unless result.hasScormActions}}<button type=\"button\" class=\"btn\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n  </div>\n</div>\n",
+  "system.blocked": "<div class=\"layout-blocked-wrap\">\n  <div class=\"card blocked-card\" data-testid=\"retake-wall\">\n    <div class=\"blocked-icon\" role=\"img\" aria-label=\"Доступ заблокирован\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"36\" height=\"36\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"/></svg>\n    </div>\n    <div data-retake-branch=\"default\">\n      <h1 class=\"blocked-title\">Доступ к тесту ограничен</h1>\n      <p class=\"blocked-description\">Для этого теста больше нет доступных попыток.</p>\n    </div>\n    <div data-retake-branch=\"cooldown\" hidden>\n      <h1 class=\"blocked-title\">Повторное прохождение пока недоступно</h1>\n      <p class=\"blocked-description\">Этот курс можно проходить не чаще, чем раз в <span data-path=\"retake.cooldownPeriodDays\">&mdash;</span> дн.</p>\n      <p class=\"blocked-description\" data-retake-available>Повторный запуск будет доступен с <strong data-path=\"retake.availableDateHuman\">&mdash;</strong>.</p>\n    </div>\n    <div data-retake-branch=\"error\" hidden>\n      <h1 class=\"blocked-title\">Не удалось проверить доступ</h1>\n      <p class=\"blocked-description\">Не удалось проверить доступность повторного прохождения. Обратитесь к администратору курса.</p>\n    </div>\n  </div>\n</div>\n",
+  "system.transition": "<div class=\"transition-page\">\n  <div class=\"transition-icon {{ transition.iconClass }}\">\n    {{#if transition.isCorrect}}\n    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M20 6 9 17l-5-5\"/></svg>\n    {{/if}}\n    {{#unless transition.isCorrect}}\n    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg>\n    {{/unless}}\n  </div>\n\n  <div class=\"transition-title\">{{ transition.title }}</div>\n\n  {{#if transition.level}}\n  <div class=\"transition-level {{ transition.level.class }}\">\n    {{#if transition.level.isUp}}<svg class=\"transition-level-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M12 19V5M5 12l7-7 7 7\"/></svg>{{/if}}\n    {{#if transition.level.isDown}}<svg class=\"transition-level-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M12 5v14M5 12l7 7 7-7\"/></svg>{{/if}}\n    {{#if transition.level.isComplete}}<svg class=\"transition-level-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4M12 8h.01\"/></svg>{{/if}}\n    <span class=\"transition-level-msg\" data-path=\"transition.level.message\"></span>\n  </div>\n  {{/if}}\n\n  {{#if transition.topic}}\n  <div class=\"transition-topic\">Переход к теме: <strong data-path=\"transition.topic.toTopic\"></strong></div>\n  {{/if}}\n\n  {{#if transition.showContinue}}\n  <div class=\"transition-actions\">\n    <button type=\"button\" class=\"btn\" data-action=\"continue\">Продолжить</button>\n  </div>\n  {{/if}}\n</div>\n"
 };
 
   /* ── Shared helpers expected by contentPage.js ── */
@@ -1985,6 +2689,35 @@ function getPagePlaceholderStyles(page) {
  * @param {object} page             Entry from TEST_DATA.contentPages
  * @param {Array}  contentTemplates Array from the design template manifest
  */
+/**
+ * Fills the content-page placeholders within `root`: plain placeholders via
+ * TestBuilder.fillPlaceholders (by type + textFit), resultField placeholders via
+ * the renderer registry, then the path-only DSL bindings. Scoped to `root` so the
+ * same logic works whether the skeleton lives directly in #app or inside the
+ * shared `content` layout's page-content slot.
+ */
+function fillContentPagePlaceholders(root, contentTemplate, values, placeholderStyles, tb) {
+  if (!contentTemplate || !tb || !tb._internal) return;
+  var nonResult = (contentTemplate.placeholders || []).filter(function (ph) { return ph.type !== "resultField"; });
+  var resultPh = (contentTemplate.placeholders || []).filter(function (ph) { return ph.type === "resultField"; });
+  var syntheticCt = Object.assign({}, contentTemplate, { placeholders: nonResult });
+  tb._internal.fillPlaceholders(root, syntheticCt, values, placeholderStyles);
+  resultPh.forEach(function (phDef) {
+    var el = root.querySelector('[data-placeholder="' + phDef.key + '"]');
+    if (el) fillResultFieldPlaceholder(el, phDef, values[phDef.key], contentTemplate);
+  });
+  // §10: bind data-path against a PUBLIC context, not the internal TEST_DATA. The
+  // default template's content has no data-path bindings (author content flows via
+  // placeholders/resultField above), so a minimal `course` context suffices; extend
+  // with result/sectionResult here if a content template ever binds those.
+  tb._internal.renderPathOnlyDsl(root, contentPublicContext());
+}
+
+/** Minimal public context for content-page data-path bindings (no raw TEST_DATA). */
+function contentPublicContext() {
+  return { course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") } };
+}
+
 function renderContentPage(page, contentTemplates) {
   var app = document.getElementById("app");
   if (!app) return;
@@ -1996,34 +2729,38 @@ function renderContentPage(page, contentTemplates) {
   var contentTemplate = findContentTemplate(page, contentTemplates);
   var values = getPageValues(page);
   var placeholderStyles = getPagePlaceholderStyles(page);
+  var skeleton = buildContentPageSkeleton(page, contentTemplate);
 
-  app.innerHTML = buildContentPageSkeleton(page, contentTemplate);
-
-  if (contentTemplate && tb && tb._internal) {
-    // Handle resultField separately; delegate rest to fillPlaceholders
-    var nonResultPlaceholders = (contentTemplate.placeholders || []).filter(
-      function (ph) {
-        return ph.type !== "resultField";
-      }
-    );
-    var resultPlaceholders = (contentTemplate.placeholders || []).filter(
-      function (ph) {
-        return ph.type === "resultField";
-      }
-    );
-
-    var syntheticCt = Object.assign({}, contentTemplate, {
-      placeholders: nonResultPlaceholders
+  // Primary path: render the shared `content` layout (wrapper + nav) and fill the
+  // page-content slot with the placeholder skeleton — the SAME layout/renderer the
+  // web host uses. Falls back to mounting the skeleton directly when absent.
+  var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts["content"];
+  var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+  var host;
+  if (layout && TB && TB.renderScreenInto) {
+    app.innerHTML = "";
+    var wrap = document.createElement("div");
+    app.appendChild(wrap);
+    TB.renderScreenInto(wrap, {
+      layout: layout,
+      context: { course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") } },
+      slots: { "page-content": skeleton }
     });
-    tb._internal.fillPlaceholders(app, syntheticCt, values, placeholderStyles);
-
-    resultPlaceholders.forEach(function (phDef) {
-      var el = app.querySelector('[data-placeholder="' + phDef.key + '"]');
-      if (el) fillResultFieldPlaceholder(el, phDef, values[phDef.key], contentTemplate);
-    });
-
-    tb._internal.renderPathOnlyDsl(app, typeof TEST_DATA !== "undefined" ? TEST_DATA : {});
+    host = wrap.querySelector('[data-slot="page-content"]') || wrap;
+    var navBtn = wrap.querySelector('.navigation [data-nav="next"]');
+    if (navBtn) navBtn.onclick = function () { if (typeof advancePageSequence === "function") advancePageSequence(); };
+  } else {
+    app.innerHTML = skeleton;
+    host = app;
+    var nav = document.createElement("div");
+    nav.className = "navigation";
+    nav.style.justifyContent = "flex-end";
+    nav.innerHTML = '<button class="btn" data-nav="next" onclick="advancePageSequence()">Далее</button>';
+    app.appendChild(nav);
   }
+
+  fillContentPagePlaceholders(host, contentTemplate, values, placeholderStyles, tb);
 
   // autoAdvance
   if (page.autoAdvance && page.autoAdvanceDelayMs && tb && tb._internal) {
@@ -2032,12 +2769,6 @@ function renderContentPage(page, contentTemplates) {
       else if (typeof next === "function") next();
     });
   }
-
-  var nav = document.createElement("div");
-  nav.className = "navigation";
-  nav.style.justifyContent = "flex-end";
-  nav.innerHTML = '<button class="btn" data-nav="next" onclick="advancePageSequence()">Далее</button>';
-  app.appendChild(nav);
 
   // Template lifecycle event
   if (tb && tb.template) {
