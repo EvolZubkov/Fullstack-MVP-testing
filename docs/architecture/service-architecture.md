@@ -1,13 +1,23 @@
 # Архитектура серверных сервисов
 
+> Актуализировано 2026-06-06: маршрутизация разнесена на модульные роутеры
+> (`server/routes/`), выделен слой сервисов (`server/services/`), добавлены доменные движки
+> в `shared/` и единый шаблонный рендерер `shared/template/` (PRD-12).
+
 ## Обзор
 
-Серверная часть проекта построена на Express.js с TypeScript и использует монолитную архитектуру
-с выделенным слоем доступа к данным (Repository pattern). Основные компоненты:
+Серверная часть проекта построена на Express.js с TypeScript, с выделенным слоем доступа
+к данным (Repository pattern). Основные компоненты:
 
 - **DatabaseStorage** -- единственная реализация интерфейса `IStorage`, инкапсулирующая все операции с БД
-- **Routes** -- монолитный модуль маршрутизации (~6000 строк)
+- **Routes** -- модульные роутеры по доменам в `server/routes/`, смонтированные тонким
+  `server/routes.ts` (`registerRoutes`)
+- **Services** -- доменные сервисы (`server/services/`): расчёт результата, контекст итогов,
+  retake-гейт, рендер-пейлоад, валидаторы
+- **Shared-движки** -- чистые модули в `shared/` (scoring/scales/formula/eligibility/draw/tags),
+  общие для клиента, сервера и SCORM-пакета
 - **SCORM Exporter** -- подсистема генерации SCORM 2004 пакетов
+- **Единый рендерер (PRD-12)** -- `shared/template/`: DSL + `renderScreenInto` для обоих хостов
 - **Email Service** -- отправка писем (сброс пароля)
 - **Crypto Utilities** -- шифрование и хеширование email
 
@@ -20,20 +30,27 @@
                          |
           +--------------+--------------+
           |              |              |
-       routes.ts      static.ts     vite.ts (dev)
+   routes.ts          static.ts     vite.ts (dev)
+ (registerRoutes —
+  тонкий оркестратор)
           |
-    +-----+------+------+------+
-    |            |      |      |
- storage.ts  email.ts  scorm/  multer/xlsx
-    |                   |
-  db.ts          +------+------+------+------+
-    |            |      |      |      |      |
-  drizzle    index.ts  zip.ts  builders/  assets/
-  + pg pool                    |
-                         +-----+-----+-----+
-                         |     |     |     |
-                      manifest metadata test-json media-assets
+    routes/ (модульные роутеры: auth, users, topics, questions,
+    |        tests, attempts, scales, result-variables, ...)
+    |
+    +-----------+-----------+------------------+
+    |           |           |                  |
+ services/   storage.ts   scorm/            shared/ (движки + рендерер)
+ (расчёт,       |           |                  |
+  контекст,   db.ts    +----+----+----+    +---+-----+------+------+
+  retake,       |      | zip builders   |  | scoring scales formula |
+  render)    drizzle   | assets template|  | eligibility draw tags  |
+             + pg pool |  templates/<id>|  | template/ (dsl, render,|
+                       +----------------+  |  context, dnd)         |
+                                           +------------------------+
 ```
+
+> Веб-хост и SCORM-пакет рендерят ученические экраны из `shared/template/` (PRD-12):
+> веб импортирует напрямую, SCORM получает через esbuild-бандл `TBTemplate`.
 
 ---
 
@@ -219,9 +236,21 @@ interface ExportData {
 
 ## 6. Routes (API Layer)
 
-**Файл:** [routes.ts](../../server/routes.ts) (~6055 строк, монолитный)
+**Файл:** [routes.ts](../../server/routes.ts) -- тонкий оркестратор (~100 строк):
+настраивает session/middleware и монтирует модульные роутеры.
 
 **Экспортируемая функция:** `registerRoutes(httpServer, app)`.
+
+**Модульные роутеры:** [server/routes/](../../server/routes/) -- по одному файлу на домен
+(auth, users, groups, topics, questions, tests, attempts, assignments, folders, test-folders,
+content-pages, result-variables, scales, templates, access, analytics, scorm-telemetry, logs),
+монтируются через массив `routerConfig` в [server/routes/index.ts](../../server/routes/index.ts).
+
+**Слой сервисов:** [server/services/](../../server/services/) -- бизнес-логика вынесена из
+route-хендлеров: `result-compute.ts` (серверный расчёт результата, PRD-2/5/10), `result-context.ts`
+(контекст экрана итогов), `scoring-config.ts`, `retake-gate.ts` (PRD-6), `template-render.ts`
+(layout+CSS для веб-хоста), `flow-policy-validator.ts`, `variant-binding.ts`,
+`content-pages-lifecycle.ts`, `test-settings.ts`, `required-fields-validator.ts`.
 
 ### Middleware авторизации
 
@@ -291,6 +320,24 @@ interface ExportData {
 | `scormPackages` | Экспортированные SCORM пакеты |
 | `scormAttempts` | Попытки из LMS |
 | `scormAnswers` | Ответы из LMS |
+| `testFolders` | Иерархия папок для тестов |
+| `topicEvents` | События темы (рекомендуемые мероприятия) |
+| `assignmentAccessTokens` | Magic-link токены доступа к назначению |
+| `templates` | Дизайн-шаблоны (PRD-7) |
+| `contentPages` | Контентные страницы (PRD-1) |
+| `resultVariables` | Показатели результата `result.*` (PRD-2) |
+| `scales`, `questionMeasurements` | Шкалы и вклады вопросов (PRD-5) |
+
+Опциональные PRD-колонки: `questions.scoring_json` (PRD-10), `questions.tags` (PRD-11/2),
+`test_sections.draw_blueprint_json` (PRD-11), `tests.retake_policy_json` (PRD-6) -- все
+nullable/с дефолтом (отсутствие = легаси-поведение).
+
+### Доменные движки (shared/)
+
+Помимо схемы, `shared/` содержит чистые browser-safe движки, общие для клиента, сервера и
+SCORM-пакета: `scoring/` (цена ответа PRD-10), `scales/` + `formula/` (шкалы/показатели PRD-5/2),
+`eligibility/` (retake PRD-6), `draw/` + `tags.ts` (квоты выдачи PRD-11), `template/` (единый
+рендерер PRD-12). Единый источник логики -- без копий на хост.
 
 ---
 
@@ -325,13 +372,15 @@ interface ExportData {
 
 ## 10. Известные архитектурные особенности
 
-1. **Монолитный routes.ts** (~6000 строк) -- все эндпоинты в одном файле,
-   бизнес-логика смешана с маршрутизацией
-2. **Отсутствие слоя сервисов** -- бизнес-логика находится непосредственно
-   в обработчиках маршрутов, а не вынесена в отдельные сервисные классы
-3. **In-memory session store** -- `memorystore` не подходит для
+1. **In-memory session store** -- `memorystore` не подходит для
    горизонтального масштабирования
-4. **Единственная реализация IStorage** -- интерфейс определён,
+2. **Единственная реализация IStorage** -- интерфейс определён,
    но используется только `DatabaseStorage`
-5. **SCORM identifiers** хранятся в JSON-файле на диске,
+3. **SCORM identifiers** хранятся в JSON-файле на диске,
    а не в базе данных
+
+### Устранено (исторические пункты)
+
+- ~~Монолитный `routes.ts` (~6000 строк)~~ -- маршрутизация разнесена на модульные роутеры
+  в `server/routes/`; `routes.ts` стал тонким оркестратором (см. §6).
+- ~~Отсутствие слоя сервисов~~ -- бизнес-логика вынесена в `server/services/` (см. §6).

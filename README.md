@@ -149,7 +149,7 @@
 | shadcn/ui (Radix UI) | -- | Компоненты UI |
 | Tailwind CSS | 4.3 | Стилизация (новый движок, `@tailwindcss/postcss`) |
 | Lucide React | -- | Иконки |
-| html2canvas + jsPDF | CDN | PDF-экспорт внутри SCORM-runtime (не npm dep) |
+| html2canvas + jsPDF | 1.4.1 / 2.5.1 | PDF-экспорт в SCORM-runtime; вендорятся в пакет из `assets/vendor/` (devDep-пин, без CDN) |
 
 ### Backend
 
@@ -311,31 +311,41 @@ Fullstack-MVP-testing/
 |   +-- index.html
 |
 |-- server/                          # Backend (Express)
+|   |-- routes/                      # Модульные роутеры по доменам (монтируются в routes.ts)
+|   |   |-- index.ts                # routerConfig: список path -> router
+|   |   |-- auth.ts  users.ts  groups.ts  topics.ts  questions.ts  tests.ts
+|   |   |-- attempts.ts  assignments.ts  folders.ts  test-folders.ts
+|   |   |-- content-pages.ts  result-variables.ts  scales.ts  templates.ts
+|   |   |-- access.ts  analytics/  scorm-telemetry.ts  logs.ts
+|   |-- services/                    # Доменные сервисы (вне route-хендлеров)
+|   |   |-- result-compute.ts       # Серверный расчёт результата (PRD-2/5/10)
+|   |   |-- result-context.ts       # AttemptResult -> контекст экрана итогов
+|   |   |-- scoring-config.ts  retake-gate.ts (PRD-6)  template-render.ts
+|   |   |-- flow-policy-validator.ts  variant-binding.ts  test-settings.ts  ...
 |   |-- scorm/                       # SCORM 2004 генератор
-|   |   |-- builders/                # Сборщики пакета
-|   |   |   |-- manifest.ts         # imsmanifest.xml
-|   |   |   |-- metadata.ts         # Метаданные SCORM
-|   |   |   |-- media-assets.ts     # Обработка медиа
-|   |   |   +-- test-json.ts        # Данные теста
+|   |   |-- builders/                # Сборщики пакета (manifest, metadata, test-json,
+|   |   |                            #   media-assets, shared-runtime — esbuild-бандл @shared)
 |   |   |-- assets/                  # Runtime-файлы SCORM
-|   |   |-- template/               # JS-логика SCORM-пакета
-|   |   |   +-- app/                # Приложение (adaptive, dnd, render, timer, telemetry)
-|   |   |-- utils/
-|   |   |-- index.ts                # Главный экспорт
+|   |   |-- template/app/            # JS-логика пакета (adaptive, dnd, render, timer, telemetry)
+|   |   |-- templates/<id>/          # Дизайн-шаблоны: layouts + styles + manifest (PRD-7/12)
+|   |   |-- index.ts                # generateScormPackage
 |   |   +-- zip.ts                  # ZIP-упаковка
-|   |-- utils/
-|   |   |-- crypto.ts               # Шифрование/дешифрование email
-|   |   +-- mask-email.ts           # Маскирование email
-|   |-- db.ts                       # Подключение к БД (Drizzle)
-|   |-- email.ts                    # Отправка email (сброс пароля)
-|   |-- index.ts                    # Entry point сервера
-|   |-- routes.ts                   # Все API endpoints (~6000 строк)
-|   |-- scorm-exporter.ts           # Оркестратор SCORM-экспорта
-|   |-- static.ts                   # Раздача статики (production)
-|   +-- storage.ts                  # Data Access Layer (~1000 строк)
+|   |-- utils/                       # crypto.ts (email AES), mask-email.ts
+|   |-- db.ts                        # Подключение к БД (Drizzle)
+|   |-- email.ts                     # Отправка email (сброс пароля)
+|   |-- index.ts                     # Entry point сервера
+|   |-- routes.ts                    # registerRoutes — тонкий оркестратор (~100 строк)
+|   |-- scorm-exporter.ts            # Точка входа SCORM-экспорта
+|   |-- template-registry.ts         # Реестр дизайн-шаблонов
+|   |-- static.ts                    # Раздача статики (production)
+|   +-- storage.ts                   # Data Access Layer (Repository pattern)
 |
-|-- shared/                          # Общий код (client + server)
-|   +-- schema.ts                   # Drizzle-схема БД + Zod-типы (~700 строк)
+|-- shared/                          # Общий код (client + server + SCORM-пакет)
+|   |-- schema.ts                   # Drizzle-схема БД + Zod-типы
+|   |-- scoring/ scales/ formula/   # Чистые доменные движки (PRD-2/5/10)
+|   |-- eligibility/ draw/ tags.ts  # Retake-eligibility (PRD-6), квоты выдачи (PRD-11)
+|   +-- template/                   # Единый рендерер (PRD-12): dsl, render-screen,
+|                                    #   renderers, context, *-context builders, dnd/
 |
 |-- script/                          # Утилиты
 |   |-- build.ts                    # Скрипт production-сборки
@@ -397,6 +407,25 @@ Fullstack-MVP-testing/
    | (Memory)   |   | (Drizzle)  |      | (uploads/)  |
    +------------+   +------------+      +-------------+
 ```
+
+### Модульность и общий код
+
+- **Роутеры**: API разнесён по доменным модулям в `server/routes/` (auth, users, topics,
+  questions, tests, attempts, scales, result-variables, content-pages и др.) и монтируется
+  тонким `server/routes.ts` (`registerRoutes`). Это не монолит.
+- **Слой сервисов** (`server/services/`): расчёт результата, контекст итогов, retake-гейт,
+  рендер-пейлоад и валидаторы вынесены из route-хендлеров.
+- **Доменные движки** (`shared/`): scoring/scales/formula/eligibility/draw/tags — чистые
+  модули, общие для клиента, сервера и SCORM-пакета (единый источник логики, без копий).
+
+### Единый рендерер ученических экранов (PRD-12)
+
+Экраны прохождения (старт, контент, вопрос, итоги, transition, блок) рендерятся из ОДНИХ
+дизайн-шаблонов на ОБОИХ хостах. `shared/template/` содержит framework-free рендерер
+(`dsl.ts` -- mustache-субсет, `renderScreenInto`, публичный контекст и сборщики, `dnd/`).
+Веб импортирует его напрямую (Vite); SCORM-пакет получает через esbuild-бандл (глобал
+`TBTemplate`). CSS тоже единый: компонентный источник `server/scorm/templates/<id>/styles/`
+(`theme.css` + `base.css`), из которого на сборке генерируется `styles.css` пакета.
 
 ### Ролевая модель
 
@@ -593,6 +622,22 @@ Test
 
 Индивидуальные ответы в SCORM-попытках (questionId, userAnswer, isCorrect, earnedPoints).
 
+#### Таблицы и колонки PRD-расширений
+
+| Таблица / колонка | PRD | Назначение |
+| ----------------- | --- | ---------- |
+| `templates` | PRD-7 | Дизайн-шаблоны (layouts, стили, manifest-параметры) |
+| `content_pages` | PRD-1 | Контентные страницы (intro/между темами/после итогов) |
+| `result_variables` | PRD-2 | Показатели результата (DSL-формулы `result.*`) |
+| `scales` + `question_measurements` | PRD-5 | Шкалы и вклады вопросов в шкалы (многомерные измерения) |
+| `test_folders`, `topic_events`, `assignment_access_tokens` | -- | Папки тестов, события темы, magic-link токены доступа |
+| `questions.scoring_json` | PRD-10 | Цена ответа: веса опций / ступенчатая таблица (иначе 0/1) |
+| `questions.tags` | PRD-11/2 | Теги-подтемы (квоты выдачи + источники формул показателей) |
+| `test_sections.draw_blueprint_json` | PRD-11 | Квоты выдачи по тегам (иначе равномерная выборка) |
+| `tests.retake_policy_json` | PRD-6 | Гейт повторного прохождения / cooldown (иначе только `maxAttempts`) |
+
+Все опциональные колонки nullable/с дефолтом: их отсутствие сохраняет легаси-поведение.
+
 ### Диаграмма связей
 
 ```text
@@ -712,6 +757,15 @@ tests
 | Метод | Endpoint | Описание |
 |---|---|---|
 | POST | `/api/media/upload` | Загрузка медиа-файла |
+
+### Прочие группы эндпоинтов
+
+API разнесён по модульным роутерам (`server/routes/`). Помимо перечисленного выше, есть
+группы: `/api/folders` и `/api/test-folders` (иерархия), `/api/tests/:id/content-pages`
+(PRD-1), `/api/tests/:id/result-variables` (PRD-2), `/api/tests/:id/scales` (PRD-5),
+`/api/templates` (PRD-7), `/api/learner/...` (прохождение), `/access/*` (magic-link),
+телеметрия SCORM и логи. Полный список маршрутов -- `routerConfig` в
+[server/routes/index.ts](server/routes/index.ts).
 
 ---
 
@@ -887,17 +941,24 @@ scormAPI.terminate();
 ### Команды
 
 ```bash
-npm run dev          # Development-сервер (tsx watch + Vite)
+npm run dev          # Development-сервер (tsx + Vite HMR; tsx запускается БЕЗ --watch)
 npm run build        # Production-сборка (esbuild + Vite)
 npm start            # Запуск production-версии
 npm run check        # Проверка типов TypeScript
+npm test             # Запуск тестов (vitest)
 npm run db:push      # Применить изменения схемы к БД
+
+# SCORM-инструменты (локальная приёмка):
+npm run scorm:template  # Собрать пакет дизайн-шаблона в out/
+npm run scorm:player    # Локальный SCORM-плеер на :5050 (грузит out/*.zip)
 ```
 
 ### Hot Reload
 
-- **Frontend** -- обновление через Vite (HMR отключен из-за проблем с reverse proxy, используется полная перезагрузка)
-- **Backend** -- автоматический перезапуск через tsx watch
+- **Frontend** -- работает Vite HMR.
+- **Backend** -- авто-перезапуск ОТСУТСТВУЕТ: dev-скрипт намеренно использует `tsx` без
+  `--watch` (под `tsx watch` зависает `createServer` Vite 8). После правок на сервере
+  перезапустите `npm run dev` вручную.
 
 ### Алиасы путей
 
@@ -1052,8 +1113,8 @@ railway up
 
 | Параметр | Значение | Где настроить |
 |---|---|---|
-| Размер медиа-файла | 200 MB | `server/routes.ts` (Multer) |
-| Время сессии | 24 часа | `server/routes.ts` (session cookie) |
+| Размер медиа-файла | 200 MB | `server/middleware/upload.ts` (Multer) |
+| Время сессии | 24 часа | `server/routes.ts` (session cookie, `registerRoutes`) |
 | Body limit | 50 MB | `server/index.ts` (express.json) |
 
 ---
