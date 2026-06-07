@@ -150,6 +150,25 @@ describe("lifecycle guards", () => {
     expect(res.status).toBe(409);
   });
 
+  it("activate is blocked when validation passed but smoke-test has not", async () => {
+    dbMock.__state.selectResult = [
+      { id: "acme", isBuiltin: false, status: "draft", validationJson: { ok: true }, smokeTestJson: null },
+    ];
+    const res = await asAuthor(request(makeApp()).put("/api/admin/templates/acme/activate"));
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain("работоспособности");
+  });
+
+  it("activate succeeds when both validation and smoke-test pass", async () => {
+    dbMock.__state.selectResult = [
+      { id: "acme", isBuiltin: false, status: "draft", validationJson: { ok: true }, smokeTestJson: { ok: true, routes: [] } },
+    ];
+    dbMock.__state.returningResult = [{ id: "acme", status: "active", isActive: true }];
+    const res = await asAuthor(request(makeApp()).put("/api/admin/templates/acme/activate"));
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("active");
+  });
+
   it("delete is refused for a built-in template", async () => {
     dbMock.__state.selectResult = [{ id: "default", isBuiltin: true, sourceType: "builtin", isActive: true, status: "active" }];
     const res = await asAuthor(request(makeApp()).delete("/api/admin/templates/default"));
@@ -169,9 +188,21 @@ describe("lifecycle guards", () => {
     expect(dbMock.transaction).toHaveBeenCalled();
   });
 
-  it("smoke-test endpoint is a Phase 2 stub (501)", async () => {
+  it("smoke-test intake rejects a malformed report (400)", async () => {
     dbMock.__state.selectResult = [{ id: "acme" }];
-    const res = await asAuthor(request(makeApp()).post("/api/admin/templates/acme/smoke-test"));
-    expect(res.status).toBe(501);
+    const res = await asAuthor(request(makeApp()).post("/api/admin/templates/acme/smoke-test").send({ nope: true }));
+    expect(res.status).toBe(400);
+  });
+
+  it("smoke-test intake persists a valid report", async () => {
+    dbMock.__state.selectResult = [{ id: "acme" }];
+    dbMock.__state.returningResult = [{ id: "acme", smokeTestJson: { ok: true, routes: [] } }];
+    const res = await asAuthor(
+      request(makeApp())
+        .post("/api/admin/templates/acme/smoke-test")
+        .send({ ok: true, total: 1, passed: 1, warned: 0, failed: 0, routes: [{ route: "start", status: "pass", errors: [], warnings: [] }] }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.report.ok).toBe(true);
   });
 });

@@ -43,6 +43,9 @@ import {
   MAX_TEMPLATE_ZIP_BYTES,
   type TemplateValidationReport,
 } from "../services/template-validation";
+// Type-only: the smoke-runner is a browser/jsdom module; the server never executes
+// it (NFR-02), it only persists and gates on the report the admin browser produces.
+import type { SmokeReport } from "@shared/template/smoke-runner";
 
 const router = Router();
 const DEFAULT_TEMPLATE_ID = "default";
@@ -150,9 +153,10 @@ router.get("/:id", requireAuthor, async (req, res) => {
 });
 
 /**
- * PUT /api/admin/templates/:id/activate — promote to `active`. Gated on the
- * persisted structural validation (Phase 1); the smoke-test gate is added in
- * Phase 2.
+ * PUT /api/admin/templates/:id/activate — promote to `active`. Gated on BOTH the
+ * persisted structural validation and the browser smoke-test (NFR-01). Built-ins
+ * are validated at sync time and need no smoke-test; uploaded templates must carry
+ * a passing structural report AND a passing smoke report.
  */
 router.put("/:id/activate", requireAuthor, async (req, res) => {
   try {
@@ -160,11 +164,12 @@ router.put("/:id/activate", requireAuthor, async (req, res) => {
     if (!row) return res.status(404).json({ error: "Template not found" });
 
     const validation = row.validationJson as TemplateValidationReport | null;
-    // Built-ins are validated at sync time and have no stored report; uploaded
-    // templates must carry a passing structural report.
-    const structurallyOk = row.isBuiltin || (validation?.ok ?? false);
-    if (!structurallyOk) {
+    const smoke = row.smokeTestJson as SmokeReport | null;
+    if (!row.isBuiltin && !(validation?.ok ?? false)) {
       return res.status(409).json({ error: "Активация запрещена: структурная валидация не пройдена" });
+    }
+    if (!row.isBuiltin && !(smoke?.ok ?? false)) {
+      return res.status(409).json({ error: "Активация запрещена: проверка работоспособности не пройдена" });
     }
 
     const [updated] = await db
@@ -376,12 +381,32 @@ router.post("/:id/validate", requireAuthor, async (req, res) => {
 });
 
 /**
- * POST /api/admin/templates/:id/smoke-test — Phase 2. The browser smoke-test is
- * client-side (NFR-03); this endpoint will accept and persist the result as the
- * activation gate. Not implemented in Phase 1.
+ * POST /api/admin/templates/:id/smoke-test — intake for the client-side browser
+ * smoke-test (NFR-03). The admin browser runs `runSmokeChecks` and posts the
+ * resulting {@link SmokeReport}; the server validates its shape and persists it as
+ * `smoke_test_json`. The `activate` gate then enforces `ok` (NFR-01). The server
+ * never runs the smoke-test itself (NFR-02).
  */
-router.post("/:id/smoke-test", requireAuthor, async (_req, res) => {
-  res.status(501).json({ error: "Браузерная smoke-проверка появится в Фазе 2 PRD-3" });
+router.post("/:id/smoke-test", requireAuthor, async (req, res) => {
+  try {
+    const row = await loadTemplate(req.params.id);
+    if (!row) return res.status(404).json({ error: "Template not found" });
+
+    const report = req.body as Partial<SmokeReport> | undefined;
+    if (!report || typeof report.ok !== "boolean" || !Array.isArray(report.routes)) {
+      return res.status(400).json({ error: "Некорректный отчёт проверки работоспособности" });
+    }
+
+    const [updated] = await db
+      .update(templates)
+      .set({ smokeTestJson: report, updatedAt: new Date() })
+      .where(eq(templates.id, row.id))
+      .returning();
+    res.json({ template: updated, report });
+  } catch (error) {
+    logger.error("Smoke-test intake error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to record smoke test" });
+  }
 });
 
 export default router;
