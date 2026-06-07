@@ -123,12 +123,15 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
         .find((v) => v.route === selectedRoute)?.label ?? selectedSpec.route
     : "";
 
-  const canActivateNow = template.isBuiltin || (report?.ok ?? false);
+  const isAlreadyActive = template.status === "active" || template.isActive === true;
+  const canActivateNow = !isAlreadyActive && (template.isBuiltin || (report?.ok ?? false));
 
   // ─── Footer verdict ──────────────────────────────────────────────────────
   let verdict: React.ReactNode;
   if (running) {
     verdict = <span className="tpl-check-verdict">Проверка выполняется…</span>;
+  } else if (isAlreadyActive) {
+    verdict = <span className="tpl-check-verdict tpl-check-verdict--ok">Шаблон активен</span>;
   } else if (!report) {
     verdict = <span className="tpl-check-verdict">Проверка работоспособности не запускалась</span>;
   } else if (report.ok) {
@@ -187,9 +190,9 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
               leadingIcon={<Power size={14} />}
               onClick={() => activate.mutate(template.id, { onSuccess: () => onActivated?.() })}
               loading={activate.isPending}
-              disabled={!canActivateNow || running}
+              disabled={isAlreadyActive || !canActivateNow || running}
             >
-              Активировать
+              {isAlreadyActive ? "Активирован" : "Активировать"}
             </Button>
           </div>
         </div>
