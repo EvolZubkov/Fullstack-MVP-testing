@@ -15,7 +15,7 @@
 **Реализовано и закрыто 2026-06-07.** Реализация велась тремя фазами:
 
 - **Фаза 1** (backend-фундамент, `5468a4d`): схема +6 колонок жизненного цикла +
-  миграция 011, ZIP-сервис (in-memory распаковка, zip-slip guard,
+  миграция 014, ZIP-сервис (in-memory распаковка, zip-slip guard,
   `uploads/templates/<id>/`), структурный валидатор, Admin API
   `/api/admin/templates` (author-гейт), реестр (реконсиляция загруженных).
 - **Фаза 2** (гейт активации, `5ace313` движок + сервер): браузерный движок
@@ -303,7 +303,9 @@ UI показывает отчёт о переносе параметров.
 
 PRD-3 расширяет общий реестр `templates` административными полями жизненного цикла.
 
-Фактическая схема (`shared/schema.ts`, миграция `migrations/011_prd3_template_lifecycle.sql`):
+Фактическая схема (`shared/schema.ts`, миграция `migrations/014_prd3_template_lifecycle.sql`).
+В деплое схема приводится к `shared/schema.ts` через `drizzle-kit push` (см.
+`docker/scripts/deploy.sh`); нумерованные SQL-файлы — ручной/исторический след:
 
 ```sql
 CREATE TABLE templates (
