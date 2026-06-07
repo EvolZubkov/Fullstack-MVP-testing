@@ -755,6 +755,15 @@ UI должен показывать отчёт:
 <button data-action="test-finish"></button>
 ```
 
+> **Реализация (PRD-3 валидатор / PRD-12 рантайм).** Структурный валидатор и
+> браузерная проверка работоспособности требуют от оболочки только
+> `data-slot="page"` (код ошибки `SHELL_CONTRACT`). Маркеры `data-nav`/`data-action`
+> привязываются Core, когда присутствуют, но **не являются** обязательными для
+> прохождения валидации/проверки: встроенный `default` их в `shell.html` не
+> объявляет, а действия Core навешивает делегированием по `[data-action]` поверх
+> экранов, отрисованных `renderScreenInto`. Жёсткая проверка привязки `next/
+> answer-submit/test-finish` — целевой контракт фазы расширенных интерактивов.
+
 Опциональные элементы оболочки:
 
 ```html
@@ -797,9 +806,15 @@ Core управляет состоянием кнопок навигации/д�
 Обязательные слоты:
 
 ```html
-<div data-slot="question-prompt"></div>
+<div data-slot="question-text"></div>
 <div data-slot="question-interaction"></div>
 ```
+
+> **Реализация (PRD-3 валидатор / PRD-12 рантайм).** Текст вопроса монтируется в
+> `data-slot="question-text"` — это и есть имя слота, которое проверяет валидатор
+> (код `QUESTION_CONTRACT`) и заполняет рендерер (`question-text` + `question-interaction`,
+> см. `server/scorm/templates/default/layouts/question.html`). Имя `question-prompt`
+> из ранних черновиков спецификации устарело; источник истины — `question-text`.
 
 Опциональные слоты:
 
@@ -1438,7 +1453,7 @@ HTML/rich content может вставляться только через ко
 ```html
 data-placeholder="body"
 data-slot="content-body"
-data-slot="question-prompt"
+data-slot="question-text"
 data-slot="question-interaction"
 data-slot="question-feedback"
 ```
