@@ -1,0 +1,1305 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-3: Администрирование шаблонов (полный набор состояний)</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:.45} }
+    .page-title { font: var(--ou-text-heading-s); font-weight: 700; }
+
+    /* ── Toolbar ─────────────────────────────────────────────────── */
+    .toolbar { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-3) var(--ou-space-5); border-bottom: var(--wf-border-w) solid var(--ou-border-default); flex-shrink: 0; }
+    .search-input-wrap { position: relative; flex: 1; max-width: var(--wf-size-340); }
+    .search-icon { position: absolute; left: var(--wf-space-9); top: 50%; transform: translateY(-50%); width: var(--wf-space-14); height: var(--wf-space-14); color: var(--ou-fg-muted); pointer-events: none; z-index: 1; }
+    .search-input-wrap .ou-field__input { padding-left: var(--ou-space-7); }
+
+    /* ── Templates table ─────────────────────────────────────────── */
+    /* ── Templates card grid (reuses approved gallery-card pattern) ── */
+    .tpl-area { flex: 1; overflow-y: auto; padding: var(--ou-space-5); }
+    .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--wf-size-300), 1fr)); gap: var(--ou-space-4); }
+    .tpl-card { border: var(--wf-border-w) solid var(--ou-border-soft); border-radius: var(--ou-radius-m); background: var(--ou-bg-elevated); overflow: hidden; display: flex; flex-direction: column; }
+    .tpl-card__preview { aspect-ratio: 16/9; background: var(--ou-bg-muted); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); overflow: hidden; }
+    .tpl-card__preview--empty { display: flex; align-items: center; justify-content: center; gap: var(--ou-space-2); color: var(--ou-fg-muted); font: var(--ou-text-body-s); }
+    .tpl-card__body { padding: var(--ou-space-3) var(--ou-space-4); display: flex; flex-direction: column; gap: var(--ou-space-2); flex: 1; }
+    .tpl-card__head { display: flex; align-items: baseline; gap: var(--ou-space-2); flex-wrap: wrap; }
+    .tpl-card__name { font: var(--ou-text-body-m); font-weight: 600; }
+    .tpl-card__id { font: var(--ou-text-caption); color: var(--ou-fg-muted); font-family: ui-monospace, monospace; }
+    .tpl-card__badges { display: flex; flex-wrap: wrap; gap: var(--wf-space-6); }
+    .tpl-card__meta { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin-top: auto; }
+    .tpl-card__foot { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3) var(--ou-space-3); border-top: var(--wf-border-w) solid var(--ou-border-soft); }
+    .tpl-card__foot .more-btn-wrap { margin-left: auto; }
+    .action-btn { width: var(--wf-size-28); height: var(--wf-size-28); border-radius: var(--ou-radius-xs); border: var(--wf-border-w) solid transparent; background: transparent; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ou-fg-muted); flex-shrink: 0; }
+    .action-btn:hover { background: var(--ou-bg-hover); border-color: var(--ou-border-default); color: var(--ou-fg-default); }
+
+    /* Mini course-preview sketch — stands in for the real assets.preview image
+       so the card communicates the template's actual look (layout + brand). */
+    .ps { width: 100%; height: 100%; display: flex; flex-direction: column; }
+    .ps__hd { height: 24%; display: flex; align-items: center; gap: var(--wf-space-6); padding: 0 var(--wf-space-9); }
+    .ps__logo { width: var(--wf-space-10); height: var(--wf-space-10); background: rgba(255,255,255,.85); border-radius: var(--wf-space-half); }
+    .ps__bd { flex: 1; display: flex; min-height: 0; }
+    .ps__side { width: 30%; background: var(--ou-bg-page); border-right: var(--wf-border-w) solid var(--ou-border-soft); padding: var(--wf-space-7); display: flex; flex-direction: column; gap: var(--wf-space-half); }
+    .ps__nav { height: var(--wf-space-7); border-radius: var(--wf-border-w); background: var(--ou-bg-hover); }
+    .ps__nav--on { background: var(--ou-accent-soft); }
+    .ps__main { flex: 1; padding: var(--wf-space-9); display: flex; flex-direction: column; gap: var(--wf-space-6); }
+    .ps__q { height: var(--wf-space-9); width: 70%; border-radius: var(--wf-border-w); background: var(--ou-bg-hover); }
+    .ps__opt { height: var(--wf-space-7); border-radius: var(--wf-border-w); background: var(--ou-bg-hover); }
+    .ps__opt--sel { background: var(--ou-accent-soft); }
+    .action-btn { width: var(--wf-size-28); height: var(--wf-size-28); border-radius: var(--ou-radius-xs); border: var(--wf-border-w) solid transparent; background: transparent; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--ou-fg-muted); flex-shrink: 0; position: relative; }
+    .action-btn:hover { background: var(--ou-bg-hover); border-color: var(--ou-border-default); color: var(--ou-fg-default); }
+    .more-btn-wrap { position: relative; }
+
+    /* ── Dropdown (row actions) ──────────────────────────────────── */
+    .dropdown-menu { position: absolute; right: 0; top: 100%; background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-s); box-shadow: var(--ou-shadow-m); z-index: 20; min-width: var(--wf-size-220); padding: var(--ou-space-1) 0; }
+    .dropdown-item { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--wf-space-14); font: var(--ou-text-body-s); cursor: pointer; color: var(--ou-fg-default); }
+    .dropdown-item:hover { background: var(--ou-bg-hover); }
+    .dropdown-item.danger { color: var(--ou-error-default); }
+    .dropdown-item.danger:hover { background: var(--ou-error-soft); }
+    .dropdown-item[aria-disabled="true"] { color: var(--ou-fg-disabled, var(--ou-fg-muted)); opacity: .5; cursor: not-allowed; }
+    .dropdown-sep { border: none; border-top: var(--wf-border-w) solid var(--ou-border-soft); margin: var(--ou-space-1) 0; }
+
+    /* ── Empty state ─────────────────────────────────────────────── */
+    .empty-block { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--wf-size-60) var(--ou-space-6); text-align: center; gap: var(--ou-space-2); }
+    .empty-icon { width: var(--ou-space-9); height: var(--ou-space-9); border-radius: var(--ou-radius-s); border: var(--wf-border-w) solid var(--ou-border-soft); background: var(--ou-bg-hover); display: flex; align-items: center; justify-content: center; color: var(--ou-fg-muted); margin-bottom: var(--wf-space-10); }
+
+    /* ── Modal scaffolding ───────────────────────────────────────── */
+    .ou-modal-root { z-index: 200; top: var(--wf-nav-offset, var(--wf-size-52)); }
+    /* Backdrop behind modals: the real templates page, dimmed (no blur), so the
+       dialog appears in context. The modal's own ou-modal__backdrop adds the scrim. */
+    .wf-admin-dim { opacity: .55; pointer-events: none; }
+
+    /* Confirm dialog (delete / deactivate) — pattern from prd7-tests-list */
+    /* position+z-index lift the dialog ABOVE ou-modal__backdrop (the scrim is a
+       positioned sibling and would otherwise paint over and dim the dialog). */
+    .modal-dialog { position: relative; z-index: 1; background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-xl); width: var(--wf-size-480); max-width: calc(100vw - var(--ou-space-8)); }
+    .modal-dialog__body { padding: var(--ou-space-6); }
+    .modal-dialog__title { font: var(--ou-text-heading-xs); font-weight: 700; margin: 0 0 var(--ou-space-2); }
+    .modal-dialog__desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); line-height: 1.5; }
+    .modal-dialog__foot { display: flex; gap: var(--ou-space-2); justify-content: flex-end; padding: var(--ou-space-3) var(--ou-space-6) var(--ou-space-5); }
+
+    /* Upload modal */
+    .upload-modal { width: var(--wf-size-560); max-width: calc(100vw - var(--ou-space-8)); }
+    .upload-zone { border: var(--wf-space-half) dashed var(--ou-border-default); border-radius: var(--ou-radius-m); background: var(--ou-bg-muted); padding: var(--ou-space-8) var(--ou-space-6); display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-2); text-align: center; }
+    .upload-zone--active { border-color: var(--ou-accent-default); background: var(--ou-accent-soft); }
+    .upload-zone__ico { color: var(--ou-fg-muted); }
+    .upload-progress { height: var(--ou-space-2); border-radius: var(--ou-radius-pill); background: var(--ou-bg-muted); overflow: hidden; }
+    .upload-progress__bar { height: 100%; background: var(--ou-accent-default); }
+    .upload-file { display: flex; align-items: center; gap: var(--ou-space-2); font: var(--ou-text-body-s); }
+
+    /* Validation / check result list */
+    .result-list { list-style: none; margin: var(--ou-space-2) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--ou-space-2); }
+    .result-item { display: flex; gap: var(--ou-space-2); font: var(--ou-text-body-s); align-items: flex-start; }
+    .result-item code { font-family: ui-monospace, monospace; color: var(--ou-fg-muted); }
+    .result-item__ico { flex-shrink: 0; margin-top: var(--wf-space-half); }
+    .result-item__ico--err { color: var(--ou-error-default); }
+    .result-item__ico--warn { color: var(--ou-warning-default); }
+    .result-item__ico--ok { color: var(--ou-success-default); }
+
+    /* Details modal */
+    .detail-modal { max-width: var(--wf-size-720); width: 100%; max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)) - var(--ou-space-7)); }
+    .detail-grid { display: grid; grid-template-columns: var(--wf-size-180) 1fr; gap: var(--ou-space-2) var(--ou-space-4); font: var(--ou-text-body-s); }
+    .detail-grid dt { color: var(--ou-fg-muted); }
+    .detail-grid dd { margin: 0; font-weight: 500; }
+    .detail-code { background: var(--ou-bg-muted); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-s); padding: var(--ou-space-3); font: var(--ou-text-caption); font-family: ui-monospace, monospace; color: var(--ou-fg-muted); white-space: pre-wrap; max-height: var(--wf-size-180); overflow: auto; }
+    .detail-section-title { font: var(--ou-text-body-xs); font-weight: 700; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .05em; margin: var(--ou-space-4) 0 var(--ou-space-2); }
+
+    /* Migration report rows */
+    .mig-row { display: flex; align-items: center; gap: var(--ou-space-2); font: var(--ou-text-body-s); padding: var(--wf-space-6) 0; border-bottom: var(--wf-border-w) solid var(--ou-border-soft); }
+    .mig-row:last-child { border-bottom: 0; }
+
+    /* ── Preview / check modal (reuses approved tpl-preview-modal) ── */
+    .tpl-preview-modal { max-width: var(--wf-size-1120); width: 100%; height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)) - var(--ou-space-7)); max-height: var(--wf-size-860); }
+    .tpl-preview-modal .ou-modal__body { padding: 0; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+    .tpl-preview-modal .ou-modal__split { flex: 1; min-height: 0; }
+    .tpl-preview-modal .ou-modal__rail { width: var(--wf-size-300); flex-shrink: 0; padding: var(--ou-space-2) 0; overflow-y: auto; }
+    /* Preview rail is three-level: Раздел → Тип → Вариант отрисовки.
+       The render status dot lives on the variant (leaf); section/type only group. */
+    .tpl-preview-section { display: flex; align-items: center; cursor: pointer; user-select: none; padding: var(--ou-space-3) var(--ou-space-3) var(--wf-space-half); font: var(--ou-text-body-xs); font-weight: 700; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .06em; }
+    .tpl-preview-section:first-child { padding-top: 0; }
+    .tpl-preview-section:not(:first-child) { margin-top: var(--ou-space-2); border-top: var(--wf-border-w) solid var(--ou-border-soft); padding-top: var(--ou-space-3); }
+    .tpl-preview-type { display: flex; align-items: center; cursor: pointer; user-select: none; gap: var(--wf-space-6); padding: var(--wf-space-7) var(--ou-space-3) var(--wf-space-half) var(--ou-space-5); font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default); }
+    /* Variant count as a compact pill, pushed to the right edge. */
+    .tpl-preview-type__n { flex-shrink: 0; margin-left: auto; min-width: var(--ou-space-5); height: var(--ou-space-5); padding: 0 var(--wf-space-6); border-radius: var(--ou-radius-pill); background: var(--ou-bg-hover); color: var(--ou-fg-muted); font: var(--ou-text-caption); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+    /* Fold chevron — DS Lucide icon (#i-chevron-right), rotated: down when
+       expanded, right when collapsed (same pattern as approved prd7-tests-list). */
+    .fold-chevron { flex-shrink: 0; width: var(--ou-space-4); height: var(--ou-space-4); margin-right: var(--wf-space-6); color: var(--ou-fg-muted); transform: rotate(90deg); transition: transform .15s; }
+    .is-collapsed > .fold-chevron { transform: rotate(0deg); }
+    .ou-modal__rail-item { display: flex; align-items: center; gap: var(--ou-space-2); }
+    .ou-modal__rail-item--var { padding-left: var(--ou-space-6); }
+    .route-dot { width: var(--ou-space-2); height: var(--ou-space-2); border-radius: 50%; flex-shrink: 0; margin-left: auto; background: var(--ou-border-default); }
+    .route-dot--pass { background: var(--ou-success-default); }
+    .route-dot--warn { background: var(--ou-warning-default); }
+    .route-dot--fail { background: var(--ou-error-default); }
+    .route-dot--run { border: var(--wf-border-w) solid var(--ou-accent-default); border-top-color: transparent; background: transparent; animation: spin .8s linear infinite; }
+    .tpl-preview-stage { flex: 1; overflow-y: auto; background: var(--ou-bg-page); padding: var(--ou-space-5); display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); }
+    .tpl-preview-shell { width: 100%; max-width: var(--wf-size-720); background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-m); overflow: hidden; box-shadow: var(--ou-shadow-sm); }
+    .tpl-preview-caption { font: var(--ou-text-body-xs); color: var(--ou-fg-muted); }
+    .smoke-summary { width: 100%; max-width: var(--wf-size-720); }
+    .smoke-errors { width: 100%; max-width: var(--wf-size-720); border: var(--wf-border-w) solid var(--ou-error-default); border-radius: var(--ou-radius-m); background: var(--ou-bg-elevated); overflow: hidden; }
+    .smoke-errors__head { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-3) var(--ou-space-4); background: var(--ou-error-soft); font: var(--ou-text-body-s); font-weight: 600; }
+    .smoke-verdict { display: flex; align-items: center; gap: var(--ou-space-2); font: var(--ou-text-body-s); }
+    .smoke-verdict--ok { color: var(--ou-success-default); }
+    .smoke-verdict--blocked { color: var(--ou-error-default); }
+    .smoke-verdict__ico { width: var(--ou-space-4); height: var(--ou-space-4); }
+
+    /* Toast (export) */
+    .wf-toast { position: fixed; bottom: var(--ou-space-5); left: 50%; transform: translateX(-50%); z-index: 300; display: flex; align-items: center; gap: var(--ou-space-2); background: var(--ou-bg-elevated); border: var(--wf-border-w) solid var(--ou-border-default); border-left: var(--wf-space-half) solid var(--ou-success-default); border-radius: var(--ou-radius-s); box-shadow: var(--ou-shadow-m); padding: var(--ou-space-3) var(--ou-space-4); font: var(--ou-text-body-s); }
+
+    .wf-sprite { display: none; }
+    .ou-modal__head { align-items: center; }
+    .wf-annot-wrap { position: relative; display: inline-flex; }
+    .wf-annot-wrap--block { position: relative; display: block; }
+    .wf-annot { display: none; position: absolute; top: calc(-1 * var(--ou-space-2)); right: calc(-1 * var(--ou-space-1)); z-index: 200; background: var(--ou-warning-default); color: var(--ou-fg-default); border-radius: var(--ou-radius-s); padding: 0 var(--ou-space-1); font-weight: 700; font-size: var(--wf-space-10); line-height: var(--ou-space-5); pointer-events: none; white-space: nowrap; box-shadow: var(--ou-shadow-sm); }
+    body.wf-annots-on .wf-annot { display: block; }
+  </style>
+
+  <style data-wf-template-overrides>
+    .wf-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 9999; display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-4); background: var(--ou-bg-elevated); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap; }
+    .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+    .wf-nav button { padding: var(--ou-space-1) var(--ou-space-3); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-s); background: transparent; color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer; }
+    .wf-nav button:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+    .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    .ou-shell.wf-state { min-height: unset; padding-top: 0; margin-top: var(--wf-nav-offset, var(--wf-size-52)); height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); }
+    .ou-shell.wf-state.active { display: grid; }
+    .ou-shell .ou-shell__main { padding: 0; overflow: hidden; gap: 0; }
+    .wf-state.shell.active { display: block; }
+    .wf-state > .ou-modal-root { top: var(--wf-nav-offset, var(--wf-size-52)); }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<!-- ─── SVG sprite ─────────────────────────────────────────────────────────── -->
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-question" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+</svg>
+
+<!-- ─── State switcher ─────────────────────────────────────────────────────── -->
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">PRD-3 · Шаблоны (админ):</span>
+  <button type="button" class="active" onclick="showState(this,'list')">s-список</button>
+  <button type="button" onclick="showState(this,'empty')">s-пусто</button>
+  <button type="button" onclick="showState(this,'row-menu')">s-меню-строки</button>
+  <div class="wf-nav-sep"></div>
+  <button type="button" onclick="showState(this,'up-pick')">s-загрузка-выбор</button>
+  <button type="button" onclick="showState(this,'up-progress')">s-загрузка-обработка</button>
+  <button type="button" onclick="showState(this,'up-ok')">s-загрузка-принят</button>
+  <button type="button" onclick="showState(this,'up-rejected')">s-загрузка-отклонён</button>
+  <button type="button" onclick="showState(this,'up-warn')">s-загрузка-предупреждения</button>
+  <div class="wf-nav-sep"></div>
+  <button type="button" onclick="showState(this,'details')">s-детали</button>
+  <button type="button" onclick="showState(this,'preview')">s-предпросмотр</button>
+  <button type="button" onclick="showState(this,'running')">s-проверка-идёт</button>
+  <button type="button" onclick="showState(this,'passed')">s-пройдена</button>
+  <button type="button" onclick="showState(this,'failed')">s-не-пройдена</button>
+  <div class="wf-nav-sep"></div>
+  <button type="button" onclick="showState(this,'deactivate')">s-деактивация</button>
+  <button type="button" onclick="showState(this,'delete')">s-удаление</button>
+  <button type="button" onclick="showState(this,'delete-blocked')">s-удаление-нельзя</button>
+  <button type="button" onclick="showState(this,'update')">s-обновление</button>
+  <button type="button" onclick="showState(this,'export')">s-экспорт</button>
+  <div class="wf-nav-sep"></div>
+  <button type="button" onclick="toggleTheme(this)">Тёмная тема</button>
+  <button type="button" onclick="toggleDensity(this)">Плотный режим</button>
+  <button type="button" onclick="toggleAnnots(this)">Аннотации</button>
+</nav>
+<script>
+  window.toggleAnnots = function (btn) { var on = document.body.classList.toggle('wf-annots-on'); if (btn) btn.classList.toggle('active', on); };
+</script>
+
+<!-- ═══ Reusable admin shell + templates list (for the page states) ═══════════ -->
+<template id="tpl-admin-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-layers"/></svg>Шаблоны</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Шаблоны</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta"><span class="ou-shell__user-name">Алексей Иванов</span><span class="ou-shell__user-role">Администратор</span></span>
+    </button>
+  </header>
+</template>
+
+<!-- Full templates page used as the (dimmed) backdrop behind modal states. -->
+<template id="tpl-admin-backdrop">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-layers"/></svg>Шаблоны</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Шаблоны</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta"><span class="ou-shell__user-name">Алексей Иванов</span><span class="ou-shell__user-role">Администратор</span></span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+    <div class="toolbar">
+      <div class="search-input-wrap"><svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg><div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию…" aria-label="Поиск"></div></div></div>
+      <span style="flex:1"></span>
+      <button class="ou-btn ou-btn--primary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-upload"/></svg> Загрузить шаблон</button>
+    </div>
+    <div class="tpl-area">
+      <div class="tpl-grid">
+        <div class="tpl-card">
+          <div class="tpl-card__preview"><div class="ps"><div class="ps__hd" style="background:hsl(0 0% 40%)"><div class="ps__logo"></div></div><div class="ps__bd"><div class="ps__side"><div class="ps__nav ps__nav--on"></div><div class="ps__nav"></div><div class="ps__nav"></div></div><div class="ps__main"><div class="ps__q"></div><div class="ps__opt ps__opt--sel"></div><div class="ps__opt"></div><div class="ps__opt"></div></div></div></div></div>
+          <div class="tpl-card__body"><div class="tpl-card__head"><span class="tpl-card__name">Стандартный</span><span class="tpl-card__id">default</span></div><div class="tpl-card__badges"><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span><span class="ou-tag ou-tag--success ou-tag--outline">Активный</span></div><div class="tpl-card__meta">Используется в 14 тестах</div></div>
+          <div class="tpl-card__foot"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button></div>
+        </div>
+        <div class="tpl-card">
+          <div class="tpl-card__preview"><div class="ps"><div class="ps__hd" style="background:hsl(217 91% 42%)"><div class="ps__logo"></div></div><div class="ps__bd"><div class="ps__side"><div class="ps__nav ps__nav--on"></div><div class="ps__nav"></div><div class="ps__nav"></div></div><div class="ps__main"><div class="ps__q"></div><div class="ps__opt ps__opt--sel"></div><div class="ps__opt"></div><div class="ps__opt"></div></div></div></div></div>
+          <div class="tpl-card__body"><div class="tpl-card__head"><span class="tpl-card__name">Корпоративный РТК</span><span class="tpl-card__id">rtk-corporate</span></div><div class="tpl-card__badges"><span class="ou-tag ou-tag--neutral">Загруженный</span><span class="ou-tag ou-tag--success ou-tag--outline">Активный</span></div><div class="tpl-card__meta">Используется в 3 тестах</div></div>
+          <div class="tpl-card__foot"><button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button></div>
+        </div>
+        <div class="tpl-card">
+          <div class="tpl-card__preview"><div class="ps"><div class="ps__hd" style="background:hsl(32 90% 45%)"><div class="ps__logo"></div></div><div class="ps__bd"><div class="ps__side"><div class="ps__nav ps__nav--on"></div><div class="ps__nav"></div></div><div class="ps__main"><div class="ps__q"></div><div class="ps__opt ps__opt--sel"></div><div class="ps__opt"></div></div></div></div></div>
+          <div class="tpl-card__body"><div class="tpl-card__head"><span class="tpl-card__name">Лаконичный</span><span class="tpl-card__id">minimal-2</span></div><div class="tpl-card__badges"><span class="ou-tag ou-tag--neutral">Загруженный</span><span class="ou-tag ou-tag--neutral ou-tag--outline">Неактивный</span></div><div class="tpl-card__meta">Ещё не используется</div></div>
+          <div class="tpl-card__foot"><button class="ou-btn ou-btn--primary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-power"/></svg> Активировать</button></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</template>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-list — Список шаблонов (таблица со всеми типами и статусами)
+     PRD §3.2. Действия в строке (предпросмотр, проверить, ещё) + кнопка загрузки.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-list" class="wf-state ou-shell active">
+  <div style="display:contents" data-template="tpl-admin-shell"></div>
+  <main class="ou-shell__main">
+    <div class="toolbar">
+      <div class="search-input-wrap" role="search">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию…" aria-label="Поиск шаблона"></div></div>
+      </div>
+      <span style="flex:1"></span>
+      <span class="wf-annot-wrap">
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-upload"/></svg> Загрузить шаблон</button>
+        <span class="wf-annot">FR-3.1</span>
+      </span>
+    </div>
+
+    <div class="tpl-area">
+      <div class="tpl-grid">
+
+        <!-- Built-in, active -->
+        <div class="tpl-card">
+          <span class="wf-annot-wrap--block">
+            <div class="tpl-card__preview">
+              <div class="ps">
+                <div class="ps__hd" style="background:hsl(0 0% 40%)"><div class="ps__logo"></div></div>
+                <div class="ps__bd"><div class="ps__side"><div class="ps__nav ps__nav--on"></div><div class="ps__nav"></div><div class="ps__nav"></div></div><div class="ps__main"><div class="ps__q"></div><div class="ps__opt ps__opt--sel"></div><div class="ps__opt"></div><div class="ps__opt"></div></div></div>
+              </div>
+            </div>
+            <span class="wf-annot">assets.preview</span>
+          </span>
+          <div class="tpl-card__body">
+            <div class="tpl-card__head"><span class="tpl-card__name">Стандартный</span><span class="tpl-card__id">default</span></div>
+            <div class="tpl-card__badges"><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span><span class="ou-tag ou-tag--success ou-tag--outline">Активный</span><span class="ou-tag ou-tag--success">Пройдена</span><span class="ou-tag ou-tag--info ou-tag--outline">1.1.0</span></div>
+            <div class="tpl-card__meta">Используется в 14 тестах</div>
+          </div>
+          <div class="tpl-card__foot">
+            <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+            <button class="action-btn" type="button" title="Экспорт" aria-label="Экспорт ZIP"><svg width="14" height="14"><use href="#i-download"/></svg></button>
+            <div class="more-btn-wrap"><button class="action-btn" type="button" aria-label="Ещё"><svg width="14" height="14"><use href="#i-more"/></svg></button></div>
+          </div>
+        </div>
+
+        <!-- Uploaded, active (warnings) -->
+        <div class="tpl-card">
+          <div class="tpl-card__preview">
+            <div class="ps">
+              <div class="ps__hd" style="background:hsl(217 91% 42%)"><div class="ps__logo"></div></div>
+              <div class="ps__bd"><div class="ps__side"><div class="ps__nav ps__nav--on"></div><div class="ps__nav"></div><div class="ps__nav"></div></div><div class="ps__main"><div class="ps__q"></div><div class="ps__opt ps__opt--sel"></div><div class="ps__opt"></div><div class="ps__opt"></div></div></div>
+            </div>
+          </div>
+          <div class="tpl-card__body">
+            <div class="tpl-card__head"><span class="tpl-card__name">Корпоративный РТК</span><span class="tpl-card__id">rtk-corporate</span></div>
+            <div class="tpl-card__badges"><span class="ou-tag ou-tag--neutral">Загруженный</span><span class="ou-tag ou-tag--success ou-tag--outline">Активный</span><span class="ou-tag ou-tag--warning">Предупреждения</span><span class="ou-tag ou-tag--info ou-tag--outline">2.0.0</span></div>
+            <div class="tpl-card__meta">Используется в 3 тестах</div>
+          </div>
+          <div class="tpl-card__foot">
+            <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+            <button class="action-btn" type="button" title="Экспорт" aria-label="Экспорт ZIP"><svg width="14" height="14"><use href="#i-download"/></svg></button>
+            <div class="more-btn-wrap"><button class="action-btn" type="button" aria-label="Ещё"><svg width="14" height="14"><use href="#i-more"/></svg></button></div>
+          </div>
+        </div>
+
+        <!-- Uploaded, draft (not checked) -->
+        <div class="tpl-card">
+          <div class="tpl-card__preview">
+            <div class="ps">
+              <div class="ps__hd" style="background:hsl(160 60% 32%)"><div class="ps__logo"></div></div>
+              <div class="ps__bd"><div class="ps__side"><div class="ps__nav ps__nav--on"></div><div class="ps__nav"></div></div><div class="ps__main"><div class="ps__q"></div><div class="ps__opt ps__opt--sel"></div><div class="ps__opt"></div></div></div>
+            </div>
+          </div>
+          <div class="tpl-card__body">
+            <div class="tpl-card__head"><span class="tpl-card__name">Тёмный курс</span><span class="tpl-card__id">dark-course</span></div>
+            <div class="tpl-card__badges"><span class="ou-tag ou-tag--neutral">Загруженный</span><span class="ou-tag ou-tag--neutral">Черновик</span><span class="ou-tag ou-tag--neutral ou-tag--outline">Не проверялся</span><span class="ou-tag ou-tag--info ou-tag--outline">0.9.0</span></div>
+            <div class="tpl-card__meta">Ещё не используется</div>
+          </div>
+          <div class="tpl-card__foot">
+            <span class="wf-annot-wrap"><button class="ou-btn ou-btn--primary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-play"/></svg> Проверить</button><span class="wf-annot">NFR-03</span></span>
+            <button class="action-btn" type="button" title="Предпросмотр" aria-label="Предпросмотр"><svg width="14" height="14"><use href="#i-eye"/></svg></button>
+            <div class="more-btn-wrap"><button class="action-btn" type="button" aria-label="Ещё"><svg width="14" height="14"><use href="#i-more"/></svg></button></div>
+          </div>
+        </div>
+
+        <!-- Uploaded, inactive -->
+        <div class="tpl-card">
+          <div class="tpl-card__preview">
+            <div class="ps">
+              <div class="ps__hd" style="background:hsl(32 90% 45%)"><div class="ps__logo"></div></div>
+              <div class="ps__bd"><div class="ps__side"><div class="ps__nav ps__nav--on"></div><div class="ps__nav"></div></div><div class="ps__main"><div class="ps__q"></div><div class="ps__opt ps__opt--sel"></div><div class="ps__opt"></div></div></div>
+            </div>
+          </div>
+          <div class="tpl-card__body">
+            <div class="tpl-card__head"><span class="tpl-card__name">Лаконичный</span><span class="tpl-card__id">minimal-2</span></div>
+            <div class="tpl-card__badges"><span class="ou-tag ou-tag--neutral">Загруженный</span><span class="ou-tag ou-tag--neutral ou-tag--outline">Неактивный</span><span class="ou-tag ou-tag--success">Пройдена</span><span class="ou-tag ou-tag--info ou-tag--outline">1.3.0</span></div>
+            <div class="tpl-card__meta">Ещё не используется</div>
+          </div>
+          <div class="tpl-card__foot">
+            <button class="ou-btn ou-btn--primary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-power"/></svg> Активировать</button>
+            <button class="action-btn" type="button" title="Экспорт" aria-label="Экспорт ZIP"><svg width="14" height="14"><use href="#i-download"/></svg></button>
+            <div class="more-btn-wrap"><button class="action-btn" type="button" aria-label="Ещё"><svg width="14" height="14"><use href="#i-more"/></svg></button></div>
+          </div>
+        </div>
+
+        <!-- Invalid (no preview) -->
+        <div class="tpl-card">
+          <div class="tpl-card__preview tpl-card__preview--empty"><svg width="20" height="20" style="color:var(--ou-error-default)"><use href="#i-alert"/></svg> Превью недоступно</div>
+          <div class="tpl-card__body">
+            <div class="tpl-card__head"><span class="tpl-card__name">Партнёрский</span><span class="tpl-card__id">partner-x</span></div>
+            <div class="tpl-card__badges"><span class="ou-tag ou-tag--neutral">Загруженный</span><span class="ou-tag ou-tag--error">Невалидный</span><span class="ou-tag ou-tag--error ou-tag--outline">Не пройдена</span><span class="ou-tag ou-tag--info ou-tag--outline">1.0.0</span></div>
+            <div class="tpl-card__meta">Файлы шаблона недоступны</div>
+          </div>
+          <div class="tpl-card__foot">
+            <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-info"/></svg> Детали</button>
+            <button class="action-btn" type="button" title="Обновить" aria-label="Обновить"><svg width="14" height="14"><use href="#i-refresh"/></svg></button>
+            <div class="more-btn-wrap"><button class="action-btn" type="button" aria-label="Ещё"><svg width="14" height="14"><use href="#i-more"/></svg></button></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-empty — Загруженных шаблонов ещё нет (есть только встроенный)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-empty" class="wf-state ou-shell">
+  <div style="display:contents" data-template="tpl-admin-shell"></div>
+  <main class="ou-shell__main">
+    <div class="toolbar">
+      <div class="search-input-wrap" role="search">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию…" aria-label="Поиск шаблона"></div></div>
+      </div>
+      <span style="flex:1"></span>
+      <button class="ou-btn ou-btn--primary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-upload"/></svg> Загрузить шаблон</button>
+    </div>
+    <div class="tpl-area">
+      <div class="tpl-grid">
+        <div class="tpl-card">
+          <div class="tpl-card__preview">
+            <div class="ps">
+              <div class="ps__hd" style="background:hsl(0 0% 40%)"><div class="ps__logo"></div></div>
+              <div class="ps__bd"><div class="ps__side"><div class="ps__nav ps__nav--on"></div><div class="ps__nav"></div><div class="ps__nav"></div></div><div class="ps__main"><div class="ps__q"></div><div class="ps__opt ps__opt--sel"></div><div class="ps__opt"></div><div class="ps__opt"></div></div></div>
+            </div>
+          </div>
+          <div class="tpl-card__body">
+            <div class="tpl-card__head"><span class="tpl-card__name">Стандартный</span><span class="tpl-card__id">default</span></div>
+            <div class="tpl-card__badges"><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span><span class="ou-tag ou-tag--success ou-tag--outline">Активный</span><span class="ou-tag ou-tag--success">Пройдена</span></div>
+            <div class="tpl-card__meta">Используется в 14 тестах</div>
+          </div>
+          <div class="tpl-card__foot">
+            <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+            <button class="action-btn" type="button" title="Экспорт" aria-label="Экспорт ZIP"><svg width="14" height="14"><use href="#i-download"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <div class="empty-block">
+        <div class="empty-icon"><svg width="20" height="20"><use href="#i-upload"/></svg></div>
+        <div style="font:var(--ou-text-body-m);font-weight:600">Загруженных шаблонов пока нет</div>
+        <div style="font:var(--ou-text-body-s);color:var(--ou-fg-muted);max-width:var(--wf-size-340)">Загрузите ZIP-архив шаблона. Система проверит его комплектность и работоспособность перед активацией.</div>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button" style="margin-top:var(--ou-space-2)"><svg width="14" height="14"><use href="#i-upload"/></svg> Загрузить шаблон</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-row-menu — Открыто меню действий строки (загруженный, активный)
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-row-menu" class="wf-state ou-shell">
+  <div style="display:contents" data-template="tpl-admin-shell"></div>
+  <main class="ou-shell__main">
+    <div class="toolbar">
+      <div class="search-input-wrap" role="search">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию…" aria-label="Поиск шаблона"></div></div>
+      </div>
+      <span style="flex:1"></span>
+      <button class="ou-btn ou-btn--primary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-upload"/></svg> Загрузить шаблон</button>
+    </div>
+    <div class="tpl-area">
+      <div class="tpl-grid">
+        <div class="tpl-card">
+          <div class="tpl-card__preview">
+            <div class="ps">
+              <div class="ps__hd" style="background:hsl(217 91% 42%)"><div class="ps__logo"></div></div>
+              <div class="ps__bd"><div class="ps__side"><div class="ps__nav ps__nav--on"></div><div class="ps__nav"></div><div class="ps__nav"></div></div><div class="ps__main"><div class="ps__q"></div><div class="ps__opt ps__opt--sel"></div><div class="ps__opt"></div><div class="ps__opt"></div></div></div>
+            </div>
+          </div>
+          <div class="tpl-card__body">
+            <div class="tpl-card__head"><span class="tpl-card__name">Корпоративный РТК</span><span class="tpl-card__id">rtk-corporate</span></div>
+            <div class="tpl-card__badges"><span class="ou-tag ou-tag--neutral">Загруженный</span><span class="ou-tag ou-tag--success ou-tag--outline">Активный</span><span class="ou-tag ou-tag--warning">Предупреждения</span><span class="ou-tag ou-tag--info ou-tag--outline">2.0.0</span></div>
+            <div class="tpl-card__meta">Используется в 3 тестах</div>
+          </div>
+          <div class="tpl-card__foot">
+            <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+            <div class="more-btn-wrap">
+              <button class="action-btn" type="button" aria-label="Ещё" aria-expanded="true" style="background:var(--ou-bg-hover);border-color:var(--ou-border-default);color:var(--ou-fg-default)"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+              <div class="dropdown-menu" role="menu" style="bottom:100%;top:auto">
+                <div class="dropdown-item" role="menuitem"><svg width="15" height="15"><use href="#i-info"/></svg> Детали</div>
+                <div class="dropdown-item" role="menuitem"><svg width="15" height="15"><use href="#i-eye"/></svg> Предпросмотр и проверка</div>
+                <div class="dropdown-item" role="menuitem"><svg width="15" height="15"><use href="#i-refresh"/></svg> Обновить (загрузить новую версию)</div>
+                <div class="dropdown-item" role="menuitem"><svg width="15" height="15"><use href="#i-download"/></svg> Экспорт ZIP</div>
+                <hr class="dropdown-sep">
+                <div class="dropdown-item" role="menuitem"><svg width="15" height="15"><use href="#i-power"/></svg> Деактивировать</div>
+                <div class="dropdown-item danger" role="menuitem" aria-disabled="true" title="Шаблон используется тестами — сначала деактивируйте"><svg width="15" height="15"><use href="#i-trash"/></svg> Удалить</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-up-pick — Загрузка: выбор / перетаскивание ZIP-файла. PRD §3.1.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-up-pick" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="up-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal upload-modal">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text"><p class="ou-modal__title" id="up-title">Загрузка шаблона</p></div>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ou-modal__body">
+        <div class="upload-zone upload-zone--active">
+          <svg class="upload-zone__ico" width="32" height="32"><use href="#i-upload"/></svg>
+          <div style="font:var(--ou-text-body-m);font-weight:600">Перетащите ZIP-архив шаблона сюда</div>
+          <div style="font:var(--ou-text-body-s);color:var(--ou-fg-muted)">или</div>
+          <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Выбрать файл</button>
+          <div style="font:var(--ou-text-caption);color:var(--ou-fg-muted);margin-top:var(--ou-space-2)">Только .zip, до 20&nbsp;МБ. Все ресурсы — внутри архива, без внешних ссылок.</div>
+        </div>
+      </div>
+      <div class="ou-modal__foot ou-modal__foot--between">
+        <span></span>
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button">Отмена</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-up-progress — Загрузка: идёт распаковка и проверка комплектности.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-up-progress" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="upp-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal upload-modal">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text"><p class="ou-modal__title" id="upp-title">Загрузка шаблона</p></div>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть" disabled aria-disabled="true"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ou-modal__body">
+        <div class="upload-file" style="margin-bottom:var(--ou-space-3)"><svg width="16" height="16" style="color:var(--ou-fg-muted)"><use href="#i-file"/></svg> rtk-corporate-2.0.0.zip <span style="color:var(--ou-fg-muted)">· 4,2 МБ</span></div>
+        <div class="upload-progress"><div class="upload-progress__bar" style="width:70%"></div></div>
+        <div style="display:flex;align-items:center;gap:var(--ou-space-2);margin-top:var(--ou-space-3);font:var(--ou-text-body-s);color:var(--ou-fg-muted)">
+          <svg width="16" height="16" style="animation:spin .8s linear infinite"><use href="#i-loader"/></svg>
+          Распаковка и проверка комплектности…
+        </div>
+      </div>
+      <div class="ou-modal__foot ou-modal__foot--between"><span></span><button class="ou-btn ou-btn--secondary ou-btn--m" type="button" disabled aria-disabled="true">Отмена</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-up-ok — Загрузка: комплектность в порядке, создан черновик.
+     Предлагается следующий шаг — проверка работоспособности. PRD §3.1.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-up-ok" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="upok-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal upload-modal">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text"><p class="ou-modal__title" id="upok-title">Шаблон загружен</p></div>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ou-modal__body">
+        <div class="ou-banner ou-banner--success" role="status" style="margin-bottom:var(--ou-space-3)">
+          <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-check-circle"/></svg></div>
+          <div class="ou-banner__body">
+            <div class="ou-banner__title">Проверка комплектности пройдена</div>
+            <div class="ou-banner__desc">«Корпоративный РТК» v2.0.0 добавлен как черновик. Перед активацией проверьте работоспособность.</div>
+          </div>
+        </div>
+        <div class="detail-grid">
+          <dt>Идентификатор</dt><dd><code>rtk-corporate</code></dd>
+          <dt>Версия</dt><dd>2.0.0</dd>
+          <dt>Версия API шаблона</dt><dd>1.0</dd>
+          <dt>Статус</dt><dd><span class="ou-tag ou-tag--neutral">Черновик</span></dd>
+        </div>
+      </div>
+      <div class="ou-modal__foot ou-modal__foot--between">
+        <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Закрыть</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-play"/></svg> Проверить работоспособность</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-up-rejected — Загрузка отклонена: блокирующие ошибки комплектности.
+     PRD §4.1.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-up-rejected" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="uprej-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal upload-modal">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text"><p class="ou-modal__title" id="uprej-title">Шаблон не принят</p></div>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ou-modal__body">
+        <span class="wf-annot-wrap--block">
+          <div class="ou-banner ou-banner--error" role="alert" style="margin-bottom:var(--ou-space-3)">
+            <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert"/></svg></div>
+            <div class="ou-banner__body">
+              <div class="ou-banner__title">Архив не прошёл проверку комплектности</div>
+              <div class="ou-banner__desc">Шаблон не загружен. Устраните ошибки и загрузите архив повторно.</div>
+            </div>
+          </div>
+          <span class="wf-annot">§4.1</span>
+        </span>
+        <ul class="result-list">
+          <li class="result-item"><svg class="result-item__ico result-item__ico--err" width="16" height="16"><use href="#i-x"/></svg><div>В архиве отсутствует файл описания шаблона (<code>manifest.json</code>).</div></li>
+          <li class="result-item"><svg class="result-item__ico result-item__ico--err" width="16" height="16"><use href="#i-x"/></svg><div>Внешняя ссылка в стилях запрещена: <code>@import url(https://cdn…)</code> в <code>styles/base.css</code>.</div></li>
+          <li class="result-item"><svg class="result-item__ico result-item__ico--err" width="16" height="16"><use href="#i-x"/></svg><div>Отсутствует файл, на который ссылается описание: <code>layouts/results.html</code>.</div></li>
+        </ul>
+      </div>
+      <div class="ou-modal__foot ou-modal__foot--between">
+        <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Закрыть</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-upload"/></svg> Загрузить другой архив</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-up-warn — Загрузка принята с предупреждениями. PRD §4.2.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-up-warn" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="upw-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal upload-modal">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text"><p class="ou-modal__title" id="upw-title">Шаблон загружен — есть предупреждения</p></div>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ou-modal__body">
+        <div class="ou-banner ou-banner--warning" role="status" style="margin-bottom:var(--ou-space-3)">
+          <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-warn"/></svg></div>
+          <div class="ou-banner__body">
+            <div class="ou-banner__title">Комплектность в порядке, есть 2 предупреждения</div>
+            <div class="ou-banner__desc">Предупреждения не мешают активации, но лучше их устранить.</div>
+          </div>
+        </div>
+        <ul class="result-list">
+          <li class="result-item"><svg class="result-item__ico result-item__ico--warn" width="16" height="16"><use href="#i-warn"/></svg><div>Файл не используется описанием: <code>assets/old-logo.png</code>.</div></li>
+          <li class="result-item"><svg class="result-item__ico result-item__ico--warn" width="16" height="16"><use href="#i-warn"/></svg><div>Не объявлен необязательный экран «Стартовая страница» — будет использован общий контентный макет.</div></li>
+        </ul>
+      </div>
+      <div class="ou-modal__foot ou-modal__foot--between">
+        <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Закрыть</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-play"/></svg> Проверить работоспособность</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-details — Карточка деталей шаблона. PRD §3.3.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-details" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="det-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--l detail-modal" style="display:flex;flex-direction:column">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <p class="ou-modal__title" id="det-title">Корпоративный РТК — детали</p>
+          <p class="ou-modal__desc">Загруженный шаблон · версия 2.0.0</p>
+        </div>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ou-modal__body" style="overflow:auto">
+        <dl class="detail-grid">
+          <dt>Идентификатор</dt><dd><code>rtk-corporate</code></dd>
+          <dt>Версия / версия API</dt><dd>2.0.0 / 1.0</dd>
+          <dt>Статус</dt><dd><span class="ou-tag ou-tag--success ou-tag--outline">Активный</span></dd>
+          <dt>Комплектность</dt><dd><span class="ou-tag ou-tag--warning">Предупреждения</span></dd>
+          <dt>Работоспособность</dt><dd><span class="ou-tag ou-tag--success">Пройдена · 11/11 экранов</span></dd>
+          <dt>Используется тестами</dt><dd>3</dd>
+        </dl>
+
+        <div class="detail-section-title">Макеты экранов</div>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--wf-space-6)">
+          <span class="ou-tag ou-tag--neutral ou-tag--outline">оболочка</span>
+          <span class="ou-tag ou-tag--neutral ou-tag--outline">вопрос</span>
+          <span class="ou-tag ou-tag--neutral ou-tag--outline">контент</span>
+          <span class="ou-tag ou-tag--neutral ou-tag--outline">результаты</span>
+          <span class="ou-tag ou-tag--neutral ou-tag--outline">старт</span>
+          <span class="ou-tag ou-tag--neutral ou-tag--outline">доступ ограничен</span>
+        </div>
+
+        <div class="detail-section-title">Параметры шаблона (8)</div>
+        <div class="detail-code">brand.primaryColor (цвет) · brand.logo (изображение) · progress.mode (выбор) · sidebar.enabled (да/нет) · …</div>
+
+        <div class="detail-section-title">Журнал проверки работоспособности</div>
+        <div class="detail-code">[OK] start · content.intro · content.info
+[OK] question.single · question.multiple · question.matching · question.ranking
+[OK] content.summary · results · system.blocked
+[WARN] question.ranking: нет необязательного слота question-hint</div>
+      </div>
+      <div class="ou-modal__foot ou-modal__foot--between">
+        <button class="ou-btn ou-btn--secondary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-eye"/></svg> Предпросмотр и проверка</button>
+        <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Закрыть</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATES: s-preview / s-running / s-passed / s-failed — окно предпросмотра и
+     проверки работоспособности (под-сценарий). PRD §3.4, §4.3, NFR-01/03.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-preview" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="pv-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--xl tpl-preview-modal">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <p class="ou-modal__title" id="pv-title">Предпросмотр «Корпоративный РТК» v2.0.0</p>
+          <p class="ou-modal__desc">Демонстрационные данные шаблона. Элементы управления работают, прогресс не сохраняется.</p>
+        </div>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ou-modal__body">
+        <div class="ou-modal__split">
+          <nav class="ou-modal__rail" aria-label="Экраны шаблона: раздел, тип, вариант отрисовки">
+            <div class="tpl-preview-section">Страницы</div>
+            <div class="tpl-preview-type">Старт</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var is-active" aria-current="page">Стартовая страница</button>
+            <div class="tpl-preview-type">Введение <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Заголовок и изображение</button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Только заголовок</button>
+            <div class="tpl-preview-type">Учебный материал</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Текст и изображение</button>
+            <div class="tpl-preview-type">Итог <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">С диаграммой</button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Кратко</button>
+            <div class="tpl-preview-type">Маршрутизатор</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Меню карточек</button>
+            <div class="tpl-preview-section">Вопросы</div>
+            <div class="tpl-preview-type">Один вариант <span class="tpl-preview-type__n" aria-label="вариантов отрисовки: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Радио-список</button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Карточки</button>
+            <div class="tpl-preview-type">Несколько вариантов</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Чекбоксы</button>
+            <div class="tpl-preview-type">Сопоставление <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Две колонки</button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Перетаскивание</button>
+            <div class="tpl-preview-type">Ранжирование</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Список с перетаскиванием</button>
+            <div class="tpl-preview-section">Итоги и система</div>
+            <div class="tpl-preview-type">Результаты <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Стандартные</button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Адаптивные</button>
+            <div class="tpl-preview-type">Доступ ограничен</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Экран блокировки</button>
+            <div class="tpl-preview-type">Переход</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Анимация перехода</button>
+          </nav>
+          <div class="tpl-preview-stage">
+            <div class="tpl-preview-shell" data-wf-demo>
+              <div style="height:var(--ou-space-9);background:hsl(217 91% 42%);color:white;display:flex;align-items:center;padding:0 var(--ou-space-5);gap:var(--ou-space-3)"><div style="width:var(--ou-space-6);height:var(--ou-space-6);background:rgba(255,255,255,.2);border-radius:var(--ou-space-1)"></div><span style="font:var(--ou-text-body-m);font-weight:500">Курс по информационной безопасности</span></div>
+              <div style="padding:var(--ou-space-8);text-align:center"><h2 style="font:var(--ou-text-heading-l);margin:0 0 var(--ou-space-2)">Курс по информационной безопасности</h2><p style="font:var(--ou-text-body-l);color:var(--ou-fg-muted);margin:0 0 var(--ou-space-6)">12 вопросов · порог 70% · 30 минут</p><button class="ou-btn ou-btn--primary ou-btn--m" type="button">Начать тест</button></div>
+            </div>
+            <div class="tpl-preview-caption">Стартовая страница · демонстрационные данные · экран <code>start</code></div>
+          </div>
+        </div>
+      </div>
+      <div class="ou-modal__foot ou-modal__foot--between">
+        <span class="smoke-verdict"><svg class="smoke-verdict__ico" aria-hidden="true"><use href="#i-info"/></svg> Проверка работоспособности не запускалась</span>
+        <div style="display:flex;gap:var(--ou-space-2)">
+          <button class="ou-btn ou-btn--secondary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-play"/></svg> Проверить работоспособность</button>
+          <button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Активировать</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="wf-running" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="rn-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--xl tpl-preview-modal">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text"><p class="ou-modal__title" id="rn-title">Предпросмотр «Корпоративный РТК» v2.0.0</p><p class="ou-modal__desc">Идёт проверка работоспособности: каждый экран отрисовывается на демонстрационных данных в изолированном окне.</p></div>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть" disabled aria-disabled="true"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ou-modal__body">
+        <div class="ou-modal__split">
+          <nav class="ou-modal__rail" aria-label="Экраны шаблона">
+            <div class="tpl-preview-section">Страницы</div>
+            <div class="tpl-preview-type">Старт</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Стартовая страница <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Введение <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Заголовок и изображение <span class="route-dot route-dot--pass"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Только заголовок <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Учебный материал</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var is-active" aria-current="page">Текст и изображение <span class="route-dot route-dot--run"></span></button>
+            <div class="tpl-preview-type">Итог <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">С диаграммой <span class="route-dot"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Кратко <span class="route-dot"></span></button>
+            <div class="tpl-preview-type">Маршрутизатор</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Меню карточек <span class="route-dot"></span></button>
+            <div class="tpl-preview-section">Вопросы</div>
+            <div class="tpl-preview-type">Один вариант <span class="tpl-preview-type__n" aria-label="вариантов отрисовки: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Радио-список <span class="route-dot"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Карточки <span class="route-dot"></span></button>
+            <div class="tpl-preview-type">Несколько вариантов</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Чекбоксы <span class="route-dot"></span></button>
+            <div class="tpl-preview-type">Сопоставление <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Две колонки <span class="route-dot"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Перетаскивание <span class="route-dot"></span></button>
+            <div class="tpl-preview-type">Ранжирование</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Список с перетаскиванием <span class="route-dot"></span></button>
+            <div class="tpl-preview-section">Итоги и система</div>
+            <div class="tpl-preview-type">Результаты <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Стандартные <span class="route-dot"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Адаптивные <span class="route-dot"></span></button>
+            <div class="tpl-preview-type">Доступ ограничен</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Экран блокировки <span class="route-dot"></span></button>
+            <div class="tpl-preview-type">Переход</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Анимация перехода <span class="route-dot"></span></button>
+          </nav>
+          <div class="tpl-preview-stage">
+            <div class="ou-banner ou-banner--info smoke-summary" role="status"><div class="ou-banner__ico"><svg width="16" height="16" style="animation:spin .8s linear infinite"><use href="#i-loader"/></svg></div><div class="ou-banner__body"><div class="ou-banner__title">Проверка 4 из 17…</div><div class="ou-banner__desc">Отрисовка варианта «Текст и изображение».</div></div></div>
+            <div class="tpl-preview-shell" data-wf-demo style="opacity:.6"><div style="height:var(--ou-space-9);background:hsl(217 91% 42%)"></div><div style="padding:var(--ou-space-7) var(--ou-space-8)"><h2 style="font:var(--ou-text-heading-l);margin:0 0 var(--ou-space-3)">Раздел 1. Базовые угрозы</h2></div></div>
+            <div class="tpl-preview-caption">Экран <code>content.info</code> · отрисовка в изолированном окне</div>
+          </div>
+        </div>
+      </div>
+      <div class="ou-modal__foot ou-modal__foot--between">
+        <span class="smoke-verdict"><svg class="smoke-verdict__ico" style="animation:spin .8s linear infinite" aria-hidden="true"><use href="#i-loader"/></svg> Проверка выполняется…</span>
+        <div style="display:flex;gap:var(--ou-space-2)"><button class="ou-btn ou-btn--secondary ou-btn--m" type="button" disabled aria-disabled="true">Проверить</button><button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Активировать</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="wf-passed" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="ps-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--xl tpl-preview-modal">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text"><p class="ou-modal__title" id="ps-title">Предпросмотр «Корпоративный РТК» v2.0.0</p><p class="ou-modal__desc">Проверка работоспособности пройдена. Шаблон можно активировать.</p></div>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ou-modal__body">
+        <div class="ou-modal__split">
+          <nav class="ou-modal__rail" aria-label="Экраны шаблона">
+            <div class="tpl-preview-section">Страницы</div>
+            <div class="tpl-preview-type">Старт</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var is-active" aria-current="page">Стартовая страница <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Введение <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Заголовок и изображение <span class="route-dot route-dot--pass"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Только заголовок <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Учебный материал</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Текст и изображение <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Итог <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">С диаграммой <span class="route-dot route-dot--pass"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Кратко <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Маршрутизатор</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Меню карточек <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-section">Вопросы</div>
+            <div class="tpl-preview-type">Один вариант <span class="tpl-preview-type__n" aria-label="вариантов отрисовки: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Радио-список <span class="route-dot route-dot--pass"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Карточки <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Несколько вариантов</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Чекбоксы <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Сопоставление <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Две колонки <span class="route-dot route-dot--pass"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Перетаскивание <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Ранжирование</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Список с перетаскиванием <span class="route-dot route-dot--warn"></span></button>
+            <div class="tpl-preview-section">Итоги и система</div>
+            <div class="tpl-preview-type">Результаты <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Стандартные <span class="route-dot route-dot--pass"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Адаптивные <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Доступ ограничен</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Экран блокировки <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Переход</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Анимация перехода <span class="route-dot route-dot--pass"></span></button>
+          </nav>
+          <div class="tpl-preview-stage">
+            <div class="ou-banner ou-banner--success smoke-summary" role="status"><div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-check-circle"/></svg></div><div class="ou-banner__body"><div class="ou-banner__title">Проверка пройдена · 17 из 17 экранов</div><div class="ou-banner__desc">1 предупреждение: вариант ранжирования без необязательного слота <code>question-hint</code>.</div></div></div>
+            <div class="tpl-preview-shell" data-wf-demo><div style="height:var(--ou-space-9);background:hsl(217 91% 42%);color:white;display:flex;align-items:center;padding:0 var(--ou-space-5);gap:var(--ou-space-3)"><div style="width:var(--ou-space-6);height:var(--ou-space-6);background:rgba(255,255,255,.2);border-radius:var(--ou-space-1)"></div><span style="font:var(--ou-text-body-m);font-weight:500">Курс по информационной безопасности</span></div><div style="padding:var(--ou-space-8);text-align:center"><h2 style="font:var(--ou-text-heading-l);margin:0 0 var(--ou-space-2)">Курс по информационной безопасности</h2><button class="ou-btn ou-btn--primary ou-btn--m" type="button">Начать тест</button></div></div>
+            <div class="tpl-preview-caption">Стартовая страница · экран <code>start</code> · пройдено</div>
+          </div>
+        </div>
+      </div>
+      <div class="ou-modal__foot ou-modal__foot--between">
+        <span class="smoke-verdict smoke-verdict--ok"><svg class="smoke-verdict__ico" aria-hidden="true"><use href="#i-check-circle"/></svg> Активация доступна</span>
+        <div style="display:flex;gap:var(--ou-space-2)"><button class="ou-btn ou-btn--secondary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-refresh"/></svg> Перепроверить</button><span class="wf-annot-wrap"><button class="ou-btn ou-btn--primary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-power"/></svg> Активировать</button><span class="wf-annot">NFR-01</span></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="wf-failed" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="fl-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--xl tpl-preview-modal">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text"><p class="ou-modal__title" id="fl-title">Предпросмотр «Корпоративный РТК» v2.0.0</p><p class="ou-modal__desc">Проверка работоспособности не пройдена. Активация заблокирована до устранения ошибок.</p></div>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ou-modal__body">
+        <div class="ou-modal__split">
+          <nav class="ou-modal__rail" aria-label="Экраны шаблона">
+            <div class="tpl-preview-section">Страницы</div>
+            <div class="tpl-preview-type">Старт</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Стартовая страница <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Введение <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Заголовок и изображение <span class="route-dot route-dot--pass"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Только заголовок <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Учебный материал</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Текст и изображение <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Итог <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">С диаграммой <span class="route-dot route-dot--pass"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Кратко <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Маршрутизатор</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Меню карточек <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-section">Вопросы</div>
+            <div class="tpl-preview-type">Один вариант <span class="tpl-preview-type__n" aria-label="вариантов отрисовки: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Радио-список <span class="route-dot route-dot--pass"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Карточки <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Несколько вариантов</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Чекбоксы <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Сопоставление <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var is-active" aria-current="page">Две колонки <span class="route-dot route-dot--fail"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Перетаскивание <span class="route-dot route-dot--fail"></span></button>
+            <div class="tpl-preview-type">Ранжирование</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Список с перетаскиванием <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-section">Итоги и система</div>
+            <div class="tpl-preview-type">Результаты <span class="tpl-preview-type__n" aria-label="вариантов: 2">2</span></div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Стандартные <span class="route-dot route-dot--pass"></span></button>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Адаптивные <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Доступ ограничен</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Экран блокировки <span class="route-dot route-dot--pass"></span></button>
+            <div class="tpl-preview-type">Переход</div>
+            <button type="button" class="ou-modal__rail-item ou-modal__rail-item--var">Анимация перехода <span class="route-dot route-dot--pass"></span></button>
+          </nav>
+          <div class="tpl-preview-stage">
+            <div class="ou-banner ou-banner--error smoke-summary" role="alert"><div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert"/></svg></div><div class="ou-banner__body"><div class="ou-banner__title">Проверка не пройдена · 2 варианта с ошибками</div><div class="ou-banner__desc">15 из 17 экранов отрисованы корректно. Выберите вариант с красной отметкой.</div></div></div>
+            <span class="wf-annot-wrap--block" style="width:100%;max-width:var(--wf-size-720)">
+              <div class="smoke-errors">
+                <div class="smoke-errors__head"><svg width="16" height="16"><use href="#i-alert"/></svg> Сопоставление → вариант «Две колонки» (<code>question.matching</code>) — 2 блокирующие ошибки</div>
+                <ul class="result-list" style="padding:var(--ou-space-2) var(--ou-space-4)">
+                  <li class="result-item"><svg class="result-item__ico result-item__ico--err" width="16" height="16"><use href="#i-x"/></svg><div>Не заполнено обязательное поле ответа (слот <code>question-interaction</code>) — макет вопроса не отрисовал ответ.</div></li>
+                  <li class="result-item"><svg class="result-item__ico result-item__ico--err" width="16" height="16"><use href="#i-x"/></svg><div>Ошибка выполнения при загрузке <code>scripts/template.js</code>: <code>TypeError: TB.dnd is undefined</code>.</div></li>
+                </ul>
+              </div>
+              <span class="wf-annot">§4.3</span>
+            </span>
+            <div class="tpl-preview-caption">Сопоставление · вариант «Две колонки» (<code>question.matching</code>) · отрисовка прервана</div>
+          </div>
+        </div>
+      </div>
+      <div class="ou-modal__foot ou-modal__foot--between">
+        <span class="smoke-verdict smoke-verdict--blocked"><svg class="smoke-verdict__ico" aria-hidden="true"><use href="#i-alert"/></svg> Активация заблокирована</span>
+        <div style="display:flex;gap:var(--ou-space-2)"><button class="ou-btn ou-btn--secondary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-refresh"/></svg> Перепроверить</button><button class="ou-btn ou-btn--primary ou-btn--m" type="button" disabled aria-disabled="true">Активировать</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-deactivate — Подтверждение деактивации + каскад на «Стандартный».
+     PRD §5.3, NFR-04.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-deactivate" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="deact-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-dialog__body">
+        <h2 class="modal-dialog__title" id="deact-title">Деактивировать «Корпоративный РТК»?</h2>
+        <p class="modal-dialog__desc">Шаблон скроется из выбора у авторов.</p>
+        <span class="wf-annot-wrap--block">
+          <div class="ou-banner ou-banner--warning" role="alert" style="margin-top:var(--ou-space-3)">
+            <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-warn"/></svg></div>
+            <div class="ou-banner__body">
+              <div class="ou-banner__title">3 теста используют этот шаблон</div>
+              <div class="ou-banner__desc">Они автоматически переключатся на «Стандартный». Совместимые параметры оформления сохранятся.</div>
+            </div>
+          </div>
+          <span class="wf-annot">§5.3</span>
+        </span>
+      </div>
+      <div class="modal-dialog__foot">
+        <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Отмена</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-power"/></svg> Деактивировать</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-delete — Подтверждение удаления (загруженный, неактивный, не исп.).
+     PRD §5.4.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-delete" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="del-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-dialog__body">
+        <h2 class="modal-dialog__title" id="del-title">Удалить «Лаконичный»?</h2>
+        <p class="modal-dialog__desc">Загруженный шаблон и его файлы будут удалены без возможности восстановления. Шаблон неактивен и не используется тестами — удаление безопасно.</p>
+      </div>
+      <div class="modal-dialog__foot">
+        <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Отмена</button>
+        <button class="ou-btn ou-btn--destructive ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-trash"/></svg> Удалить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-delete-blocked — Удаление невозможно (шаблон используется/активен).
+     PRD §5.4.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-delete-blocked" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="delb-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-dialog__body">
+        <h2 class="modal-dialog__title" id="delb-title">Удалить нельзя</h2>
+        <div class="ou-banner ou-banner--error" role="alert" style="margin-top:var(--ou-space-1)">
+          <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert"/></svg></div>
+          <div class="ou-banner__body">
+            <div class="ou-banner__title">«Корпоративный РТК» используется 3 тестами</div>
+            <div class="ou-banner__desc">Сначала деактивируйте шаблон — связанные тесты переключатся на «Стандартный», после чего его можно удалить.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-dialog__foot">
+        <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Закрыть</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-power"/></svg> Деактивировать</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-update — Обновление (повторная загрузка) + отчёт о переносе
+     параметров. PRD §5.5–5.6.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-update" class="wf-state shell">
+  <div class="ou-shell wf-admin-dim" style="display:grid"><div style="display:contents" data-template="tpl-admin-backdrop"></div></div>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="upd-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal upload-modal">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text"><p class="ou-modal__title" id="upd-title">Обновление «Корпоративный РТК»</p><p class="ou-modal__desc">Новая версия 2.1.0 · идентификатор совпал, комплектность пройдена</p></div>
+        <button class="ou-modal__close" type="button" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="ou-modal__body">
+        <span class="wf-annot-wrap--block">
+          <div class="detail-section-title" style="margin-top:0">Перенос параметров оформления</div>
+          <div>
+            <div class="mig-row"><svg width="16" height="16" class="result-item__ico--ok" style="color:var(--ou-success-default)"><use href="#i-check"/></svg> 6 параметров перенесены без изменений</div>
+            <div class="mig-row"><svg width="16" height="16" style="color:var(--ou-warning-default)"><use href="#i-warn"/></svg> 1 параметр больше не используется: <code>sidebar.width</code> — будет удалён</div>
+            <div class="mig-row"><svg width="16" height="16" style="color:var(--ou-info-default)"><use href="#i-info"/></svg> 1 новый параметр требует значения: <code>brand.footerText</code></div>
+          </div>
+          <span class="wf-annot">§5.6</span>
+        </span>
+        <p style="font:var(--ou-text-body-s);color:var(--ou-fg-muted);margin-top:var(--ou-space-3)">После обновления потребуется повторная проверка работоспособности.</p>
+      </div>
+      <div class="ou-modal__foot ou-modal__foot--between">
+        <button class="ou-btn ou-btn--ghost ou-btn--m" type="button">Отмена</button>
+        <button class="ou-btn ou-btn--primary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-refresh"/></svg> Обновить шаблон</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     STATE: s-export — Экспорт шаблона в ZIP (действие со всплывающим уведомлением).
+     PRD §7.
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="wf-export" class="wf-state ou-shell">
+  <div style="display:contents" data-template="tpl-admin-shell"></div>
+  <main class="ou-shell__main">
+    <div class="toolbar">
+      <div class="search-input-wrap" role="search">
+        <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="Поиск по названию…" aria-label="Поиск шаблона"></div></div>
+      </div>
+      <span style="flex:1"></span>
+      <button class="ou-btn ou-btn--primary ou-btn--m" type="button"><svg width="14" height="14"><use href="#i-upload"/></svg> Загрузить шаблон</button>
+    </div>
+    <div class="tpl-area">
+      <div class="tpl-grid">
+        <div class="tpl-card">
+          <div class="tpl-card__preview">
+            <div class="ps">
+              <div class="ps__hd" style="background:hsl(0 0% 40%)"><div class="ps__logo"></div></div>
+              <div class="ps__bd"><div class="ps__side"><div class="ps__nav ps__nav--on"></div><div class="ps__nav"></div><div class="ps__nav"></div></div><div class="ps__main"><div class="ps__q"></div><div class="ps__opt ps__opt--sel"></div><div class="ps__opt"></div><div class="ps__opt"></div></div></div>
+            </div>
+          </div>
+          <div class="tpl-card__body">
+            <div class="tpl-card__head"><span class="tpl-card__name">Стандартный</span><span class="tpl-card__id">default</span></div>
+            <div class="tpl-card__badges"><span class="ou-tag ou-tag--neutral ou-tag--outline">Встроенный</span><span class="ou-tag ou-tag--success ou-tag--outline">Активный</span><span class="ou-tag ou-tag--success">Пройдена</span></div>
+            <div class="tpl-card__meta">Используется в 14 тестах</div>
+          </div>
+          <div class="tpl-card__foot">
+            <button class="ou-btn ou-btn--secondary ou-btn--s" type="button"><svg width="13" height="13"><use href="#i-eye"/></svg> Предпросмотр</button>
+            <button class="action-btn" type="button" title="Экспорт" aria-label="Экспорт ZIP" style="background:var(--ou-bg-hover);border-color:var(--ou-border-default);color:var(--ou-fg-default)"><svg width="14" height="14"><use href="#i-download"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="wf-toast" role="status">
+      <svg width="16" height="16" style="color:var(--ou-success-default)"><use href="#i-check-circle"/></svg>
+      <span>Скачивается <code style="font-family:ui-monospace,monospace">default-1.1.0.zip</code> — валидный стартовый шаблон</span>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     Acceptance
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<section class="acceptance" aria-label="Acceptance">
+  <h2>Acceptance &mdash; PRD-3: администрирование шаблонов</h2>
+  <table class="acceptance-table">
+    <thead><tr><th>Состояние</th><th>Раздел PRD</th><th>Покрывает</th></tr></thead>
+    <tbody>
+      <tr><td>s-список / s-пусто</td><td>§3.2</td><td>Карточки шаблонов с настоящим превью (<code>assets.preview</code>): имя+идентификатор, тип (встроенный/загруженный), версия, статус (активный/черновик/неактивный/невалидный), проверка (пройдена/предупреждения/не пройдена/не проверялся), использование, действия. Невалидный — «Превью недоступно». Пустой список — подсказка + загрузка.</td></tr>
+      <tr><td>s-меню-строки</td><td>§3.2, §5</td><td>Меню действий карточки: детали, предпросмотр+проверка, обновить, экспорт, деактивировать, удалить (выключено с подсказкой, если используется).</td></tr>
+      <tr><td>s-загрузка-выбор/обработка</td><td>§3.1</td><td>Зона перетаскивания/выбора ZIP, лимит 20 МБ, запрет внешних ссылок; индикатор распаковки и проверки комплектности.</td></tr>
+      <tr><td>s-загрузка-принят/отклонён/предупреждения</td><td>§4.1, §4.2</td><td>Результат комплектности: принят как черновик; отклонён со списком блокирующих ошибок (нет описания / внешняя ссылка / нет файла); принят с предупреждениями.</td></tr>
+      <tr><td>s-детали</td><td>§3.3</td><td>Описание (только чтение), макеты, параметры, журнал проверки, использование.</td></tr>
+      <tr><td>s-предпросмотр/проверка-идёт/пройдена/не-пройдена</td><td>§3.4, §4.3, NFR-01/03</td><td>Живой предпросмотр на демо-данных + проверка работоспособности. Слева — трёхуровневый сворачиваемый список «Раздел → Тип → Вариант отрисовки» (тип может иметь несколько вариантов: «Введение», «Итог» — по 2; тип вопроса «Один вариант» — 2 варианта отрисовки и т.п.); статус проверки на варианте; разделы и типы сворачиваются. Гейт активации.</td></tr>
+      <tr><td>s-деактивация</td><td>§5.3, NFR-04</td><td>Подтверждение + предупреждение о переключении N тестов на «Стандартный» (параметры сохраняются), транзакционно.</td></tr>
+      <tr><td>s-удаление / s-удаление-нельзя</td><td>§5.4</td><td>Удаление загруженного неактивного неиспользуемого шаблона; блокировка с объяснением, если используется/активен.</td></tr>
+      <tr><td>s-обновление</td><td>§5.5–5.6</td><td>Повторная загрузка + отчёт о переносе параметров (сохранены / удалены / требуют значения).</td></tr>
+      <tr><td>s-экспорт</td><td>§7</td><td>Экспорт встроенного/загруженного шаблона в ZIP, валидный как стартовый.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TEMPLATE NOTES / DS MAPPING
+     ═══════════════════════════════════════════════════════════ -->
+<div class="wf-page">
+<div class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+  <table>
+    <thead><tr><th>Элемент</th><th>Поле API / условие</th><th>Примечание</th></tr></thead>
+    <tbody>
+      <tr><td>Состояния wireframe</td><td><code>showState(btn, id)</code></td><td>Метанавигация переключает только визуальные состояния; не часть продуктового интерфейса.</td></tr>
+      <tr><td>Список шаблонов</td><td><code>GET /api/admin/templates</code></td><td>Включает встроенные и загруженные, все статусы.</td></tr>
+      <tr><td>Загрузка</td><td><code>POST /api/admin/templates</code></td><td>Архив с блокирующими ошибками отклоняется и не создаётся; при успехе — черновик.</td></tr>
+      <tr><td>Проверка/активация</td><td><code>POST …/smoke-test</code>, <code>PUT …/activate</code></td><td>Активация при <code>validation_json.ok &amp;&amp; smoke_test_json.ok</code> (NFR-01).</td></tr>
+      <tr><td>Деактивация</td><td><code>PUT …/deactivate</code></td><td>Каскад: тесты с этим <code>templateId</code> → «Стандартный», параметры сохраняются (§5.3).</td></tr>
+      <tr><td>Удаление</td><td><code>DELETE …/:id</code></td><td>Только загруженный, неактивный, не используемый (§5.4).</td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping</h2>
+  <p class="wf-mapping-sub">Заполняется до старта frontend (gate этапа 3.5). Строка с «custom» в колонке DS-компонент — блокер.</p>
+  <table>
+    <thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead>
+    <tbody>
+      <tr><td>Метанавигация состояний</td><td><code>Wireframe utility</code></td><td><code>--ou-space-*</code>, <code>--ou-border-*</code>, <code>--ou-accent-*</code></td><td>Не мигрируется.</td></tr>
+      <tr><td>Оболочка администратора</td><td><code>.ou-shell</code> + <code>.ou-side</code></td><td><code>--ou-bg-*</code>, <code>--ou-space-*</code></td><td>Боковая навигация с пунктом «Шаблоны».</td></tr>
+      <tr><td>Сетка карточек шаблонов</td><td><code>Card</code> (паттерн <code>gallery-card</code>)</td><td><code>--ou-bg-elevated</code>, <code>--ou-border-soft</code>, <code>--ou-radius-m</code>, <code>--ou-space-*</code></td><td>Карточка с превью 16:9 по образцу галереи из <code>prd7-design-tab.html</code>; превью = реальный <code>assets.preview</code>.</td></tr>
+      <tr><td>Бейджи статуса/проверки/типа</td><td><code>Tag</code> (<code>.ou-tag</code>)</td><td><code>--ou-success-*</code>, <code>--ou-warning-*</code>, <code>--ou-error-*</code>, <code>--ou-neutral-*</code></td><td>Активный/Черновик/Неактивный/Невалидный; Пройдена/Предупреждения/Не пройдена.</td></tr>
+      <tr><td>Меню действий строки</td><td><code>DropdownMenu</code></td><td><code>--ou-bg-elevated</code>, <code>--ou-shadow-m</code>, <code>--ou-error-soft</code></td><td>Пункт «Удалить» выключается, если шаблон используется.</td></tr>
+      <tr><td>Окно загрузки + зона файла</td><td><code>ModalDialog</code> + <code>FileUpload/Dropzone</code></td><td><code>--ou-border-default</code>, <code>--ou-accent-soft</code>, <code>--ou-space-*</code></td><td>Уточнить компонент зоны загрузки при mapping-gate.</td></tr>
+      <tr><td>Результат проверки (баннер + список)</td><td><code>Banner</code> + список на токенах</td><td><code>--ou-success-soft</code>, <code>--ou-warning-soft</code>, <code>--ou-error-soft</code></td><td>Один баннер на исход + перечень ошибок/предупреждений.</td></tr>
+      <tr><td>Диалоги подтверждения (деакт./удаление)</td><td><code>ConfirmDialog</code> (<code>ModalDialog</code>)</td><td><code>--ou-error-default</code>, <code>--ou-space-*</code>, <code>--ou-shadow-xl</code></td><td>Удаление — destructive; деактивация — primary + предупреждение.</td></tr>
+      <tr><td>Окно деталей</td><td><code>ModalDialog</code> (<code>--l</code>)</td><td><code>--ou-bg-muted</code>, <code>--ou-border-default</code></td><td>Описание только для чтения; блок журнала — моноширинный.</td></tr>
+      <tr><td>Окно предпросмотра + проверки</td><td><code>ModalDialog</code> (<code>--xl</code>, split)</td><td><code>--ou-bg-elevated</code>, <code>--ou-shadow-xl</code></td><td>Паттерн <code>tpl-preview-modal</code> из <code>prd7-design-tab.html</code>; статус-точка экрана — общий индикатор статуса (уточнить).</td></tr>
+      <tr><td>Уведомление об экспорте</td><td><code>Toast</code></td><td><code>--ou-success-default</code>, <code>--ou-shadow-m</code></td><td>Краткое подтверждение скачивания.</td></tr>
+    </tbody>
+  </table>
+</div>
+</div>
+
+<!-- ─── Scripts ─────────────────────────────────────────────────────────────── -->
+<script>
+  (function injectTemplates() {
+    document.querySelectorAll('[data-template]').forEach(function (slot) {
+      var tpl = document.getElementById(slot.getAttribute('data-template'));
+      if (tpl) slot.appendChild(tpl.content.cloneNode(true));
+    });
+  })();
+
+  function resolveState(id) { return document.getElementById('wf-' + id) || document.getElementById(id); }
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (nav) document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+  window.showState = function (btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+    document.querySelectorAll('.wf-nav button').forEach(function (b) { b.classList.toggle('active', b === btn); });
+    updateWireframeNavOffset();
+  };
+  window.toggleTheme = function (btn) {
+    var b = document.body, dark = b.classList.contains('ou--dark');
+    b.classList.toggle('ou--dark', !dark); b.classList.toggle('ou--light', dark);
+    if (btn) { btn.textContent = dark ? 'Тёмная тема' : 'Светлая тема'; btn.classList.toggle('active', !dark); }
+  };
+  window.toggleDensity = function (btn) {
+    var b = document.body, c = b.classList.contains('ou--compact');
+    b.classList.toggle('ou--compact', !c); b.classList.toggle('ou--normal', c);
+    if (btn) { btn.textContent = c ? 'Плотный режим' : 'Обычный режим'; btn.classList.toggle('active', !c); }
+  };
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+  if (window.ResizeObserver) { var n = document.querySelector('.wf-nav'); if (n) new ResizeObserver(updateWireframeNavOffset).observe(n); }
+</script>
+<script>
+  // Collapsible preview rail: Раздел сворачивает свои Типы и Варианты;
+  // Тип сворачивает свои Варианты. Recompute visibility from header state.
+  (function initRailFold() {
+    function applyFold(rail) {
+      var sectionCollapsed = false, typeCollapsed = false;
+      Array.prototype.forEach.call(rail.children, function (el) {
+        if (el.classList.contains('tpl-preview-section')) {
+          sectionCollapsed = el.classList.contains('is-collapsed');
+          typeCollapsed = false;
+          el.style.display = '';
+        } else if (el.classList.contains('tpl-preview-type')) {
+          typeCollapsed = el.classList.contains('is-collapsed');
+          el.style.display = sectionCollapsed ? 'none' : '';
+        } else {
+          el.style.display = (sectionCollapsed || typeCollapsed) ? 'none' : '';
+        }
+      });
+    }
+    document.querySelectorAll('.tpl-preview-modal .ou-modal__rail').forEach(function (rail) {
+      rail.querySelectorAll('.tpl-preview-section, .tpl-preview-type').forEach(function (h) {
+        var NS = 'http://www.w3.org/2000/svg';
+        var chev = document.createElementNS(NS, 'svg');
+        chev.setAttribute('class', 'fold-chevron');
+        chev.setAttribute('aria-hidden', 'true');
+        var use = document.createElementNS(NS, 'use');
+        use.setAttribute('href', '#i-chevron-right');
+        chev.appendChild(use);
+        h.insertBefore(chev, h.firstChild);
+        h.setAttribute('role', 'button');
+        h.setAttribute('tabindex', '0');
+        h.setAttribute('aria-expanded', 'true');
+        h.addEventListener('click', function () {
+          var collapsed = h.classList.toggle('is-collapsed');
+          h.setAttribute('aria-expanded', String(!collapsed));
+          applyFold(rail);
+        });
+        h.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); h.click(); }
+        });
+      });
+      applyFold(rail);
+    });
+  })();
+</script>
+<script>
+  (function () { var s = document.createElement('script'); s.src = '/docs/wireframes/wf-links.js'; document.head.appendChild(s); })();
+</script>
+
+</body>
+</html>
