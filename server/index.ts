@@ -5,7 +5,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./storage";
-import { syncBuiltinTemplates, reconcileUploadedTemplates } from "./template-registry";
+import { syncBuiltinTemplates, reconcileTemplates } from "./template-registry";
 import {
   waitForDatabase,
   closeDatabaseConnection,
@@ -124,9 +124,9 @@ app.use((req, res, next) => {
     logger.error(err instanceof Error ? err : String(err), "syncBuiltinTemplates");
   }
   try {
-    await reconcileUploadedTemplates();
+    await reconcileTemplates();
   } catch (err) {
-    logger.error(err instanceof Error ? err : String(err), "reconcileUploadedTemplates");
+    logger.error(err instanceof Error ? err : String(err), "reconcileTemplates");
   }
 
   // Health check endpoint

@@ -5,15 +5,19 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import crypto from "node:crypto";
+import { eq, sql } from "drizzle-orm";
 import { db } from "./db";
 import {
   templates,
+  tests,
   templateManifestSchema,
   defaultTemplateManifestSchema,
   SUPPORTED_TEMPLATE_API_VERSIONS,
   isSupportedTemplateApiVersion,
 } from "@shared/schema";
+import { readDirEntries } from "./services/template-package";
+import { validateTemplatePackage, type TemplateValidationReport } from "./services/template-validation";
 import { logger } from "./logger";
 
 // API-version helpers live in @shared/schema (db-free, shared with the validator);
@@ -43,6 +47,31 @@ export function validateManifest(manifest: unknown, templateId: string): string 
   return result.error.issues
     .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
     .join("; ");
+}
+
+/**
+ * Computes a cheap source fingerprint for a template directory: a SHA-1 over each
+ * file's POSIX-relative path, byte size and modification time (`stat` only — no
+ * content reads). Any added/removed/edited file changes the hash, so the startup
+ * reconcile can skip the expensive structural re-validation when it is unchanged.
+ */
+function computeSourceFingerprint(rootDir: string): string {
+  const parts: string[] = [];
+  const walk = (dir: string): void => {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        walk(full);
+      } else if (ent.isFile()) {
+        const st = fs.statSync(full);
+        const rel = path.relative(rootDir, full).split(path.sep).join("/");
+        parts.push(`${rel}:${st.size}:${Math.floor(st.mtimeMs)}`);
+      }
+    }
+  };
+  walk(rootDir);
+  parts.sort();
+  return crypto.createHash("sha1").update(parts.join("\n")).digest("hex");
 }
 
 /**
@@ -115,21 +144,97 @@ export async function syncBuiltinTemplates(): Promise<void> {
 }
 
 /**
- * Startup integrity check for uploaded templates (PRD-3): uploaded packages live
- * in the DB and on disk under their `source_path`. If the extracted files have
- * gone missing, the template can no longer be exported or rendered, so it is
- * flagged `invalid` and hidden from authors. Safe to call repeatedly.
+ * Startup template-integrity gate (PRD-3, NFR-01/02). For every template that is
+ * NOT a currently shipped built-in, it verifies the template is safe to expose:
+ * the source files must exist AND pass the same structural validation as an upload
+ * ({@link validateTemplatePackage}; files are read, never executed — NFR-02). It:
+ *
+ *   - REMOVES orphaned built-ins — ids that were built-in in a previous build but
+ *     are no longer shipped (e.g. `corporate`/`minimal`) and have no source dir.
+ *     These are system-managed phantom rows, so they are deleted and any dependent
+ *     test is repointed to `default` first (mirrors the deactivate cascade, §5.3);
+ *   - DEACTIVATES uploaded packages whose files went missing or fail validation
+ *     (flagged `invalid`, not deleted — uploaded packages are author data, removed
+ *     only via the admin UI).
+ *
+ * Idempotent and boot-safe (the caller wraps it in try/catch). Valid templates are
+ * never auto-(de)activated — an admin re-enables a fixed template through the UI,
+ * which re-runs validation and the browser health check. Shipped built-ins
+ * ({@link BUILTIN_IDS}) are validated by {@link syncBuiltinTemplates} and skipped.
  */
-export async function reconcileUploadedTemplates(): Promise<void> {
-  const rows = await db.select().from(templates).where(eq(templates.sourceType, "uploaded"));
+export async function reconcileTemplates(): Promise<void> {
+  const shipped = new Set<string>(BUILTIN_IDS);
+  const rows = await db.select().from(templates);
+
   for (const row of rows) {
+    // Currently shipped built-ins are validated + upserted by syncBuiltinTemplates.
+    if (row.sourceType === "builtin" && shipped.has(row.id)) continue;
+
     const present = !!row.sourcePath && fs.existsSync(row.sourcePath);
-    if (!present && row.status !== "invalid") {
+
+    // ── Orphaned built-in (phantom from an old build): remove it ───────────────
+    // No longer shipped and no files on disk → not a real template. Repoint any
+    // dependent tests to `default`, then delete, transactionally (NFR-04).
+    if (row.sourceType === "builtin" && !present) {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(tests)
+          .set({ designSettingsJson: sql`jsonb_set(${tests.designSettingsJson}, '{templateId}', '"default"'::jsonb, true)` })
+          .where(sql`${tests.designSettingsJson}->>'templateId' = ${row.id}`);
+        await tx.delete(templates).where(eq(templates.id, row.id));
+      });
+      logger.warn(`Removed orphaned built-in template "${row.id}" (no longer shipped, source missing); dependent tests repointed to default`);
+      continue;
+    }
+
+    // ── Uploaded with missing source: deactivate once (keep the row — user data) ─
+    if (!present) {
+      if (row.status === "invalid" && !row.isActive) continue; // already handled
       await db
         .update(templates)
-        .set({ status: "invalid", isActive: false, updatedAt: new Date() })
+        .set({ status: "invalid", isActive: false, sourceFingerprint: null, updatedAt: new Date() })
         .where(eq(templates.id, row.id));
-      logger.warn(`Uploaded template "${row.id}" marked invalid: source path missing (${row.sourcePath})`);
+      logger.warn(`Template "${row.id}" deactivated on startup: source files missing (${row.sourcePath ?? "—"})`);
+      continue;
+    }
+
+    // ── Change-detection: skip re-validation when files are unchanged ──────────
+    const fingerprint = computeSourceFingerprint(row.sourcePath!);
+    if (fingerprint === row.sourceFingerprint) continue; // unchanged since last reconcile
+
+    // ── Source new/changed: re-run the same structural validation as an upload ─
+    let report: TemplateValidationReport | null = null;
+    let reason: string | null = null;
+    try {
+      const entries = await readDirEntries(row.sourcePath!);
+      report = validateTemplatePackage(entries, { mode: "update", expectedId: row.id });
+      if (!report.ok) {
+        reason = "structural validation failed: " + report.blocking.map((b) => b.code).join(", ");
+      }
+    } catch (err) {
+      reason = `validation error: ${(err as Error).message}`;
+    }
+
+    if (reason) {
+      await db
+        .update(templates)
+        .set({
+          status: "invalid",
+          isActive: false,
+          validationJson: report ?? row.validationJson,
+          sourceFingerprint: fingerprint,
+          updatedAt: new Date(),
+        })
+        .where(eq(templates.id, row.id));
+      logger.warn(`Template "${row.id}" deactivated on startup (invalid): ${reason}`);
+    } else {
+      // Valid: persist the fresh report + fingerprint but do NOT auto-activate —
+      // an admin re-enables a fixed template through the UI (re-runs the health check).
+      await db
+        .update(templates)
+        .set({ validationJson: report, sourceFingerprint: fingerprint, updatedAt: new Date() })
+        .where(eq(templates.id, row.id));
+      logger.info(`Template "${row.id}" re-validated on startup: ok`);
     }
   }
 }
