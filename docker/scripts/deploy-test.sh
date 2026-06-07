@@ -241,6 +241,17 @@ EOF
 
 cd "${TEST_APP_DIR}"
 docker compose down --remove-orphans 2>/dev/null || true
+
+# Bring the cloned DB schema up to date with the image BEFORE the app boots.
+# The startup template sync (syncBuiltinTemplates) is awaited before the HTTP
+# server listens, so a stale cloned schema aborts the whole boot. Run push in a
+# one-off container with the entrypoint overridden so the app itself does not
+# start (the ownership reassignment above exists precisely so push can ALTER the
+# cloned tables). Mirrors the prod deploy.sh schema step.
+info "Applying DB schema to test DB (drizzle-kit push)..."
+docker compose run --rm --no-deps --entrypoint sh "${TEST_PROJECT}" -c "npx drizzle-kit push --force"
+ok "DB schema up to date"
+
 docker compose up -d
 ok "Container started"
 

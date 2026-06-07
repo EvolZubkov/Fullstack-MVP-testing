@@ -148,29 +148,24 @@ sed \
 ok "docker-compose.yml generated at ${APP_DIR}/docker-compose.yml"
 
 # ---------------------------------------------------------------------------
-# 6. Start service via docker compose
+# 6. Apply DB schema BEFORE starting the app
 # ---------------------------------------------------------------------------
-info "Starting service with docker compose..."
+# The app's startup (syncBuiltinTemplates) is awaited before the HTTP server
+# listens, so it reads the current schema and aborts the entire boot if a column
+# is missing (e.g. right after a schema change). Push the schema first, in a
+# one-off container with the entrypoint overridden so the app does not boot yet.
+info "Applying DB schema (drizzle-kit push)..."
 cd "${APP_DIR}"
 docker compose down --remove-orphans 2>/dev/null || true
+docker compose run --rm --no-deps --entrypoint sh app -c "npx drizzle-kit push --force"
+ok "DB schema up to date"
+
+# ---------------------------------------------------------------------------
+# 7. Start service via docker compose
+# ---------------------------------------------------------------------------
+info "Starting service with docker compose..."
 docker compose up -d
 ok "Service started"
-
-# ---------------------------------------------------------------------------
-# 7. Run DB migrations
-# ---------------------------------------------------------------------------
-info "Waiting for container to be ready..."
-for i in $(seq 1 15); do
-    if docker compose exec -T app echo "ok" &>/dev/null 2>&1; then
-        break
-    fi
-    echo "  attempt ${i}/15..."
-    sleep 2
-done
-
-info "Applying DB schema (drizzle-kit push)..."
-docker compose exec -T app npx drizzle-kit push --force
-ok "DB schema up to date"
 
 echo ""
 docker compose ps
