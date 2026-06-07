@@ -135,30 +135,74 @@ function buildSkeleton(placeholders: PlaceholderDef[]): string {
   return placeholders.map((p) => `<div data-placeholder="${esc(p.key)}"></div>`).join("");
 }
 
-/** Build minimal interaction HTML for the `question-interaction` slot, by type. */
+// Drag-handle glyphs mirror the web host (client/pages/learner/template-question-screen)
+// so the preview interaction is visually identical to the runtime.
+const RANK_GRIP =
+  '<svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">' +
+  '<path d="M2.5 4.99524H17.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>' +
+  '<path d="M14.1667 9.9952H2.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>' +
+  '<path d="M2.5 14.9951H10.8333" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+const MATCH_GRIP =
+  '<svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">' +
+  '<circle cx="7" cy="5" r="1.4"></circle><circle cx="13" cy="5" r="1.4"></circle>' +
+  '<circle cx="7" cy="10" r="1.4"></circle><circle cx="13" cy="10" r="1.4"></circle>' +
+  '<circle cx="7" cy="15" r="1.4"></circle><circle cx="13" cy="15" r="1.4"></circle></svg>';
+
+/**
+ * Build interaction HTML for the `question-interaction` slot. The markup/classes
+ * mirror the runtime web host (`template-question-screen.tsx`: `.option` /
+ * `.ranking-board`/`.rank-item` / `.matching-board`/`.match-*`) so the preview
+ * renders the real, template-styled interaction rather than a bare list. Demo
+ * state only: nothing is pre-selected, and matching chips are offset by one row so
+ * the preview does not reveal the correct pairing.
+ */
 function buildInteraction(q: PreviewQuestion): string {
   const opts = q.options ?? [];
   switch (q.type) {
     case "single":
     case "multiple": {
       const input = q.type === "single" ? "radio" : "checkbox";
-      const items = opts
-        .map((o) => `<label class="q-opt"><input type="${input}" name="${esc(q.id)}"> ${esc(o.text)}</label>`)
+      return opts
+        .map(
+          (o) =>
+            `<div class="option" role="button" tabindex="0">` +
+            `<input type="${input}" tabindex="-1" aria-hidden="true"><span>${esc(o.text)}</span></div>`,
+        )
         .join("");
-      return `<div class="q-options">${items}</div>`;
-    }
-    case "matching": {
-      const rows = (q.pairs ?? [])
-        .map((p) => `<div class="q-pair"><span>${esc(p.left)}</span><span>${esc(p.right)}</span></div>`)
-        .join("");
-      return `<div class="q-matching">${rows}</div>`;
     }
     case "ranking": {
-      const items = opts.map((o) => `<li class="q-rank">${esc(o.text)}</li>`).join("");
-      return `<ol class="q-ranking">${items}</ol>`;
+      const items = opts
+        .map(
+          (o, pos) =>
+            `<div class="rank-item rank-draggable" data-drag="${pos}" data-drop="${pos}">` +
+            `<span class="rank-grip">${RANK_GRIP}</span>` +
+            `<span class="rank-text">${esc(o.text)}</span></div>`,
+        )
+        .join("");
+      return `<div class="ranking-board">${items}</div>`;
+    }
+    case "matching": {
+      const pairs = q.pairs ?? [];
+      const n = pairs.length;
+      const rows = pairs
+        .map((p, i) => {
+          // Offset left chips by one row → an unsolved task, not the answer key.
+          const left = n > 1 ? pairs[(i + 1) % n].left : p.left;
+          return (
+            `<div class="matching-line">` +
+            `<div class="match-tile match-left-slot"><div class="match-chip">` +
+            `<span class="match-grip" aria-hidden="true">${MATCH_GRIP}</span>` +
+            `<span class="match-chip-text">${esc(left)}</span></div></div>` +
+            `<div class="matching-gap"></div>` +
+            `<div class="match-tile match-right-tile">${esc(p.right)}</div>` +
+            `</div>`
+          );
+        })
+        .join("");
+      return `<div class="matching-board">${rows}</div>`;
     }
     default:
-      return `<div class="q-options"></div>`;
+      return "";
   }
 }
 
@@ -191,6 +235,21 @@ function resultContextFromRuntime(dataset: PreviewDemoDataset): Record<string, u
     scorePercent: Number(r.scorePercent) || 0,
     status: r.status ?? "",
     passed: !!r.passed,
+  };
+}
+
+/**
+ * `result`-namespace for the per-section summary page (`content.summary`). Per
+ * spec-template-platform §8.2, Core feeds `content.summary` the result of the
+ * TOPIC/SECTION (not the whole test) — so the «Итог раздела» page reflects the
+ * section result. Falls back to the test result when the demo has no sectionResult.
+ */
+function sectionResultContextFromRuntime(dataset: PreviewDemoDataset): Record<string, unknown> {
+  const r = (dataset.runtime?.sectionResult ?? dataset.runtime?.result ?? {}) as Record<string, unknown>;
+  return {
+    scorePercent: Number(r.scorePercent) || 0,
+    status: r.status ?? "",
+    passed: r.passed != null ? !!r.passed : r.status === "passed",
   };
 }
 
@@ -272,7 +331,11 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
     const tpl = findContentTemplate(manifest, page?.templateKey ?? target.templateKey);
     const placeholders = tpl?.placeholders ?? [];
     const skeleton = buildSkeleton(placeholders);
-    const context = { course: { title: c.title }, result: resultContextFromRuntime(dataset) };
+    // The «Итог раздела» page (content.summary, after_topic) reflects the SECTION
+    // result; other content pages keep the test-level result namespace (§8.2).
+    const isSummary = route === "content.summary" || (tpl?.kind ?? page?.type) === "summary";
+    const result = isSummary ? sectionResultContextFromRuntime(dataset) : resultContextFromRuntime(dataset);
+    const context = { course: { title: c.title }, result };
     return {
       ...base,
       requiredSlots: ["page-content"],
