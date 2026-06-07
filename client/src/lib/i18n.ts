@@ -250,6 +250,7 @@ export const t = {
     topics: "Темы",
     questions: "Вопросы",
     tests: "Тесты",
+    templates: "Шаблоны",
     analytics: "Аналитика",
     users: "Пользователи",
     groups: "Группы",

@@ -14,6 +14,7 @@ import FirstLoginPage from "@/pages/first-login";
 import TopicsPage from "@/pages/author/topics";
 import QuestionsPage from "@/pages/author/questions";
 import TestsPage from "@/pages/author/tests";
+import AuthorTemplatesPage from "@/pages/author/templates";
 import AnalyticsPage from "@/pages/author/analytics";
 import TestAnalyticsPage from "@/pages/author/test-analytics";
 import UsersPage from "@/pages/author/users";
@@ -100,6 +101,14 @@ function Router() {
         <ProtectedRoute allowedRoles={["author"]}>
           <AuthorLayout>
             <TestsPage />
+          </AuthorLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/author/templates">
+        <ProtectedRoute allowedRoles={["author"]}>
+          <AuthorLayout>
+            <AuthorTemplatesPage />
           </AuthorLayout>
         </ProtectedRoute>
       </Route>
