@@ -210,6 +210,8 @@
   color: var(--ou-fg-default);
   text-align: left;
 }
+/* Section-level screen row (single-variant type rendered without the middle level). */
+.tpl-check-rail__var--top { padding-left: var(--ou-space-2); font-weight: 500; }
 .tpl-check-rail__var:hover { background: var(--ou-bg-muted); }
 .tpl-check-rail__var.is-active {
   background: var(--ou-accent-soft);

@@ -202,28 +202,43 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
 
       {bundle && (
         <div className="tpl-check-split">
-          <nav className="tpl-check-rail" aria-label="Экраны шаблона: раздел, тип, вариант отрисовки">
+          <nav className="tpl-check-rail" aria-label="Экраны шаблона по разделам">
             {rail.map((section) => (
               <div key={section.key}>
                 <div className="tpl-check-rail__section">{section.label}</div>
                 {section.types.map((type) => {
+                  // Two-level rail: a type with a single render variant is shown as
+                  // the screen itself (no redundant middle level). The collapsible
+                  // type group appears ONLY when a type has 2+ render variants.
+                  if (type.variants.length === 1) {
+                    const v = type.variants[0];
+                    return (
+                      <button
+                        key={v.route}
+                        type="button"
+                        className={"tpl-check-rail__var tpl-check-rail__var--top" + (v.route === selectedRoute ? " is-active" : "")}
+                        aria-current={v.route === selectedRoute ? "page" : undefined}
+                        onClick={() => setSelectedRoute(v.route)}
+                      >
+                        <span>{type.label}</span>
+                        <span className={dotClass(v.route)} aria-hidden="true" />
+                      </button>
+                    );
+                  }
                   const isOpen = openTypes.has(type.key);
-                  const multi = type.variants.length > 1;
                   return (
                     <div key={type.key}>
                       <button
                         type="button"
                         className={"tpl-check-rail__type" + (isOpen ? " is-open" : "")}
                         onClick={() => toggleType(type.key)}
-                        aria-expanded={isOpen}
+                        aria-expanded={isOpen ? "true" : "false"}
                       >
                         <ChevronRight size={14} className="tpl-check-rail__chevron" aria-hidden="true" />
                         <span className="tpl-check-rail__type-label">{type.label}</span>
-                        {multi && (
-                          <span className="tpl-check-rail__type-n" aria-label={`вариантов: ${type.variants.length}`}>
-                            {type.variants.length}
-                          </span>
-                        )}
+                        <span className="tpl-check-rail__type-n" aria-label={`вариантов: ${type.variants.length}`}>
+                          {type.variants.length}
+                        </span>
                       </button>
                       {isOpen &&
                         type.variants.map((v) => (
