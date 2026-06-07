@@ -33,12 +33,25 @@ export interface RailSection {
   types: RailType[];
 }
 
+// Sections follow the spec taxonomy: the content-page kinds of PRD-1 §4.3
+// (intro / info / router / questions / summary) plus the system surfaces —
+// the results layout (spec-template-platform §8.3) and system pages (§5.4).
+// Each kind/category is its own section so summary (итоговая страница) and the
+// results screen are clearly distinct, and intro/info are not lumped together.
 const SECTION_LABELS: Record<string, string> = {
-  pages: "Страницы",
+  start: "Старт",
+  // intro / summary are the symmetric per-SECTION bookends (PRD-4: `before_topic`
+  // shows content.intro before a section's questions; `after_topic` shows
+  // content.summary after the section result). Labelled symmetrically.
+  intro: "Введение раздела",
+  info: "Учебные страницы",
+  router: "Маршрутизатор",
   questions: "Вопросы",
-  outcome: "Итоги и система",
+  summary: "Итог раздела",
+  results: "Результаты теста",
+  system: "Системные экраны",
 };
-const SECTION_ORDER = ["pages", "questions", "outcome"];
+const SECTION_ORDER = ["start", "intro", "info", "router", "questions", "summary", "results", "system"];
 
 const TYPE_LABELS: Record<string, string> = {
   start: "Старт",
@@ -53,28 +66,38 @@ const TYPE_LABELS: Record<string, string> = {
   "question.ranking": "Ранжирование",
   question: "Вопрос",
   results: "Результаты",
+  "results.adaptive": "Адаптивные результаты",
   "system.blocked": "Доступ ограничен",
   "system.transition": "Переход",
 };
 
-/** Map a route to its (section, type) grouping keys. */
+/**
+ * Map a route to its (section, type) grouping keys following the spec taxonomy:
+ * the route's content-page `kind` (PRD-1 §4.3) drives the section, so `intro`,
+ * `info`, `router`, `questions` and `summary` each land in their own section,
+ * while `results` (§8.3) and `system.*` (§5.4) are the system surfaces.
+ */
 function classify(route: string): { section: string; typeKey: string } {
-  if (route === "start") return { section: "pages", typeKey: "start" };
+  if (route === "start") return { section: "start", typeKey: "start" };
+  if (route === "content.intro") return { section: "intro", typeKey: "content.intro" };
+  if (route === "content.summary") return { section: "summary", typeKey: "content.summary" };
+  if (route === "content.router" || route === "router") return { section: "router", typeKey: "content.router" };
   if (route === "content" || route.startsWith("content.")) {
+    // Remaining content kinds (info and any future ones) → "Учебные страницы".
     const sub = route.includes(".") ? route.split(".")[1] : "";
-    return { section: "pages", typeKey: sub ? `content.${sub}` : "content" };
+    return { section: "info", typeKey: sub ? `content.${sub}` : "content" };
   }
   if (route === "question" || route.startsWith("question.")) {
     const sub = route.includes(".") ? route.split(".")[1] : "";
     return { section: "questions", typeKey: sub ? `question.${sub}` : "question" };
   }
   if (route === "results" || route.startsWith("results")) {
-    return { section: "outcome", typeKey: "results" };
+    return { section: "results", typeKey: route === "results.adaptive" ? "results.adaptive" : "results" };
   }
   if (route.startsWith("system.")) {
-    return { section: "outcome", typeKey: route };
+    return { section: "system", typeKey: route };
   }
-  return { section: "outcome", typeKey: route };
+  return { section: "system", typeKey: route };
 }
 
 function typeLabel(typeKey: string): string {

@@ -123,19 +123,34 @@
 
 /* ─── 2) Preview + check modal: split + rail + stage ───────────────────────── */
 
+/* Make this modal a fixed-height workspace: the body fills the space between the
+   header and footer, and the split (rail + stage) fills the body. Both panes then
+   share the SAME height and scroll internally — so the rail is never clipped short
+   while the stage runs longer. (DS `.ou-modal` is a flex column with a max-height;
+   pinning the height lets the flex children resolve.) */
+.tpl-check-modal .ou-modal {
+  height: calc(100vh - var(--ou-space-7) * 2);
+}
+.tpl-check-modal .ou-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
 .tpl-check-split {
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(var(--ou-size-240, 240px), 18rem) 1fr;
   gap: var(--ou-space-5);
-  min-height: var(--ou-size-420, 420px);
 }
 
 .tpl-check-rail {
   display: flex;
   flex-direction: column;
   gap: var(--ou-space-1);
+  min-height: 0;
   overflow: auto;
-  max-height: 60vh;
   padding-right: var(--ou-space-2);
   border-right: var(--ou-border-width) solid var(--ou-border-soft);
 }
@@ -207,6 +222,7 @@
   flex-direction: column;
   gap: var(--ou-space-3);
   min-width: 0;
+  min-height: 0;
 }
 .tpl-check-stage__frame {
   flex: 1 1 auto;
