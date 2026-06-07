@@ -1198,7 +1198,7 @@
 </div>
 <div class="wf-mapping">
   <h2 class="wf-mapping-title">DS Mapping</h2>
-  <p class="wf-mapping-sub">Заполняется до старта frontend (gate этапа 3.5). Строка с «custom» в колонке DS-компонент — блокер.</p>
+  <p class="wf-mapping-sub">Gate этапа 3.5 ПРОЙДЕН (2026-06-07): все элементы покрыты компонентами <code>@universityrt/ui-kit</code>, строк «custom» нет — блокеров нет, можно начинать frontend.</p>
   <table>
     <thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead>
     <tbody>
@@ -1207,11 +1207,11 @@
       <tr><td>Сетка карточек шаблонов</td><td><code>Card</code> (паттерн <code>gallery-card</code>)</td><td><code>--ou-bg-elevated</code>, <code>--ou-border-soft</code>, <code>--ou-radius-m</code>, <code>--ou-space-*</code></td><td>Карточка с превью 16:9 по образцу галереи из <code>prd7-design-tab.html</code>; превью = реальный <code>assets.preview</code>.</td></tr>
       <tr><td>Бейджи статуса/проверки/типа</td><td><code>Tag</code> (<code>.ou-tag</code>)</td><td><code>--ou-success-*</code>, <code>--ou-warning-*</code>, <code>--ou-error-*</code>, <code>--ou-neutral-*</code></td><td>Активный/Черновик/Неактивный/Невалидный; Пройдена/Предупреждения/Не пройдена.</td></tr>
       <tr><td>Меню действий строки</td><td><code>DropdownMenu</code></td><td><code>--ou-bg-elevated</code>, <code>--ou-shadow-m</code>, <code>--ou-error-soft</code></td><td>Пункт «Удалить» выключается, если шаблон используется.</td></tr>
-      <tr><td>Окно загрузки + зона файла</td><td><code>ModalDialog</code> + <code>FileUpload/Dropzone</code></td><td><code>--ou-border-default</code>, <code>--ou-accent-soft</code>, <code>--ou-space-*</code></td><td>Уточнить компонент зоны загрузки при mapping-gate.</td></tr>
+      <tr><td>Окно загрузки + зона файла</td><td><code>Modal</code> + <code>FileUploader</code> + <code>FileItem</code></td><td><code>--ou-border-default</code>, <code>--ou-accent-soft</code>, <code>--ou-space-*</code></td><td>Gate 3.5 закрыт: зона = <code>FileUploader</code> (<code>onFiles</code>/<code>accept=".zip"</code>/<code>maxSizeMb=20</code>/<code>error</code>); строка принятого архива = <code>FileItem</code> (<code>status: idle|uploading|success|error</code>). Без custom.</td></tr>
       <tr><td>Результат проверки (баннер + список)</td><td><code>Banner</code> + список на токенах</td><td><code>--ou-success-soft</code>, <code>--ou-warning-soft</code>, <code>--ou-error-soft</code></td><td>Один баннер на исход + перечень ошибок/предупреждений.</td></tr>
       <tr><td>Диалоги подтверждения (деакт./удаление)</td><td><code>ConfirmDialog</code> (<code>ModalDialog</code>)</td><td><code>--ou-error-default</code>, <code>--ou-space-*</code>, <code>--ou-shadow-xl</code></td><td>Удаление — destructive; деактивация — primary + предупреждение.</td></tr>
       <tr><td>Окно деталей</td><td><code>ModalDialog</code> (<code>--l</code>)</td><td><code>--ou-bg-muted</code>, <code>--ou-border-default</code></td><td>Описание только для чтения; блок журнала — моноширинный.</td></tr>
-      <tr><td>Окно предпросмотра + проверки</td><td><code>ModalDialog</code> (<code>--xl</code>, split)</td><td><code>--ou-bg-elevated</code>, <code>--ou-shadow-xl</code></td><td>Паттерн <code>tpl-preview-modal</code> из <code>prd7-design-tab.html</code>; статус-точка экрана — общий индикатор статуса (уточнить).</td></tr>
+      <tr><td>Окно предпросмотра + проверки</td><td><code>Modal</code> (<code>--xl</code>, split) + <code>Tag</code> (<code>dot</code>)</td><td><code>--ou-bg-elevated</code>, <code>--ou-shadow-xl</code>, <code>--ou-success-*</code>, <code>--ou-warning-*</code>, <code>--ou-error-*</code></td><td>Паттерн <code>tpl-preview-modal</code> из <code>prd7-design-tab.html</code>. Gate 3.5 закрыт: статус-точка варианта = <code>Tag</code> с <code>dot</code> + <code>tone</code> (pass→<code>success</code>, warn→<code>warning</code>, fail→<code>error</code>, не проверено→<code>neutral</code>). Без custom.</td></tr>
       <tr><td>Уведомление об экспорте</td><td><code>Toast</code></td><td><code>--ou-success-default</code>, <code>--ou-shadow-m</code></td><td>Краткое подтверждение скачивания.</td></tr>
     </tbody>
   </table>
