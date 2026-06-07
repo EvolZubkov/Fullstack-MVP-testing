@@ -1,22 +1,34 @@
 # PRD-3: Администрирование и жизненный цикл SCORM-шаблонов
 
-**Версия:** 2.0  
-**Статус:** Утверждено — post-MVP (ROADMAP §0.2); шаг 7  
-**Дата актуализации:** 2026-06-02 (статус -> «Утверждено» после ревью-прохода)  
+**Версия:** 2.1  
+**Статус:** Реализовано — закрыто 2026-06-07  
+**Дата актуализации:** 2026-06-07 (актуализация под реализованный код после закрытия трека)  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md),
 [PRD-1](../prd-1/templates-content-pages.md),
-[Платформа SCORM-шаблонов](../spec-template-platform.md)  
+[Платформа SCORM-шаблонов](../spec-template-platform.md),
+[PRD-12](../prd-12/web-runtime-parity.md)  
 **Этап BRD:** BR-05  
-**Зависимость:** платформа макетов шаблонов из PRD-1
+**Зависимость:** платформа макетов шаблонов из PRD-1 / PRD-12
 
 ## Статус
 
-**Не начато** (post-MVP, шаг 7 по [ROADMAP](../../ROADMAP.md)). Не блокирует
-runtime-возможности; включается, когда платформа готова к подрядчикам/партнёрам.
+**Реализовано и закрыто 2026-06-07.** Реализация велась тремя фазами:
+
+- **Фаза 1** (backend-фундамент, `5468a4d`): схема +6 колонок жизненного цикла +
+  миграция 011, ZIP-сервис (in-memory распаковка, zip-slip guard,
+  `uploads/templates/<id>/`), структурный валидатор, Admin API
+  `/api/admin/templates` (author-гейт), реестр (реконсиляция загруженных).
+- **Фаза 2** (гейт активации, `5ace313` движок + сервер): браузерный движок
+  проверки работоспособности (`shared/template/smoke-runner` + мост
+  `preview-context`) поверх общего рендерера PRD-12; сервер принимает отчёт и
+  гейтит активацию; эндпоинты `smoke-bundle`/`preview-image` (`19f3949`).
+- **Фаза 3** (видимый UI, `3ee4926`): страница `/author/templates`
+  (`client/src/features/templates/*`) — карточный список, загрузка, детали,
+  предпросмотр+проверка, обновление, деактивация/удаление, экспорт.
 
 Сужение (2026-06-05): платформенная часть (DSL-рендерер, registry, layout-контракты)
 поглощена PRD-12 и реализована. PRD-3 сведён к админ-реестру и жизненному циклу ВНЕШНИХ
-шаблонных ZIP (загрузка/валидация/активация/деактивация/обновление/удаление/экспорт).
+шаблонных ZIP (загрузка/валидация/проверка/активация/деактивация/обновление/удаление/экспорт).
 
 ---
 
@@ -69,7 +81,7 @@ HTML, CSS и браузерный `template.js`, но не серверный к
 
 Основной поток:
 
-1. Администратор открывает `/admin/templates`.
+1. Администратор открывает `/author/templates` (страница доступна роли `author`).
 2. Нажимает **"Загрузить шаблон"**.
 3. Выбирает ZIP.
 4. Система выполняет структурную валидацию.
@@ -115,8 +127,18 @@ ZIP с блокирующими ошибками не может быть акт
 
 ### 3.4 Живой предпросмотр на демонстрационном наборе данных
 
-После загрузки система предоставляет iframe/живой предпросмотр на демонстрационном наборе данных,
+После загрузки система предоставляет живой предпросмотр на демонстрационном наборе данных,
 объявленном в `manifest.preview.demoData` по контракту технической спецификации.
+
+**Реализация.** Предпросмотр и проверка живут в одном окне (`/author/templates` ->
+карточка -> «Предпросмотр и проверка»). Слева — трёхуровневый список экранов
+**Раздел -> Тип -> Вариант отрисовки** со статус-точкой проверки на варианте (листе).
+Справа — живой рендер выбранного экрана **тем же** унифицированным рендерером
+`renderScreenInto` (`shared/template/render-screen`), что и оба рантайма (паритет PRD-12);
+шаблонный CSS изолируется в Shadow DOM. Файлы для рендера и проверки браузер забирает
+через `GET /api/admin/templates/:id/smoke-bundle` (manifest + demo + layouts + css +
+`template.js`). Отдельный iframe `preview.html` (как во вкладке «Оформление») здесь не
+используется — загруженный шаблон может не содержать `preview.html`.
 
 Демонстрационный набор данных должен покрывать:
 
@@ -177,9 +199,9 @@ ZIP с блокирующими ошибками не может быть акт
 - предупреждения консоли в smoke-проверке;
 - объявленная возможность с резервным рендерером Core.
 
-### 4.3 Блокирующие ошибки браузерной smoke-проверки
+### 4.3 Блокирующие ошибки браузерной проверки работоспособности
 
-Smoke-проверка блокирует активацию, если:
+Целевой контракт — проверка блокирует активацию, если:
 
 - есть необработанная runtime-ошибка;
 - оболочка не загрузилась;
@@ -189,6 +211,23 @@ Smoke-проверка блокирует активацию, если:
 - страница результатов не открывается;
 - `template.js` ломает Core runtime;
 - правила шаблона падают при парсинге или исполнении.
+
+**Реализация (`shared/template/smoke-runner`).** Движок проходит по
+`manifest.preview.routes[]`, рендерит каждый экран через общий `renderScreenInto`
+в изолированном контейнере и помечает экран проваленным (`fail`) при:
+
+- необработанном исключении рендера;
+- пустом результате рендера;
+- отсутствии или незаполненности обязательного слота (`question-text` +
+  `question-interaction` для вопросов, `page-content` для контентных страниц);
+- ошибке `console.error` во время рендера.
+
+`console.warn` даёт неблокирующее предупреждение (`warn`). Дополнительно: `template.js`
+проверяется **только компиляцией** (`new Function(src)`, без исполнения — NFR-02),
+а файл правил — `JSON.parse`. Проверки привязки обработчиков `next/answer-submit/
+test-finish` и сохранения ответов в Core — целевой контракт для фазы расширенных
+интерактивов; текущий движок их не выполняет (встроенный `default` рендерит экраны
+по-экранно, действия Core навешивает делегированием, см. [PRD-12](../prd-12/web-runtime-parity.md)).
 
 ---
 
@@ -264,30 +303,37 @@ UI показывает отчёт о переносе параметров.
 
 PRD-3 расширяет общий реестр `templates` административными полями жизненного цикла.
 
+Фактическая схема (`shared/schema.ts`, миграция `migrations/011_prd3_template_lifecycle.sql`):
+
 ```sql
 CREATE TABLE templates (
   id                   text PRIMARY KEY,
   name                 text NOT NULL,
   description          text,
   version              text NOT NULL,
-  template_api_version text NOT NULL,
+  template_api_version text NOT NULL DEFAULT '1.0',
   is_builtin           boolean NOT NULL DEFAULT false,
-  is_active            boolean NOT NULL DEFAULT false,
-  status               text NOT NULL DEFAULT 'draft'
+  is_active            boolean NOT NULL DEFAULT true,   -- author-facing visibility
+  status               text NOT NULL DEFAULT 'active'   -- admin lifecycle FSM
                          CHECK (status IN ('draft', 'active', 'inactive', 'invalid')),
-  source_type          text NOT NULL CHECK (source_type IN ('builtin', 'uploaded')),
-  source_path          text NOT NULL,
+  source_type          text NOT NULL DEFAULT 'builtin'
+                         CHECK (source_type IN ('builtin', 'uploaded')),
+  source_path          text,            -- on-disk root (built-in dir / uploads/templates/<id>)
   manifest             jsonb NOT NULL,
-  preview_path         text,
+  preview_path         text,            -- зарезервировано; превью сейчас берётся из manifest.assets.preview
   validation_json      jsonb,
   smoke_test_json      jsonb,
   installed_at         timestamp NOT NULL DEFAULT now(),
+  created_at           timestamp NOT NULL DEFAULT now(),
   updated_at           timestamp NOT NULL DEFAULT now()
 );
 ```
 
 `source_type = 'builtin'` и `source_type = 'uploaded'` обслуживаются через единый
-API реестра шаблонов.
+API реестра шаблонов (NFR-07). Колоночные `default` подобраны под бэкфилл встроенных
+(active/builtin); поток загрузки явно ставит `status = 'draft'`, `is_active = false`.
+Колонка `preview_path` зарезервирована и пока не заполняется — миниатюра отдаётся из
+`manifest.assets.preview` эндпоинтом `GET /:id/preview-image`.
 
 ---
 
@@ -312,17 +358,30 @@ GET /api/admin/templates/:id
 Детали: манифест, валидация, smoke-проверка, использование.
 
 ```text
-PUT /api/admin/templates/:id/activate
-PUT /api/admin/templates/:id/deactivate
+PUT    /api/admin/templates/:id/activate
+PUT    /api/admin/templates/:id/deactivate
 DELETE /api/admin/templates/:id
-PUT /api/admin/templates/:id/update
-GET /api/admin/templates/:id/export
-POST /api/admin/templates/:id/validate
-POST /api/admin/templates/:id/smoke-test
+PUT    /api/admin/templates/:id/update
+GET    /api/admin/templates/:id/export
+POST   /api/admin/templates/:id/validate
+GET    /api/admin/templates/:id/smoke-bundle
+POST   /api/admin/templates/:id/smoke-test
+GET    /api/admin/templates/:id/preview-image
 ```
 
 `GET /export` доступен для встроенных и загруженных шаблонов. Экспорт встроенного шаблона должен
 возвращать ZIP, валидный как стартовый шаблон.
+
+Все маршруты под `requireAuthor`. Дополнительно к базовому набору реализованы:
+
+- `GET /:id/smoke-bundle` — файлы, нужные браузеру для рендера экранов и проверки
+  работоспособности: `{ manifest, demo, layouts (без shell), css, templateJs?, rulesJson? }`.
+  Сервер только читает файлы пакета, не исполняет их (NFR-02).
+- `POST /:id/smoke-test` — приём отчёта, который сформировал **браузер** (`runSmokeChecks`);
+  сервер валидирует форму отчёта, сохраняет в `smoke_test_json` и далее гейтит активацию
+  по `ok` (NFR-01). Сервер не запускает проверку сам.
+- `GET /:id/preview-image` — стрим `manifest.assets.preview` для карточек реестра
+  (путь строго внутри корня шаблона).
 
 ---
 
@@ -356,18 +415,26 @@ POST /api/admin/templates/:id/smoke-test
 
 ## 10. Критерии приёмки
 
-- [ ] Корректный ZIP проходит валидацию и smoke-проверку
-- [ ] ZIP без `manifest.json` отклоняется
-- [ ] ZIP с нарушением обязательного контракта оболочки отклоняется
-- [ ] ZIP с нарушением обязательного контракта макета вопроса отклоняется
-- [ ] ZIP с CDN-скриптом или CDN-стилем отклоняется
-- [ ] `template.js` с runtime-ошибкой проваливает smoke-проверку
-- [ ] Живой предпросмотр открывает загруженный шаблон до активации
-- [ ] Активированный загруженный шаблон появляется в галерее автора
+**Статус (2026-06-07).** Проверено: `npm run check` 0 ошибок, `npm run build` (клиент +
+сервер), `vitest` 2093 теста (валидатор, движок проверки `smoke-runner`, admin-API
+`routes.admin-templates`), Playwright-сверка с утверждённым эскизом на живом сервере
+(список карточек, окно предпросмотра, состояние «проверка пройдена», зона загрузки).
+Отмеченные ниже пункты подтверждены автотестом или визуальной проверкой; неотмеченные
+реализованы, но не покрыты сквозным e2e на загруженном внешнем шаблоне (нет живой
+выгрузки внешнего ZIP, см. [[no-live-webtutor-verify-local]]).
+
+- [x] Корректный ZIP проходит структурную валидацию (создаётся `draft`)
+- [x] ZIP без `manifest.json` отклоняется
+- [ ] ZIP с нарушением обязательного контракта оболочки отклоняется (есть код `SHELL_CONTRACT`)
+- [x] Нарушение контракта макета вопроса проваливает проверку (тест `smoke-runner`: drop `question-interaction`)
+- [ ] ZIP с CDN-скриптом или CDN-стилем отклоняется (есть код `EXTERNAL_URL`)
+- [x] Невалидный `template.js` (синтаксис) и невалидные правила проваливают проверку
+- [x] Живой предпросмотр открывает шаблон до активации (через общий рендерер)
+- [ ] Активированный загруженный шаблон появляется в галерее автора (логика `is_active`)
 - [ ] Экспорт SCORM с загруженным шаблоном содержит только выбранный шаблон
-- [ ] Деактивация шаблона переключает связанные тесты на `default`
+- [x] Деактивация шаблона переключает связанные тесты на `default` (транзакционно)
 - [ ] Экспорт встроенного шаблона возвращает стартовый ZIP, проходящий валидацию
-- [ ] Обновление шаблона запускает валидацию и smoke-проверку повторно
+- [ ] Обновление шаблона запускает валидацию повторно (есть `PUT /:id/update`)
 
 ---
 
