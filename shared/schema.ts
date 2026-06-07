@@ -998,6 +998,9 @@ export const templates = pgTable("templates", {
   // PRD-3 §4: persisted structural-validation and browser smoke-test reports.
   validationJson: jsonb("validation_json"),
   smokeTestJson: jsonb("smoke_test_json"),
+  // PRD-3: cheap source fingerprint (hash of each file's path/size/mtime) used by
+  // the startup reconcile to skip re-validating templates whose files are unchanged.
+  sourceFingerprint: text("source_fingerprint"),
   installedAt: timestamp("installed_at").notNull().defaultNow(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
