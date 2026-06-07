@@ -13,7 +13,7 @@ import session from "express-session";
 import JSZip from "jszip";
 
 // ─── Hoist mocks ──────────────────────────────────────────────────────────────
-const { dbMock, storageMock } = vi.hoisted(() => {
+const { dbMock, storageMock, pkgState } = vi.hoisted(() => {
   const state: { selectResult: any[]; returningResult: any[] } = { selectResult: [], returningResult: [] };
   const chain: any = { __state: state };
   for (const m of ["select", "from", "where", "insert", "values", "update", "set", "delete", "onConflictDoUpdate"]) {
@@ -22,7 +22,11 @@ const { dbMock, storageMock } = vi.hoisted(() => {
   chain.returning = vi.fn(() => Promise.resolve(state.returningResult));
   chain.then = (resolve: any) => resolve(state.selectResult);
   chain.transaction = vi.fn(async (cb: any) => cb(chain));
-  return { dbMock: chain, storageMock: { getUser: vi.fn() } };
+  return {
+    dbMock: chain,
+    storageMock: { getUser: vi.fn() },
+    pkgState: { dirEntries: new Map<string, Buffer>() },
+  };
 });
 
 vi.mock("../server/db", () => ({ db: dbMock }));
@@ -30,7 +34,11 @@ vi.mock("../server/storage", () => ({ storage: storageMock }));
 vi.mock("../server/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock("../server/services/template-package", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../server/services/template-package")>();
-  return { ...actual, writeTemplateFiles: vi.fn().mockResolvedValue("/fake/uploads/templates/acme") };
+  return {
+    ...actual,
+    writeTemplateFiles: vi.fn().mockResolvedValue("/fake/uploads/templates/acme"),
+    readDirEntries: vi.fn(async () => pkgState.dirEntries),
+  };
 });
 
 import adminTemplatesRouter from "../server/routes/admin-templates";
@@ -87,6 +95,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   dbMock.__state.selectResult = [];
   dbMock.__state.returningResult = [];
+  pkgState.dirEntries = new Map<string, Buffer>();
   storageMock.getUser.mockResolvedValue({ id: "author1", role: "author" });
 });
 
@@ -204,5 +213,52 @@ describe("lifecycle guards", () => {
     );
     expect(res.status).toBe(200);
     expect(res.body.report.ok).toBe(true);
+  });
+});
+
+describe("smoke-bundle + preview-image", () => {
+  const manifest = {
+    layouts: { shell: "shell.html", question: "layouts/question.html" },
+    assets: { styles: ["styles/base.css"], scripts: ["scripts/template.js"], preview: "preview.svg" },
+    preview: { demoData: "demo/course.json", routes: [] },
+  };
+
+  it("smoke-bundle returns manifest, demo, layouts (no shell), css and template.js", async () => {
+    pkgState.dirEntries = new Map<string, Buffer>([
+      ["layouts/question.html", Buffer.from("<div data-slot=\"question-text\"></div>")],
+      ["styles/base.css", Buffer.from("body{color:red}")],
+      ["demo/course.json", Buffer.from('{"course":{"title":"Демокурс"}}')],
+      ["scripts/template.js", Buffer.from("var x = 1;")],
+    ]);
+    dbMock.__state.selectResult = [{ id: "acme", sourcePath: "/fake/acme", manifest }];
+
+    const res = await asAuthor(request(makeApp()).get("/api/admin/templates/acme/smoke-bundle"));
+    expect(res.status).toBe(200);
+    expect(res.body.layouts.question).toContain("question-text");
+    expect(res.body.layouts.shell).toBeUndefined(); // shell skipped for per-screen render
+    expect(res.body.css).toContain("body{color:red}");
+    expect(res.body.demo.course.title).toBe("Демокурс");
+    expect(res.body.templateJs).toBe("var x = 1;");
+  });
+
+  it("smoke-bundle 409 when the template has no file source", async () => {
+    dbMock.__state.selectResult = [{ id: "acme", sourcePath: null, manifest: {} }];
+    const res = await asAuthor(request(makeApp()).get("/api/admin/templates/acme/smoke-bundle"));
+    expect(res.status).toBe(409);
+  });
+
+  it("smoke-bundle 422 when the demo dataset is invalid JSON", async () => {
+    pkgState.dirEntries = new Map<string, Buffer>([["demo/course.json", Buffer.from("{ broken")]]);
+    dbMock.__state.selectResult = [
+      { id: "acme", sourcePath: "/fake/acme", manifest: { preview: { demoData: "demo/course.json" } } },
+    ];
+    const res = await asAuthor(request(makeApp()).get("/api/admin/templates/acme/smoke-bundle"));
+    expect(res.status).toBe(422);
+  });
+
+  it("preview-image 404 when the manifest declares no preview asset", async () => {
+    dbMock.__state.selectResult = [{ id: "acme", sourcePath: "/fake/acme", manifest: { assets: {} } }];
+    const res = await asAuthor(request(makeApp()).get("/api/admin/templates/acme/preview-image"));
+    expect(res.status).toBe(404);
   });
 });
