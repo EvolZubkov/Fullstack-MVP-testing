@@ -21,10 +21,12 @@
  * PUT    /:id/update        - re-upload a ZIP for an existing id
  * GET    /:id/export        - download the template as a ZIP
  * POST   /:id/validate      - re-run structural validation against stored files
+ * GET    /:id/smoke-bundle  - (Phase 2) files the browser needs to render + smoke-test
  * POST   /:id/smoke-test    - (Phase 2) browser smoke-test result intake
  */
 import { Router } from "express";
 import fsp from "node:fs/promises";
+import path from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { templates, tests, type Template } from "@shared/schema";
@@ -377,6 +379,128 @@ router.post("/:id/validate", requireAuthor, async (req, res) => {
   } catch (error) {
     logger.error("Validate template error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to validate template" });
+  }
+});
+
+/** Manifest subset the smoke-bundle reads (paths into the package). */
+interface BundleManifest {
+  layouts?: Record<string, string>;
+  assets?: { styles?: string[]; scripts?: string[]; preview?: string };
+  preview?: { demoData?: string };
+}
+
+/** Content types for the preview asset, by extension. */
+const PREVIEW_MIME: Record<string, string> = {
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+};
+
+/**
+ * GET /api/admin/templates/:id/preview-image — streams the manifest's
+ * `assets.preview` thumbnail from the package, for the admin card grid (§3.2).
+ * The path comes from the manifest and is resolved strictly inside the template
+ * root (defence against traversal). 404 when absent.
+ */
+router.get("/:id/preview-image", requireAuthor, async (req, res) => {
+  try {
+    const row = await loadTemplate(req.params.id);
+    if (!row) return res.status(404).json({ error: "Template not found" });
+    const manifest = (row.manifest ?? {}) as BundleManifest;
+    const rel = manifest.assets?.preview;
+    if (!row.sourcePath || !rel) return res.status(404).json({ error: "No preview asset" });
+
+    const root = path.resolve(row.sourcePath);
+    const target = path.resolve(root, rel);
+    if (target !== root && !target.startsWith(root + path.sep)) {
+      return res.status(400).json({ error: "Unsafe preview path" });
+    }
+    let buf: Buffer;
+    try {
+      buf = await fsp.readFile(target);
+    } catch {
+      return res.status(404).json({ error: "Preview asset not found" });
+    }
+    res.setHeader("Content-Type", PREVIEW_MIME[path.extname(rel).toLowerCase()] ?? "application/octet-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.send(buf);
+  } catch (error) {
+    logger.error("Preview-image error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to read preview image" });
+  }
+});
+
+/** A rules file is conventional, not declared in the manifest; probed by path. */
+const RULES_ENTRY_CANDIDATES = ["template-rules.json", "rules.json"];
+
+/**
+ * GET /api/admin/templates/:id/smoke-bundle — returns everything the admin
+ * browser needs to render preview screens and run the smoke-test (NFR-03)
+ * entirely client-side: the manifest, the demo dataset, the layout HTML keyed by
+ * `manifest.layouts` key, the concatenated CSS, and (when present) the
+ * `template.js` and rules sources for the compile/parse checks. The server only
+ * reads files here — it never executes them (NFR-02).
+ */
+router.get("/:id/smoke-bundle", requireAuthor, async (req, res) => {
+  try {
+    const row = await loadTemplate(req.params.id);
+    if (!row) return res.status(404).json({ error: "Template not found" });
+    if (!row.sourcePath) {
+      return res.status(409).json({ error: "У шаблона нет файлового источника" });
+    }
+
+    const entries = await readDirEntries(row.sourcePath);
+    const read = (rel: string): string | undefined => entries.get(rel)?.toString("utf8");
+
+    const manifest = (row.manifest ?? {}) as BundleManifest;
+    const layoutPaths = manifest.layouts ?? {};
+
+    // Layout HTML keyed by manifest layout key (skip the shell — per-screen
+    // rendering uses the inner layouts, mirroring the unified web host).
+    const layouts: Record<string, string> = {};
+    for (const [key, rel] of Object.entries(layoutPaths)) {
+      if (key === "shell") continue;
+      const html = read(rel);
+      if (html != null) layouts[key] = html;
+    }
+
+    const demoRel = manifest.preview?.demoData;
+    let demo: unknown = null;
+    if (demoRel) {
+      const raw = read(demoRel);
+      if (raw != null) {
+        try {
+          demo = JSON.parse(raw);
+        } catch {
+          return res.status(422).json({ error: "Демонстрационные данные шаблона повреждены (невалидный JSON)" });
+        }
+      }
+    }
+
+    const css = (manifest.assets?.styles ?? [])
+      .map((rel) => read(rel))
+      .filter((s): s is string => s != null)
+      .join("\n");
+
+    const scriptRel = manifest.assets?.scripts?.[0];
+    const templateJs = scriptRel ? read(scriptRel) : undefined;
+
+    let rulesJson: string | undefined;
+    for (const cand of RULES_ENTRY_CANDIDATES) {
+      const raw = read(cand);
+      if (raw != null) {
+        rulesJson = raw;
+        break;
+      }
+    }
+
+    res.json({ manifest, demo, layouts, css, templateJs, rulesJson });
+  } catch (error) {
+    logger.error("Smoke-bundle error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to build smoke bundle" });
   }
 });
 
