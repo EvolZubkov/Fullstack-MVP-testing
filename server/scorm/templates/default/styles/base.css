@@ -1110,3 +1110,11 @@ a.results-rec-item:hover { text-decoration: underline; }
 .renderer__fill { height: 100%; background: hsl(var(--primary)); }
 .renderer__ring-track { stroke: hsl(var(--muted)); }
 .renderer__ring-fill { stroke: hsl(var(--primary)); }
+/* Ring chart: center the percentage inside the ring (mirrors the results screen). */
+.renderer--ring-chart { position: relative; display: inline-flex; align-items: center; justify-content: center; }
+.renderer--ring-chart .renderer__ring { display: block; }
+.renderer--ring-chart .renderer__value {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  font-size: 30px; font-weight: 800;
+}
+.renderer--ring-chart .renderer__label { position: absolute; left: 0; right: 0; bottom: -22px; text-align: center; }

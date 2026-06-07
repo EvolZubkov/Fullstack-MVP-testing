@@ -60,9 +60,9 @@
           "title": "Итоги раздела",
           "result": {
             "path": "result.scorePercent",
-            "renderer": "core.textMetric",
-            "rendererOptions": { "suffix": "%", "decimals": 0 },
-            "label": "Результат"
+            "renderer": "core.ringChart",
+            "rendererOptions": { "showValue": true, "decimals": 0, "size": 150, "strokeWidth": 14 },
+            "label": ""
           }
         }
       }

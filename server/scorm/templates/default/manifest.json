@@ -240,10 +240,11 @@
           ],
           "defaultPath": "result.scorePercent",
           "allowedRenderers": [
+            "core.ringChart",
             "core.textMetric",
             "core.progressBar"
           ],
-          "defaultRenderer": "core.textMetric"
+          "defaultRenderer": "core.ringChart"
         }
       ]
     },
