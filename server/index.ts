@@ -112,8 +112,22 @@ app.use((req, res, next) => {
   // Wait for database to be available before starting
   await waitForDatabase();
   await seedDatabase();
-  await syncBuiltinTemplates();
-  await reconcileUploadedTemplates();
+
+  // Template-registry sync is best-effort: a failure here (e.g. a schema not yet
+  // migrated, a malformed built-in manifest) must NOT abort the whole boot —
+  // otherwise the HTTP server never starts listening and the app is fully down for
+  // a template-registry problem. Log and continue; the registry re-syncs on the
+  // next restart once the underlying issue (e.g. drizzle-kit push) is resolved.
+  try {
+    await syncBuiltinTemplates();
+  } catch (err) {
+    logger.error(err instanceof Error ? err : String(err), "syncBuiltinTemplates");
+  }
+  try {
+    await reconcileUploadedTemplates();
+  } catch (err) {
+    logger.error(err instanceof Error ? err : String(err), "reconcileUploadedTemplates");
+  }
 
   // Health check endpoint
   app.get("/api/health", async (_req, res) => {
