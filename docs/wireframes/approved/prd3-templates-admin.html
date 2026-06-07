@@ -118,8 +118,12 @@
     .tpl-preview-modal .ou-modal__body { padding: 0; display: flex; flex-direction: column; min-height: 0; flex: 1; }
     .tpl-preview-modal .ou-modal__split { flex: 1; min-height: 0; }
     .tpl-preview-modal .ou-modal__rail { width: var(--wf-size-300); flex-shrink: 0; padding: var(--ou-space-2) 0; overflow-y: auto; }
-    /* Preview rail is three-level: Раздел → Тип → Вариант отрисовки.
-       The render status dot lives on the variant (leaf); section/type only group. */
+    /* Preview rail. NOTE (реализация разошлась с эскизом): итоговый рейл АДАПТИВНЫЙ —
+       тип с одним вариантом отрисовки рендерится сразу как экран («Раздел → экран»,
+       2 уровня); сворачиваемый уровень «Тип → Вариант отрисовки» (показан ниже) включается
+       только при 2+ вариантах. Разделы — по видам страниц PRD-1 §4.3 + системные
+       (Результаты теста §8.3, Системные экраны §5.4). Источник истины — PRD-3 §3.4.
+       Статус-точка проверки — на экране (листе). */
     .tpl-preview-section { display: flex; align-items: center; cursor: pointer; user-select: none; padding: var(--ou-space-3) var(--ou-space-3) var(--wf-space-half); font: var(--ou-text-body-xs); font-weight: 700; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .06em; }
     .tpl-preview-section:first-child { padding-top: 0; }
     .tpl-preview-section:not(:first-child) { margin-top: var(--ou-space-2); border-top: var(--wf-border-w) solid var(--ou-border-soft); padding-top: var(--ou-space-3); }

@@ -158,8 +158,8 @@ my-template/
           "label": "Результат",
           "allowedPaths": ["result.scorePercent"],
           "defaultPath": "result.scorePercent",
-          "allowedRenderers": ["core.textMetric", "core.progressBar"],
-          "defaultRenderer": "core.textMetric"
+          "allowedRenderers": ["core.ringChart", "core.textMetric", "core.progressBar"],
+          "defaultRenderer": "core.ringChart"
         }
       ]
     },
@@ -426,8 +426,24 @@ my-template/
 `contentTemplates[]` описывает «типы» контентных страниц. Каждый элемент:
 
 - `key` — уникальный ключ варианта (`intro.hero`);
-- `kind` — системный вид: `intro`, `info`, `summary`, `router`, `questions`;
+- `kind` — функциональный вид страницы;
 - `placeholders[]` — поля, которые заполняет автор.
+
+Виды (`kind`, PRD-1 §4.3):
+
+| `kind` | Назначение |
+| --- | --- |
+| `intro` | Вводная страница: «Введение раздела» (`before_topic`) при делении на темы, либо вводная теста («До теста») в плоском |
+| `summary` | Итоговая страница: «Итог раздела» (`after_topic`) при делении на темы, либо итог теста («После теста») в плоском. Показывает **результат раздела** — Core кладёт его в `result.*` (шаблон не считает сам) |
+| `info` | Учебная/информационная страница, сколько угодно, в любой зоне |
+| `questions` | Макет страницы вопроса |
+| `router` | Страница-маршрутизатор (меню тем) |
+
+`intro` и `summary` — симметричные «закладки» раздела (одна перед вопросами раздела,
+другая после его результата). «Итог раздела» (`summary`) показывает результат **раздела**,
+а итог всего теста — отдельный системный экран результатов (макет `results`). Несколько
+вариантов отрисовки одного `kind` (напр. два варианта `summary`) — допустимы; автор
+выбирает нужный.
 
 Типы placeholders и как они отрисовываются в `data-placeholder`:
 
@@ -438,18 +454,25 @@ my-template/
 | `number` | Экранированное число |
 | `image` | `<img src="...">` (вписывается в контейнер) |
 | `boolean` | Галочка или пусто |
-| `resultField` | Показатель результата через реестр рендереров (`core.textMetric`, `core.progressBar`) |
+| `resultField` | Показатель результата через реестр рендереров (см. ниже) |
 
-Пример `resultField` в наборе данных автора (значение `values.result`):
+Встроенные рендереры `resultField` (`shared/template/renderers.ts`): `core.textMetric`,
+`core.badge`, `core.progressBar`, `core.ringChart` (кольцевая диаграмма),
+`core.segmentedProgress`. Шаблон ограничивает выбор через `allowedRenderers` плейсхолдера.
+
+Пример `resultField` в наборе данных автора (значение `values.result`) — кольцо:
 
 ```json
 {
   "path": "result.scorePercent",
-  "renderer": "core.textMetric",
-  "rendererOptions": { "suffix": "%", "decimals": 0 },
-  "label": "Результат"
+  "renderer": "core.ringChart",
+  "rendererOptions": { "showValue": true, "decimals": 0, "size": 150, "strokeWidth": 14 },
+  "label": ""
 }
 ```
+
+На странице `summary` («Итог раздела») `result.scorePercent` — это результат **раздела**
+(Core подаёт его в `result.*`, §8.2 платформенной спеки).
 
 ## 9. Параметры (params)
 
@@ -614,14 +637,17 @@ HSL-компоненты** (без `hsl(...)`), чтобы их можно бы�
           "percent": 75, "passed": true, "total": 4, "correct": 3,
           "passClass": "is-pass", "statusLabel": "Пройден" }
       ]
-    }
+    },
+    "sectionResult": { "scorePercent": 75, "status": "passed" }
   }
 }
 ```
 
 Соответствие маршрут → данные:
 
-- `start`, `results` — берут `course.*` и `runtime.result`;
+- `start`, `results` — берут `course.*` и `runtime.result` (итог всего теста);
+- `content.summary` («Итог раздела») — берёт `runtime.sectionResult` (результат
+  раздела) в `result.*`;
 - `question.<type>` — ищут вопрос по `questionId` из маршрута, иначе первый
   вопрос подходящего типа;
 - `content.<kind>` — берут страницу по `templateKey`/`route` из `contentPages`.
