@@ -16,6 +16,7 @@ const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(),
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getScales: vi.fn(),
     createScale: vi.fn(),
     updateScale: vi.fn(),
@@ -102,6 +103,7 @@ describe("POST /api/tests/:id/scales", () => {
   });
 
   it("returns 403 when user is a learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     storageMock.getUser.mockResolvedValue(learnerUser);
     expect((await request(makeApp("learner")).post("/api/tests/test-1/scales").send(validScale)).status).toBe(403);
   });
@@ -245,6 +247,7 @@ describe("POST /api/tests/:id/scales/preview", () => {
   });
 
   it("requires author role", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     storageMock.getUser.mockResolvedValue(learnerUser);
     const res = await request(makeApp("learner")).post("/api/tests/test-1/scales/preview").send({ answers: {} });
     expect(res.status).toBe(403);

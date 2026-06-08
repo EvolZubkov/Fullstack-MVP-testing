@@ -28,6 +28,7 @@ const { storageMock, scormMock, fsMock, isSupportedMock } = vi.hoisted(() => {
     getTopicCourses: vi.fn(),
     getTopicEvents: vi.fn(),
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getContentPages: vi.fn(),
     getAdaptiveTopicSettingsByTest: vi.fn(),
     getAdaptiveLevelsByTest: vi.fn(),

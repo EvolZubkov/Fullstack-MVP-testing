@@ -26,6 +26,8 @@ const { storageMock, sendEmailMock } = vi.hoisted(() => ({
     updateUser: vi.fn(),
     getUserGroups: vi.fn(),
     setUserGroups: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
+    setUserRoles: vi.fn(),
     getGroups: vi.fn(),
     createGroup: vi.fn(),
     addUserToGroup: vi.fn(),
@@ -113,6 +115,7 @@ describe("GET /api/users/bulk-template", () => {
   });
 
   it("returns 403 for learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     const res = await asLearner(request(makeApp()).get("/api/users/bulk-template"));
     expect(res.status).toBe(403);
   });
@@ -150,6 +153,7 @@ describe("POST /api/users/bulk-preview", () => {
   });
 
   it("returns 403 for learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     const buf = await makeXlsx([["email", "name"], ["a@a.com", "Тест"]]);
     const res = await asLearner(request(makeApp()).post("/api/users/bulk-preview").attach("file", buf, "users.xlsx"));
     expect(res.status).toBe(403);
@@ -248,6 +252,7 @@ describe("POST /api/users/bulk-import", () => {
   });
 
   it("returns 403 for learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     const res = await asLearner(request(makeApp()).post("/api/users/bulk-import").send({ rows: [baseRow], sendInvites: false }));
     expect(res.status).toBe(403);
   });
@@ -278,7 +283,6 @@ describe("POST /api/users/bulk-import", () => {
     expect(storageMock.createUser).toHaveBeenCalledWith(expect.objectContaining({
       email: "new@test.com",
       name: "Новый",
-      role: "learner",
       status: "pending",
       mustChangePassword: true,
     }));

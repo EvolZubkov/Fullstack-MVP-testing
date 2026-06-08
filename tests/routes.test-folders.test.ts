@@ -20,6 +20,7 @@ const { storageMock } = vi.hoisted(() => ({
     deleteTestFolder: vi.fn(),
     moveTestToFolder: vi.fn(),
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
   },
 }));
 
@@ -71,12 +72,11 @@ describe("GET /api/test-folders", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns folders list for learner (requireAuth)", async () => {
+  it("returns 403 for learner (content is author/admin only, PRD-13)", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     storageMock.getTestFolders.mockResolvedValue([folder1, folder2]);
     const res = await asLearner(request(makeApp()).get("/api/test-folders"));
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(2);
-    expect(res.body[0].id).toBe("f1");
+    expect(res.status).toBe(403);
   });
 
   it("returns folders list for author", async () => {
@@ -101,6 +101,7 @@ describe("POST /api/test-folders", () => {
   });
 
   it("returns 403 for learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     const res = await asLearner(request(makeApp()).post("/api/test-folders").send({ name: "Новая" }));
     expect(res.status).toBe(403);
   });
@@ -152,6 +153,7 @@ describe("PUT /api/test-folders/:id", () => {
   });
 
   it("returns 403 for learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     const res = await asLearner(request(makeApp()).put("/api/test-folders/f1").send({ name: "Переименовано" }));
     expect(res.status).toBe(403);
   });
@@ -194,6 +196,7 @@ describe("DELETE /api/test-folders/:id", () => {
   });
 
   it("returns 403 for learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     const res = await asLearner(request(makeApp()).delete("/api/test-folders/f1"));
     expect(res.status).toBe(403);
   });
@@ -230,6 +233,7 @@ describe("PATCH /api/test-folders/move/:testId", () => {
   });
 
   it("returns 403 for learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     const res = await asLearner(request(makeApp()).patch("/api/test-folders/move/test1").send({ folderId: "f1" }));
     expect(res.status).toBe(403);
   });

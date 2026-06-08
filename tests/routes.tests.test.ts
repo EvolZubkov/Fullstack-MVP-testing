@@ -25,6 +25,7 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     getMigrationHealth: vi.fn(),
     getTestSections: vi.fn(),
     getTopics: vi.fn(),
+    getUsers: vi.fn().mockResolvedValue([]),
     getQuestionsByTopic: vi.fn(),
     getAdaptiveTopicSettingsByTest: vi.fn(),
     getAdaptiveLevelsByTest: vi.fn(),
@@ -39,6 +40,11 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     createAdaptiveLevel: vi.fn(),
     createAdaptiveLevelLink: vi.fn(),
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
+    setTestOwner: vi.fn().mockResolvedValue(undefined),
+    getTestAccessGrants: vi.fn().mockResolvedValue([]),
+    getUserTestGrants: vi.fn().mockResolvedValue([]),
+    getTestIdsByOwner: vi.fn().mockResolvedValue([]),
   },
   serviceMock: {
     create: vi.fn(),
@@ -308,6 +314,7 @@ describe("Backward compat — POST / and PUT /:id", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTest.mockResolvedValue(dbTest);
     storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([]);
     storageMock.getAdaptiveLevelsByTest.mockResolvedValue([]);
     app = makeApp();
@@ -438,6 +445,7 @@ describe("PUT /api/tests/:id — Zod validation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTest.mockResolvedValue(dbTest);
     storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([]);
     storageMock.getAdaptiveLevelsByTest.mockResolvedValue([]);
     app = makeApp();

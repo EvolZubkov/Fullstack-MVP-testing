@@ -39,6 +39,14 @@ const { dbMock, fsMock } = vi.hoisted(() => {
 
 vi.mock("../server/db", () => ({ db: dbMock }));
 vi.mock("node:fs", () => ({ default: fsMock }));
+// templates.ts reads template data from `db`; storage is used only by the
+// permission middleware, so a light mock returning an author is enough.
+vi.mock("../server/storage", () => ({
+  storage: {
+    getUser: vi.fn().mockResolvedValue({ id: "author1", role: "author", status: "active", emailHash: "x" }),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
+  },
+}));
 vi.mock("../server/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));

@@ -20,6 +20,7 @@ const { storageMock, dbMock } = vi.hoisted(() => {
     getTest: vi.fn(),
     updateTest: vi.fn(),
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
   };
 
   const makeChain = (result: unknown) => {
@@ -151,6 +152,7 @@ describe("PUT /api/tests/:id/design", () => {
   });
 
   it("returns 403 when user is learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     storageMock.getUser.mockResolvedValue(learnerUser);
     const res = await request(makeApp("learner"))
       .put("/api/tests/test-1/design")

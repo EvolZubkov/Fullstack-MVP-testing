@@ -14,7 +14,23 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { getPermissions, ROLES, type Capability } from "@shared/access";
 import { TestsListPage } from "../tests-list";
+
+// The list reads capabilities to gate row actions (PRD-13). Stub the auth
+// context so the component renders without an AuthProvider; `authMock.can` is
+// mutable so individual tests can simulate a role. Reset to "all true" in
+// beforeEach so the rest of the suite keeps every action visible.
+const { authMock } = vi.hoisted(() => ({ authMock: { can: (_cap: string): boolean => true } }));
+vi.mock("@/lib/auth", () => ({
+  useAuth: () => ({ can: (cap: string) => authMock.can(cap) }),
+}));
+
+/** Build a `can` that mirrors the real role -> permission map for the role set. */
+function canForRoles(roles: Parameters<typeof getPermissions>[0]): (cap: string) => boolean {
+  const perms = getPermissions(roles);
+  return (cap: string) => perms.has(cap as Capability);
+}
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────
 
@@ -66,6 +82,8 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   // jsdom doesn't ship localStorage with persistence across tests; reset.
   window.localStorage.clear();
+  // Default: every capability granted (admin-like) so unrelated tests are unaffected.
+  authMock.can = () => true;
 });
 
 afterEach(() => {
@@ -209,6 +227,50 @@ describe("<TestsListPage /> — test more-menu", () => {
 
     fireEvent.click(screen.getByTestId("test-more-t-1"));
     expect(screen.getByText("Снять с публикации")).toBeInTheDocument();
+  });
+});
+
+describe("<TestsListPage /> — owner column + action gating by role (PRD-13)", () => {
+  it("AC-30: shows the owner name in the «Владелец» column", async () => {
+    mockMany({
+      "/api/tests": [buildApiTestRow({ ownerName: "Марина Иванова" })],
+      "/api/test-folders": [],
+    });
+    renderPage();
+    await waitFor(() => screen.getByText("Основы информационной безопасности"));
+    expect(screen.getByText("Марина Иванова")).toBeInTheDocument();
+  });
+
+  it("an author sees edit, analytics and the more-menu, but not assign", async () => {
+    authMock.can = canForRoles([ROLES.AUTHOR]);
+    mockMany({ "/api/tests": [buildApiTestRow()], "/api/test-folders": [] });
+    renderPage();
+    await waitFor(() => screen.getByTestId("test-row-t-1"));
+    expect(screen.getByTestId("test-edit-t-1")).toBeInTheDocument();
+    expect(screen.getByTestId("test-analytics-t-1")).toBeInTheDocument();
+    expect(screen.getByTestId("test-more-t-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("test-assign-t-1")).toBeNull();
+  });
+
+  it("a manager sees assign and analytics, but not edit or the more-menu", async () => {
+    authMock.can = canForRoles([ROLES.MANAGER]);
+    mockMany({ "/api/tests": [buildApiTestRow()], "/api/test-folders": [] });
+    renderPage();
+    await waitFor(() => screen.getByTestId("test-row-t-1"));
+    expect(screen.getByTestId("test-assign-t-1")).toBeInTheDocument();
+    expect(screen.getByTestId("test-analytics-t-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("test-edit-t-1")).toBeNull();
+    expect(screen.queryByTestId("test-more-t-1")).toBeNull();
+  });
+
+  it("the «Общий доступ» menu item is hidden without tests.access.grant (author)", async () => {
+    authMock.can = canForRoles([ROLES.AUTHOR]);
+    mockMany({ "/api/tests": [buildApiTestRow()], "/api/test-folders": [] });
+    renderPage();
+    await waitFor(() => screen.getByTestId("test-row-t-1"));
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+    expect(screen.getByTestId("menu-edit-t-1")).toBeInTheDocument();
+    expect(screen.queryByTestId("menu-access-t-1")).toBeNull();
   });
 });
 

@@ -18,6 +18,7 @@ const { storageMock } = vi.hoisted(() => ({
     getTests: vi.fn(),
     getTopics: vi.fn(),
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getAttempt: vi.fn(),
     getScormAnswersByAttempt: vi.fn(),
     getQuestionsByIds: vi.fn(),
@@ -95,6 +96,7 @@ const lmsAttemptUnfinished = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  storageMock.getUserRoles.mockResolvedValue(["administrator"]);
   storageMock.getUser.mockImplementation((id: string) => {
     if (id === "author1") return Promise.resolve(authorUser);
     if (id === "learner1") return Promise.resolve({ id: "learner1", name: "Learner One", email: "l1@test.com" });

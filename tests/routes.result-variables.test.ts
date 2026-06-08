@@ -19,6 +19,7 @@ const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(),
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getResultVariables: vi.fn(),
     createResultVariable: vi.fn(),
     updateResultVariable: vi.fn(),
@@ -128,6 +129,7 @@ describe("POST /api/tests/:id/result-variables", () => {
   });
 
   it("returns 403 when user is a learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     storageMock.getUser.mockResolvedValue(learnerUser);
     const res = await request(makeApp("learner")).post("/api/tests/test-1/result-variables").send(validBody);
     expect(res.status).toBe(403);

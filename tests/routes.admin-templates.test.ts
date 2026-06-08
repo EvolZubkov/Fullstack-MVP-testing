@@ -24,7 +24,7 @@ const { dbMock, storageMock, pkgState } = vi.hoisted(() => {
   chain.transaction = vi.fn(async (cb: any) => cb(chain));
   return {
     dbMock: chain,
-    storageMock: { getUser: vi.fn() },
+    storageMock: { getUser: vi.fn(), getUserRoles: vi.fn().mockResolvedValue(["administrator"]) },
     pkgState: { dirEntries: new Map<string, Buffer>() },
   };
 });
@@ -106,6 +106,7 @@ describe("auth gate", () => {
   });
 
   it("403 for a learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     storageMock.getUser.mockResolvedValue({ id: "learner1", role: "learner" });
     const res = await asLearner(request(makeApp()).get("/api/admin/templates"));
     expect(res.status).toBe(403);

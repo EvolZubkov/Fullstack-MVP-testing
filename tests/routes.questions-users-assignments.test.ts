@@ -14,10 +14,12 @@ const { storageMock } = vi.hoisted(() => ({
     getQuestionsByTopic: vi.fn(), getTestSections: vi.fn(), getTest: vi.fn(),
     getTopics: vi.fn(),
     getUsers: vi.fn(), getUser: vi.fn(), getUserByEmail: vi.fn(), createUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]), setUserRoles: vi.fn(),
     updateUser: vi.fn(), updateUserPassword: vi.fn(), deactivateUser: vi.fn(),
     activateUser: vi.fn(), deleteAttemptsByUserAndTest: vi.fn(),
     getAttemptsByUser: vi.fn(), getTests: vi.fn(),
     getUserGroups: vi.fn(), setUserGroups: vi.fn(),
+    getAssignment: vi.fn(),
     getTestAssignments: vi.fn(), createTestAssignment: vi.fn(),
     deleteTestAssignment: vi.fn(), getAssignedTestsForUser: vi.fn(),
     getGroup: vi.fn(), getGroupUsers: vi.fn(),
@@ -131,6 +133,7 @@ describe("Questions routes", () => {
   });
 
   it("POST / — returns 403 when learner tries to create", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     storageMock.getUser.mockResolvedValue(learnerUser);
     const res = await asLearner(request(app).post("/api/questions").send({
       topicId: "t1", type: "single", prompt: "Q?",
@@ -334,13 +337,13 @@ describe("Users routes", () => {
     expect(storageMock.deactivateUser).toHaveBeenCalledWith("u1");
   });
 
-  it("POST /:id/deactivate — returns 400 when trying to deactivate author", async () => {
+  it("POST /:id/deactivate — allows deactivating a non-superadmin (PRD-13: author-protection removed)", async () => {
     storageMock.getUser
       .mockResolvedValueOnce(authorUser)      // middleware
       .mockResolvedValueOnce({ ...dbUser, role: "author" }); // target user
+    storageMock.deactivateUser.mockResolvedValue(undefined);
     const res = await asAuthor(request(app).post("/api/users/u1/deactivate"));
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/author/);
+    expect(res.status).toBe(200);
   });
 
   it("POST /:id/activate — activates user", async () => {
@@ -440,6 +443,8 @@ describe("Assignments routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getAssignment.mockResolvedValue({ id: "asgn1", testId: "test1" });
     storageMock.getGroupUsers.mockResolvedValue([]);
     storageMock.getAssignmentAccessTokensByAssignment.mockResolvedValue([]);
     storageMock.createAssignmentAccessToken.mockImplementation((data: any) =>
@@ -552,8 +557,9 @@ describe("Assignments routes", () => {
     expect(res.body[0].title).toBe("Test 1");
   });
 
-  it("GET /learner/assigned-tests — returns 403 for author", async () => {
+  it("GET /learner/assigned-tests — accessible to any role (PRD-13 D1)", async () => {
+    storageMock.getAssignedTestsForUser.mockResolvedValue([]);
     const res = await asAuthor(request(app).get("/api/learner/assigned-tests"));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 });

@@ -26,6 +26,7 @@ const { storageMock, dbMock } = vi.hoisted(() => {
     getTest: vi.fn(),
     getTestSections: vi.fn(),
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getContentPages: vi.fn(),
     getContentPage: vi.fn(),
     createContentPage: vi.fn(),
@@ -202,6 +203,7 @@ describe("POST /api/tests/:id/content-pages", () => {
   });
 
   it("returns 403 when user is learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     storageMock.getUser.mockResolvedValue(learnerUser);
     const res = await request(makeApp("learner"))
       .post("/api/tests/test-1/content-pages")
@@ -359,6 +361,7 @@ describe("PUT /api/tests/:id/content-pages/reorder", () => {
   });
 
   it("returns 403 when user is learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     storageMock.getUser.mockResolvedValue(learnerUser);
     const res = await request(makeApp("learner"))
       .put("/api/tests/test-1/content-pages/reorder")
@@ -466,6 +469,7 @@ describe("DELETE /api/tests/:id/content-pages/:pageId", () => {
   });
 
   it("returns 403 when user is learner", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     storageMock.getUser.mockResolvedValue(learnerUser);
     const res = await request(makeApp("learner")).delete("/api/tests/test-1/content-pages/page-1");
     expect(res.status).toBe(403);
@@ -605,6 +609,7 @@ describe("POST /api/tests/:id/content-pages/:pageId/replace-variant", () => {
   });
 
   it("returns 403 for non-author role", async () => {
+    storageMock.getUserRoles.mockResolvedValueOnce(["learner"]);
     storageMock.getUser.mockResolvedValue(learnerUser);
     const res = await request(makeApp("learner"))
       .post("/api/tests/test-1/content-pages/page-1/replace-variant")

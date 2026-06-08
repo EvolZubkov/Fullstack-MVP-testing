@@ -15,7 +15,10 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     patchTestStatus: vi.fn(),
     getAttempt: vi.fn(), createAttempt: vi.fn(), updateAttempt: vi.fn(),
     getAttemptsByUser: vi.fn(), getAttemptsByUserAndTest: vi.fn(),
-    getUser: vi.fn(), getTopics: vi.fn(), getQuestionsByTopic: vi.fn(),
+    getUser: vi.fn(), getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
+    getUsers: vi.fn().mockResolvedValue([]),
+    setTestOwner: vi.fn().mockResolvedValue(undefined),
+    getTopics: vi.fn(), getQuestionsByTopic: vi.fn(),
     getQuestionsByIds: vi.fn(), getTopicCourses: vi.fn(),
     getAssignedTestsForUser: vi.fn(),
     getAdaptiveTopicSettingsByTest: vi.fn(), getAdaptiveLevelsByTest: vi.fn(),
@@ -116,10 +119,12 @@ describe("Attempts routes — learner/tests", () => {
     expect(res.body[0].completedAttempts).toBe(0);
   });
 
-  it("GET /learner/tests — returns 403 for author", async () => {
+  it("GET /learner/tests — accessible to any role (PRD-13 D1)", async () => {
     storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getAssignedTestsForUser.mockResolvedValue([]);
     const res = await asAuthor(request(app).get("/api/learner/tests"));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(0);
   });
 });
 

@@ -50,6 +50,7 @@ const { storageMock } = vi.hoisted(() => ({
     createTopic: vi.fn(),
     getTestSections: vi.fn(),
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getContentHashesByTopic: vi.fn(),
   },
 }));

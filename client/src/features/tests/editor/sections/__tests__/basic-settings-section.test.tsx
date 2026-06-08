@@ -357,6 +357,29 @@ describe("<SettingsSection /> — Ограничения pane", () => {
     expect(next.sections[0].timeLimit).toEqual({ source: "none" });
   });
 
+  it("turning the switch ON flips every inherit_test section to none and reveals the table", () => {
+    const updateModel = vi.fn();
+    const model = baseModel({
+      sections: [
+        sampleSection,
+        { ...sampleSection, topicId: "topic-2", topicName: "Topic B" },
+      ],
+    });
+    const { rerender } = render(
+      <SettingsSection model={model} updateModel={updateModel} />,
+    );
+    fireEvent.click(screen.getByTestId("settings-rail-limits"));
+    // Switch starts OFF (all sections inherit_test) and the table is hidden.
+    expect(screen.queryByTestId("settings-per-topic-table")).toBeNull();
+    fireEvent.click(screen.getByTestId("settings-per-topic-switch"));
+    const next = runUpdater(updateModel, model);
+    // Every section becomes `none` so the derived switch stays ON.
+    expect(next.sections.every((s) => s.timeLimit.source === "none")).toBe(true);
+    // Re-rendering with the produced model now shows the per-topic table.
+    rerender(<SettingsSection model={next} updateModel={updateModel} />);
+    expect(screen.getByTestId("settings-per-topic-table")).toBeInTheDocument();
+  });
+
   it("turning the switch OFF resets every section back to inherit_test", () => {
     const updateModel = vi.fn();
     const model = baseModel({
