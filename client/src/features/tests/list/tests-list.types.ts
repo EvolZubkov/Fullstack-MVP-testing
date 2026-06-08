@@ -30,6 +30,9 @@ export type TestListEntry = {
   mode: TestListMode;
   flowMode: TestListFlowMode;
   folderId: string | null;
+  /** Test owner (PRD-13). `ownerName` is resolved server-side for display. */
+  ownerId: string | null;
+  ownerName: string | null;
   topicCount: number;
   questionCount: number;
   assignmentCount: number;

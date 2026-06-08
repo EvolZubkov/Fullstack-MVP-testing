@@ -39,6 +39,7 @@ import {
   GitBranch,
   Globe,
   Info,
+  KeyRound,
   Layers,
   MoreHorizontal,
   Pencil,
@@ -61,7 +62,9 @@ import {
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { TestEditor } from "@/features/tests/editor/test-editor";
+import { TestAccessPanel } from "@/features/tests/access/test-access-panel";
 import { AssignTestDialog } from "@/components/assign-test-dialog";
+import { useAuth } from "@/lib/auth";
 import type { Test, TestSection, TestFolder } from "@shared/schema";
 import {
   buildSearchRows,
@@ -79,6 +82,8 @@ import type {
 
 type ApiTestRow = Test & {
   sections: (TestSection & { topicName?: string; maxQuestions?: number })[];
+  /** Owner display name resolved server-side (PRD-13). */
+  ownerName?: string | null;
 };
 
 function apiToEntry(row: ApiTestRow): TestListEntry {
@@ -90,6 +95,8 @@ function apiToEntry(row: ApiTestRow): TestListEntry {
     mode: (row.mode as TestListEntry["mode"]) ?? "standard",
     flowMode: (isFlowMode(flowMode) ? flowMode : "linear_flat") as TestListFlowMode,
     folderId: row.folderId ?? null,
+    ownerId: row.ownerId ?? null,
+    ownerName: row.ownerName ?? null,
     topicCount: row.sections?.length ?? 0,
     questionCount: row.sections?.reduce((sum, s) => sum + (s.drawCount ?? 0), 0) ?? 0,
     assignmentCount: (row as { assignmentCount?: number }).assignmentCount ?? 0,
@@ -127,6 +134,7 @@ const EMPTY_FOLDERS: TestFolder[] = [];
 
 export function TestsListPage(): React.JSX.Element {
   const { toast } = useToast();
+  const { can } = useAuth();
 
   // Data ----------------------------------------------------------------------
   const {
@@ -235,6 +243,10 @@ export function TestsListPage(): React.JSX.Element {
   // Existing dialogs (assign / export) --------------------------------------
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignTest, setAssignTest] = useState<{ id: string; title: string } | null>(null);
+
+  // Access panel (PRD-13, WF-2) — admin/superadmin only ---------------------
+  const [accessTest, setAccessTest] = useState<{ id: string; title: string } | null>(null);
+  const canGrantAccess = can("tests.access.grant");
 
   // ─── Mutations ───────────────────────────────────────────────────────────
   const statusMutation = useMutation({
@@ -567,6 +579,9 @@ export function TestsListPage(): React.JSX.Element {
         open={editorTarget !== null}
         onClose={() => setEditorTarget(null)}
       />
+
+      {/* Access panel (PRD-13, WF-2) ---------------------------------------- */}
+      <TestAccessPanel test={accessTest} onClose={() => setAccessTest(null)} />
     </div>
   );
 
@@ -593,6 +608,21 @@ export function TestsListPage(): React.JSX.Element {
           <Pencil className="h-3.5 w-3.5" />
           Редактировать
         </button>
+        {canGrantAccess && (
+          <button
+            type="button"
+            className="dropdown-item"
+            role="menuitem"
+            onClick={() => {
+              setTestMenu(null);
+              setAccessTest({ id: test.id, title: test.title });
+            }}
+            data-testid={`menu-access-${test.id}`}
+          >
+            <KeyRound className="h-3.5 w-3.5" />
+            Общий доступ
+          </button>
+        )}
         <a
           className="dropdown-item"
           role="menuitem"
@@ -775,6 +805,7 @@ function TreeHeader() {
   return (
     <div className="tree-header" aria-hidden="true">
       <div>Название</div>
+      <div>Владелец</div>
       <div>Статус</div>
       <div>Режим</div>
       <div>Сценарий</div>
@@ -929,7 +960,7 @@ function FolderRow(props: {
         {props.name}
         <span className="folder-count">({props.testsCount})</span>
       </div>
-      <div /><div /><div /><div /><div /><div />
+      <div /><div /><div /><div /><div /><div /><div />
       <div className={"tree-folder-actions" + (props.menuOpen ? " is-open" : "")}>
         <div className="more-btn-wrap">
           <button
@@ -960,6 +991,18 @@ function TestRow(props: {
   menu: React.JSX.Element | null;
 }) {
   const e = props.entry;
+  const { can } = useAuth();
+  // PRD-13: gate row actions by capability (the tree is already scope-filtered,
+  // so a visible row is always actionable within the role's allowed actions).
+  const canEdit = can("tests.edit");
+  const canAssign = can("assignments.manage");
+  const canAnalytics = can("analytics.read");
+  const canAnyMenu =
+    canEdit ||
+    can("tests.export.scorm") ||
+    can("tests.publish") ||
+    can("tests.delete") ||
+    can("tests.access.grant");
   // Reactive subscription to warning state written by the editor after save.
   // queryFn is never called (enabled: false); setQueryData in the editor triggers re-render.
   const { data: hasWarnings = false } = useQuery<boolean>({
@@ -973,7 +1016,7 @@ function TestRow(props: {
       className={"tree-test" + (props.indented ? " indent-1" : "")}
       role="treeitem"
       aria-level={props.indented ? 3 : 2}
-      onClick={props.onClick}
+      onClick={canEdit ? props.onClick : undefined}
       data-testid={`test-row-${e.id}`}
     >
       <div className="tree-test-name">
@@ -998,6 +1041,9 @@ function TestRow(props: {
           )}
         </div>
       </div>
+      <div className="tree-test-owner">
+        <span>{e.ownerName ?? "—"}</span>
+      </div>
       <div>
         <StatusTag status={e.status} />
       </div>
@@ -1013,55 +1059,63 @@ function TestRow(props: {
       <div className="tree-num">{e.questionCount}</div>
       <div className="tree-num">{e.assignmentCount}</div>
       <div className={"tree-test-actions" + (props.menuOpen ? " is-open" : "")}>
-        <button
-          type="button"
-          className="action-btn"
-          title="Редактировать"
-          aria-label="Редактировать"
-          onClick={(ev) => {
-            ev.stopPropagation();
-            props.onEdit();
-          }}
-          data-testid={`test-edit-${e.id}`}
-        >
-          <Pencil width={14} height={14} />
-        </button>
-        <button
-          type="button"
-          className="action-btn"
-          title="Назначить"
-          aria-label="Назначить"
-          onClick={(ev) => {
-            ev.stopPropagation();
-            props.onAssign();
-          }}
-          data-testid={`test-assign-${e.id}`}
-        >
-          <Users width={14} height={14} />
-        </button>
-        <Link href={`/author/tests/${e.id}/analytics`} onClick={(ev) => ev.stopPropagation()}>
+        {canEdit && (
           <button
             type="button"
             className="action-btn"
-            title="Аналитика"
-            aria-label="Аналитика"
-            data-testid={`test-analytics-${e.id}`}
+            title="Редактировать"
+            aria-label="Редактировать"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              props.onEdit();
+            }}
+            data-testid={`test-edit-${e.id}`}
           >
-            <BarChart3 width={14} height={14} />
+            <Pencil width={14} height={14} />
           </button>
-        </Link>
-        <div className="more-btn-wrap">
+        )}
+        {canAssign && (
           <button
             type="button"
             className="action-btn"
-            aria-label="Ещё действия"
-            onClick={props.onMore}
-            data-testid={`test-more-${e.id}`}
+            title="Назначить"
+            aria-label="Назначить"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              props.onAssign();
+            }}
+            data-testid={`test-assign-${e.id}`}
           >
-            <MoreHorizontal width={14} height={14} />
+            <Users width={14} height={14} />
           </button>
-          {props.menu}
-        </div>
+        )}
+        {canAnalytics && (
+          <Link href={`/author/tests/${e.id}/analytics`} onClick={(ev) => ev.stopPropagation()}>
+            <button
+              type="button"
+              className="action-btn"
+              title="Аналитика"
+              aria-label="Аналитика"
+              data-testid={`test-analytics-${e.id}`}
+            >
+              <BarChart3 width={14} height={14} />
+            </button>
+          </Link>
+        )}
+        {canAnyMenu && (
+          <div className="more-btn-wrap">
+            <button
+              type="button"
+              className="action-btn"
+              aria-label="Ещё действия"
+              onClick={props.onMore}
+              data-testid={`test-more-${e.id}`}
+            >
+              <MoreHorizontal width={14} height={14} />
+            </button>
+            {props.menu}
+          </div>
+        )}
       </div>
     </div>
   );

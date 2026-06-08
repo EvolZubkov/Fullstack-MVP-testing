@@ -83,7 +83,7 @@
   border-radius: var(--ou-radius-s); background: var(--ou-bg-elevated);
 }
 
-/* ─── Tree container + 8-column grid ─────────────────────────────────────── */
+/* ─── Tree container + 9-column grid (PRD-13: + "Владелец") ──────────────── */
 .tb-tests-list .tree-area { flex: 1; overflow-y: auto; }
 
 .tb-tests-list .tree-header,
@@ -92,7 +92,8 @@
 .tb-tests-list .tree-test {
   display: grid;
   grid-template-columns:
-    1fr
+    minmax(var(--wf-size-180), 1fr)
+    var(--wf-size-130)
     var(--wf-size-110)
     var(--wf-size-90)
     var(--wf-size-130)
@@ -110,12 +111,12 @@
   position: sticky; top: 0; background: var(--ou-bg-elevated); z-index: 1;
 }
 .tb-tests-list .tree-header > div:first-child { padding-left: var(--ou-space-6); }
-.tb-tests-list .tree-header > :nth-child(2),
 .tb-tests-list .tree-header > :nth-child(3),
 .tb-tests-list .tree-header > :nth-child(4),
 .tb-tests-list .tree-header > :nth-child(5),
 .tb-tests-list .tree-header > :nth-child(6),
-.tb-tests-list .tree-header > :nth-child(7) { text-align: center; }
+.tb-tests-list .tree-header > :nth-child(7),
+.tb-tests-list .tree-header > :nth-child(8) { text-align: center; }
 
 .tb-tests-list .tree-root {
   align-items: center;
@@ -201,19 +202,28 @@
   font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-half);
   display: flex; align-items: center; gap: var(--ou-space-1);
 }
-.tb-tests-list .tree-test > :nth-child(2),
 .tb-tests-list .tree-test > :nth-child(3),
 .tb-tests-list .tree-test > :nth-child(4),
 .tb-tests-list .tree-test > :nth-child(5),
 .tb-tests-list .tree-test > :nth-child(6),
 .tb-tests-list .tree-test > :nth-child(7),
-.tb-tests-list .tree-folder > :nth-child(2),
+.tb-tests-list .tree-test > :nth-child(8),
 .tb-tests-list .tree-folder > :nth-child(3),
 .tb-tests-list .tree-folder > :nth-child(4),
 .tb-tests-list .tree-folder > :nth-child(5),
 .tb-tests-list .tree-folder > :nth-child(6),
-.tb-tests-list .tree-folder > :nth-child(7) {
+.tb-tests-list .tree-folder > :nth-child(7),
+.tb-tests-list .tree-folder > :nth-child(8) {
   display: flex; align-items: center; justify-content: center;
+}
+
+/* PRD-13: "Владелец" column (2nd) — left-aligned text, muted, ellipsis. */
+.tb-tests-list .tree-test-owner {
+  display: flex; align-items: center; min-width: 0;
+  font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+}
+.tb-tests-list .tree-test-owner > span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tb-tests-list .tree-test-actions {
   display: flex; align-items: center; gap: var(--wf-space-1q);

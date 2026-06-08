@@ -62,12 +62,18 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
+import { Drawer } from "@universityrt/ui-kit";
+import { RolePicker } from "@/components/role-picker";
+import { useAuth } from "@/lib/auth";
+import { ROLE_LABELS } from "@/lib/roles";
+import { ROLE_PRIORITY, type Role } from "@shared/access";
 
 interface User {
   id: string;
   email: string;
   name: string | null;
-  role: "author" | "learner";
+  /** Effective stored roles (PRD-13 multi-role). */
+  roles?: string[];
   status: "pending" | "active" | "inactive";
   mustChangePassword: boolean;
   gdprConsent: boolean;
@@ -87,6 +93,9 @@ interface UserAttemptsSummary {
 export default function UsersPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuth();
+  /** Acting user's effective roles, drives the role-assignment ceiling (WF-1). */
+  const actorRoles = (currentUser?.roles ?? []) as Role[];
   
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -105,7 +114,7 @@ export default function UsersPage() {
     email: "",
     name: "",
     password: "",
-    role: "learner" as "author" | "learner",
+    roles: ["learner"] as string[],
     mustChangePassword: true,
     expiresAt: "",
   });
@@ -214,7 +223,7 @@ export default function UsersPage() {
 
   // Update user mutation
   const updateUserMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<typeof formData> }) => {
+    mutationFn: async ({ id, data, roles }: { id: string; data: Partial<typeof formData>; roles?: string[] }) => {
       const res = await fetch(`/api/users/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -224,6 +233,19 @@ export default function UsersPage() {
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || "Failed to update user");
+      }
+      // Roles are managed through a dedicated endpoint (PRD-13, ceiling-checked).
+      if (roles) {
+        const rolesRes = await fetch(`/api/users/${id}/roles`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ roles }),
+        });
+        if (!rolesRes.ok) {
+          const error = await rolesRes.json();
+          throw new Error(error.error || "Failed to update roles");
+        }
       }
       return res.json();
     },
@@ -336,7 +358,7 @@ export default function UsersPage() {
       email: "",
       name: "",
       password: "",
-      role: "learner",
+      roles: ["learner"],
       mustChangePassword: true,
       expiresAt: "",
     });
@@ -357,7 +379,7 @@ export default function UsersPage() {
       email: user.email,
       name: user.name || "",
       password: "",
-      role: user.role,
+      roles: user.roles ?? [],
       mustChangePassword: user.mustChangePassword,
       expiresAt: user.expiresAt ? user.expiresAt.split("T")[0] : "",
     });
@@ -386,7 +408,7 @@ export default function UsersPage() {
     const matchesSearch =
       user.email.toLowerCase().includes(search.toLowerCase()) ||
       (user.name && user.name.toLowerCase().includes(search.toLowerCase()));
-    const matchesRole = roleFilter === "all" || user.role === roleFilter;
+    const matchesRole = roleFilter === "all" || (user.roles ?? []).includes(roleFilter);
     const matchesStatus = statusFilter === "all" || user.status === statusFilter;
     return matchesSearch && matchesRole && matchesStatus;
   });
@@ -404,15 +426,18 @@ export default function UsersPage() {
     }
   };
 
-  const getRoleBadge = (role: string) => {
-    switch (role) {
-      case "author":
-        return <Badge variant="default">{t.users.author}</Badge>;
-      case "learner":
-        return <Badge variant="outline">{t.users.learner}</Badge>;
-      default:
-        return <Badge variant="outline">{role}</Badge>;
-    }
+  /** Render a user's effective roles as a wrapping list of badges (PRD-13). */
+  const renderRoleBadges = (roles: string[] | undefined) => {
+    const list = roles ?? [];
+    if (list.length === 0) return <span className="text-muted-foreground">—</span>;
+    const ordered = ROLE_PRIORITY.filter((r) => list.includes(r));
+    return (
+      <div className="flex flex-wrap gap-1">
+        {ordered.map((r) => (
+          <Badge key={r} variant="outline">{ROLE_LABELS[r as Role] ?? r}</Badge>
+        ))}
+      </div>
+    );
   };
 
   const formatDate = (dateString: string | null) => {
@@ -470,8 +495,9 @@ export default function UsersPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{t.users.allRoles}</SelectItem>
-            <SelectItem value="author">{t.users.author}</SelectItem>
-            <SelectItem value="learner">{t.users.learner}</SelectItem>
+            {ROLE_PRIORITY.map((r) => (
+              <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -513,7 +539,7 @@ export default function UsersPage() {
                 <TableRow key={user.id}>
                   <TableCell className="font-medium">{user.email}</TableCell>
                   <TableCell>{user.name || "—"}</TableCell>
-                  <TableCell>{getRoleBadge(user.role)}</TableCell>
+                  <TableCell>{renderRoleBadges(user.roles)}</TableCell>
                   <TableCell>{getStatusBadge(user.status)}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {formatDate(user.lastLoginAt)}
@@ -537,7 +563,7 @@ export default function UsersPage() {
                           <KeyRound className="h-4 w-4 mr-2" />
                           {t.users.resetPassword}
                         </DropdownMenuItem>
-                        {user.role === "learner" && (
+                        {(user.roles ?? []).includes("learner") && (
                           <DropdownMenuItem onClick={() => openResetAttemptsDialog(user)}>
                             <RotateCcw className="h-4 w-4 mr-2" />
                             Сбросить попытки
@@ -568,171 +594,112 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Create User Dialog */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.users.createUser}</DialogTitle>
-            <DialogDescription>
-              Заполните данные для создания нового пользователя.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">{t.users.email} *</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="user@example.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="name">{t.users.name}</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Иван Иванов"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">{t.users.password} *</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Минимум 8 символов"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setFormData({ ...formData, password: generatePassword() })}
-                >
-                  {t.users.generatePassword}
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="role">{t.users.role}</Label>
-              <Select
-                value={formData.role}
-                onValueChange={(value: "author" | "learner") =>
-                  setFormData({ ...formData, role: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="learner">{t.users.learner}</SelectItem>
-                  <SelectItem value="author">{t.users.author}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="mustChangePassword"
-                checked={formData.mustChangePassword}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, mustChangePassword: !!checked })
-                }
-              />
-              <Label htmlFor="mustChangePassword" className="text-sm font-normal">
-                {t.users.mustChangePassword}
-              </Label>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="expiresAt">{t.users.expiresAt}</Label>
-              <Input
-                id="expiresAt"
-                type="date"
-                value={formData.expiresAt}
-                onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
-              />
-            </div>
-          </div>
-          <DialogFooter>
+      {/* Create User Drawer (PRD-13, WF-1) */}
+      <Drawer
+        open={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        size="narrow"
+        title={t.users.createUser}
+        description="Заполните данные для создания нового пользователя."
+        footer={
+          <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
               {t.common.cancel}
             </Button>
             <Button
               onClick={() => createUserMutation.mutate(formData)}
-              disabled={!formData.email || !formData.password || createUserMutation.isPending}
+              disabled={
+                !formData.email ||
+                !formData.password ||
+                formData.roles.length === 0 ||
+                createUserMutation.isPending
+              }
             >
               {createUserMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {t.common.create}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit User Dialog */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.users.editUser}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-email">{t.users.email} *</Label>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email">{t.users.email} *</Label>
+            <Input
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="user@example.com"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="name">{t.users.name}</Label>
+            <Input
+              id="name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="Иван Иванов"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">{t.users.password} *</Label>
+            <div className="flex gap-2">
               <Input
-                id="edit-email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                id="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Минимум 8 символов"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">{t.users.name}</Label>
-              <Input
-                id="edit-name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-role">{t.users.role}</Label>
-              <Select
-                value={formData.role}
-                onValueChange={(value: "author" | "learner") =>
-                  setFormData({ ...formData, role: value })
-                }
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setFormData({ ...formData, password: generatePassword() })}
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="learner">{t.users.learner}</SelectItem>
-                  <SelectItem value="author">{t.users.author}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="edit-mustChangePassword"
-                checked={formData.mustChangePassword}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, mustChangePassword: !!checked })
-                }
-              />
-              <Label htmlFor="edit-mustChangePassword" className="text-sm font-normal">
-                {t.users.mustChangePassword}
-              </Label>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-expiresAt">{t.users.expiresAt}</Label>
-              <Input
-                id="edit-expiresAt"
-                type="date"
-                value={formData.expiresAt}
-                onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
-              />
+                {t.users.generatePassword}
+              </Button>
             </div>
           </div>
-          <DialogFooter>
+          <div className="space-y-2">
+            <Label>Роли *</Label>
+            <RolePicker
+              value={formData.roles}
+              onChange={(roles) => setFormData({ ...formData, roles })}
+              actorRoles={actorRoles}
+              atCreation
+            />
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="mustChangePassword"
+              checked={formData.mustChangePassword}
+              onCheckedChange={(checked) =>
+                setFormData({ ...formData, mustChangePassword: !!checked })
+              }
+            />
+            <Label htmlFor="mustChangePassword" className="text-sm font-normal">
+              {t.users.mustChangePassword}
+            </Label>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="expiresAt">{t.users.expiresAt}</Label>
+            <Input
+              id="expiresAt"
+              type="date"
+              value={formData.expiresAt}
+              onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
+            />
+          </div>
+        </div>
+      </Drawer>
+
+      {/* Edit User Drawer (PRD-13, WF-1) */}
+      <Drawer
+        open={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+        size="narrow"
+        title={t.users.editUser}
+        footer={
+          <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>
               {t.common.cancel}
             </Button>
@@ -744,20 +711,70 @@ export default function UsersPage() {
                   data: {
                     email: formData.email,
                     name: formData.name || undefined,
-                    role: formData.role,
                     mustChangePassword: formData.mustChangePassword,
                     expiresAt: formData.expiresAt || undefined,
                   },
+                  roles: formData.roles,
                 })
               }
-              disabled={!formData.email || updateUserMutation.isPending}
+              disabled={!formData.email || formData.roles.length === 0 || updateUserMutation.isPending}
             >
               {updateUserMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {t.common.save}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="edit-email">{t.users.email} *</Label>
+            <Input
+              id="edit-email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-name">{t.users.name}</Label>
+            <Input
+              id="edit-name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Роли *</Label>
+            <RolePicker
+              value={formData.roles}
+              onChange={(roles) => setFormData({ ...formData, roles })}
+              actorRoles={actorRoles}
+              disabled={(selectedUser?.roles ?? []).includes("superadmin")}
+            />
+          </div>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="edit-mustChangePassword"
+              checked={formData.mustChangePassword}
+              onCheckedChange={(checked) =>
+                setFormData({ ...formData, mustChangePassword: !!checked })
+              }
+            />
+            <Label htmlFor="edit-mustChangePassword" className="text-sm font-normal">
+              {t.users.mustChangePassword}
+            </Label>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-expiresAt">{t.users.expiresAt}</Label>
+            <Input
+              id="edit-expiresAt"
+              type="date"
+              value={formData.expiresAt}
+              onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
+            />
+          </div>
+        </div>
+      </Drawer>
 
       {/* Reset Password Dialog */}
       <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>

@@ -452,7 +452,7 @@ function PerTopicLimitsBlock({ model, updateModel }: SettingsSectionProps) {
     );
   }
 
-  function setAllSectionsTo(source: "inherit_test") {
+  function setAllSectionsTo(source: "inherit_test" | "none") {
     updateModel((m) => ({
       ...m,
       sections: m.sections.map((s) => ({ ...s, timeLimit: { source } })),
@@ -485,12 +485,17 @@ function PerTopicLimitsBlock({ model, updateModel }: SettingsSectionProps) {
           checked={hasCustomLimits}
           onChange={(e) => {
             const checked = e.target.checked;
-            if (!checked) {
+            if (checked) {
+              // Switching ON: flip every inherit_test row to `none` (unlimited)
+              // so `hasCustomLimits` becomes true, the switch stays ON, and the
+              // table appears. Rows render with empty inputs (placeholder
+              // «Без ограничения»); the author opts into a custom limit by
+              // typing a positive number. Without this the derived `checked`
+              // would snap straight back to OFF and the table never shows.
+              setAllSectionsTo("none");
+            } else {
               setAllSectionsTo("inherit_test");
             }
-            // Switching ON: leave inherit_test rows as-is — the table renders
-            // them with empty inputs (placeholder «Без ограничения»). The
-            // author opts into a custom limit by typing a positive number.
           }}
           data-testid="settings-per-topic-switch"
         />
