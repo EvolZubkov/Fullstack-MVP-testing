@@ -2,6 +2,7 @@ import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { normalizeTag, normalizeTags, TAG_MAX_LENGTH } from "./tags";
+import { STORED_ROLES } from "./access/roles";
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -9,7 +10,8 @@ export const users = pgTable("users", {
   emailHash: varchar("email_hash", { length: 64 }).unique(), // SHA-256 хеш для поиска
   passwordHash: text("password_hash").notNull(), // bcrypt hash
   name: text("name"), // заполняется при первом входе
-  role: text("role", { enum: ["author", "learner"] }).notNull().default("learner"),
+  // PRD-13 (T-10): the legacy single `role` column was dropped — roles live in
+  // `user_roles` (many-to-many) plus the configuration-derived superadmin.
   status: text("status", { enum: ["pending", "active", "inactive"] }).notNull().default("pending"),
   mustChangePassword: boolean("must_change_password").notNull().default(true),
   gdprConsent: boolean("gdpr_consent").notNull().default(false),
@@ -37,6 +39,22 @@ export const userGroups = pgTable("user_groups", {
   addedAt: timestamp("added_at").notNull().defaultNow(),
 }, (table) => ({
   userGroupIdx: uniqueIndex("user_groups_user_group_idx").on(table.userId, table.groupId),
+}));
+
+/**
+ * PRD-13 RBAC: a user holds a SET of roles (many-to-many). Effective permissions
+ * are the union over these roles plus the configuration-derived superadmin. The
+ * `superadmin` role is never stored here. Supersedes the single `users.role`
+ * column, which stays during the transition and is dropped in a later migration.
+ */
+export const userRoles = pgTable("user_roles", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  role: text("role", { enum: STORED_ROLES }).notNull(),
+  grantedBy: varchar("granted_by", { length: 36 }), // who assigned this role
+  grantedAt: timestamp("granted_at").notNull().defaultNow(),
+}, (table) => ({
+  userRoleIdx: uniqueIndex("user_roles_user_role_idx").on(table.userId, table.role),
 }));
 
 // Назначение тестов пользователям/группам
@@ -232,6 +250,9 @@ export type RetakePolicy = z.infer<typeof retakePolicySchema>;
 export const tests = pgTable("tests", {
   id: varchar("id", { length: 36 }).primaryKey(),
   folderId: varchar("folder_id", { length: 36 }),
+  // PRD-13 RBAC: test owner (a content-role user). Null = unowned legacy test,
+  // accessible only to administrators/superadmin until an admin assigns an owner.
+  ownerId: varchar("owner_id", { length: 36 }),
   title: text("title").notNull(),
   description: text("description"),
   mode: text("mode", { enum: ["standard", "adaptive"] }).notNull().default("standard"),
@@ -257,6 +278,23 @@ export const tests = pgTable("tests", {
   // PRD-6: optional retake gate / cooldown policy. Null = legacy (no gate).
   retakePolicyJson: jsonb("retake_policy_json").$type<RetakePolicy>(),
 });
+
+/**
+ * PRD-13 RBAC: explicit access to a test for a non-owner. `edit` lets an author
+ * edit/publish/export the test; `assign` lets a manager assign it. Grants are
+ * created and revoked only by an administrator or superadmin. One grant per
+ * (test, user); `edit` covers the `assign` scope during access resolution.
+ */
+export const testAccessGrants = pgTable("test_access_grants", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  testId: varchar("test_id", { length: 36 }).notNull(),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  accessLevel: text("access_level", { enum: ["edit", "assign"] }).notNull(),
+  grantedBy: varchar("granted_by", { length: 36 }), // which admin granted it
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  testUserIdx: uniqueIndex("test_access_grants_test_user_idx").on(table.testId, table.userId),
+}));
 
 // ─── PRD-11: tag draw quotas (квоты выдачи по тегам) ─────────────────────────
 // Optional per-section stratified-draw blueprint guaranteeing coverage of
@@ -386,12 +424,20 @@ export const insertAdaptiveLevelSchema = createInsertSchema(adaptiveLevels).omit
 export const insertAdaptiveLevelLinkSchema = createInsertSchema(adaptiveLevelLinks).omit({ id: true });
 export const insertGroupSchema = createInsertSchema(groups).omit({ id: true });
 export const insertUserGroupSchema = createInsertSchema(userGroups).omit({ id: true });
+export const insertUserRoleSchema = createInsertSchema(userRoles).omit({ id: true, grantedAt: true });
+export const insertTestAccessGrantSchema = createInsertSchema(testAccessGrants).omit({ id: true, createdAt: true });
 export const insertTestAssignmentSchema = createInsertSchema(testAssignments).omit({ id: true });
 export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({ id: true });
 export const insertAssignmentAccessTokenSchema = createInsertSchema(assignmentAccessTokens).omit({ id: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export type InsertUserRole = z.infer<typeof insertUserRoleSchema>;
+export type UserRole = typeof userRoles.$inferSelect;
+
+export type InsertTestAccessGrant = z.infer<typeof insertTestAccessGrantSchema>;
+export type TestAccessGrant = typeof testAccessGrants.$inferSelect;
 
 export type InsertFolder = z.infer<typeof insertFolderSchema>;
 export type Folder = typeof folders.$inferSelect;
