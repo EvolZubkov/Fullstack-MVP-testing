@@ -19,7 +19,8 @@
  */
 import { Router } from "express";
 import { storage } from "../storage";
-import { requireAuth, requireAuthor } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
+import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
 import { insertScaleSchema, insertQuestionMeasurementSchema, type Scale, type QuestionMeasurement } from "@shared/schema";
 import {
@@ -73,7 +74,7 @@ function toMeasurementSpecs(measurements: QuestionMeasurement[], scales: Scale[]
 }
 
 // ─── GET /api/tests/:id/scales ───────────────────────────────────────────────
-router.get("/:id/scales", requireAuth, async (req, res) => {
+router.get("/:id/scales", requirePermission("tests.read"), requireTestScope("read"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -85,7 +86,7 @@ router.get("/:id/scales", requireAuth, async (req, res) => {
 });
 
 // ─── POST /api/tests/:id/scales ──────────────────────────────────────────────
-router.post("/:id/scales", requireAuthor, async (req, res) => {
+router.post("/:id/scales", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const testId = req.params.id;
     const test = await storage.getTest(testId);
@@ -114,7 +115,7 @@ router.post("/:id/scales", requireAuthor, async (req, res) => {
 });
 
 // ─── PUT /api/tests/:id/scales/reorder ───────────────────────────────────────
-router.put("/:id/scales/reorder", requireAuthor, async (req, res) => {
+router.put("/:id/scales/reorder", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -131,7 +132,7 @@ router.put("/:id/scales/reorder", requireAuthor, async (req, res) => {
 });
 
 // ─── PUT /api/tests/:id/scales/:scaleId ──────────────────────────────────────
-router.put("/:id/scales/:scaleId", requireAuthor, async (req, res) => {
+router.put("/:id/scales/:scaleId", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const { id: testId, scaleId } = req.params;
     const test = await storage.getTest(testId);
@@ -159,7 +160,7 @@ router.put("/:id/scales/:scaleId", requireAuthor, async (req, res) => {
 });
 
 // ─── DELETE /api/tests/:id/scales/:scaleId ───────────────────────────────────
-router.delete("/:id/scales/:scaleId", requireAuthor, async (req, res) => {
+router.delete("/:id/scales/:scaleId", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const { id: testId, scaleId } = req.params;
     const test = await storage.getTest(testId);
@@ -177,7 +178,7 @@ router.delete("/:id/scales/:scaleId", requireAuthor, async (req, res) => {
 });
 
 // ─── GET /api/tests/:id/measurements ─────────────────────────────────────────
-router.get("/:id/measurements", requireAuth, async (req, res) => {
+router.get("/:id/measurements", requirePermission("tests.read"), requireTestScope("read"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -189,7 +190,7 @@ router.get("/:id/measurements", requireAuth, async (req, res) => {
 });
 
 // ─── PUT /api/tests/:id/measurements/:questionId ─────────────────────────────
-router.put("/:id/measurements/:questionId", requireAuthor, async (req, res) => {
+router.put("/:id/measurements/:questionId", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const { id: testId, questionId } = req.params;
     const test = await storage.getTest(testId);
@@ -222,7 +223,7 @@ router.put("/:id/measurements/:questionId", requireAuthor, async (req, res) => {
 // errors. Body: { answers: { [questionId]: Answer } } where Answer is the
 // runtime encoding (index | index[] | { left: right } | null). Question types
 // are resolved server-side from the measured questions.
-router.post("/:id/scales/preview", requireAuthor, async (req, res) => {
+router.post("/:id/scales/preview", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const testId = req.params.id;
     const test = await storage.getTest(testId);

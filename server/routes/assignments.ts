@@ -2,7 +2,8 @@ import { Router } from "express";
 import { createHash, randomBytes } from "crypto";
 import { logger } from "../logger";
 import { storage } from "../storage";
-import { requireAuthor, requireLearner } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
+import { requireTestScope, requireAssignmentScope } from "../middleware/test-scope";
 import { sendAssignmentEmail } from "../email";
 
 const router = Router();
@@ -91,7 +92,7 @@ async function notifyUser(opts: {
 }
 
 // ─── GET /api/tests/:id/assignments ──────────────────────────────────────────
-router.get("/tests/:id/assignments", requireAuthor, async (req, res) => {
+router.get("/tests/:id/assignments", requirePermission("assignments.manage"), requireTestScope("assign"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -138,7 +139,7 @@ router.get("/tests/:id/assignments", requireAuthor, async (req, res) => {
 });
 
 // ─── POST /api/tests/:id/assignments ─────────────────────────────────────────
-router.post("/tests/:id/assignments", requireAuthor, async (req, res) => {
+router.post("/tests/:id/assignments", requirePermission("assignments.manage"), requireTestScope("assign"), async (req, res) => {
   try {
     const { userId, groupId, dueDate, linkExpiresAt } = req.body;
 
@@ -208,7 +209,7 @@ router.post("/tests/:id/assignments", requireAuthor, async (req, res) => {
 });
 
 // ─── POST /api/tests/:id/assignments/bulk ────────────────────────────────────
-router.post("/tests/:id/assignments/bulk", requireAuthor, async (req, res) => {
+router.post("/tests/:id/assignments/bulk", requirePermission("assignments.manage"), requireTestScope("assign"), async (req, res) => {
   try {
     const { userIds, groupIds, dueDate, linkExpiresAt } = req.body;
 
@@ -282,7 +283,7 @@ router.post("/tests/:id/assignments/bulk", requireAuthor, async (req, res) => {
 });
 
 // ─── DELETE /api/assignments/:id ──────────────────────────────────────────────
-router.delete("/assignments/:id", requireAuthor, async (req, res) => {
+router.delete("/assignments/:id", requirePermission("assignments.manage"), requireAssignmentScope("id"), async (req, res) => {
   try {
     // Отзываем все токены назначения перед удалением
     await storage.revokeAssignmentAccessTokensByAssignment(req.params.id);
@@ -296,7 +297,10 @@ router.delete("/assignments/:id", requireAuthor, async (req, res) => {
 });
 
 // ─── PATCH /api/assignment-tokens/:id/revoke ──────────────────────────────────
-router.patch("/assignment-tokens/:id/revoke", requireAuthor, async (req, res) => {
+// Token revoke is keyed by token id; per-test scope (token -> assignment -> test)
+// is not resolved here, so this is gated by capability only. Admin/superadmin
+// always pass; for managers this is a known scope gap to tighten later.
+router.patch("/assignment-tokens/:id/revoke", requirePermission("assignments.manage"), async (req, res) => {
   try {
     await storage.revokeAssignmentAccessToken(req.params.id);
     res.json({ success: true });
@@ -307,7 +311,7 @@ router.patch("/assignment-tokens/:id/revoke", requireAuthor, async (req, res) =>
 });
 
 // ─── POST /api/assignments/:id/resend ─────────────────────────────────────────
-router.post("/assignments/:id/resend", requireAuthor, async (req, res) => {
+router.post("/assignments/:id/resend", requirePermission("assignments.manage"), requireAssignmentScope("id"), async (req, res) => {
   try {
     const tokens = await storage.getAssignmentAccessTokensByAssignment(req.params.id);
     if (tokens.length === 0) {
@@ -361,7 +365,7 @@ router.post("/assignments/:id/resend", requireAuthor, async (req, res) => {
 });
 
 // ─── GET /api/assignments/:id/group-users — участники группового назначения ───
-router.get("/assignments/:id/group-users", requireAuthor, async (req, res) => {
+router.get("/assignments/:id/group-users", requirePermission("assignments.manage"), requireAssignmentScope("id"), async (req, res) => {
   try {
     const assignment = await storage.getAssignment(req.params.id);
     if (!assignment) return res.status(404).json({ error: "Assignment not found" });
@@ -397,7 +401,7 @@ router.get("/assignments/:id/group-users", requireAuthor, async (req, res) => {
 });
 
 // ─── POST /api/assignments/:id/resend-group — обновить ссылки для всей группы ─
-router.post("/assignments/:id/resend-group", requireAuthor, async (req, res) => {
+router.post("/assignments/:id/resend-group", requirePermission("assignments.manage"), requireAssignmentScope("id"), async (req, res) => {
   try {
     const assignment = await storage.getAssignment(req.params.id);
     if (!assignment) return res.status(404).json({ error: "Assignment not found" });
@@ -453,7 +457,7 @@ router.post("/assignments/:id/resend-group", requireAuthor, async (req, res) => 
 });
 
 // ─── POST /api/assignments/:id/resend-user/:userId — обновить ссылку одному пользователю в группе
-router.post("/assignments/:id/resend-user/:userId", requireAuthor, async (req, res) => {
+router.post("/assignments/:id/resend-user/:userId", requirePermission("assignments.manage"), requireAssignmentScope("id"), async (req, res) => {
   try {
     const { id: assignmentId, userId } = req.params;
     const assignment = await storage.getAssignment(assignmentId);
@@ -498,7 +502,7 @@ router.post("/assignments/:id/resend-user/:userId", requireAuthor, async (req, r
 });
 
 // ─── PATCH /api/assignments/:id/revoke-user/:userId — отозвать ссылку пользователя в группе
-router.patch("/assignments/:id/revoke-user/:userId", requireAuthor, async (req, res) => {
+router.patch("/assignments/:id/revoke-user/:userId", requirePermission("assignments.manage"), requireAssignmentScope("id"), async (req, res) => {
   try {
     const { id: assignmentId, userId } = req.params;
     await storage.revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId, userId);
@@ -510,7 +514,7 @@ router.patch("/assignments/:id/revoke-user/:userId", requireAuthor, async (req, 
 });
 
 // ─── GET /api/learner/assigned-tests ─────────────────────────────────────────
-router.get("/learner/assigned-tests", requireLearner, async (req, res) => {
+router.get("/learner/assigned-tests", requirePermission("attempts.self.read"), async (req, res) => {
   try {
     const assignedTests = await storage.getAssignedTestsForUser(req.session.userId!);
     res.json(assignedTests);

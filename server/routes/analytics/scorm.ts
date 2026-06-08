@@ -1,12 +1,12 @@
 import { Router, Request, Response } from "express";
 import { logger } from "../../logger";
 import { storage } from "../../storage";
-import { requireAuthor } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/auth";
 
 const router = Router();
 
 // GET /api/analytics/scorm-attempts - Все SCORM попытки
-router.get("/scorm-attempts", requireAuthor, async (_req: Request, res: Response) => {
+router.get("/scorm-attempts", requirePermission("analytics.read"), async (_req: Request, res: Response) => {
   try {
     const attempts = await storage.getAllScormAttempts();
     const packages = await storage.getScormPackages();
@@ -50,7 +50,7 @@ router.get("/scorm-attempts", requireAuthor, async (_req: Request, res: Response
 });
 
 // GET /api/analytics/scorm-attempts/:attemptId - Детали SCORM попытки
-router.get("/scorm-attempts/:attemptId", requireAuthor, async (req: Request, res: Response) => {
+router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {
     const attempt = await storage.getScormAttempt(req.params.attemptId);
     if (!attempt) {

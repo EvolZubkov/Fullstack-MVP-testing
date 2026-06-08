@@ -30,7 +30,7 @@ import path from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { templates, tests, type Template } from "@shared/schema";
-import { requireAuthor } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 import { memoryUpload } from "../middleware/upload";
 import { logger } from "../logger";
 import {
@@ -68,7 +68,7 @@ async function usageCount(id: string): Promise<number> {
 }
 
 /** GET /api/admin/templates — every template, newest activity first. */
-router.get("/", requireAuthor, async (_req, res) => {
+router.get("/", requirePermission("adminTemplates.manage"), async (_req, res) => {
   try {
     const rows = await db.select().from(templates);
     res.json(rows);
@@ -84,7 +84,7 @@ router.get("/", requireAuthor, async (_req, res) => {
  * nothing is persisted. On success the files are extracted and a `draft` row is
  * created with the validation report.
  */
-router.post("/", requireAuthor, memoryUpload.single("file"), async (req, res) => {
+router.post("/", requirePermission("adminTemplates.manage"), memoryUpload.single("file"), async (req, res) => {
   try {
     if (!req.file?.buffer) {
       return res.status(400).json({ error: "Файл ZIP не передан (поле file)" });
@@ -143,7 +143,7 @@ router.post("/", requireAuthor, memoryUpload.single("file"), async (req, res) =>
 });
 
 /** GET /api/admin/templates/:id — details + usage count. */
-router.get("/:id", requireAuthor, async (req, res) => {
+router.get("/:id", requirePermission("adminTemplates.manage"), async (req, res) => {
   try {
     const row = await loadTemplate(req.params.id);
     if (!row) return res.status(404).json({ error: "Template not found" });
@@ -160,7 +160,7 @@ router.get("/:id", requireAuthor, async (req, res) => {
  * are validated at sync time and need no smoke-test; uploaded templates must carry
  * a passing structural report AND a passing smoke report.
  */
-router.put("/:id/activate", requireAuthor, async (req, res) => {
+router.put("/:id/activate", requirePermission("adminTemplates.manage"), async (req, res) => {
   try {
     const row = await loadTemplate(req.params.id);
     if (!row) return res.status(404).json({ error: "Template not found" });
@@ -191,7 +191,7 @@ router.put("/:id/activate", requireAuthor, async (req, res) => {
  * dependent test to the `default` template, preserving the saved params
  * (PRD-3 §5.3). Runs in one transaction (NFR-04).
  */
-router.put("/:id/deactivate", requireAuthor, async (req, res) => {
+router.put("/:id/deactivate", requirePermission("adminTemplates.manage"), async (req, res) => {
   try {
     const row = await loadTemplate(req.params.id);
     if (!row) return res.status(404).json({ error: "Template not found" });
@@ -235,7 +235,7 @@ router.put("/:id/deactivate", requireAuthor, async (req, res) => {
  * DELETE /api/admin/templates/:id — remove an uploaded template. Allowed only
  * when it is not built-in, not active, and used by no test (PRD-3 §5.4).
  */
-router.delete("/:id", requireAuthor, async (req, res) => {
+router.delete("/:id", requirePermission("adminTemplates.manage"), async (req, res) => {
   try {
     const row = await loadTemplate(req.params.id);
     if (!row) return res.status(404).json({ error: "Template not found" });
@@ -267,7 +267,7 @@ router.delete("/:id", requireAuthor, async (req, res) => {
  * validation the files are replaced and the manifest/version refreshed; on a
  * failing validation the template is flagged `invalid`.
  */
-router.put("/:id/update", requireAuthor, memoryUpload.single("file"), async (req, res) => {
+router.put("/:id/update", requirePermission("adminTemplates.manage"), memoryUpload.single("file"), async (req, res) => {
   try {
     const row = await loadTemplate(req.params.id);
     if (!row) return res.status(404).json({ error: "Template not found" });
@@ -333,7 +333,7 @@ router.put("/:id/update", requireAuthor, memoryUpload.single("file"), async (req
  * GET /api/admin/templates/:id/export — download the template (built-in or
  * uploaded) as a ZIP that is valid as a starter template (PRD-3 §7).
  */
-router.get("/:id/export", requireAuthor, async (req, res) => {
+router.get("/:id/export", requirePermission("adminTemplates.manage"), async (req, res) => {
   try {
     const row = await loadTemplate(req.params.id);
     if (!row) return res.status(404).json({ error: "Template not found" });
@@ -354,7 +354,7 @@ router.get("/:id/export", requireAuthor, async (req, res) => {
  * POST /api/admin/templates/:id/validate — re-run structural validation against
  * the files currently on disk and persist the fresh report.
  */
-router.post("/:id/validate", requireAuthor, async (req, res) => {
+router.post("/:id/validate", requirePermission("adminTemplates.manage"), async (req, res) => {
   try {
     const row = await loadTemplate(req.params.id);
     if (!row) return res.status(404).json({ error: "Template not found" });
@@ -405,7 +405,7 @@ const PREVIEW_MIME: Record<string, string> = {
  * The path comes from the manifest and is resolved strictly inside the template
  * root (defence against traversal). 404 when absent.
  */
-router.get("/:id/preview-image", requireAuthor, async (req, res) => {
+router.get("/:id/preview-image", requirePermission("adminTemplates.manage"), async (req, res) => {
   try {
     const row = await loadTemplate(req.params.id);
     if (!row) return res.status(404).json({ error: "Template not found" });
@@ -444,7 +444,7 @@ const RULES_ENTRY_CANDIDATES = ["template-rules.json", "rules.json"];
  * `template.js` and rules sources for the compile/parse checks. The server only
  * reads files here — it never executes them (NFR-02).
  */
-router.get("/:id/smoke-bundle", requireAuthor, async (req, res) => {
+router.get("/:id/smoke-bundle", requirePermission("adminTemplates.manage"), async (req, res) => {
   try {
     const row = await loadTemplate(req.params.id);
     if (!row) return res.status(404).json({ error: "Template not found" });
@@ -511,7 +511,7 @@ router.get("/:id/smoke-bundle", requireAuthor, async (req, res) => {
  * `smoke_test_json`. The `activate` gate then enforces `ok` (NFR-01). The server
  * never runs the smoke-test itself (NFR-02).
  */
-router.post("/:id/smoke-test", requireAuthor, async (req, res) => {
+router.post("/:id/smoke-test", requirePermission("adminTemplates.manage"), async (req, res) => {
   try {
     const row = await loadTemplate(req.params.id);
     if (!row) return res.status(404).json({ error: "Template not found" });

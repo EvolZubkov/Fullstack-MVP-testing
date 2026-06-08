@@ -20,7 +20,8 @@ import { eq } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
 import { templates } from "@shared/schema";
-import { requireAuth, requireAuthor } from "../middleware/auth";
+import { requireAuth, requirePermission } from "../middleware/auth";
+import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
 import {
   sanitizeHtmlWithDiagnostics,
@@ -302,7 +303,7 @@ router.get("/:id/content-pages/:pageId/preview-page", requireAuth, async (req, r
 
 // ─── GET /api/tests/:id/content-pages ────────────────────────────────────────
 
-router.get("/:id/content-pages", requireAuth, async (req, res) => {
+router.get("/:id/content-pages", requirePermission("tests.read"), requireTestScope("read"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -325,7 +326,7 @@ router.get("/:id/content-pages", requireAuth, async (req, res) => {
 
 // ─── POST /api/tests/:id/content-pages ───────────────────────────────────────
 
-router.post("/:id/content-pages", requireAuthor, async (req, res) => {
+router.post("/:id/content-pages", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const testId = req.params.id;
     const test = await storage.getTest(testId);
@@ -414,7 +415,7 @@ router.post("/:id/content-pages", requireAuthor, async (req, res) => {
 // ─── PUT /api/tests/:id/content-pages/reorder ────────────────────────────────
 // Must be registered BEFORE /:pageId to avoid "reorder" being captured as pageId.
 
-router.put("/:id/content-pages/reorder", requireAuthor, async (req, res) => {
+router.put("/:id/content-pages/reorder", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -434,7 +435,7 @@ router.put("/:id/content-pages/reorder", requireAuthor, async (req, res) => {
 
 // ─── PUT /api/tests/:id/content-pages/:pageId ────────────────────────────────
 
-router.put("/:id/content-pages/:pageId", requireAuthor, async (req, res) => {
+router.put("/:id/content-pages/:pageId", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const testId = req.params.id;
     const pageId = req.params.pageId;
@@ -532,7 +533,7 @@ router.put("/:id/content-pages/:pageId", requireAuthor, async (req, res) => {
 // values for placeholders that exist in both variants are preserved, values
 // for placeholders that disappear are dropped. Rejects with 422 when the
 // requested variant has a different kind.
-router.post("/:id/content-pages/:pageId/replace-variant", requireAuthor, async (req, res) => {
+router.post("/:id/content-pages/:pageId/replace-variant", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const testId = req.params.id;
     const pageId = req.params.pageId;
@@ -638,7 +639,7 @@ router.post("/:id/content-pages/:pageId/replace-variant", requireAuthor, async (
 
 // ─── DELETE /api/tests/:id/content-pages/:pageId ─────────────────────────────
 
-router.delete("/:id/content-pages/:pageId", requireAuthor, async (req, res) => {
+router.delete("/:id/content-pages/:pageId", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const testId = req.params.id;
     const pageId = req.params.pageId;

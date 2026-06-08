@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { logger } from "../logger";
 import { storage } from "../storage";
-import { requireAuth, requireAuthor } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
 // GET /api/folders - Список папок
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requirePermission("folders.manage"), async (req, res) => {
   try {
     const folders = await storage.getFolders();
     res.json(folders);
@@ -17,7 +17,7 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 // POST /api/folders - Создать папку
-router.post("/", requireAuthor, async (req, res) => {
+router.post("/", requirePermission("folders.manage"), async (req, res) => {
   try {
     const { name, parentId } = req.body;
     if (!name) {
@@ -32,7 +32,7 @@ router.post("/", requireAuthor, async (req, res) => {
 });
 
 // PUT /api/folders/:id - Обновить папку
-router.put("/:id", requireAuthor, async (req, res) => {
+router.put("/:id", requirePermission("folders.manage"), async (req, res) => {
   try {
     const { name, parentId } = req.body;
     const updated = await storage.updateFolder(req.params.id, { name, parentId });
@@ -47,7 +47,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
 });
 
 // DELETE /api/folders/:id - Удалить папку
-router.delete("/:id", requireAuthor, async (req, res) => {
+router.delete("/:id", requirePermission("folders.manage"), async (req, res) => {
   try {
     const success = await storage.deleteFolder(req.params.id);
     if (!success) {

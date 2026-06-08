@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { logger, audit } from "../logger";
 import { storage } from "../storage";
-import { requireAuthor } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
+import { getEffectiveRoles, isSuperadmin } from "../services/access";
+import { validateRoleChange, isStoredRole, type StoredRole } from "@shared/access";
 import { sendInviteEmail } from "../email";
 import multer from "multer";
 import ExcelJS from "exceljs";
@@ -17,14 +19,22 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 
 const router = Router();
 
+/** Attach the user's stored roles to a user object for API responses. */
+async function withStoredRoles<T extends { id: string }>(
+  user: T,
+): Promise<T & { roles: StoredRole[] }> {
+  return { ...user, roles: await storage.getUserRoles(user.id) };
+}
+
 // GET /api/users - Список пользователей
-router.get("/", requireAuthor, async (req, res) => {
+router.get("/", requirePermission("users.read"), async (req, res) => {
   try {
     const users = await storage.getUsers();
     const usersWithGroups = await Promise.all(
       users.map(async (user) => {
         const groups = await storage.getUserGroups(user.id);
-        return { ...user, groups };
+        const roles = await storage.getUserRoles(user.id);
+        return { ...user, roles, groups };
       })
     );
     res.json(usersWithGroups);
@@ -35,7 +45,7 @@ router.get("/", requireAuthor, async (req, res) => {
 });
 
 // GET /api/users/bulk-template — download CSV template (must be before /:id)
-router.get("/bulk-template", requireAuthor, async (_req, res) => {
+router.get("/bulk-template", requirePermission("users.read"), async (_req, res) => {
   const wb = new ExcelJS.Workbook();
   addAoaSheet(wb, "Users", [
     ["email", "name", "role", "group"],
@@ -49,14 +59,14 @@ router.get("/bulk-template", requireAuthor, async (_req, res) => {
 });
 
 // GET /api/users/:id - Получить пользователя
-router.get("/:id", requireAuthor, async (req, res) => {
+router.get("/:id", requirePermission("users.read"), async (req, res) => {
   try {
     const user = await storage.getUser(req.params.id);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
     const groups = await storage.getUserGroups(user.id);
-    res.json({ ...user, groups });
+    res.json({ ...user, roles: await storage.getUserRoles(user.id), groups });
   } catch (error) {
     logger.error("Get user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to get user" });
@@ -64,12 +74,31 @@ router.get("/:id", requireAuthor, async (req, res) => {
 });
 
 // POST /api/users - Создать пользователя
-router.post("/", requireAuthor, async (req, res) => {
+router.post("/", requirePermission("users.create"), async (req, res) => {
   try {
-    const { email, password, name, role, groupIds } = req.body;
+    const { email, password, name, role, roles, groupIds } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: "Email and password required" });
+    }
+
+    // Requested role set: new `roles[]`, else legacy single `role` (default learner).
+    const requestedRoles: string[] = Array.isArray(roles) && roles.length > 0
+      ? roles.map((r: unknown) => String(r))
+      : [String(role || "learner")];
+    if (!requestedRoles.every(isStoredRole)) {
+      return res.status(400).json({ error: "Invalid role in request" });
+    }
+
+    // Enforce the assignment ceiling (PRD-13): e.g. a manager may create only learners.
+    const ceiling = validateRoleChange({
+      actorRoles: req.effectiveRoles ?? [],
+      currentRoles: [],
+      requestedRoles,
+      atCreation: true,
+    });
+    if (!ceiling.ok) {
+      return res.status(403).json({ error: "Forbidden", reason: ceiling.reason });
     }
 
     const existingUser = await storage.getUserByEmail(email);
@@ -81,11 +110,12 @@ router.post("/", requireAuthor, async (req, res) => {
       email,
       passwordHash: password,
       name: name || null,
-      role: role || "learner",
       status: "pending",
       mustChangePassword: true,
       createdBy: req.session.userId,
     });
+
+    await storage.setUserRoles(user.id, requestedRoles as StoredRole[], req.session.userId ?? null);
 
     // Добавляем в группы если указаны
     if (groupIds && Array.isArray(groupIds)) {
@@ -93,8 +123,8 @@ router.post("/", requireAuthor, async (req, res) => {
     }
 
     const groups = await storage.getUserGroups(user.id);
-    audit.userCreate(user.email, user.role);
-    res.status(201).json({ ...user, groups });
+    audit.userCreate(user.email, requestedRoles.join("+"));
+    res.status(201).json({ ...user, roles: requestedRoles, groups });
   } catch (error) {
     logger.error("Create user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create user" });
@@ -102,9 +132,9 @@ router.post("/", requireAuthor, async (req, res) => {
 });
 
 // PUT /api/users/:id - Обновить пользователя
-router.put("/:id", requireAuthor, async (req, res) => {
+router.put("/:id", requirePermission("users.manage"), async (req, res) => {
   try {
-    const { email, name, role, groupIds } = req.body;
+    const { email, name, groupIds } = req.body;
     const userId = req.params.id;
 
     const existingUser = await storage.getUser(userId);
@@ -120,7 +150,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
       }
     }
 
-    const updated = await storage.updateUser(userId, { email, name, role });
+    const updated = await storage.updateUser(userId, { email, name });
 
     // Обновляем группы если указаны
     if (groupIds && Array.isArray(groupIds)) {
@@ -128,15 +158,47 @@ router.put("/:id", requireAuthor, async (req, res) => {
     }
 
     const groups = await storage.getUserGroups(userId);
-    res.json({ ...updated, groups });
+    res.json({ ...updated, roles: await storage.getUserRoles(userId), groups });
   } catch (error) {
     logger.error("Update user error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to update user" });
   }
 });
 
+// PUT /api/users/:id/roles - Назначить набор ролей (PRD-13, с потолком)
+router.put("/:id/roles", requirePermission("users.role.assign"), async (req, res) => {
+  try {
+    const target = await storage.getUser(req.params.id);
+    if (!target) return res.status(404).json({ error: "User not found" });
+
+    const { roles } = req.body ?? {};
+    if (!Array.isArray(roles)) {
+      return res.status(400).json({ error: "roles array required" });
+    }
+    const requestedRoles = roles.map((r: unknown) => String(r));
+
+    const currentRoles = await storage.getUserRoles(target.id);
+    const result = validateRoleChange({
+      actorRoles: req.effectiveRoles ?? [],
+      currentRoles,
+      requestedRoles,
+      targetIsSuperadmin: isSuperadmin(target),
+    });
+    if (!result.ok) {
+      return res.status(403).json({ error: "Forbidden", reason: result.reason });
+    }
+
+    await storage.setUserRoles(target.id, requestedRoles as StoredRole[], req.session.userId ?? null);
+
+    res.json({ id: target.id, roles: requestedRoles });
+  } catch (error) {
+    logger.error("Set user roles error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to set user roles" });
+  }
+});
+
 // POST /api/users/:id/reset-password - Сбросить пароль пользователя
-router.post("/:id/reset-password", requireAuthor, async (req, res) => {
+router.post("/:id/reset-password", requirePermission("users.manage"), async (req, res) => {
   try {
     const { newPassword } = req.body;
     if (!newPassword) {
@@ -162,15 +224,15 @@ router.post("/:id/reset-password", requireAuthor, async (req, res) => {
 });
 
 // POST /api/users/:id/deactivate - Деактивировать пользователя
-router.post("/:id/deactivate", requireAuthor, async (req, res) => {
+router.post("/:id/deactivate", requirePermission("users.manage"), async (req, res) => {
   try {
     const user = await storage.getUser(req.params.id);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    if (user.role === "author") {
-      return res.status(400).json({ error: "Cannot deactivate author accounts" });
+    if (isSuperadmin(user)) {
+      return res.status(400).json({ error: "Cannot deactivate a superadmin account" });
     }
 
     await storage.deactivateUser(user.id);
@@ -183,7 +245,7 @@ router.post("/:id/deactivate", requireAuthor, async (req, res) => {
 });
 
 // POST /api/users/:id/activate - Активировать пользователя
-router.post("/:id/activate", requireAuthor, async (req, res) => {
+router.post("/:id/activate", requirePermission("users.manage"), async (req, res) => {
   try {
     const user = await storage.getUser(req.params.id);
     if (!user) {
@@ -200,7 +262,7 @@ router.post("/:id/activate", requireAuthor, async (req, res) => {
 });
 
 // POST /api/users/:id/reset-attempts - Сбросить попытки пользователя
-router.post("/:id/reset-attempts", requireAuthor, async (req, res) => {
+router.post("/:id/reset-attempts", requirePermission("users.manage"), async (req, res) => {
   try {
     const { testId } = req.body;
     const userId = req.params.id;
@@ -228,7 +290,7 @@ router.post("/:id/reset-attempts", requireAuthor, async (req, res) => {
 });
 
 // GET /api/users/:id/attempts-summary - Сводка попыток пользователя
-router.get("/:id/attempts-summary", requireAuthor, async (req, res) => {
+router.get("/:id/attempts-summary", requirePermission("users.read"), async (req, res) => {
   try {
     const userId = req.params.id;
 
@@ -279,7 +341,7 @@ router.get("/:id/attempts-summary", requireAuthor, async (req, res) => {
 });
 
 // GET /api/users/:id/groups - Группы пользователя
-router.get("/:id/groups", requireAuthor, async (req, res) => {
+router.get("/:id/groups", requirePermission("users.read"), async (req, res) => {
   try {
     const user = await storage.getUser(req.params.id);
     if (!user) {
@@ -295,7 +357,7 @@ router.get("/:id/groups", requireAuthor, async (req, res) => {
 });
 
 // PUT /api/users/:id/groups - Обновить группы пользователя
-router.put("/:id/groups", requireAuthor, async (req, res) => {
+router.put("/:id/groups", requirePermission("users.manage"), async (req, res) => {
   try {
     const { groupIds } = req.body;
     const userId = req.params.id;
@@ -320,7 +382,7 @@ router.put("/:id/groups", requireAuthor, async (req, res) => {
 });
 
 // POST /api/users/bulk-preview — parse CSV/XLSX, return preview rows with duplicate/group status
-router.post("/bulk-preview", requireAuthor, upload.single("file"), async (req, res) => {
+router.post("/bulk-preview", requirePermission("users.create"), upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "File required" });
 
@@ -375,7 +437,7 @@ router.post("/bulk-preview", requireAuthor, upload.single("file"), async (req, r
 });
 
 // POST /api/users/bulk-import — create users, assign groups, send invite emails
-router.post("/bulk-import", requireAuthor, async (req, res) => {
+router.post("/bulk-import", requirePermission("users.create"), async (req, res) => {
   try {
     // Parse body — fallback to rawBody in case express.json() didn't run
     let parsed = req.body;
@@ -433,7 +495,7 @@ router.post("/bulk-import", requireAuthor, async (req, res) => {
         if (row.status === "duplicate") {
           if (row.duplicateAction === "skip" || !row.duplicateAction) { skipped++; continue; }
           if (row.duplicateAction === "update" && row.existingId) {
-            await storage.updateUser(row.existingId, { name: row.name || undefined, role: (row.role as any) || "learner" });
+            await storage.updateUser(row.existingId, { name: row.name || undefined });
             const gid = await resolveGroupId(row.groupId, row.groupName);
             if (gid) await storage.addUserToGroup(row.existingId, gid).catch((e: Error) => {
               logger.warn(`bulk-import: addUserToGroup failed for ${row.email} → group ${gid}: ${e.message}`);
@@ -443,18 +505,31 @@ router.post("/bulk-import", requireAuthor, async (req, res) => {
           continue;
         }
 
+        // Determine and authorize the row's role set (PRD-13 ceiling).
+        const rowRoles = [isStoredRole(String(row.role || "")) ? String(row.role) : "learner"];
+        const rowCeiling = validateRoleChange({
+          actorRoles: req.effectiveRoles ?? [],
+          currentRoles: [],
+          requestedRoles: rowRoles,
+          atCreation: true,
+        });
+        if (!rowCeiling.ok) {
+          errors.push(`${row.email}: ${rowCeiling.reason ?? "role not allowed"}`);
+          continue;
+        }
+
         // Create user with a random temp password
         const tempPassword = randomBytes(16).toString("hex");
         const user = await storage.createUser({
           email: row.email,
           passwordHash: tempPassword,
           name: row.name || null,
-          role: (row.role as any) || "learner",
           status: "pending",
           mustChangePassword: true,
           gdprConsent: false,
           createdBy: req.session.userId,
         });
+        await storage.setUserRoles(user.id, rowRoles as StoredRole[], req.session.userId ?? null);
 
         // Assign group (auto-create if not found)
         const gid = await resolveGroupId(row.groupId, row.groupName);

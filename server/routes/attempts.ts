@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { logger } from "../logger";
 import { storage } from "../storage";
-import { requireLearner } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 import { checkAnswer } from "../utils/check-answer";
 import { drawSection } from "@shared/draw/blueprint";
 import { loadScoringConfig } from "../services/scoring-config";
@@ -25,7 +25,7 @@ function shuffleInPlace<T>(arr: T[]): T[] {
 }
 
 // GET /api/learner/tests - Тесты для ученика
-router.get("/learner/tests", requireLearner, async (req, res) => {
+router.get("/learner/tests", requirePermission("attempts.self.read"), async (req, res) => {
   try {
     const assignedTests = await storage.getAssignedTestsForUser(req.session.userId!);
 
@@ -81,7 +81,7 @@ router.get("/learner/tests", requireLearner, async (req, res) => {
 });
 
 // POST /api/tests/:testId/attempts/start - Начать обычный тест
-router.post("/tests/:testId/attempts/start", requireLearner, async (req, res) => {
+router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.testId);
     if (!test) {
@@ -165,7 +165,7 @@ router.post("/tests/:testId/attempts/start", requireLearner, async (req, res) =>
 });
 
 // POST /api/tests/:testId/attempts/start-adaptive - Начать адаптивный тест
-router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req, res) => {
+router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempts.take"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.testId);
     if (!test) {
@@ -316,7 +316,7 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
 });
 
 // POST /api/attempts/:attemptId/answer-adaptive - Ответить на вопрос адаптивного теста
-router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, res) => {
+router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.take"), async (req, res) => {
   try {
     const attempt = await storage.getAttempt(req.params.attemptId);
     if (!attempt) {
@@ -505,7 +505,7 @@ router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, 
 });
 
 // POST /api/attempts/:attemptId/save-progress - Сохранить прогресс
-router.post("/attempts/:attemptId/save-progress", requireLearner, async (req, res) => {
+router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.take"), async (req, res) => {
   try {
     const attempt = await storage.getAttempt(req.params.attemptId);
     if (!attempt) {
@@ -544,7 +544,7 @@ router.post("/attempts/:attemptId/save-progress", requireLearner, async (req, re
 });
 
 // GET /api/tests/:testId/resume - Возобновить попытку
-router.get("/tests/:testId/resume", requireLearner, async (req, res) => {
+router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.testId);
     if (!test) {
@@ -585,7 +585,7 @@ router.get("/tests/:testId/resume", requireLearner, async (req, res) => {
 });
 
 // POST /api/attempts/:attemptId/finish - Завершить попытку
-router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
+router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), async (req, res) => {
   try {
     const attempt = await storage.getAttempt(req.params.attemptId);
     if (!attempt) {
@@ -737,7 +737,7 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
 });
 
 // GET /api/attempts/:attemptId/result - Результат попытки
-router.get("/attempts/:attemptId/result", requireLearner, async (req, res) => {
+router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"), async (req, res) => {
   try {
     const attempt = await storage.getAttempt(req.params.attemptId);
     if (!attempt) {
@@ -788,7 +788,7 @@ router.get("/attempts/:attemptId/result", requireLearner, async (req, res) => {
 });
 
 // GET /api/learner/attempts - История попыток ученика
-router.get("/learner/attempts", requireLearner, async (req, res) => {
+router.get("/learner/attempts", requirePermission("attempts.self.read"), async (req, res) => {
   try {
     const attempts = await storage.getAttemptsByUser(req.session.userId!);
     const tests = await storage.getTests();

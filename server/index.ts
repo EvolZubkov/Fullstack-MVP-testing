@@ -5,6 +5,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./storage";
+import { provisionSuperadmins } from "./services/access";
 import { syncBuiltinTemplates, reconcileTemplates } from "./template-registry";
 import {
   waitForDatabase,
@@ -112,6 +113,13 @@ app.use((req, res, next) => {
   // Wait for database to be available before starting
   await waitForDatabase();
   await seedDatabase();
+
+  // PRD-13: ensure configured superadmins exist (best-effort, no stored roles).
+  try {
+    await provisionSuperadmins();
+  } catch (err) {
+    logger.error(err instanceof Error ? err : String(err), "provisionSuperadmins");
+  }
 
   // Template-registry sync is best-effort: a failure here (e.g. a schema not yet
   // migrated, a malformed built-in manifest) must NOT abort the whole boot —

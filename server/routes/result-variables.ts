@@ -17,7 +17,8 @@
  */
 import { Router } from "express";
 import { storage } from "../storage";
-import { requireAuth, requireAuthor } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
+import { requireTestScope } from "../middleware/test-scope";
 import { logger } from "../logger";
 import { insertResultVariableSchema } from "@shared/schema";
 import type { ValueType } from "@shared/formula";
@@ -37,7 +38,7 @@ async function controlsStatusConflict(
 }
 
 // ─── GET /api/tests/:id/result-variables ─────────────────────────────────────
-router.get("/:id/result-variables", requireAuth, async (req, res) => {
+router.get("/:id/result-variables", requirePermission("tests.read"), requireTestScope("read"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -49,7 +50,7 @@ router.get("/:id/result-variables", requireAuth, async (req, res) => {
 });
 
 // ─── POST /api/tests/:id/result-variables ────────────────────────────────────
-router.post("/:id/result-variables", requireAuthor, async (req, res) => {
+router.post("/:id/result-variables", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const testId = req.params.id;
     const test = await storage.getTest(testId);
@@ -85,7 +86,7 @@ router.post("/:id/result-variables", requireAuthor, async (req, res) => {
 });
 
 // ─── PUT /api/tests/:id/result-variables/reorder ─────────────────────────────
-router.put("/:id/result-variables/reorder", requireAuthor, async (req, res) => {
+router.put("/:id/result-variables/reorder", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -102,7 +103,7 @@ router.put("/:id/result-variables/reorder", requireAuthor, async (req, res) => {
 });
 
 // ─── POST /api/tests/:id/result-variables/validate-formula ───────────────────
-router.post("/:id/result-variables/validate-formula", requireAuthor, async (req, res) => {
+router.post("/:id/result-variables/validate-formula", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const testId = req.params.id;
     const test = await storage.getTest(testId);
@@ -126,7 +127,7 @@ router.post("/:id/result-variables/validate-formula", requireAuthor, async (req,
 });
 
 // ─── PUT /api/tests/:id/result-variables/:varId ──────────────────────────────
-router.put("/:id/result-variables/:varId", requireAuthor, async (req, res) => {
+router.put("/:id/result-variables/:varId", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const { id: testId, varId } = req.params;
     const test = await storage.getTest(testId);
@@ -165,7 +166,7 @@ router.put("/:id/result-variables/:varId", requireAuthor, async (req, res) => {
 });
 
 // ─── DELETE /api/tests/:id/result-variables/:varId ───────────────────────────
-router.delete("/:id/result-variables/:varId", requireAuthor, async (req, res) => {
+router.delete("/:id/result-variables/:varId", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const { id: testId, varId } = req.params;
     const test = await storage.getTest(testId);

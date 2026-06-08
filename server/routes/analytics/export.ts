@@ -3,7 +3,8 @@ import { logger } from "../../logger";
 import ExcelJS from "exceljs";
 import { addAoaSheet, workbookToBuffer } from "../../utils/excel";
 import { storage } from "../../storage";
-import { requireAuthor } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/auth";
+import { requireTestScope } from "../../middleware/test-scope";
 import { checkAnswer } from "../../utils/check-answer";
 import {
   formatQuestionType,
@@ -15,7 +16,7 @@ import {
 const router = Router();
 
 // GET /api/analytics/tests/:testId/export/excel - Экспорт теста в Excel
-router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, res: Response) => {
+router.get("/tests/:testId/export/excel", requirePermission("analytics.export"), requireTestScope("analytics", "testId"), async (req: Request, res: Response) => {
   try {
     const testId = req.params.testId;
     const test = await storage.getTest(testId);
@@ -278,7 +279,7 @@ router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, re
 });
 
 // GET /api/export/filters - Данные для фильтров экспорта
-router.get("/export/filters", requireAuthor, async (_req: Request, res: Response) => {
+router.get("/export/filters", requirePermission("analytics.export"), async (_req: Request, res: Response) => {
   try {
     const tests = await storage.getTests();
     const allAttempts = await storage.getAllAttempts();
@@ -372,7 +373,7 @@ router.get("/export/filters", requireAuthor, async (_req: Request, res: Response
 });
 
 // POST /api/export/excel - Экспорт отчёта в Excel
-router.post("/export/excel", requireAuthor, async (req: Request, res: Response) => {
+router.post("/export/excel", requirePermission("analytics.export"), async (req: Request, res: Response) => {
   try {
     const config = req.body as any;
 
@@ -728,7 +729,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
 });
 
 // POST /api/export/excel-lms - Экспорт LMS данных в Excel
-router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Response) => {
+router.post("/export/excel-lms", requirePermission("analytics.export"), async (req: Request, res: Response) => {
   try {
     const config = req.body as any;
 

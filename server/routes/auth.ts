@@ -2,6 +2,7 @@ import { Router } from "express";
 import crypto from "node:crypto";
 import { storage } from "../storage";
 import { requireAuth } from "../middleware/auth";
+import { getEffectiveRoles, getUserCapabilities } from "../services/access";
 import { sendPasswordResetEmail } from "../email";
 import { maskEmail } from "../utils/mask-email";
 import { logger, audit, requestContext } from "../logger";
@@ -52,7 +53,7 @@ router.post("/login", async (req, res) => {
     }
 
     await storage.updateUserLastLogin(user.id);
-    logger.info(`User logged in: ${email} (${user.role}) from ${ip}`, "auth");
+    logger.info(`User logged in: ${email} from ${ip}`, "auth");
     audit.login(email, true, ip);
 
     // Подтягиваем userId в контекст запроса сразу после логина
@@ -79,7 +80,8 @@ router.post("/login", async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        roles: await getEffectiveRoles(user),
+        permissions: [...(await getUserCapabilities(user))],
         status: user.status,
         mustChangePassword: user.mustChangePassword,
         gdprConsent: user.gdprConsent,
@@ -157,7 +159,8 @@ router.get("/me", async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.name,
-        role: user.role,
+        roles: await getEffectiveRoles(user),
+        permissions: [...(await getUserCapabilities(user))],
         status: user.status,
         mustChangePassword: user.mustChangePassword,
         gdprConsent: user.gdprConsent,
@@ -368,7 +371,6 @@ router.post("/complete-first-login", requireAuth, async (req, res) => {
         id: updatedUser!.id,
         email: updatedUser!.email,
         name: updatedUser!.name,
-        role: updatedUser!.role,
         status: updatedUser!.status,
         mustChangePassword: updatedUser!.mustChangePassword,
         gdprConsent: updatedUser!.gdprConsent,

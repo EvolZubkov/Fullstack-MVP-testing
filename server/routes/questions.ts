@@ -9,7 +9,7 @@ import {
   workbookToBuffer,
 } from "../utils/excel";
 import { storage } from "../storage";
-import { requireAuth, requireAuthor } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
 import { questionScoringSchema, type QuestionScoring } from "@shared/schema";
 import { normalizeTags } from "@shared/tags";
@@ -101,7 +101,7 @@ const typeFromExcel: Record<string, string> = {
 // ============================================
 // GET /api/questions - Список вопросов
 // ============================================
-router.get("/", requireAuth, async (_req: Request, res: Response) => {
+router.get("/", requirePermission("questions.manage"), async (_req: Request, res: Response) => {
   try {
     const questions = await storage.getQuestions();
     const topics = await storage.getTopics();
@@ -124,7 +124,7 @@ router.get("/", requireAuth, async (_req: Request, res: Response) => {
 // ============================================
 router.post(
   "/",
-  requireAuthor,
+  requirePermission("questions.manage"),
   async (req: Request<{}, {}, CreateQuestionBody>, res: Response) => {
     try {
       const {
@@ -186,7 +186,7 @@ router.post(
 // ============================================
 router.put(
   "/:id",
-  requireAuthor,
+  requirePermission("questions.manage"),
   async (req: Request, res: Response) => {
     try {
       const {
@@ -249,7 +249,7 @@ router.put(
 // ============================================
 router.delete(
   "/:id",
-  requireAuthor,
+  requirePermission("questions.manage"),
   async (req: Request, res: Response) => {
     try {
       const success = await storage.deleteQuestion(req.params.id);
@@ -269,7 +269,7 @@ router.delete(
 // ============================================
 router.post(
   "/bulk-delete",
-  requireAuthor,
+  requirePermission("questions.manage"),
   async (req: Request<{}, {}, BulkDeleteBody>, res: Response) => {
     try {
       const { ids } = req.body;
@@ -290,7 +290,7 @@ router.post(
 // ============================================
 router.post(
   "/:id/duplicate",
-  requireAuthor,
+  requirePermission("questions.manage"),
   async (req: Request, res: Response) => {
     try {
       const result = await (storage as any).duplicateQuestion(req.params.id);
@@ -310,7 +310,7 @@ router.post(
 // ============================================
 router.get(
   "/export",
-  requireAuthor,
+  requirePermission("questions.importExport"),
   async (req: Request<{}, {}, {}, ExportQuery>, res: Response) => {
     try {
       let questions = await storage.getQuestions();
@@ -431,7 +431,7 @@ router.get(
 // ============================================
 router.post(
   "/import",
-  requireAuthor,
+  requirePermission("questions.importExport"),
   memoryUpload.single("file"),
   async (req: Request, res: Response) => {
     try {

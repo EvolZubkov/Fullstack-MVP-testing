@@ -7,7 +7,9 @@ import { db } from "../db";
 import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, retakePolicySchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate } from "../services/template-render";
-import { requireAuth, requireAuthor } from "../middleware/auth";
+import { requireAuth, requirePermission } from "../middleware/auth";
+import { requireTestScope } from "../middleware/test-scope";
+import { readableTestScope } from "../services/test-access";
 import { generateScormPackage } from "../scorm-exporter";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { logger } from "../logger";
@@ -178,18 +180,29 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
 
 // GET /api/tests - Список тестов
 // Query param: ?status=archived shows only archived; default excludes archived.
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requirePermission("tests.read"), async (req, res) => {
   try {
     const statusFilter = (req.query.status as string | undefined)?.toLowerCase();
     const allTests = await storage.getTests();
     const filteredTests = statusFilter === "archived"
       ? allTests.filter((t) => t.status === "archived")
       : allTests.filter((t) => t.status !== "archived");
+
+    // PRD-13: restrict the list to tests this user may read (scope by role).
+    const scope = await readableTestScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+    const visibleTests = scope.all
+      ? filteredTests
+      : filteredTests.filter((t) => scope.ids.has(t.id));
+
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t]));
 
+    // PRD-13: resolve owner display names for the list "Владелец" column.
+    const allUsers = await storage.getUsers();
+    const ownerNameById = new Map(allUsers.map((u) => [u.id, u.name]));
+
     const testsWithSections = await Promise.all(
-      filteredTests.map(async (test) => {
+      visibleTests.map(async (test) => {
         const sections = await storage.getTestSections(test.id);
         const sectionsWithDetails = await Promise.all(
           sections.map(async (s) => {
@@ -227,7 +240,8 @@ router.get("/", requireAuth, async (req, res) => {
           );
         }
 
-        return { ...test, sections: sectionsWithDetails, adaptiveSettings };
+        const ownerName = test.ownerId ? ownerNameById.get(test.ownerId) ?? null : null;
+        return { ...test, ownerName, sections: sectionsWithDetails, adaptiveSettings };
       })
     );
 
@@ -262,7 +276,7 @@ router.get("/:id/screen-template/:screen", requireAuth, async (req, res) => {
 });
 
 // GET /api/tests/migration-health — проверка полноты миграции legacy-полей (PRD-7 §1.11)
-router.get("/migration-health", requireAuthor, async (req, res) => {
+router.get("/migration-health", requirePermission("tests.read"), async (req, res) => {
   try {
     const health = await storage.getMigrationHealth();
     res.json(health);
@@ -277,7 +291,7 @@ router.get("/migration-health", requireAuthor, async (req, res) => {
 // все поля `tests` (включая `version`, `flowPolicyJson`, `designSettingsJson`,
 // `feedbackJson`), `sections[]` с `topicName`/`maxQuestions`, плюс
 // `adaptiveSettings` для adaptive-режима. Используется редактором PRD-7.
-router.get("/:id", requireAuthor, async (req, res) => {
+router.get("/:id", requirePermission("tests.read"), requireTestScope("read"), async (req, res) => {
   try {
     // Heal `content_pages` system rows against current (flowMode, topics,
     // template) before returning the bundle (G48 2026-05-28). Idempotent —
@@ -311,7 +325,7 @@ router.get("/:id", requireAuthor, async (req, res) => {
 // PRD-6 §6.2: read-only list of active eligibility plugins + configs for the
 // author's retake-policy picker. Phase 1 serves the seeded in-code registry
 // (trimmed — no raw endpoints); a DB-backed admin registry is Phase 2.
-router.get("/:id/available-eligibility-plugins", requireAuthor, (_req, res) => {
+router.get("/:id/available-eligibility-plugins", requirePermission("tests.read"), requireTestScope("read"), (_req, res) => {
   const plugins = listActiveEligibilityPlugins().map((p) => ({
     key: p.key,
     name: p.name,
@@ -326,7 +340,7 @@ router.get("/:id/available-eligibility-plugins", requireAuthor, (_req, res) => {
 });
 
 // POST /api/tests - Создать тест
-router.post("/", requireAuthor, async (req, res) => {
+router.post("/", requirePermission("tests.create"), async (req, res) => {
   try {
     const parsed = createTestBodySchema.safeParse(req.body);
     if (!parsed.success) {
@@ -389,6 +403,9 @@ router.post("/", requireAuthor, async (req, res) => {
         : undefined,
     });
 
+    // PRD-13: the creator becomes the test owner.
+    await storage.setTestOwner(test.id, req.session.userId ?? null);
+
     const full = await loadFullTest(test.id);
     res.status(201).json(full ?? test);
   } catch (error) {
@@ -404,7 +421,7 @@ router.post("/", requireAuthor, async (req, res) => {
 });
 
 // GET /api/tests/:id/adaptive-settings - Адаптивные настройки теста
-router.get("/:id/adaptive-settings", requireAuthor, async (req, res) => {
+router.get("/:id/adaptive-settings", requirePermission("tests.read"), requireTestScope("read"), async (req, res) => {
   try {
     const testId = req.params.id;
     const topicSettings = await storage.getAdaptiveTopicSettingsByTest(testId);
@@ -454,7 +471,7 @@ router.get("/:id/design", requireAuth, async (req, res) => {
 });
 
 // PUT /api/tests/:id/design - Сохранить настройки оформления теста
-router.put("/:id/design", requireAuthor, async (req, res) => {
+router.put("/:id/design", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const testId = req.params.id;
     const test = await storage.getTest(testId);
@@ -533,7 +550,7 @@ router.put("/:id/design", requireAuthor, async (req, res) => {
 // sections replace, adaptive settings replace, system content_pages
 // reconciliation (PRD-7 §1.4), and required-fields validation when the
 // status transitions to "published" (PRD-1 §4.3.6).
-router.put("/:id", requireAuthor, async (req, res) => {
+router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), async (req, res) => {
   try {
     const parsed = updateTestBodySchema.safeParse(req.body);
     if (!parsed.success) {
@@ -637,7 +654,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
 });
 
 // PATCH /api/tests/:id/status - Сменить статус (без инкремента версии, PRD-7 §9)
-router.patch("/:id/status", requireAuthor, async (req, res) => {
+router.patch("/:id/status", requirePermission("tests.publish"), requireTestScope("edit"), async (req, res) => {
   try {
     const { status, expectedVersion } = req.body as {
       status?: unknown;
@@ -669,7 +686,7 @@ router.patch("/:id/status", requireAuthor, async (req, res) => {
 });
 
 // POST /api/tests/:id/restore - Восстановить тест из архива
-router.post("/:id/restore", requireAuthor, async (req, res) => {
+router.post("/:id/restore", requirePermission("tests.publish"), requireTestScope("edit"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -687,7 +704,7 @@ router.post("/:id/restore", requireAuthor, async (req, res) => {
 });
 
 // DELETE /api/tests/:id - Удалить тест (требует подтверждения точного названия, PRD-7 §5.2)
-router.delete("/:id", requireAuthor, async (req, res) => {
+router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delete"), async (req, res) => {
   try {
     const { confirmTitle } = req.body as { confirmTitle?: string };
 
@@ -710,7 +727,7 @@ router.delete("/:id", requireAuthor, async (req, res) => {
 });
 
 // GET /api/tests/:id/export/scorm - Экспорт SCORM
-router.get("/:id/export/scorm", requireAuthor, async (req, res) => {
+router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), requireTestScope("edit"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) {
@@ -839,6 +856,81 @@ router.get("/:id/export/scorm", requireAuthor, async (req, res) => {
   } catch (error) {
     logger.error("SCORM export error: " + (error as Error).message, "scorm-export");
     res.status(500).json({ error: "Failed to export SCORM package" });
+  }
+});
+
+// ─── PRD-13: per-test access management (administrators / superadmin only) ────
+
+// GET /api/tests/:id/access — owner and access grants for the test.
+router.get("/:id/access", requirePermission("tests.access.grant"), async (req, res) => {
+  try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    const grants = await storage.getTestAccessGrants(test.id);
+    res.json({ testId: test.id, ownerId: test.ownerId ?? null, grants });
+  } catch (error) {
+    logger.error("Get test access error: " + (error as Error).message, "tests");
+    res.status(500).json({ error: "Failed to get test access" });
+  }
+});
+
+// POST /api/tests/:id/access — grant or update a user's edit/assign access.
+router.post("/:id/access", requirePermission("tests.access.grant"), async (req, res) => {
+  try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    const { userId, accessLevel } = req.body ?? {};
+    if (typeof userId !== "string" || !userId) {
+      return res.status(400).json({ error: "userId required" });
+    }
+    if (accessLevel !== "edit" && accessLevel !== "assign") {
+      return res.status(400).json({ error: "accessLevel must be 'edit' or 'assign'" });
+    }
+    const grantee = await storage.getUser(userId);
+    if (!grantee) return res.status(404).json({ error: "User not found" });
+    const grant = await storage.upsertTestAccessGrant({
+      testId: test.id,
+      userId,
+      accessLevel,
+      grantedBy: req.session.userId ?? null,
+    });
+    res.status(201).json(grant);
+  } catch (error) {
+    logger.error("Grant test access error: " + (error as Error).message, "tests");
+    res.status(500).json({ error: "Failed to grant test access" });
+  }
+});
+
+// DELETE /api/tests/:id/access/:userId — revoke a user's access grant.
+router.delete("/:id/access/:userId", requirePermission("tests.access.grant"), async (req, res) => {
+  try {
+    const removed = await storage.removeTestAccessGrant(req.params.id, req.params.userId);
+    if (!removed) return res.status(404).json({ error: "Grant not found" });
+    res.status(204).end();
+  } catch (error) {
+    logger.error("Revoke test access error: " + (error as Error).message, "tests");
+    res.status(500).json({ error: "Failed to revoke test access" });
+  }
+});
+
+// PATCH /api/tests/:id/owner — change the test owner.
+router.patch("/:id/owner", requirePermission("tests.owner.change"), async (req, res) => {
+  try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    const { ownerId } = req.body ?? {};
+    if (ownerId !== null && typeof ownerId !== "string") {
+      return res.status(400).json({ error: "ownerId must be a string or null" });
+    }
+    if (ownerId) {
+      const owner = await storage.getUser(ownerId);
+      if (!owner) return res.status(404).json({ error: "Owner user not found" });
+    }
+    await storage.setTestOwner(test.id, ownerId ?? null);
+    res.json({ testId: test.id, ownerId: ownerId ?? null });
+  } catch (error) {
+    logger.error("Change test owner error: " + (error as Error).message, "tests");
+    res.status(500).json({ error: "Failed to change test owner" });
   }
 });
 

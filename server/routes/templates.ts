@@ -14,7 +14,7 @@ import path from "node:path";
 import { db } from "../db";
 import { templates } from "@shared/schema";
 import { and, eq } from "drizzle-orm";
-import { requireAuth } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 import { logger } from "../logger";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { encodeJsonForScript, injectIntoPreview } from "../scorm/preview-embed";
@@ -91,7 +91,7 @@ function rewritePreviewForEmbedding(
 }
 
 /** GET /api/templates — returns all active templates. */
-router.get("/", requireAuth, async (_req, res) => {
+router.get("/", requirePermission("templates.read"), async (_req, res) => {
   try {
     const rows = await db
       .select()
@@ -112,7 +112,7 @@ router.get("/", requireAuth, async (_req, res) => {
  * Each override replaces the manifest's `default` for the matching param key,
  * which the preview bootstrap then applies as a CSS variable on load.
  */
-router.get("/:id/preview-page", requireAuth, async (req, res) => {
+router.get("/:id/preview-page", requirePermission("templates.read"), async (req, res) => {
   try {
     const previewPath = await resolveBuiltinPreviewPath(req.params.id);
     if (!previewPath) {
@@ -132,7 +132,7 @@ router.get("/:id/preview-page", requireAuth, async (req, res) => {
 });
 
 /** GET /api/templates/:id — returns a single active template with its manifest. */
-router.get("/:id", requireAuth, async (req, res) => {
+router.get("/:id", requirePermission("templates.read"), async (req, res) => {
   try {
     const [row] = await db
       .select()

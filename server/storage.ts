@@ -8,6 +8,7 @@ import {
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
   groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
   contentPages, resultVariables, scales, questionMeasurements,
+  userRoles, testAccessGrants,
   type User, type InsertUser,
   type Folder, type InsertFolder,
   type TestFolder, type InsertTestFolder,
@@ -26,6 +27,7 @@ import {
   type ScormAnswer, type InsertScormAnswer,
   type Group, type InsertGroup,
   type UserGroup, type InsertUserGroup,
+  type TestAccessGrant, type InsertTestAccessGrant,
   type TestAssignment, type InsertTestAssignment,
   type PasswordResetToken, type InsertPasswordResetToken,
   type AssignmentAccessToken, type InsertAssignmentAccessToken,
@@ -34,6 +36,7 @@ import {
   type Scale, type InsertScale,
   type QuestionMeasurement, type InsertQuestionMeasurement,
 } from "@shared/schema";
+import type { StoredRole } from "@shared/access";
 import { validate, type ValidationResult, type ValueType } from "@shared/formula";
 
 /**
@@ -73,6 +76,21 @@ export interface IStorage {
   addUserToGroup(userId: string, groupId: string): Promise<UserGroup>;
   removeUserFromGroup(userId: string, groupId: string): Promise<boolean>;
   setUserGroups(userId: string, groupIds: string[]): Promise<void>;
+
+  // User Roles (PRD-13 RBAC)
+  getUserRoles(userId: string): Promise<StoredRole[]>;
+  setUserRoles(userId: string, roles: StoredRole[], grantedBy?: string | null): Promise<void>;
+  addUserRole(userId: string, role: StoredRole, grantedBy?: string | null): Promise<void>;
+  removeUserRole(userId: string, role: StoredRole): Promise<void>;
+
+  // Test access grants + owner (PRD-13 RBAC)
+  setTestOwner(testId: string, ownerId: string | null): Promise<void>;
+  getTestIdsByOwner(ownerId: string): Promise<string[]>;
+  getTestAccessGrants(testId: string): Promise<TestAccessGrant[]>;
+  getUserTestGrants(userId: string): Promise<TestAccessGrant[]>;
+  getTestGrantForUser(testId: string, userId: string): Promise<TestAccessGrant | undefined>;
+  upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant>;
+  removeTestAccessGrant(testId: string, userId: string): Promise<boolean>;
 
   // Test Assignments
   getAssignment(id: string): Promise<TestAssignment | undefined>;
@@ -263,7 +281,6 @@ export class DatabaseStorage implements IStorage {
       emailHash: emailHashValue,
       passwordHash: hashedPassword,
       name: insertUser.name || null,
-      role: insertUser.role || "learner",
       status: insertUser.status || "pending",
       mustChangePassword: insertUser.mustChangePassword ?? true,
       gdprConsent: false,
@@ -423,6 +440,92 @@ export class DatabaseStorage implements IStorage {
       }));
       await db.insert(userGroups).values(values);
     }
+  }
+
+  // ============================================
+  // User Roles (PRD-13 RBAC)
+  // ============================================
+
+  async getUserRoles(userId: string): Promise<StoredRole[]> {
+    const rows = await db.select({ role: userRoles.role }).from(userRoles).where(eq(userRoles.userId, userId));
+    return rows.map((r) => r.role);
+  }
+
+  async setUserRoles(userId: string, roles: StoredRole[], grantedBy: string | null = null): Promise<void> {
+    // Replace the whole role set (mirrors setUserGroups).
+    await db.delete(userRoles).where(eq(userRoles.userId, userId));
+    const unique = Array.from(new Set(roles));
+    if (unique.length > 0) {
+      await db.insert(userRoles).values(unique.map((role) => ({
+        id: randomUUID(),
+        userId,
+        role,
+        grantedBy,
+        grantedAt: new Date(),
+      })));
+    }
+  }
+
+  async addUserRole(userId: string, role: StoredRole, grantedBy: string | null = null): Promise<void> {
+    await db.insert(userRoles).values({
+      id: randomUUID(),
+      userId,
+      role,
+      grantedBy,
+      grantedAt: new Date(),
+    }).onConflictDoNothing();
+  }
+
+  async removeUserRole(userId: string, role: StoredRole): Promise<void> {
+    await db.delete(userRoles).where(and(eq(userRoles.userId, userId), eq(userRoles.role, role)));
+  }
+
+  // ============================================
+  // Test access grants + owner (PRD-13 RBAC)
+  // ============================================
+
+  async setTestOwner(testId: string, ownerId: string | null): Promise<void> {
+    await db.update(tests).set({ ownerId }).where(eq(tests.id, testId));
+  }
+
+  async getTestIdsByOwner(ownerId: string): Promise<string[]> {
+    const rows = await db.select({ id: tests.id }).from(tests).where(eq(tests.ownerId, ownerId));
+    return rows.map((r) => r.id);
+  }
+
+  async getTestAccessGrants(testId: string): Promise<TestAccessGrant[]> {
+    return db.select().from(testAccessGrants).where(eq(testAccessGrants.testId, testId));
+  }
+
+  async getUserTestGrants(userId: string): Promise<TestAccessGrant[]> {
+    return db.select().from(testAccessGrants).where(eq(testAccessGrants.userId, userId));
+  }
+
+  async getTestGrantForUser(testId: string, userId: string): Promise<TestAccessGrant | undefined> {
+    const [grant] = await db.select().from(testAccessGrants)
+      .where(and(eq(testAccessGrants.testId, testId), eq(testAccessGrants.userId, userId)));
+    return grant || undefined;
+  }
+
+  async upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant> {
+    const [row] = await db.insert(testAccessGrants).values({
+      id: randomUUID(),
+      testId: grant.testId,
+      userId: grant.userId,
+      accessLevel: grant.accessLevel,
+      grantedBy: grant.grantedBy ?? null,
+      createdAt: new Date(),
+    }).onConflictDoUpdate({
+      target: [testAccessGrants.testId, testAccessGrants.userId],
+      set: { accessLevel: grant.accessLevel, grantedBy: grant.grantedBy ?? null },
+    }).returning();
+    return row;
+  }
+
+  async removeTestAccessGrant(testId: string, userId: string): Promise<boolean> {
+    const result = await db.delete(testAccessGrants)
+      .where(and(eq(testAccessGrants.testId, testId), eq(testAccessGrants.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
   }
 
   // ============================================
@@ -1498,32 +1601,36 @@ export async function seedDatabase() {
   const learnerId = randomUUID();
 
   await db.insert(users).values([
-    { 
-      id: adminId, 
+    {
+      id: adminId,
       email: await encryptEmail(adminEmail),
       emailHash: hashEmail(adminEmail),
-      passwordHash: adminPassword, 
+      passwordHash: adminPassword,
       name: "Администратор",
-      role: "author",
       status: "active",
       mustChangePassword: false,
       gdprConsent: true,
       gdprConsentAt: new Date(),
       createdAt: new Date(),
     },
-    { 
-      id: learnerId, 
+    {
+      id: learnerId,
       email: await encryptEmail(learnerEmail),
       emailHash: hashEmail(learnerEmail),
-      passwordHash: learnerPassword, 
+      passwordHash: learnerPassword,
       name: "Тестовый ученик",
-      role: "learner",
       status: "active",
       mustChangePassword: false,
       gdprConsent: true,
       gdprConsentAt: new Date(),
       createdAt: new Date(),
     },
+  ]);
+
+  // PRD-13: roles live in `user_roles` (the legacy `users.role` column was dropped).
+  await db.insert(userRoles).values([
+    { id: randomUUID(), userId: adminId, role: "administrator" },
+    { id: randomUUID(), userId: learnerId, role: "learner" },
   ]);
 
   const iptvTopicId = randomUUID();

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { createHash, randomBytes } from "crypto";
 import { logger } from "../logger";
 import { storage } from "../storage";
-import { requireAuthor, requireLearner } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 import { sendAssignmentEmail } from "../email";
 
 const APP_URL = (process.env.APP_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/$/, '');
@@ -64,7 +64,7 @@ async function notifyNewGroupMember(userId: string, groupId: string) {
 }
 
 // GET /api/groups - Список групп
-router.get("/", requireAuthor, async (req, res) => {
+router.get("/", requirePermission("groups.manage"), async (req, res) => {
   try {
     const groups = await storage.getGroups();
     const groupsWithUsers = await Promise.all(
@@ -85,7 +85,7 @@ router.get("/", requireAuthor, async (req, res) => {
 });
 
 // GET /api/groups/:id - Получить группу
-router.get("/:id", requireAuthor, async (req, res) => {
+router.get("/:id", requirePermission("groups.manage"), async (req, res) => {
   try {
     const group = await storage.getGroup(req.params.id);
     if (!group) {
@@ -104,7 +104,7 @@ router.get("/:id", requireAuthor, async (req, res) => {
 });
 
 // POST /api/groups - Создать группу
-router.post("/", requireAuthor, async (req, res) => {
+router.post("/", requirePermission("groups.manage"), async (req, res) => {
   try {
     const { name, description } = req.body;
     if (!name) {
@@ -125,7 +125,7 @@ router.post("/", requireAuthor, async (req, res) => {
 });
 
 // PUT /api/groups/:id - Обновить группу
-router.put("/:id", requireAuthor, async (req, res) => {
+router.put("/:id", requirePermission("groups.manage"), async (req, res) => {
   try {
     const { name, description } = req.body;
     const updated = await storage.updateGroup(req.params.id, { name, description });
@@ -140,7 +140,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
 });
 
 // DELETE /api/groups/:id - Удалить группу
-router.delete("/:id", requireAuthor, async (req, res) => {
+router.delete("/:id", requirePermission("groups.manage"), async (req, res) => {
   try {
     const success = await storage.deleteGroup(req.params.id);
     if (!success) {
@@ -154,7 +154,7 @@ router.delete("/:id", requireAuthor, async (req, res) => {
 });
 
 // POST /api/groups/:id/users - Добавить пользователей в группу
-router.post("/:id/users", requireAuthor, async (req, res) => {
+router.post("/:id/users", requirePermission("groups.manage"), async (req, res) => {
   try {
     const { userIds, userId } = req.body;
     const groupId = req.params.id;
@@ -198,7 +198,7 @@ router.post("/:id/users", requireAuthor, async (req, res) => {
 });
 
 // DELETE /api/groups/:id/users/:userId - Удалить пользователя из группы
-router.delete("/:id/users/:userId", requireAuthor, async (req, res) => {
+router.delete("/:id/users/:userId", requirePermission("groups.manage"), async (req, res) => {
   try {
     const { id: groupId, userId } = req.params;
 

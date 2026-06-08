@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { logger } from "../logger";
 import { storage } from "../storage";
-import { requireAuth, requireAuthor } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
 // GET /api/test-folders
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requirePermission("folders.manage"), async (req, res) => {
   try {
     const folders = await storage.getTestFolders();
     res.json(folders);
@@ -17,7 +17,7 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 // POST /api/test-folders
-router.post("/", requireAuthor, async (req, res) => {
+router.post("/", requirePermission("folders.manage"), async (req, res) => {
   try {
     const { name, parentId } = req.body;
     if (!name?.trim()) {
@@ -32,7 +32,7 @@ router.post("/", requireAuthor, async (req, res) => {
 });
 
 // PUT /api/test-folders/:id
-router.put("/:id", requireAuthor, async (req, res) => {
+router.put("/:id", requirePermission("folders.manage"), async (req, res) => {
   try {
     const { name, parentId } = req.body;
     const updated = await storage.updateTestFolder(req.params.id, { name, parentId });
@@ -64,7 +64,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
  * Backward compatibility: пустое body — старое поведение «folder-only» с
  * переносом в корень (для legacy-клиентов, оставшихся на старом UI).
  */
-router.delete("/:id", requireAuthor, async (req, res) => {
+router.delete("/:id", requirePermission("folders.manage"), async (req, res) => {
   try {
     const folder = await storage.getTestFolders().then((all) => all.find((f) => f.id === req.params.id));
     if (!folder) return res.status(404).json({ error: "Folder not found" });
@@ -96,7 +96,7 @@ router.delete("/:id", requireAuthor, async (req, res) => {
 });
 
 // PATCH /api/test-folders/move/:testId — move test to folder
-router.patch("/move/:testId", requireAuthor, async (req, res) => {
+router.patch("/move/:testId", requirePermission("folders.manage"), async (req, res) => {
   try {
     const { folderId } = req.body;
     const success = await storage.moveTestToFolder(req.params.testId, folderId ?? null);
