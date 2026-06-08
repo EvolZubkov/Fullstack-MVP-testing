@@ -23,6 +23,10 @@ TEST_PORT="${3:?Missing test_port argument}"
 INTERNAL_PORT=8081
 RESET_DB=false
 
+# The container drops privileges to this unprivileged UID (see Dockerfile); the
+# uploads volume must be owned by it so the app can write media/scorm/templates.
+APP_UID=1500
+
 shift 3
 for arg in "$@"; do
     case "$arg" in
@@ -176,8 +180,14 @@ info "[3/5] Creating directories..."
 mkdir -p "${TEST_APP_DIR}/env"
 mkdir -p "${TEST_DATA_DIR}/uploads/media"
 mkdir -p "${TEST_DATA_DIR}/uploads/scorm"
+mkdir -p "${TEST_DATA_DIR}/uploads/templates"
+# These dirs are created here by root; the container runs as the app UID, so hand
+# ownership over — otherwise every upload fails with EACCES (mkdir
+# uploads/templates/<id>, media, scorm). setgid (2770) keeps new files group-readable.
+chown -R "${APP_UID}":"${APP_UID}" "${TEST_DATA_DIR}/uploads"
+chmod -R 2770 "${TEST_DATA_DIR}/uploads"
 ok "  app:  ${TEST_APP_DIR}"
-ok "  data: ${TEST_DATA_DIR}"
+ok "  data: ${TEST_DATA_DIR}  (uploads owned by UID ${APP_UID})"
 
 # ---------------------------------------------------------------------------
 # 4. Write .env for test instance
@@ -241,6 +251,44 @@ EOF
 
 cd "${TEST_APP_DIR}"
 docker compose down --remove-orphans 2>/dev/null || true
+
+# PRD-13 role backfill, BEFORE push drops users.role. The test DB was just cloned
+# from prod, which still has users.role but not yet the user_roles table (prod is
+# not migrated) — so create user_roles here and copy each role into it (former
+# authors -> administrator, everyone else -> learner), then push drops the legacy
+# column. Done server-side with the same postgres superuser used for the clone
+# above, so it needs no app image and no extra shipped files (deploy-test.bat
+# ships only this script). The column-existence guard makes it a safe no-op once
+# the column is already gone (a non-reset re-run). Mirrors migrations/016 — keep
+# the role mapping in sync. Without this, push would drop users.role and every
+# cloned account would lose all roles (blank "no access" screen for everyone).
+info "Backfilling roles (users.role -> user_roles) before push..."
+sudo -u postgres psql -v ON_ERROR_STOP=1 "${TEST_DB_NAME}" << SQL
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE TABLE IF NOT EXISTS "user_roles" (
+  "id" varchar(36) PRIMARY KEY NOT NULL,
+  "user_id" varchar(36) NOT NULL,
+  "role" text NOT NULL,
+  "granted_by" varchar(36),
+  "granted_at" timestamp DEFAULT now() NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "user_roles_user_role_idx"
+  ON "user_roles" ("user_id", "role");
+ALTER TABLE "user_roles" OWNER TO "${DB_USER}";
+DO \$\$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name='users' AND column_name='role') THEN
+    INSERT INTO "user_roles" ("id","user_id","role","granted_at")
+    SELECT gen_random_uuid()::text, u."id",
+           CASE WHEN u."role"='author' THEN 'administrator' ELSE 'learner' END, now()
+    FROM "users" u
+    WHERE NOT EXISTS (SELECT 1 FROM "user_roles" ur WHERE ur."user_id"=u."id");
+  END IF;
+END
+\$\$;
+SQL
+ok "Roles backfilled"
 
 # Bring the cloned DB schema up to date with the image BEFORE the app boots.
 # The startup template sync (syncBuiltinTemplates) is awaited before the HTTP

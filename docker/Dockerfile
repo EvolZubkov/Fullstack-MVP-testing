@@ -46,6 +46,14 @@ COPY --chown=nodejs:nodejs dist ./dist
 COPY --chown=nodejs:nodejs shared ./shared
 COPY --chown=nodejs:nodejs drizzle.config.ts ./
 
+# SQL migrations + a tiny runner. `drizzle-kit push` syncs SCHEMA only; data
+# migrations (e.g. the PRD-13 role backfill in migrations/016) are applied by the
+# deploy scripts via `node script/run-sql.cjs <file>` BEFORE push drops legacy
+# columns. Both must be in the image because the deploy runs them in a one-off
+# container and the DB is external (no psql/tsx available here).
+COPY --chown=nodejs:nodejs migrations ./migrations
+COPY --chown=nodejs:nodejs script/run-sql.cjs ./script/run-sql.cjs
+
 # Built-in design template manifests/previews — read from disk at runtime by
 # server/template-registry.ts and the preview routes (process.cwd()/server/scorm/templates).
 # Without these the templates table stays empty and every test reports "template missing".
@@ -57,9 +65,13 @@ COPY docker/entrypoint.sh ./docker/entrypoint.sh
 RUN sed -i 's/\r$//' /app/docker/entrypoint.sh && \
     chmod +x /app/docker/entrypoint.sh
 
-# Create volume mount points owned by nodejs (writable at runtime)
-RUN mkdir -p /app/uploads/media /app/uploads/scorm /app/logs /app/tmp && \
-    chown nodejs:nodejs /app/uploads /app/logs /app/tmp
+# Create volume mount points owned by nodejs (writable at runtime).
+# `uploads/templates` holds uploaded PRD-3 design-template packages
+# (server/services/template-package.ts extracts to uploads/templates/<id>/).
+# Recursive chown so every subdir is app-writable in the no-volume / image-default
+# case; a host bind-mount over /app/uploads is re-owned at runtime by entrypoint.sh.
+RUN mkdir -p /app/uploads/media /app/uploads/scorm /app/uploads/templates /app/logs /app/tmp && \
+    chown -R nodejs:nodejs /app/uploads /app/logs /app/tmp
 
 EXPOSE ${SERVICE_PORT}
 

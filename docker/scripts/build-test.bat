@@ -111,7 +111,7 @@ if errorlevel 1 ( echo ERROR: scp failed & exit /b 1 )
 :: -tt forces a TTY so drizzle-kit's interactive prompts (e.g. unique-constraint
 :: truncate confirmation, which --force does NOT suppress - drizzle bug #4531)
 :: render live and can be answered during deploy.
-ssh -tt "%DEPLOY_TARGET%" "docker load -i %REMOTE_TAR% && sudo sed -i 's|image: .*:latest|image: %IMAGE_NAME%:latest|' %TEST_APP_DIR%/docker-compose.yml && cd %TEST_APP_DIR% && sudo docker compose up -d --force-recreate && echo 'Waiting for container...' && sleep 5 && echo 'Applying DB schema (drizzle-kit push)...' && sudo docker exec -it %IMAGE_NAME% npx drizzle-kit push --force && rm -f %REMOTE_TAR%"
+ssh -tt "%DEPLOY_TARGET%" "docker load -i %REMOTE_TAR% && sudo sed -i 's|image: .*:latest|image: %IMAGE_NAME%:latest|' %TEST_APP_DIR%/docker-compose.yml && cd %TEST_APP_DIR% && sudo docker compose up -d --force-recreate && echo 'Waiting for container...' && sleep 5 && echo 'Applying pre-push data migrations (PRD-13 role backfill)...' && sudo docker exec %IMAGE_NAME% node script/run-sql.cjs migrations/016_prd13_rbac_roles.sql && echo 'Applying DB schema (drizzle-kit push)...' && sudo docker exec -it %IMAGE_NAME% npx drizzle-kit push --force && rm -f %REMOTE_TAR%"
 if errorlevel 1 ( echo ERROR: remote reload failed & exit /b 1 )
 
 echo.

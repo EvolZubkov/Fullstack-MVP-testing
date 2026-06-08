@@ -12,6 +12,7 @@
 #   /srv/logs/<project>/                      - application logs
 #   /srv/data/<project>/uploads/media/        - media uploads
 #   /srv/data/<project>/uploads/scorm/        - SCORM packages
+#   /srv/data/<project>/uploads/templates/    - uploaded design-template packages (PRD-3)
 # =============================================================================
 
 set -euo pipefail
@@ -89,7 +90,8 @@ mkdir -p \
     "${APP_DIR}/env" \
     "${LOG_DIR}" \
     "${DATA_DIR}/uploads/media" \
-    "${DATA_DIR}/uploads/scorm"
+    "${DATA_DIR}/uploads/scorm" \
+    "${DATA_DIR}/uploads/templates"
 
 chown -R root:"${APP_GROUP}" "${APP_DIR}"
 chmod 2750 "${APP_DIR}"
@@ -154,9 +156,19 @@ ok "docker-compose.yml generated at ${APP_DIR}/docker-compose.yml"
 # listens, so it reads the current schema and aborts the entire boot if a column
 # is missing (e.g. right after a schema change). Push the schema first, in a
 # one-off container with the entrypoint overridden so the app does not boot yet.
-info "Applying DB schema (drizzle-kit push)..."
 cd "${APP_DIR}"
 docker compose down --remove-orphans 2>/dev/null || true
+
+# Data migrations that `drizzle-kit push` cannot perform must run FIRST, while
+# legacy columns still exist. PRD-13: migrations/016 copies users.role ->
+# user_roles; if push ran first it would drop users.role and every account would
+# lose all roles. The migration is guarded/idempotent, so it is a safe no-op once
+# the column is already gone (later deploys).
+info "Applying pre-push data migrations (PRD-13 role backfill)..."
+docker compose run --rm --no-deps --entrypoint sh app -c "node script/run-sql.cjs migrations/016_prd13_rbac_roles.sql"
+ok "Data migrations applied"
+
+info "Applying DB schema (drizzle-kit push)..."
 docker compose run --rm --no-deps --entrypoint sh app -c "npx drizzle-kit push --force"
 ok "DB schema up to date"
 

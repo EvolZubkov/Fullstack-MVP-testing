@@ -38,9 +38,16 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Ensure writable volume mount points exist (may be new empty volumes)
+# Ensure writable volume mount points exist (may be new empty volumes) and are
+# owned by the app user. A host bind-mount can come up root-owned (e.g. created
+# by `mkdir` as root in a deploy script); the app runs as nodejs and must be able
+# to create uploads/templates/<id>/, uploads/media/..., etc. `chown nodejs`
+# (owner only, no group) makes the dirs app-writable WITHOUT touching the
+# host-side group deploy.sh sets (botadmins + setgid) for host file management,
+# and only rewrites the directory nodes (fast — not recursive into media).
 # ---------------------------------------------------------------------------
-mkdir -p /app/uploads/media /app/uploads/scorm /app/logs /app/tmp
+mkdir -p /app/uploads/media /app/uploads/scorm /app/uploads/templates /app/logs /app/tmp
+chown nodejs /app/uploads /app/uploads/media /app/uploads/scorm /app/uploads/templates /app/logs /app/tmp
 ok "Volume mount points ready"
 
 # ---------------------------------------------------------------------------
