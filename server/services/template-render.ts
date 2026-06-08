@@ -8,11 +8,15 @@
  * renderer ({@link module:shared/template/render-screen}). Defensive: any read or
  * build failure yields `null`, so the result endpoint degrades to its legacy
  * (React-markup) rendering rather than erroring.
+ *
+ * This module is intentionally db-free: it reads files from an already-resolved
+ * template DIRECTORY. The caller resolves which directory (built-in or uploaded)
+ * via {@link module:server/services/template-dir}, which owns the db lookup. This
+ * keeps the pure render-payload assembly testable without a database.
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { getTemplatesRootDir } from "../scorm/builders/template-copy";
 import { buildResultContext, buildAdaptiveResultContext } from "./result-context";
 import type { AttemptResult } from "@shared/schema";
 
@@ -39,24 +43,20 @@ function readFileSafe(p: string): string {
   }
 }
 
-/** Resolve a template directory, falling back to `default` (mirrors the exporter). */
-function templateDir(templateId: string): string {
-  const root = getTemplatesRootDir();
-  const dir = path.join(root, templateId);
-  return fs.existsSync(dir) ? dir : path.join(root, "default");
-}
-
 /**
  * Read a named screen's template ASSETS (layout HTML + css + theme tokens) without
  * building a context — for screens whose context the client assembles itself
  * (e.g. the start screen). Returns null when the layout file is missing.
+ *
+ * `dir` is an already-resolved template directory (see
+ * {@link module:server/services/template-dir resolveTemplateDir}) — a built-in
+ * (`server/scorm/templates/<id>`) or uploaded (`uploads/templates/<id>`) path.
  */
 export function readScreenTemplate(
-  templateId: string,
+  dir: string,
   layoutFile: string,
 ): Omit<ScreenRenderPayload, "context"> | null {
   try {
-    const dir = templateDir(templateId);
     const layout = readFileSafe(path.join(dir, "layouts", layoutFile));
     if (!layout) return null;
     const css = [
@@ -77,13 +77,13 @@ export function readScreenTemplate(
  * (e.g. adaptive), so the caller can fall back to legacy rendering.
  */
 export function readResultsRenderPayload(
-  templateId: string,
+  dir: string,
   result: AttemptResult | (Record<string, unknown> & { mode?: string }),
   testTitle: string,
 ): ScreenRenderPayload | null {
   try {
     const isAdaptive = (result as { mode?: string }).mode === "adaptive";
-    const base = readScreenTemplate(templateId, isAdaptive ? "results.adaptive.html" : "results.html");
+    const base = readScreenTemplate(dir, isAdaptive ? "results.adaptive.html" : "results.html");
     if (!base) return null;
     const context = isAdaptive
       ? buildAdaptiveResultContext(result, testTitle)

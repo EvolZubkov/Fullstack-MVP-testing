@@ -7,6 +7,7 @@ import { db } from "../db";
 import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, retakePolicySchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate } from "../services/template-render";
+import { resolveTemplateDir } from "../services/template-dir";
 import { requireAuth, requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { readableTestScope } from "../services/test-access";
@@ -266,7 +267,8 @@ router.get("/:id/screen-template/:screen", requireAuth, async (req, res) => {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
     const templateId = ((test.designSettingsJson as any)?.templateId as string) || "default";
-    const payload = readScreenTemplate(templateId, layoutFile);
+    const dir = await resolveTemplateDir(templateId);
+    const payload = readScreenTemplate(dir, layoutFile);
     if (!payload) return res.status(404).json({ error: "Template not found" });
     res.json(payload);
   } catch (error) {
@@ -834,6 +836,11 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
       logger.info(`SCORM telemetry package created: ${packageId} test="${test.title}" (${test.id}) by user=${req.session.userId}`, "scorm-export");
     }
 
+    // Resolve the actual on-disk directory of the selected template (built-in or
+    // uploaded PRD-3) so the exporter copies the right files instead of falling
+    // back to `default` for uploaded ids (whose files live under uploads/templates).
+    const templateDir = await resolveTemplateDir(designTemplateId);
+
     const buffer = await generateScormPackage({
       test,
       sections: exportSections,
@@ -843,6 +850,7 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
       scales,
       measurements,
       designSettings,
+      templateDir,
       telemetry: telemetryConfig,
     });
 

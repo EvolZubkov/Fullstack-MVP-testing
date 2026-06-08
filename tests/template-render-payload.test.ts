@@ -9,7 +9,12 @@
  */
 
 import { describe, it, expect } from "vitest";
+import path from "node:path";
 import { readResultsRenderPayload } from "../server/services/template-render";
+import { getTemplatesRootDir } from "../server/scorm/builders/template-copy";
+
+/** The built-in `default` template directory — what the route resolves for the default id. */
+const DEFAULT_DIR = path.join(getTemplatesRootDir(), "default");
 
 const standardResult = {
   overallPassed: true,
@@ -57,7 +62,7 @@ const adaptiveResult = {
 
 describe("readResultsRenderPayload", () => {
   it("standard: builds the results.html payload with score fields", () => {
-    const p = readResultsRenderPayload("default", standardResult, "Тест");
+    const p = readResultsRenderPayload(DEFAULT_DIR, standardResult, "Тест");
     expect(p).not.toBeNull();
     expect(p!.layout).toContain("results-page");
     const ctx = p!.context as { result: Record<string, unknown> };
@@ -67,7 +72,7 @@ describe("readResultsRenderPayload", () => {
   });
 
   it("adaptive: builds the results.adaptive.html payload with level views", () => {
-    const p = readResultsRenderPayload("default", adaptiveResult, "Адаптивный");
+    const p = readResultsRenderPayload(DEFAULT_DIR, adaptiveResult, "Адаптивный");
     expect(p).not.toBeNull();
     // The adaptive layout has no score ring/stats — it is the level-based variant.
     expect(p!.layout).toContain("Результаты по темам");
@@ -80,7 +85,7 @@ describe("readResultsRenderPayload", () => {
   });
 
   it("returns a theme so the embedding host can match the surface", () => {
-    const p = readResultsRenderPayload("default", standardResult, "Тест");
+    const p = readResultsRenderPayload(DEFAULT_DIR, standardResult, "Тест");
     expect(typeof p!.theme.background).toBe("string");
     expect(typeof p!.theme.foreground).toBe("string");
   });

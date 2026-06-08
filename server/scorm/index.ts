@@ -6,7 +6,7 @@ import { buildMetadataXml } from "./builders/metadata";
 import { escapeXml } from "./utils/escape";
 import { readAsset } from "./assets/read-asset";
 import { extractEmbeddedMediaIntoAssets } from "./builders/media-assets";
-import { addTemplateFilesToZip, getTemplatesRootDir } from "./builders/template-copy";
+import { copyDirToFiles, getTemplatesRootDir } from "./builders/template-copy";
 import { getSharedRuntimeBundle } from "./builders/shared-runtime";
 import fs from "node:fs";
 import path from "node:path";
@@ -307,19 +307,29 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
   });
 
   const templateId = data.designSettings?.templateId ?? "default";
+  // Resolve the template's files directory. The route passes `data.templateDir`
+  // (built-in or uploaded PRD-3 path, resolved via the templates table). Without
+  // it, fall back to the built-in convention `server/scorm/templates/<id>` (and
+  // `default` when that id has no shipped directory) — this keeps the exporter
+  // usable standalone (acceptance fixtures pass no templateDir).
+  const builtinRoot = getTemplatesRootDir();
+  const templateDir =
+    data.templateDir && fs.existsSync(data.templateDir)
+      ? data.templateDir
+      : path.join(builtinRoot, fs.existsSync(path.join(builtinRoot, templateId)) ? templateId : "default");
+
   const templateFiles: Record<string, string | Buffer> = {};
-  addTemplateFilesToZip(templateId, getTemplatesRootDir(), templateFiles);
+  if (fs.existsSync(templateDir)) {
+    copyDirToFiles(templateDir, "template", templateFiles);
+  } else {
+    logger.warn(`Template directory not found for "${templateId}" (${templateDir})`, "scorm-export");
+  }
   const manifestHrefs = mediaHrefs.concat(Object.keys(templateFiles));
 
   // PRD-12 CSS unification: the package stylesheet is the SINGLE template CSS source
   // (theme.css tokens + base.css), the SAME files the web host loads — no separate
   // hand-maintained runtime stylesheet to drift out of sync.
-  const stylesRoot = getTemplatesRootDir();
-  const stylesDir = path.join(
-    stylesRoot,
-    fs.existsSync(path.join(stylesRoot, templateId)) ? templateId : "default",
-    "styles",
-  );
+  const stylesDir = path.join(templateDir, "styles");
   const readStyle = (f: string): string => {
     try {
       return fs.readFileSync(path.join(stylesDir, f), "utf8");

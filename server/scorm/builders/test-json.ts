@@ -27,6 +27,12 @@ interface ExportData {
   scales?: Scale[];
   measurements?: QuestionMeasurement[];
   designSettings?: DesignSettingsExport;
+  /**
+   * Already-resolved on-disk directory of the selected template (built-in or
+   * uploaded PRD-3), provided by the route via `resolveTemplateDir`. When absent
+   * the exporter falls back to the built-in convention `server/scorm/templates/<id>`.
+   */
+  templateDir?: string;
   // Telemetry config
   telemetry?: {
     enabled: boolean;
