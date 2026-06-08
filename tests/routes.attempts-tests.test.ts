@@ -152,6 +152,26 @@ describe("Attempts routes — start attempt", () => {
     expect(res.body.questions[0].correctJson).toBeUndefined();
   });
 
+  it("POST /tests/:testId/attempts/start — carries section timeLimitMinutes into the variant (PRD-4 v1.1 §3.2)", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getTestSections.mockResolvedValue([
+      { topicId: "t1", drawCount: 1, timeLimitMinutes: 15 },
+      { topicId: "t2", drawCount: 1 }, // no per-topic limit -> null in variant
+    ]);
+    storageMock.getTopics.mockResolvedValue([
+      { id: "t1", name: "JS" },
+      { id: "t2", name: "TS" },
+    ]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    const variant = storageMock.createAttempt.mock.calls[0][0].variantJson;
+    expect(variant.sections[0].timeLimitMinutes).toBe(15);
+    expect(variant.sections[1].timeLimitMinutes).toBeNull();
+  });
+
   it("POST /tests/:testId/attempts/start — exposes correctJson when showCorrectAnswers is true", async () => {
     storageMock.getTest.mockResolvedValue({ ...dbTest, showCorrectAnswers: true });
     storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
@@ -179,6 +199,123 @@ describe("Attempts routes — start attempt", () => {
     const res = await asLearner(request(app).post("/api/tests/test1/attempts/start"));
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("ATTEMPTS_EXHAUSTED");
+  });
+});
+
+// PRD-4 v1.1 §3.2 — adaptive per-topic timer: topic exposure + force transition.
+describe("Attempts routes — adaptive topic timer", () => {
+  let app: express.Express;
+  const adaptiveTest = { ...dbTest, mode: "adaptive" };
+  const dbQuestion2 = { ...dbQuestion, id: "q2", topicId: "t2", prompt: "Q2?" };
+
+  const makeAdaptiveVariant = () => ({
+    mode: "adaptive",
+    currentTopicIndex: 0,
+    currentQuestionId: "q1",
+    topics: [
+      {
+        topicId: "t1", topicName: "JS", currentLevelIndex: 0, finalLevelIndex: null,
+        status: "in_progress", timeLimitMinutes: 5,
+        levelsState: [{
+          levelIndex: 0, levelName: "L1", questionIds: ["q1"], answeredQuestionIds: [],
+          correctCount: 0, status: "in_progress", passThreshold: 50, passThresholdType: "percent",
+        }],
+      },
+      {
+        topicId: "t2", topicName: "TS", currentLevelIndex: 0, finalLevelIndex: null,
+        status: "pending", timeLimitMinutes: null,
+        levelsState: [{
+          levelIndex: 0, levelName: "L1", questionIds: ["q2"], answeredQuestionIds: [],
+          correctCount: 0, status: "pending", passThreshold: 50, passThresholdType: "percent",
+        }],
+      },
+    ],
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(learnerUser);
+    app = makeApp(attemptsRouter);
+  });
+
+  it("POST start-adaptive — exposes current topic's topicId + sectionTimeLimitMinutes", async () => {
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([{ topicId: "t1" }]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([
+      { topicId: "t1", levelIndex: 0, levelName: "L1", minDifficulty: 0, maxDifficulty: 100, questionsCount: 1, passThreshold: 50, passThresholdType: "percent" },
+    ]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", timeLimitMinutes: 7 }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([dbQuestion]);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion]);
+    storageMock.createAttempt.mockResolvedValue({ ...dbAttempt, id: "atmp-ad" });
+    const res = await asLearner(request(app).post("/api/tests/test1/attempts/start-adaptive"));
+    expect(res.status).toBe(201);
+    expect(res.body.currentQuestion.topicId).toBe("t1");
+    expect(res.body.currentQuestion.sectionTimeLimitMinutes).toBe(7);
+  });
+
+  it("POST expire-topic-adaptive — force-advances to the next topic", async () => {
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, variantJson: makeAdaptiveVariant() });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion2]);
+    storageMock.updateAttempt.mockResolvedValue({});
+    const res = await asLearner(
+      request(app).post("/api/attempts/atmp1/expire-topic-adaptive").send({ topicId: "t1" }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.isFinished).toBe(false);
+    expect(res.body.topicTransition.toTopic).toBe("TS");
+    expect(res.body.nextQuestion.topicId).toBe("t2");
+    const saved = storageMock.updateAttempt.mock.calls[0][1].variantJson;
+    expect(saved.currentTopicIndex).toBe(1);
+  });
+
+  it("POST expire-topic-adaptive — idempotent re-sync when the topic already advanced", async () => {
+    const variant = makeAdaptiveVariant();
+    variant.currentTopicIndex = 1; // already moved on to t2
+    variant.currentQuestionId = "q2";
+    variant.topics[1].status = "in_progress";
+    variant.topics[1].levelsState[0].status = "in_progress";
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, variantJson: variant });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getQuestionsByIds.mockResolvedValue([dbQuestion2]);
+    const res = await asLearner(
+      request(app).post("/api/attempts/atmp1/expire-topic-adaptive").send({ topicId: "t1" }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.topicTransition).toBeNull();
+    expect(res.body.nextQuestion.topicId).toBe("t2");
+    expect(storageMock.updateAttempt).not.toHaveBeenCalled();
+  });
+
+  it("POST expire-topic-adaptive — finishes when the last topic expires", async () => {
+    const variant = makeAdaptiveVariant();
+    variant.currentTopicIndex = 1; // t2 is the last topic
+    variant.currentQuestionId = "q2";
+    variant.topics[1].status = "in_progress";
+    variant.topics[1].levelsState[0].status = "in_progress";
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, variantJson: variant });
+    storageMock.getTest.mockResolvedValue(adaptiveTest);
+    storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([]);
+    storageMock.getAdaptiveLevelsByTest.mockResolvedValue([]);
+    storageMock.updateAttempt.mockResolvedValue({});
+    const res = await asLearner(
+      request(app).post("/api/attempts/atmp1/expire-topic-adaptive").send({ topicId: "t2" }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.isFinished).toBe(true);
+    expect(res.body.nextQuestion).toBeNull();
+    expect(storageMock.updateAttempt.mock.calls[0][1].finishedAt).not.toBeNull();
+  });
+
+  it("POST expire-topic-adaptive — 403 for another user's attempt", async () => {
+    storageMock.getAttempt.mockResolvedValue({ ...dbAttempt, userId: "other", variantJson: makeAdaptiveVariant() });
+    const res = await asLearner(
+      request(app).post("/api/attempts/atmp1/expire-topic-adaptive").send({ topicId: "t1" }),
+    );
+    expect(res.status).toBe(403);
   });
 });
 

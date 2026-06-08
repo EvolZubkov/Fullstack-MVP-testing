@@ -44,8 +44,8 @@ export const userGroups = pgTable("user_groups", {
 /**
  * PRD-13 RBAC: a user holds a SET of roles (many-to-many). Effective permissions
  * are the union over these roles plus the configuration-derived superadmin. The
- * `superadmin` role is never stored here. Supersedes the single `users.role`
- * column, which stays during the transition and is dropped in a later migration.
+ * `superadmin` role is never stored here. This is the sole source of stored roles —
+ * the legacy `users.role` column was dropped in migration 017 (T-10).
  */
 export const userRoles = pgTable("user_roles", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -588,6 +588,14 @@ export const testVariantSchema = z.object({
     topicId: z.string(),
     topicName: z.string(),
     questionIds: z.array(z.string()),
+    /**
+     * PRD-4 v1.1 §3.2 — per-section (per-topic) time budget in minutes, or
+     * `null` when the topic has no custom limit (inherit_test / none). Carried
+     * in the persisted variant so the web learner runtime can run a per-topic
+     * timer (mirrors `TEST_DATA.sections[].timeLimitMinutes` in the SCORM
+     * package). Absent on legacy in-progress attempts — treat missing as null.
+     */
+    timeLimitMinutes: z.number().int().positive().nullable().optional(),
   })),
 });
 

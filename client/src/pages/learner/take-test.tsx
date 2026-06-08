@@ -14,6 +14,13 @@ import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
 import { buildStartState } from "@shared/template/start-state";
+import {
+  useSectionTimer,
+  useAdaptiveSectionTimer,
+  prevAccessibleIndex,
+  nextAccessibleIndex,
+  forceAdvanceTarget,
+} from "./use-section-timer";
 import { t } from "@/lib/i18n";
 import type { Question, Attempt, Test } from "@shared/schema";
 
@@ -25,6 +32,10 @@ interface AttemptWithQuestions extends Attempt {
 interface FlatQuestion {
   question: Question;
   topicName: string;
+  /** Owning topic id — drives the per-topic section timer (PRD-4 v1.1 §3.2). */
+  topicId: string;
+  /** Per-topic time budget in minutes, or null when the topic has no limit. */
+  sectionTimeLimitMinutes: number | null;
   index: number;
 }
 
@@ -37,6 +48,9 @@ interface AdaptiveState {
     id: string;
     question: Question;
     topicName: string;
+    /** Owning topic id + budget — drive the adaptive topic timer (PRD-4 v1.1 §3.2). */
+    topicId?: string;
+    sectionTimeLimitMinutes?: number | null;
     levelName: string;
     questionNumber: number;
     totalInLevel: number;
@@ -156,11 +170,38 @@ export default function TakeTestPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [shuffleMappings, setShuffleMappings] = useState<Record<string, any>>({});
 
+  // PRD-4 v1.1 §3.2 — per-topic (section) timer for the standard flow. The
+  // expiry handler is invoked via a ref so it can read the freshest state
+  // (lockedTopics / answers / currentIndex) without re-subscribing the hook.
+  const sectionExpireRef = useRef<(topicId: string) => void>(() => {});
+  const { sectionRemainingSeconds, lockedTopics } = useSectionTimer({
+    attemptId: attempt?.id ?? null,
+    questions: flatQuestions,
+    currentIndex,
+    enabled: testMode === "standard" && phase === "question" && flatQuestions.length > 0,
+    onExpire: (topicId) => sectionExpireRef.current(topicId),
+  });
+
+  // Tracks mount so the adaptive expiry retry loop stops after navigation away.
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
+
   // Adaptive mode state
   const [adaptiveState, setAdaptiveState] = useState<AdaptiveState | null>(null);
   const [isAnswering, setIsAnswering] = useState(false);
   const [showTransition, setShowTransition] = useState(false);
   const [feedbackShown, setFeedbackShown] = useState(false);
+
+  // PRD-4 v1.1 §3.2 — adaptive topic timer (forward-only; expiry asks the
+  // server to advance, with retry, so transient network loss can't strand it).
+  const adaptiveExpireRef = useRef<(topicId: string) => void>(() => {});
+  const { sectionRemainingSeconds: adaptiveSectionRemaining } = useAdaptiveSectionTimer({
+    attemptId: adaptiveState?.attemptId ?? null,
+    topicId: adaptiveState?.currentQuestion?.topicId ?? null,
+    limitMinutes: adaptiveState?.currentQuestion?.sectionTimeLimitMinutes ?? null,
+    enabled: testMode === "adaptive" && phase === "question" && !!adaptiveState && !adaptiveState.isFinished,
+    onExpire: (topicId) => adaptiveExpireRef.current(topicId),
+  });
   const [lastAnswerResult, setLastAnswerResult] = useState<{
     isCorrect: boolean;
     correctAnswer?: any;
@@ -456,6 +497,8 @@ export default function TakeTestPage() {
             questions.push({
               question,
               topicName: section.topicName,
+              topicId: section.topicId,
+              sectionTimeLimitMinutes: section.timeLimitMinutes ?? null,
               index: idx++,
             });
 
@@ -557,6 +600,8 @@ export default function TakeTestPage() {
           questions.push({
             question,
             topicName: section.topicName,
+            topicId: section.topicId,
+            sectionTimeLimitMinutes: section.timeLimitMinutes ?? null,
             index: idx++,
           });
 
@@ -755,9 +800,9 @@ export default function TakeTestPage() {
     setStandardFeedbackShown(false);
     setStandardAnswerResult(null);
 
-    if (currentIndex < flatQuestions.length - 1) {
-      setCurrentIndex((i) => i + 1);
-    }
+    // Skip past any topic whose section timer has already expired.
+    const nextIdx = nextAccessibleIndex(flatQuestions, currentIndex + 1, lockedTopics);
+    if (nextIdx !== null) setCurrentIndex(nextIdx);
   };
 
   const handleNext = () => {
@@ -799,7 +844,9 @@ export default function TakeTestPage() {
       }
     }
 
-    setCurrentIndex((i) => Math.min(flatQuestions.length - 1, i + 1));
+    // Skip past any topic whose section timer has already expired.
+    const nextIdx = nextAccessibleIndex(flatQuestions, currentIndex + 1, lockedTopics);
+    if (nextIdx !== null) setCurrentIndex(nextIdx);
   };
 
   const handleSubmit = async () => {
@@ -840,7 +887,130 @@ export default function TakeTestPage() {
     }
   };
 
+  // Finish the standard attempt with whatever answers exist (no unanswered
+  // guard) — used when the LAST topic's section timer expires and there is no
+  // further topic to advance into.
+  const forceFinishStandard = async () => {
+    if (!attempt) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch(`/api/attempts/${attempt.id}/finish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ answers }),
+      });
+      if (!res.ok) throw new Error("Failed to submit");
+      navigate(`/learner/result/${attempt.id}`);
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Ошибка отправки",
+        description: "Не удалось отправить ответы",
+      });
+      setIsSubmitting(false);
+    }
+  };
+
+  // Section-timer expiry (PRD-4 v1.1 §3.2): the viewed topic ran out of time.
+  // Force-advance past it to the next non-locked topic (or finish the test).
+  // `lockedTopics` lags the just-expired topic by a tick, so union it in.
+  const handleSectionExpire = (expiredTopicId: string) => {
+    const locked = new Set(lockedTopics);
+    locked.add(expiredTopicId);
+    const target = forceAdvanceTarget(flatQuestions, expiredTopicId, currentIndex, locked);
+    setStandardFeedbackShown(false);
+    setStandardAnswerResult(null);
+    toast({
+      variant: "destructive",
+      title: "Время темы истекло",
+      description: target === null ? "Завершаем тест" : "Переходим к следующей теме",
+    });
+    if (target === null) {
+      void forceFinishStandard();
+    } else {
+      setCurrentIndex(target);
+    }
+  };
+  // Keep the hook's expiry callback pointed at the latest closure each render.
+  sectionExpireRef.current = handleSectionExpire;
+
   // Adaptive mode handlers
+
+  // Apply an expire-topic-adaptive response: jump straight to the next topic's
+  // first question (the learner didn't act — we auto-advance), or finish.
+  const applyAdaptiveExpireResult = (data: any) => {
+    if (data.isFinished) {
+      setAdaptiveState((prev) =>
+        prev ? { ...prev, isFinished: true, result: data.result, currentQuestion: null } : null,
+      );
+      return;
+    }
+    if (data.nextQuestion) {
+      setShuffleMappings((prev) => ({
+        ...prev,
+        [data.nextQuestion.question.id]: createAdaptiveShuffleMapping(data.nextQuestion.question),
+      }));
+      setFeedbackShown(false);
+      setShowTransition(false);
+      setAdaptiveState((prev) =>
+        prev
+          ? {
+              ...prev,
+              currentQuestion: data.nextQuestion,
+              currentTopicIndex: data.topicTransition
+                ? prev.currentTopicIndex + 1
+                : prev.currentTopicIndex,
+              answer: null,
+              lastResult: null,
+            }
+          : null,
+      );
+    }
+  };
+
+  // Ask the server to force the topic transition, retrying with backoff while
+  // the network is down (per the resilience requirement). Idempotent server-side,
+  // so a lost response that already advanced just re-syncs the current question.
+  const postExpireTopicWithRetry = async (attemptId: string, topicId: string): Promise<any | null> => {
+    let delay = 1000;
+    while (mountedRef.current) {
+      try {
+        const res = await fetch(`/api/attempts/${attemptId}/expire-topic-adaptive`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ topicId }),
+        });
+        if (res.ok) return await res.json();
+        if (res.status >= 400 && res.status < 500) return null; // unrecoverable
+      } catch {
+        // Network error — keep retrying after backoff until reconnect.
+      }
+      await new Promise((r) => setTimeout(r, delay));
+      delay = Math.min(delay * 2, 15_000);
+    }
+    return null;
+  };
+
+  // Adaptive topic timer expired: freeze input, advance via the server (retrying
+  // through network loss), then render the next topic / finished state.
+  const handleAdaptiveTopicExpire = async (topicId: string) => {
+    const attemptId = adaptiveState?.attemptId;
+    if (!attemptId) return;
+    toast({
+      variant: "destructive",
+      title: "Время темы истекло",
+      description: "Переходим к следующей теме",
+    });
+    setIsAnswering(true); // freeze the current question while we transition
+    const data = await postExpireTopicWithRetry(attemptId, topicId);
+    setIsAnswering(false);
+    if (data) applyAdaptiveExpireResult(data);
+  };
+  // Keep the hook's expiry callback pointed at the latest closure each render.
+  adaptiveExpireRef.current = handleAdaptiveTopicExpire;
+
   const handleAdaptiveAnswer = (answer: any) => {
     if (!adaptiveState) return;
     setAdaptiveState({ ...adaptiveState, answer });
@@ -1425,7 +1595,10 @@ export default function TakeTestPage() {
     if (questionTpl) {
       const counter =
         `Тема: ${currentQuestion.topicName} · Вопрос ${currentQuestion.questionNumber} из ${currentQuestion.totalInLevel}` +
-        (showDifficultyLevel && currentQuestion.levelName ? ` · ${currentQuestion.levelName}` : "");
+        (showDifficultyLevel && currentQuestion.levelName ? ` · ${currentQuestion.levelName}` : "") +
+        (adaptiveSectionRemaining !== null
+          ? ` · Время темы ${Math.floor(adaptiveSectionRemaining / 60)}:${String(adaptiveSectionRemaining % 60).padStart(2, "0")}`
+          : "");
       const fbHtml = feedbackShown && lastAnswerResult ? adaptiveFeedbackHtml(currentQ, lastAnswerResult) : "";
       const btnCls =
         "ml-auto inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50";
@@ -1489,6 +1662,9 @@ export default function TakeTestPage() {
             <div className="flex items-center gap-4">
               {remainingSeconds !== null && (
                 <TimerDisplay remainingSeconds={remainingSeconds} />
+              )}
+              {adaptiveSectionRemaining !== null && (
+                <SectionTimerDisplay remainingSeconds={adaptiveSectionRemaining} />
               )}
               <div className="text-sm text-muted-foreground">
                 Тема: <span className="font-medium text-foreground">{currentQuestion.topicName}</span>
@@ -1611,21 +1787,30 @@ export default function TakeTestPage() {
     !showCorrectAnswers
   ) {
     const currentQ = flatQuestions[currentIndex];
+    // PRD-4 v1.1 §3.2 — section-timer state for the templated standard screen.
+    const currentTopicLocked = lockedTopics.has(currentQ.topicId);
+    const prevIdx = prevAccessibleIndex(flatQuestions, currentIndex - 1, lockedTopics);
+    const sectionClock =
+      sectionRemainingSeconds !== null
+        ? ` · Время темы ${Math.floor(sectionRemainingSeconds / 60)}:${String(sectionRemainingSeconds % 60).padStart(2, "0")}`
+        : "";
     return (
       <TemplateQuestionScreen
         tpl={questionTpl}
         testTitle={attempt.testTitle}
-        counterLabel={`Вопрос ${currentIndex + 1} из ${flatQuestions.length}`}
+        counterLabel={`Вопрос ${currentIndex + 1} из ${flatQuestions.length} · Тема: ${currentQ.topicName}${sectionClock}`}
         progressPercent={((currentIndex + 1) / flatQuestions.length) * 100}
         question={currentQ.question}
         answer={answers[currentQ.question.id]}
         shuffleMapping={shuffleMappings[currentQ.question.id]}
         onAnswer={(a) => handleAnswer(currentQ.question.id, a)}
-        canPrev={currentIndex > 0}
+        locked={currentTopicLocked}
+        canPrev={prevIdx !== null}
         onPrev={() => {
           setStandardFeedbackShown(false);
           setStandardAnswerResult(null);
-          setCurrentIndex((i) => Math.max(0, i - 1));
+          // Skip back over any topic whose section timer already expired.
+          if (prevIdx !== null) setCurrentIndex(prevIdx);
         }}
         isLast={currentIndex === flatQuestions.length - 1}
         isSubmitting={isSubmitting}
@@ -1640,6 +1825,9 @@ export default function TakeTestPage() {
     const currentQ = flatQuestions[currentIndex];
     const progress = ((currentIndex + 1) / flatQuestions.length) * 100;
     const isLastQuestion = currentIndex === flatQuestions.length - 1;
+    // Section-timer state for this view (PRD-4 v1.1 §3.2).
+    const currentTopicLocked = lockedTopics.has(currentQ.topicId);
+    const prevIdx = prevAccessibleIndex(flatQuestions, currentIndex - 1, lockedTopics);
 
     return (
       <div className="min-h-screen bg-background select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
@@ -1658,6 +1846,9 @@ export default function TakeTestPage() {
             <div className="flex items-center gap-4">
               {remainingSeconds !== null && (
                 <TimerDisplay remainingSeconds={remainingSeconds} />
+              )}
+              {sectionRemainingSeconds !== null && (
+                <SectionTimerDisplay remainingSeconds={sectionRemainingSeconds} />
               )}
               <div className="text-sm text-muted-foreground">
                 Тема: <span className="font-medium text-foreground">{currentQ.topicName}</span>
@@ -1694,9 +1885,9 @@ export default function TakeTestPage() {
               <QuestionInput
                 question={currentQ.question}
                 answer={answers[currentQ.question.id]}
-                onAnswer={standardFeedbackShown ? () => { } : (answer) => handleAnswer(currentQ.question.id, answer)}
+                onAnswer={standardFeedbackShown || currentTopicLocked ? () => { } : (answer) => handleAnswer(currentQ.question.id, answer)}
                 shuffleMapping={shuffleMappings[currentQ.question.id]}
-                disabled={standardFeedbackShown}
+                disabled={standardFeedbackShown || currentTopicLocked}
                 showCorrectAnswer={standardFeedbackShown}
                 correctAnswer={standardAnswerResult?.correctAnswer}
               />
@@ -1731,9 +1922,10 @@ export default function TakeTestPage() {
               onClick={() => {
                 setStandardFeedbackShown(false);
                 setStandardAnswerResult(null);
-                setCurrentIndex((i) => Math.max(0, i - 1));
+                // Skip back over any topic whose section timer already expired.
+                if (prevIdx !== null) setCurrentIndex(prevIdx);
               }}
-              disabled={currentIndex === 0}
+              disabled={prevIdx === null}
             >
               <ChevronLeft className="h-4 w-4 mr-2" />
               Назад
@@ -2411,6 +2603,28 @@ function TimerDisplay({ remainingSeconds }: { remainingSeconds: number }) {
 
   return (
     <div className={`font-mono text-lg ${isLowTime ? "text-red-500 font-bold animate-pulse" : "text-muted-foreground"}`}>
+      {minutes}:{seconds < 10 ? "0" : ""}{seconds}
+    </div>
+  );
+}
+
+/**
+ * Per-topic (section) countdown shown next to the test-wide timer (PRD-4 v1.1
+ * §3.2). Mirrors {@link TimerDisplay} with a «Тема» label so the learner can
+ * tell the two budgets apart.
+ */
+function SectionTimerDisplay({ remainingSeconds }: { remainingSeconds: number }) {
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = remainingSeconds % 60;
+  const isLowTime = remainingSeconds <= 60;
+
+  return (
+    <div
+      className={`flex items-center gap-1 font-mono text-lg ${isLowTime ? "text-red-500 font-bold animate-pulse" : "text-muted-foreground"}`}
+      title="Время на текущую тему"
+      data-testid="section-timer-display"
+    >
+      <BookOpen className="h-4 w-4" aria-hidden="true" />
       {minutes}:{seconds < 10 ? "0" : ""}{seconds}
     </div>
   );

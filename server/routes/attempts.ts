@@ -130,6 +130,9 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
         topicId: section.topicId,
         topicName: topicMap.get(section.topicId) || "Unknown",
         questionIds: qIds,
+        // PRD-4 v1.1 §3.2: carry the per-topic time budget so the web runtime
+        // can run a per-topic timer (parity with the SCORM package).
+        timeLimitMinutes: section.timeLimitMinutes ?? null,
       });
 
       allQuestionIds.push(...qIds);
@@ -204,6 +207,12 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
     const adaptiveLevels = await storage.getAdaptiveLevelsByTest(test.id);
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
+    // PRD-4 v1.1 §3.2: per-topic time budgets live on test_sections; join them
+    // onto the adaptive topics by topicId so the runtime can run a topic timer.
+    const adaptiveSections = await storage.getTestSections(test.id);
+    const sectionLimitMap = new Map(
+      adaptiveSections.map((s) => [s.topicId, s.timeLimitMinutes ?? null]),
+    );
 
     if (adaptiveSettings.length === 0) {
       return res.status(400).json({ error: "Adaptive test has no settings configured" });
@@ -255,6 +264,8 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
         levelsState,
         finalLevelIndex: null,
         status: "in_progress",
+        // Per-topic time budget (null = no limit); read by the topic timer.
+        timeLimitMinutes: sectionLimitMap.get(topicSettings.topicId) ?? null,
       });
     }
 
@@ -302,6 +313,8 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
             id: firstQuestion.id,
             question: firstQuestion,
             topicName: firstTopic.topicName,
+            topicId: firstTopic.topicId,
+            sectionTimeLimitMinutes: firstTopic.timeLimitMinutes ?? null,
             levelName: firstLevel.levelName,
             questionNumber: 1,
             totalInLevel: firstLevel.questionIds.length,
@@ -502,6 +515,86 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
   } catch (error) {
     logger.error("Answer adaptive error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to process answer" });
+  }
+});
+
+// POST /api/attempts/:attemptId/expire-topic-adaptive - PRD-4 v1.1 §3.2:
+// the per-topic timer ran out. Force-complete the current adaptive topic (with
+// whatever was answered) and move to the next topic or finish. Idempotent: a
+// retried/duplicate request whose `topicId` no longer matches the current topic
+// (the move already happened — e.g. the first response was lost) re-syncs the
+// client to the current question instead of advancing again.
+router.post("/attempts/:attemptId/expire-topic-adaptive", requirePermission("attempts.take"), async (req, res) => {
+  try {
+    const attempt = await storage.getAttempt(req.params.attemptId);
+    if (!attempt) {
+      return res.status(404).json({ error: "Attempt not found" });
+    }
+    if (attempt.userId !== req.session.userId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const { topicId } = req.body;
+    const variant = attempt.variantJson as any;
+    if (variant.mode !== "adaptive") {
+      return res.status(400).json({ error: "This is not an adaptive attempt" });
+    }
+
+    const test = await storage.getTest(attempt.testId);
+    if (!test) {
+      return res.status(404).json({ error: "Test not found" });
+    }
+
+    // Already finished (possibly by a prior expiry) — idempotent finished state.
+    if (attempt.finishedAt) {
+      return res.json({
+        nextQuestion: null,
+        levelTransition: null,
+        topicTransition: null,
+        isFinished: true,
+        result: attempt.resultJson ?? null,
+      });
+    }
+
+    const currentTopic = variant.topics[variant.currentTopicIndex];
+    // Idempotent: the expired topic was already advanced past. Re-send the
+    // current question so a lost-response retry re-syncs without double-advancing.
+    if (!currentTopic || currentTopic.topicId !== topicId) {
+      const cur = await currentAdaptiveQuestion(variant, storage);
+      return res.json({
+        nextQuestion: cur,
+        levelTransition: null,
+        topicTransition: null,
+        isFinished: false,
+        result: null,
+      });
+    }
+
+    const currentLevel = currentTopic.levelsState[currentTopic.currentLevelIndex];
+    const { levelTransition, topicTransition, nextQuestionData, isFinished } =
+      await moveToNextTopicOrFinish(variant, currentTopic, currentLevel, storage);
+
+    let result: any = null;
+    if (isFinished) {
+      result = await buildAdaptiveResult(variant, test.id, storage);
+    }
+
+    await storage.updateAttempt(attempt.id, {
+      variantJson: variant,
+      resultJson: isFinished ? result : null,
+      finishedAt: isFinished ? new Date() : null,
+    });
+
+    res.json({
+      nextQuestion: nextQuestionData,
+      levelTransition,
+      topicTransition,
+      isFinished,
+      result,
+    });
+  } catch (error) {
+    logger.error("Expire adaptive topic error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to expire topic" });
   }
 });
 
@@ -885,10 +978,27 @@ async function getNextQuestionData(level: any, topic: any, questionIndex: number
     id: questionId,
     question: questions[0],
     topicName: topic.topicName,
+    topicId: topic.topicId,
+    // PRD-4 v1.1 §3.2: carry the topic's time budget so the runtime can run a
+    // per-topic timer for the topic that owns this question.
+    sectionTimeLimitMinutes: topic.timeLimitMinutes ?? null,
     levelName: level.levelName,
     questionNumber: questionIndex + 1,
     totalInLevel: level.questionIds.length,
   };
+}
+
+/**
+ * Build the question-data payload for the variant's CURRENT position (the
+ * `currentQuestionId` within the current topic/level). Used by the idempotent
+ * branch of expire-topic-adaptive to re-sync a client after a lost response.
+ */
+async function currentAdaptiveQuestion(variant: any, storage: any) {
+  const topic = variant.topics?.[variant.currentTopicIndex];
+  if (!topic) return null;
+  const level = topic.levelsState[topic.currentLevelIndex];
+  const idx = level.questionIds.indexOf(variant.currentQuestionId);
+  return getNextQuestionData(level, topic, idx >= 0 ? idx : 0, storage);
 }
 
 async function moveToNextTopicOrFinish(variant: any, currentTopic: any, currentLevel: any, storage: any) {
