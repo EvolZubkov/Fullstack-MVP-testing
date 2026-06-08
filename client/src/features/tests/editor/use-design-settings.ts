@@ -19,7 +19,7 @@
  *     step and is not orchestrated here.
  *   - No local-storage persistence (FR-25j).
  */
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -205,19 +205,27 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
 
   const persisted: DesignSettings | undefined = designQuery.data;
 
-  const templateQuery = useQuery({
-    queryKey: ["templates", persisted?.templateId],
-    queryFn: () => fetchTemplate(persisted!.templateId),
-    enabled: Boolean(persisted?.templateId),
-  });
-
   const [draft, setDraft] = useState<DesignSettings>({ templateId: "default" });
 
-  useEffect(() => {
-    if (persisted) {
-      setDraft({ ...persisted, params: { ...(persisted.params ?? {}) } });
-    }
-  }, [persisted]);
+  // Sync the draft from the persisted settings as soon as they (re)load. Done
+  // during render (React's "adjust state when a prop changes" pattern) rather than
+  // in an effect, so `draft.templateId` follows the saved template within the SAME
+  // commit. This is also what makes the gallery switch work: «Заменить шаблон»
+  // mutates the draft, which re-points the manifest query below — updating the
+  // template card and Branding form immediately, without waiting for a save.
+  const [syncedFrom, setSyncedFrom] = useState<DesignSettings | undefined>(undefined);
+  if (persisted && persisted !== syncedFrom) {
+    setSyncedFrom(persisted);
+    setDraft({ ...persisted, params: { ...(persisted.params ?? {}) } });
+  }
+
+  // The manifest follows the DRAFT template (not the persisted one), so switching
+  // templates loads the new template's params/card right away.
+  const templateQuery = useQuery({
+    queryKey: ["templates", draft.templateId],
+    queryFn: () => fetchTemplate(draft.templateId),
+    enabled: Boolean(persisted) && Boolean(draft.templateId),
+  });
 
   const isDirty = useMemo(() => {
     if (!persisted) return false;

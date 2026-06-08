@@ -336,9 +336,6 @@ describe("<DesignSection /> — template preview modal (S12-G2)", () => {
     await waitFor(() =>
       expect(screen.getByTestId("design-template-preview-modal")).toBeInTheDocument(),
     );
-    // Iframe is the body of the modal — verifies the iframe-based embedding
-    // (the previous React mock has been replaced — see s12-design-closeout §G2 v2).
-    expect(screen.getByTestId("design-template-preview-iframe")).toBeInTheDocument();
   });
 
   it("closes on close button click", async () => {
@@ -356,12 +353,29 @@ describe("<DesignSection /> — template preview modal (S12-G2)", () => {
     );
   });
 
-  it("iframe src points at the preview-page endpoint and forwards draft.params as query overrides", async () => {
-    // Pre-load a non-default param so the iframe URL must include it.
+  it("renders via the unified renderer and applies draft.params as CSS variables", async () => {
+    // Minimal bundle: one "start" screen + a primaryColor param (→ --primary).
+    const BUNDLE = {
+      manifest: {
+        name: "Корпоративный",
+        version: "1.2.0",
+        params: [
+          { key: "companyName", type: "text", label: "Название компании", default: "" },
+          { key: "primaryColor", type: "color", label: "Основной цвет", default: "221 83% 53%" },
+        ],
+        layouts: { start: "start.html" },
+        preview: { defaultRoute: "start", routes: ["start"] },
+      },
+      demo: { course: { title: "Демо" } },
+      layouts: { start: "<div class=\"start-page\">Демо</div>" },
+      css: ":root{--primary: 221 83% 53%;}",
+    };
+    // Pre-load a non-default param so the applied CSS variable must reflect it.
     mockFetch((url) => {
       if (url === `/api/tests/${TEST_ID}/design`)
         return jsonResponse({ templateId: "corporate", params: { companyName: "Acme", primaryColor: "180 50% 40%" } });
       if (url === `/api/templates/corporate`) return jsonResponse(TEMPLATE);
+      if (url === `/api/templates/corporate/bundle`) return jsonResponse(BUNDLE);
       return jsonResponse({ error: "unexpected" }, 500);
     });
     renderWithClient(<DesignSection testId={TEST_ID} />);
@@ -376,14 +390,13 @@ describe("<DesignSection /> — template preview modal (S12-G2)", () => {
     });
     fireEvent.click(screen.getByTestId("design-rail-template"));
     fireEvent.click(screen.getByTestId("design-template-preview"));
-    await waitFor(() =>
-      expect(screen.getByTestId("design-template-preview-iframe")).toBeInTheDocument(),
-    );
-    const iframe = screen.getByTestId("design-template-preview-iframe") as HTMLIFrameElement;
-    expect(iframe.getAttribute("src")).toMatch(/^\/api\/templates\/corporate\/preview-page\?/);
-    expect(iframe.getAttribute("src")).toContain("companyName=Acme");
-    expect(iframe.getAttribute("src")).toContain("primaryColor=");
-    expect(iframe.getAttribute("sandbox")).toBe("allow-scripts allow-same-origin");
+    // The unified renderer mounts into a host carrying the draft's branding as
+    // CSS custom properties — primaryColor (180 50% 40%) → --primary.
+    await waitFor(() => {
+      const host = document.querySelector("[data-template-screen]") as HTMLElement | null;
+      expect(host).not.toBeNull();
+      expect(host!.style.getPropertyValue("--primary").trim()).toBe("180 50% 40%");
+    });
   });
 });
 
@@ -425,8 +438,8 @@ describe("<DesignSection /> — template-incompatible state (S12-G6)", () => {
     expect(screen.getByTestId("design-rail-progress")).toBeDisabled();
   });
 
-  it("clicking «Применить «Стандартный»» switches the draft to templateId='default'", async () => {
-    // Refetch returns the default template on second template-query (after applyDefault).
+  it("clicking «Применить «Стандартный»» switches the draft to the default template", async () => {
+    // The default template resolves on the draft-keyed manifest query after the switch.
     mockFetch((url) => {
       if (url === `/api/tests/${TEST_ID}/design`) {
         return jsonResponse({ templateId: "deleted-template-v2", params: {} });
@@ -446,12 +459,14 @@ describe("<DesignSection /> — template-incompatible state (S12-G6)", () => {
     );
     fireEvent.click(screen.getByText("Применить «Стандартный»"));
 
-    // After applyDefaultTemplate the templateMissing flag does not flip until
-    // a successful PUT + refetch. For the unit test we verify the action
-    // fired by checking the banner is still there (no client-side optimism)
-    // — the integration that flips the state lives in the save flow.
-    // Sanity: the click did not throw.
-    expect(screen.getByTestId("design-template-incompatible")).toBeInTheDocument();
+    // The draft now points at a resolvable template, so the manifest loads and the
+    // incompatible banner clears — the template pane returns (the user still saves
+    // to persist). This is the same mechanism that makes «Заменить шаблон» update
+    // the card without a save.
+    await waitFor(() => {
+      expect(screen.queryByTestId("design-template-incompatible")).not.toBeInTheDocument();
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument();
+    });
   });
 });
 

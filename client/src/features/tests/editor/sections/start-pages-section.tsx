@@ -124,6 +124,13 @@ export type StructureSectionProps = {
    * by `test.status === "published"`.
    */
   readOnly?: boolean;
+  /**
+   * The in-progress design draft (template id + params) from the editor-level
+   * {@link useDesignSettings}. The single-page preview renders against THIS
+   * template/branding, so an unsaved «Оформление» switch is reflected immediately
+   * — consistent with the «Оформление» template preview.
+   */
+  designDraft?: { templateId: string; params?: Record<string, unknown> };
 };
 
 /** Backwards-compatible alias: original skeleton lived under this name. */
@@ -290,7 +297,7 @@ const structureCollision: CollisionDetection = (args) => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition, updateModel, readOnly = false }: StructureSectionProps) {
+export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition, updateModel, readOnly = false, designDraft }: StructureSectionProps) {
   // Fallback hook so the section works standalone (component tests) when the
   // drawer has not hoisted the hook. Mirrors design-section's pattern.
   const fallback = useContentPages(contentProp ? undefined : testId);
@@ -357,12 +364,13 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
         }}
       />
       <ReplaceVariantModal ctx={replaceCtx} cp={cp} onClose={() => setReplaceCtx(null)} />
-      {previewCtx && testId && (
+      {previewCtx && (
         <PagePreviewModal
           open
           onClose={() => setPreviewCtx(null)}
-          testId={testId}
-          pageId={previewCtx.page.id}
+          templateId={designDraft?.templateId}
+          params={designDraft?.params ?? {}}
+          page={previewCtx.page}
           pageTitle={pageTitle(previewCtx.page)}
         />
       )}

@@ -1,55 +1,90 @@
 /**
  * @module features/tests/editor/sections/page-preview-modal
  * @description Single content-page preview modal for the «Структура» tab
- * (PRD-7 S13.4-G17 / FR-44). Wireframe state `s-page-preview` in
- * `prd7-structure-linear-by-topics.html` (lines 984-1058).
+ * (PRD-7 S13.4-G17 / FR-44).
  *
- * Renders an iframe that embeds the test's design-template `preview.html` and
- * - via a server-injected override script - calls the runtime-exposed
- * `renderContentPage(page, contentTemplates)` directly with the page's saved
- * values. The standalone navigation chrome is suppressed by the same embed
- * CSS template-preview uses (S12-G2).
+ * Renders ONLY the page being previewed, through the SAME unified renderer the
+ * runtime and «Шаблоны» use ({@link TemplateScreen} → `renderScreenInto`) — no
+ * second preview engine. The page's current placeholder values are fed into the
+ * renderer's content channel ({@link buildContentPageScreen}); the template +
+ * branding come from the DESIGN DRAFT (the in-progress «Оформление» selection),
+ * not the saved design — so switching the template in «Оформление» is reflected
+ * here immediately, consistent with the template preview. Resolved server-side
+ * via `sourcePath`, so uploaded (PRD-3) templates preview too.
  *
- * Differs from {@link TemplatePreviewModal} in source-of-truth:
- *   - TemplatePreview: param overrides arrive via query string; the iframe
- *     walks the demo navigation of the chosen template.
- *   - PagePreview: the backend reads the content_page from the DB and patches
- *     the bootstrap to render just that one page in the test's current
- *     design-template branding.
+ * Static visual evaluation only — interactions are demo-only and persist nothing.
  */
-import { ModalDialog, Button } from "@universityrt/ui-kit";
+import { useMemo } from "react";
+import { Banner, Button, ModalDialog } from "@universityrt/ui-kit";
+import { TemplateScreen } from "@/components/template-screen";
+import { buildContentPageScreen, buildScreenInputs, type PreviewDemoDataset } from "@shared/template/preview-context";
+import { buildTemplateCssVars } from "@shared/template/params-css";
+import { useTemplateBundle } from "./use-template-bundle";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
+
+/** The content-page fields the preview reads (structural — date shapes vary by host). */
+export interface PagePreviewPage {
+  id: string;
+  /** Variant-binding kind (PRD-1 §4.3): intro | info | summary | router | questions. */
+  kind?: string | null;
+  templateKey?: string | null;
+  valuesJson?: unknown;
+}
 
 export type PagePreviewModalProps = {
   open: boolean;
   onClose: () => void;
-  /** Test id - part of the preview-page URL. */
-  testId: string;
-  /** Content page being previewed (id used in URL, title shown in header). */
-  pageId: string;
+  /** Draft design template id — the page previews against the IN-PROGRESS template. */
+  templateId: string | undefined;
+  /** Draft design params (branding), applied as CSS variables. */
+  params: Record<string, unknown>;
+  /** The content page being previewed (its current values are rendered). */
+  page: PagePreviewPage;
   /** Display title for the modal header («Предпросмотр: <title>»). */
   pageTitle: string;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-/**
- * Modal dialog that embeds the test's design-template preview.html and
- * delegates rendering of the single target page to the iframe runtime.
- * Static visual evaluation only - interactions inside the preview are
- * demo-only and do not persist anything.
- */
-export function PagePreviewModal({
-  open,
-  onClose,
-  testId,
-  pageId,
-  pageTitle,
-}: PagePreviewModalProps) {
-  const previewUrl = `/api/tests/${encodeURIComponent(testId)}/content-pages/${encodeURIComponent(pageId)}/preview-page`;
+export function PagePreviewModal({ open, onClose, templateId, params, page, pageTitle }: PagePreviewModalProps) {
+  const bundleQuery = useTemplateBundle(templateId, open);
+  const bundle = bundleQuery.data;
+
+  // One ScreenSpec for THIS page. A `questions` section has no content
+  // placeholders — it must preview a SAMPLE question in the template's QUESTION
+  // layout, not the content layout (else it renders the content/intro screen).
+  // Content kinds (intro/info/summary/router) render the page's own values.
+  const spec = useMemo(() => {
+    if (!bundle) return null;
+    if (page.kind === "questions") {
+      const demoScreens = bundle.demo ? buildScreenInputs(bundle.demo as PreviewDemoDataset, bundle.manifest) : [];
+      return demoScreens.find((s) => s.route.startsWith("question")) ?? null;
+    }
+    const values = (page.valuesJson as { values?: Record<string, unknown> } | null)?.values ?? {};
+    const tpl = (bundle.manifest.contentTemplates ?? []).find((c) => c.key === page.templateKey);
+    const route = tpl?.pageKind ?? `content.${page.kind ?? "info"}`;
+    const runtime = (bundle.demo as { runtime?: { result?: Record<string, unknown>; sectionResult?: Record<string, unknown> } } | null)?.runtime;
+    const rr = runtime?.sectionResult ?? runtime?.result;
+    const result = rr
+      ? { scorePercent: Number(rr.scorePercent) || 0, status: rr.status ?? "", passed: !!rr.passed }
+      : undefined;
+    return buildContentPageScreen({
+      manifest: bundle.manifest,
+      route,
+      templateKey: page.templateKey ?? undefined,
+      values,
+      courseTitle: "",
+      result,
+    });
+  }, [bundle, page]);
+
+  // Draft branding → CSS variables, via the SAME mapping the runtime uses.
+  const cssVars = useMemo(() => buildTemplateCssVars(params, bundle?.manifest.params), [params, bundle]);
 
   if (!open) return null;
+
+  const layout = spec && bundle ? bundle.layouts[spec.layoutKey] : undefined;
 
   return (
     <ModalDialog
@@ -58,35 +93,43 @@ export function PagePreviewModal({
       size="xl"
       className="tpl-preview-modal"
       title={`Предпросмотр: ${pageTitle}`}
-      description="Так страница выглядит в SCORM-плеере. Прогресс не сохраняется."
+      description="Так страница выглядит в плеере. Прогресс не сохраняется."
       footer={
         <div className="tpl-preview-foot" data-testid="page-preview-foot">
           <span className="tpl-preview-foot__info">
-            предпросмотр одной страницы · стиль и шрифты — из текущего шаблона теста
+            предпросмотр одной страницы · стиль и шрифты — из текущего «Оформления»
           </span>
-          <Button
-            variant="secondary"
-            size="m"
-            onClick={onClose}
-            data-testid="page-preview-close"
-          >
+          <Button variant="secondary" size="m" onClick={onClose} data-testid="page-preview-close">
             Закрыть
           </Button>
         </div>
       }
     >
       <div className="tpl-preview-frame" data-testid="page-preview-modal">
-        <iframe
-          key={previewUrl}
-          src={previewUrl}
-          title={`Предпросмотр страницы ${pageTitle}`}
-          className="tpl-preview-iframe"
-          // Same sandbox as template-preview: scripts to run the runtime,
-          // same-origin to read window.PRD1_PREVIEW_* globals injected by
-          // the backend response.
-          sandbox="allow-scripts allow-same-origin"
-          data-testid="page-preview-iframe"
-        />
+        {bundleQuery.isLoading && <p className="tpl-upload-hint">Загружаем шаблон…</p>}
+        {bundleQuery.error && (
+          <Banner tone="error" title="Не удалось загрузить файлы шаблона" description={(bundleQuery.error as Error).message} />
+        )}
+        {bundle && spec && layout != null ? (
+          <div className="tpl-check-stage__frame">
+            <TemplateScreen
+              layout={layout}
+              context={spec.input.context}
+              slots={spec.input.slots}
+              content={spec.input.content}
+              css={bundle.css}
+              cssVars={cssVars}
+            />
+          </div>
+        ) : (
+          bundle && (
+            <Banner
+              tone="warning"
+              title="Не удалось собрать предпросмотр страницы"
+              description={spec ? `Макет «${spec.layoutKey}» не найден в шаблоне.` : "Выбранный шаблон не содержит подходящего макета."}
+            />
+          )
+        )}
       </div>
     </ModalDialog>
   );

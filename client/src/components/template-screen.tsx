@@ -9,7 +9,7 @@
  * `onAction`, so the host can wire template buttons (e.g. restart) to app navigation.
  */
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { renderScreenInto, type ContentPageData } from "@shared/template/render-screen";
 import { attachPointerDnd } from "@shared/template/dnd/pointer-dnd";
 
@@ -24,16 +24,50 @@ export interface TemplateScreenProps {
   slots?: Record<string, string>;
   /** Content-page placeholder data, when rendering a content screen. */
   content?: ContentPageData;
+  /**
+   * Design-param overrides as CSS custom properties (e.g. `{ "--background": "0 0% 100%" }`,
+   * built via {@link module:shared/template/params-css buildTemplateCssVars}). Applied on
+   * the shadow host so they override the template's `theme.css` `:root` tokens — this is
+   * how per-test branding renders in the preview, the SAME mapping the runtime uses.
+   */
+  cssVars?: Record<string, string>;
   /** Called with the `data-action` value when a button inside the screen is clicked. */
   onAction?: (action: string) => void;
   className?: string;
 }
 
-export function TemplateScreen({ layout, context, css, slots, content, onAction, className }: TemplateScreenProps) {
+export function TemplateScreen({ layout, context, css, slots, content, cssVars, onAction, className }: TemplateScreenProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const shadowRef = useRef<ShadowRoot | null>(null);
+  const screenRef = useRef<HTMLElement | null>(null);
+  const appliedVarsRef = useRef<string[]>([]);
   const onActionRef = useRef(onAction);
   onActionRef.current = onAction;
+
+  // Fit-to-width: some templates render a FIXED-size canvas (e.g. a 1280×720
+  // Storyline-style layout). Scale it down so it fits the host width — no
+  // horizontal scroll — mirroring how the runtime fits the canvas to the player.
+  // Responsive layouts (natural width ≤ host width) are left untouched.
+  const fitToWidth = useCallback(() => {
+    const host = hostRef.current;
+    const screen = screenRef.current;
+    const root = screen?.firstElementChild as HTMLElement | null;
+    if (!host || !screen || !root) return;
+    // Reset before measuring the natural (unscaled) size.
+    root.style.transform = "";
+    root.style.transformOrigin = "top left";
+    screen.style.height = "";
+    screen.style.overflow = "";
+    const naturalW = root.offsetWidth;
+    const naturalH = root.offsetHeight;
+    const containerW = host.clientWidth;
+    if (naturalW > 0 && containerW > 0 && naturalW > containerW + 1) {
+      const scale = containerW / naturalW;
+      root.style.transform = `scale(${scale})`;
+      screen.style.height = `${Math.ceil(naturalH * scale)}px`;
+      screen.style.overflow = "hidden";
+    }
+  }, []);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -58,10 +92,33 @@ export function TemplateScreen({ layout, context, css, slots, content, onAction,
         "\n:host{padding:0;}";
       shadow.appendChild(style);
     }
+    // Apply design-param overrides on the host element. Inline custom properties
+    // on the host win over the template's `:host{}` (`:root`-mapped) tokens and
+    // inherit into the shadow tree — so per-test branding overrides theme.css.
+    // Clear stale keys from a previous render before applying the current set.
+    for (const name of appliedVarsRef.current) host.style.removeProperty(name);
+    if (cssVars) {
+      for (const [name, value] of Object.entries(cssVars)) host.style.setProperty(name, value);
+      appliedVarsRef.current = Object.keys(cssVars);
+    } else {
+      appliedVarsRef.current = [];
+    }
+
     const screen = document.createElement("div");
     shadow.appendChild(screen);
+    screenRef.current = screen;
     renderScreenInto(screen, { layout, context, slots, content });
-  }, [layout, context, css, slots, content]);
+    fitToWidth();
+  }, [layout, context, css, slots, content, cssVars, fitToWidth]);
+
+  // Re-fit when the host (modal) width changes.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => fitToWidth());
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, [fitToWidth]);
 
   // Delegate clicks on [data-action] elements to the host (bound once).
   useEffect(() => {

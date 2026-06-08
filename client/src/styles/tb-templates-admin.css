@@ -238,6 +238,9 @@
   font: var(--ou-text-body-s);
   color: var(--ou-fg-muted);
 }
+.tpl-check-stage__empty {
+  padding: var(--ou-space-5);
+}
 
 .tpl-check-errors {
   border: var(--ou-border-width) solid var(--ou-error-border, var(--ou-error-default));

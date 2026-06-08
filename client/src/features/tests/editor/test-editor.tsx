@@ -543,6 +543,7 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
               onGoToComposition={() => setActiveTab("composition")}
               updateModel={editor.updateModel}
               readOnly={editor.model.basic.status === "published"}
+              designDraft={design.draft}
             />
           )}
           {editor.model && activeTab === "scales" && (
