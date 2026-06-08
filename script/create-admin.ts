@@ -82,6 +82,11 @@ async function upsertAdmin(options: Options) {
       [emailHash],
     );
 
+    // PRD-13 (T-10): the legacy `users.role` column was dropped — roles live in
+    // `user_roles`. Upsert the user without a role column, then grant the
+    // administrator role separately (idempotent).
+    let result: { action: "created" | "updated"; id: string };
+
     if (existing.rowCount && existing.rows[0]) {
       const id = existing.rows[0].id;
 
@@ -90,7 +95,6 @@ async function upsertAdmin(options: Options) {
          SET email = $1,
              password_hash = $2,
              name = $3,
-             role = 'author',
              status = 'active',
              must_change_password = $4,
              gdpr_consent = true,
@@ -107,37 +111,46 @@ async function upsertAdmin(options: Options) {
         ],
       );
 
-      return { action: "updated", id };
+      result = { action: "updated", id };
+    } else {
+      const id = randomUUID();
+
+      await pool.query(
+        `INSERT INTO users (
+           id,
+           email,
+           email_hash,
+           password_hash,
+           name,
+           status,
+           must_change_password,
+           gdpr_consent,
+           gdpr_consent_at,
+           created_at
+         ) VALUES ($1, $2, $3, $4, $5, 'active', $6, true, $7, NOW())`,
+        [
+          id,
+          encryptedEmail,
+          emailHash,
+          passwordHash,
+          options.name,
+          options.mustChangePassword,
+          gdprConsentAt,
+        ],
+      );
+
+      result = { action: "created", id };
     }
 
-    const id = randomUUID();
-
+    // Grant the administrator role (PRD-13). Unique (user_id, role) -> idempotent.
     await pool.query(
-      `INSERT INTO users (
-         id,
-         email,
-         email_hash,
-         password_hash,
-         name,
-         role,
-         status,
-         must_change_password,
-         gdpr_consent,
-         gdpr_consent_at,
-         created_at
-       ) VALUES ($1, $2, $3, $4, $5, 'author', 'active', $6, true, $7, NOW())`,
-      [
-        id,
-        encryptedEmail,
-        emailHash,
-        passwordHash,
-        options.name,
-        options.mustChangePassword,
-        gdprConsentAt,
-      ],
+      `INSERT INTO user_roles (id, user_id, role)
+       VALUES ($1, $2, 'administrator')
+       ON CONFLICT (user_id, role) DO NOTHING`,
+      [randomUUID(), result.id],
     );
 
-    return { action: "created", id };
+    return result;
   } finally {
     await pool.end();
   }
@@ -152,7 +165,7 @@ async function main() {
       ? `Admin user created: ${options.email} (${result.id})`
       : `Admin user updated: ${options.email} (${result.id})`,
   );
-  console.log("Role: author");
+  console.log("Role: administrator");
   console.log(`Status: active`);
 }
 

@@ -53,13 +53,17 @@ const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
 
 try {
   await client.connect();
+  // PRD-13 (T-10): the legacy `users.role` column was dropped — roles live in
+  // `user_roles`. This tool only resets the password, so it neither reads nor
+  // writes roles; `RETURNING role` here would fail with "column role does not
+  // exist" on a migrated DB.
   const { rows } = await client.query(
     `UPDATE users
         SET password_hash = $1,
             must_change_password = $2,
             status = CASE WHEN status = 'pending' THEN 'active' ELSE status END
       WHERE email_hash = $3
-      RETURNING id, role, status`,
+      RETURNING id, status`,
     [passwordHash, FORCE_CHANGE, emailHash],
   );
 
@@ -75,7 +79,7 @@ try {
 
   for (const r of rows) {
     console.log(
-      `OK: password set for ${EMAIL} -> id=${r.id} role=${r.role} ` +
+      `OK: password set for ${EMAIL} -> id=${r.id} ` +
         `status=${r.status} mustChangePassword=${FORCE_CHANGE}`,
     );
   }
