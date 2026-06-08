@@ -22,3 +22,4 @@ export { attachPointerDnd } from "./dnd/pointer-dnd";
 export { buildResultContext, buildAdaptiveResultContext } from "./result-context";
 export { buildStartState } from "./start-state";
 export { buildTransitionContext } from "./transition-context";
+export { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS } from "./params-css";

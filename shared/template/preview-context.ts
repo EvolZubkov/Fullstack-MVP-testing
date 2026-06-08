@@ -374,3 +374,43 @@ export function buildScreenInputs(dataset: PreviewDemoDataset, manifest: Preview
   const targets = (manifest.preview?.routes ?? []).map(normalizeTarget);
   return targets.map((t) => buildOne(t, dataset, manifest));
 }
+
+/** Inputs for {@link buildContentPageScreen}: a single REAL content page. */
+export interface ContentPageScreenInput {
+  manifest: PreviewManifest;
+  /** Page route/kind, e.g. `content.intro` | `content.info` | `content.summary`. */
+  route: string;
+  /** The content template key bound to the page (`manifest.contentTemplates[].key`). */
+  templateKey?: string;
+  /** Saved placeholder values for the page. */
+  values: Record<string, unknown>;
+  /** Course/test title for the `course` namespace. */
+  courseTitle: string;
+  /** `result` namespace (for `summary`/`resultField` placeholders); zeroed when absent. */
+  result?: Record<string, unknown>;
+}
+
+/**
+ * Build a {@link ScreenSpec} for ONE real content page (single-page preview, FR-44):
+ * resolves its layout key + content template, builds the placeholder skeleton, and
+ * feeds the page's saved values into the renderer's `content` channel. Reuses the
+ * same primitives as {@link buildScreenInputs}, so the page renders identically to
+ * the runtime — no second renderer.
+ */
+export function buildContentPageScreen(inp: ContentPageScreenInput): ScreenSpec {
+  const layoutKey = resolveLayoutKey(inp.route, inp.manifest);
+  const tpl = findContentTemplate(inp.manifest, inp.templateKey);
+  const placeholders = tpl?.placeholders ?? [];
+  const skeleton = buildSkeleton(placeholders);
+  const result = inp.result ?? { scorePercent: 0, status: "", passed: false };
+  return {
+    route: inp.route,
+    layoutKey,
+    requiredSlots: ["page-content"],
+    input: {
+      context: { course: { title: inp.courseTitle }, result },
+      slots: { "page-content": skeleton },
+      content: { template: { placeholders }, values: inp.values },
+    },
+  };
+}

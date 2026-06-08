@@ -18,6 +18,8 @@ import { requirePermission } from "../middleware/auth";
 import { logger } from "../logger";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { encodeJsonForScript, injectIntoPreview } from "../scorm/preview-embed";
+import { resolveTemplateDir } from "../services/template-dir";
+import { readTemplateBundle } from "../services/template-package";
 
 const router = Router();
 
@@ -128,6 +130,25 @@ router.get("/:id/preview-page", requirePermission("templates.read"), async (req,
   } catch (error) {
     logger.error("Preview-page error: " + (error as Error).message);
     res.status(500).type("text/plain").send("preview-page failed");
+  }
+});
+
+/**
+ * GET /api/templates/:id/bundle — render files (manifest + demo + layouts + css)
+ * for the unified preview renderer (the SAME engine the runtime/«Шаблоны» use).
+ * Resolves the template directory via the templates table `sourcePath` (built-in
+ * OR uploaded), so uploaded templates preview too. The client applies design
+ * params as CSS variables via the shared mapping — no second preview engine.
+ */
+router.get("/:id/bundle", requirePermission("templates.read"), async (req, res) => {
+  try {
+    const dir = await resolveTemplateDir(req.params.id);
+    const bundle = await readTemplateBundle(dir);
+    res.setHeader("Cache-Control", "no-store");
+    res.json(bundle);
+  } catch (error) {
+    logger.error("Template bundle error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to read template bundle" });
   }
 });
 

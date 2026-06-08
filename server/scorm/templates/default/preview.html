@@ -1929,6 +1929,13 @@ a.results-rec-item:hover { text-decoration: underline; }
    * @returns {object}
    */
   function buildCssVarDeclarations(params, manifestParams) {
+    // Canonical mapping lives in shared/template/params-css and is exposed on the
+    // TBTemplate runtime bundle. Delegate to it so the package runtime and the web
+    // preview never drift. The inline copy below is a byte-for-byte fallback used
+    // only when the bundle is not present (defensive — keeps the package working).
+    if (root.TBTemplate && typeof root.TBTemplate.buildTemplateCssVars === "function") {
+      return root.TBTemplate.buildTemplateCssVars(params, manifestParams);
+    }
     var result = {};
     if (!manifestParams || !params) return result;
     var defaultCssVars = {

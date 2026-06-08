@@ -139,6 +139,65 @@ export async function readDirEntries(rootDir: string): Promise<TemplateEntries> 
   return entries;
 }
 
+/** The render files a host needs to preview a template's screens client-side. */
+export interface TemplateBundle {
+  /** Parsed `manifest.json` (params, contentTemplates, layouts, preview.routes). */
+  manifest: Record<string, unknown>;
+  /** Parsed `preview.demoData` dataset, or null when the template declares none. */
+  demo: unknown | null;
+  /** Inner layout HTML keyed by `manifest.layouts` key (the `shell` is skipped). */
+  layouts: Record<string, string>;
+  /** Concatenated `manifest.assets.styles` (theme + base), the unified host CSS. */
+  css: string;
+}
+
+/**
+ * Reads a template DIRECTORY into the {@link TemplateBundle} the unified renderer
+ * needs (manifest + demo + per-screen layouts + css). Files are read, never
+ * executed (NFR-02). Shared by every author-facing preview endpoint so there is
+ * ONE bundle reader — no per-host copy. `sourceDir` is resolved by the caller via
+ * {@link module:server/services/template-dir} (built-in or uploaded path).
+ */
+export async function readTemplateBundle(sourceDir: string): Promise<TemplateBundle> {
+  const entries = await readDirEntries(sourceDir);
+  const read = (rel: string): string | undefined => entries.get(rel)?.toString("utf8");
+
+  const manifestRaw = read("manifest.json");
+  const manifest = (manifestRaw ? JSON.parse(manifestRaw) : {}) as Record<string, unknown>;
+  const m = manifest as {
+    layouts?: Record<string, string>;
+    assets?: { styles?: string[] };
+    preview?: { demoData?: string };
+  };
+
+  const layouts: Record<string, string> = {};
+  for (const [key, rel] of Object.entries(m.layouts ?? {})) {
+    if (key === "shell") continue; // per-screen rendering uses the inner layouts
+    const html = read(rel);
+    if (html != null) layouts[key] = html;
+  }
+
+  let demo: unknown = null;
+  const demoRel = m.preview?.demoData;
+  if (demoRel) {
+    const raw = read(demoRel);
+    if (raw != null) {
+      try {
+        demo = JSON.parse(raw);
+      } catch {
+        demo = null;
+      }
+    }
+  }
+
+  const css = (m.assets?.styles ?? [])
+    .map((rel) => read(rel))
+    .filter((s): s is string => s != null)
+    .join("\n");
+
+  return { manifest, demo, layouts, css };
+}
+
 /**
  * Packs a template root directory into a ZIP buffer for export (PRD-3 §7
  * `GET /export`). Works for both built-in and uploaded template directories.
