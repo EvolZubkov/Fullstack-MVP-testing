@@ -86,5 +86,13 @@
   "quota-acceptance-test": {
     "code": "20260605_Quota_acceptance",
     "createdAt": "20260605"
+  },
+  "acceptance-test": {
+    "code": "20260608_Acceptance_test",
+    "createdAt": "20260608"
+  },
+  "prd4-acceptance": {
+    "code": "20260608_PRD_4_adaptive_router_by_topics",
+    "createdAt": "20260608"
   }
 }
