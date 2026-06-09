@@ -863,19 +863,27 @@ Core вставляет:
 
 | Page kind | Назначение | Специфичный layout | Fallback |
 | --- | --- | --- | --- |
-| `start` | Стартовая страница теста | `layouts.start` | `layouts.content` |
-| `content.intro` | Введение перед темой/разделом | `layouts["content.intro"]` | `layouts.content` |
+| `start` | Стартовый экран теста (лендинг) — тест-уровневый, всегда | `layouts.start` | `layouts.content` |
+| `content.intro` | «Введение раздела» (`before_topic`) — по одной на тему | `layouts["content.intro"]` | `layouts.content` |
 | `content.info` | Информационная/учебная страница | `layouts["content.info"]` | `layouts.content` |
-| `content.summary` | Итог темы/раздела | `layouts["content.summary"]` | `layouts.content` |
+| `content.summary` | «Итог раздела» (`after_topic`) — по одной на тему; показывает результат РАЗДЕЛА | `layouts["content.summary"]` | `layouts.content` |
+| `content.router` | Меню тем (`router_by_topics`) | `layouts["content.router"]` | `layouts.content` |
+| `results` | «Итоги теста» — итоговый результат всего теста, тест-уровневый, всегда | `layouts.results` | — |
 | `content.html` | Санитизированный HTML-блок | `layouts["content.html"]` | `layouts.content` |
 | `system.blocked` | Системная страница блокировки | `systemPages[].layout` | `layouts.content` |
+
+`start` и `results` — тест-уровневые системные экраны (по одному на тест, в любом режиме);
+`content.intro` / `content.summary` — закладки раздела (по одной на тему, только в режимах
+по темам). Семантика `variant.kind` и жизненный цикл — [PRD-1 §4.3](prd-1/templates-content-pages.md).
 
 ### 8.2.1 `contentTemplates[]`
 
 `manifest.contentTemplates[]` объявляет скелеты страниц, доступные автору при выбранном шаблоне.
 Один SCORM-шаблонный пакет может содержать несколько content templates. Это штатный механизм для
-вариантов страниц: например несколько `content.info`, несколько `content.summary` или разные
-варианты стартовой страницы.
+вариантов страниц: например несколько `content.info`, несколько `content.summary`, разные варианты
+стартового экрана (`start`) или итогов теста (`results`). Стандартный (`default`) шаблон обязан
+объявить хотя бы по одному варианту каждого системного `kind`: `start`, `intro`, `summary`,
+`results`, `router`, `questions` (он — системный fallback, [PRD-1 §4.3.2](prd-1/templates-content-pages.md)).
 
 Множественность работает так:
 
