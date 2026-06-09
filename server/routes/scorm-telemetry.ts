@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import crypto from "crypto";
 import { storage } from "../storage";
-import { requireAuthor } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 import { logger } from "../logger";
 
 const router = Router();
@@ -261,7 +261,7 @@ router.post("/scorm-telemetry/finish", async (req: Request, res: Response) => {
 // ============================================
 
 // GET /api/scorm-packages - Список пакетов
-router.get("/scorm-packages", requireAuthor, async (req: Request, res: Response) => {
+router.get("/scorm-packages", requirePermission("scormPackages.manage"), async (req: Request, res: Response) => {
   try {
     const packages = await storage.getScormPackages();
     
@@ -287,7 +287,7 @@ router.get("/scorm-packages", requireAuthor, async (req: Request, res: Response)
 });
 
 // GET /api/scorm-packages/:id - Детали пакета
-router.get("/scorm-packages/:id", requireAuthor, async (req: Request, res: Response) => {
+router.get("/scorm-packages/:id", requirePermission("scormPackages.manage"), async (req: Request, res: Response) => {
   try {
     const pkg = await storage.getScormPackage(req.params.id);
     if (!pkg) {
@@ -307,7 +307,7 @@ router.get("/scorm-packages/:id", requireAuthor, async (req: Request, res: Respo
 });
 
 // POST /api/scorm-packages/:id/regenerate-key - Перегенерация ключа
-router.post("/scorm-packages/:id/regenerate-key", requireAuthor, async (req: Request, res: Response) => {
+router.post("/scorm-packages/:id/regenerate-key", requirePermission("scormPackages.manage"), async (req: Request, res: Response) => {
   try {
     const pkg = await storage.getScormPackage(req.params.id);
     if (!pkg) {
@@ -332,7 +332,7 @@ router.post("/scorm-packages/:id/regenerate-key", requireAuthor, async (req: Req
 });
 
 // POST /api/scorm-packages/:id/deactivate - Деактивация пакета
-router.post("/scorm-packages/:id/deactivate", requireAuthor, async (req: Request, res: Response) => {
+router.post("/scorm-packages/:id/deactivate", requirePermission("scormPackages.manage"), async (req: Request, res: Response) => {
   try {
     const pkg = await storage.getScormPackage(req.params.id);
     if (!pkg) {
@@ -352,7 +352,7 @@ router.post("/scorm-packages/:id/deactivate", requireAuthor, async (req: Request
 });
 
 // POST /api/scorm-packages/:id/activate - Активация пакета
-router.post("/scorm-packages/:id/activate", requireAuthor, async (req: Request, res: Response) => {
+router.post("/scorm-packages/:id/activate", requirePermission("scormPackages.manage"), async (req: Request, res: Response) => {
   try {
     const pkg = await storage.getScormPackage(req.params.id);
     if (!pkg) {

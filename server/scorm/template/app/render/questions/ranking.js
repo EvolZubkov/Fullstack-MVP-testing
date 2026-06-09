@@ -12,11 +12,13 @@ function renderRankingQuestionInput(q, answer, locked, correct, shuffleMapping) 
   userOrder.forEach(function(itemIdx, pos){
     var text = (items[itemIdx] != null) ? String(items[itemIdx]) : ('#' + itemIdx);
 
+    // Shared DnD contract: data-drag/data-drop = position (the shared pointer engine
+    // reorders by from→to). data-qid/data-item are kept for the feedback highlighter.
     html += ''
       + '<div class="rank-item rank-draggable"'
-      + ' draggable="true"'
+      + ' data-drag="' + pos + '"'
+      + ' data-drop="' + pos + '"'
       + ' data-qid="' + escapeHtml(q.id) + '"'
-      + ' data-pos="' + pos + '"'
       + ' data-item="' + itemIdx + '">'
       +   '<span class="rank-grip">' + burgerSvgInline() + '</span>'
       +   '<span class="rank-text">' + escapeHtml(text) + '</span>'

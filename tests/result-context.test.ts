@@ -1,0 +1,137 @@
+// @vitest-environment jsdom
+/**
+ * @module tests/result-context
+ *
+ * End-to-end verification of the results bridge (PRD-12 task 2-4): the server
+ * context builder (server/services/result-context) turns a computed AttemptResult
+ * into the runtime context, which the unified renderer (shared/template/render-screen)
+ * draws against the REAL default results layout. Proves resultJson → context →
+ * correct DOM headless, before wiring any host.
+ */
+
+import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { buildResultContext, buildAdaptiveResultContext } from "../server/services/result-context";
+import { renderScreenInto } from "../shared/template/render-screen";
+import type { AttemptResult } from "../shared/schema";
+
+const resultsLayout = fs.readFileSync(
+  path.join(process.cwd(), "server", "scorm", "templates", "default", "layouts", "results.html"),
+  "utf8",
+);
+
+const attemptResult: AttemptResult = {
+  totalCorrect: 6,
+  totalQuestions: 10,
+  overallPercent: 60,
+  totalEarnedPoints: 6,
+  totalPossiblePoints: 10,
+  overallPassed: false,
+  topicResults: [
+    { topicId: "t1", topicName: "Тема A", correct: 4, total: 5, percent: 80, earnedPoints: 4, possiblePoints: 5, passed: true, passRule: null, recommendedCourses: [] },
+    { topicId: "t2", topicName: "Тема B", correct: 2, total: 5, percent: 40, earnedPoints: 2, possiblePoints: 5, passed: false, passRule: null, recommendedCourses: [] },
+  ],
+};
+
+describe("buildResultContext (unit)", () => {
+  const ctx = buildResultContext(attemptResult, "Демо-тест");
+
+  it("maps score + presentational fields", () => {
+    expect(ctx.course.title).toBe("Демо-тест");
+    expect(ctx.result.scorePercent).toBe(60);
+    expect(ctx.result.passed).toBe(false);
+    expect(ctx.result.passClass).toBe("is-fail");
+    expect(ctx.result.statusLabel).toBe("Не пройден");
+  });
+
+  it("maps per-topic rows with Core-prepared class + label", () => {
+    const topics = ctx.result.topicResults as Array<Record<string, unknown>>;
+    expect(topics).toHaveLength(2);
+    expect(topics[0]).toMatchObject({ topicName: "Тема A", percent: 80, passClass: "is-pass", statusLabel: "Пройдено" });
+    expect(topics[1]).toMatchObject({ topicName: "Тема B", percent: 40, passClass: "is-fail", statusLabel: "Не пройдено" });
+  });
+});
+
+describe("buildResultContext → render real results.html (e2e)", () => {
+  const ctx = buildResultContext(attemptResult, "Демо-тест");
+  const root = document.createElement("div");
+  renderScreenInto(root, { layout: resultsLayout, context: ctx });
+
+  it("binds title + score from the built context", () => {
+    expect(root.querySelector('[data-path="course.title"]')?.textContent).toBe("Демо-тест");
+    expect(root.querySelector('[data-path="result.scorePercent"]')?.textContent).toBe("60");
+  });
+
+  it("renders the fail branch and the per-topic rows", () => {
+    expect(root.textContent).toContain("Тест не пройден");
+    expect(root.textContent).toContain("Тема A");
+    expect(root.textContent).toContain("Тема B");
+    const widths = Array.from(root.querySelectorAll("[data-bar-width]")).map((b) => b.getAttribute("data-bar-width"));
+    expect(widths).toContain("80");
+    expect(widths).toContain("40");
+  });
+
+  it("prepares the ring offset for the score ring", () => {
+    expect(root.querySelector(".results-ring")?.getAttribute("data-ring-offset")).toBeTruthy();
+  });
+});
+
+const adaptiveLayout = fs.readFileSync(
+  path.join(process.cwd(), "server", "scorm", "templates", "default", "layouts", "results.adaptive.html"),
+  "utf8",
+);
+
+const adaptiveResult = {
+  mode: "adaptive",
+  overallPassed: true,
+  topicResults: [
+    {
+      topicId: "a",
+      topicName: "Внутренние коммуникации",
+      achievedLevelIndex: 1,
+      achievedLevelName: "Средний",
+      feedback: "Ваш уровень знаний по данной теме — средний",
+      recommendedLinks: [{ title: "Курс по коммуникациям", url: "https://example.test/comm" }],
+    },
+    {
+      topicId: "b",
+      topicName: "Безопасность",
+      achievedLevelIndex: null,
+      achievedLevelName: null,
+      feedback: "",
+      recommendedLinks: [],
+    },
+  ],
+};
+
+describe("buildAdaptiveResultContext → render real results.adaptive.html (e2e)", () => {
+  const ctx = buildAdaptiveResultContext(adaptiveResult, "Адаптивный тест");
+  const root = document.createElement("div");
+  renderScreenInto(root, { layout: adaptiveLayout, context: ctx });
+
+  it("renders the neutral hero with the test title", () => {
+    expect(root.textContent).toContain("Тест завершён");
+    expect(root.querySelector('[data-path="course.title"]')?.textContent).toBe("Адаптивный тест");
+  });
+
+  it("renders achieved level pills per topic", () => {
+    expect(root.textContent).toContain("Внутренние коммуникации");
+    expect(root.textContent).toContain("Средний");
+    expect(root.querySelector(".results-pill.is-info")).not.toBeNull(); // achieved
+    // not-achieved topic -> fallback label + is-fail pill
+    expect(root.textContent).toContain("Безопасность");
+    expect(root.textContent).toContain("Не достигнут");
+    expect(root.querySelector(".results-pill.is-fail")).not.toBeNull();
+  });
+
+  it("renders feedback and recommended links only where present (nested each)", () => {
+    expect(root.textContent).toContain("Ваш уровень знаний по данной теме — средний");
+    const link = root.querySelector(".topic-link") as HTMLAnchorElement | null;
+    expect(link?.getAttribute("href")).toBe("https://example.test/comm");
+    expect(link?.textContent).toContain("Курс по коммуникациям");
+    // exactly one feedback block and one link (second topic has neither)
+    expect(root.querySelectorAll(".topic-feedback")).toHaveLength(1);
+    expect(root.querySelectorAll(".topic-link")).toHaveLength(1);
+  });
+});

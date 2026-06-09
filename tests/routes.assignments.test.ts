@@ -17,6 +17,8 @@ import session from "express-session";
 const { storageMock, sendEmailMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(),
+    getAssignment: vi.fn(),
+    getUserRoles: vi.fn(),
     getTestAssignments: vi.fn(),
     createTestAssignment: vi.fn(),
     deleteTestAssignment: vi.fn(),
@@ -95,6 +97,10 @@ function asLearner(req: request.Test) { return req.set("x-test-user", "learner1"
 beforeEach(() => {
   vi.resetAllMocks();
 
+  storageMock.getUserRoles.mockResolvedValue(["administrator"]);
+  storageMock.getTest.mockResolvedValue(dbTest);
+  storageMock.getAssignment.mockResolvedValue(dbAssignment);
+
   storageMock.getUser.mockImplementation((id: string) => {
     if (id === "author1") return Promise.resolve(authorUser);
     if (id === "learner1") return Promise.resolve(learnerUser);
@@ -145,6 +151,7 @@ describe("GET /api/tests/:id/assignments", () => {
     storageMock.getTest.mockResolvedValue(dbTest);
     storageMock.getTestAssignments.mockResolvedValue([groupAssignment]);
     storageMock.getGroup.mockResolvedValue(dbGroup);
+    storageMock.getGroupUsers.mockResolvedValue([]); // enrichment fetches group members
     storageMock.getAssignmentAccessTokensByAssignment.mockResolvedValue([]);
 
     const res = await asAuthor(request(makeApp()).get("/api/tests/test1/assignments"));

@@ -6,6 +6,8 @@ import { buildMetadataXml } from "./builders/metadata";
 import { escapeXml } from "./utils/escape";
 import { readAsset } from "./assets/read-asset";
 import { extractEmbeddedMediaIntoAssets } from "./builders/media-assets";
+import { copyDirToFiles, getTemplatesRootDir } from "./builders/template-copy";
+import { getSharedRuntimeBundle } from "./builders/shared-runtime";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -70,8 +72,7 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
 
   const indexHtml = readAsset("index.html").replace("__TITLE__", escapeXml(data.test.title));
   const runtimeJs = readAsset("runtime.js");
-  const stylesCss = readAsset("styles.css");
-  
+
   const testObj = JSON.parse(testJson);
   const { testObj: patchedTestObj, assets } = extractEmbeddedMediaIntoAssets(testObj);
 
@@ -113,9 +114,69 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     "app/state.js",
   ]);
 
+  const templateCoreJs = readOneOf([
+    "app/templateCore.js",
+  ]);
+
+  const templateLoaderJs = readOneOf([
+    "app/templateLoader.js",
+  ]);
+
+  const contentFlowJs = readOneOf([
+    "app/contentFlow.js",
+  ]);
+
+  // PRD-4 v1.1 Phase 4c — router_by_topics state machine. Loaded for every
+  // package (idempotent: no-op when flowPolicy.mode !== "router_by_topics").
+  const routerFlowJs = readOneOf([
+    "app/routerFlow.js",
+  ]);
+
+  // PRD-4 v1.1 Phase 4d — single-topic adaptive session wrapper. Loaded for
+  // every package; only used when mode='adaptive' AND a per-topic session is
+  // launched by routerFlow.selectRouterTopic / contentFlow (linear_by_topics).
+  const adaptiveSessionJs = readOneOf([
+    "app/adaptiveSession.js",
+  ]);
+
+  const renderersJs = readOneOf([
+    "app/render/renderers.js",
+  ]);
+
+  const contentPageJs = readOneOf([
+    "app/render/contentPage.js",
+  ]);
+
   const startPageJs = readOneOf([
     "app/render/startPage.js",
   ]);
+
+  // Scale engine — plain-JS port of shared/scales/engine (PRD-5). Joined before
+  // resultsPage.js, which computes scales (scale.*) before result variables.
+  const scaleEngineJs = readOneOf([
+    "app/scales/engine.js",
+  ]);
+
+  // Graded-answer scoring engine — plain-JS port of shared/scoring/engine
+  // (PRD-10). Joined before resultsPage.js, whose checkAnswer delegates to
+  // ScoringEngine.scoreAnswer for weighted/tiered scoring.
+  const scoringEngineJs = readOneOf([
+    "app/scoring/engine.js",
+  ]);
+
+  // Result-variable formula DSL — plain-JS port of shared/formula (PRD-2). Must
+  // be joined before resultsPage.js, which evaluates formulas via FormulaDSL.
+  const formulaJs = readOneOf([
+    "app/dsl/formula.js",
+  ]);
+
+  // PRD-6 retake gate — plain-JS ports of shared/eligibility/* (engine + plugins)
+  // and the runtime gate. Bundled for every package; the gate only runs when the
+  // test carries a retake policy (RetakeGate.isGated), so unpolicied packages are
+  // unaffected at runtime (the bundled bytes differ — see test-json conditional export).
+  const eligibilityEngineJs = readOneOf(["app/eligibility/engine.js"]);
+  const eligibilityPluginsJs = readOneOf(["app/eligibility/plugins.js"]);
+  const eligibilityGateJs = readOneOf(["app/eligibility/gate.js"]);
 
   const resultsPageJs = readOneOf([
     "app/render/resultsPage.js",
@@ -175,14 +236,25 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     ? tryReadAsset(["app/telemetry/telemetry.js"])
     : "";
 
+  // PRD-12 (2-7): shared template runtime bundled from `@shared` and exposed as the
+  // `TBTemplate` global — the same renderer the web host uses. Prepended so every
+  // package part can consume it.
+  const sharedRuntimeJs = await getSharedRuntimeBundle();
+
   let appJs = joinJsParts([
+    sharedRuntimeJs,
     escapeHtmlJs,
-    telemetryJs, 
+    telemetryJs,
     shuffleJs,
     suspendAttemptsJs,
     sessionRecoveryJs,
     testDataJs,
     stateJs,
+    templateCoreJs,
+    templateLoaderJs,
+    contentFlowJs,
+    routerFlowJs,
+    renderersJs,
     timerJs,
     qSingleJs,
     qMultipleJs,
@@ -194,14 +266,22 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     rankingDndJs,
     startPageJs,
     viewResultsJs,
+    scaleEngineJs,
+    scoringEngineJs,
+    formulaJs,
     resultsPageJs,
     questionMediaJs,
     pdfExportJs,
     adaptiveJs,
     adaptiveRenderJs,
+    adaptiveSessionJs,
+    contentPageJs,
     mainRenderJs,
     appMain,
     feedbackJs,
+    eligibilityEngineJs,
+    eligibilityPluginsJs,
+    eligibilityGateJs,
     bootstrapMainJs,
   ]).replace("__TEST_JSON_B64__", testJsonB64);
   
@@ -226,13 +306,55 @@ export async function generateScormPackage(data: ExportData): Promise<Buffer> {
     }
   });
 
+  const templateId = data.designSettings?.templateId ?? "default";
+  // Resolve the template's files directory. The route passes `data.templateDir`
+  // (built-in or uploaded PRD-3 path, resolved via the templates table). Without
+  // it, fall back to the built-in convention `server/scorm/templates/<id>` (and
+  // `default` when that id has no shipped directory) — this keeps the exporter
+  // usable standalone (acceptance fixtures pass no templateDir).
+  const builtinRoot = getTemplatesRootDir();
+  const templateDir =
+    data.templateDir && fs.existsSync(data.templateDir)
+      ? data.templateDir
+      : path.join(builtinRoot, fs.existsSync(path.join(builtinRoot, templateId)) ? templateId : "default");
+
+  const templateFiles: Record<string, string | Buffer> = {};
+  if (fs.existsSync(templateDir)) {
+    copyDirToFiles(templateDir, "template", templateFiles);
+  } else {
+    logger.warn(`Template directory not found for "${templateId}" (${templateDir})`, "scorm-export");
+  }
+  const manifestHrefs = mediaHrefs.concat(Object.keys(templateFiles));
+
+  // PRD-12 CSS unification: the package stylesheet is the SINGLE template CSS source
+  // (theme.css tokens + base.css), the SAME files the web host loads — no separate
+  // hand-maintained runtime stylesheet to drift out of sync.
+  const stylesDir = path.join(templateDir, "styles");
+  const readStyle = (f: string): string => {
+    try {
+      return fs.readFileSync(path.join(stylesDir, f), "utf8");
+    } catch {
+      return "";
+    }
+  };
+  const stylesCss = readStyle("theme.css") + "\n" + readStyle("base.css");
+
+  // Vendored PDF-export libraries (no CDN — the package must work offline inside the LMS).
+  // html2canvas + jsPDF are shipped in the package (from server/scorm/assets/vendor/) and
+  // loaded by index.html as window globals consumed by app/utils/pdfExport.js.
+  const html2canvasJs = readAsset("vendor/html2canvas.min.js");
+  const jspdfJs = readAsset("vendor/jspdf.umd.min.js");
+
   const files: Record<string, string | Buffer> = {
-    "imsmanifest.xml": buildManifest(data.test, data, mediaHrefs), 
+    "imsmanifest.xml": buildManifest(data.test, data, manifestHrefs),
     "metadata.xml": buildMetadataXml(data.test),
     "index.html": indexHtml,
     "styles.css": stylesCss,
     "runtime.js": runtimeJs,
     "app.js": appJs,
+    "vendor/html2canvas.min.js": html2canvasJs,
+    "vendor/jspdf.umd.min.js": jspdfJs,
+    ...templateFiles,
   };
   
   // Добавляем подложки и логотипы для PDF (только в assets/media/)

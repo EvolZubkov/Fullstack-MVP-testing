@@ -1,10 +1,33 @@
 import { Router, Request, Response } from "express";
 import { createHash } from "crypto";
 import { logger } from "../logger";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import {
+  addJsonSheet,
+  readWorkbookFromBuffer,
+  sheetToObjects,
+  workbookToBuffer,
+} from "../utils/excel";
 import { storage } from "../storage";
-import { requireAuth, requireAuthor } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
+import { questionScoringSchema, type QuestionScoring } from "@shared/schema";
+import { normalizeTags } from "@shared/tags";
+
+// PRD-10: validate the optional graded-scoring config (FR-13). Null/undefined =
+// exact match (default); a present config must satisfy questionScoringSchema.
+function validateScoring(
+  scoringJson: unknown,
+  res: Response,
+): scoringJson is QuestionScoring | null | undefined {
+  if (scoringJson == null) return true;
+  const parsed = questionScoringSchema.safeParse(scoringJson);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid scoring config", details: parsed.error.flatten() });
+    return false;
+  }
+  return true;
+}
 
 // SHA-256 от type + prompt + нормализованные варианты ответов
 function computeQuestionHash(type: string, prompt: string, dataJson: unknown): string {
@@ -35,12 +58,15 @@ interface CreateQuestionBody {
   points?: number;
   difficulty?: number;
   mediaUrl?: string;
-  mediaType?: string;
+  mediaType?: "image" | "audio" | "video" | null;
   shuffleAnswers?: boolean;
   feedback?: string;
-  feedbackMode?: "general" | "per_answer";
+  feedbackMode?: "general" | "conditional";
   feedbackCorrect?: string;
   feedbackIncorrect?: string;
+  scoringJson?: QuestionScoring | null;
+  /** PRD-11 §3a: sub-topic tags; normalized on save (trim/collapse, dedup, cap). */
+  tags?: string[];
 }
 
 interface UpdateQuestionBody extends Partial<CreateQuestionBody> {}
@@ -75,7 +101,7 @@ const typeFromExcel: Record<string, string> = {
 // ============================================
 // GET /api/questions - Список вопросов
 // ============================================
-router.get("/", requireAuth, async (_req: Request, res: Response) => {
+router.get("/", requirePermission("questions.manage"), async (_req: Request, res: Response) => {
   try {
     const questions = await storage.getQuestions();
     const topics = await storage.getTopics();
@@ -98,7 +124,7 @@ router.get("/", requireAuth, async (_req: Request, res: Response) => {
 // ============================================
 router.post(
   "/",
-  requireAuthor,
+  requirePermission("questions.manage"),
   async (req: Request<{}, {}, CreateQuestionBody>, res: Response) => {
     try {
       const {
@@ -116,6 +142,8 @@ router.post(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
+        scoringJson,
+        tags,
       } = req.body;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
@@ -123,6 +151,8 @@ router.post(
       if (!topicId || !type || !prompt) {
         return res.status(400).json({ error: "TopicId, type and prompt required" });
       }
+
+      if (!validateScoring(scoringJson, res)) return;
 
       const question = await storage.createQuestion({
         topicId,
@@ -139,7 +169,9 @@ router.post(
         feedbackMode: feedbackMode || "general",
         feedbackCorrect: feedbackCorrect || null,
         feedbackIncorrect: feedbackIncorrect || null,
-      });
+        scoringJson: scoringJson ?? null,
+        tags: normalizeTags(Array.isArray(tags) ? tags : []),
+      } as any);
 
       res.status(201).json(question);
     } catch (error) {
@@ -154,8 +186,8 @@ router.post(
 // ============================================
 router.put(
   "/:id",
-  requireAuthor,
-  async (req: Request<IdParams, {}, UpdateQuestionBody>, res: Response) => {
+  requirePermission("questions.manage"),
+  async (req: Request, res: Response) => {
     try {
       const {
         topicId,
@@ -172,9 +204,13 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
-      } = req.body;
+        scoringJson,
+        tags,
+      } = req.body as UpdateQuestionBody;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
+
+      if (!validateScoring(scoringJson, res)) return;
 
       const updated = await storage.updateQuestion(req.params.id, {
         topicId,
@@ -191,7 +227,10 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
-      });
+        scoringJson,
+        // Only touch tags when the client sent them; otherwise leave unchanged.
+        tags: Array.isArray(tags) ? normalizeTags(tags) : undefined,
+      } as any);
 
       if (!updated) {
         return res.status(404).json({ error: "Question not found" });
@@ -210,8 +249,8 @@ router.put(
 // ============================================
 router.delete(
   "/:id",
-  requireAuthor,
-  async (req: Request<IdParams>, res: Response) => {
+  requirePermission("questions.manage"),
+  async (req: Request, res: Response) => {
     try {
       const success = await storage.deleteQuestion(req.params.id);
       if (!success) {
@@ -230,7 +269,7 @@ router.delete(
 // ============================================
 router.post(
   "/bulk-delete",
-  requireAuthor,
+  requirePermission("questions.manage"),
   async (req: Request<{}, {}, BulkDeleteBody>, res: Response) => {
     try {
       const { ids } = req.body;
@@ -251,8 +290,8 @@ router.post(
 // ============================================
 router.post(
   "/:id/duplicate",
-  requireAuthor,
-  async (req: Request<IdParams>, res: Response) => {
+  requirePermission("questions.manage"),
+  async (req: Request, res: Response) => {
     try {
       const result = await (storage as any).duplicateQuestion(req.params.id);
       if (!result) {
@@ -271,7 +310,7 @@ router.post(
 // ============================================
 router.get(
   "/export",
-  requireAuthor,
+  requirePermission("questions.importExport"),
   async (req: Request<{}, {}, {}, ExportQuery>, res: Response) => {
     try {
       let questions = await storage.getQuestions();
@@ -362,16 +401,10 @@ router.get(
         };
       });
 
-      const ws = XLSX.utils.json_to_sheet(rows);
-      ws["!cols"] = [
-        { wch: 36 }, { wch: 25 }, { wch: 18 }, { wch: 50 }, { wch: 8 },
-        { wch: 12 }, { wch: 60 }, { wch: 25 }, { wch: 15 }, { wch: 40 },
-      ];
+      const wb = new ExcelJS.Workbook();
+      addJsonSheet(wb, "Вопросы", rows, [36, 25, 18, 50, 8, 12, 60, 25, 15, 40]);
 
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Вопросы");
-
-      const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      const buffer = await workbookToBuffer(wb);
 
       const timestamp = new Date().toISOString().slice(0, 10);
       let filename = `questions_${timestamp}.xlsx`;
@@ -398,7 +431,7 @@ router.get(
 // ============================================
 router.post(
   "/import",
-  requireAuthor,
+  requirePermission("questions.importExport"),
   memoryUpload.single("file"),
   async (req: Request, res: Response) => {
     try {
@@ -406,10 +439,10 @@ router.post(
         return res.status(400).json({ error: "File required" });
       }
 
-      const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
+      const workbook = await readWorkbookFromBuffer(req.file.buffer);
+      const sheet = workbook.worksheets[0];
+      if (!sheet) return res.status(400).json({ error: "File is empty" });
+      const rows = sheetToObjects(sheet);
 
       const topics = await storage.getTopics();
       // Нормализуем ключ: убираем все виды пробелов (включая \u00a0, \r и т.д.)
@@ -564,7 +597,7 @@ router.post(
                 shuffleAnswers,
                 feedback: String(row["Обратная связь"] || "").trim() || null,
                 contentHash,
-              });
+              } as any);
               results.updated++;
               continue;
             }
@@ -589,7 +622,7 @@ router.post(
             shuffleAnswers,
             feedback: String(row["Обратная связь"] || "").trim() || null,
             contentHash,
-          });
+          } as any);
 
           // Добавляем в кэш чтобы не дублировать внутри одного файла
           existingHashes.add(contentHash);

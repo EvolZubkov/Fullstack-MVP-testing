@@ -1,14 +1,32 @@
 import { Router } from "express";
 import { logger } from "../logger";
 import { storage } from "../storage";
-import { requireLearner } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 import { checkAnswer } from "../utils/check-answer";
-import type { TestVariant, AttemptResult, TopicResult, PassRule } from "@shared/schema";
+import { drawSection } from "@shared/draw/blueprint";
+import { loadScoringConfig } from "../services/scoring-config";
+import { computeAttemptResult } from "../services/result-compute";
+import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
+import { readResultsRenderPayload } from "../services/template-render";
+import { resolveTemplateDir } from "../services/template-dir";
+import type { QuestionType } from "@shared/scales/engine";
+import type { TestVariant, AttemptResult, TopicResult, PassRule, RetakePolicy } from "@shared/schema";
 
 const router = Router();
 
+/** Fisher-Yates in-place shuffle for the server-side variant draw (PRD-11). */
+function shuffleInPlace<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = tmp;
+  }
+  return arr;
+}
+
 // GET /api/learner/tests - Тесты для ученика
-router.get("/learner/tests", requireLearner, async (req, res) => {
+router.get("/learner/tests", requirePermission("attempts.self.read"), async (req, res) => {
   try {
     const assignedTests = await storage.getAssignedTestsForUser(req.session.userId!);
 
@@ -24,14 +42,34 @@ router.get("/learner/tests", requireLearner, async (req, res) => {
         }));
 
         const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
-        const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
+        const completed = userAttempts.filter((a) => a.finishedAt !== null);
+        const completedAttempts = completed.length;
         const inProgressAttempt = userAttempts.find((a) => a.finishedAt === null);
+
+        // Resume position from the in-progress variant (PRD-12 §10 start parity):
+        // index = saved currentIndex, total = drawn question count.
+        let resumeIndex: number | null = null;
+        let resumeTotal: number | null = null;
+        if (inProgressAttempt) {
+          const v = inProgressAttempt.variantJson as { currentIndex?: number; sections?: Array<{ questionIds?: string[] }> } | null;
+          resumeIndex = v?.currentIndex || 0;
+          resumeTotal = Array.isArray(v?.sections)
+            ? v!.sections.reduce((n, s) => n + (s.questionIds?.length || 0), 0)
+            : 0;
+        }
+        // Most recent completed attempt — target of the start screen's "Мой результат".
+        const lastCompleted = completed
+          .slice()
+          .sort((a, b) => new Date(b.finishedAt as Date).getTime() - new Date(a.finishedAt as Date).getTime())[0];
 
         return {
           ...test,
           sections: sectionsWithNames,
           completedAttempts,
           inProgressAttemptId: inProgressAttempt?.id || null,
+          resumeIndex,
+          resumeTotal,
+          lastCompletedAttemptId: lastCompleted?.id || null,
         };
       })
     );
@@ -44,19 +82,32 @@ router.get("/learner/tests", requireLearner, async (req, res) => {
 });
 
 // POST /api/tests/:testId/attempts/start - Начать обычный тест
-router.post("/tests/:testId/attempts/start", requireLearner, async (req, res) => {
+router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.testId);
     if (!test) {
       return res.status(404).json({ error: "Test not found" });
     }
 
-    // Проверяем ограничение попыток
-    if (test.maxAttempts !== null) {
+    // Attempt gates: retake cooldown (PRD-6, web) + max attempts. Load the user's
+    // attempts once and reuse for both checks.
+    const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
+    if (retakePolicy?.enabled === true || test.maxAttempts !== null) {
       const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
-      const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
+      const completed = userAttempts.filter((a) => a.finishedAt !== null);
 
-      if (completedAttempts >= test.maxAttempts) {
+      // PRD-12: retake cooldown — date sourced from the server's own completed
+      // attempts (no LMS plugin; the web is the authoritative date source).
+      const gate = decideRetake(
+        retakePolicy,
+        lastCompletedAttemptDate(completed.map((a) => a.finishedAt)),
+        toIsoDateUTC(new Date()),
+      );
+      if (!gate.allowed) {
+        return res.status(403).json({ error: "Retake cooldown active", code: "RETAKE_COOLDOWN", ...gate });
+      }
+
+      if (test.maxAttempts !== null && completed.length >= test.maxAttempts) {
         return res.status(403).json({ error: "Attempts exhausted", code: "ATTEMPTS_EXHAUSTED" });
       }
     }
@@ -70,14 +121,18 @@ router.post("/tests/:testId/attempts/start", requireLearner, async (req, res) =>
 
     for (const section of sections) {
       const questions = await storage.getQuestionsByTopic(section.topicId);
-      const shuffled = questions.sort(() => Math.random() - 0.5);
-      const selected = shuffled.slice(0, section.drawCount);
+      // PRD-11: stratified draw by tag quotas when a blueprint is set; otherwise
+      // a uniform draw (FR-02). Shared with the SCORM runtime via shared/draw.
+      const { selected } = drawSection(questions, section.drawCount, section.drawBlueprintJson, shuffleInPlace);
       const qIds = selected.map((q) => q.id);
 
       variant.sections.push({
         topicId: section.topicId,
         topicName: topicMap.get(section.topicId) || "Unknown",
         questionIds: qIds,
+        // PRD-4 v1.1 §3.2: carry the per-topic time budget so the web runtime
+        // can run a per-topic timer (parity with the SCORM package).
+        timeLimitMinutes: section.timeLimitMinutes ?? null,
       });
 
       allQuestionIds.push(...qIds);
@@ -114,19 +169,32 @@ router.post("/tests/:testId/attempts/start", requireLearner, async (req, res) =>
 });
 
 // POST /api/tests/:testId/attempts/start-adaptive - Начать адаптивный тест
-router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req, res) => {
+router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempts.take"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.testId);
     if (!test) {
       return res.status(404).json({ error: "Test not found" });
     }
 
-    // Проверяем ограничение попыток
-    if (test.maxAttempts !== null) {
+    // Attempt gates: retake cooldown (PRD-6, web) + max attempts. Load the user's
+    // attempts once and reuse for both checks.
+    const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
+    if (retakePolicy?.enabled === true || test.maxAttempts !== null) {
       const userAttempts = await storage.getAttemptsByUserAndTest(req.session.userId!, test.id);
-      const completedAttempts = userAttempts.filter((a) => a.finishedAt !== null).length;
+      const completed = userAttempts.filter((a) => a.finishedAt !== null);
 
-      if (completedAttempts >= test.maxAttempts) {
+      // PRD-12: retake cooldown — date sourced from the server's own completed
+      // attempts (no LMS plugin; the web is the authoritative date source).
+      const gate = decideRetake(
+        retakePolicy,
+        lastCompletedAttemptDate(completed.map((a) => a.finishedAt)),
+        toIsoDateUTC(new Date()),
+      );
+      if (!gate.allowed) {
+        return res.status(403).json({ error: "Retake cooldown active", code: "RETAKE_COOLDOWN", ...gate });
+      }
+
+      if (test.maxAttempts !== null && completed.length >= test.maxAttempts) {
         return res.status(403).json({ error: "Attempts exhausted", code: "ATTEMPTS_EXHAUSTED" });
       }
     }
@@ -139,6 +207,12 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
     const adaptiveLevels = await storage.getAdaptiveLevelsByTest(test.id);
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
+    // PRD-4 v1.1 §3.2: per-topic time budgets live on test_sections; join them
+    // onto the adaptive topics by topicId so the runtime can run a topic timer.
+    const adaptiveSections = await storage.getTestSections(test.id);
+    const sectionLimitMap = new Map(
+      adaptiveSections.map((s) => [s.topicId, s.timeLimitMinutes ?? null]),
+    );
 
     if (adaptiveSettings.length === 0) {
       return res.status(400).json({ error: "Adaptive test has no settings configured" });
@@ -190,6 +264,8 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
         levelsState,
         finalLevelIndex: null,
         status: "in_progress",
+        // Per-topic time budget (null = no limit); read by the topic timer.
+        timeLimitMinutes: sectionLimitMap.get(topicSettings.topicId) ?? null,
       });
     }
 
@@ -237,6 +313,8 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
             id: firstQuestion.id,
             question: firstQuestion,
             topicName: firstTopic.topicName,
+            topicId: firstTopic.topicId,
+            sectionTimeLimitMinutes: firstTopic.timeLimitMinutes ?? null,
             levelName: firstLevel.levelName,
             questionNumber: 1,
             totalInLevel: firstLevel.questionIds.length,
@@ -252,7 +330,7 @@ router.post("/tests/:testId/attempts/start-adaptive", requireLearner, async (req
 });
 
 // POST /api/attempts/:attemptId/answer-adaptive - Ответить на вопрос адаптивного теста
-router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, res) => {
+router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.take"), async (req, res) => {
   try {
     const attempt = await storage.getAttempt(req.params.attemptId);
     if (!attempt) {
@@ -440,8 +518,88 @@ router.post("/attempts/:attemptId/answer-adaptive", requireLearner, async (req, 
   }
 });
 
+// POST /api/attempts/:attemptId/expire-topic-adaptive - PRD-4 v1.1 §3.2:
+// the per-topic timer ran out. Force-complete the current adaptive topic (with
+// whatever was answered) and move to the next topic or finish. Idempotent: a
+// retried/duplicate request whose `topicId` no longer matches the current topic
+// (the move already happened — e.g. the first response was lost) re-syncs the
+// client to the current question instead of advancing again.
+router.post("/attempts/:attemptId/expire-topic-adaptive", requirePermission("attempts.take"), async (req, res) => {
+  try {
+    const attempt = await storage.getAttempt(req.params.attemptId);
+    if (!attempt) {
+      return res.status(404).json({ error: "Attempt not found" });
+    }
+    if (attempt.userId !== req.session.userId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const { topicId } = req.body;
+    const variant = attempt.variantJson as any;
+    if (variant.mode !== "adaptive") {
+      return res.status(400).json({ error: "This is not an adaptive attempt" });
+    }
+
+    const test = await storage.getTest(attempt.testId);
+    if (!test) {
+      return res.status(404).json({ error: "Test not found" });
+    }
+
+    // Already finished (possibly by a prior expiry) — idempotent finished state.
+    if (attempt.finishedAt) {
+      return res.json({
+        nextQuestion: null,
+        levelTransition: null,
+        topicTransition: null,
+        isFinished: true,
+        result: attempt.resultJson ?? null,
+      });
+    }
+
+    const currentTopic = variant.topics[variant.currentTopicIndex];
+    // Idempotent: the expired topic was already advanced past. Re-send the
+    // current question so a lost-response retry re-syncs without double-advancing.
+    if (!currentTopic || currentTopic.topicId !== topicId) {
+      const cur = await currentAdaptiveQuestion(variant, storage);
+      return res.json({
+        nextQuestion: cur,
+        levelTransition: null,
+        topicTransition: null,
+        isFinished: false,
+        result: null,
+      });
+    }
+
+    const currentLevel = currentTopic.levelsState[currentTopic.currentLevelIndex];
+    const { levelTransition, topicTransition, nextQuestionData, isFinished } =
+      await moveToNextTopicOrFinish(variant, currentTopic, currentLevel, storage);
+
+    let result: any = null;
+    if (isFinished) {
+      result = await buildAdaptiveResult(variant, test.id, storage);
+    }
+
+    await storage.updateAttempt(attempt.id, {
+      variantJson: variant,
+      resultJson: isFinished ? result : null,
+      finishedAt: isFinished ? new Date() : null,
+    });
+
+    res.json({
+      nextQuestion: nextQuestionData,
+      levelTransition,
+      topicTransition,
+      isFinished,
+      result,
+    });
+  } catch (error) {
+    logger.error("Expire adaptive topic error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to expire topic" });
+  }
+});
+
 // POST /api/attempts/:attemptId/save-progress - Сохранить прогресс
-router.post("/attempts/:attemptId/save-progress", requireLearner, async (req, res) => {
+router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.take"), async (req, res) => {
   try {
     const attempt = await storage.getAttempt(req.params.attemptId);
     if (!attempt) {
@@ -480,7 +638,7 @@ router.post("/attempts/:attemptId/save-progress", requireLearner, async (req, re
 });
 
 // GET /api/tests/:testId/resume - Возобновить попытку
-router.get("/tests/:testId/resume", requireLearner, async (req, res) => {
+router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.testId);
     if (!test) {
@@ -521,7 +679,7 @@ router.get("/tests/:testId/resume", requireLearner, async (req, res) => {
 });
 
 // POST /api/attempts/:attemptId/finish - Завершить попытку
-router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
+router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), async (req, res) => {
   try {
     const attempt = await storage.getAttempt(req.params.attemptId);
     if (!attempt) {
@@ -547,6 +705,8 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
     let totalEarnedPoints = 0;
     let totalPossiblePoints = 0;
     const topicResults: TopicResult[] = [];
+    // PRD-12: question types for the scale engine's percent-normalization.
+    const questionTypes: Record<string, QuestionType> = {};
 
     for (const variantSection of variant.sections) {
       const section = sectionMap.get(variantSection.topicId);
@@ -559,6 +719,7 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
       const sectionTotal = questions.length;
 
       for (const q of questions) {
+        questionTypes[q.id] = q.type as QuestionType;
         const answer = answers?.[q.id];
         const scoreRatio = checkAnswer(q, answer);
         const qPoints = q.points || 1;
@@ -618,6 +779,31 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
       }
     }
 
+    // PRD-12: graded namespaces (scales PRD-5 + result variables PRD-2) via the
+    // shared engines, mirroring the SCORM runtime. No-op when the test has none.
+    const scoringConfig = await loadScoringConfig(test.id);
+    let scaleResults: AttemptResult["scaleResults"];
+    let resultVariables: AttemptResult["resultVariables"];
+    let status: AttemptResult["status"];
+    if (scoringConfig.scales.length > 0 || scoringConfig.resultVariables.length > 0) {
+      const computation = computeAttemptResult(
+        scoringConfig,
+        answers ?? {},
+        questionTypes,
+        { percent: overallPercent, topicResults },
+      );
+      if (Object.keys(computation.scaleResults).length > 0) scaleResults = computation.scaleResults;
+      if (Object.keys(computation.resultVariables).length > 0) resultVariables = computation.resultVariables;
+      if (computation.status.success !== undefined || computation.status.completion !== undefined) {
+        status = computation.status;
+      }
+      // A boolean controls_status="success" variable overrides the pass flag
+      // (parity with the SCORM runtime, resultsPage.js).
+      if (typeof computation.status.success === "boolean") {
+        overallPassed = computation.status.success;
+      }
+    }
+
     const result: AttemptResult = {
       totalCorrect,
       totalQuestions,
@@ -626,6 +812,9 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
       totalPossiblePoints,
       overallPassed,
       topicResults,
+      ...(scaleResults ? { scaleResults } : {}),
+      ...(resultVariables ? { resultVariables } : {}),
+      ...(status ? { status } : {}),
     };
 
     await storage.updateAttempt(attempt.id, {
@@ -642,7 +831,7 @@ router.post("/attempts/:attemptId/finish", requireLearner, async (req, res) => {
 });
 
 // GET /api/attempts/:attemptId/result - Результат попытки
-router.get("/attempts/:attemptId/result", requireLearner, async (req, res) => {
+router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"), async (req, res) => {
   try {
     const attempt = await storage.getAttempt(req.params.attemptId);
     if (!attempt) {
@@ -660,11 +849,25 @@ router.get("/attempts/:attemptId/result", requireLearner, async (req, res) => {
     const maxAttempts = test?.maxAttempts || null;
     const canRetake = maxAttempts === null || completedAttempts < maxAttempts;
 
+    // PRD-12 web-host: render payload (template layout + css + context) for the
+    // results screen. Covers BOTH standard (results.html) and adaptive
+    // (results.adaptive.html) — readResultsRenderPayload branches on result.mode.
+    // Null only when the layout is missing or the result lacks topic rows, in which
+    // case the client falls back to its React markup.
+    const resultJson = attempt.resultJson as (AttemptResult & { mode?: string }) | null;
+    let render = null;
+    if (resultJson && Array.isArray(resultJson.topicResults)) {
+      const templateId = ((test?.designSettingsJson as any)?.templateId as string) || "default";
+      const dir = await resolveTemplateDir(templateId);
+      render = readResultsRenderPayload(dir, resultJson, test?.title || "");
+    }
+
     res.json({
       ...attempt,
       testTitle: test?.title || "Unknown Test",
       result: attempt.resultJson as AttemptResult,
       canRetake,
+      render,
       attemptsInfo:
         maxAttempts !== null
           ? {
@@ -680,7 +883,7 @@ router.get("/attempts/:attemptId/result", requireLearner, async (req, res) => {
 });
 
 // GET /api/learner/attempts - История попыток ученика
-router.get("/learner/attempts", requireLearner, async (req, res) => {
+router.get("/learner/attempts", requirePermission("attempts.self.read"), async (req, res) => {
   try {
     const attempts = await storage.getAttemptsByUser(req.session.userId!);
     const tests = await storage.getTests();
@@ -775,10 +978,27 @@ async function getNextQuestionData(level: any, topic: any, questionIndex: number
     id: questionId,
     question: questions[0],
     topicName: topic.topicName,
+    topicId: topic.topicId,
+    // PRD-4 v1.1 §3.2: carry the topic's time budget so the runtime can run a
+    // per-topic timer for the topic that owns this question.
+    sectionTimeLimitMinutes: topic.timeLimitMinutes ?? null,
     levelName: level.levelName,
     questionNumber: questionIndex + 1,
     totalInLevel: level.questionIds.length,
   };
+}
+
+/**
+ * Build the question-data payload for the variant's CURRENT position (the
+ * `currentQuestionId` within the current topic/level). Used by the idempotent
+ * branch of expire-topic-adaptive to re-sync a client after a lost response.
+ */
+async function currentAdaptiveQuestion(variant: any, storage: any) {
+  const topic = variant.topics?.[variant.currentTopicIndex];
+  if (!topic) return null;
+  const level = topic.levelsState[topic.currentLevelIndex];
+  const idx = level.questionIds.indexOf(variant.currentQuestionId);
+  return getNextQuestionData(level, topic, idx >= 0 ? idx : 0, storage);
 }
 
 async function moveToNextTopicOrFinish(variant: any, currentTopic: any, currentLevel: any, storage: any) {

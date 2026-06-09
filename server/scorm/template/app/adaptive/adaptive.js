@@ -319,6 +319,21 @@ function submitAdaptiveAnswer(questionId, answer) {
       result.isFinished = true;
       state.adaptiveState.isFinished = true;
       state.adaptiveState.result = buildAdaptiveResult();
+      // PRD-4 v1.1 §4.6/§4.7: in single-topic scope (sessions launched by
+      // routerFlow or contentFlow per topic), «all topics completed» means
+      // OUR one topic is done. Delegate to AdaptiveSession to fire the
+      // onComplete callback and clear state.adaptiveState. The caller then
+      // returns to the router page or advances to the next topic chunk.
+      if (
+        typeof AdaptiveSession !== 'undefined' &&
+        AdaptiveSession.maybeFinishSingleTopic &&
+        AdaptiveSession.maybeFinishSingleTopic()
+      ) {
+        // AdaptiveSession handled the completion; do not finalize the
+        // multi-topic test result here. Suppress the legacy auto-submit
+        // path so the caller's onComplete can navigate cleanly.
+        result.singleTopicHandled = true;
+      }
     }
   }
 

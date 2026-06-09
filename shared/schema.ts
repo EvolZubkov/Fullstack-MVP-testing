@@ -1,6 +1,8 @@
-import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex } from "drizzle-orm/pg-core"
+import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, uuid, real } from "drizzle-orm/pg-core"
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { normalizeTag, normalizeTags, TAG_MAX_LENGTH } from "./tags";
+import { STORED_ROLES } from "./access/roles";
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -8,7 +10,8 @@ export const users = pgTable("users", {
   emailHash: varchar("email_hash", { length: 64 }).unique(), // SHA-256 хеш для поиска
   passwordHash: text("password_hash").notNull(), // bcrypt hash
   name: text("name"), // заполняется при первом входе
-  role: text("role", { enum: ["author", "learner"] }).notNull().default("learner"),
+  // PRD-13 (T-10): the legacy single `role` column was dropped — roles live in
+  // `user_roles` (many-to-many) plus the configuration-derived superadmin.
   status: text("status", { enum: ["pending", "active", "inactive"] }).notNull().default("pending"),
   mustChangePassword: boolean("must_change_password").notNull().default(true),
   gdprConsent: boolean("gdpr_consent").notNull().default(false),
@@ -36,6 +39,22 @@ export const userGroups = pgTable("user_groups", {
   addedAt: timestamp("added_at").notNull().defaultNow(),
 }, (table) => ({
   userGroupIdx: uniqueIndex("user_groups_user_group_idx").on(table.userId, table.groupId),
+}));
+
+/**
+ * PRD-13 RBAC: a user holds a SET of roles (many-to-many). Effective permissions
+ * are the union over these roles plus the configuration-derived superadmin. The
+ * `superadmin` role is never stored here. This is the sole source of stored roles —
+ * the legacy `users.role` column was dropped in migration 017 (T-10).
+ */
+export const userRoles = pgTable("user_roles", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  role: text("role", { enum: STORED_ROLES }).notNull(),
+  grantedBy: varchar("granted_by", { length: 36 }), // who assigned this role
+  grantedAt: timestamp("granted_at").notNull().defaultNow(),
+}, (table) => ({
+  userRoleIdx: uniqueIndex("user_roles_user_role_idx").on(table.userId, table.role),
 }));
 
 // Назначение тестов пользователям/группам
@@ -101,6 +120,65 @@ export const topicEvents = pgTable("topic_events", {
   title: text("title").notNull(),
 });
 
+// ─── PRD-10: graded answer scoring (цена ответа) ─────────────────────────────
+// Per-question scoring config on the correctness axis (how many points an answer
+// earns), orthogonal to scale contributions (PRD-5, question_measurements).
+// Absence (null) = exact match, sMax = 1 — legacy tests stay bit-identical
+// (scoring-model §11; PRD-10 FR-02). Stored in its own nullable `scoring_json`
+// column, NOT mixed into correct_json (which the answer checker parses). Unit
+// identity is index-based (option index / matching pair / ranking position),
+// consistent with the PRD-5 source_key convention — no durable ids (PRD-10 OQ-3).
+
+/** Counter token in a tier predicate: total correct units (T), pairs (P) or items (N). */
+export const scoringCounterTokenSchema = z.enum(["T", "P", "N"]);
+
+/** One condition of a tier predicate (scoring-model §11.2): `lhs op rhs`. */
+export const scoringConditionSchema = z.object({
+  /** Left counter: correctly selected (c) or wrongly selected (x). */
+  lhs: z.enum(["c", "x"]),
+  op: z.enum(["==", ">=", "<=", "<", ">"]),
+  /** Right side: a literal number or a counter token (T/P/N). */
+  rhs: z.union([z.number(), scoringCounterTokenSchema]),
+});
+
+/** Tier predicate: conjunction of conditions — all must hold (scoring-model §11.2). */
+export const scoringPredicateSchema = z.object({
+  all: z.array(scoringConditionSchema).min(1),
+});
+
+/** A graduated tier: when `when` holds, award `score` (floored at 0). */
+export const scoringTierSchema = z.object({
+  when: scoringPredicateSchema,
+  score: z.number().min(0),
+});
+
+/**
+ * Question scoring config, discriminated by `kind`:
+ * - `exact`    — exact match (0/1), sMax = 1; same as null (default).
+ * - `weighted` — single choice: score = weight of the chosen option (additive).
+ * - `tiered`   — multiple/matching/ranking: first matching tier wins, else 0
+ *                (non-additive step table over the answer counters).
+ * `sMax` is optional and otherwise derived: max(weights) | max(tier.score).
+ */
+export const questionScoringSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("exact") }),
+  z.object({
+    kind: z.literal("weighted"),
+    weights: z.array(z.number().min(0)).min(1),
+    sMax: z.number().positive().optional(),
+  }),
+  z.object({
+    kind: z.literal("tiered"),
+    tiers: z.array(scoringTierSchema).min(1),
+    sMax: z.number().positive().optional(),
+  }),
+]);
+
+export type ScoringCondition = z.infer<typeof scoringConditionSchema>;
+export type ScoringPredicate = z.infer<typeof scoringPredicateSchema>;
+export type ScoringTier = z.infer<typeof scoringTierSchema>;
+export type QuestionScoring = z.infer<typeof questionScoringSchema>;
+
 export const questions = pgTable("questions", {
   id: varchar("id", { length: 36 }).primaryKey(),
   topicId: varchar("topic_id", { length: 36 }).notNull(),
@@ -118,6 +196,10 @@ export const questions = pgTable("questions", {
   feedbackCorrect: text("feedback_correct"),
   feedbackIncorrect: text("feedback_incorrect"),
   contentHash: text("content_hash"),
+  // PRD-2 §8.2: tags feed result-variable aggregate formulas; chip input in the question card.
+  tags: jsonb("tags").$type<string[]>().notNull().default([]),
+  // PRD-10: graded answer scoring (correctness axis). Null = exact match (FR-02).
+  scoringJson: jsonb("scoring_json").$type<QuestionScoring>(),
 });
 
 export const testFolders = pgTable("test_folders", {
@@ -127,32 +209,150 @@ export const testFolders = pgTable("test_folders", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// ─── PRD-6: retake gate / cooldown (ограничение повторного прохождения) ──────
+// Optional per-test policy that gates a new attempt before the SCORM `Initialize`
+// (FR-01/02). Absence / `enabled !== true` / no plugin = legacy behaviour
+// (`allowed = true`). Eligibility is decided by a pluggable rule (PRD-6 §3.4).
+
+/** Reference to a chosen eligibility plugin + its admin-managed config (PRD-6 §3.1). */
+export const eligibilityPluginRefSchema = z.object({
+  key: z.string().min(1),
+  configId: z.string().optional(),
+  failPolicy: z.enum(["failOpen", "failClosed"]).default("failOpen"),
+});
+
+/**
+ * `tests.retake_policy_json`. `cooldownPeriodDays` is whole calendar days
+ * (1–3650); legacy `cooldownDays` is accepted on input and normalized.
+ */
+export const retakePolicySchema = z.preprocess(
+  (val) => {
+    if (val && typeof val === "object") {
+      const v = val as Record<string, unknown>;
+      if (v.cooldownPeriodDays == null && typeof v.cooldownDays === "number") {
+        return { ...v, cooldownPeriodDays: v.cooldownDays };
+      }
+    }
+    return val;
+  },
+  z.object({
+    enabled: z.boolean().default(false),
+    cooldownPeriodDays: z.number().int().min(1).max(3650),
+    gateMode: z.literal("before_internal_start").default("before_internal_start"),
+    eligibilityPlugin: eligibilityPluginRefSchema.nullish(),
+    blockedPageId: z.string().optional(),
+  }),
+);
+
+export type EligibilityPluginRef = z.infer<typeof eligibilityPluginRefSchema>;
+export type RetakePolicy = z.infer<typeof retakePolicySchema>;
+
 export const tests = pgTable("tests", {
   id: varchar("id", { length: 36 }).primaryKey(),
   folderId: varchar("folder_id", { length: 36 }),
+  // PRD-13 RBAC: test owner (a content-role user). Null = unowned legacy test,
+  // accessible only to administrators/superadmin until an admin assigns an owner.
+  ownerId: varchar("owner_id", { length: 36 }),
   title: text("title").notNull(),
   description: text("description"),
   mode: text("mode", { enum: ["standard", "adaptive"] }).notNull().default("standard"),
   showDifficultyLevel: boolean("show_difficulty_level").notNull().default(true),
   overallPassRuleJson: jsonb("overall_pass_rule_json").notNull(),
   webhookUrl: text("webhook_url"),
+  /** @deprecated PRD-7: superseded by `status`. Kept for transitional backward compatibility; remove in a later release. */
   published: boolean("published").default(false),
+  status: text("status", { enum: ["draft", "published", "archived"] }).notNull().default("draft"),
   version: integer("version").notNull().default(1),
   feedback: text("feedback"),
+  feedbackJson: jsonb("feedback_json"),
+  flowPolicyJson: jsonb("flow_policy_json"),
+  telemetryEnabled: boolean("telemetry_enabled").notNull().default(false),
   timeLimitMinutes: integer("time_limit_minutes"),
   maxAttempts: integer("max_attempts"),
   showCorrectAnswers: boolean("show_correct_answers").notNull().default(false),
+  /** @deprecated PRD-7: replaced by `content_pages` row of type='intro' without topic_id. Kept for backward compatibility. */
   startPageContent: text("start_page_content"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  designSettingsJson: jsonb("design_settings_json").notNull().default({}),
+  // PRD-6: optional retake gate / cooldown policy. Null = legacy (no gate).
+  retakePolicyJson: jsonb("retake_policy_json").$type<RetakePolicy>(),
 });
+
+/**
+ * PRD-13 RBAC: explicit access to a test for a non-owner. `edit` lets an author
+ * edit/publish/export the test; `assign` lets a manager assign it. Grants are
+ * created and revoked only by an administrator or superadmin. One grant per
+ * (test, user); `edit` covers the `assign` scope during access resolution.
+ */
+export const testAccessGrants = pgTable("test_access_grants", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  testId: varchar("test_id", { length: 36 }).notNull(),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  accessLevel: text("access_level", { enum: ["edit", "assign"] }).notNull(),
+  grantedBy: varchar("granted_by", { length: 36 }), // which admin granted it
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  testUserIdx: uniqueIndex("test_access_grants_test_user_idx").on(table.testId, table.userId),
+}));
+
+// ─── PRD-11: tag draw quotas (квоты выдачи по тегам) ─────────────────────────
+// Optional per-section stratified-draw blueprint guaranteeing coverage of
+// sub-topics (tags) within a topic's draw_count sample. Absence = today's
+// uniform draw (FR-02). A delivery mechanism, orthogonal to scoring (PRD-10).
+// Sub-topic = a value in questions.tags; no new entity (PRD-11 §4).
+
+/**
+ * One quota (stratum): take `count` questions tagged `tag`. `mode` is PER-TAG
+ * (PRD-11 §3a, FR-03b) — "exact" (default, exactly `count`) or "min" (at least
+ * `count`; the remainder may pull more of the same tag). `tag` is normalized
+ * on save (trim + collapse spaces, 1–{@link TAG_MAX_LENGTH} chars); the draw
+ * match is case-insensitive (shared/tags.ts).
+ */
+export const drawStratumSchema = z.object({
+  tag: z
+    .string()
+    .transform(normalizeTag)
+    .refine((t) => t.length >= 1 && t.length <= TAG_MAX_LENGTH, {
+      message: `Тег: 1–${TAG_MAX_LENGTH} символов после нормализации`,
+    }),
+  count: z.number().int().min(1),
+  mode: z.enum(["exact", "min"]).optional(),
+});
+
+/**
+ * Stratified-draw blueprint (scoring-model §2.4; PRD-11 §3a, FR-01/03/03a/03b).
+ * Just a non-empty list of per-tag strata; the mode lives on each stratum, so
+ * there is no topic-level mode/granularity. Absence of a blueprint = uniform
+ * draw (FR-02).
+ */
+export const drawBlueprintSchema = z.object({
+  strata: z.array(drawStratumSchema).min(1),
+});
+
+export type DrawStratum = z.infer<typeof drawStratumSchema>;
+export type DrawBlueprint = z.infer<typeof drawBlueprintSchema>;
 
 export const testSections = pgTable("test_sections", {
   id: varchar("id", { length: 36 }).primaryKey(),
   testId: varchar("test_id", { length: 36 }).notNull(),
   topicId: varchar("topic_id", { length: 36 }).notNull(),
   drawCount: integer("draw_count").notNull(),
+  // When true the topic contributes its ENTIRE current question pool to the
+  // test, ignoring drawCount. Stores the author's manual intent; adaptive mode
+  // overrides the effective behaviour to "all" without touching this flag, so
+  // leaving adaptive restores the manual setting. Default false = legacy draw.
+  drawAll: boolean("draw_all").notNull().default(false),
   topicPassRuleJson: jsonb("topic_pass_rule_json"),
+  required: boolean("required").notNull().default(true),
+  timeLimitMinutes: integer("time_limit_minutes"),
+  feedbackJson: jsonb("feedback_json"),
+  // PRD-11: optional stratified-draw blueprint. Null = uniform draw (FR-02).
+  drawBlueprintJson: jsonb("draw_blueprint_json").$type<DrawBlueprint>(),
+  // PRD-7 S13.5 / G47: explicit author-controlled topic order. Persisted on
+  // every save as the index of the topic in the editor's sections array, so
+  // drag-reorder in Structure round-trips through getTestSections() ORDER BY.
+  sortOrder: integer("sort_order").notNull().default(0),
 });
 
 export const adaptiveTopicSettings = pgTable("adaptive_topic_settings", {
@@ -201,9 +401,22 @@ export const insertFolderSchema = createInsertSchema(folders).omit({ id: true })
 export const insertTopicSchema = createInsertSchema(topics).omit({ id: true });
 export const insertTopicCourseSchema = createInsertSchema(topicCourses).omit({ id: true });
 export const insertTopicEventSchema = createInsertSchema(topicEvents).omit({ id: true });
-export const insertQuestionSchema = createInsertSchema(questions).omit({ id: true });
-export const insertTestSchema = createInsertSchema(tests).omit({ id: true });
-export const insertTestSectionSchema = createInsertSchema(testSections).omit({ id: true });
+export const insertQuestionSchema = createInsertSchema(questions)
+  .omit({ id: true })
+  // drizzle-zod types jsonb loosely; validate the scoring config explicitly (FR-13)
+  // and normalize tags on save (PRD-11 §3a: trim/collapse, dedup, length cap).
+  .extend({
+    scoringJson: questionScoringSchema.nullish(),
+    tags: z.array(z.string()).transform(normalizeTags).optional(),
+  });
+export const insertTestSchema = createInsertSchema(tests)
+  .omit({ id: true })
+  // drizzle-zod types jsonb loosely; validate the retake policy explicitly (PRD-6).
+  .extend({ retakePolicyJson: retakePolicySchema.nullish() });
+export const insertTestSectionSchema = createInsertSchema(testSections)
+  .omit({ id: true })
+  // drizzle-zod types jsonb loosely; validate the draw blueprint explicitly.
+  .extend({ drawBlueprintJson: drawBlueprintSchema.nullish() });
 export const insertAttemptSchema = createInsertSchema(attempts).omit({ id: true });
 
 export const insertAdaptiveTopicSettingsSchema = createInsertSchema(adaptiveTopicSettings).omit({ id: true });
@@ -211,12 +424,20 @@ export const insertAdaptiveLevelSchema = createInsertSchema(adaptiveLevels).omit
 export const insertAdaptiveLevelLinkSchema = createInsertSchema(adaptiveLevelLinks).omit({ id: true });
 export const insertGroupSchema = createInsertSchema(groups).omit({ id: true });
 export const insertUserGroupSchema = createInsertSchema(userGroups).omit({ id: true });
+export const insertUserRoleSchema = createInsertSchema(userRoles).omit({ id: true, grantedAt: true });
+export const insertTestAccessGrantSchema = createInsertSchema(testAccessGrants).omit({ id: true, createdAt: true });
 export const insertTestAssignmentSchema = createInsertSchema(testAssignments).omit({ id: true });
 export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({ id: true });
 export const insertAssignmentAccessTokenSchema = createInsertSchema(assignmentAccessTokens).omit({ id: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+export type InsertUserRole = z.infer<typeof insertUserRoleSchema>;
+export type UserRole = typeof userRoles.$inferSelect;
+
+export type InsertTestAccessGrant = z.infer<typeof insertTestAccessGrantSchema>;
+export type TestAccessGrant = typeof testAccessGrants.$inferSelect;
 
 export type InsertFolder = z.infer<typeof insertFolderSchema>;
 export type Folder = typeof folders.$inferSelect;
@@ -269,12 +490,55 @@ export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertAssignmentAccessToken = z.infer<typeof insertAssignmentAccessTokenSchema>;
 export type AssignmentAccessToken = typeof assignmentAccessTokens.$inferSelect;
 
+// `none` = no overall/topic pass threshold (pass is governed elsewhere, e.g.
+// adaptive levels or scales). The read mapper and SCORM/attempt consumers
+// already treat `none` as "skip percent/absolute gating"; the write schema
+// must accept it too, otherwise existing tests stored with `type: "none"`
+// fail to save (HTTP 400 on overallPassRuleJson.type).
 export const passRuleSchema = z.object({
-  type: z.enum(["percent", "absolute"]),
+  type: z.enum(["percent", "absolute", "none"]),
   value: z.number(),
 });
 
 export type PassRule = z.infer<typeof passRuleSchema>;
+
+/**
+ * Feedback structures (PRD-7 §3.4 / decisions.md §3.4, §3.5).
+ *
+ * The single jsonb column `tests.feedback_json` (and `test_sections.feedback_json`)
+ * stores `format`, `text`, nested `links` and nested `assets`. Per decisions.md §3.4
+ * there are NO separate `feedback_links_json` / `feedback_assets_json` columns — links
+ * and assets are inlined.
+ *
+ * Default for legacy `feedback: string` (§4.3): `{ format: "plain", text, links: [], assets: [] }`.
+ */
+export const feedbackFormatSchema = z.enum(["plain", "richText", "html"]);
+
+export const feedbackLinkSchema = z.object({
+  title: z.string().min(1),
+  url: z.string().url(),
+});
+
+export const feedbackAssetSchema = z.object({
+  id: z.string().optional(),
+  title: z.string().min(1),
+  fileName: z.string().min(1),
+  mimeType: z.literal("application/pdf"),
+  /** Filled by backend when the asset is persisted to SCORM (decisions.md §6.5). */
+  scormHref: z.string().optional(),
+});
+
+export const feedbackContentSchema = z.object({
+  format: feedbackFormatSchema,
+  text: z.string(),
+  links: z.array(feedbackLinkSchema).default([]),
+  assets: z.array(feedbackAssetSchema).default([]),
+});
+
+export type FeedbackFormat = z.infer<typeof feedbackFormatSchema>;
+export type FeedbackLink = z.infer<typeof feedbackLinkSchema>;
+export type FeedbackAsset = z.infer<typeof feedbackAssetSchema>;
+export type FeedbackContent = z.infer<typeof feedbackContentSchema>;
 
 export const singleChoiceDataSchema = z.object({
   options: z.array(z.string()),
@@ -324,6 +588,14 @@ export const testVariantSchema = z.object({
     topicId: z.string(),
     topicName: z.string(),
     questionIds: z.array(z.string()),
+    /**
+     * PRD-4 v1.1 §3.2 — per-section (per-topic) time budget in minutes, or
+     * `null` when the topic has no custom limit (inherit_test / none). Carried
+     * in the persisted variant so the web learner runtime can run a per-topic
+     * timer (mirrors `TEST_DATA.sections[].timeLimitMinutes` in the SCORM
+     * package). Absent on legacy in-progress attempts — treat missing as null.
+     */
+    timeLimitMinutes: z.number().int().positive().nullable().optional(),
   })),
 });
 
@@ -353,6 +625,12 @@ export const attemptResultSchema = z.object({
   totalPossiblePoints: z.number(),
   overallPassed: z.boolean(),
   topicResults: z.array(topicResultSchema),
+  // PRD-12 (web parity): graded namespaces computed via @shared engines, present
+  // only when the test defines scales (PRD-5) / result variables (PRD-2). Absence
+  // keeps the legacy result shape and old stored results valid (back-compat).
+  scaleResults: z.record(z.string(), z.unknown()).optional(),
+  resultVariables: z.record(z.string(), z.unknown()).optional(),
+  status: z.object({ success: z.boolean().optional(), completion: z.boolean().optional() }).optional(),
 });
 
 export type TopicResult = z.infer<typeof topicResultSchema>;
@@ -745,6 +1023,65 @@ export const scormAnswers = pgTable("scorm_answers", {
   answeredAt: timestamp("answered_at").notNull(),
 });
 
+// ============================================
+// Templates & Content Pages (PRD-1)
+// ============================================
+
+export const templates = pgTable("templates", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  version: text("version").notNull(),
+  templateApiVersion: text("template_api_version").notNull().default("1.0"),
+  isBuiltin: boolean("is_builtin").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  // PRD-3 §5.1: explicit lifecycle state. `is_active` stays as the author-facing
+  // visibility flag; `status` is the admin lifecycle FSM (draft/active/inactive/invalid).
+  status: text("status", { enum: ["draft", "active", "inactive", "invalid"] })
+    .notNull()
+    .default("active"),
+  // PRD-3 §6: source adapter. Built-ins sync from disk; uploaded come from an admin ZIP.
+  sourceType: text("source_type", { enum: ["builtin", "uploaded"] })
+    .notNull()
+    .default("builtin"),
+  // Absolute/relative path to the template root: the on-disk built-in dir, or the
+  // extracted uploads/templates/<id> dir for uploaded packages.
+  sourcePath: text("source_path"),
+  manifest: jsonb("manifest").notNull(),
+  previewPath: text("preview_path"),
+  // PRD-3 §4: persisted structural-validation and browser smoke-test reports.
+  validationJson: jsonb("validation_json"),
+  smokeTestJson: jsonb("smoke_test_json"),
+  // PRD-3: cheap source fingerprint (hash of each file's path/size/mtime) used by
+  // the startup reconcile to skip re-validating templates whose files are unchanged.
+  sourceFingerprint: text("source_fingerprint"),
+  installedAt: timestamp("installed_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const contentPages = pgTable("content_pages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
+  // PRD-7 §4.2: nullable topicId allows test-scope pages (position 'before'/'after',
+  // i.e. the «До теста» / «После теста» zones in linear_flat); topic-scoped pages
+  // use 'before_topic'/'after_topic' with a topicId.
+  topicId: varchar("topic_id", { length: 36 }).references(() => topics.id),
+  position: text("position", { enum: ["before", "after", "before_topic", "after_topic"] }).notNull(),
+  mode: text("mode", { enum: ["template", "standard", "html"] }).notNull().default("template"),
+  /** @deprecated Use `kind` instead. Kept for backward compat in this release. */
+  type: text("type", { enum: ["intro", "info", "summary", "html"] }).notNull(),
+  /** PRD-1 §4.3: variant-binding kind. Drives lifecycle of system pages. */
+  kind: text("kind", { enum: ["questions", "router", "summary", "intro", "info"] }).notNull(),
+  templateKey: text("template_key"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  valuesJson: jsonb("values_json").notNull().default({}),
+  autoAdvance: boolean("auto_advance").notNull().default(false),
+  autoAdvanceDelayMs: integer("auto_advance_delay_ms"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Insert schemas
 export const insertScormPackageSchema = createInsertSchema(scormPackages).omit({ id: true });
 export const insertScormAttemptSchema = createInsertSchema(scormAttempts).omit({ id: true });
@@ -759,3 +1096,209 @@ export type ScormAttempt = typeof scormAttempts.$inferSelect;
 
 export type InsertScormAnswer = z.infer<typeof insertScormAnswerSchema>;
 export type ScormAnswer = typeof scormAnswers.$inferSelect;
+
+// Templates & Content Pages types (PRD-1)
+
+/**
+ * PRD-1 §4.3: variant.kind — functional role of a template variant.
+ * Drives variant binding rules in PRD-7 §1.4 (silent binding for system kinds).
+ */
+export const variantKindSchema = z.enum(["questions", "router", "summary", "intro", "info"]);
+export type VariantKind = z.infer<typeof variantKindSchema>;
+
+/**
+ * Single entry in `manifest.contentTemplates[]`. Schema is intentionally narrow:
+ * it locks the variant-binding contract (key/label/kind) and lets template-specific
+ * shape (placeholders, pageKind, textFit, etc.) pass through unchanged.
+ */
+export const contentTemplateEntrySchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  kind: variantKindSchema,
+  pageKind: z.string().optional(),
+  isDefault: z.boolean().optional(),
+  placeholders: z.array(z.unknown()).optional(),
+}).passthrough();
+
+/**
+ * Top-level SCORM template manifest contract relevant to the variant-binding system.
+ * Other fields (params, layouts, capabilities, preview, etc.) pass through and
+ * are validated by adjacent specs (spec-template-platform.md).
+ */
+export const templateManifestSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  version: z.string().regex(/^\d+\.\d+\.\d+$/),
+  templateApiVersion: z.string().min(1),
+  contentTemplates: z.array(contentTemplateEntrySchema).min(1),
+}).passthrough();
+
+/**
+ * PRD-1 §4.3.2 / PRD-7 §1.4: the built-in `default` template is the system-wide
+ * fallback for every system variant kind. When another template omits a variant
+ * of a system kind, `bindSystemVariant()` falls back to the default — so the
+ * default itself must declare each system kind, otherwise reconcile silently
+ * fails to materialize the corresponding `content_pages` row (G48 2026-05-28).
+ *
+ * System kinds: `intro`, `summary`, `router`, `questions`. The user kind `info`
+ * is author-created and not lifecycle-managed.
+ */
+const REQUIRED_DEFAULT_VARIANT_KINDS = ["intro", "summary", "router", "questions"] as const;
+
+export const defaultTemplateManifestSchema = templateManifestSchema.superRefine((m, ctx) => {
+  const declared = new Set(m.contentTemplates.map((ct) => ct.kind));
+  for (const required of REQUIRED_DEFAULT_VARIANT_KINDS) {
+    if (!declared.has(required)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Default template must declare at least one contentTemplate with kind: "${required}"`,
+        path: ["contentTemplates"],
+      });
+    }
+  }
+});
+
+export type TemplateManifest = z.infer<typeof templateManifestSchema>;
+
+/**
+ * Template platform API versions this build accepts (PRD-3 §4.1). Kept here,
+ * free of any server/db import, so the pure template validator can use it.
+ * Re-exported from server/template-registry for backward-compatible imports.
+ */
+export const SUPPORTED_TEMPLATE_API_VERSIONS = ["1.0"] as const;
+
+/** Returns true when the given templateApiVersion is accepted by this build. */
+export function isSupportedTemplateApiVersion(version: string): boolean {
+  return (SUPPORTED_TEMPLATE_API_VERSIONS as readonly string[]).includes(version);
+}
+
+export const designSettingsSchema = z.object({
+  templateId: z.string(),
+  templateVersion: z.string(),
+  templateApiVersion: z.string(),
+  params: z.record(z.string(), z.unknown()),
+});
+
+export type DesignSettings = z.infer<typeof designSettingsSchema>;
+
+export const contentPageValuesSchema = z.object({
+  values: z.record(z.string(), z.unknown()).default({}),
+  placeholderStyles: z.record(z.string(), z.object({ fontSize: z.number() })).optional(),
+});
+
+export type ContentPageValues = z.infer<typeof contentPageValuesSchema>;
+
+export const insertTemplateSchema = createInsertSchema(templates).omit({ createdAt: true, updatedAt: true, installedAt: true });
+export const insertContentPageSchema = createInsertSchema(contentPages).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
+export type Template = typeof templates.$inferSelect;
+
+/** PRD-3 §5.1: lifecycle states of a template in the admin registry. */
+export const templateStatusSchema = z.enum(["draft", "active", "inactive", "invalid"]);
+export type TemplateStatus = z.infer<typeof templateStatusSchema>;
+
+/** PRD-3 §6: where a template came from (single registry, two source adapters). */
+export const templateSourceTypeSchema = z.enum(["builtin", "uploaded"]);
+export type TemplateSourceType = z.infer<typeof templateSourceTypeSchema>;
+
+export type InsertContentPage = z.infer<typeof insertContentPageSchema>;
+export type ContentPage = typeof contentPages.$inferSelect;
+
+// PRD-2: user-defined result variables (показатели результата). Test-scoped,
+// formula-driven values published to result.* at completion. See migration 008
+// for the name-regex CHECK and the partial unique indexes that enforce at most
+// one success / one completion controller per test.
+export const resultVariables = pgTable("result_variables", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  label: text("label").notNull(),
+  type: text("type", { enum: ["boolean", "number", "string"] }).notNull(),
+  formula: text("formula").notNull(),
+  showToLearner: boolean("show_to_learner").notNull().default(false),
+  scormTarget: text("scorm_target", { enum: ["interaction", "suspend_data", "both", "none"] }).notNull().default("both"),
+  controlsStatus: text("controls_status", { enum: ["none", "success", "completion"] }).notNull().default("none"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertResultVariableSchema = createInsertSchema(resultVariables)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({
+    name: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,63}$/, "name: начинается с буквы; строчные/цифры/подчёркивание; до 64 символов"),
+    label: z.string().min(1).max(120),
+  });
+
+export type InsertResultVariable = z.infer<typeof insertResultVariableSchema>;
+export type ResultVariable = typeof resultVariables.$inferSelect;
+
+// PRD-5: measurement scales (шкалы). Test-scoped named aggregates of explicit
+// per-question contributions, normalized (with optional inversion) and banded.
+// Published to scale.* before result.* at completion. See migration 009 for the
+// key-regex CHECK and the enum CHECKs.
+export const scales = pgTable("scales", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  description: text("description"),
+  type: text("type", { enum: ["number", "boolean", "category", "level"] }).notNull(),
+  aggregation: text("aggregation", { enum: ["sum", "avg", "weighted_avg", "max", "min"] }).notNull().default("sum"),
+  normalization: text("normalization", { enum: ["none", "percent", "custom"] }).notNull().default("none"),
+  direction: text("direction", { enum: ["positive", "inverse"] }).notNull().default("positive"),
+  configJson: jsonb("config_json").$type<Record<string, unknown>>().notNull().default({}),
+  showToLearner: boolean("show_to_learner").notNull().default(false),
+  scormTarget: text("scorm_target", { enum: ["none", "suspend_data", "interaction", "both"] }).notNull().default("none"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertScaleSchema = createInsertSchema(scales)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({
+    key: z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,63}$/, "key: начинается с буквы; строчные/цифры/подчёркивание; до 64 символов"),
+    label: z.string().min(1).max(120),
+  });
+
+export type InsertScale = z.infer<typeof insertScaleSchema>;
+export type Scale = typeof scales.$inferSelect;
+
+// PRD-5: explicit contribution of one question unit (whole question / option /
+// matching pair / ranking position) into one scale. `value_json` is the explicit
+// numeric contribution (0 and negatives valid); correctness is orthogonal.
+export const questionMeasurements = pgTable("question_measurements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
+  questionId: varchar("question_id", { length: 36 }).notNull().references(() => questions.id, { onDelete: "cascade" }),
+  scaleId: uuid("scale_id").notNull().references(() => scales.id, { onDelete: "cascade" }),
+  sourceType: text("source_type", { enum: ["question", "option", "matching_pair", "ranking_position"] }).notNull(),
+  sourceKey: text("source_key"),
+  valueJson: jsonb("value_json").$type<number>().notNull(),
+  weight: real("weight").notNull().default(1),
+  conditionJson: jsonb("condition_json"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertQuestionMeasurementSchema = createInsertSchema(questionMeasurements)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({
+    // The contribution is an explicit numeric value (0 and negatives valid).
+    valueJson: z.number(),
+    // Fields with a DB default / nullable are optional in the API payload.
+    weight: z.number().optional(),
+    sourceKey: z.string().nullish(),
+    sortOrder: z.number().optional(),
+    conditionJson: z.unknown().nullish(),
+  });
+
+export type InsertQuestionMeasurement = z.infer<typeof insertQuestionMeasurementSchema>;
+export type QuestionMeasurement = typeof questionMeasurements.$inferSelect;

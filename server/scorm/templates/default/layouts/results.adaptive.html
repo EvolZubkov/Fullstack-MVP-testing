@@ -1,0 +1,38 @@
+<div class="results-page">
+  <div class="results-hero">
+    <div class="results-hero-icon is-info">
+      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10"/><path d="M17 4v5a5 5 0 0 1-10 0V4"/><path d="M5 6h2"/><path d="M17 6h2"/></svg>
+    </div>
+    <div class="results-hero-title">Тест завершён</div>
+    <div class="results-hero-sub" data-path="course.title"></div>
+  </div>
+
+  <div class="results-section-title">Результаты по темам</div>
+  <div class="results-topics-grid">
+    {{#each result.topicResults}}
+    <div class="card topic-card">
+      <div class="topic-head">
+        <div class="topic-name">{{topicName}}</div>
+        <div class="results-pill {{levelClass}}">{{levelLabel}}</div>
+      </div>
+      {{#if hasFeedback}}
+      <div class="topic-feedback">{{feedback}}</div>
+      {{/if}}
+      {{#if hasLinks}}
+      <div class="topic-links">
+        {{#each links}}
+        <a class="topic-link" href="{{url}}" target="_blank" rel="noopener noreferrer">{{title}}</a>
+        {{/each}}
+      </div>
+      {{/if}}
+    </div>
+    {{/each}}
+  </div>
+
+  <div class="results-actions">
+    {{#if result.showPdf}}<button type="button" class="btn btn--outline" data-action="download-pdf">Скачать PDF</button>{{/if}}
+    {{#if result.canRetry}}<button type="button" class="btn" data-action="restart-adaptive">Пройти заново</button>{{/if}}
+    {{#if result.showFinish}}<button type="button" class="btn" data-action="finish">Завершить тест</button>{{/if}}
+    {{#unless result.hasScormActions}}<button type="button" class="btn" data-action="restart">Пройти снова</button>{{/unless}}
+  </div>
+</div>

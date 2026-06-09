@@ -1,13 +1,14 @@
 import { Router, Request, Response } from "express";
 import { logger } from "../../logger";
 import { storage } from "../../storage";
-import { requireAuthor } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/auth";
+import { requireTestScope } from "../../middleware/test-scope";
 import { checkAnswer } from "../../utils/check-answer";
 
 const router = Router();
 
 // GET /api/analytics/tests/:testId/attempts - Список попыток теста
-router.get("/tests/:testId/attempts", requireAuthor, async (req: Request, res: Response) => {
+router.get("/tests/:testId/attempts", requirePermission("analytics.read"), requireTestScope("analytics", "testId"), async (req: Request, res: Response) => {
   try {
     const testId = req.params.testId;
     const test = await storage.getTest(testId);
@@ -75,7 +76,7 @@ router.get("/tests/:testId/attempts", requireAuthor, async (req: Request, res: R
 });
 
 // GET /api/analytics/attempts/:attemptId - Детали попытки
-router.get("/attempts/:attemptId", requireAuthor, async (req: Request, res: Response) => {
+router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {
     const attemptId = req.params.attemptId;
     const attempt = await storage.getAttempt(attemptId);

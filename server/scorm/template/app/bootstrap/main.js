@@ -1,6 +1,10 @@
 // app/bootstrap/main.js
 (function () {
-  function boot() {
+  // The normal course launch: SCORM.Initialize + telemetry + recovery + render.
+  // For tests without a retake policy this runs immediately on boot (unchanged
+  // behaviour). For gated tests it runs only after the gate allows AND the
+  // learner clicks «Начать курс» (PRD-6 NFR-01).
+  function runCourse() {
     // SCORM runtime должен быть уже загружен (runtime.js)
     SCORM.init();
 
@@ -23,8 +27,18 @@
           }
         }
 
-        // Сохраняем текущую сессию если тест в процессе (только для тестов без таймера)
-        if (state.phase === 'question' && !state.submitted && state.flatQuestions && state.flatQuestions.length > 0) {
+        // Сохраняем текущую сессию если тест в процессе.
+        // PRD-4 v1.1 / Phase 4f: router-mode sessions persist `routerTopicStates`
+        // + `sectionResults` regardless of phase, so the learner can resume
+        // with completed topics intact. Legacy linear sessions still only
+        // persist mid-question state (timer/adaptive guarded inside save).
+        var _isRouterMode =
+          TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode === 'router_by_topics';
+        var _shouldSave = !state.submitted && (
+          _isRouterMode ||
+          (state.phase === 'question' && state.flatQuestions && state.flatQuestions.length > 0)
+        );
+        if (_shouldSave) {
           saveCurrentSession();
         }
 
@@ -53,43 +67,101 @@
       try { SCORM.terminate(); } catch (e) { }
     });
 
-    // биндинги DnD
-    bindMatchingDnDOnce();
-    bindRankingDnDOnce();
+    var templateReady = typeof loadDesignTemplate === "function"
+      ? loadDesignTemplate()
+      : Promise.resolve(null);
 
-    // ===== ВОССТАНОВЛЕНИЕ СЕССИИ =====
-    var recovery = determineRecovery();
-    console.log('🔄 Recovery decision:', recovery.action);
+    templateReady.then(function () {
+      // биндинги DnD
+      bindMatchingDnDOnce();
+      bindRankingDnDOnce();
 
-    if (recovery.action === 'restore') {
-      // Восстанавливаем незавершённую попытку
-      restoreSession(recovery.session);
-      render();
-    } else if (recovery.action === 'show_last_attempt') {
-      // Показываем результат последней попытки, сбрасываем незавершённую сессию
-      clearCurrentSession();
-      if (TEST_DATA.mode === 'adaptive' && TEST_DATA.adaptiveTopics) {
-        initAdaptiveTest();
-      } else {
+      // ===== ВОССТАНОВЛЕНИЕ СЕССИИ =====
+      var recovery = determineRecovery();
+      console.log('🔄 Recovery decision:', recovery.action);
+
+      if (recovery.action === 'restore') {
+        // Восстанавливаем незавершённую попытку
+        restoreSession(recovery.session);
+        if (typeof rebuildPageSequence === 'function') {
+          rebuildPageSequence();
+          var qIndex = state.currentIndex || 0;
+          var itemIndex = state.pageSequence.findIndex(function (item) {
+            return item.kind === 'question' && item.questionIndex === qIndex;
+          });
+          goToPageSequenceIndex(itemIndex >= 0 ? itemIndex : 0);
+        }
+        render();
+      } else if (recovery.action === 'restore_router') {
+        // PRD-4 v1.1 §3.2 / Phase 4f — router-mode recovery: re-apply the
+        // completed-topics snapshot, generate a fresh variant (questions
+        // pool stays section-ordered), build the pageSequence (which in
+        // router mode is just test-before + router page), then render.
+        // The router page now shows previously-completed topics as
+        // «Пройдена» so the learner picks up exactly where they left off.
+        restoreRouterSession(recovery.session);
         generateVariant();
-      }
-      state.phase = 'viewResults';
-      state.viewedAttempt = recovery.attempt;
-      render();
-    } else {
-      // start_fresh — обычная инициализация
-      clearCurrentSession();
-      if (TEST_DATA.mode === 'adaptive' && TEST_DATA.adaptiveTopics) {
-        initAdaptiveTest();
+        if (typeof rebuildPageSequence === 'function') rebuildPageSequence();
+        // Skip the test-before content the learner has already seen by
+        // jumping to the router page itself, if present.
+        if (state.pageSequence) {
+          var routerIdx = state.pageSequence.findIndex(function (it) {
+            return it && it.isRouter;
+          });
+          if (routerIdx >= 0) goToPageSequenceIndex(routerIdx);
+        }
+        render();
+      } else if (recovery.action === 'show_last_attempt') {
+        // Показываем результат последней попытки, сбрасываем незавершённую сессию
+        clearCurrentSession();
+        // PRD-4 v1.1 §3.1.2 / §4.6: legacy (adaptive, linear_flat) keeps the
+        // multi-topic adaptive auto-init for backward compat. Sectional modes
+        // (linear_by_topics / router_by_topics) launch per-topic adaptive
+        // sessions on demand from contentFlow / routerFlow — auto-init here
+        // would short-circuit those flows and bypass content pages / router.
+        var _adaptiveAutoInit_a =
+          TEST_DATA.mode === 'adaptive' &&
+          TEST_DATA.adaptiveTopics &&
+          ((TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode) || 'linear_flat') === 'linear_flat';
+        if (_adaptiveAutoInit_a) {
+          initAdaptiveTest();
+        } else {
+          generateVariant();
+        }
+        state.phase = 'viewResults';
+        state.viewedAttempt = recovery.attempt;
+        render();
       } else {
-        generateVariant();
+        // start_fresh — обычная инициализация
+        clearCurrentSession();
+        var _adaptiveAutoInit_b =
+          TEST_DATA.mode === 'adaptive' &&
+          TEST_DATA.adaptiveTopics &&
+          ((TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode) || 'linear_flat') === 'linear_flat';
+        if (_adaptiveAutoInit_b) {
+          initAdaptiveTest();
+        } else {
+          generateVariant();
+          state.phase = 'start';
+        }
+        render();
       }
-      render();
-    }
 
-    window.addEventListener("resize", function () {
-      syncMatchingHeights();
+      window.addEventListener("resize", function () {
+        syncMatchingHeights();
+      });
     });
+  }
+
+  // PRD-6: the retake gate runs BEFORE SCORM.Initialize for tests with a policy
+  // (NFR-01/02). Blocked => block-wall (no init, no cmi). Allowed => «Начать
+  // курс» shell whose click runs the normal course. Non-gated tests run directly.
+  function boot() {
+    if (typeof RetakeGate !== "undefined" && RetakeGate.isGated(TEST_DATA)) {
+      RetakeGate.run(TEST_DATA, runCourse);
+    } else {
+      runCourse();
+    }
   }
 
   // чтобы работало и в обычной загрузке, и если скрипт подцепился поздно

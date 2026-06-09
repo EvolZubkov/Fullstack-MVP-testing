@@ -1,0 +1,298 @@
+/**
+ * @module features/templates/templates-page
+ * @description PRD-3 admin template registry page. A card grid of every template
+ * (built-in + uploaded) with real `assets.preview` thumbnails, lifecycle/health
+ * badges and a per-card action menu, plus the upload, details, preview+check,
+ * update and confirm (deactivate/delete) modals. All wired to the admin API and
+ * the client-side health-check engine.
+ */
+import { useState } from "react";
+import { Banner, Button, MenuItem, MenuTrigger, Tag } from "@universityrt/ui-kit";
+import { Download, Eye, Info, MoreVertical, Power, RefreshCw, Trash2, Upload } from "lucide-react";
+import {
+  previewImageUrl,
+  useActivateTemplate,
+  useAdminTemplates,
+  useDeactivateTemplate,
+  useDeleteTemplate,
+  useTemplateDetails,
+  type AdminTemplate,
+} from "./use-admin-templates";
+import { canActivate, smokeBadge, statusBadge, validationBadge } from "./template-status";
+import { UploadModal } from "./upload-modal";
+import { DetailsModal } from "./details-modal";
+import { PreviewCheckModal } from "./preview-check-modal";
+import { UpdateModal } from "./update-modal";
+import { ConfirmDialog } from "./confirm-dialog";
+
+const DEFAULT_ID = "default";
+
+type ModalState =
+  | { kind: "details"; template: AdminTemplate }
+  | { kind: "preview"; template: AdminTemplate }
+  | { kind: "update"; template: AdminTemplate }
+  | { kind: "deactivate"; template: AdminTemplate }
+  | { kind: "delete"; template: AdminTemplate }
+  | null;
+
+function exportTemplate(id: string) {
+  const a = document.createElement("a");
+  a.href = `/api/admin/templates/${encodeURIComponent(id)}/export`;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+// ─── Card thumbnail with graceful fallback ─────────────────────────────────
+
+function CardThumb({ template }: { template: AdminTemplate }) {
+  const [failed, setFailed] = useState(false);
+  const hasPreview = !!template.manifest.assets?.preview && template.status !== "invalid";
+  if (!hasPreview || failed) {
+    return (
+      <div className="tpl-admin-card__thumb">
+        <span className="tpl-admin-card__thumb-empty">Превью недоступно</span>
+      </div>
+    );
+  }
+  return (
+    <div className="tpl-admin-card__thumb">
+      <img src={previewImageUrl(template.id)} alt={`Превью «${template.name}»`} onError={() => setFailed(true)} />
+    </div>
+  );
+}
+
+// ─── Card ───────────────────────────────────────────────────────────────────
+
+function TemplateCard({
+  template,
+  onAction,
+  onActivate,
+}: {
+  template: AdminTemplate;
+  onAction: (state: NonNullable<ModalState>) => void;
+  onActivate: (id: string) => void;
+}) {
+  const status = statusBadge(template.status);
+  const completeness = validationBadge(template.validationJson);
+  const health = smokeBadge(template.smokeTestJson);
+  const uploaded = !template.isBuiltin;
+  const isActive = template.status === "active";
+  const showActivate = uploaded && !isActive && canActivate(template);
+
+  return (
+    <article className={"tpl-admin-card" + (template.status === "inactive" ? " is-inactive" : "")}>
+      <CardThumb template={template} />
+      <div className="tpl-admin-card__body">
+        <div className="tpl-admin-card__name">
+          {template.name}
+          {template.isBuiltin && (
+            <Tag tone="neutral" variant="outline" size="s">
+              Встроенный
+            </Tag>
+          )}
+        </div>
+        {template.description && <div className="tpl-admin-card__desc">{template.description}</div>}
+        <div className="tpl-admin-card__tags">
+          <Tag tone={status.tone} size="s">
+            {status.label}
+          </Tag>
+          {uploaded && (
+            <Tag tone={completeness.tone} size="s">
+              Комплектность: {completeness.label}
+            </Tag>
+          )}
+          <Tag tone={health.tone} size="s">
+            {health.label}
+          </Tag>
+        </div>
+      </div>
+      <div className="tpl-admin-card__foot">
+        <div className="tpl-admin-card__foot-tags">
+          <Tag tone="info" variant="outline" size="s">
+            v{template.version}
+          </Tag>
+        </div>
+        <MenuTrigger
+          placement="bottom-end"
+          trigger={
+            <Button variant="ghost" size="m" aria-label={`Действия: ${template.name}`}>
+              <MoreVertical size={16} />
+            </Button>
+          }
+        >
+          <MenuItem icon={<Eye size={15} />} title="Предпросмотр и проверка" onClick={() => onAction({ kind: "preview", template })} />
+          <MenuItem icon={<Info size={15} />} title="Детали" onClick={() => onAction({ kind: "details", template })} />
+          {showActivate && (
+            <MenuItem icon={<Power size={15} />} title="Активировать" onClick={() => onActivate(template.id)} />
+          )}
+          {uploaded && isActive && template.id !== DEFAULT_ID && (
+            <MenuItem icon={<Power size={15} />} title="Деактивировать" onClick={() => onAction({ kind: "deactivate", template })} />
+          )}
+          {uploaded && (
+            <MenuItem icon={<RefreshCw size={15} />} title="Обновить (загрузить новую версию)" onClick={() => onAction({ kind: "update", template })} />
+          )}
+          <MenuItem icon={<Download size={15} />} title="Экспортировать ZIP" onClick={() => exportTemplate(template.id)} />
+          {uploaded && (
+            <MenuItem
+              icon={<Trash2 size={15} />}
+              title="Удалить"
+              danger
+              disabled={isActive}
+              meta={isActive ? "Сначала деактивируйте" : undefined}
+              onClick={() => !isActive && onAction({ kind: "delete", template })}
+            />
+          )}
+        </MenuTrigger>
+      </div>
+    </article>
+  );
+}
+
+// ─── Lifecycle confirms (need usage count) ─────────────────────────────────
+
+function DeactivateConfirm({ template, onClose }: { template: AdminTemplate; onClose: () => void }) {
+  const details = useTemplateDetails(template.id, true);
+  const deactivate = useDeactivateTemplate();
+  const used = details.data?.usageCount ?? 0;
+  return (
+    <ConfirmDialog
+      open
+      onClose={onClose}
+      title={`Деактивировать «${template.name}»?`}
+      description="Шаблон скроется из выбора у авторов."
+      confirmLabel="Деактивировать"
+      confirmVariant="primary"
+      confirmIcon={<Power size={14} />}
+      pending={deactivate.isPending}
+      banner={
+        used > 0
+          ? {
+              tone: "warning",
+              title: `${used} тест(ов) используют этот шаблон`,
+              description: "Они автоматически переключатся на «Стандартный». Совместимые параметры оформления сохранятся.",
+            }
+          : undefined
+      }
+      onConfirm={() => deactivate.mutate(template.id, { onSuccess: onClose })}
+    />
+  );
+}
+
+function DeleteConfirm({ template, onClose }: { template: AdminTemplate; onClose: () => void }) {
+  const details = useTemplateDetails(template.id, true);
+  const del = useDeleteTemplate();
+  const used = details.data?.usageCount ?? 0;
+  const blocked = used > 0;
+  return (
+    <ConfirmDialog
+      open
+      onClose={onClose}
+      title={`Удалить «${template.name}»?`}
+      description={blocked ? undefined : "Файлы шаблона будут удалены безвозвратно."}
+      confirmLabel="Удалить"
+      confirmVariant="destructive"
+      confirmIcon={<Trash2 size={14} />}
+      confirmDisabled={blocked || details.isLoading}
+      pending={del.isPending}
+      banner={
+        blocked
+          ? {
+              tone: "error",
+              title: `Шаблон используется ${used} тест(ами)`,
+              description: "Удаление невозможно. Переключите тесты на другой шаблон или деактивируйте этот.",
+            }
+          : undefined
+      }
+      onConfirm={() => del.mutate(template.id, { onSuccess: onClose })}
+    />
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────
+
+export function TemplatesPage() {
+  const list = useAdminTemplates();
+  const activate = useActivateTemplate();
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [modal, setModal] = useState<ModalState>(null);
+
+  const templates = list.data ?? [];
+
+  return (
+    <div className="tpl-admin-page">
+      <div className="tpl-admin-toolbar">
+        <div className="tpl-admin-toolbar__text">
+          <h1 className="tpl-admin-toolbar__title">Шаблоны</h1>
+          <p className="tpl-admin-toolbar__sub">
+            {templates.length > 0 ? `${templates.length} шаблон(ов) в реестре` : "Реестр шаблонов оформления"}
+          </p>
+        </div>
+        <Button variant="primary" size="m" leadingIcon={<Upload size={14} />} onClick={() => setUploadOpen(true)}>
+          Загрузить шаблон
+        </Button>
+      </div>
+
+      {list.isLoading && <p className="tpl-admin-empty">Загружаем шаблоны…</p>}
+      {list.error && (
+        <Banner tone="error" title="Не удалось загрузить шаблоны" description={(list.error as Error).message} />
+      )}
+      {!list.isLoading && !list.error && templates.length === 0 && (
+        <p className="tpl-admin-empty">Шаблоны не найдены. Загрузите ZIP-архив, чтобы начать.</p>
+      )}
+
+      {templates.length > 0 && (
+        <div className="tpl-admin-grid">
+          {templates.map((t) => (
+            <TemplateCard
+              key={t.id}
+              template={t}
+              onAction={setModal}
+              onActivate={(id) => activate.mutate(id)}
+            />
+          ))}
+        </div>
+      )}
+
+      <UploadModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onCheckNow={(template) => {
+          setUploadOpen(false);
+          setModal({ kind: "preview", template });
+        }}
+      />
+
+      {modal?.kind === "details" && (
+        <DetailsModal
+          open
+          onClose={() => setModal(null)}
+          template={modal.template}
+          onOpenPreview={() => setModal({ kind: "preview", template: modal.template })}
+        />
+      )}
+
+      {modal?.kind === "preview" && (
+        <PreviewCheckModal
+          open
+          onClose={() => setModal(null)}
+          template={modal.template}
+          onActivated={() => setModal(null)}
+        />
+      )}
+
+      {modal?.kind === "update" && (
+        <UpdateModal open onClose={() => setModal(null)} template={modal.template} />
+      )}
+
+      {modal?.kind === "deactivate" && (
+        <DeactivateConfirm template={modal.template} onClose={() => setModal(null)} />
+      )}
+
+      {modal?.kind === "delete" && (
+        <DeleteConfirm template={modal.template} onClose={() => setModal(null)} />
+      )}
+    </div>
+  );
+}

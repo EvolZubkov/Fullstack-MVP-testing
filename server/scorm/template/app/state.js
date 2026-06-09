@@ -4,9 +4,14 @@
 var state = {
   phase: 'start',
   currentIndex: 0,
+  currentPageIndex: 0,
   answers: {},
   variant: null,
   flatQuestions: [],
+  pageSequence: [],
+  templateManifest: null,
+  templateShell: null,
+  templateLayouts: {},
   shuffleMappings: {},
   matchingPools: {},
   timerInterval: null,
@@ -19,6 +24,32 @@ var state = {
   
   // Adaptive mode state
   adaptiveState: null, // Will be initialized for adaptive tests
+
+  // PRD-4 v1.1 §4.4: per-section results, frozen when the learner enters the
+  // first `after_topic` content page for that section. Map of topicId -> the
+  // same shape topicResults entries carry in `calculateResults()` output.
+  // Templates bind via `TEST_DATA.section.current.result.*`.
+  sectionResults: {},
+
+  // PRD-4 v1.1 §4.7 router_by_topics: state machine for router navigation.
+  // - routerTopicStates: per-topic completion status. 'notStarted' before
+  //   the learner picks the topic from the router; 'inProgress' after pick;
+  //   'completed' after the topic chunk finishes (sectionResult frozen).
+  // - currentRouterTopic: the topicId currently being traversed (null while
+  //   the router itself is on screen).
+  // - routerFinished: true when the learner triggers the «Завершить» action
+  //   from the router (completionPolicy is satisfied). Switches the page
+  //   sequence to the post-router test-after content + results.
+  routerTopicStates: {},
+  currentRouterTopic: null,
+  routerFinished: false,
+
+  // PRD-4 v1.1 §3.2 / Phase 4e: per-section timer. Active when the learner
+  // is inside a section with a non-null section.timeLimitMinutes. Started
+  // by contentFlow / routerFlow at section entry; stopped on section exit
+  // or expiry. Shape: { topicId, limitMinutes, remainingSeconds, expired,
+  // onExpire, intervalId } or null.
+  sectionTimer: null,
 };
 
 // SCORM finish guard

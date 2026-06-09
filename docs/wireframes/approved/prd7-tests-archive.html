@@ -1,0 +1,809 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Wireframe: prd7 — Tests Archive Page
+    Этап 3 — Wireframes
+    Файл: docs/wireframes/prd7-tests-archive.html
+    Состояния: s-list, s-preview, s-restore, s-restore-orphan, s-delete, s-empty
+    Покрывает: FR-31
+  -->
+  <title>prd7 — Архив тестов</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <style>
+    /* Wireframe-specific helpers — not part of product UI */
+    .wf-sprite { display: none; }
+
+    .page-title { font: var(--ou-text-heading-s); font-weight: 700; }
+
+    /* ── Back button ─────────────────────────────────────────────────────── */
+    .wf-back-btn {
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      font: var(--ou-text-body-s); color: var(--ou-accent-default);
+      background: none; border: none; cursor: pointer; padding: 0; font-family: inherit;
+      text-decoration: none; flex-shrink: 0;
+    }
+    .wf-back-btn svg { width: var(--wf-space-14); height: var(--wf-space-14); }
+
+    /* ── Content split (table + preview) ──────────────────────────────────── */
+    .wf-content-split { display: flex; flex: 1; overflow: hidden; }
+    .wf-tree-section { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+    /* ── Tests table ──────────────────────────────────────────────────────── */
+    .wf-table-header {
+      display: grid;
+      grid-template-columns: 1fr var(--wf-size-110) var(--wf-size-90) var(--wf-size-130) var(--wf-size-65) var(--wf-size-95) var(--wf-size-120) var(--wf-size-110) var(--wf-size-150);
+      padding: var(--ou-space-1) 0;
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: .05em;
+      position: sticky; top: 0; background: var(--ou-bg-elevated); z-index: 1; flex-shrink: 0;
+    }
+    .wf-table-header > :first-child { padding-left: var(--ou-space-6); }
+    .wf-table-header > :nth-child(n+2) { display: flex; align-items: center; justify-content: center; }
+    .wf-table-header > :last-child { display: inline-flex; justify-self: end; margin-right: var(--ou-space-2); }
+
+    .wf-test-row {
+      display: grid;
+      grid-template-columns: 1fr var(--wf-size-110) var(--wf-size-90) var(--wf-size-130) var(--wf-size-65) var(--wf-size-95) var(--wf-size-120) var(--wf-size-110) var(--wf-size-150);
+      align-items: center;
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      opacity: .78; cursor: pointer;
+    }
+    .wf-test-row:hover { background: var(--ou-accent-soft); opacity: 1; }
+    .wf-test-row--selected { background: var(--ou-accent-soft); opacity: 1; }
+    .wf-test-row > :nth-child(n+2) { display: flex; align-items: center; justify-content: center; }
+    .wf-test-row > :last-child { justify-content: flex-end; padding-right: var(--ou-space-2); }
+
+    .wf-test-name-cell { padding: var(--ou-space-2) 0 var(--ou-space-2) var(--ou-space-6); }
+    .wf-test-name { font: var(--ou-text-body-s); font-weight: 500; }
+    .wf-test-sub { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--wf-space-half); }
+    .wf-tree-num { font: var(--ou-text-body-s); }
+    .wf-date-cell { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+    .wf-scroll-area { flex: 1; overflow-y: auto; }
+
+    /* ── Row actions ──────────────────────────────────────────────────────── */
+    .wf-row-actions { display: flex; align-items: center; gap: var(--ou-space-1); }
+    .wf-icon-row-btn {
+      width: var(--wf-size-28); height: var(--wf-size-28); border-radius: var(--ou-radius-s);
+      border: var(--wf-border-w) solid transparent; background: transparent;
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--ou-fg-muted); flex-shrink: 0; position: relative;
+    }
+    .wf-icon-row-btn svg { width: var(--wf-space-14); height: var(--wf-space-14); }
+    .wf-icon-row-btn--restore:hover { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+    .wf-icon-row-btn--delete:hover  { background: var(--ou-error-soft); color: var(--ou-error-on-soft); border-color: var(--ou-border-error); }
+    .wf-icon-row-btn[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; top: calc(100% + var(--wf-space-6)); right: 0;
+      background: var(--ou-neutral-900); color: var(--ou-neutral-0);
+      font: var(--ou-text-caption); white-space: nowrap; padding: var(--wf-space-1q) var(--wf-space-7);
+      border-radius: var(--ou-radius-s); pointer-events: none; z-index: 30;
+    }
+    .wf-icon-row-btn[data-tooltip]:hover::before {
+      content: ''; position: absolute; top: calc(100% + var(--wf-space-half)); right: var(--wf-space-7);
+      border: var(--ou-space-1) solid transparent; border-bottom-color: var(--ou-neutral-900);
+      pointer-events: none; z-index: 30;
+    }
+
+    /* ── Preview panel toggle ─────────────────────────────────────────────── */
+    .wf-preview-toggle-btn {
+      width: var(--wf-size-28); height: var(--wf-size-28); padding: 0; flex-shrink: 0;
+      border-radius: var(--ou-radius-s); border: var(--wf-border-w) solid transparent;
+      background: transparent; cursor: pointer; color: var(--ou-fg-muted);
+      display: inline-flex; align-items: center; justify-content: center; position: relative;
+    }
+    .wf-preview-toggle-btn--active { color: var(--ou-accent-default); border-color: var(--ou-accent-default); background: var(--ou-accent-soft); }
+    .wf-preview-toggle-btn svg { width: var(--wf-space-14); height: var(--wf-space-14); }
+    .wf-preview-toggle-btn[data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; top: calc(100% + var(--wf-space-6)); right: 0;
+      background: var(--ou-neutral-900); color: var(--ou-neutral-0);
+      font: var(--ou-text-caption); white-space: nowrap; padding: var(--wf-space-1q) var(--wf-space-7);
+      border-radius: var(--ou-radius-s); pointer-events: none; z-index: 30;
+    }
+
+    /* ── Mode badge ───────────────────────────────────────────────────────── */
+    .wf-mode-badge {
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      font: var(--ou-text-caption); font-weight: 500; padding: var(--wf-space-half) var(--ou-space-2);
+      border-radius: var(--wf-space-10); white-space: nowrap;
+    }
+    .wf-mode-badge--standard { background: var(--ou-bg-muted); color: var(--ou-fg-muted); border: var(--wf-border-w) solid var(--ou-border-soft); }
+    .wf-mode-badge--adaptive { background: var(--ou-accent-soft); color: var(--ou-accent-active); border: var(--wf-border-w) solid var(--ou-accent-container-hover); }
+
+    /* ── Flow chip ────────────────────────────────────────────────────────── */
+    .wf-flow-chip {
+      display: inline-flex; align-items: center; gap: var(--ou-space-1);
+      font: var(--ou-text-caption); font-weight: 500; color: var(--ou-fg-default);
+      padding: var(--wf-space-half) var(--ou-space-2); border-radius: var(--ou-radius-s);
+      background: var(--ou-bg-muted); border: var(--wf-border-w) solid var(--ou-border-soft);
+      white-space: nowrap;
+    }
+    .wf-flow-chip svg { width: var(--wf-space-11); height: var(--wf-space-11); flex-shrink: 0; color: var(--ou-fg-muted); }
+
+    /* ── Preview panel (right) ────────────────────────────────────────────── */
+    .wf-preview-panel {
+      width: var(--wf-size-300); flex-shrink: 0;
+      border-left: var(--wf-border-w) solid var(--ou-border-soft);
+      display: flex; flex-direction: column; overflow-y: auto;
+      background: var(--ou-bg-elevated);
+    }
+    .wf-preview-panel-header {
+      padding: var(--ou-space-3) var(--ou-space-4) var(--ou-space-2);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft); flex-shrink: 0;
+    }
+    .wf-preview-panel-name { font: var(--ou-text-body-s); font-weight: 600; line-height: 1.4; margin-bottom: var(--ou-space-2); }
+    .wf-preview-badges { display: flex; flex-wrap: wrap; gap: var(--ou-space-1); }
+    .wf-preview-panel-body { padding: var(--ou-space-4); display: flex; flex-direction: column; gap: var(--ou-space-5); }
+    .wf-preview-section-title {
+      font: var(--ou-text-caption); font-weight: 700; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: var(--ou-space-2);
+    }
+    .wf-preview-topic-row { display: flex; align-items: baseline; gap: var(--ou-space-1); font: var(--ou-text-body-s); padding: var(--wf-space-half) 0; }
+    .wf-preview-topic-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .wf-preview-topic-dots { flex: none; color: var(--ou-border-soft); overflow: hidden; white-space: nowrap; }
+    .wf-preview-topic-count { flex-shrink: 0; color: var(--ou-fg-muted); }
+    .wf-preview-topic-total { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-1); padding-top: var(--ou-space-1); border-top: var(--wf-border-w) solid var(--ou-border-soft); }
+    .wf-preview-kv-row { display: flex; justify-content: space-between; align-items: baseline; font: var(--ou-text-body-s); padding: var(--wf-space-half) 0; }
+    .wf-preview-kv-key { color: var(--ou-fg-muted); }
+    .wf-preview-kv-val { font-weight: 500; }
+
+    /* ── Restore orphan warning ───────────────────────────────────────────── */
+    .wf-restore-warn {
+      display: flex; align-items: flex-start; gap: var(--ou-space-2);
+      background: var(--ou-warning-soft);
+      border: var(--wf-border-w) solid var(--ou-warning-default);
+      color: var(--ou-fg-default); border-radius: var(--ou-radius-m);
+      font: var(--ou-text-body-s);
+      padding: var(--ou-space-2) var(--ou-space-3); margin-top: var(--ou-space-3);
+    }
+    .wf-restore-warn svg { flex-shrink: 0; margin-top: var(--wf-border-w); color: var(--ou-warning-default); }
+
+    /* ── Delete note ──────────────────────────────────────────────────────── */
+    .wf-delete-note { margin-top: var(--ou-space-2); color: var(--ou-fg-muted); font: var(--ou-text-body-s); }
+
+    /* ── Empty archive state ──────────────────────────────────────────────── */
+    .wf-empty-archive { padding: var(--ou-space-10) var(--ou-space-6); text-align: center; color: var(--ou-fg-muted); }
+    .wf-empty-archive-title { font: var(--ou-text-body-m); font-weight: 500; color: var(--ou-fg-default); margin-bottom: var(--ou-space-1); }
+    .wf-empty-archive-desc { font: var(--ou-text-body-s); }
+  </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: var(--wf-border-w);
+      height: var(--ou-space-5);
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    .ou-shell.wf-state { min-height: unset; padding-top: 0; margin-top: var(--wf-nav-offset, var(--wf-size-52)); height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); }
+    .ou-shell.wf-state.active { display: grid; }
+    .ou-shell .ou-shell__main { padding: 0; overflow: hidden; gap: 0; }
+
+    .wf-state > .drawer-overlay,
+    .wf-state > .overlay,
+    .wf-state > .wf-overlay {
+      top: var(--wf-nav-offset, var(--wf-size-52));
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .drawer-overlay > .drawer {
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+    }
+
+    /* Wireframe: modal sits above shell but below wf-nav (9999) */
+    .ou-modal-root { z-index: 200; top: var(--wf-nav-offset, var(--wf-size-52)); }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+  </symbol>
+  <symbol id="i-question" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/>
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="8" height="4" x="8" y="2" rx="1"/>
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+  </symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </symbol>
+  <symbol id="i-archive-restore" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="20" height="5" x="2" y="3" rx="1"/>
+    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/>
+    <path d="m9 13 3-3 3 3"/><path d="M12 10v8"/>
+  </symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+  </symbol>
+  <symbol id="i-panel-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/>
+  </symbol>
+  <symbol id="i-flow-router" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+    <path d="M18 9a9 9 0 0 1-9 9"/>
+  </symbol>
+  <symbol id="i-flow-topics" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="4" y1="7" x2="10" y2="7"/><line x1="4" y1="12" x2="10" y2="12"/><line x1="4" y1="17" x2="10" y2="17"/>
+    <polyline points="14 9 18 12 14 15"/>
+  </symbol>
+  <symbol id="i-warn-tri" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+  </symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-label">prd7 — Архив тестов:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-list')">s-list</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-preview')">s-preview</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-restore')">s-restore</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-restore-orphan')">s-restore-orphan</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-delete')">s-delete</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-empty')">s-empty</button>
+  <a class="wf-link" href="prd7-tests-list.html">← Список тестов</a>
+  <button class="wf-btn" type="button" onclick="toggleTheme()">Dark</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity()">Compact</button>
+</nav>
+
+<!-- ═══════════ STATE: s-list ═══════════ -->
+<div id="s-list" class="wf-state ou-shell active">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub is-active" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <a class="wf-back-btn" href="prd7-tests-list.html"><svg width="14" height="14"><use href="#i-arrow-left"/></svg>Тесты</a>
+    <span class="page-title">Архив тестов</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="wf-content-split">
+      <div class="wf-tree-section">
+        <div class="wf-table-header">
+          <div>Название</div>
+          <div>Статус</div><div>Режим</div><div>Сценарий</div>
+          <div>Тем</div><div>Вопросов</div><div>Архивирован</div><div>Назначений</div><button type="button" class="wf-preview-toggle-btn" aria-label="Панель предпросмотра" data-tooltip="Панель предпросмотра"><svg width="14" height="14"><use href="#i-panel-right"/></svg></button>
+        </div>
+        <div class="wf-scroll-area">
+          <div class="wf-test-row">
+            <div class="wf-test-name-cell">
+              <div class="wf-test-name">Аудит логов SCORM</div>
+              <div class="wf-test-sub">Папка: Системное администрирование</div>
+            </div>
+            <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+            <div><span class="wf-mode-badge wf-mode-badge--standard">Стандарт</span></div>
+            <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-router"/></svg>Роутер</span></div>
+            <div class="wf-tree-num">5</div><div class="wf-tree-num">27</div>
+            <div class="wf-date-cell">10.01.2025</div><div class="wf-tree-num">0</div>
+            <div class="wf-row-actions">
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore" aria-label="Восстановить" data-tooltip="Восстановить"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete" aria-label="Удалить навсегда" data-tooltip="Удалить навсегда"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+            </div>
+          </div>
+          <div class="wf-test-row">
+            <div class="wf-test-name-cell">
+              <div class="wf-test-name">Введение в DevOps</div>
+              <div class="wf-test-sub">Папка: Программирование</div>
+            </div>
+            <div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+            <div><span class="wf-mode-badge wf-mode-badge--adaptive">Адаптив</span></div>
+            <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-topics"/></svg>По темам</span></div>
+            <div class="wf-tree-num">3</div><div class="wf-tree-num">14</div>
+            <div class="wf-date-cell">22.12.2024</div><div class="wf-tree-num">12</div>
+            <div class="wf-row-actions">
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore" aria-label="Восстановить" data-tooltip="Восстановить"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete" aria-label="Удалить навсегда" data-tooltip="Удалить навсегда"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════ STATE: s-preview ═══════════ -->
+<div id="s-preview" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub is-active" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <a class="wf-back-btn" href="prd7-tests-list.html"><svg width="14" height="14"><use href="#i-arrow-left"/></svg>Тесты</a>
+    <span class="page-title">Архив тестов</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="wf-content-split">
+      <div class="wf-tree-section">
+        <div class="wf-table-header">
+          <div>Название</div>
+          <div>Статус</div><div>Режим</div><div>Сценарий</div>
+          <div>Тем</div><div>Вопросов</div><div>Архивирован</div><div>Назначений</div><button type="button" class="wf-preview-toggle-btn wf-preview-toggle-btn--active" aria-label="Скрыть предпросмотр" data-tooltip="Скрыть предпросмотр"><svg width="14" height="14"><use href="#i-panel-right"/></svg></button>
+        </div>
+        <div class="wf-scroll-area">
+          <div class="wf-test-row wf-test-row--selected">
+            <div class="wf-test-name-cell">
+              <div class="wf-test-name">Аудит логов SCORM</div>
+              <div class="wf-test-sub">Папка: Системное администрирование</div>
+            </div>
+            <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+            <div><span class="wf-mode-badge wf-mode-badge--standard">Стандарт</span></div>
+            <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-router"/></svg>Роутер</span></div>
+            <div class="wf-tree-num">5</div><div class="wf-tree-num">27</div>
+            <div class="wf-date-cell">10.01.2025</div><div class="wf-tree-num">0</div>
+            <div class="wf-row-actions">
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore" aria-label="Восстановить" data-tooltip="Восстановить"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete" aria-label="Удалить навсегда" data-tooltip="Удалить навсегда"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+            </div>
+          </div>
+          <div class="wf-test-row">
+            <div class="wf-test-name-cell">
+              <div class="wf-test-name">Введение в DevOps</div>
+              <div class="wf-test-sub">Папка: Программирование</div>
+            </div>
+            <div><span class="ou-tag ou-tag--success">Опубликован</span></div>
+            <div><span class="wf-mode-badge wf-mode-badge--adaptive">Адаптив</span></div>
+            <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-topics"/></svg>По темам</span></div>
+            <div class="wf-tree-num">3</div><div class="wf-tree-num">14</div>
+            <div class="wf-date-cell">22.12.2024</div><div class="wf-tree-num">12</div>
+            <div class="wf-row-actions">
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore" aria-label="Восстановить" data-tooltip="Восстановить"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete" aria-label="Удалить навсегда" data-tooltip="Удалить навсегда"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <aside class="wf-preview-panel">
+        <div class="wf-preview-panel-header">
+          <div class="wf-preview-panel-name">Аудит логов SCORM</div>
+          <div class="wf-preview-badges">
+            <span class="ou-tag ou-tag--neutral">Черновик</span>
+            <span class="wf-mode-badge wf-mode-badge--standard">Стандарт</span>
+            <span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-router"/></svg>Роутер</span>
+          </div>
+        </div>
+        <div class="wf-preview-panel-body">
+          <div>
+            <div class="wf-preview-section-title">Состав</div>
+            <div class="wf-preview-topic-row">
+              <span class="wf-preview-topic-name">Аудит SCORM runtime</span>
+              <span class="wf-preview-topic-dots">............</span>
+              <span class="wf-preview-topic-count">10</span>
+            </div>
+            <div class="wf-preview-topic-row">
+              <span class="wf-preview-topic-name">Настройка LRS</span>
+              <span class="wf-preview-topic-dots">............</span>
+              <span class="wf-preview-topic-count">8</span>
+            </div>
+            <div class="wf-preview-topic-row">
+              <span class="wf-preview-topic-name">SCORM 1.2 vs 2004</span>
+              <span class="wf-preview-topic-dots">............</span>
+              <span class="wf-preview-topic-count">5</span>
+            </div>
+            <div class="wf-preview-topic-row">
+              <span class="wf-preview-topic-name">Отладка</span>
+              <span class="wf-preview-topic-dots">............</span>
+              <span class="wf-preview-topic-count">4</span>
+            </div>
+            <div class="wf-preview-topic-total">Итого: 27 вопросов, 5 тем</div>
+          </div>
+          <div>
+            <div class="wf-preview-section-title">Сведения</div>
+            <div class="wf-preview-kv-row"><span class="wf-preview-kv-key">Назначений</span><span class="wf-preview-kv-val">0</span></div>
+            <div class="wf-preview-kv-row"><span class="wf-preview-kv-key">Архивирован</span><span class="wf-preview-kv-val">10.01.2025</span></div>
+            <div class="wf-preview-kv-row"><span class="wf-preview-kv-key">Создан</span><span class="wf-preview-kv-val">05.11.2024</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════ STATE: s-restore ═══════════ -->
+<div id="s-restore" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub is-active" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <a class="wf-back-btn" href="prd7-tests-list.html"><svg width="14" height="14"><use href="#i-arrow-left"/></svg>Тесты</a>
+    <span class="page-title">Архив тестов</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main" style="opacity:.4;pointer-events:none;">
+
+    <div class="wf-content-split">
+      <div class="wf-tree-section">
+        <div class="wf-table-header">
+          <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div>
+          <div>Тем</div><div>Вопросов</div><div>Архивирован</div><div>Назначений</div><div></div>
+        </div>
+        <div class="wf-scroll-area">
+          <div class="wf-test-row">
+            <div class="wf-test-name-cell">
+              <div class="wf-test-name">Аудит логов SCORM</div>
+              <div class="wf-test-sub">Папка: Системное администрирование</div>
+            </div>
+            <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+            <div><span class="wf-mode-badge wf-mode-badge--standard">Стандарт</span></div>
+            <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-router"/></svg>Роутер</span></div>
+            <div class="wf-tree-num">5</div><div class="wf-tree-num">27</div>
+            <div class="wf-date-cell">10.01.2025</div><div class="wf-tree-num">0</div>
+            <div class="wf-row-actions">
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-restore-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <p class="ou-modal__title" id="dlg-restore-title">Восстановить тест?</p>
+        </div>
+      </div>
+      <div class="ou-modal__body">
+        Тест <strong>«Аудит логов SCORM»</strong> будет восстановлен и переведён в статус <strong>«Черновик»</strong>. Он снова появится в основном списке тестов.
+      </div>
+      <div class="ou-modal__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
+        <button class="ou-btn ou-btn--primary ou-btn--s" type="button">Восстановить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ STATE: s-restore-orphan ═══════════ -->
+<div id="s-restore-orphan" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub is-active" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <a class="wf-back-btn" href="prd7-tests-list.html"><svg width="14" height="14"><use href="#i-arrow-left"/></svg>Тесты</a>
+    <span class="page-title">Архив тестов</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main" style="opacity:.4;pointer-events:none;">
+
+    <div class="wf-content-split">
+      <div class="wf-tree-section">
+        <div class="wf-table-header">
+          <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div>
+          <div>Тем</div><div>Вопросов</div><div>Архивирован</div><div>Назначений</div><div></div>
+        </div>
+        <div class="wf-scroll-area">
+          <div class="wf-test-row">
+            <div class="wf-test-name-cell">
+              <div class="wf-test-name">Аудит логов SCORM</div>
+              <div class="wf-test-sub">Папка удалена</div>
+            </div>
+            <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+            <div><span class="wf-mode-badge wf-mode-badge--standard">Стандарт</span></div>
+            <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-router"/></svg>Роутер</span></div>
+            <div class="wf-tree-num">5</div><div class="wf-tree-num">27</div>
+            <div class="wf-date-cell">10.01.2025</div><div class="wf-tree-num">0</div>
+            <div class="wf-row-actions">
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-orphan-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <p class="ou-modal__title" id="dlg-orphan-title">Восстановить тест?</p>
+        </div>
+      </div>
+      <div class="ou-modal__body">
+        Тест <strong>«Аудит логов SCORM»</strong> будет восстановлен и переведён в статус <strong>«Черновик»</strong>.
+        <div class="wf-restore-warn">
+          <svg width="14" height="14"><use href="#i-warn-tri"/></svg>
+          <span>Папка <strong>«Системное администрирование»</strong>, в которой находился тест, была удалена. После восстановления тест окажется в корне списка тестов.</span>
+        </div>
+      </div>
+      <div class="ou-modal__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
+        <button class="ou-btn ou-btn--primary ou-btn--s" type="button">Восстановить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ STATE: s-delete ═══════════ -->
+<div id="s-delete" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub is-active" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <a class="wf-back-btn" href="prd7-tests-list.html"><svg width="14" height="14"><use href="#i-arrow-left"/></svg>Тесты</a>
+    <span class="page-title">Архив тестов</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main" style="opacity:.4;pointer-events:none;">
+
+    <div class="wf-content-split">
+      <div class="wf-tree-section">
+        <div class="wf-table-header">
+          <div>Название</div><div>Статус</div><div>Режим</div><div>Сценарий</div>
+          <div>Тем</div><div>Вопросов</div><div>Архивирован</div><div>Назначений</div><div></div>
+        </div>
+        <div class="wf-scroll-area">
+          <div class="wf-test-row">
+            <div class="wf-test-name-cell">
+              <div class="wf-test-name">Аудит логов SCORM</div>
+              <div class="wf-test-sub">Папка: Системное администрирование</div>
+            </div>
+            <div><span class="ou-tag ou-tag--neutral">Черновик</span></div>
+            <div><span class="wf-mode-badge wf-mode-badge--standard">Стандарт</span></div>
+            <div><span class="wf-flow-chip"><svg width="11" height="11"><use href="#i-flow-router"/></svg>Роутер</span></div>
+            <div class="wf-tree-num">5</div><div class="wf-tree-num">27</div>
+            <div class="wf-date-cell">10.01.2025</div><div class="wf-tree-num">0</div>
+            <div class="wf-row-actions">
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--restore"><svg width="14" height="14"><use href="#i-archive-restore"/></svg></button>
+              <button type="button" class="wf-icon-row-btn wf-icon-row-btn--delete"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-delete-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <p class="ou-modal__title" id="dlg-delete-title">Удалить тест навсегда?</p>
+        </div>
+      </div>
+      <div class="ou-modal__body">
+        Тест <strong>«Аудит логов SCORM»</strong> будет удалён безвозвратно вместе со всеми данными о попытках.
+        <div class="wf-delete-note">Это действие невозможно отменить.</div>
+      </div>
+      <div class="ou-modal__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
+        <button class="ou-btn ou-btn--destructive ou-btn--s" type="button">Удалить навсегда</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ STATE: s-empty ═══════════ -->
+<div id="s-empty" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub is-active" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <a class="wf-back-btn" href="prd7-tests-list.html"><svg width="14" height="14"><use href="#i-arrow-left"/></svg>Тесты</a>
+    <span class="page-title">Архив тестов</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main">
+
+    <div class="wf-content-split">
+      <div class="wf-tree-section">
+        <div class="wf-scroll-area">
+          <div class="wf-empty-archive">
+            <div class="wf-empty-archive-title">Архив пуст</div>
+            <div class="wf-empty-archive-desc">Архивированные тесты будут отображаться здесь.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<section class="wf-acceptance" aria-label="Acceptance criteria">
+  <h2>Acceptance — FR-31 покрытие</h2>
+  <table class="wf-acceptance-table">
+    <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+    <tbody>
+      <tr><td>FR-31</td><td>Архивированные тесты не отображаются в основном списке. Архив доступен через подпункт «Архив» в сайдбаре раздела Тесты.</td></tr>
+      <tr><td>FR-31</td><td>Восстановление через icon-кнопку с tooltip и confirmation dialog; тест переводится в статус «Черновик».</td></tr>
+      <tr><td>FR-31</td><td>Edge case orphan: если папка тест была архивирован в удалённую папку — в диалоге показывается предупреждение; тест восстанавливается в корень.</td></tr>
+      <tr><td>FR-31</td><td>Удаление навсегда (permanent delete) через icon-кнопку с confirmation dialog. Данные попыток также удаляются.</td></tr>
+      <tr><td>—</td><td>Таблица: Название, Статус, Режим, Сценарий, Тем, Вопросов, Архивирован, Назначений. Панель предпросмотра — toggle-кнопка в заголовке.</td></tr>
+      <tr><td>—</td><td>Состояние «Архив пуст» с empty-state текстом.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+/**
+ * @fileoverview Wireframe state switcher and theme/density toggle.
+ * @module prd7-tests-archive
+ */
+(function () {
+  function resolveState(id) {
+    return document.getElementById(id) || document.getElementById('wf-' + id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      button.classList.toggle('active', button === btn);
+    });
+    updateWireframeNavOffset();
+  };
+
+  window.toggleTheme = function toggleTheme() {
+    document.body.classList.toggle('ou--dark');
+    document.body.classList.toggle('ou--light');
+  };
+
+  window.toggleDensity = function toggleDensity() {
+    document.body.classList.toggle('ou--compact');
+    document.body.classList.toggle('ou--normal');
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+}());
+</script>
+</body>
+</html>

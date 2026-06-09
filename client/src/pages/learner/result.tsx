@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { LoadingState } from "@/components/loading-state";
+import { TemplateScreen } from "@/components/template-screen";
 import { t } from "@/lib/i18n";
 import type { Attempt, AttemptResult, TopicResult } from "@shared/schema";
 
@@ -17,6 +18,13 @@ interface AttemptWithResult extends Attempt {
   attemptsInfo: {
     completed: number;
     max: number | null;
+  } | null;
+  /** PRD-12 web-host: template render payload for the results screen (standard mode). */
+  render?: {
+    layout: string;
+    css: string;
+    context: unknown;
+    theme?: { background: string; foreground: string };
   } | null;
 }
 
@@ -64,9 +72,18 @@ export default function ResultPage() {
     );
   }
 
-  // Адаптивный тест — отдельный рендер
+  // Адаптивный тест — через шаблон (если сервер дал render), иначе legacy-вёрстка.
   if ((result as any).mode === "adaptive") {
+    if (attempt.render) {
+      return <TemplateResultPage attempt={attempt} />;
+    }
     return <AdaptiveResultPage attempt={attempt} result={result as any} />;
+  }
+
+  // PRD-12 web-host: render the results screen via the design template when the
+  // server supplied a render payload (standard mode); else the React markup below.
+  if (attempt.render) {
+    return <TemplateResultPage attempt={attempt} />;
   }
 
   const passed = result.overallPassed;
@@ -288,6 +305,55 @@ function TopicResultCard({ topic }: { topic: TopicResult }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/** Read a CSS custom property (e.g. `--background`) from a stylesheet string. */
+function cssVar(css: string, name: string): string | undefined {
+  const m = new RegExp(`--${name}:\\s*([^;}]+)`).exec(css);
+  return m ? m[1].trim() : undefined;
+}
+
+function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
+  const [, navigate] = useLocation();
+  const render = attempt.render!;
+  // Full-bleed surface in the template's own colors, so there is no seam between
+  // the (dark) template and the surrounding app shell. The back-nav lives inside
+  // the surface, on the same background. Colors come from the template CSS itself
+  // (server `theme` if present, else parsed from the bundled stylesheet).
+  const surface = render.theme?.background || cssVar(render.css, "background");
+  const onSurface = render.theme?.foreground || cssVar(render.css, "foreground");
+
+  return (
+    <div className="min-h-full flex flex-col" style={{ background: surface }}>
+      <TemplateScreen
+        className="flex-1 w-full"
+        layout={render.layout}
+        css={render.css}
+        context={render.context}
+        onAction={(action) => {
+          if (action === "restart" && attempt.canRetake) {
+            navigate(`/learner/test/${attempt.testId}`);
+          }
+        }}
+      />
+
+      <div
+        className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 px-6 pb-10 text-sm"
+        style={{ color: onSurface }}
+      >
+        <Link href="/learner" className="inline-flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
+          <ArrowLeft className="h-4 w-4" />
+          {t.result.backToTests}
+        </Link>
+        {attempt.attemptsInfo && (
+          <span className="opacity-70">
+            Использовано попыток: {attempt.attemptsInfo.completed} / {attempt.attemptsInfo.max}
+            {!attempt.canRetake && attempt.attemptsInfo.max !== null && " — попытки закончились"}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -12,6 +12,7 @@ const { storageMock, emailMock } = vi.hoisted(() => {
     validatePassword: vi.fn(),
     updateUserLastLogin: vi.fn(),
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getUserByEmail: vi.fn(),
     updateUserPassword: vi.fn(),
     updateUser: vi.fn(),
@@ -102,7 +103,7 @@ describe("POST /api/auth/login", () => {
     const res = await request(app).post("/api/auth/login").send({ email: "kate@test.com", password: "correct" });
     expect(res.status).toBe(200);
     expect(res.body.user.email).toBe("kate@test.com");
-    expect(res.body.user.role).toBe("author");
+    expect(res.body.user.roles).toEqual(["administrator"]);
     expect(storageMock.updateUserLastLogin).toHaveBeenCalledWith("u1");
   });
 });

@@ -1,12 +1,14 @@
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
-import { eq, inArray, and, sql, desc } from "drizzle-orm";
+import { eq, inArray, and, sql, desc, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { encryptEmail, decryptEmail, hashEmail } from "./utils/crypto";
 import {
   users, topics, topicCourses, topicEvents, questions, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
   groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
+  contentPages, resultVariables, scales, questionMeasurements,
+  userRoles, testAccessGrants,
   type User, type InsertUser,
   type Folder, type InsertFolder,
   type TestFolder, type InsertTestFolder,
@@ -25,10 +27,29 @@ import {
   type ScormAnswer, type InsertScormAnswer,
   type Group, type InsertGroup,
   type UserGroup, type InsertUserGroup,
+  type TestAccessGrant, type InsertTestAccessGrant,
   type TestAssignment, type InsertTestAssignment,
   type PasswordResetToken, type InsertPasswordResetToken,
   type AssignmentAccessToken, type InsertAssignmentAccessToken,
+  type ContentPage, type InsertContentPage,
+  type ResultVariable, type InsertResultVariable,
+  type Scale, type InsertScale,
+  type QuestionMeasurement, type InsertQuestionMeasurement,
 } from "@shared/schema";
+import type { StoredRole } from "@shared/access";
+import { validate, type ValidationResult, type ValueType } from "@shared/formula";
+
+/**
+ * Normalizes a test row from the DB for backward compatibility (PRD-7 §1.11).
+ * - If `status` is falsy (pre-migration row), derives it from `published`.
+ * - Ensures `published` is always in sync with `status` when reading.
+ */
+function mapLegacyTest(row: Test): Test {
+  const status = row.status || (row.published ? "published" : "draft");
+  const published = status === "published";
+  if (status === row.status && published === row.published) return row;
+  return { ...row, status: status as Test["status"], published };
+}
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -55,6 +76,21 @@ export interface IStorage {
   addUserToGroup(userId: string, groupId: string): Promise<UserGroup>;
   removeUserFromGroup(userId: string, groupId: string): Promise<boolean>;
   setUserGroups(userId: string, groupIds: string[]): Promise<void>;
+
+  // User Roles (PRD-13 RBAC)
+  getUserRoles(userId: string): Promise<StoredRole[]>;
+  setUserRoles(userId: string, roles: StoredRole[], grantedBy?: string | null): Promise<void>;
+  addUserRole(userId: string, role: StoredRole, grantedBy?: string | null): Promise<void>;
+  removeUserRole(userId: string, role: StoredRole): Promise<void>;
+
+  // Test access grants + owner (PRD-13 RBAC)
+  setTestOwner(testId: string, ownerId: string | null): Promise<void>;
+  getTestIdsByOwner(ownerId: string): Promise<string[]>;
+  getTestAccessGrants(testId: string): Promise<TestAccessGrant[]>;
+  getUserTestGrants(userId: string): Promise<TestAccessGrant[]>;
+  getTestGrantForUser(testId: string, userId: string): Promise<TestAccessGrant | undefined>;
+  upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant>;
+  removeTestAccessGrant(testId: string, userId: string): Promise<boolean>;
 
   // Test Assignments
   getAssignment(id: string): Promise<TestAssignment | undefined>;
@@ -88,7 +124,19 @@ export interface IStorage {
   getTestFolders(): Promise<TestFolder[]>;
   createTestFolder(folder: InsertTestFolder): Promise<TestFolder>;
   updateTestFolder(id: string, updates: Partial<InsertTestFolder>): Promise<TestFolder | undefined>;
-  deleteTestFolder(id: string): Promise<boolean>;
+  /**
+   * Удаляет папку, предварительно переместив все тесты и вложенные папки
+   * в указанное место (`moveTo`, по умолчанию `null` = корень). Это вариант
+   * "Только папку" из эскиза prd7-tests-list.html (s-folder-delete-a).
+   */
+  deleteTestFolder(id: string, moveTo?: string | null): Promise<boolean>;
+  /**
+   * Удаляет папку вместе со всеми тестами внутри неё (включая транзитивно
+   * через вложенные папки) и сами вложенные папки. Используется для варианта
+   * "Папку и все тесты" (s-folder-delete-b), требующего ввода точного имени
+   * для подтверждения на уровне route handler.
+   */
+  deleteTestFolderCascade(id: string): Promise<boolean>;
   moveTestToFolder(testId: string, folderId: string | null): Promise<boolean>;
 
   getTopics(): Promise<Topic[]>;
@@ -118,8 +166,11 @@ export interface IStorage {
 
   getTests(): Promise<Test[]>;
   getTest(id: string): Promise<Test | undefined>;
+  getMigrationHealth(): Promise<{ legacyStartPageCount: number }>;
   createTest(test: InsertTest, sections: Omit<InsertTestSection, "testId">[]): Promise<Test>;
   updateTest(id: string, test: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined>;
+  /** Updates only the status field without bumping the version counter (PRD-7 §9). */
+  patchTestStatus(id: string, status: "draft" | "published" | "archived"): Promise<{ id: string; status: string; version: number } | undefined>;
   deleteTest(id: string): Promise<boolean>;
   getTestSections(testId: string): Promise<TestSection[]>;
 
@@ -165,6 +216,40 @@ export interface IStorage {
   
   createScormAnswer(answer: InsertScormAnswer & { id: string }): Promise<ScormAnswer>;
   getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]>;
+
+  // Content Pages (PRD-1)
+  getContentPages(testId: string): Promise<ContentPage[]>;
+  getContentPage(id: string): Promise<ContentPage | undefined>;
+  createContentPage(page: InsertContentPage): Promise<ContentPage>;
+  updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined>;
+  deleteContentPage(id: string): Promise<boolean>;
+  reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void>;
+
+  // PRD-2: user-defined result variables (показатели результата).
+  getResultVariables(testId: string): Promise<ResultVariable[]>;
+  createResultVariable(rv: InsertResultVariable): Promise<ResultVariable>;
+  updateResultVariable(id: string, updates: Partial<InsertResultVariable>): Promise<ResultVariable | undefined>;
+  deleteResultVariable(id: string): Promise<boolean>;
+  reorderResultVariables(updates: { id: string; sortOrder: number }[]): Promise<void>;
+  validateResultVariableFormula(
+    testId: string,
+    formula: string,
+    type: ValueType,
+    opts?: { sortOrder?: number; excludeId?: string },
+  ): Promise<ValidationResult>;
+  // PRD-5: scales and per-question measurements.
+  getScales(testId: string): Promise<Scale[]>;
+  createScale(scale: InsertScale): Promise<Scale>;
+  updateScale(id: string, updates: Partial<InsertScale>): Promise<Scale | undefined>;
+  deleteScale(id: string): Promise<boolean>;
+  reorderScales(updates: { id: string; sortOrder: number }[]): Promise<void>;
+  getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]>;
+  getQuestionMeasurementsByQuestion(testId: string, questionId: string): Promise<QuestionMeasurement[]>;
+  upsertQuestionMeasurements(
+    testId: string,
+    questionId: string,
+    rows: InsertQuestionMeasurement[],
+  ): Promise<QuestionMeasurement[]>;
 }
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
@@ -196,7 +281,6 @@ export class DatabaseStorage implements IStorage {
       emailHash: emailHashValue,
       passwordHash: hashedPassword,
       name: insertUser.name || null,
-      role: insertUser.role || "learner",
       status: insertUser.status || "pending",
       mustChangePassword: insertUser.mustChangePassword ?? true,
       gdprConsent: false,
@@ -356,6 +440,92 @@ export class DatabaseStorage implements IStorage {
       }));
       await db.insert(userGroups).values(values);
     }
+  }
+
+  // ============================================
+  // User Roles (PRD-13 RBAC)
+  // ============================================
+
+  async getUserRoles(userId: string): Promise<StoredRole[]> {
+    const rows = await db.select({ role: userRoles.role }).from(userRoles).where(eq(userRoles.userId, userId));
+    return rows.map((r) => r.role);
+  }
+
+  async setUserRoles(userId: string, roles: StoredRole[], grantedBy: string | null = null): Promise<void> {
+    // Replace the whole role set (mirrors setUserGroups).
+    await db.delete(userRoles).where(eq(userRoles.userId, userId));
+    const unique = Array.from(new Set(roles));
+    if (unique.length > 0) {
+      await db.insert(userRoles).values(unique.map((role) => ({
+        id: randomUUID(),
+        userId,
+        role,
+        grantedBy,
+        grantedAt: new Date(),
+      })));
+    }
+  }
+
+  async addUserRole(userId: string, role: StoredRole, grantedBy: string | null = null): Promise<void> {
+    await db.insert(userRoles).values({
+      id: randomUUID(),
+      userId,
+      role,
+      grantedBy,
+      grantedAt: new Date(),
+    }).onConflictDoNothing();
+  }
+
+  async removeUserRole(userId: string, role: StoredRole): Promise<void> {
+    await db.delete(userRoles).where(and(eq(userRoles.userId, userId), eq(userRoles.role, role)));
+  }
+
+  // ============================================
+  // Test access grants + owner (PRD-13 RBAC)
+  // ============================================
+
+  async setTestOwner(testId: string, ownerId: string | null): Promise<void> {
+    await db.update(tests).set({ ownerId }).where(eq(tests.id, testId));
+  }
+
+  async getTestIdsByOwner(ownerId: string): Promise<string[]> {
+    const rows = await db.select({ id: tests.id }).from(tests).where(eq(tests.ownerId, ownerId));
+    return rows.map((r) => r.id);
+  }
+
+  async getTestAccessGrants(testId: string): Promise<TestAccessGrant[]> {
+    return db.select().from(testAccessGrants).where(eq(testAccessGrants.testId, testId));
+  }
+
+  async getUserTestGrants(userId: string): Promise<TestAccessGrant[]> {
+    return db.select().from(testAccessGrants).where(eq(testAccessGrants.userId, userId));
+  }
+
+  async getTestGrantForUser(testId: string, userId: string): Promise<TestAccessGrant | undefined> {
+    const [grant] = await db.select().from(testAccessGrants)
+      .where(and(eq(testAccessGrants.testId, testId), eq(testAccessGrants.userId, userId)));
+    return grant || undefined;
+  }
+
+  async upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant> {
+    const [row] = await db.insert(testAccessGrants).values({
+      id: randomUUID(),
+      testId: grant.testId,
+      userId: grant.userId,
+      accessLevel: grant.accessLevel,
+      grantedBy: grant.grantedBy ?? null,
+      createdAt: new Date(),
+    }).onConflictDoUpdate({
+      target: [testAccessGrants.testId, testAccessGrants.userId],
+      set: { accessLevel: grant.accessLevel, grantedBy: grant.grantedBy ?? null },
+    }).returning();
+    return row;
+  }
+
+  async removeTestAccessGrant(testId: string, userId: string): Promise<boolean> {
+    const result = await db.delete(testAccessGrants)
+      .where(and(eq(testAccessGrants.testId, testId), eq(testAccessGrants.userId, userId)));
+    return (result.rowCount ?? 0) > 0;
   }
 
   // ============================================
@@ -576,13 +746,47 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
-  async deleteTestFolder(id: string): Promise<boolean> {
-    // Move tests in this folder to root
-    await db.update(tests).set({ folderId: null }).where(eq(tests.folderId, id));
-    // Move child folders to root
-    await db.update(testFolders).set({ parentId: null }).where(eq(testFolders.parentId, id));
+  async deleteTestFolder(id: string, moveTo: string | null = null): Promise<boolean> {
+    // Move direct tests to the requested destination (root by default).
+    await db.update(tests).set({ folderId: moveTo }).where(eq(tests.folderId, id));
+    // Reparent child folders to the requested destination.
+    await db.update(testFolders).set({ parentId: moveTo }).where(eq(testFolders.parentId, id));
     const result = await db.delete(testFolders).where(eq(testFolders.id, id)).returning();
     return result.length > 0;
+  }
+
+  /**
+   * Recursively delete a folder, its sub-folders and every test inside them.
+   * Test-side soft cleanup (adaptive levels/links/topic-settings) is the
+   * caller's responsibility (route handler), keeping this method focused on
+   * the folder/test row deletion.
+   */
+  async deleteTestFolderCascade(id: string): Promise<boolean> {
+    // Collect all descendant folder ids breadth-first.
+    const allFolders = await db.select().from(testFolders);
+    const childrenByParent = new Map<string | null, string[]>();
+    for (const f of allFolders) {
+      const key = f.parentId ?? null;
+      if (!childrenByParent.has(key)) childrenByParent.set(key, []);
+      childrenByParent.get(key)!.push(f.id);
+    }
+    const descendantIds: string[] = [];
+    const queue: string[] = [id];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      descendantIds.push(current);
+      const children = childrenByParent.get(current) ?? [];
+      queue.push(...children);
+    }
+
+    // Delete every test in any of those folders. Adaptive children rows are
+    // assumed cleaned up by the route handler before this call.
+    if (descendantIds.length > 0) {
+      await db.delete(tests).where(inArray(tests.folderId, descendantIds));
+      const result = await db.delete(testFolders).where(inArray(testFolders.id, descendantIds)).returning();
+      return result.length > 0;
+    }
+    return false;
   }
 
   async moveTestToFolder(testId: string, folderId: string | null): Promise<boolean> {
@@ -708,6 +912,8 @@ export class DatabaseStorage implements IStorage {
       feedbackCorrect: question.feedbackCorrect || null,
       feedbackIncorrect: question.feedbackIncorrect || null,
       contentHash: question.contentHash || null,
+      tags: question.tags ?? [],
+      scoringJson: question.scoringJson ?? null,
     }).returning();
     return newQuestion;
   }
@@ -733,6 +939,8 @@ export class DatabaseStorage implements IStorage {
       mediaUrl: original.mediaUrl,
       mediaType: original.mediaType,
       shuffleAnswers: original.shuffleAnswers,
+      tags: original.tags,
+      scoringJson: original.scoringJson,
     }).returning();
     return newQuestion;
   }
@@ -779,6 +987,8 @@ export class DatabaseStorage implements IStorage {
         feedbackMode: q.feedbackMode,
         feedbackCorrect: q.feedbackCorrect,
         feedbackIncorrect: q.feedbackIncorrect,
+        tags: q.tags,
+        scoringJson: q.scoringJson,
       }).returning();
       newQuestions.push(newQ);
     }
@@ -808,68 +1018,145 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTests(): Promise<Test[]> {
-    return db.select().from(tests);
+    const rows = await db.select().from(tests);
+    return rows.map(mapLegacyTest);
   }
 
   async getTest(id: string): Promise<Test | undefined> {
-    const [test] = await db.select().from(tests).where(eq(tests.id, id));
-    return test || undefined;
+    const [row] = await db.select().from(tests).where(eq(tests.id, id));
+    return row ? mapLegacyTest(row) : undefined;
+  }
+
+  /**
+   * Returns counts of legacy rows not yet covered by migration 003.
+   * `legacyStartPageCount` — tests with non-empty `start_page_content` that have
+   * no intro `content_pages` row (position='before', topic_id IS NULL).
+   */
+  async getMigrationHealth(): Promise<{ legacyStartPageCount: number }> {
+    const [{ count }] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(tests)
+      .where(
+        and(
+          sql`${tests.startPageContent} IS NOT NULL`,
+          sql`length(trim(coalesce(${tests.startPageContent}, ''))) > 0`,
+          sql`NOT EXISTS (
+            SELECT 1 FROM content_pages cp
+            WHERE cp.test_id = ${tests.id}
+              AND cp.type = 'intro'
+              AND cp.topic_id IS NULL
+          )`,
+        ),
+      );
+    return { legacyStartPageCount: count ?? 0 };
   }
 
   async createTest(test: InsertTest, sections: Omit<InsertTestSection, "testId">[]): Promise<Test> {
-    const id = randomUUID();
-    const [newTest] = await db.insert(tests).values({
-      id,
-      title: test.title,
-      description: test.description || null,
-      overallPassRuleJson: test.overallPassRuleJson,
-      webhookUrl: test.webhookUrl || null,
-      published: test.published || false,
-      showCorrectAnswers: test.showCorrectAnswers || false,
-      timeLimitMinutes: test.timeLimitMinutes || null,
-      maxAttempts: test.maxAttempts || null,
-      startPageContent: test.startPageContent || null,
-      feedback: test.feedback || null,
-      mode: test.mode || "standard",
-      showDifficultyLevel: test.showDifficultyLevel ?? true,
-    }).returning();
+    return db.transaction(async (tx) => {
+      const id = randomUUID();
+      // PRD-7 §4.1: status is the source of truth; sync published from it.
+      const status = test.status ?? (test.published ? "published" : "draft");
+      const [newTest] = await tx.insert(tests).values({
+        id,
+        title: test.title,
+        description: test.description || null,
+        overallPassRuleJson: test.overallPassRuleJson,
+        webhookUrl: test.webhookUrl || null,
+        status,
+        published: status === "published",
+        telemetryEnabled: test.telemetryEnabled ?? false,
+        feedbackJson: test.feedbackJson ?? null,
+        flowPolicyJson: test.flowPolicyJson ?? null,
+        showCorrectAnswers: test.showCorrectAnswers || false,
+        timeLimitMinutes: test.timeLimitMinutes || null,
+        maxAttempts: test.maxAttempts || null,
+        startPageContent: test.startPageContent || null,
+        feedback: test.feedback || null,
+        mode: test.mode || "standard",
+        showDifficultyLevel: test.showDifficultyLevel ?? true,
+      }).returning();
 
-    for (const section of sections) {
-      const sectionId = randomUUID();
-      await db.insert(testSections).values({
-        id: sectionId,
-        testId: id,
-        topicId: section.topicId,
-        drawCount: section.drawCount,
-        topicPassRuleJson: section.topicPassRuleJson || null,
-      });
-    }
-
-    return newTest;
-  }
-  async updateTest(id: string, updates: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined> {
-    // Increment version when test is updated
-    const [updated] = await db.update(tests)
-      .set({ ...updates, version: sql`${tests.version} + 1`, updatedAt: new Date() })
-      .where(eq(tests.id, id))
-      .returning();
-    if (!updated) return undefined;
-
-    if (sections) {
-      await db.delete(testSections).where(eq(testSections.testId, id));
       for (const section of sections) {
-        const sectionId = randomUUID();
-        await db.insert(testSections).values({
-          id: sectionId,
+        await tx.insert(testSections).values({
+          id: randomUUID(),
           testId: id,
           topicId: section.topicId,
           drawCount: section.drawCount,
-          topicPassRuleJson: section.topicPassRuleJson || null,
+          drawAll: section.drawAll ?? false,
+          topicPassRuleJson: section.topicPassRuleJson ?? null,
+          required: section.required ?? true,
+          timeLimitMinutes: section.timeLimitMinutes ?? null,
+          feedbackJson: section.feedbackJson ?? null,
+          drawBlueprintJson: section.drawBlueprintJson ?? null,
         });
       }
-    }
 
-    return updated;
+      // Safety net (§1.11): if legacy client passes startPageContent, create an
+      // intro content_page so new code can use it even without migration 003.
+      if (test.startPageContent?.trim()) {
+        await tx.insert(contentPages).values({
+          id: randomUUID(),
+          testId: id,
+          topicId: null,
+          position: "before",
+          mode: "html",
+          type: "intro",
+          kind: "intro",
+          templateKey: null,
+          sortOrder: 0,
+          valuesJson: { values: { html: test.startPageContent } },
+          autoAdvance: false,
+          autoAdvanceDelayMs: null,
+        });
+      }
+
+      return newTest;
+    });
+  }
+
+  async updateTest(id: string, updates: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined> {
+    return db.transaction(async (tx) => {
+      // PRD-7 §4.1: keep status and published in sync on every write.
+      const patch: Partial<InsertTest> = { ...updates };
+      if (patch.status !== undefined) {
+        patch.published = patch.status === "published";
+      } else if (patch.published !== undefined) {
+        patch.status = patch.published ? "published" : "draft";
+      }
+
+      const [updated] = await tx.update(tests)
+        .set({ ...patch, version: sql`${tests.version} + 1`, updatedAt: new Date() })
+        .where(eq(tests.id, id))
+        .returning();
+      if (!updated) return undefined;
+
+      if (sections) {
+        await tx.delete(testSections).where(eq(testSections.testId, id));
+        for (const section of sections) {
+          await tx.insert(testSections).values({
+            id: randomUUID(),
+            testId: id,
+            topicId: section.topicId,
+            drawCount: section.drawCount,
+            drawAll: section.drawAll ?? false,
+            topicPassRuleJson: section.topicPassRuleJson ?? null,
+            required: section.required ?? true,
+            timeLimitMinutes: section.timeLimitMinutes ?? null,
+            feedbackJson: section.feedbackJson ?? null,
+            drawBlueprintJson: section.drawBlueprintJson ?? null,
+          });
+        }
+      }
+
+      return updated;
+    });
+  }
+
+  async patchTestStatus(id: string, status: "draft" | "published" | "archived"): Promise<{ id: string; status: string; version: number } | undefined> {
+    const [row] = await db.update(tests)
+      .set({ status, published: status === "published", updatedAt: new Date() })
+      .where(eq(tests.id, id))
+      .returning({ id: tests.id, status: tests.status, version: tests.version });
+    return row ?? undefined;
   }
 
   async deleteTest(id: string): Promise<boolean> {
@@ -879,7 +1166,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTestSections(testId: string): Promise<TestSection[]> {
-    return db.select().from(testSections).where(eq(testSections.testId, testId));
+    return db
+      .select()
+      .from(testSections)
+      .where(eq(testSections.testId, testId))
+      .orderBy(testSections.sortOrder);
   }
 
   async createAttempt(attempt: InsertAttempt): Promise<Attempt> {
@@ -1113,6 +1404,186 @@ export class DatabaseStorage implements IStorage {
   async getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]> {
     return db.select().from(scormAnswers).where(eq(scormAnswers.attemptId, attemptId));
   }
+
+  // ============================================
+  // Content Pages (PRD-1)
+  // ============================================
+
+  async getContentPages(testId: string): Promise<ContentPage[]> {
+    return db.select().from(contentPages)
+      .where(eq(contentPages.testId, testId))
+      .orderBy(contentPages.topicId, contentPages.position, contentPages.sortOrder);
+  }
+
+  async getContentPage(id: string): Promise<ContentPage | undefined> {
+    const [page] = await db.select().from(contentPages).where(eq(contentPages.id, id));
+    return page;
+  }
+
+  async createContentPage(page: InsertContentPage): Promise<ContentPage> {
+    const [created] = await db.insert(contentPages).values(page).returning();
+    return created;
+  }
+
+  async updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined> {
+    const [updated] = await db.update(contentPages)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(contentPages.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteContentPage(id: string): Promise<boolean> {
+    const result = await db.delete(contentPages).where(eq(contentPages.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      for (const { id, sortOrder } of updates) {
+        await tx.update(contentPages)
+          .set({ sortOrder, updatedAt: new Date() })
+          .where(eq(contentPages.id, id));
+      }
+    });
+  }
+
+  // ─── Result variables (PRD-2) ──────────────────────────────────────────────
+  async getResultVariables(testId: string): Promise<ResultVariable[]> {
+    return db.select().from(resultVariables)
+      .where(eq(resultVariables.testId, testId))
+      .orderBy(resultVariables.sortOrder);
+  }
+
+  async createResultVariable(rv: InsertResultVariable): Promise<ResultVariable> {
+    const [created] = await db.insert(resultVariables).values(rv).returning();
+    return created;
+  }
+
+  async updateResultVariable(id: string, updates: Partial<InsertResultVariable>): Promise<ResultVariable | undefined> {
+    const [updated] = await db.update(resultVariables)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(resultVariables.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteResultVariable(id: string): Promise<boolean> {
+    const result = await db.delete(resultVariables).where(eq(resultVariables.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async reorderResultVariables(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      for (const { id, sortOrder } of updates) {
+        await tx.update(resultVariables)
+          .set({ sortOrder, updatedAt: new Date() })
+          .where(eq(resultVariables.id, id));
+      }
+    });
+  }
+
+  /**
+   * Validate a result-variable formula against a test's reference sets using the
+   * shared DSL. `topicById` resolves to the test's topics; `var()` may reference
+   * only variables with a smaller `sort_order` (DAG, scoring-model §10.9).
+   * `scaleById`/`countScales` resolve against the test's scales (PRD-5, B2).
+   */
+  async validateResultVariableFormula(
+    testId: string,
+    formula: string,
+    type: ValueType,
+    opts: { sortOrder?: number; excludeId?: string } = {},
+  ): Promise<ValidationResult> {
+    const sections = await db.select().from(testSections).where(eq(testSections.testId, testId));
+    const topicIds = new Set(sections.map((s) => s.topicId));
+    const existing = await this.getResultVariables(testId);
+    const prior = existing.filter(
+      (rv) => rv.id !== opts.excludeId && (opts.sortOrder === undefined || rv.sortOrder < opts.sortOrder),
+    );
+    const priorVarNames = new Set(prior.map((rv) => rv.name));
+    const scaleRows = await db.select().from(scales).where(eq(scales.testId, testId));
+    const scaleKeys = new Set(scaleRows.map((s) => s.key));
+    return validate(formula, type, { topicIds, priorVarNames, scaleKeys });
+  }
+
+  // ─── PRD-5: scales ──────────────────────────────────────────────────────────
+
+  async getScales(testId: string): Promise<Scale[]> {
+    return db.select().from(scales)
+      .where(eq(scales.testId, testId))
+      .orderBy(scales.sortOrder);
+  }
+
+  async createScale(scale: InsertScale): Promise<Scale> {
+    const [created] = await db.insert(scales).values(scale).returning();
+    return created;
+  }
+
+  async updateScale(id: string, updates: Partial<InsertScale>): Promise<Scale | undefined> {
+    const [updated] = await db.update(scales)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(scales.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteScale(id: string): Promise<boolean> {
+    const result = await db.delete(scales).where(eq(scales.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async reorderScales(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    await db.transaction(async (tx) => {
+      for (const { id, sortOrder } of updates) {
+        await tx.update(scales)
+          .set({ sortOrder, updatedAt: new Date() })
+          .where(eq(scales.id, id));
+      }
+    });
+  }
+
+  // ─── PRD-5: per-question measurements ─────────────────────────────────────────
+
+  async getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]> {
+    return db.select().from(questionMeasurements)
+      .where(eq(questionMeasurements.testId, testId))
+      .orderBy(questionMeasurements.sortOrder);
+  }
+
+  async getQuestionMeasurementsByQuestion(
+    testId: string,
+    questionId: string,
+  ): Promise<QuestionMeasurement[]> {
+    return db.select().from(questionMeasurements)
+      .where(and(
+        eq(questionMeasurements.testId, testId),
+        eq(questionMeasurements.questionId, questionId),
+      ))
+      .orderBy(questionMeasurements.sortOrder);
+  }
+
+  /**
+   * Replace all measurements of one question in one test with `rows`
+   * (delete-then-insert in a transaction). Returns the persisted rows. An empty
+   * `rows` clears the question's contributions.
+   */
+  async upsertQuestionMeasurements(
+    testId: string,
+    questionId: string,
+    rows: InsertQuestionMeasurement[],
+  ): Promise<QuestionMeasurement[]> {
+    return db.transaction(async (tx) => {
+      await tx.delete(questionMeasurements).where(and(
+        eq(questionMeasurements.testId, testId),
+        eq(questionMeasurements.questionId, questionId),
+      ));
+      if (rows.length === 0) return [];
+      return tx.insert(questionMeasurements)
+        .values(rows.map((r) => ({ ...r, testId, questionId })))
+        .returning();
+    });
+  }
 }
 
 export const storage = new DatabaseStorage();
@@ -1123,35 +1594,43 @@ export async function seedDatabase() {
 
   const adminPassword = await bcrypt.hash("admin123", 10);
   const learnerPassword = await bcrypt.hash("learner123", 10);
+  const adminEmail = "admin@test.com";
+  const learnerEmail = "learner@test.com";
 
   const adminId = randomUUID();
   const learnerId = randomUUID();
 
   await db.insert(users).values([
-    { 
-      id: adminId, 
-      email: "admin@test.com", 
-      passwordHash: adminPassword, 
+    {
+      id: adminId,
+      email: await encryptEmail(adminEmail),
+      emailHash: hashEmail(adminEmail),
+      passwordHash: adminPassword,
       name: "Администратор",
-      role: "author",
       status: "active",
       mustChangePassword: false,
       gdprConsent: true,
       gdprConsentAt: new Date(),
       createdAt: new Date(),
     },
-    { 
-      id: learnerId, 
-      email: "learner@test.com", 
-      passwordHash: learnerPassword, 
+    {
+      id: learnerId,
+      email: await encryptEmail(learnerEmail),
+      emailHash: hashEmail(learnerEmail),
+      passwordHash: learnerPassword,
       name: "Тестовый ученик",
-      role: "learner",
       status: "active",
       mustChangePassword: false,
       gdprConsent: true,
       gdprConsentAt: new Date(),
       createdAt: new Date(),
     },
+  ]);
+
+  // PRD-13: roles live in `user_roles` (the legacy `users.role` column was dropped).
+  await db.insert(userRoles).values([
+    { id: randomUUID(), userId: adminId, role: "administrator" },
+    { id: randomUUID(), userId: learnerId, role: "learner" },
   ]);
 
   const iptvTopicId = randomUUID();

@@ -1,6 +1,7 @@
 # SCORM Test Constructor
 
-Веб-приложение для создания, управления и экспорта интерактивных тестов в формате SCORM 2004 4th Edition. Поддерживает стандартный и адаптивный режимы тестирования с интеграцией в LMS.
+Веб-приложение для создания, управления и экспорта интерактивных тестов в формате SCORM 2004 4th Edition.
+Поддерживает стандартный и адаптивный режимы тестирования с интеграцией в LMS.
 
 ---
 
@@ -28,10 +29,13 @@
 
 ## О проекте
 
-**SCORM Test Constructor** -- полнофункциональное веб-приложение для создания интерактивных тестов с экспортом в формат SCORM 2004 4th Edition. Приложение разделено на две роли:
+**SCORM Test Constructor** -- полнофункциональное веб-приложение для создания интерактивных тестов с экспортом
+в формат SCORM 2004 4th Edition. Приложение разделено на две роли:
 
-- **Авторы (Author)** -- создают банки вопросов, группируют их по темам, конструируют тесты с гибкими правилами прохождения, управляют пользователями и группами, просматривают аналитику
-- **Учащиеся (Learner)** -- проходят тесты в стандартном или адаптивном режиме, получают детальные результаты с рекомендациями курсов
+- **Авторы (Author)** -- создают банки вопросов, группируют их по темам, конструируют тесты с гибкими
+  правилами прохождения, управляют пользователями и группами, просматривают аналитику
+- **Учащиеся (Learner)** -- проходят тесты в стандартном или адаптивном режиме, получают детальные
+  результаты с рекомендациями курсов
 
 ---
 
@@ -51,6 +55,10 @@
 
 - 4 типа вопросов: single choice, multiple choice, matching, ranking
 - Настройка баллов и уровня сложности
+- **Цена ответа** -- градуированный (частичный) балл за вопрос: веса опций (single) или ступенчатая
+  таблица «условие → балл» над счётчиками правильных/неправильных ответов (multiple/matching/ranking);
+  по умолчанию точное совпадение 0/1
+- **Теги (подтемы)** -- метки вопроса для квот выдачи: chip-инпут с автодополнением из тегов банка
 - Медиа-вложения (изображения, аудио, видео) с загрузкой до 200 MB
 - Перемешивание вариантов ответов (опция)
 - Обратная связь: общая или условная (для правильного/неправильного ответа)
@@ -62,6 +70,8 @@
 - Два режима тестирования:
   - **Стандартный** -- фиксированный набор вопросов из выбранных тем с настраиваемым drawCount
   - **Адаптивный** -- динамическая сложность с уровнями, порогами прохождения и связанными ресурсами
+- **Квоты выдачи по тегам** -- на теме опциональная стратифицированная выдача: гарантированное
+  покрытие подтем (тегов) -- «ровно N» или «не менее N» вопросов с тегом внутри общей выборки
 - Гибкие правила прохождения (по процентам или абсолютным числам) для каждой темы и теста в целом
 - Ограничение по времени и количеству попыток
 - Показ правильных ответов после прохождения
@@ -132,33 +142,32 @@
 ### Frontend
 
 | Технология | Версия | Назначение |
-|---|---|---|
-| React | 18.3 | UI-библиотека |
-| TypeScript | 5.6 | Типизация |
-| Vite | 5.4 | Сборщик и dev-сервер |
-| Wouter | 3.3 | Легковесный роутинг |
-| TanStack React Query | 5.60 | Управление серверным состоянием |
-| React Hook Form | 7.55 | Формы |
-| Zod | 3.24 | Валидация |
+| --- | --- | --- |
+| React | 19.2 | UI-библиотека |
+| TypeScript | 6.0 | Типизация |
+| Vite | 8.0 | Сборщик и dev-сервер |
+| Wouter | 3.10 | Легковесный роутинг |
+| TanStack React Query | 5.100 | Управление серверным состоянием |
+| React Hook Form | 7.76 | Формы |
+| Zod | 4.4 | Валидация |
 | shadcn/ui (Radix UI) | -- | Компоненты UI |
-| Tailwind CSS | 3.4 | Стилизация |
-| Recharts | 2.15 | Графики и визуализации |
+| Tailwind CSS | 4.3 | Стилизация (новый движок, `@tailwindcss/postcss`) |
 | Lucide React | -- | Иконки |
-| html2canvas + jsPDF | -- | PDF-экспорт результатов |
+| html2canvas + jsPDF | 1.4.1 / 2.5.1 | PDF-экспорт в SCORM-runtime; вендорятся в пакет из `assets/vendor/` (devDep-пин, без CDN) |
 
 ### Backend
 
 | Технология | Версия | Назначение |
-|---|---|---|
-| Node.js | 18+ | Runtime |
-| Express | 4.21 | Веб-фреймворк |
-| TypeScript | 5.6 | Типизация |
-| Drizzle ORM | 0.39 | Работа с БД |
+| --- | --- | --- |
+| Node.js | 20+ | Runtime |
+| Express | 5.2 | Веб-фреймворк |
+| TypeScript | 6.0 | Типизация |
+| Drizzle ORM | 0.45 | Работа с БД |
 | PostgreSQL | 14+ | База данных |
-| express-session | 1.18 | Управление сессиями |
+| express-session | 1.19 | Управление сессиями |
 | bcryptjs | 3.0 | Хеширование паролей |
-| Nodemailer | 7.0 | Отправка email |
-| Multer | 2.0 | Загрузка файлов |
+| Nodemailer | 8.0 | Отправка email |
+| Multer | 2.1 | Загрузка файлов |
 | Archiver | 7.0 | Создание SCORM ZIP-пакетов |
 | XLSX | -- | Импорт/экспорт Excel |
 
@@ -306,31 +315,41 @@ Fullstack-MVP-testing/
 |   +-- index.html
 |
 |-- server/                          # Backend (Express)
+|   |-- routes/                      # Модульные роутеры по доменам (монтируются в routes.ts)
+|   |   |-- index.ts                # routerConfig: список path -> router
+|   |   |-- auth.ts  users.ts  groups.ts  topics.ts  questions.ts  tests.ts
+|   |   |-- attempts.ts  assignments.ts  folders.ts  test-folders.ts
+|   |   |-- content-pages.ts  result-variables.ts  scales.ts  templates.ts
+|   |   |-- access.ts  analytics/  scorm-telemetry.ts  logs.ts
+|   |-- services/                    # Доменные сервисы (вне route-хендлеров)
+|   |   |-- result-compute.ts       # Серверный расчёт результата (PRD-2/5/10)
+|   |   |-- result-context.ts       # AttemptResult -> контекст экрана итогов
+|   |   |-- scoring-config.ts  retake-gate.ts (PRD-6)  template-render.ts
+|   |   |-- flow-policy-validator.ts  variant-binding.ts  test-settings.ts  ...
 |   |-- scorm/                       # SCORM 2004 генератор
-|   |   |-- builders/                # Сборщики пакета
-|   |   |   |-- manifest.ts         # imsmanifest.xml
-|   |   |   |-- metadata.ts         # Метаданные SCORM
-|   |   |   |-- media-assets.ts     # Обработка медиа
-|   |   |   +-- test-json.ts        # Данные теста
+|   |   |-- builders/                # Сборщики пакета (manifest, metadata, test-json,
+|   |   |                            #   media-assets, shared-runtime — esbuild-бандл @shared)
 |   |   |-- assets/                  # Runtime-файлы SCORM
-|   |   |-- template/               # JS-логика SCORM-пакета
-|   |   |   +-- app/                # Приложение (adaptive, dnd, render, timer, telemetry)
-|   |   |-- utils/
-|   |   |-- index.ts                # Главный экспорт
+|   |   |-- template/app/            # JS-логика пакета (adaptive, dnd, render, timer, telemetry)
+|   |   |-- templates/<id>/          # Дизайн-шаблоны: layouts + styles + manifest (PRD-7/12)
+|   |   |-- index.ts                # generateScormPackage
 |   |   +-- zip.ts                  # ZIP-упаковка
-|   |-- utils/
-|   |   |-- crypto.ts               # Шифрование/дешифрование email
-|   |   +-- mask-email.ts           # Маскирование email
-|   |-- db.ts                       # Подключение к БД (Drizzle)
-|   |-- email.ts                    # Отправка email (сброс пароля)
-|   |-- index.ts                    # Entry point сервера
-|   |-- routes.ts                   # Все API endpoints (~6000 строк)
-|   |-- scorm-exporter.ts           # Оркестратор SCORM-экспорта
-|   |-- static.ts                   # Раздача статики (production)
-|   +-- storage.ts                  # Data Access Layer (~1000 строк)
+|   |-- utils/                       # crypto.ts (email AES), mask-email.ts
+|   |-- db.ts                        # Подключение к БД (Drizzle)
+|   |-- email.ts                     # Отправка email (сброс пароля)
+|   |-- index.ts                     # Entry point сервера
+|   |-- routes.ts                    # registerRoutes — тонкий оркестратор (~100 строк)
+|   |-- scorm-exporter.ts            # Точка входа SCORM-экспорта
+|   |-- template-registry.ts         # Реестр дизайн-шаблонов
+|   |-- static.ts                    # Раздача статики (production)
+|   +-- storage.ts                   # Data Access Layer (Repository pattern)
 |
-|-- shared/                          # Общий код (client + server)
-|   +-- schema.ts                   # Drizzle-схема БД + Zod-типы (~700 строк)
+|-- shared/                          # Общий код (client + server + SCORM-пакет)
+|   |-- schema.ts                   # Drizzle-схема БД + Zod-типы
+|   |-- scoring/ scales/ formula/   # Чистые доменные движки (PRD-2/5/10)
+|   |-- eligibility/ draw/ tags.ts  # Retake-eligibility (PRD-6), квоты выдачи (PRD-11)
+|   +-- template/                   # Единый рендерер (PRD-12): dsl, render-screen,
+|                                    #   renderers, context, *-context builders, dnd/
 |
 |-- script/                          # Утилиты
 |   |-- build.ts                    # Скрипт production-сборки
@@ -338,12 +357,11 @@ Fullstack-MVP-testing/
 |   |-- migrate-emails.ts           # Миграция email
 |   +-- test-crypto.ts              # Тесты шифрования
 |
-|-- docs/                            # Документация
-|   |-- guides/
-|   |   +-- design_guidelines.md    # Гайдлайны дизайна
-|   +-- reports/
-|       |-- ANALYSIS_REPORT.md      # Отчет об анализе
-|       +-- CODE_REVIEW.md          # Отчет code review
+|-- docs/                            # Документация (PRD, ROADMAP, гайды, wireframes)
+|   |-- guides/                      # Гайды (DOCUMENTATION-GUIDELINES, design_guidelines, LOGGING)
+|   |-- prd-*.md                     # PRD-1..9
+|   |-- wireframes/                  # HTML-эскизы (PRD-7)
+|   +-- reports/                     # Аудиты зависимостей и LMS-анализы
 |
 |-- migrations/                      # Drizzle-миграции БД
 |-- uploads/                         # Загруженные файлы
@@ -393,6 +411,25 @@ Fullstack-MVP-testing/
    | (Memory)   |   | (Drizzle)  |      | (uploads/)  |
    +------------+   +------------+      +-------------+
 ```
+
+### Модульность и общий код
+
+- **Роутеры**: API разнесён по доменным модулям в `server/routes/` (auth, users, topics,
+  questions, tests, attempts, scales, result-variables, content-pages и др.) и монтируется
+  тонким `server/routes.ts` (`registerRoutes`). Это не монолит.
+- **Слой сервисов** (`server/services/`): расчёт результата, контекст итогов, retake-гейт,
+  рендер-пейлоад и валидаторы вынесены из route-хендлеров.
+- **Доменные движки** (`shared/`): scoring/scales/formula/eligibility/draw/tags — чистые
+  модули, общие для клиента, сервера и SCORM-пакета (единый источник логики, без копий).
+
+### Единый рендерер ученических экранов (PRD-12)
+
+Экраны прохождения (старт, контент, вопрос, итоги, transition, блок) рендерятся из ОДНИХ
+дизайн-шаблонов на ОБОИХ хостах. `shared/template/` содержит framework-free рендерер
+(`dsl.ts` -- mustache-субсет, `renderScreenInto`, публичный контекст и сборщики, `dnd/`).
+Веб импортирует его напрямую (Vite); SCORM-пакет получает через esbuild-бандл (глобал
+`TBTemplate`). CSS тоже единый: компонентный источник `server/scorm/templates/<id>/styles/`
+(`theme.css` + `base.css`), из которого на сборке генерируется `styles.css` пакета.
 
 ### Ролевая модель
 
@@ -507,7 +544,7 @@ Test
 #### topics
 
 | Поле | Тип | Описание |
-|---|---|---|
+| --- | --- | --- |
 | id | varchar(36) PK | UUID |
 | name | text | Название темы |
 | description | text | Описание |
@@ -521,7 +558,7 @@ Test
 #### questions
 
 | Поле | Тип | Описание |
-|---|---|---|
+| --- | --- | --- |
 | id | varchar(36) PK | UUID |
 | topicId | varchar FK | Тема |
 | type | enum | single, multiple, matching, ranking |
@@ -541,7 +578,7 @@ Test
 #### tests
 
 | Поле | Тип | Описание |
-|---|---|---|
+| --- | --- | --- |
 | id | varchar(36) PK | UUID |
 | title | text | Название теста |
 | description | text | Описание |
@@ -566,7 +603,7 @@ Test
 #### attempts
 
 | Поле | Тип | Описание |
-|---|---|---|
+| --- | --- | --- |
 | id | varchar(36) PK | UUID |
 | userId | varchar FK | Учащийся |
 | testId | varchar FK | Тест |
@@ -588,6 +625,22 @@ Test
 #### scormAnswers
 
 Индивидуальные ответы в SCORM-попытках (questionId, userAnswer, isCorrect, earnedPoints).
+
+#### Таблицы и колонки PRD-расширений
+
+| Таблица / колонка | PRD | Назначение |
+| ----------------- | --- | ---------- |
+| `templates` | PRD-7 | Дизайн-шаблоны (layouts, стили, manifest-параметры) |
+| `content_pages` | PRD-1 | Контентные страницы (intro/между темами/после итогов) |
+| `result_variables` | PRD-2 | Показатели результата (DSL-формулы `result.*`) |
+| `scales` + `question_measurements` | PRD-5 | Шкалы и вклады вопросов в шкалы (многомерные измерения) |
+| `test_folders`, `topic_events`, `assignment_access_tokens` | -- | Папки тестов, события темы, magic-link токены доступа |
+| `questions.scoring_json` | PRD-10 | Цена ответа: веса опций / ступенчатая таблица (иначе 0/1) |
+| `questions.tags` | PRD-11/2 | Теги-подтемы (квоты выдачи + источники формул показателей) |
+| `test_sections.draw_blueprint_json` | PRD-11 | Квоты выдачи по тегам (иначе равномерная выборка) |
+| `tests.retake_policy_json` | PRD-6 | Гейт повторного прохождения / cooldown (иначе только `maxAttempts`) |
+
+Все опциональные колонки nullable/с дефолтом: их отсутствие сохраняет легаси-поведение.
 
 ### Диаграмма связей
 
@@ -622,7 +675,7 @@ tests
 ### Аутентификация
 
 | Метод | Endpoint | Описание |
-|---|---|---|
+| --- | --- | --- |
 | POST | `/api/login` | Вход в систему |
 | POST | `/api/logout` | Выход |
 | POST | `/api/register` | Регистрация пользователя |
@@ -633,7 +686,7 @@ tests
 ### Пользователи (Author)
 
 | Метод | Endpoint | Описание |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/users` | Список пользователей |
 | POST | `/api/users` | Создать пользователя |
 | GET | `/api/user/profile` | Профиль текущего пользователя |
@@ -642,7 +695,7 @@ tests
 ### Группы (Author)
 
 | Метод | Endpoint | Описание |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/groups` | Список групп |
 | POST | `/api/groups` | Создать группу |
 | PUT | `/api/groups/:id` | Обновить группу |
@@ -652,7 +705,7 @@ tests
 ### Темы (Author)
 
 | Метод | Endpoint | Описание |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/topics` | Список тем |
 | POST | `/api/topics` | Создать тему |
 | PUT | `/api/topics/:id` | Обновить тему |
@@ -663,7 +716,7 @@ tests
 ### Вопросы (Author)
 
 | Метод | Endpoint | Описание |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/questions` | Список вопросов |
 | POST | `/api/questions` | Создать вопрос |
 | PUT | `/api/questions/:id` | Обновить вопрос |
@@ -676,7 +729,7 @@ tests
 ### Тесты (Author)
 
 | Метод | Endpoint | Описание |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/tests` | Список тестов |
 | POST | `/api/tests` | Создать тест |
 | PUT | `/api/tests/:id` | Обновить тест |
@@ -688,7 +741,7 @@ tests
 ### Попытки (Learner)
 
 | Метод | Endpoint | Описание |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/learner/tests` | Доступные тесты |
 | POST | `/api/tests/:id/start` | Начать тест |
 | POST | `/api/attempts/:id/answer` | Сохранить ответ |
@@ -699,15 +752,24 @@ tests
 ### Аналитика (Author)
 
 | Метод | Endpoint | Описание |
-|---|---|---|
+| --- | --- | --- |
 | GET | `/api/analytics` | Общая аналитика |
 | GET | `/api/analytics/:testId` | Аналитика по тесту |
 
 ### Медиа
 
 | Метод | Endpoint | Описание |
-|---|---|---|
+| --- | --- | --- |
 | POST | `/api/media/upload` | Загрузка медиа-файла |
+
+### Прочие группы эндпоинтов
+
+API разнесён по модульным роутерам (`server/routes/`). Помимо перечисленного выше, есть
+группы: `/api/folders` и `/api/test-folders` (иерархия), `/api/tests/:id/content-pages`
+(PRD-1), `/api/tests/:id/result-variables` (PRD-2), `/api/tests/:id/scales` (PRD-5),
+`/api/templates` (PRD-7), `/api/learner/...` (прохождение), `/access/*` (magic-link),
+телеметрия SCORM и логи. Полный список маршрутов -- `routerConfig` в
+[server/routes/index.ts](server/routes/index.ts).
 
 ---
 
@@ -824,11 +886,11 @@ scormAPI.terminate();
 2. Заполните файл по формату:
 
 | Тема | Тип | Текст | Балл | Варианты (#-разделитель) | Правильные | Перемешивание |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- | --- |
 | Математика | single | Сколько 2+2? | 1 | 3#4#5#6 | 1 | Random |
 | История | multiple | Страны Европы | 2 | Франция#Япония#Германия | 0,2 | Random |
 
-3. Импортируйте: **"Импорт из Excel"**
+1. Импортируйте: **"Импорт из Excel"**
 
 #### Шаг 4: Создание теста
 
@@ -883,22 +945,29 @@ scormAPI.terminate();
 ### Команды
 
 ```bash
-npm run dev          # Development-сервер (tsx watch + Vite)
+npm run dev          # Development-сервер (tsx + Vite HMR; tsx запускается БЕЗ --watch)
 npm run build        # Production-сборка (esbuild + Vite)
 npm start            # Запуск production-версии
 npm run check        # Проверка типов TypeScript
+npm test             # Запуск тестов (vitest)
 npm run db:push      # Применить изменения схемы к БД
+
+# SCORM-инструменты (локальная приёмка):
+npm run scorm:template  # Собрать пакет дизайн-шаблона в out/
+npm run scorm:player    # Локальный SCORM-плеер на :5050 (грузит out/*.zip)
 ```
 
 ### Hot Reload
 
-- **Frontend** -- обновление через Vite (HMR отключен из-за проблем с reverse proxy, используется полная перезагрузка)
-- **Backend** -- автоматический перезапуск через tsx watch
+- **Frontend** -- работает Vite HMR.
+- **Backend** -- авто-перезапуск ОТСУТСТВУЕТ: dev-скрипт намеренно использует `tsx` без
+  `--watch` (под `tsx watch` зависает `createServer` Vite 8). После правок на сервере
+  перезапустите `npm run dev` вручную.
 
 ### Алиасы путей
 
 | Алиас | Путь |
-|---|---|
+| --- | --- |
 | `@/*` | `client/src/*` |
 | `@shared/*` | `shared/*` |
 | `@assets/*` | `attached_assets/*` |
@@ -1026,7 +1095,7 @@ railway up
 ### Переменные окружения
 
 | Переменная | Обязательна | По умолчанию | Описание |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `DATABASE_URL` | Да | -- | PostgreSQL connection string |
 | `PORT` | Нет | 5000 | Порт сервера |
 | `NODE_ENV` | Нет | development | Режим: development / production |
@@ -1047,9 +1116,9 @@ railway up
 ### Лимиты
 
 | Параметр | Значение | Где настроить |
-|---|---|---|
-| Размер медиа-файла | 200 MB | `server/routes.ts` (Multer) |
-| Время сессии | 24 часа | `server/routes.ts` (session cookie) |
+| --- | --- | --- |
+| Размер медиа-файла | 200 MB | `server/middleware/upload.ts` (Multer) |
+| Время сессии | 24 часа | `server/routes.ts` (session cookie, `registerRoutes`) |
 | Body limit | 50 MB | `server/index.ts` (express.json) |
 
 ---
@@ -1117,7 +1186,9 @@ npm run build
 ### Сессия сбрасывается
 
 - Проверьте `SESSION_SECRET` в `.env`
-- В production рассмотрите использование connect-pg-simple вместо MemoryStore
+- Текущая конфигурация использует `memorystore` (in-memory с TTL).
+- Для масштабирования на несколько инстансов используйте session-store с поддержкой PostgreSQL
+  (например, `connect-pg-simple`) и обновите конфиг сессии в `server/index.ts`.
 
 ---
 

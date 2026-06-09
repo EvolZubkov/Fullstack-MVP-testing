@@ -22,8 +22,9 @@ const { storageMock } = vi.hoisted(() => ({
     getGroups: vi.fn(), getGroup: vi.fn(), createGroup: vi.fn(),
     updateGroup: vi.fn(), deleteGroup: vi.fn(),
     getGroupUsers: vi.fn(), addUserToGroup: vi.fn(), removeUserFromGroup: vi.fn(),
-    // auth middleware needs getUser
+    // auth middleware needs getUser; requirePermission also reads user roles
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
   }
 }));
 

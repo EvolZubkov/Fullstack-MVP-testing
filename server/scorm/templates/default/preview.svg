@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+  <rect width="320" height="200" fill="hsl(225,7%,7%)"/>
+  <rect x="0" y="0" width="320" height="3" fill="hsl(217,91%,42%)"/>
+  <rect x="20" y="20" width="280" height="68" rx="10" fill="hsl(225,14%,14%)" stroke="hsl(0,0%,22%)" stroke-width="1"/>
+  <text x="36" y="45" font-family="Inter,sans-serif" font-size="13" font-weight="700" fill="hsl(0,0%,98%)">Основы информационной безопасности</text>
+  <text x="36" y="64" font-family="Inter,sans-serif" font-size="10" fill="hsl(0,0%,65%)">Проверочный тест · 4 вопроса · 70% для прохождения</text>
+  <rect x="100" y="76" width="120" height="6" rx="3" fill="hsl(217,91%,42%)"/>
+  <rect x="20" y="102" width="280" height="56" rx="10" fill="hsl(225,14%,14%)" stroke="hsl(0,0%,22%)" stroke-width="1"/>
+  <text x="36" y="122" font-family="Inter,sans-serif" font-size="10" font-weight="600" fill="hsl(217,91%,42%)">ВОПРОС 2 ИЗ 4</text>
+  <text x="36" y="138" font-family="Inter,sans-serif" font-size="11" fill="hsl(0,0%,98%)">Какой пароль является наиболее надёжным?</text>
+  <rect x="20" y="172" width="134" height="18" rx="5" fill="hsl(225,14%,14%)" stroke="hsl(0,0%,22%)" stroke-width="1"/>
+  <rect x="166" y="172" width="134" height="18" rx="5" fill="hsl(217,91%,42%)"/>
+  <text x="220" y="185" font-family="Inter,sans-serif" font-size="9" font-weight="600" fill="hsl(0,0%,98%)" text-anchor="middle">Принять ответ</text>
+</svg>

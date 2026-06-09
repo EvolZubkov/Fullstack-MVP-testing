@@ -234,9 +234,15 @@ function insertFeedback(q, isCorrect, scoreRatio) {
     html += '<div style="color:#333;font-size:14px;">' + escapeHtml(feedbackText) + '</div>';
   }
   html += '</div>';
-  
-  // Вставляем после .card
-  var card = document.querySelector('.card');
+
+  // Prefer the template's dedicated feedback slot (question.html); fall back to
+  // appending after the card (hardcoded chrome / older layouts).
+  var slot = document.querySelector('[data-slot="question-feedback"]');
+  if (slot) {
+    slot.innerHTML = html;
+    return;
+  }
+  var card = document.querySelector('.question-card, .card');
   if (card) {
     card.insertAdjacentHTML('beforeend', html);
   }

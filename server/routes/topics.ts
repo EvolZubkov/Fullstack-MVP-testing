@@ -1,12 +1,12 @@
 import { Router } from "express";
 import { logger } from "../logger";
 import { storage } from "../storage";
-import { requireAuth, requireAuthor } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 
 const router = Router();
 
 // GET /api/topics - Список тем с курсами и количеством вопросов
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requirePermission("topics.manage"), async (req, res) => {
   try {
     const topics = await storage.getTopics();
     const topicsWithDetails = await Promise.all(
@@ -30,7 +30,7 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 // POST /api/topics - Создать тему
-router.post("/", requireAuthor, async (req, res) => {
+router.post("/", requirePermission("topics.manage"), async (req, res) => {
   try {
     const { name, description, feedback, folderId } = req.body;
     if (!name) {
@@ -45,7 +45,7 @@ router.post("/", requireAuthor, async (req, res) => {
 });
 
 // PUT /api/topics/:id - Обновить тему
-router.put("/:id", requireAuthor, async (req, res) => {
+router.put("/:id", requirePermission("topics.manage"), async (req, res) => {
   try {
     const { name, description, feedback, folderId } = req.body;
     const updated = await storage.updateTopic(req.params.id, { name, description, feedback, folderId });
@@ -60,7 +60,7 @@ router.put("/:id", requireAuthor, async (req, res) => {
 });
 
 // DELETE /api/topics/events/:id - Удалить мероприятие (must be before /:id)
-router.delete("/events/:id", requireAuthor, async (req, res) => {
+router.delete("/events/:id", requirePermission("topics.manage"), async (req, res) => {
   try {
     const success = await storage.deleteTopicEvent(req.params.id);
     if (!success) {
@@ -74,7 +74,7 @@ router.delete("/events/:id", requireAuthor, async (req, res) => {
 });
 
 // DELETE /api/topics/courses/:id - Удалить курс (must be before /:id)
-router.delete("/courses/:id", requireAuthor, async (req, res) => {
+router.delete("/courses/:id", requirePermission("topics.manage"), async (req, res) => {
   try {
     const success = await storage.deleteTopicCourse(req.params.id);
     if (!success) {
@@ -88,7 +88,7 @@ router.delete("/courses/:id", requireAuthor, async (req, res) => {
 });
 
 // DELETE /api/topics/:id - Удалить тему
-router.delete("/:id", requireAuthor, async (req, res) => {
+router.delete("/:id", requirePermission("topics.manage"), async (req, res) => {
   try {
     const success = await storage.deleteTopic(req.params.id);
     if (!success) {
@@ -102,7 +102,7 @@ router.delete("/:id", requireAuthor, async (req, res) => {
 });
 
 // POST /api/topics/bulk-delete - Массовое удаление тем
-router.post("/bulk-delete", requireAuthor, async (req, res) => {
+router.post("/bulk-delete", requirePermission("topics.manage"), async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
@@ -117,7 +117,7 @@ router.post("/bulk-delete", requireAuthor, async (req, res) => {
 });
 
 // POST /api/topics/:id/duplicate - Дублировать тему с вопросами
-router.post("/:id/duplicate", requireAuthor, async (req, res) => {
+router.post("/:id/duplicate", requirePermission("topics.manage"), async (req, res) => {
   try {
     const result = await (storage as any).duplicateTopicWithQuestions(req.params.id);
     if (!result) {
@@ -131,7 +131,7 @@ router.post("/:id/duplicate", requireAuthor, async (req, res) => {
 });
 
 // POST /api/topics/:topicId/courses - Добавить курс к теме
-router.post("/:topicId/courses", requireAuthor, async (req, res) => {
+router.post("/:topicId/courses", requirePermission("topics.manage"), async (req, res) => {
   try {
     const { title, url } = req.body;
     if (!title || !url) {
@@ -150,7 +150,7 @@ router.post("/:topicId/courses", requireAuthor, async (req, res) => {
 });
 
 // POST /api/topics/:topicId/events - Добавить мероприятие к теме
-router.post("/:topicId/events", requireAuthor, async (req, res) => {
+router.post("/:topicId/events", requirePermission("topics.manage"), async (req, res) => {
   try {
     const { title } = req.body;
     if (!title) {
@@ -169,7 +169,7 @@ router.post("/:topicId/events", requireAuthor, async (req, res) => {
 
 
 // GET /api/topics/:topicId/difficulty-distribution - Распределение сложности
-router.get("/:topicId/difficulty-distribution", requireAuthor, async (req, res) => {
+router.get("/:topicId/difficulty-distribution", requirePermission("topics.manage"), async (req, res) => {
   try {
     const questions = await storage.getQuestionsByTopic(req.params.topicId);
     const totalQuestions = questions.length;

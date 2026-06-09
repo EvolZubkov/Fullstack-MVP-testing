@@ -11,6 +11,7 @@ import crypto from "crypto";
 const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     // scorm-telemetry
     getScormPackage: vi.fn(), getScormPackages: vi.fn(), updateScormPackage: vi.fn(),
     getScormAttemptsByPackage: vi.fn(), getScormAttemptBySession: vi.fn(),

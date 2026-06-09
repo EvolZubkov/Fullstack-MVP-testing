@@ -1,0 +1,166 @@
+{
+  "schemaVersion": "1.0",
+  "locale": "ru-RU",
+  "params": {
+    "primaryColor": "217 91% 42%",
+    "backgroundColor": "225 7% 7%",
+    "foregroundColor": "0 0% 98%",
+    "cardColor": "225 14% 14%",
+    "cardBorderColor": "0 0% 24%",
+    "borderColor": "0 0% 22%",
+    "mutedColor": "225 10% 20%",
+    "accentColor": "225 8% 22%",
+    "fontFamily": "Inter",
+    "logoUrl": null,
+    "progress.mode": "questions",
+    "showProgressBar": true
+  },
+  "course": {
+    "title": "Основы информационной безопасности",
+    "description": "Проверочный тест по базовым принципам защиты корпоративных данных",
+    "passPercent": 70,
+    "timeLimitMinutes": 30,
+    "maxAttempts": 3,
+    "questionCount": 4,
+    "topics": [
+      { "id": "topic-1", "title": "Базовые угрозы", "status": "available" },
+      { "id": "topic-2", "title": "Парольная защита", "status": "locked" }
+    ],
+    "contentPages": [
+      {
+        "id": "demo-intro",
+        "type": "intro",
+        "route": "content.intro",
+        "templateKey": "intro.hero",
+        "topicId": "topic-1",
+        "values": {
+          "title": "Введение в раздел",
+          "subtitle": "Перед началом ответьте внимательно на каждый вопрос",
+          "heroImage": null
+        }
+      },
+      {
+        "id": "demo-info",
+        "type": "info",
+        "route": "content.info",
+        "templateKey": "info.text",
+        "topicId": "topic-1",
+        "values": {
+          "title": "Перед началом",
+          "body": "<p>Короткий учебный блок с <strong>важным акцентом</strong> и понятным следующим шагом.</p><p>Внимательно читайте каждый вопрос перед тем, как выбирать ответ.</p>"
+        }
+      },
+      {
+        "id": "demo-summary",
+        "type": "summary",
+        "route": "content.summary",
+        "templateKey": "summary.result",
+        "topicId": "topic-1",
+        "values": {
+          "title": "Итоги раздела",
+          "result": {
+            "path": "result.scorePercent",
+            "renderer": "core.ringChart",
+            "rendererOptions": { "showValue": true, "decimals": 0, "size": 150, "strokeWidth": 14 },
+            "label": ""
+          }
+        }
+      }
+    ],
+    "questions": [
+      {
+        "id": "demo-single",
+        "topicId": "topic-1",
+        "type": "single",
+        "prompt": "Какой пароль является наиболее надёжным с точки зрения безопасности?",
+        "options": [
+          { "id": "s1", "text": "Дата рождения (например, 01011990)" },
+          { "id": "s2", "text": "Длинная случайная фраза: «Кофе&Море2024!»", "correct": true },
+          { "id": "s3", "text": "Название компании с цифрой в конце" },
+          { "id": "s4", "text": "Стандартный пароль qwerty123" }
+        ]
+      },
+      {
+        "id": "demo-multiple",
+        "topicId": "topic-1",
+        "type": "multiple",
+        "prompt": "Какие действия помогают защитить корпоративные данные? Выберите все подходящие.",
+        "options": [
+          { "id": "m1", "text": "Использовать разные пароли для разных сервисов", "correct": true },
+          { "id": "m2", "text": "Открывать вложения из незнакомых писем" },
+          { "id": "m3", "text": "Включить двухфакторную аутентификацию", "correct": true },
+          { "id": "m4", "text": "Блокировать экран при уходе с рабочего места", "correct": true }
+        ]
+      },
+      {
+        "id": "demo-matching",
+        "topicId": "topic-1",
+        "type": "matching",
+        "prompt": "Сопоставьте тип угрозы с описанием.",
+        "pairs": [
+          { "id": "p1", "left": "Фишинг", "right": "Поддельное письмо для кражи данных" },
+          { "id": "p2", "left": "Вредоносное ПО", "right": "Программа, повреждающая систему" },
+          { "id": "p3", "left": "Социальная инженерия", "right": "Манипуляция людьми для получения доступа" },
+          { "id": "p4", "left": "Брутфорс", "right": "Перебор паролей автоматически" }
+        ]
+      },
+      {
+        "id": "demo-ranking",
+        "topicId": "topic-1",
+        "type": "ranking",
+        "prompt": "Расположите шаги реакции на инцидент в правильном порядке.",
+        "options": [
+          { "id": "r1", "text": "Обнаружить подозрительную активность" },
+          { "id": "r2", "text": "Сообщить в службу информационной безопасности" },
+          { "id": "r3", "text": "Изолировать поражённое устройство" },
+          { "id": "r4", "text": "Провести анализ инцидента и устранить уязвимость" }
+        ],
+        "order": ["r1", "r2", "r3", "r4"]
+      }
+    ]
+  },
+  "runtime": {
+    "route": "start",
+    "progress": {
+      "active": { "current": 2, "total": 4, "percent": 50 },
+      "question": { "current": 2, "total": 4, "percent": 50 },
+      "page": { "current": 4, "total": 9, "percent": 44 }
+    },
+    "result": {
+      "score": 86,
+      "maxScore": 100,
+      "scorePercent": 86,
+      "status": "passed",
+      "passed": true,
+      "totalQuestions": 4,
+      "correct": 3,
+      "earnedPoints": "8.6",
+      "ringDasharray": "395.84",
+      "ringDashoffset": "55.42",
+      "passClass": "is-pass",
+      "statusLabel": "Пройден",
+      "topicResults": [
+        {
+          "topicId": "topic-1",
+          "topicName": "Базовые угрозы",
+          "percent": 75,
+          "passed": true,
+          "total": 4,
+          "correct": 3,
+          "passClass": "is-pass",
+          "statusLabel": "Пройден"
+        }
+      ]
+    },
+    "sectionResult": {
+      "score": 3,
+      "maxScore": 4,
+      "scorePercent": 75,
+      "status": "passed"
+    },
+    "state": {
+      "currentTopicId": "topic-1",
+      "currentPageId": "demo-intro"
+    }
+  }
+}

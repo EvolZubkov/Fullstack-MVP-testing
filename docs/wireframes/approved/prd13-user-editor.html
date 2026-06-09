@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-13: Редактор пользователя — роли</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    /* Drawer rendering glue inside a wf-state (from prd7-editor-drawer) */
+    .wf-state.active { display: block; }
+    .wf-state > .ou-drawer-root {
+      top: var(--wf-nav-offset, var(--wf-size-52));
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .ou-drawer-root > .ou-drawer {
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+    }
+    /* PRD-13 local layout (composition only, DS tokens) */
+    .ue-stack { display: flex; flex-direction: column; gap: var(--ou-space-5); }
+    .ue-section { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+    .ue-label {
+      font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .ue-roles { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+    .ue-spacer { flex: 1; }
+    .wf-sprite { display: none; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">PRD-13 · Редактор пользователя:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-create-admin')">Создаёт Администратор</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-create-mgr')">Создаёт Менеджер</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-create-super')">Создаёт Суперадмин</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-edit')">Редактирование ролей</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-super')">Учётка суперадмина</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- s-create-admin -->
+<div class="wf-state active" id="s-create-admin">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-ca">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--narrow ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="dt-ca" class="ou-drawer__title">Новый пользователь</h1>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ue-stack">
+          <div class="ue-section">
+            <label class="ue-label" for="ca-name">ФИО</label>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input id="ca-name" class="ou-field__input" type="text" placeholder="Иван Петров"></div></div>
+          </div>
+          <div class="ue-section">
+            <label class="ue-label" for="ca-email">Email</label>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input id="ca-email" class="ou-field__input" type="email" placeholder="user@example.com"></div></div>
+          </div>
+          <div class="ue-section">
+            <span class="ue-label">Роли</span>
+            <div class="ue-roles" role="group" aria-label="Роли пользователя">
+              <label class="ou-check is-disabled">
+                <input class="ou-check__input" type="checkbox" disabled>
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Администратор</span><span class="ou-check__desc">Пользователи, группы, назначения, шаблоны, тесты.</span></span>
+              </label>
+              <label class="ou-check">
+                <input class="ou-check__input" type="checkbox">
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Автор</span><span class="ou-check__desc">Темы, вопросы, тесты: создание, редактирование, публикация.</span></span>
+              </label>
+              <label class="ou-check">
+                <input class="ou-check__input" type="checkbox" checked>
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Менеджер по обучению</span><span class="ou-check__desc">Группы, обычные пользователи, назначения, результаты.</span></span>
+              </label>
+              <label class="ou-check">
+                <input class="ou-check__input" type="checkbox">
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Обычный пользователь</span><span class="ou-check__desc">Прохождение назначенных тестов, свои результаты.</span></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ue-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Создать</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- s-create-mgr -->
+<div class="wf-state" id="s-create-mgr">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-cm">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--narrow ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="dt-cm" class="ou-drawer__title">Новый пользователь</h1>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ue-stack">
+          <div class="ue-section">
+            <label class="ue-label" for="cm-name">ФИО</label>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input id="cm-name" class="ou-field__input" type="text" placeholder="Иван Петров"></div></div>
+          </div>
+          <div class="ue-section">
+            <label class="ue-label" for="cm-email">Email</label>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input id="cm-email" class="ou-field__input" type="email" placeholder="user@example.com"></div></div>
+          </div>
+          <div class="ue-section">
+            <span class="ue-label">Роли</span>
+            <div class="ue-roles" role="group" aria-label="Роли пользователя">
+              <label class="ou-check is-disabled">
+                <input class="ou-check__input" type="checkbox" disabled>
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Администратор</span><span class="ou-check__desc">Пользователи, группы, назначения, шаблоны, тесты.</span></span>
+              </label>
+              <label class="ou-check is-disabled">
+                <input class="ou-check__input" type="checkbox" disabled>
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Автор</span><span class="ou-check__desc">Темы, вопросы, тесты: создание, редактирование, публикация.</span></span>
+              </label>
+              <label class="ou-check is-disabled">
+                <input class="ou-check__input" type="checkbox" disabled>
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Менеджер по обучению</span><span class="ou-check__desc">Группы, обычные пользователи, назначения, результаты.</span></span>
+              </label>
+              <label class="ou-check">
+                <input class="ou-check__input" type="checkbox" checked>
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Обычный пользователь</span><span class="ou-check__desc">Прохождение назначенных тестов, свои результаты.</span></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ue-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Создать</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- s-create-super -->
+<div class="wf-state" id="s-create-super">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-cs">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--narrow ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="dt-cs" class="ou-drawer__title">Новый пользователь</h1>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ue-stack">
+          <div class="ue-section">
+            <label class="ue-label" for="cs-name">ФИО</label>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input id="cs-name" class="ou-field__input" type="text" placeholder="Иван Петров"></div></div>
+          </div>
+          <div class="ue-section">
+            <label class="ue-label" for="cs-email">Email</label>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input id="cs-email" class="ou-field__input" type="email" placeholder="user@example.com"></div></div>
+          </div>
+          <div class="ue-section">
+            <span class="ue-label">Роли</span>
+            <div class="ue-roles" role="group" aria-label="Роли пользователя">
+              <label class="ou-check">
+                <input class="ou-check__input" type="checkbox" checked>
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Администратор</span><span class="ou-check__desc">Пользователи, группы, назначения, шаблоны, тесты.</span></span>
+              </label>
+              <label class="ou-check">
+                <input class="ou-check__input" type="checkbox">
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Автор</span><span class="ou-check__desc">Темы, вопросы, тесты: создание, редактирование, публикация.</span></span>
+              </label>
+              <label class="ou-check">
+                <input class="ou-check__input" type="checkbox">
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Менеджер по обучению</span><span class="ou-check__desc">Группы, обычные пользователи, назначения, результаты.</span></span>
+              </label>
+              <label class="ou-check">
+                <input class="ou-check__input" type="checkbox">
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Обычный пользователь</span><span class="ou-check__desc">Прохождение назначенных тестов, свои результаты.</span></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ue-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Создать</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- s-edit -->
+<div class="wf-state" id="s-edit">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-ed">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--narrow ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="dt-ed" class="ou-drawer__title">Дмитрий Орлов</h1>
+          <p class="ou-drawer__desc">dmitry.orlov@example.com</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ue-stack">
+          <div class="ue-section">
+            <label class="ue-label" for="ed-name">ФИО</label>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input id="ed-name" class="ou-field__input" type="text" value="Дмитрий Орлов"></div></div>
+          </div>
+          <div class="ue-section">
+            <span class="ue-label">Роли</span>
+            <div class="ue-roles" role="group" aria-label="Роли пользователя">
+              <label class="ou-check is-disabled">
+                <input class="ou-check__input" type="checkbox" disabled>
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Администратор</span><span class="ou-check__desc">Пользователи, группы, назначения, шаблоны, тесты.</span></span>
+              </label>
+              <label class="ou-check">
+                <input class="ou-check__input" type="checkbox" checked>
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Автор</span><span class="ou-check__desc">Темы, вопросы, тесты: создание, редактирование, публикация.</span></span>
+              </label>
+              <label class="ou-check">
+                <input class="ou-check__input" type="checkbox" checked>
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Менеджер по обучению</span><span class="ou-check__desc">Группы, обычные пользователи, назначения, результаты.</span></span>
+              </label>
+              <label class="ou-check">
+                <input class="ou-check__input" type="checkbox">
+                <span class="ou-check__box"><svg><use href="#i-check"/></svg></span>
+                <span class="ou-check__text"><span class="ou-check__lbl">Обычный пользователь</span><span class="ou-check__desc">Прохождение назначенных тестов, свои результаты.</span></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ue-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- s-super -->
+<div class="wf-state" id="s-super">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-sa">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--narrow ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="dt-sa" class="ou-drawer__title">Дмитрий Орлов</h1>
+          <p class="ou-drawer__desc">dmitry.orlov@example.com</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ue-stack">
+          <div class="ue-section">
+            <label class="ue-label" for="sa-name">ФИО</label>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input id="sa-name" class="ou-field__input" type="text" value="Дмитрий Орлов"></div></div>
+          </div>
+          <div class="ue-section">
+            <span class="ue-label">Роли</span>
+            <div class="ue-roles" role="group" aria-label="Роли пользователя">
+              <span class="ou-tag ou-tag--neutral">Суперадминистратор</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ue-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Закрыть</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- Пояснения -->
+<section class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения</h3>
+  <table>
+    <thead><tr><th>Состояние / элемент</th><th>Поведение</th><th>Правило (PRD-13)</th></tr></thead>
+    <tbody>
+      <tr><td>Создаёт Администратор</td><td>«Администратор» disabled; доступны Автор, Менеджер, Обычный</td><td>Потолок: AD назначает до Автора/Менеджера (FR-10)</td></tr>
+      <tr><td>Создаёт Менеджер</td><td>Активен только «Обычный пользователь»; остальные disabled</td><td>Менеджер создаёт только обычных пользователей (FR-10)</td></tr>
+      <tr><td>Создаёт Суперадмин</td><td>Доступны все роли, включая «Администратор»</td><td>Роль «Администратор» назначает только суперадмин (FR-11)</td></tr>
+      <tr><td>Редактирование ролей</td><td>Несколько ролей отмечены одновременно (Автор + Менеджер)</td><td>Мультироль; права = объединение прав всех ролей (FR-28)</td></tr>
+      <tr><td>Учётка суперадмина</td><td>Роли не редактируются; показаны как метка</td><td>SU вычисляется из конфигурации SUPERADMIN_EMAILS, через UI не назначается (FR-06/09)</td></tr>
+      <tr><td><code>.ou-check.is-disabled</code></td><td>Роль выше потолка субъекта: показана, но не выбирается</td><td>Доступный набор ролей зависит от полномочий субъекта</td></tr>
+      <tr><td>Кнопка «Создать» с ролью «Администратор» не суперадмином</td><td>Отклоняется сервером (403)</td><td>validateRoleChange, потолок (FR-13)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- DS Mapping -->
+<section class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping — UniversityRT</h2>
+  <table>
+    <thead><tr><th>Класс</th><th>Где используется</th><th>DS компонент</th><th>React (ui-kit)</th></tr></thead>
+    <tbody>
+      <tr><td><code>.ou-drawer</code></td><td>Контейнер редактора</td><td>Drawer</td><td><code>Drawer</code> (--narrow, --right)</td></tr>
+      <tr><td><code>.ou-check</code></td><td>Список ролей (чекбокс + описание)</td><td>Checkbox</td><td><code>Checkbox</code> (label + desc, is-disabled)</td></tr>
+      <tr><td><code>.ou-field</code></td><td>ФИО, Email</td><td>Field / Input</td><td><code>Input</code></td></tr>
+      <tr><td><code>.ou-tag</code></td><td>Метка «Суперадминистратор»</td><td>Tag</td><td><code>Tag</code> (--neutral)</td></tr>
+      <tr><td><code>.ou-btn</code></td><td>Отмена / Создать / Сохранить</td><td>Button</td><td><code>Button</code> (--primary, --ghost)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</body>
+</html>

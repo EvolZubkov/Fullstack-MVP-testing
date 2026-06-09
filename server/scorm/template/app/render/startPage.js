@@ -1,4 +1,86 @@
+/**
+ * Renders the start screen. Primary path renders the shared `start` layout via the
+ * SHARED renderer (the SAME layout + renderer the web host mounts) from a public
+ * context; the SCORM-richer actions (resume-with-position, "Начать заново", "Мой
+ * результат") are gated layout blocks the web context does not set, and the
+ * web-only "back to list" action is likewise gated off here. Falls back to the
+ * bespoke chrome for adaptive mode or when the design template is absent.
+ */
 function renderStartPage() {
+  var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts['start'];
+  var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+  if (layout && TB && TB.renderScreenInto && TEST_DATA.mode !== 'adaptive') {
+    renderStartPageTemplated();
+    return;
+  }
+  renderStartPageFallback();
+}
+
+/**
+ * Gathers the SCORM start facts (incl. resume eligibility — session staleness /
+ * time-limit / adaptive checks) and delegates the action-flag assembly to the
+ * SHARED builder (TBTemplate.buildStartState), so the SCORM and web start screens
+ * produce the identical model. Returns the full `{ course, state }` context.
+ */
+function buildScormStartContext() {
+  var used = getAttemptsUsed();
+  var hasLimit = !!TEST_DATA.maxAttempts;
+  var hasCompleted = !!getAllAttempts() && getAllAttempts().length > 0;
+  var canStartNew = hasAttemptsLeft();
+
+  var suspendObj = readSuspendObj();
+  var pendingSession = suspendObj.currentSession;
+  var canResume = !!(
+    pendingSession &&
+    !TEST_DATA.timeLimitMinutes &&
+    TEST_DATA.mode !== 'adaptive' &&
+    pendingSession.flatQuestions &&
+    pendingSession.flatQuestions.length > 0 &&
+    !isSessionStale(pendingSession)
+  );
+
+  return window.TBTemplate.buildStartState({
+    info: {
+      title: TEST_DATA.title,
+      description: TEST_DATA.description || '',
+      questionCount: TEST_DATA.totalQuestions,
+      passPercent: TEST_DATA.passPercent,
+      timeLimitMinutes: TEST_DATA.timeLimitMinutes,
+      maxAttempts: TEST_DATA.maxAttempts,
+      // PRD-7 S10: startPageContent migrated to an intro content page; not shown here.
+      startPageContent: ''
+    },
+    maxAttempts: hasLimit ? TEST_DATA.maxAttempts : null,
+    completedAttempts: used,
+    resume: canResume ? { index: (pendingSession.currentIndex || 0), total: pendingSession.flatQuestions.length } : null,
+    hasCompletedResults: hasCompleted,
+    canStartNew: canStartNew,
+    showBack: false
+  });
+}
+
+/** Wire a data-action button (if present) to a runtime handler. */
+function wireStartAction(root, action, fn) {
+  var btn = root.querySelector('[data-action="' + action + '"]');
+  if (btn) btn.onclick = fn;
+}
+
+/** Build the start context (shared builder) and mount the shared layout (standard mode). */
+function renderStartPageTemplated() {
+  var app = document.getElementById('app');
+  var ctx = buildScormStartContext();
+  app.innerHTML = '';
+  var wrap = document.createElement('div');
+  app.appendChild(wrap);
+  window.TBTemplate.renderScreenInto(wrap, { layout: state.templateLayouts['start'], context: ctx });
+  wireStartAction(wrap, 'start-test', startTest);
+  wireStartAction(wrap, 'resume', continueSession);
+  wireStartAction(wrap, 'restart', startTest);
+  wireStartAction(wrap, 'view-results', viewSavedResults);
+}
+
+function renderStartPageFallback() {
   var app = document.getElementById('app');
   var used = getAttemptsUsed();
   var hasLimit = !!TEST_DATA.maxAttempts;
@@ -83,17 +165,23 @@ function renderStartPage() {
 
   html += '</div>';
 
-  // Custom content
-  if (TEST_DATA.startPageContent) {
-    html += '<div style="margin-top:20px;padding:16px;background:hsl(var(--muted));border-radius:12px;border-left:4px solid hsl(var(--primary));border:1px solid hsl(var(--border));">';
-    html += '<div style="color:hsl(var(--foreground));font-size:14px;line-height:1.6;">' + escapeHtml(TEST_DATA.startPageContent) + '</div>';
-    html += '</div>';
-  }
+  // PRD-7 S10: legacy `startPageContent` is no longer rendered here. Its content
+  // is migrated to a `content_pages` 'intro' page (migration 003 §4.2) and played
+  // as the first item of the page sequence by the content-flow runtime, so the
+  // start overview no longer duplicates it.
 
   // ===== ЛОГИКА КНОПОК =====
   var noAttempts = hasLimit && left <= 0;
   var hasCompletedAttempts = !!getAllAttempts() && getAllAttempts().length > 0;
   var canStartNewAttempt = hasAttemptsLeft();
+
+  if (noAttempts && !hasCompletedAttempts) {
+    app.innerHTML = '<div class="card" data-layout="system.blocked" role="status" style="max-width:560px;margin:40px auto;text-align:center;">'
+      + '<h1>Доступ к тесту ограничен</h1>'
+      + '<p style="color:hsl(var(--muted-foreground));">Для этого теста больше нет доступных попыток.</p>'
+      + '</div>';
+    return;
+  }
 
   // Проверяем есть ли незавершённая сессия для продолжения
   var suspendObj = readSuspendObj();
@@ -220,7 +308,8 @@ function startTest() {
   // Send telemetry start
   Telemetry.start();
 
-  state.phase = 'question';
+  if (typeof goToPageSequenceIndex === 'function') goToPageSequenceIndex(0);
+  else state.phase = 'question';
   initTimer();
   render();
 }
@@ -311,7 +400,8 @@ function restart() {
   }
 
   // ===== ЗАПУСК ТЕСТА =====
-  state.phase = 'question';
+  if (typeof goToPageSequenceIndex === 'function') goToPageSequenceIndex(0);
+  else state.phase = 'question';
   initTimer();
   render();
 }

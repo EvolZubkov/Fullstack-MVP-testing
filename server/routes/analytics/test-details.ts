@@ -1,14 +1,15 @@
 import { Router, Request, Response } from "express";
 import { logger } from "../../logger";
 import { storage } from "../../storage";
-import { requireAuthor } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/auth";
+import { requireTestScope } from "../../middleware/test-scope";
 import { checkAnswer } from "../../utils/check-answer";
 import type { AttemptResult } from "@shared/schema";
 
 const router = Router();
 
 // GET /api/analytics/tests/:testId - Детальная аналитика теста
-router.get("/:testId", requireAuthor, async (req: Request, res: Response) => {
+router.get("/:testId", requirePermission("analytics.read"), requireTestScope("analytics", "testId"), async (req: Request, res: Response) => {
   try {
     const testId = req.params.testId;
     const test = await storage.getTest(testId);

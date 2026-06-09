@@ -46,7 +46,7 @@ interface User {
   id: string;
   email: string;
   name: string | null;
-  role: "author" | "learner";
+  roles?: string[];
   status: string;
 }
 
@@ -429,7 +429,7 @@ export function AssignTestDialog({
   const assignedUserIds = new Set(assignments.filter((a) => a.userId).map((a) => a.userId!));
   const groupMemberIds = new Set(assignments.flatMap((a) => a.groupMemberIds ?? []));
   const availableUsers = allUsers.filter(
-    (u) => !assignedUserIds.has(u.id) && !groupMemberIds.has(u.id) && u.role === "learner"
+    (u) => !assignedUserIds.has(u.id) && !groupMemberIds.has(u.id) && (u.roles ?? []).includes("learner")
   );
 
   // Filter out already assigned groups

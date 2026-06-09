@@ -1,8 +1,10 @@
 import { Router, Request, Response } from "express";
 import { logger } from "../../logger";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { addAoaSheet, workbookToBuffer } from "../../utils/excel";
 import { storage } from "../../storage";
-import { requireAuthor } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/auth";
+import { requireTestScope } from "../../middleware/test-scope";
 import { checkAnswer } from "../../utils/check-answer";
 import {
   formatQuestionType,
@@ -14,7 +16,7 @@ import {
 const router = Router();
 
 // GET /api/analytics/tests/:testId/export/excel - Экспорт теста в Excel
-router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, res: Response) => {
+router.get("/tests/:testId/export/excel", requirePermission("analytics.export"), requireTestScope("analytics", "testId"), async (req: Request, res: Response) => {
   try {
     const testId = req.params.testId;
     const test = await storage.getTest(testId);
@@ -256,34 +258,13 @@ router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, re
     questionStatsData.unshift(header!);
 
     // Создаём Excel
-    const workbook = XLSX.utils.book_new();
+    const workbook = new ExcelJS.Workbook();
+    addAoaSheet(workbook, "Сводка", summaryData);
+    addAoaSheet(workbook, "Попытки", attemptsData, [36, 20, 18, 18, 12, 12, 10, 12, 12, 40]);
+    addAoaSheet(workbook, "Ответы", answersData, [36, 15, 18, 50, 20, 15, 10, 50, 30, 30, 10, 8, 15]);
+    addAoaSheet(workbook, "Статистика вопросов", questionStatsData, [50, 20, 15, 10, 50, 30, 12, 12, 12]);
 
-    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(workbook, summarySheet, "Сводка");
-
-    const attemptsSheet = XLSX.utils.aoa_to_sheet(attemptsData);
-    attemptsSheet["!cols"] = [
-      { wch: 36 }, { wch: 20 }, { wch: 18 }, { wch: 18 },
-      { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 40 },
-    ];
-    XLSX.utils.book_append_sheet(workbook, attemptsSheet, "Попытки");
-
-    const answersSheet = XLSX.utils.aoa_to_sheet(answersData);
-    answersSheet["!cols"] = [
-      { wch: 36 }, { wch: 15 }, { wch: 18 }, { wch: 50 }, { wch: 20 },
-      { wch: 15 }, { wch: 10 }, { wch: 50 }, { wch: 30 }, { wch: 30 },
-      { wch: 10 }, { wch: 8 }, { wch: 15 },
-    ];
-    XLSX.utils.book_append_sheet(workbook, answersSheet, "Ответы");
-
-    const questionStatsSheet = XLSX.utils.aoa_to_sheet(questionStatsData);
-    questionStatsSheet["!cols"] = [
-      { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 50 },
-      { wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
-    ];
-    XLSX.utils.book_append_sheet(workbook, questionStatsSheet, "Статистика вопросов");
-
-    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    const buffer = await workbookToBuffer(workbook);
 
     const filename = `analytics_${test.title.replace(/[^a-zA-Zа-яА-Я0-9]/g, "_")}_${new Date().toISOString().split("T")[0]}.xlsx`;
 
@@ -298,7 +279,7 @@ router.get("/tests/:testId/export/excel", requireAuthor, async (req: Request, re
 });
 
 // GET /api/export/filters - Данные для фильтров экспорта
-router.get("/export/filters", requireAuthor, async (_req: Request, res: Response) => {
+router.get("/export/filters", requirePermission("analytics.export"), async (_req: Request, res: Response) => {
   try {
     const tests = await storage.getTests();
     const allAttempts = await storage.getAllAttempts();
@@ -392,7 +373,7 @@ router.get("/export/filters", requireAuthor, async (_req: Request, res: Response
 });
 
 // POST /api/export/excel - Экспорт отчёта в Excel
-router.post("/export/excel", requireAuthor, async (req: Request, res: Response) => {
+router.post("/export/excel", requirePermission("analytics.export"), async (req: Request, res: Response) => {
   try {
     const config = req.body as any;
 
@@ -525,7 +506,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
     const questions = await storage.getQuestionsByIds(Array.from(allQuestionIds));
     const questionMap = new Map(questions.map(q => [q.id, q]));
 
-    const wb = XLSX.utils.book_new();
+    const wb = new ExcelJS.Workbook();
 
     // Sheet: Summary
     if (includeSheets.summary) {
@@ -548,7 +529,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
         rows.push([t.title, ta.length, `${avg.toFixed(1)}%`, ta.length ? `${(passed / ta.length * 100).toFixed(1)}%` : "0%"]);
       }
 
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "Сводка");
+      addAoaSheet(wb, "Сводка", rows);
     }
 
     // Sheet: Attempts
@@ -578,9 +559,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
         ]);
       }
 
-      const sh = XLSX.utils.aoa_to_sheet(rows);
-      sh["!cols"] = [{ wch: 24 }, { wch: 36 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
-      XLSX.utils.book_append_sheet(wb, sh, "Попытки");
+      addAoaSheet(wb, "Попытки", rows, [24, 36, 18, 18, 18, 12, 12, 10, 12, 10]);
     }
 
     // Sheet: Answers
@@ -621,9 +600,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
         }
       }
 
-      const sh = XLSX.utils.aoa_to_sheet(rows);
-      sh["!cols"] = [{ wch: 24 }, { wch: 36 }, { wch: 15 }, { wch: 18 }, { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 50 }, { wch: 30 }, { wch: 30 }, { wch: 10 }, { wch: 8 }];
-      XLSX.utils.book_append_sheet(wb, sh, "Ответы");
+      addAoaSheet(wb, "Ответы", rows, [24, 36, 15, 18, 50, 20, 15, 10, 50, 30, 30, 10, 8]);
     }
 
     // Sheet: Question stats
@@ -662,9 +639,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
         ]);
       }
 
-      const sh = XLSX.utils.aoa_to_sheet(rows);
-      sh["!cols"] = [{ wch: 24 }, { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, sh, "Статистика вопросов");
+      addAoaSheet(wb, "Статистика вопросов", rows, [24, 50, 20, 15, 10, 10, 12, 12]);
     }
 
     // Sheet: Level stats — кто какой уровень достиг
@@ -694,9 +669,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
       }
 
       if (rows.length > 1) {
-        const sh = XLSX.utils.aoa_to_sheet(rows);
-        sh["!cols"] = [{ wch: 25 }, { wch: 30 }, { wch: 30 }, { wch: 25 }, { wch: 20 }, { wch: 15 }];
-        XLSX.utils.book_append_sheet(wb, sh, "Статистика уровней");
+        addAoaSheet(wb, "Статистика уровней", rows, [25, 30, 30, 25, 20, 15]);
       }
     }
 
@@ -736,13 +709,11 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
             rows.push([userName, course]);
           }
         }
-        const sh = XLSX.utils.aoa_to_sheet(rows);
-        sh["!cols"] = [{ wch: 30 }, { wch: 50 }];
-        XLSX.utils.book_append_sheet(wb, sh, "Рекомендации");
+        addAoaSheet(wb, "Рекомендации", rows, [30, 50]);
       }
     }
 
-    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const buffer = await workbookToBuffer(wb);
 
     const filename = `report_${new Date().toISOString().split("T")[0]}.xlsx`;
     const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -758,7 +729,7 @@ router.post("/export/excel", requireAuthor, async (req: Request, res: Response) 
 });
 
 // POST /api/export/excel-lms - Экспорт LMS данных в Excel
-router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Response) => {
+router.post("/export/excel-lms", requirePermission("analytics.export"), async (req: Request, res: Response) => {
   try {
     const config = req.body as any;
 
@@ -860,7 +831,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
     const questions = await storage.getQuestionsByIds(Array.from(allQuestionIds));
     const questionMap = new Map(questions.map(q => [q.id, q]));
 
-    const wb = XLSX.utils.book_new();
+    const wb = new ExcelJS.Workbook();
 
     // Sheet: Summary
     if (includeSheets.summary) {
@@ -888,7 +859,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
         ]);
       }
 
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), "Сводка");
+      addAoaSheet(wb, "Сводка", rows);
     }
 
     // Sheet: Attempts
@@ -922,12 +893,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
         ]);
       }
 
-      const sh = XLSX.utils.aoa_to_sheet(rows);
-      sh["!cols"] = [
-        { wch: 24 }, { wch: 36 }, { wch: 20 }, { wch: 25 }, { wch: 25 }, { wch: 20 },
-        { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }
-      ];
-      XLSX.utils.book_append_sheet(wb, sh, "Попытки");
+      addAoaSheet(wb, "Попытки", rows, [24, 36, 20, 25, 25, 20, 18, 18, 12, 12, 10, 12, 10]);
     }
 
     // Sheet: Answers
@@ -968,14 +934,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
         }
       }
 
-      const sh = XLSX.utils.aoa_to_sheet(rows);
-      sh["!cols"] = [
-        { wch: 24 }, { wch: 36 }, { wch: 25 }, { wch: 25 }, { wch: 18 },
-        { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 10 },
-        { wch: 50 }, { wch: 30 }, { wch: 30 },
-        { wch: 10 }, { wch: 8 }, { wch: 15 },
-      ];
-      XLSX.utils.book_append_sheet(wb, sh, "Ответы");
+      addAoaSheet(wb, "Ответы", rows, [24, 36, 25, 25, 18, 50, 20, 15, 10, 50, 30, 30, 10, 8, 15]);
     }
 
     // Sheet: Question stats
@@ -1020,9 +979,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
         ]);
       }
 
-      const sh = XLSX.utils.aoa_to_sheet(rows);
-      sh["!cols"] = [{ wch: 24 }, { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 12 }];
-      XLSX.utils.book_append_sheet(wb, sh, "Статистика вопросов");
+      addAoaSheet(wb, "Статистика вопросов", rows, [24, 50, 20, 15, 10, 10, 12, 12]);
     }
 
     // Sheet: Level stats — кто какой уровень достиг (LMS)
@@ -1053,9 +1010,7 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
       }
 
       if (rows.length > 1) {
-        const sh = XLSX.utils.aoa_to_sheet(rows);
-        sh["!cols"] = [{ wch: 25 }, { wch: 30 }, { wch: 30 }, { wch: 25 }, { wch: 20 }, { wch: 15 }];
-        XLSX.utils.book_append_sheet(wb, sh, "Статистика уровней");
+        addAoaSheet(wb, "Статистика уровней", rows, [25, 30, 30, 25, 20, 15]);
       }
     }
 
@@ -1094,13 +1049,11 @@ router.post("/export/excel-lms", requireAuthor, async (req: Request, res: Respon
       }
 
       if (rows.length > 1) {
-        const sh = XLSX.utils.aoa_to_sheet(rows);
-        sh["!cols"] = [{ wch: 25 }, { wch: 50 }];
-        XLSX.utils.book_append_sheet(wb, sh, "Рекомендации");
+        addAoaSheet(wb, "Рекомендации", rows, [25, 50]);
       }
     }
 
-    const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const buffer = await workbookToBuffer(wb);
 
     const filename = `report_lms_${new Date().toISOString().split("T")[0]}.xlsx`;
     const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "_");

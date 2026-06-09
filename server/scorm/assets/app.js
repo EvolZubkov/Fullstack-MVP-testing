@@ -1,5 +1,45 @@
 // Initialize
 
+// PRD-11 stratified draw — plain-JS port of shared/draw/blueprint.ts. No
+// blueprint => uniform draw (FR-02). Kept in golden parity with the TS source
+// by tests/draw-blueprint-port.test.ts.
+function drawSection(questions, drawCount, blueprint, shuffleFn) {
+  if (!blueprint || !blueprint.strata || blueprint.strata.length === 0) {
+    return { selected: shuffleFn(questions.slice()).slice(0, drawCount), warnings: [] };
+  }
+  var selected = [];
+  var used = {};
+  var warnings = [];
+  // Per-tag mode, default 'exact' (PRD-11 §3a). Match on the normalized tag key
+  // (trim + collapse spaces + lowercase) so "Финансы" matches "финансы".
+  function tagKey(t) { return String(t).replace(/\s+/g, ' ').trim().toLowerCase(); }
+  function effMode(s) { return s.mode || 'exact'; }
+  var qKeys = {};
+  questions.forEach(function (q) { qKeys[q.id] = (q.tags || []).map(tagKey); });
+  function hasTag(q, key) { return (qKeys[q.id] || []).indexOf(key) !== -1; }
+  var exactKeys = {};
+  blueprint.strata.forEach(function (s) { if (effMode(s) === 'exact') exactKeys[tagKey(s.tag)] = true; });
+
+  blueprint.strata.forEach(function (stratum) {
+    var stratumKey = tagKey(stratum.tag);
+    var pool = questions.filter(function (q) { return !used[q.id] && hasTag(q, stratumKey); });
+    var take = shuffleFn(pool.slice()).slice(0, stratum.count);
+    if (take.length < stratum.count) {
+      warnings.push({ tag: stratum.tag, requested: stratum.count, available: take.length });
+    }
+    take.forEach(function (q) { used[q.id] = true; selected.push(q); });
+  });
+
+  var remainder = drawCount - selected.length;
+  if (remainder > 0) {
+    var free = questions.filter(function (q) {
+      return !used[q.id] && !(qKeys[q.id] || []).some(function (k) { return exactKeys[k]; });
+    });
+    shuffleFn(free.slice()).slice(0, remainder).forEach(function (q) { used[q.id] = true; selected.push(q); });
+  }
+  return { selected: selected.slice(0, drawCount), warnings: warnings };
+}
+
 function generateVariant() {
   state.variant = { sections: [] };
   state.flatQuestions = [];
@@ -9,7 +49,13 @@ function generateVariant() {
 
   TEST_DATA.sections.forEach(function(section) {
     var available = section.questions.filter(function(q) { return !usedIds[q.id]; });
-    var questions = shuffle(available.slice()).slice(0, section.drawCount);
+    var drawn = drawSection(available, section.drawCount, section.drawBlueprint, shuffle);
+    var questions = drawn.selected;
+    if (drawn.warnings.length && typeof console !== 'undefined' && console.warn) {
+      drawn.warnings.forEach(function (w) {
+        console.warn('PRD-11 quota shortfall: tag "' + w.tag + '" requested ' + w.requested + ', available ' + w.available);
+      });
+    }
     questions.forEach(function(q) { usedIds[q.id] = true; });
     state.variant.sections.push({
       topicId: section.topicId,
@@ -42,7 +88,7 @@ function generateVariant() {
           }
         }
       }
-      
+
       state.flatQuestions.push({
         question: q,
         topicId: section.topicId,
@@ -50,7 +96,23 @@ function generateVariant() {
       });
     });
   });
-  state.flatQuestions = shuffle(state.flatQuestions);
+  // PRD-4 v1.1: global shuffle only applies to legacy_flat mode. For sectional
+  // modes (linear_by_topics / router_by_topics) the section boundary must be
+  // preserved — questions stay grouped by topic in the order sections were
+  // listed by the author. Questions within a section are still shuffled at
+  // selection time (see `shuffle(available)` above), but no cross-section
+  // mixing.
+  var flowMode =
+    TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode
+      ? TEST_DATA.flowPolicy.mode
+      : 'linear_flat';
+  if (flowMode === 'linear_flat') {
+    state.flatQuestions = shuffle(state.flatQuestions);
+  }
+  if (typeof rebuildPageSequence === 'function') {
+    rebuildPageSequence();
+    goToPageSequenceIndex(0);
+  }
 }
 
 function renderResults() {
@@ -242,8 +304,14 @@ function renderResults() {
     html += '<button class="btn btn-outline" onclick="restart()">Пройти заново</button>';
   }
 
-  // "Завершить" — всегда
-  html += '<button class="btn" onclick="finishAndClose()">Завершить тест</button>';
+  // Test-scope «После теста» content pages declared after the summary render
+  // after this screen — show «Далее» instead of finishing immediately.
+  if (state.postResultsPages && state.postResultsPages.length > 0) {
+    html += '<button class="btn" data-nav="next" onclick="enterPostResults()">Далее</button>';
+  } else {
+    // "Завершить" — всегда
+    html += '<button class="btn" onclick="finishAndClose()">Завершить тест</button>';
+  }
 
   html += '</div>';
 

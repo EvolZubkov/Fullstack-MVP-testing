@@ -4,12 +4,14 @@ import {
   FolderOpen,
   FileQuestion,
   ClipboardList,
+  LayoutTemplate,
   BarChart3,
   LogOut,
   User,
   Users,
   UsersRound,
   ScrollText,
+  type LucideIcon,
 } from "lucide-react";
 import {
   Sidebar,
@@ -26,20 +28,25 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
+import { formatRoles } from "@/lib/roles";
 import { t } from "@/lib/i18n";
+import type { Capability } from "@shared/access";
 
-const authorNavItems = [
-  { title: t.navigation.topics, href: "/author/topics", icon: FolderOpen },
-  { title: t.navigation.questions, href: "/author/questions", icon: FileQuestion },
-  { title: t.navigation.tests, href: "/author/tests", icon: ClipboardList },
-  { title: t.navigation.analytics, href: "/author/analytics", icon: BarChart3 },
-  { title: t.navigation.users, href: "/author/users", icon: Users },
-  { title: t.navigation.groups, href: "/author/groups", icon: UsersRound },
+/** Sidebar entries with the capability that gates each (PRD-13). */
+const authorNavItems: Array<{ title: string; href: string; icon: LucideIcon; perm: Capability }> = [
+  { title: t.navigation.topics, href: "/author/topics", icon: FolderOpen, perm: "topics.manage" },
+  { title: t.navigation.questions, href: "/author/questions", icon: FileQuestion, perm: "questions.manage" },
+  { title: t.navigation.tests, href: "/author/tests", icon: ClipboardList, perm: "tests.read" },
+  { title: t.navigation.templates, href: "/author/templates", icon: LayoutTemplate, perm: "adminTemplates.manage" },
+  { title: t.navigation.analytics, href: "/author/analytics", icon: BarChart3, perm: "analytics.read" },
+  { title: t.navigation.users, href: "/author/users", icon: Users, perm: "users.read" },
+  { title: t.navigation.groups, href: "/author/groups", icon: UsersRound, perm: "groups.manage" },
 ];
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
+  const navItems = authorNavItems.filter((item) => can(item.perm));
 
   const handleLogout = async () => {
     await logout();
@@ -59,7 +66,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>{t.sidebar.authorPanel}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {authorNavItems.map((item) => (
+              {navItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
@@ -86,8 +93,8 @@ export function AppSidebar() {
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{user?.name || user?.email}</p>
-            <p className="text-xs text-muted-foreground capitalize">
-              {user?.role === "author" ? t.auth.author : t.auth.learner}
+            <p className="text-xs text-muted-foreground">
+              {formatRoles(user?.roles)}
             </p>
           </div>
         </div>

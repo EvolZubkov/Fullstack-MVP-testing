@@ -11,6 +11,8 @@ import {
   UserMinus,
   Loader2,
 } from "lucide-react";
+import { formatRoles } from "@/lib/roles";
+import type { Role } from "@shared/access";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -65,7 +67,7 @@ interface User {
   id: string;
   email: string;
   name: string | null;
-  role: "author" | "learner";
+  roles?: string[];
   status: "pending" | "active" | "inactive";
 }
 
@@ -511,7 +513,7 @@ export default function GroupsPage() {
                         <TableCell>{user.name || "—"}</TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {user.role === "author" ? t.users.author : t.users.learner}
+                            {formatRoles((user.roles ?? []) as Role[])}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -594,7 +596,7 @@ export default function GroupsPage() {
                         <TableCell>{user.name || "—"}</TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {user.role === "author" ? t.users.author : t.users.learner}
+                            {formatRoles((user.roles ?? []) as Role[])}
                           </Badge>
                         </TableCell>
                       </TableRow>

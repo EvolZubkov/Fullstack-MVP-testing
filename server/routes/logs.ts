@@ -1,17 +1,17 @@
 import { Router } from "express";
-import { requireAuthor } from "../middleware/auth";
+import { requirePermission } from "../middleware/auth";
 import { getAvailableLogDates, readLogFile } from "../logger";
 
 const router = Router();
 
 // Только author имеет доступ
 // GET /api/logs/dates — список доступных дат
-router.get("/dates", requireAuthor, (_req, res) => {
+router.get("/dates", requirePermission("logs.read"), (_req, res) => {
   res.json(getAvailableLogDates());
 });
 
 // GET /api/logs?date=2026-03-19&level=error&search=database
-router.get("/", requireAuthor, (req, res) => {
+router.get("/", requirePermission("logs.read"), (req, res) => {
   const date = (req.query.date as string) || new Date().toISOString().slice(0, 10);
   const level = req.query.level as string | undefined;
   const search = req.query.search as string | undefined;

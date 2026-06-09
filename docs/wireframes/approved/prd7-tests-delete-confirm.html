@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    Wireframe: prd7 — Диалог удаления теста
+    Этап 3 — Wireframes
+    Файл: docs/wireframes/prd7-tests-delete-confirm.html
+    Состояния: s-empty (поле пустое), s-mismatch (не совпадает), s-match (совпало)
+    Покрывает: FR-30
+  -->
+  <title>prd7 — Диалог удаления теста</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <style>
+    /* Wireframe-specific helpers — not part of product UI */
+    .wf-sprite { display: none; }
+
+    .page-title { font: var(--ou-text-heading-s); font-weight: 700; }
+
+    /* Modal body: typed-confirmation block */
+    .wf-typed-confirm { margin-top: var(--ou-space-4); }
+    .wf-typed-confirm__label {
+      font: var(--ou-text-body-s); font-weight: 500;
+      display: block; margin-bottom: var(--ou-space-2);
+      color: var(--ou-fg-default);
+    }
+    .wf-typed-confirm__name-block {
+      background: var(--ou-bg-muted);
+      padding: var(--ou-space-2) var(--ou-space-3);
+      border-radius: var(--ou-radius-s);
+      margin-bottom: var(--ou-space-2);
+      font: var(--ou-text-body-s); font-weight: 600;
+      word-break: break-all; color: var(--ou-fg-default);
+      -webkit-user-select: all; user-select: all;
+    }
+    .wf-typed-confirm__hint {
+      font: var(--ou-text-caption); color: var(--ou-fg-muted);
+      margin-top: var(--ou-space-1);
+    }
+    .wf-typed-confirm__error {
+      font: var(--ou-text-caption); color: var(--ou-error-on-soft);
+      margin-top: var(--ou-space-1);
+    }
+
+    /* Input state variants (local — DS lacks success variant for input) */
+    .ou-field--error .ou-field__box { border-color: var(--ou-border-error); }
+    .ou-field--success .ou-field__box { border-color: var(--ou-success-default); }
+
+    /* Dim main behind modal (wireframe-only visualization) */
+    .wf-main-dimmed { opacity: .4; pointer-events: none; }
+  </style>
+
+  <style data-wf-template-overrides>
+    /* WIREFRAME.html compliance: keep meta navigation and state containers on the shared template contract. */
+    .wf-nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: var(--ou-space-2);
+      padding: var(--ou-space-2) var(--ou-space-4);
+      background: var(--ou-bg-elevated);
+      border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+      box-shadow: var(--ou-shadow-xs);
+      color: var(--ou-fg-default);
+      flex-wrap: wrap;
+    }
+    .wf-nav-title,
+    .wf-nav span.wf-nav-title {
+      font: var(--ou-text-body-s);
+      font-weight: 600;
+      color: var(--ou-fg-muted);
+      margin-right: var(--ou-space-2);
+      white-space: nowrap;
+    }
+    .wf-nav button,
+    .wf-nav .wf-btn {
+      padding: var(--ou-space-1) var(--ou-space-3);
+      border: var(--wf-border-w) solid var(--ou-border-default);
+      border-radius: var(--ou-radius-s);
+      background: transparent;
+      color: var(--ou-fg-default);
+      font: var(--ou-text-body-s);
+      cursor: pointer;
+    }
+    .wf-nav button:hover,
+    .wf-nav .wf-btn:hover { background: var(--ou-bg-hover); }
+    .wf-nav button.active,
+    .wf-nav .wf-btn.active {
+      background: var(--ou-accent-default);
+      color: var(--ou-fg-on-accent);
+      border-color: var(--ou-accent-default);
+    }
+    .wf-nav-sep {
+      width: var(--wf-border-w);
+      height: var(--ou-space-5);
+      background: var(--ou-border-soft);
+      margin: 0 var(--ou-space-2);
+    }
+    .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+    .wf-state.active { display: block; }
+    .ou-shell.wf-state { min-height: unset; padding-top: 0; margin-top: var(--wf-nav-offset, var(--wf-size-52)); height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); }
+    .ou-shell.wf-state.active { display: grid; }
+    .ou-shell .ou-shell__main { padding: 0; overflow: hidden; gap: 0; }
+
+    /* Wireframe: modal sits above shell but below wf-nav (9999) */
+    .ou-modal-root { z-index: 200; top: var(--wf-nav-offset, var(--wf-size-52)); }
+  </style>
+</head>
+
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+  </symbol>
+  <symbol id="i-question" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/>
+  </symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <rect width="8" height="4" x="8" y="2" rx="1"/>
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+  </symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+    <circle cx="9" cy="7" r="4"/>
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">prd7 — Удаление теста:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this, 's-empty')">Поле пустое</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-mismatch')">Не совпадает</button>
+  <button class="wf-btn"        type="button" onclick="showState(this, 's-match')">Совпало</button>
+  <a class="wf-link" href="prd7-tests-list.html">← Список тестов</a>
+  <div class="wf-nav-sep"></div>
+  <button type="button" onclick="toggleTheme(this)">Dark</button>
+  <button type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Поле пустое — кнопка «Удалить навсегда» disabled
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-empty" class="wf-state ou-shell active">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main wf-main-dimmed"></main>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-del-empty-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <p class="ou-modal__title" id="dlg-del-empty-title">Удалить тест навсегда?</p>
+        </div>
+      </div>
+      <div class="ou-modal__body">
+        Тест <strong>«Основы информационной безопасности»</strong> будет удалён безвозвратно вместе со всеми назначениями и результатами попыток. Это действие невозможно отменить.
+        <div class="wf-typed-confirm">
+          <label class="wf-typed-confirm__label" for="del-input-empty">
+            Введите точное название теста для подтверждения:
+          </label>
+          <div class="wf-typed-confirm__name-block" aria-hidden="true">Основы информационной безопасности</div>
+          <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" id="del-input-empty" placeholder="Введите название…" autocomplete="off" /></div></div>
+          <p class="wf-typed-confirm__hint">Регистр символов учитывается.</p>
+        </div>
+      </div>
+      <div class="ou-modal__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
+        <button class="ou-btn ou-btn--destructive ou-btn--s" type="button" disabled aria-disabled="true">Удалить навсегда</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Название не совпадает — input в error, кнопка disabled
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-mismatch" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main wf-main-dimmed"></main>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-del-mm-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <p class="ou-modal__title" id="dlg-del-mm-title">Удалить тест навсегда?</p>
+        </div>
+      </div>
+      <div class="ou-modal__body">
+        Тест <strong>«Основы информационной безопасности»</strong> будет удалён безвозвратно вместе со всеми назначениями и результатами попыток. Это действие невозможно отменить.
+        <div class="wf-typed-confirm">
+          <label class="wf-typed-confirm__label" for="del-input-mm">
+            Введите точное название теста для подтверждения:
+          </label>
+          <div class="wf-typed-confirm__name-block" aria-hidden="true">Основы информационной безопасности</div>
+          <div class="ou-field ou-field--m ou-field--error"><div class="ou-field__box"><input class="ou-field__input" type="text" id="del-input-mm" value="основы информационной безопасности" aria-invalid="true" aria-describedby="del-err-mm" autocomplete="off" /></div></div>
+          <p id="del-err-mm" class="wf-typed-confirm__error" role="alert">Название не совпадает. Учитывается регистр символов.</p>
+        </div>
+      </div>
+      <div class="ou-modal__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
+        <button class="ou-btn ou-btn--destructive ou-btn--s" type="button" disabled aria-disabled="true">Удалить навсегда</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     STATE: Название совпало — input в success, кнопка enabled
+═══════════════════════════════════════════════════════════════════════ -->
+<div id="s-match" class="wf-state ou-shell">
+  <div class="ou-shell__side"><aside class="ou-side">
+    <div class="ou-side__brand"><div class="ou-shell__brand-mark">TB</div><span class="brand-text">Test Builder</span></div>
+    <nav class="ou-side__nav">
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-folder"/></svg>Темы</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-question"/></svg>Вопросы</div>
+      <div class="ou-side__item is-active"><svg class="ou-side__ico"><use href="#i-clipboard"/></svg>Тесты</div>
+      <a class="ou-side__item ou-side__item--sub" href="prd7-tests-archive.html">Архив</a>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-chart"/></svg>Аналитика</div>
+      <div class="ou-side__item"><svg class="ou-side__ico"><use href="#i-users"/></svg>Пользователи</div>
+    </nav>
+  </aside></div>
+  <header class="ou-shell__header">
+    <span class="page-title">Тесты</span>
+    <button class="ou-shell__user" type="button">
+      <span class="ou-shell__avatar">АИ</span>
+      <span class="ou-shell__user-meta">
+        <span class="ou-shell__user-name">Алексей Иванов</span>
+        <span class="ou-shell__user-role">Автор</span>
+      </span>
+    </button>
+  </header>
+  <main class="ou-shell__main wf-main-dimmed"></main>
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dlg-del-match-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <div class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <p class="ou-modal__title" id="dlg-del-match-title">Удалить тест навсегда?</p>
+        </div>
+      </div>
+      <div class="ou-modal__body">
+        Тест <strong>«Основы информационной безопасности»</strong> будет удалён безвозвратно вместе со всеми назначениями и результатами попыток. Это действие невозможно отменить.
+        <div class="wf-typed-confirm">
+          <label class="wf-typed-confirm__label" for="del-input-match">
+            Введите точное название теста для подтверждения:
+          </label>
+          <div class="wf-typed-confirm__name-block" aria-hidden="true">Основы информационной безопасности</div>
+          <div class="ou-field ou-field--m ou-field--success"><div class="ou-field__box"><input class="ou-field__input" type="text" id="del-input-match" value="Основы информационной безопасности" autocomplete="off" /></div></div>
+        </div>
+      </div>
+      <div class="ou-modal__foot">
+        <button class="ou-btn ou-btn--secondary ou-btn--s" type="button">Отмена</button>
+        <button class="ou-btn ou-btn--destructive ou-btn--s" type="button">Удалить навсегда</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/**
+ * @fileoverview Wireframe state switcher and theme/density toggle.
+ * @module prd7-tests-delete-confirm
+ */
+(function () {
+  function resolveState(id) {
+    return document.getElementById(id) || document.getElementById('wf-' + id);
+  }
+
+  function updateWireframeNavOffset() {
+    var nav = document.querySelector('.wf-nav');
+    if (!nav) return;
+    document.body.style.setProperty('--wf-nav-offset', nav.offsetHeight + 'px');
+  }
+
+  window.showState = function showState(btn, id) {
+    var target = resolveState(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) {
+      el.classList.toggle('active', el === target);
+    });
+    document.querySelectorAll('.wf-nav button').forEach(function (button) {
+      button.classList.toggle('active', button === btn);
+    });
+    updateWireframeNavOffset();
+  };
+
+  window.toggleTheme = function toggleTheme() {
+    document.body.classList.toggle('ou--dark');
+    document.body.classList.toggle('ou--light');
+  };
+
+  window.toggleDensity = function toggleDensity() {
+    document.body.classList.toggle('ou--compact');
+    document.body.classList.toggle('ou--normal');
+  };
+
+  updateWireframeNavOffset();
+  window.addEventListener('resize', updateWireframeNavOffset);
+}());
+</script>
+
+<!-- Acceptance & DS mapping ═════════════════════════════════════════════ -->
+<section class="wf-page" aria-label="Acceptance criteria">
+  <div class="wf-notes">
+    <h3 class="wf-notes-title">Acceptance — FR-30 покрытие</h3>
+    <table>
+      <thead><tr><th>Код</th><th>Описание</th></tr></thead>
+      <tbody>
+        <tr><td>FR-30</td><td>Удаление теста требует ввода точного названия (case-sensitive) для подтверждения; кнопка «Удалить навсегда» disabled до точного совпадения.</td></tr>
+        <tr><td>FR-30</td><td>Текст предупреждения inline содержит название теста; warning описывает безвозвратность и удаление назначений / результатов попыток.</td></tr>
+        <tr><td>FR-30</td><td>Кнопка подтверждения — destructive (красная) по DS (`ou-btn--destructive`).</td></tr>
+        <tr><td>—</td><td>Состояния: s-empty (input пустой), s-mismatch (введено неточно — input error, сообщение под полем), s-match (точное совпадение — input success, кнопка enabled).</td></tr>
+        <tr><td>—</td><td>После удаления — redirect на список тестов; Toast «Тест удалён» (action error → toast, не state-level).</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</body>
+</html>

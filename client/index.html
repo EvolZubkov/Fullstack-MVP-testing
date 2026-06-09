@@ -10,7 +10,10 @@
     <title>СкилУм</title>
     <meta name="description" content="Платформа для создания тестов и оценки знаний с экспортом в SCORM для интеграции с LMS.">
   </head>
-  <body>
+  <!-- Scope DS tokens: `.ou` is always present; density `.ou--normal` is the
+       default. Theme variant (`.ou--light` / `.ou--dark`) is toggled by
+       ThemeProvider to keep DS in sync with the user's light/dark choice. -->
+  <body class="ou ou--normal">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

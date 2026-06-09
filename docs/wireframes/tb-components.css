@@ -1,0 +1,625 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * Test Builder — проектный набор UI-компонентов (namespace `tb-`).
+ *
+ * КОПИЯ для wireframes. Канонический источник:
+ * client/src/styles/tb-components.css (там же импортируется в prod-bundle
+ * через client/src/index.css). При правках обновляй ОБЕ копии.
+ *
+ * Сюда выносятся повторяющиеся прикладные паттерны, специфичные для
+ * SCORM Test Constructor (карточки уровней, таблица правил прохождения,
+ * адаптивные секции, link-row, timer preview и т.п.).
+ *
+ * Правило: внутри *эскизов* (docs/wireframes/*.html) не используем `wf-*`
+ * для компонентов приложения — только `tb-*` или DS `ou-*`.
+ * `wf-*` остаётся только для wireframe-каркаса (навигация, аннотации,
+ * state-контейнеры, размерные токены) и живёт в prd7-shared.css / wf-utils.css.
+ *
+ * Когда паттерн универсален и пригодится в других продуктах — рекомендуем
+ * перенос в общий DS (ENGINERING_HANDBOOK/handbook/design-system/...),
+ * иначе оставляем здесь.
+ *
+ * Tokens: --ou-* из UniversityRT DS (см. ds/university-rt.css).
+ * ───────────────────────────────────────────────────────────────────────── */
+
+/* ── Local tb-* literal-token aliases ─────────────────────────────────── */
+/* Product-specific values without a DS equivalent: fixed widths for Settings
+   form-controls, accent-rail hairline, sub-DS half-step spacing. Aliasing
+   keeps wireframe DS-gate happy while documenting intent. */
+:root {
+  /* gate-skip-start */
+  --tb-input-w-md: 280px;
+  --tb-input-w-sm: 140px;
+  --tb-accent-rail-w: 2px;
+  --tb-space-half:   2px;
+  --wf-border-w: 1px;   /* fallback for portal-rendered components outside .tb-tests-list */
+  /* gate-skip-end */
+}
+
+/* ── Drawer body scroll contract ────────────────────────────────────────
+   DS .ou-drawer__body has `overflow-y: auto; padding: var(--ou-space-5)`.
+   In the Drawer flex-column shell the body must be allowed to shrink below
+   its content height; otherwise long tabs expand under the footer instead of
+   becoming scrollable. */
+.ou-drawer__body {
+  min-height: 0;
+}
+
+/* ── Drawer body — flush variant for split layouts ──────────────────────
+   DS .ou-drawer__body has `overflow-y: auto; padding: var(--ou-space-5)`.
+   When the body's child is a `.ou-drawer__split` (rail + content), we want
+   the split to fill the body's full height with the inner content panel as
+   the single scroll container — not a body-level scroll that wraps both rail
+   and content. Use this modifier on the body element when the tab renders
+   `<div class="ou-drawer__split">…</div>`. */
+.ou-drawer__body--flush {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ── Settings content container (правая колонка drawer-а Настроек) ──── */
+/* container-type: inline-size — точка отсчёта для @container ниже:
+   адаптив реагирует на ширину самой колонки настроек, а не viewport
+   (drawer может быть узким даже на широком экране). */
+.tb-settings-content { flex: 1; min-height: 0; overflow-y: auto; padding: var(--ou-space-5); container-type: inline-size; }
+
+/* Page-level баннеры сверху форм: остаются на виду при прокрутке. Z-index выше
+   баннера, чтобы он перекрывал scroll-контент. Закрытие — через .ou-banner__close. */
+.tb-settings-content > .ou-banner,
+.tb-settings-content > .wf-annot-wrap--block:has(> .ou-banner) {
+  position: sticky;
+  top: calc(var(--ou-space-5) * -1);
+  z-index: 2;
+  margin: calc(var(--ou-space-5) * -1) calc(var(--ou-space-5) * -1) var(--ou-space-4);
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+}
+.tb-settings-content > .wf-annot-wrap--block:has(> .ou-banner) > .ou-banner {
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+}
+.tb-settings-content .ou-formfield { display: flex; flex-direction: column; gap: var(--ou-space-2); margin-bottom: var(--ou-space-4); }
+.tb-settings-content .ou-formfield > .ou-field,
+.tb-settings-content .ou-formfield > .ou-textarea { display: flex; width: 100%; }
+.tb-settings-content .ou-formfield > .ou-select { width: 100%; }
+/* NumberInput по DS — inline-flex с intrinsic-шириной (суффикс типа «минут» делает
+   соседние поля разной длины). На верхнем уровне формы выравниваем по фиксированной
+   ширине; max-width: 100% сжимается на узких viewport. */
+.tb-settings-content > .ou-formfield > .ou-number { width: var(--tb-input-w-md); max-width: 100%; }
+
+/* Section caption (subdued uppercase-like heading внутри формы). */
+.tb-section-label { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); display: inline-flex; align-items: center; gap: var(--ou-space-2); }
+
+/* Card body paragraph (muted info). */
+.tb-card-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); }
+
+/* Meta-count — компактный indicator «иконка + число» (например, число
+   назначений теста в шапке drawer-а). Не chip, не tag — просто tone-muted
+   inline-метка. */
+.tb-meta-count {
+  display: inline-flex; align-items: center; gap: var(--ou-space-1);
+  font: var(--ou-text-body-s); font-weight: 500; color: var(--ou-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.tb-meta-count svg { flex-shrink: 0; color: var(--ou-fg-muted); }
+
+/* Inline link (accent caption — например, в баннерах и hint-row). */
+.tb-link-text { font: var(--ou-text-caption); color: var(--ou-accent-default); text-decoration: none; }
+.tb-link-text:hover { text-decoration: underline; }
+
+/* ── Generic tables (compact data grid) ───────────────────────────────── */
+.tb-table { width: 100%; border-collapse: collapse; font: var(--ou-text-body-s); margin-top: var(--ou-space-2); }
+.tb-table th {
+  padding: var(--ou-space-2) var(--ou-space-3); background: var(--ou-bg-muted);
+  text-align: left; font: var(--ou-text-caption); font-weight: 600;
+  color: var(--ou-fg-muted); border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+}
+.tb-table td { padding: var(--ou-space-2) var(--ou-space-3); border-bottom: var(--wf-border-w) solid var(--ou-border-soft); vertical-align: middle; }
+.tb-table tr:last-child td { border-bottom: none; }
+.tb-table--mb { margin-bottom: var(--ou-space-3); }
+.tb-table__cell--nowrap { white-space: nowrap; }
+
+/* Compact rule cell inside table (custom rule + fields + unit). */
+.tb-rule-cell { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+.tb-rule-cell__fields { display: flex; align-items: center; gap: var(--ou-space-1); margin-top: var(--ou-space-1); }
+.tb-rule-cell__unit { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+/* ── Timer preview (h/m/s scrollers + label) ─────────────────────────── */
+.tb-timer-preview {
+  background: var(--ou-bg-muted); border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s); padding: var(--ou-space-2) var(--ou-space-4);
+  font-family: ui-monospace, monospace; margin-top: var(--ou-space-2);
+  display: flex; gap: var(--ou-space-6);
+}
+.tb-timer-preview__item { display: flex; flex-direction: column; gap: var(--wf-space-half); }
+.tb-timer-preview__label {
+  font: var(--ou-text-caption); color: var(--ou-fg-muted);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.tb-timer-preview__val { font: var(--ou-text-body-m); font-weight: 600; color: var(--ou-fg-default); }
+
+/* ── Feedback block (textarea + ссылки + файлы) ───────────────────────
+   Композитный паттерн редактора: «Обратная связь» = текст для обучающегося
+   + ссылки на материалы + прикреплённые файлы (PDF). Используется на 6
+   уровнях:
+     - общая обратная связь теста (s-basic feedback card);
+     - обратная связь для уровня сложности × 3 (s-adaptive level cards);
+     - обратная связь при провале всех уровней (s-adaptive);
+     - обратная связь при провале темы (s-adaptive-topic-disabled).
+   В client/ это будущий React-компонент <FeedbackBlock value links files />.
+   Состав фиксирован: внутри строго 3 .ou-formfield (text, links, files);
+   обёртка сама не задаёт margin, gap нормализован. */
+.tb-feedback-block { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+.tb-feedback-block > .ou-formfield { margin-bottom: 0; }
+
+/* ── Link row (название + url + удаление; read-only inline link list) ── */
+/* DS-кандидат: ou-list-item / ou-link-row — пока локальный паттерн. */
+.tb-link-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-1) 0; border-bottom: var(--wf-border-w) dashed var(--ou-border-soft);
+  font: var(--ou-text-body-s);
+}
+.tb-link-row:last-of-type { border-bottom: none; }
+.tb-link-row__label { flex: 1; }
+.tb-link-row__url { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+.tb-link-row__icon { flex-shrink: 0; color: var(--ou-fg-muted); width: var(--wf-space-14); height: var(--wf-space-14); }
+
+/* Error row in pass-rules table. */
+.tb-row--error > td { background: var(--ou-error-soft); }
+.tb-row--error .ou-formfield__msg--error { margin-top: var(--ou-space-1); }
+
+/* Disabled chip group (opacity overlay поверх group; DS .ou-chip.is-disabled —
+   только для одного chip-а, для group-уровня DS-аналога нет). */
+.tb-chips--disabled { opacity: 0.55; pointer-events: none; margin-top: var(--ou-space-2); }
+
+/* Highlighted rail-item (новый пункт, появляется при смене режима). */
+.tb-rail-item--new {
+  background: var(--ou-accent-soft);
+  border-left: var(--tb-accent-rail-w) solid var(--ou-accent-default);
+}
+
+/* ── Section separator used in settings panes ────────────────────────── */
+.wf-sep { border: none; border-top: var(--wf-border-w) solid var(--ou-border-soft); margin: var(--ou-space-4) 0; }
+
+/* ── Pass-rules block (Тест пройден, если…) ──────────────────────────── */
+.tb-pass-card { margin-bottom: var(--ou-space-3); }
+.tb-pass-card > .ou-card__header { padding-bottom: var(--ou-space-2); }
+.tb-pass-card > .ou-card__body { padding-top: var(--ou-space-2); padding-bottom: var(--ou-space-3); }
+.tb-pass-card .ou-radio-group__items { gap: var(--ou-space-2); }
+
+.tb-pass-overall {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--ou-space-3);
+  margin-top: var(--ou-space-3);
+}
+.tb-pass-overall .ou-formfield { margin-bottom: 0; }
+
+.tb-topics-title { font: var(--ou-text-heading-s); color: var(--ou-fg-default); margin: 0 0 var(--ou-space-2); }
+
+.tb-pass-table { width: 100%; table-layout: fixed; }
+.tb-pass-table th, .tb-pass-table td {
+  vertical-align: middle;
+  padding: var(--ou-space-2) var(--ou-space-3);
+}
+.tb-pass-table th { font: var(--ou-text-body-s); font-weight: 500; }
+.tb-pass-table__topic-col { width: var(--wf-size-180); }
+.tb-pass-table__req-col { width: var(--wf-size-100); text-align: center; }
+
+/* Expand-row: 3-td layout. */
+.tb-pass-table__detail > td {
+  background: var(--ou-bg-muted);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  border-top: 0;
+}
+.tb-pass-table__detail-inner {
+  /* wrap — при узком td контролы переходят на новую строку, а не накладываются.
+     row-gap синхронизирован с column-gap. */
+  display: flex; flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ou-space-2) var(--ou-space-3);
+  min-width: 0;
+}
+.tb-pass-table__detail-inner .ou-formfield {
+  display: inline-flex; flex-direction: row; align-items: center;
+  gap: var(--ou-space-2); margin-bottom: 0; min-width: 0;
+}
+.tb-pass-table__detail-inner .ou-formfield__lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0; flex-shrink: 0; }
+/* Select в detail-row: уменьшаем растяжение, чтобы Number поместился рядом. */
+.tb-pass-table__detail-inner .ou-select { width: auto; min-width: 0; }
+.tb-pass-table__detail-inner .ou-select__trigger { min-width: var(--tb-input-w-sm); }
+
+/* Адаптив переехал в единый @container ниже (см. в конце файла). */
+
+/* ── Status dot (универсальный индикатор состояния) ──────────────────── */
+.tb-status-dot {
+  width: var(--ou-space-3); height: var(--ou-space-3); border-radius: 50%;
+  flex-shrink: 0; background: var(--ou-fg-muted);
+}
+.tb-status-dot--ok    { background: var(--ou-success-default); }
+.tb-status-dot--warn  { background: var(--ou-warning-default); }
+.tb-status-dot--err   { background: var(--ou-error-default); }
+.tb-status-dot--off   { background: var(--ou-border-default); }
+.tb-status-dot--dirty { background: var(--ou-accent-default); }
+
+/* ── Adaptive block (адаптивность по темам) ──────────────────────────── */
+.tb-adaptive-topics { margin-bottom: var(--ou-space-3); }
+.tb-adaptive-topics .ou-acc__trigger { padding: var(--ou-space-3) var(--ou-space-4); gap: var(--ou-space-3); }
+/* DS .ou-acc__body has padding-top: 0 — добавляем зазор, иначе hover-фон триггера
+   визуально упирается в кнопку «Добавить уровень». */
+.tb-adaptive-topics .ou-acc__body { padding-top: var(--ou-space-3); }
+
+.tb-adaptive-topics__toggle { display: inline-flex; align-items: center; gap: var(--ou-space-2); flex-shrink: 0; }
+.tb-adaptive-topics__toggle-lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-adaptive-topics__level-banner { margin-top: var(--ou-space-3); }
+.tb-adaptive-topics__level-banner .ou-banner { align-items: center; }
+.tb-adaptive-topics__level-banner .ou-banner__title { font: var(--ou-text-body-xs); }
+
+/* Disabled topic visual. */
+.tb-topic--disabled .ou-acc__title { color: var(--ou-fg-muted); }
+
+/* Section inside accordion body. */
+.tb-adaptive-section { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+.tb-adaptive-section + .tb-adaptive-section { margin-top: var(--ou-space-3); }
+.tb-adaptive-section__title { font: var(--ou-text-body-m); font-weight: 600; color: var(--ou-fg-default); margin: 0; }
+.tb-adaptive-section__head { display: flex; align-items: center; justify-content: space-between; gap: var(--ou-space-3); }
+.tb-adaptive-section__actions { display: inline-flex; align-items: center; gap: var(--ou-space-2); }
+.tb-adaptive-section--disabled { opacity: 0.55; pointer-events: none; }
+.tb-adaptive-section--disabled .tb-level-card__chev { display: none; }
+
+/* Distribution: семантический контейнер для .ou-histogram внутри темы. */
+.tb-adaptive-distribution { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+
+/* Levels stack. */
+.tb-adaptive-levels { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+
+/* ── Level card (раскрываемая карточка уровня сложности) ─────────────── */
+/* DS-кандидат: ou-disclosure-card (общий паттерн раскрываемой карточки). */
+.tb-level-card .ou-card__header { padding-bottom: var(--ou-space-2); }
+.tb-level-card .ou-card__body { padding-top: 0; }
+.tb-level-card__head {
+  cursor: pointer;
+  gap: var(--ou-space-3);
+  align-items: center;
+}
+.tb-level-card__head:hover { background: var(--ou-bg-hover); }
+.tb-level-card__heading { min-width: 0; }
+.tb-level-card__title { font: var(--ou-text-body-m); font-weight: 600; margin: 0; }
+.tb-level-card__summary { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: var(--tb-space-half) 0 0; }
+.tb-level-card__trail { display: inline-flex; gap: var(--ou-space-1); align-items: center; }
+.tb-level-card__chev {
+  width: var(--ou-space-6); height: var(--ou-space-6);
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; padding: 0; background: transparent; cursor: pointer;
+  color: var(--ou-fg-muted); border-radius: var(--ou-radius-s);
+  transition: transform var(--ou-motion-base) var(--ou-easing-standard), background var(--ou-motion-fast);
+}
+.tb-level-card__chev:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
+.tb-level-card.is-collapsed .tb-level-card__chev { transform: rotate(-90deg); }
+.tb-level-card.is-collapsed .tb-level-card__body { display: none; }
+.tb-level-card.is-collapsed .ou-card__header { padding-bottom: var(--ou-space-3); }
+
+/* Level fields: 4 cols (Name · Min · Max · Questions). Порог + Тип — отдельная строка ниже.
+   minmax(0, …) разрешает ячейкам сжиматься ниже intrinsic-ширины контролов,
+   иначе .ou-number (inline-flex без width:100%) выдавливает сетку за границу карточки. */
+.tb-level-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+  gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+  align-items: end;
+}
+.tb-level-grid .ou-formfield { margin-bottom: 0; }
+.tb-level-grid > .ou-formfield > .ou-number,
+.tb-level-grid > .ou-formfield > .ou-field { display: flex; width: 100%; }
+
+/* Compact density inside level-card. */
+.tb-level-card .ou-card__body .ou-formfield {
+  margin-bottom: var(--ou-space-2);
+  gap: var(--ou-space-1);
+}
+.tb-level-card .ou-card__body .ou-formfield:last-child { margin-bottom: 0; }
+.tb-level-card .ou-card__body .ou-formfield__lbl { margin: 0; }
+.tb-level-card .ou-card__body .tb-link-row { padding: var(--ou-space-1) 0; }
+.tb-level-card .ou-card__body .ou-chip-group { gap: var(--ou-space-1); margin-bottom: var(--ou-space-1); }
+.tb-level-card .ou-card__body .ou-textarea__input { padding: var(--ou-space-2); }
+.tb-level-card .ou-card__body .ou-formfield > .ou-btn { margin-top: var(--ou-space-1); align-self: flex-start; }
+
+/* ── Topic row composite (вкладка «Состав» Drawer-а) ───────────────────
+   Карточка темы: header (название · бейдж · счётчик) + body (draw_count + feedback).
+   Используется во вкладке «Состав» редактора теста.
+   В client/ это будущий React-компонент <TopicRow topic drawCount mode /> с
+   фиксированной композицией внутри. */
+.tb-topic-row {
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-l);
+  background: var(--ou-bg-elevated);
+  box-shadow: var(--ou-shadow-sm);
+  margin-bottom: var(--ou-space-2);
+  overflow: hidden;
+}
+.tb-topic-row__header {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-4);
+  background: var(--ou-bg-subtle);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+}
+.tb-topic-row__name { font: var(--ou-text-heading-s); flex: 1; min-width: 0; }
+.tb-topic-row__count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-topic-row__body { padding: var(--ou-space-3) var(--ou-space-4); }
+
+/* Draw-count row: «Вопросов в тест [ N ] из M» — standard mode. */
+.tb-draw-count-row {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  margin-bottom: var(--ou-space-2);
+}
+.tb-draw-count-row__label {
+  font: var(--ou-text-body-s);
+  width: var(--wf-size-150); flex-shrink: 0;
+}
+.tb-draw-count-row__max { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* Adaptive mode: draw_count заменяется bag-таггом + ссылкой на уровни (FR-36).
+   `--adaptive` modifier добавляет flex-wrap, поскольку link-tail длиннее number-input. */
+.tb-draw-count-row--adaptive { flex-wrap: wrap; }
+
+/* Feedback preview (read-only) — clickable card со snippet'ом и meta-row.
+   Edit-форма — отдельный паттерн `.tb-feedback-block` (см. выше).
+   `.is-empty` — placeholder-вариант («Не задано — нажмите для редактирования»).
+   В client/ будущий React-компонент <FeedbackPreview snippet links files />. */
+.tb-feedback-preview {
+  display: block; width: 100%; box-sizing: border-box;
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  font: var(--ou-text-body-s);
+  background: var(--ou-bg-elevated);
+  cursor: pointer;
+  text-align: left;
+}
+.tb-feedback-preview:hover { border-color: var(--ou-accent-default); }
+.tb-feedback-preview.is-empty {
+  color: var(--ou-fg-muted); font-style: italic;
+}
+.tb-feedback-preview__text {
+  display: flex; align-items: baseline; gap: var(--ou-space-2);
+}
+.tb-feedback-preview__snippet { flex: 1; }
+.tb-feedback-preview__meta {
+  display: flex; gap: var(--ou-space-2); margin-top: var(--ou-space-1);
+  font: var(--ou-text-caption); color: var(--ou-fg-muted); align-items: center;
+}
+.tb-feedback-preview__meta svg { width: var(--wf-space-10); height: var(--wf-space-10); flex-shrink: 0; }
+.tb-feedback-preview__sep { color: var(--ou-border-soft); }
+/* Rich-text preview: rendered HTML from RTE, clipped to ~4 lines */
+.tb-feedback-preview__rich {
+  overflow: hidden; max-height: 5rem;
+  -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+}
+.tb-feedback-preview__rich p { margin: 0 0 var(--ou-space-1); }
+.tb-feedback-preview__rich p:last-child { margin-bottom: 0; }
+.tb-feedback-preview__rich ul,
+.tb-feedback-preview__rich ol { margin: 0; padding-left: 1.25em; }
+.tb-feedback-preview__edit-hint {
+  display: flex; justify-content: flex-end; margin-top: var(--ou-space-1);
+  color: var(--ou-fg-muted);
+}
+
+/* ── Feedback editor modal (per prd7-editor-drawer.html s-feedback-edit) ──
+   Composite: format selector + (optional) RTE / Textarea + links + PDFs.
+   Used by features/tests/editor/sections/feedback-editor-modal.tsx. */
+.tb-feedback-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-5);
+}
+.tb-feedback-editor__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+.tb-feedback-editor__section--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--ou-space-3);
+  flex-wrap: wrap;
+}
+.tb-feedback-editor__sec-title {
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  color: var(--ou-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+}
+.tb-feedback-editor__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+.tb-feedback-editor__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-2);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+  background: var(--ou-bg-elevated);
+}
+.tb-feedback-editor__item-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  gap: var(--ou-space-2);
+  min-width: 0;
+}
+.tb-feedback-editor__item-fields > .ou-field { flex: 1; min-width: 0; }
+
+/* PDF asset row inside feedback editor. */
+.tb-feedback-editor__asset {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+  flex: 1;
+  min-width: 0;
+}
+.tb-feedback-editor__asset-ico {
+  flex-shrink: 0;
+  color: var(--ou-fg-muted);
+  margin-top: var(--ou-space-1);
+}
+.tb-feedback-editor__asset-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-1);
+  flex: 1;
+  min-width: 0;
+}
+.tb-feedback-editor__asset-meta > .ou-field { width: 100%; }
+.tb-feedback-editor__asset-file { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+/* Upload row below asset list. */
+.tb-feedback-editor__upload {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-3);
+  flex-wrap: wrap;
+}
+.tb-feedback-editor__upload-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+/* ── RTE (Rich Text Editor, execCommand-based toolbar) ───────────────────
+   Used in FeedbackEditorModal when format === "richText". */
+.tb-rte {
+  border: var(--wf-border-w, 1px) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  overflow: hidden;
+  background: var(--ou-bg-elevated);
+}
+.tb-rte__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+  padding: var(--ou-space-1) var(--ou-space-2);
+  border-bottom: var(--wf-border-w, 1px) solid var(--ou-border-soft);
+  background: var(--ou-bg-subtle);
+}
+.tb-rte__sep {
+  width: 1px; height: var(--ou-space-4);
+  background: var(--ou-border-default);
+  margin: 0 var(--ou-space-1); flex-shrink: 0; display: inline-block;
+}
+.tb-rte__area {
+  min-height: 120px; padding: var(--ou-space-3);
+  font: var(--ou-text-body-m); color: var(--ou-fg-default);
+  line-height: 1.5; outline: none;
+}
+.tb-rte__area:focus { outline: none; }
+.tb-rte__area p { margin: 0 0 var(--ou-space-2); }
+.tb-rte__area p:last-child { margin-bottom: 0; }
+.tb-rte__area strong { font-weight: 700; }
+.tb-rte__area em { font-style: italic; }
+.tb-rte__area a { color: var(--ou-accent-default); text-decoration: underline; }
+.tb-rte__area ul, .tb-rte__area ol { margin: 0 0 var(--ou-space-2); padding-left: var(--ou-space-5); }
+
+/* ── Saving overlay (наложение со спиннером поверх Drawer body) ─────────
+   Используется во время атомарного сохранения теста (PUT /api/tests/:id).
+   Host-контейнер (например, ou-drawer__body) должен получить tb-saving-host
+   modifier — он переключает positioning, чтобы overlay лёг абсолютом внутри.
+   В client/ — будущий React-компонент <SavingOverlay show={isSaving} />. */
+.tb-saving-host { position: relative; overflow: hidden; }
+.tb-saving-overlay { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; }
+.tb-saving-overlay__bd { position: absolute; inset: 0; background: var(--ou-bg-elevated); opacity: 0.88; }
+.tb-saving-overlay__inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-3); }
+.tb-saving-overlay__spinner { color: var(--ou-accent-default); }
+.tb-saving-overlay__text { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+
+/* ── Changes popover (список изменений в Drawer footer) ─────────────────
+   Открывается по клику на «Показать изменения» в Drawer footer; показывает
+   grouped summary по вкладкам/секциям (FR-25c1). Якорь — кнопка в footer,
+   popover позиционируется относительно anchor (bottom-up).
+   В client/ — будущий <ChangesPopover anchorEl items />. */
+.tb-changes-anchor { position: relative; display: flex; align-items: center; }
+.tb-changes-popover {
+  position: absolute; bottom: calc(100% + var(--wf-space-10)); right: 0;
+  width: var(--wf-size-400); max-height: var(--wf-size-420); overflow: hidden;
+  background: var(--ou-bg-elevated);
+  border: var(--wf-border-w) solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m);
+  box-shadow: var(--ou-shadow-lg);
+  display: flex; flex-direction: column; z-index: 70;
+}
+.tb-changes-popover__header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+  flex-shrink: 0;
+}
+.tb-changes-popover__title { font: var(--ou-text-body-s); font-weight: 600; }
+.tb-changes-popover__count { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+.tb-changes-popover__body { flex: 1; overflow-y: auto; }
+.tb-changes-popover__group { padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-3); }
+.tb-changes-popover__group + .tb-changes-popover__group {
+  border-top: var(--wf-border-w) solid var(--ou-border-default);
+}
+.tb-changes-popover__group-title {
+  font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--ou-fg-muted);
+  padding: var(--ou-space-2) 0;
+}
+.tb-changes-popover__item {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ou-space-2);
+  padding: var(--ou-space-2) 0; font: var(--ou-text-body-s);
+  border-top: var(--wf-border-w) dashed var(--ou-border-default);
+}
+.tb-changes-popover__item:first-of-type { border-top: none; }
+.tb-changes-popover__label { font-weight: 500; flex-basis: 100%; }
+.tb-changes-popover__old {
+  padding: var(--wf-border-w) var(--wf-space-6); border-radius: var(--ou-radius-s);
+  font-family: ui-monospace, monospace;
+  color: var(--ou-error-on-soft); background: var(--ou-error-soft);
+  text-decoration: line-through;
+}
+.tb-changes-popover__new {
+  padding: var(--wf-border-w) var(--wf-space-6); border-radius: var(--ou-radius-s);
+  font-family: ui-monospace, monospace;
+  color: var(--ou-success-on-soft); background: var(--ou-success-soft);
+  font-weight: 500;
+}
+.tb-changes-popover__arrow { color: var(--ou-fg-muted); }
+.tb-changes-popover__context { color: var(--ou-fg-muted); flex-basis: 100%; }
+
+/* ── Адаптив по ширине drawer-а Настроек ─────────────────────────────────
+   Используем @container на .tb-settings-content (container-type: inline-size
+   объявлен выше). Так layout переключается при сжатии drawer, независимо
+   от ширины viewport. */
+/* gate-skip-start */
+/* @container breakpoint остаётся literal — var() внутри @container не поддерживается
+   production-браузерами без CSS Houdini-style runtime resolution. */
+@container (max-width: 720px) {
+  /* Узкая форма уровня сложности: Название (text) занимает всю строку;
+     числовые поля — парами «Сложность от + до» и «Вопросов + Порог».
+     align-items: start — в этом layout все строки однотипные (label + контрол),
+     выравнивание по верху держит label на одной линии в паре. */
+  .tb-level-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .tb-level-grid > .ou-formfield:first-child { grid-column: 1 / -1; }
+
+  /* Pass-rules block. */
+  .tb-pass-overall { grid-template-columns: 1fr; }
+  /* .tb-pass-table__detail-inner сам переносит контролы через flex-wrap,
+     принудительный flex-direction: column был лишним и ломал layout даже
+     когда controls помещались в строку. */
+
+  /* Topic accordion toggle: prefix-label прячется, остаётся только switch. */
+  .tb-adaptive-topics__toggle-lbl { display: none; }
+}
+/* gate-skip-end */

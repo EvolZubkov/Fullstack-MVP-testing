@@ -148,7 +148,7 @@ describe("formatUserAnswerText", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 const { storageMock } = vi.hoisted(() => ({
   storageMock: {
-    getUser: vi.fn(), getTest: vi.fn(), getAllAttempts: vi.fn(),
+    getUser: vi.fn(), getUserRoles: vi.fn().mockResolvedValue(["administrator"]), getTest: vi.fn(), getAllAttempts: vi.fn(),
     getQuestionsByIds: vi.fn(), getTopics: vi.fn(),
   }
 }));

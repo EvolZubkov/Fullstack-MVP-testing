@@ -1,6 +1,18 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* CSS @import must precede all other statements. Order:
+   1) UniversityRT DS — `ou-*` BEM + tokens. Vendored under
+      `styles/vendor/` because the upstream package does not declare
+      `./css/*` in its `exports` map and ships a malformed comment block
+      that Tailwind's PostCSS selector parser cannot tolerate (see
+      `styles/vendor/README.md`).
+   2) Project DS-extensions (`tb-*` components, see styles/tb-components.css).
+   3) Tailwind layers from the local utility-first stack. */
+@import './styles/vendor/university-rt.css';
+@import './styles/tb-components.css';
+@import './styles/tb-tests-list.css';
+@import './styles/tb-templates-admin.css';
+
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
 
 /* LIGHT MODE */
 :root {

@@ -217,6 +217,54 @@ describe("buildTestJson — standard mode", () => {
     expect(q.correct.correctIndex).toBe(0);
   });
 
+  // PRD-10 Stage 3: graded scoring is exported only when set (FR-02 byte-identical).
+  it("omits scoring when the question has no scoringJson", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    expect(data.sections[0].questions[0].scoring).toBeUndefined();
+  });
+
+  it("exports scoring into the runtime question when set", () => {
+    const scoring = {
+      kind: "tiered",
+      tiers: [{ when: { all: [{ lhs: "c", op: "==", rhs: "T" }] }, score: 2 }],
+    };
+    const d = {
+      ...exportData,
+      sections: [{ ...dbSection, questions: [{ ...dbQuestion, scoringJson: scoring }] }],
+    };
+    const q = JSON.parse(buildTestJson(d)).sections[0].questions[0];
+    expect(q.scoring).toEqual(scoring);
+  });
+
+  // PRD-11 Stage 3: the draw blueprint is exported only when set (FR-02).
+  it("omits drawBlueprint when the section has none", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    expect(data.sections[0].drawBlueprint).toBeUndefined();
+  });
+
+  it("exports drawBlueprint into the runtime section when set", () => {
+    const bp = { strata: [{ tag: "Базовые понятия", count: 2, mode: "exact" }] };
+    const d = { ...exportData, sections: [{ ...dbSection, drawBlueprintJson: bp }] };
+    const s = JSON.parse(buildTestJson(d)).sections[0];
+    expect(s.drawBlueprint).toEqual(bp);
+  });
+
+  // PRD-11 Stage 3: question tags must reach the runtime — drawSection matches a
+  // stratum tag against q.tags, so without them the draw blueprint is inert.
+  it("omits tags when the question has none", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    expect(data.sections[0].questions[0].tags).toBeUndefined();
+  });
+
+  it("exports tags into the runtime question when set", () => {
+    const d = {
+      ...exportData,
+      sections: [{ ...dbSection, questions: [{ ...dbQuestion, tags: ["Базовые понятия", "Протоколы"] }] }],
+    };
+    const q = JSON.parse(buildTestJson(d)).sections[0].questions[0];
+    expect(q.tags).toEqual(["Базовые понятия", "Протоколы"]);
+  });
+
   it("does not include adaptiveTopics for standard mode", () => {
     const data = JSON.parse(buildTestJson(exportData));
     expect(data.adaptiveTopics).toBeUndefined();
@@ -257,6 +305,126 @@ describe("buildTestJson — standard mode", () => {
   it("omits telemetry when not provided", () => {
     const data = JSON.parse(buildTestJson(exportData));
     expect(data.telemetry).toBeUndefined();
+  });
+});
+
+describe("buildTestJson — flowPolicy export (PRD-4 v1.1)", () => {
+  it("defaults to linear_flat when flowPolicyJson is missing", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    expect(data.flowPolicy).toEqual({ mode: "linear_flat" });
+  });
+
+  it("exports linear_by_topics when set in flowPolicyJson", () => {
+    const payload = {
+      ...exportData,
+      test: { ...exportData.test, flowPolicyJson: { mode: "linear_by_topics" } },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.mode).toBe("linear_by_topics");
+  });
+
+  it("exports router_by_topics when set in flowPolicyJson", () => {
+    const payload = {
+      ...exportData,
+      test: { ...exportData.test, flowPolicyJson: { mode: "router_by_topics" } },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.mode).toBe("router_by_topics");
+  });
+
+  it("coerces unknown flowMode values to linear_flat (defensive default)", () => {
+    const payload = {
+      ...exportData,
+      test: { ...exportData.test, flowPolicyJson: { mode: "section_graph" } },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.mode).toBe("linear_flat");
+  });
+
+  // PRD-4 v1.1 §4.7: router_by_topics carries optional gating fields.
+
+  it("router_by_topics defaults routerCompletionPolicy to all_required_completed", () => {
+    const payload = {
+      ...exportData,
+      test: { ...exportData.test, flowPolicyJson: { mode: "router_by_topics" } },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.routerCompletionPolicy).toBe("all_required_completed");
+  });
+
+  it("router_by_topics carries explicit routerCompletionPolicy when provided", () => {
+    const payload = {
+      ...exportData,
+      test: {
+        ...exportData.test,
+        flowPolicyJson: {
+          mode: "router_by_topics",
+          routerCompletionPolicy: "all_required_passed",
+        },
+      },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.routerCompletionPolicy).toBe("all_required_passed");
+  });
+
+  it("router_by_topics propagates sectionUnlockRules", () => {
+    const unlockRules = {
+      "t2": { mode: "after_sections_completed", sectionIds: ["t1"] },
+    };
+    const payload = {
+      ...exportData,
+      test: {
+        ...exportData.test,
+        flowPolicyJson: { mode: "router_by_topics", sectionUnlockRules: unlockRules },
+      },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.sectionUnlockRules).toEqual(unlockRules);
+  });
+
+  it("non-router modes do NOT carry routerCompletionPolicy / sectionUnlockRules", () => {
+    const payload = {
+      ...exportData,
+      test: {
+        ...exportData.test,
+        flowPolicyJson: {
+          mode: "linear_by_topics",
+          routerCompletionPolicy: "all_required_passed",
+          sectionUnlockRules: { t1: { mode: "always" } },
+        },
+      },
+    };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.flowPolicy.mode).toBe("linear_by_topics");
+    expect(data.flowPolicy.routerCompletionPolicy).toBeUndefined();
+    expect(data.flowPolicy.sectionUnlockRules).toBeUndefined();
+  });
+
+  it("section.required is exported (defaults to true when absent)", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    // Default fixture didn't set `required` — exporter coerces to true.
+    expect(data.sections[0].required).toBe(true);
+  });
+
+  it("section.required=false is preserved", () => {
+    const optionalSection = { ...dbSection, required: false };
+    const payload = { ...exportData, sections: [optionalSection] };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.sections[0].required).toBe(false);
+  });
+
+  // PRD-4 v1.1 §3.2 / Phase 4e: per-section time limit export.
+
+  it("section.timeLimitMinutes is exported when set", () => {
+    const sectionWithLimit = { ...dbSection, timeLimitMinutes: 15 };
+    const payload = { ...exportData, sections: [sectionWithLimit] };
+    const data = JSON.parse(buildTestJson(payload));
+    expect(data.sections[0].timeLimitMinutes).toBe(15);
+  });
+
+  it("section.timeLimitMinutes defaults to null when absent (inherit_test)", () => {
+    const data = JSON.parse(buildTestJson(exportData));
+    expect(data.sections[0].timeLimitMinutes).toBeNull();
   });
 });
 

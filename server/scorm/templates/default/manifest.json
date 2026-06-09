@@ -1,0 +1,394 @@
+{
+  "id": "default",
+  "name": "Стандартный",
+  "version": "1.1.0",
+  "templateApiVersion": "1.0",
+  "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
+  "params": [
+    {
+      "key": "primaryColor",
+      "type": "color",
+      "label": "Основной цвет",
+      "default": "217 91% 42%",
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "backgroundColor",
+      "type": "color",
+      "label": "Цвет фона",
+      "default": "225 7% 7%",
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "foregroundColor",
+      "type": "color",
+      "label": "Цвет текста",
+      "default": "0 0% 98%",
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "cardColor",
+      "type": "color",
+      "label": "Цвет карточек",
+      "default": "225 14% 14%",
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "cardBorderColor",
+      "type": "color",
+      "label": "Граница карточек",
+      "default": "0 0% 24%",
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "borderColor",
+      "type": "color",
+      "label": "Цвет границ",
+      "default": "0 0% 22%",
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "mutedColor",
+      "type": "color",
+      "label": "Приглушённый цвет",
+      "default": "225 10% 20%",
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "accentColor",
+      "type": "color",
+      "label": "Акцентный цвет",
+      "default": "225 8% 22%",
+      "group": "Цвета",
+      "section": "branding"
+    },
+    {
+      "key": "fontFamily",
+      "type": "select",
+      "label": "Шрифт",
+      "default": "Inter",
+      "group": "Оформление",
+      "section": "branding",
+      "options": [
+        "Inter",
+        "Roboto",
+        "Arial"
+      ]
+    },
+    {
+      "key": "logoUrl",
+      "type": "image",
+      "label": "Логотип",
+      "default": null,
+      "group": "Оформление",
+      "section": "branding"
+    },
+    {
+      "key": "progress.mode",
+      "type": "select",
+      "label": "Режим прогресса",
+      "default": "questions",
+      "group": "Навигация",
+      "section": "progress",
+      "options": [
+        "questions",
+        "pages",
+        "hidden"
+      ],
+      "optionLabels": {
+        "questions": "По вопросам",
+        "pages": "По страницам",
+        "hidden": "Не показывать"
+      }
+    },
+    {
+      "key": "showProgressBar",
+      "type": "boolean",
+      "label": "Показывать прогресс-бар",
+      "default": true,
+      "group": "Навигация",
+      "section": "progress"
+    }
+  ],
+  "contentTemplates": [
+    {
+      "key": "intro.hero",
+      "label": "Введение: заголовок и изображение",
+      "kind": "intro",
+      "pageKind": "content.intro",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 36,
+            "minFontSize": 24,
+            "maxFontSize": 36,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "subtitle",
+          "type": "text",
+          "label": "Подзаголовок",
+          "required": false,
+          "maxLength": 300,
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 18,
+            "allowAuthorFontSize": true,
+            "allowedFontSizes": [
+              16,
+              18,
+              20,
+              22
+            ],
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "heroImage",
+          "type": "image",
+          "label": "Изображение",
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "info.text",
+      "label": "Информация: текст",
+      "kind": "info",
+      "pageKind": "content.info",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "autoFitFont",
+            "defaultFontSize": 28,
+            "minFontSize": 20,
+            "maxFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "body",
+          "type": "richText",
+          "label": "Текст",
+          "required": false,
+          "textFit": {
+            "mode": "growBox",
+            "defaultFontSize": 16,
+            "overflow": "warn"
+          },
+          "allowedMarks": [
+            "bold",
+            "italic",
+            "link"
+          ],
+          "allowedBlocks": [
+            "paragraph",
+            "bulletedList",
+            "numberedList"
+          ]
+        }
+      ]
+    },
+    {
+      "key": "summary.result",
+      "label": "Итог: результат",
+      "kind": "summary",
+      "pageKind": "content.summary",
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "result",
+          "type": "resultField",
+          "label": "Результат",
+          "required": false,
+          "allowedPaths": [
+            "result.scorePercent",
+            "progress.question.percent"
+          ],
+          "defaultPath": "result.scorePercent",
+          "allowedRenderers": [
+            "core.ringChart",
+            "core.textMetric",
+            "core.progressBar"
+          ],
+          "defaultRenderer": "core.ringChart"
+        }
+      ]
+    },
+    {
+      "key": "question.standard",
+      "label": "Стандартный макет вопроса",
+      "kind": "questions",
+      "isDefault": true,
+      "placeholders": []
+    },
+    {
+      "key": "router.menu",
+      "label": "Меню карточек",
+      "kind": "router",
+      "pageKind": "content.router",
+      "isDefault": true,
+      "placeholders": [
+        {
+          "key": "title",
+          "type": "text",
+          "label": "Заголовок меню",
+          "required": false,
+          "maxLength": 120,
+          "textFit": {
+            "mode": "fixed",
+            "defaultFontSize": 28,
+            "allowAuthorFontSize": false,
+            "overflow": "warn"
+          }
+        },
+        {
+          "key": "instruction",
+          "type": "textarea",
+          "label": "Инструкция",
+          "required": false,
+          "maxLength": 600
+        }
+      ]
+    }
+  ],
+  "rendererPlugins": [],
+  "layouts": {
+    "shell": "shell.html",
+    "start": "layouts/start.html",
+    "content": "layouts/content.html",
+    "question": "layouts/question.html",
+    "results": "layouts/results.html",
+    "results.adaptive": "layouts/results.adaptive.html",
+    "system.blocked": "layouts/system.blocked.html",
+    "system.transition": "layouts/system.transition.html"
+  },
+  "assets": {
+    "styles": [
+      "styles/theme.css",
+      "styles/base.css"
+    ],
+    "scripts": [
+      "scripts/template.js"
+    ],
+    "images": [],
+    "preview": "preview.svg"
+  },
+  "capabilities": {
+    "navigation": [
+      "linear",
+      "locked"
+    ],
+    "sidebar": false,
+    "progress": [
+      "questions",
+      "pages",
+      "hidden"
+    ],
+    "timer": true,
+    "contentPages": [
+      "start",
+      "intro",
+      "info",
+      "summary",
+      "html"
+    ],
+    "questionTypes": [
+      "single",
+      "multiple",
+      "matching",
+      "ranking"
+    ],
+    "customInteractions": false,
+    "runtimeApi": "1.0"
+  },
+  "preview": {
+    "demoData": "demo/course.json",
+    "defaultRoute": "start",
+    "routes": [
+      {
+        "route": "start",
+        "label": "Старт"
+      },
+      {
+        "route": "content.intro",
+        "pageId": "demo-intro",
+        "templateKey": "intro.hero",
+        "label": "Введение: заголовок и изображение"
+      },
+      {
+        "route": "content.info",
+        "pageId": "demo-info",
+        "templateKey": "info.text",
+        "label": "Информация: текст"
+      },
+      {
+        "route": "question.single",
+        "questionId": "demo-single",
+        "label": "Вопрос: одиночный выбор"
+      },
+      {
+        "route": "question.multiple",
+        "questionId": "demo-multiple",
+        "label": "Вопрос: множественный выбор"
+      },
+      {
+        "route": "question.matching",
+        "questionId": "demo-matching",
+        "label": "Вопрос: сопоставление"
+      },
+      {
+        "route": "question.ranking",
+        "questionId": "demo-ranking",
+        "label": "Вопрос: ранжирование"
+      },
+      {
+        "route": "content.summary",
+        "pageId": "demo-summary",
+        "templateKey": "summary.result",
+        "label": "Итог: результат"
+      },
+      {
+        "route": "results",
+        "label": "Результаты"
+      },
+      {
+        "route": "system.blocked",
+        "label": "Системная: доступ ограничен"
+      }
+    ]
+  }
+}

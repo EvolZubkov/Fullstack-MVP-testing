@@ -138,12 +138,16 @@ describe("checkAnswer — matching", () => {
     expect(checkAnswer(q, null)).toBe(0);
   });
 
-  it("returns 0 when correctPairs is empty", () => {
+  // PRD-12: the server now delegates to the canonical @shared/scoring engine.
+  // For a malformed question with no correct pairs, the engine scores an empty
+  // answer as a vacuous full match (1) — matching the SCORM runtime. The old
+  // server-only guard that returned 0 is intentionally dropped for parity.
+  it("scores empty answer as full credit when correctPairs is empty (engine parity)", () => {
     const qEmpty = makeQuestion({
       type: "matching",
       correctJson: { pairs: [] },
     });
-    expect(checkAnswer(qEmpty, {})).toBe(0);
+    expect(checkAnswer(qEmpty, {})).toBe(1);
   });
 });
 
@@ -181,12 +185,14 @@ describe("checkAnswer — ranking", () => {
     expect(checkAnswer(q, null)).toBe(0);
   });
 
-  it("returns 0 when correctOrder is empty", () => {
+  // PRD-12: parity with @shared/scoring — see the matching case above. An empty
+  // ranking answer against an empty correctOrder is a vacuous full match (1).
+  it("scores empty answer as full credit when correctOrder is empty (engine parity)", () => {
     const qEmpty = makeQuestion({
       type: "ranking",
       correctJson: { correctOrder: [] },
     });
-    expect(checkAnswer(qEmpty, [])).toBe(0);
+    expect(checkAnswer(qEmpty, [])).toBe(1);
   });
 });
 

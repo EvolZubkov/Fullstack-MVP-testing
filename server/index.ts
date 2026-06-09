@@ -5,6 +5,8 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { seedDatabase } from "./storage";
+import { provisionSuperadmins } from "./services/access";
+import { syncBuiltinTemplates, reconcileTemplates } from "./template-registry";
 import {
   waitForDatabase,
   closeDatabaseConnection,
@@ -79,7 +81,15 @@ app.use((req, res, next) => {
       if (reqPath.startsWith("/api") && !reqPath.startsWith("/api/logs")) {
         const ctx = requestContext.getStore();
         const userTag = ctx?.userId ? ` user:${ctx.userId}` : "";
-        log(`[req:${reqId}]${userTag} ${req.method} ${reqPath} ${res.statusCode} in ${duration}ms`);
+        const line = `[req:${reqId}]${userTag} ${req.method} ${reqPath} ${res.statusCode} in ${duration}ms`;
+        const code = res.statusCode;
+        if (code >= 500) {
+          logger.error(line, "express");
+        } else if (code >= 400) {
+          logger.warn(line, "express");
+        } else {
+          logger.info(line, "express");
+        }
 
         if (duration > SLOW_REQUEST_MS) {
           logger.warn(`SLOW REQUEST [req:${reqId}] ${req.method} ${reqPath} — ${duration}ms`, "express");
@@ -103,6 +113,29 @@ app.use((req, res, next) => {
   // Wait for database to be available before starting
   await waitForDatabase();
   await seedDatabase();
+
+  // PRD-13: ensure configured superadmins exist (best-effort, no stored roles).
+  try {
+    await provisionSuperadmins();
+  } catch (err) {
+    logger.error(err instanceof Error ? err : String(err), "provisionSuperadmins");
+  }
+
+  // Template-registry sync is best-effort: a failure here (e.g. a schema not yet
+  // migrated, a malformed built-in manifest) must NOT abort the whole boot —
+  // otherwise the HTTP server never starts listening and the app is fully down for
+  // a template-registry problem. Log and continue; the registry re-syncs on the
+  // next restart once the underlying issue (e.g. drizzle-kit push) is resolved.
+  try {
+    await syncBuiltinTemplates();
+  } catch (err) {
+    logger.error(err instanceof Error ? err : String(err), "syncBuiltinTemplates");
+  }
+  try {
+    await reconcileTemplates();
+  } catch (err) {
+    logger.error(err instanceof Error ? err : String(err), "reconcileTemplates");
+  }
 
   // Health check endpoint
   app.get("/api/health", async (_req, res) => {

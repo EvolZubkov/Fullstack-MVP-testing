@@ -1,0 +1,158 @@
+// @vitest-environment jsdom
+/**
+ * @module tests/results-template-gating
+ *
+ * Guards the PRD-12 host-superset invariant for the results layouts: the SCORM
+ * runtime renders the SAME `results.html` / `results.adaptive.html` as the web
+ * host, with the SCORM-richer parts (per-topic points / threshold / feedback,
+ * recommended courses & events, the back action, the adaptive PDF/retry/finish
+ * actions) gated on context flags the WEB context never sets. So the web output
+ * must stay identical (those blocks absent) while the SCORM context lights them
+ * up. This test renders each layout with a web-shaped and a SCORM-shaped context
+ * and asserts the gating, protecting "web byte-identical, SCORM enriched".
+ */
+
+import { describe, it, expect } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { renderScreenInto } from "../shared/template/render-screen";
+
+const layoutsDir = path.join(process.cwd(), "server", "scorm", "templates", "default", "layouts");
+const resultsLayout = fs.readFileSync(path.join(layoutsDir, "results.html"), "utf8");
+const adaptiveLayout = fs.readFileSync(path.join(layoutsDir, "results.adaptive.html"), "utf8");
+
+function render(layout: string, context: unknown): HTMLElement {
+  const root = document.createElement("div");
+  renderScreenInto(root, { layout, context });
+  return root;
+}
+
+const actions = (root: HTMLElement) =>
+  Array.from(root.querySelectorAll("[data-action]")).map((b) => b.getAttribute("data-action"));
+
+// Minimal web-shaped context (the shape buildResultContext produces — no SCORM extras).
+const webResult = {
+  course: { title: "Тест" },
+  result: {
+    passed: true,
+    passClass: "is-pass",
+    statusLabel: "Пройден",
+    scorePercent: 80,
+    ringDashoffset: 79,
+    totalQuestions: 5,
+    correct: 4,
+    earnedPoints: 4,
+    possiblePoints: 5,
+    topicResults: [
+      { topicName: "Тема 1", correct: 4, total: 5, percent: 80, passClass: "is-pass", statusLabel: "Пройдено" },
+    ],
+  },
+};
+
+describe("results.html — superset gating", () => {
+  it("web context: restart action only, no SCORM-only blocks", () => {
+    const root = render(resultsLayout, webResult);
+    expect(actions(root)).toEqual(["restart"]);
+    expect(root.querySelector(".topic-required")).toBeNull();
+    expect(root.querySelector(".results-rec-list")).toBeNull();
+    // The "Баллов" STAT (main card) always shows; only the per-topic points ROW is
+    // gated — so scope the check to the topic card.
+    expect(root.querySelector(".topic-card")?.textContent).not.toContain("Баллов");
+    expect(root.querySelectorAll(".topic-card .topic-row").length).toBe(1); // "Правильно" only
+    expect(root.textContent).not.toContain("Рекомендуемые курсы");
+  });
+
+  it("SCORM context: points row + threshold + feedback + recommendations + back action", () => {
+    const scorm = {
+      course: { title: "Тест" },
+      result: {
+        ...webResult.result,
+        topicResults: [
+          {
+            ...webResult.result.topicResults[0],
+            pointsLabel: "4.0 / 5.0",
+            requiredLabel: "Требуется: 70%",
+            topicFeedback: "Отличный результат",
+          },
+        ],
+        recommendedCourses: [{ title: "Курс A", url: "https://e/a" }],
+        recommendedEvents: [{ title: "Семинар B" }],
+        backAction: "back-to-start",
+        backLabel: "Вернуться к тесту",
+      },
+    };
+    const root = render(resultsLayout, scorm);
+    expect(actions(root)).toEqual(["back-to-start"]); // restart is hidden via {{#unless backAction}}
+    expect(root.querySelector(".topic-required")?.textContent).toContain("70%");
+    expect(root.querySelectorAll(".topic-card .topic-row").length).toBe(2); // "Правильно" + "Баллов"
+    expect(root.querySelector(".topic-card")?.textContent).toContain("Баллов");
+    expect(root.textContent).toContain("4.0 / 5.0");
+    expect(root.textContent).toContain("Рекомендуемые курсы");
+    expect(root.textContent).toContain("Курс A");
+    expect(root.textContent).toContain("Рекомендуемые мероприятия");
+    expect(root.querySelector('[data-action="back-to-start"]')?.textContent).toBe("Вернуться к тесту");
+  });
+});
+
+const webAdaptive = {
+  course: { title: "Адаптивный тест" },
+  result: {
+    adaptive: true,
+    topicResults: [
+      { topicName: "Сети", levelLabel: "Средний", levelClass: "is-info", hasFeedback: false, hasLinks: false },
+    ],
+  },
+};
+
+describe("results.adaptive.html — superset gating", () => {
+  it("web context: restart action only", () => {
+    const root = render(adaptiveLayout, webAdaptive);
+    expect(actions(root)).toEqual(["restart"]);
+    expect(root.querySelector('[data-action="download-pdf"]')).toBeNull();
+    expect(root.querySelector('[data-action="finish"]')).toBeNull();
+  });
+
+  it("SCORM context: PDF + retry + finish actions, no web restart", () => {
+    const scorm = {
+      course: { title: "Адаптивный тест" },
+      result: {
+        ...webAdaptive.result,
+        hasScormActions: true,
+        showPdf: true,
+        canRetry: true,
+        showFinish: true,
+      },
+    };
+    const root = render(adaptiveLayout, scorm);
+    expect(actions(root)).toEqual(["download-pdf", "restart-adaptive", "finish"]);
+    expect(root.querySelector('[data-action="restart"]')).toBeNull();
+  });
+
+  it("renders per-topic level pill + feedback/links only where present", () => {
+    const ctx = {
+      course: { title: "T" },
+      result: {
+        adaptive: true,
+        topicResults: [
+          {
+            topicName: "Сети",
+            levelLabel: "Средний",
+            levelClass: "is-info",
+            feedback: "Хорошо",
+            hasFeedback: true,
+            hasLinks: true,
+            links: [{ title: "Курс TCP/IP", url: "https://e/x" }],
+          },
+          { topicName: "БД", levelLabel: "Не достигнут", levelClass: "is-fail", hasFeedback: false, hasLinks: false },
+        ],
+      },
+    };
+    const root = render(adaptiveLayout, ctx);
+    const cards = root.querySelectorAll(".topic-card");
+    expect(cards.length).toBe(2);
+    expect(cards[0].querySelector(".topic-feedback")?.textContent).toContain("Хорошо");
+    expect(cards[0].querySelector(".topic-link")?.getAttribute("href")).toBe("https://e/x");
+    expect(cards[1].querySelector(".topic-feedback")).toBeNull();
+    expect(cards[1].querySelector(".results-pill")?.textContent).toContain("Не достигнут");
+  });
+});

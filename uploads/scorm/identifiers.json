@@ -78,5 +78,21 @@
   "22885ecb-ee0d-4748-a3c7-3f0923e238f7": {
     "code": "20260416_Test_meropriyatiya",
     "createdAt": "20260416"
+  },
+  "te-1": {
+    "code": "20260531_Osnovy_informatsionnoy_bezopasnosti",
+    "createdAt": "20260531"
+  },
+  "quota-acceptance-test": {
+    "code": "20260605_Quota_acceptance",
+    "createdAt": "20260605"
+  },
+  "acceptance-test": {
+    "code": "20260608_Acceptance_test",
+    "createdAt": "20260608"
+  },
+  "prd4-acceptance": {
+    "code": "20260608_PRD_4_adaptive_router_by_topics",
+    "createdAt": "20260608"
   }
 }

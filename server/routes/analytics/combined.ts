@@ -1,13 +1,13 @@
 import { Router, Request, Response } from "express";
 import { logger } from "../../logger";
 import { storage } from "../../storage";
-import { requireAuthor } from "../../middleware/auth";
+import { requirePermission } from "../../middleware/auth";
 import { checkAnswer } from "../../utils/check-answer";
 
 const router = Router();
 
 // GET /api/analytics/combined - Комбинированная аналитика (Web + LMS)
-router.get("/combined", requireAuthor, async (req: Request, res: Response) => {
+router.get("/combined", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {
     const source = req.query.source as string || "all";
     const testId = req.query.testId as string || null;
@@ -130,7 +130,7 @@ router.get("/combined", requireAuthor, async (req: Request, res: Response) => {
 });
 
 // GET /api/analytics/summary - Только сводка (быстрый запрос)
-router.get("/summary", requireAuthor, async (req: Request, res: Response) => {
+router.get("/summary", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {
     const source = (req.query.source as string) || "all";
     const testIdFilter = req.query.testId as string | undefined;
@@ -208,7 +208,7 @@ router.get("/summary", requireAuthor, async (req: Request, res: Response) => {
 });
 
 // GET /api/analytics/combined-full - Полная комбинированная аналитика
-router.get("/combined-full", requireAuthor, async (req: Request, res: Response) => {
+router.get("/combined-full", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {
     const source = (req.query.source as string) || "all";
     const testIdFilter = req.query.testId as string | undefined;
@@ -544,7 +544,7 @@ router.get("/combined-full", requireAuthor, async (req: Request, res: Response) 
     for (const a of combined) {
       if (!a.finishedAt || !a.testId) continue;
       const dt = new Date(a.finishedAt);
-      const entry = alertMap.get(a.testId) || { testTitle: a.testTitle, recent: [], prev: [] };
+      const entry = alertMap.get(a.testId) || { testTitle: a.testTitle, recent: [] as number[], prev: [] as number[] };
       if (dt >= day7ago) entry.recent.push(a.resultPassed ? 1 : 0);
       else if (dt >= day14ago) entry.prev.push(a.resultPassed ? 1 : 0);
       alertMap.set(a.testId, entry);

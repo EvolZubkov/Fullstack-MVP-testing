@@ -10,6 +10,7 @@ import session from "express-session";
 const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     getUser: vi.fn(),
+    getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getTest: vi.fn(), getTests: vi.fn(), getTopics: vi.fn(),
     getAllAttempts: vi.fn(), getAttemptsByUser: vi.fn(),
     getQuestionsByIds: vi.fn(), getTopicCourses: vi.fn(),
@@ -221,6 +222,7 @@ describe("POST /analytics/export/excel", () => {
   let app: express.Express;
   beforeEach(() => {
     vi.resetAllMocks();
+    storageMock.getUserRoles.mockResolvedValue(["administrator"]);
     storageMock.getUser.mockResolvedValue(authorUser);
     app = makeApp();
   });

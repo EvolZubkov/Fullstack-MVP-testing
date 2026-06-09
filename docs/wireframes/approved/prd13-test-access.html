@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-13: Доступ к тесту — владелец и гранты</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    /* Drawer rendering glue inside a wf-state (from prd7-editor-drawer) */
+    .wf-state.active { display: block; }
+    .wf-state > .ou-drawer-root {
+      top: var(--wf-nav-offset, var(--wf-size-52));
+      bottom: 0;
+      height: auto;
+    }
+    .wf-state > .ou-drawer-root > .ou-drawer {
+      height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+    }
+    /* PRD-13 local layout (composition only, DS tokens) */
+    .ta-stack { display: flex; flex-direction: column; gap: var(--ou-space-6); }
+    .ta-section { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+    .ta-label {
+      font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .ta-owner { display: flex; align-items: center; gap: var(--ou-space-3); }
+    .ta-id { display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0; }
+    .ta-id__name { font: var(--ou-text-body-m); }
+    .ta-spacer { flex: 1; }
+    .ta-add { display: flex; align-items: flex-end; gap: var(--ou-space-3); flex-wrap: wrap; }
+    .ta-add__col { display: flex; flex-direction: column; gap: var(--ou-space-1); }
+    .ta-empty {
+      display: flex; flex-direction: column; align-items: center; gap: var(--ou-space-2);
+      padding: var(--ou-space-7) var(--ou-space-4); text-align: center;
+      color: var(--ou-fg-muted); border: 1px dashed var(--ou-border-default);
+      border-radius: var(--ou-radius-m);
+    }
+    .wf-sprite { display: none; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.5 12.5 19 4"/><path d="M16 7l3 3"/></symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">PRD-13 · Доступ к тесту:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-default')">Гранты</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-empty')">Пусто</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-owner')">Смена владельца</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- s-default: владелец + добавление + список грантов -->
+<div class="wf-state active" id="s-default">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-d">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="dt-d" class="ou-drawer__title">Доступ к тесту</h1>
+          <p class="ou-drawer__desc">Основы информационной безопасности</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ta-stack">
+          <div class="ta-section">
+            <span class="ta-label">Владелец</span>
+            <div class="ta-owner">
+              <span class="ta-id"><span class="ou-shell__avatar">МИ</span><span class="ta-id__name">Марина Иванова</span></span>
+              <span class="ta-spacer"></span>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">Сменить владельца</button>
+            </div>
+          </div>
+
+          <div class="ta-section">
+            <div class="ta-add">
+              <div class="ta-add__col">
+                <select class="ou-select" aria-label="Выбрать пользователя">
+                  <option selected disabled>Выберите пользователя…</option>
+                  <option>Дмитрий Орлов</option>
+                  <option>Анна Лебедева</option>
+                </select>
+              </div>
+              <div class="ta-add__col">
+                <select class="ou-select" aria-label="Уровень доступа">
+                  <option selected>Редактирование</option>
+                  <option>Назначение</option>
+                </select>
+              </div>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Добавить</button>
+            </div>
+
+            <div class="ou-table-wrap">
+              <table class="ou-table">
+                <thead><tr><th>Пользователь</th><th>Уровень</th><th>Действия</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><span class="ta-id"><span class="ou-shell__avatar">ПС</span><span class="ta-id__name">Павел Сорокин</span></span></td>
+                    <td>
+                      <select class="ou-select" aria-label="Уровень доступа">
+                        <option selected>Редактирование</option>
+                        <option>Назначение</option>
+                      </select>
+                    </td>
+                    <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Отозвать доступ"><svg width="14" height="14"><use href="#i-trash"/></svg></button></td>
+                  </tr>
+                  <tr>
+                    <td><span class="ta-id"><span class="ou-shell__avatar">ЕК</span><span class="ta-id__name">Елена Кравцова</span></span></td>
+                    <td>
+                      <select class="ou-select" aria-label="Уровень доступа">
+                        <option>Редактирование</option>
+                        <option selected>Назначение</option>
+                      </select>
+                    </td>
+                    <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Отозвать доступ"><svg width="14" height="14"><use href="#i-trash"/></svg></button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ta-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- s-empty: владелец + добавление, грантов нет -->
+<div class="wf-state" id="s-empty">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-e">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="dt-e" class="ou-drawer__title">Доступ к тесту</h1>
+          <p class="ou-drawer__desc">Основы информационной безопасности</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ta-stack">
+          <div class="ta-section">
+            <span class="ta-label">Владелец</span>
+            <div class="ta-owner">
+              <span class="ta-id"><span class="ou-shell__avatar">МИ</span><span class="ta-id__name">Марина Иванова</span></span>
+              <span class="ta-spacer"></span>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">Сменить владельца</button>
+            </div>
+          </div>
+          <div class="ta-section">
+            <div class="ta-add">
+              <div class="ta-add__col">
+                <select class="ou-select" aria-label="Выбрать пользователя">
+                  <option selected disabled>Выберите пользователя…</option>
+                  <option>Дмитрий Орлов</option>
+                  <option>Анна Лебедева</option>
+                </select>
+              </div>
+              <div class="ta-add__col">
+                <select class="ou-select" aria-label="Уровень доступа">
+                  <option selected>Редактирование</option>
+                  <option>Назначение</option>
+                </select>
+              </div>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Добавить</button>
+            </div>
+            <div class="ta-empty">
+              <svg width="24" height="24" aria-hidden="true"><use href="#i-key"/></svg>
+              <div>Доступ ещё никому не выдан</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ta-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- s-owner: смена владельца -->
+<div class="wf-state" id="s-owner">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="dt-o">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text">
+          <h1 id="dt-o" class="ou-drawer__title">Доступ к тесту</h1>
+          <p class="ou-drawer__desc">Основы информационной безопасности</p>
+        </div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="ta-stack">
+          <div class="ta-section">
+            <span class="ta-label">Владелец</span>
+            <select class="ou-select" aria-label="Владелец теста">
+              <option selected>Марина Иванова</option>
+              <option>Дмитрий Орлов</option>
+              <option>Анна Лебедева</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="ta-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- Пояснения -->
+<section class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения</h3>
+  <table>
+    <thead><tr><th>Элемент</th><th>Поведение</th><th>Правило (PRD-13)</th></tr></thead>
+    <tbody>
+      <tr><td>Панель «Доступ к тесту»</td><td>Открывается из списка тестов; доступна только администратору и суперадмину</td><td>tests.access.grant — только AD/SU (FR-18)</td></tr>
+      <tr><td>Владелец</td><td>«Сменить владельца» → выбор; изменение копится в панели</td><td>Применяется по «Сохранить»; tests.owner.change — только AD/SU (FR-15)</td></tr>
+      <tr><td>Уровень «Редактирование»</td><td>Автор может редактировать/публиковать/экспортировать тест</td><td>Грант edit (раздел 6.2)</td></tr>
+      <tr><td>Уровень «Назначение»</td><td>Менеджер может назначать тест</td><td>Грант assign (раздел 6.2)</td></tr>
+      <tr><td>«Добавить» / смена уровня в селекте</td><td>Изменение копится в панели (не применяется сразу)</td><td>Применяется по «Сохранить» (POST /access · upsert, unique(testId, userId), FR-19)</td></tr>
+      <tr><td>Отзыв (корзина)</td><td>Помечает грант к удалению в панели</td><td>Применяется по «Сохранить» (DELETE /api/tests/:id/access/:userId)</td></tr>
+      <tr><td>«Сохранить» / «Отмена»</td><td>«Сохранить» применяет все изменения (владелец, добавление, смена уровня, отзыв) одним действием; «Отмена» отменяет несохранённое и закрывает</td><td>FR-15, FR-18, FR-19</td></tr>
+      <tr><td>Пусто</td><td>Грантов нет — доступ только у владельца и админов</td><td>—</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- DS Mapping -->
+<section class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping — UniversityRT</h2>
+  <table>
+    <thead><tr><th>Класс</th><th>Где используется</th><th>DS компонент</th><th>React (ui-kit)</th></tr></thead>
+    <tbody>
+      <tr><td><code>.ou-drawer</code></td><td>Контейнер панели</td><td>Drawer</td><td><code>Drawer</code> (--wide, --right)</td></tr>
+      <tr><td><code>.ou-table</code></td><td>Список грантов</td><td>Table</td><td><code>Table</code></td></tr>
+      <tr><td><code>.ou-select</code></td><td>Владелец, пользователь, уровень доступа</td><td>Select</td><td><code>Combobox</code> (поиск пользователя) / <code>Select</code></td></tr>
+      <tr><td><code>.ou-shell__avatar</code></td><td>Аватар пользователя</td><td>Avatar</td><td><code>Avatar</code></td></tr>
+      <tr><td><code>.ou-btn</code></td><td>Добавить, отозвать, сменить владельца, Готово</td><td>Button</td><td><code>Button</code> (--primary, --secondary, --ghost)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</body>
+</html>

@@ -90,7 +90,10 @@ export function buildManifest(test: Test, data: ExportData, extraFiles: string[]
   const resId = `${code}_r`;
 
   const overallPassRule = test.overallPassRuleJson as PassRule;
-  const totalQuestions = data.sections.reduce((sum, s) => sum + s.drawCount, 0);
+  // Effective per-topic draw: drawAll / adaptive draw the whole current pool.
+  const effectiveDraw = (s: ExportData["sections"][number]): number =>
+    (test.mode || "standard") === "adaptive" || s.drawAll ? s.questions.length : s.drawCount;
+  const totalQuestions = data.sections.reduce((sum, s) => sum + effectiveDraw(s), 0);
 
   const overallThreshold =
     overallPassRule.type === "percent"
@@ -107,7 +110,7 @@ export function buildManifest(test: Test, data: ExportData, extraFiles: string[]
         threshold =
           topicPassRule.type === "percent"
             ? (topicPassRule.value / 100).toFixed(2)
-            : (topicPassRule.value / s.drawCount).toFixed(2);
+            : (topicPassRule.value / Math.max(effectiveDraw(s), 1)).toFixed(2);
       }
       return `
         <imsss:objective objectiveID="obj_topic_${s.topic.id}">
@@ -178,6 +181,8 @@ export function buildManifest(test: Test, data: ExportData, extraFiles: string[]
       <file href="styles.css"/>
       <file href="runtime.js"/>
       <file href="app.js"/>
+      <file href="vendor/html2canvas.min.js"/>
+      <file href="vendor/jspdf.umd.min.js"/>
 ${extraFileTags ? extraFileTags + "\n" : ""}    </resource>
   </resources>
 </manifest>`;

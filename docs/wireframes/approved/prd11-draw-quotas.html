@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-11 — Квоты выдачи по тегам: квота-блок в СТРОКЕ ТЕМЫ.
+    Issue: BR-10 (Этап 11). Спека: docs/specs/prd-11/tag-draw-quotas.md;
+    нормативная модель: docs/specs/scoring-model.md §2.4.
+    Поверхность: строка темы во вкладке «Структура» редактора теста
+    (client/.../sections/topics-structure-section.tsx — tb-topic-row, ui-kit).
+    Квоты — уточнение «Вопросов в тест» (draw_count): свич включает инлайн-блок
+    [тег → сколько] прямо в теле строки (как обратная связь, но без модалки —
+    конфиг мелкий). Теги — РЕАЛЬНЫЕ из questions.tags вопросов темы.
+    Состояния:
+      s-on       — Квоты включены: строки [тег → count → режим Ровно/Не менее (на тег)] + Σ
+      s-off      — Квоты выключены (выдача равномерная, как обычно)
+      s-warning  — Нехватка вопросов с тегом (доступно < count) — НЕблокирующий warning
+      s-error    — Σ count > draw_count — ошибка валидации, сохранение блокируется
+      s-docs     — Пояснения + DS Mapping
+    DRAFT — не перенесён в approved/ до согласования.
+    -->
+    <title>PRD-11 — Квоты выдачи по тегам (строка темы)</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <style>
+      /* WIREFRAME-каркас: только эскизные утилиты и DS-override на токенах. */
+      .wf-sprite { display: none; }
+      /* Override legacy .ou-select fallback из wf-utils.css (двойная рамка). */
+      .ou-select {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        line-height: inherit;
+        cursor: default;
+        border-radius: 0;
+      }
+      .ou-select:not(.is-open) .ou-select__menu { display: none; }
+      /* Section label with a leading icon (inline-flex, no pixel nudge). */
+      .wf-seclbl { display: inline-flex; align-items: center; gap: var(--ou-space-2); margin: 0; }
+      /* Свич-строка «Квоты по подтемам» в теле темы. */
+      .wf-toggle-row {
+        display: flex;
+        align-items: center;
+        gap: var(--ou-space-3);
+        margin-top: var(--ou-space-4);
+      }
+      /* Инлайн-блок квот: вложен под свич (отбивка слева, токены). */
+      .wf-quota-block {
+        margin-top: var(--ou-space-3);
+        padding-left: var(--ou-space-4);
+        border-left: var(--wf-border-w) solid var(--ou-border-soft);
+      }
+      .wf-strata-grid td .ou-field--s .ou-field__box { width: var(--wf-size-72); }
+      .wf-strata-grid .ou-seg { width: max-content; }
+      .wf-avail { display: inline-flex; align-items: center; gap: var(--ou-space-2); }
+      .wf-row-actions { display: flex; gap: var(--ou-space-2); margin-top: var(--ou-space-3); }
+      .wf-sum {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--ou-space-3);
+        margin-top: var(--ou-space-3);
+        font: var(--ou-text-body-s);
+        color: var(--ou-fg-muted);
+      }
+      .wf-sum--error { color: var(--ou-error-default); font-weight: 600; }
+      .wf-muted { color: var(--ou-fg-muted); }
+      /* Required-свич в шапке строки темы. */
+      .wf-required { display: inline-flex; align-items: center; gap: var(--ou-space-2); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+      /* Аннотационные бейджи. */
+      .wf-annot { display: none; }
+      body.wf-annots-on .wf-annot {
+        display: inline-block;
+        margin: var(--ou-space-1) 0 0;
+        padding: 0 var(--ou-space-2);
+        border-radius: var(--ou-radius-xs);
+        background: var(--ou-accent-soft);
+        color: var(--ou-accent-default);
+        font: var(--ou-text-caption);
+        font-weight: 600;
+      }
+    </style>
+
+    <style data-wf-template-overrides>
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-state { display: none; padding: var(--wf-size-72, 76px) var(--ou-space-6) var(--ou-space-10); max-width: var(--wf-size-720, 720px); }
+      .wf-state.active { display: block; }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></symbol>
+      <symbol id="i-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></symbol>
+      <symbol id="i-alert-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Квоты выдачи:</span>
+      <button type="button" class="active" onclick="showState(this, 'on')">квоты включены (дефолт)</button>
+      <button type="button" onclick="showState(this, 'off')">выключены</button>
+      <button type="button" onclick="showState(this, 'warning')">нехватка</button>
+      <button type="button" onclick="showState(this, 'error')">ошибка</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <button type="button" onclick="toggleAnnots(this)">Аннотации</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="approved/prd7-structure-linear-by-topics.html">&harr; Структура</a>
+    </nav>
+
+    <!-- ════════════════ s-on: квоты включены (дефолт) ════════════════ -->
+    <div id="wf-on" class="wf-state active">
+      <div class="tb-topic-row">
+        <div class="tb-topic-row__header">
+          <span class="tb-topic-row__name">Финансы</span>
+          <span class="tb-topic-row__count">30 вопросов</span>
+          <label class="wf-required">
+            <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+            Обязательная
+          </label>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Убрать тему «Финансы»"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+        </div>
+        <div class="tb-topic-row__body">
+          <div class="tb-draw-count-row">
+            <span class="tb-draw-count-row__label">Вопросов в тест</span>
+            <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="6" aria-label="Вопросов в тест из темы Финансы" /></div></div>
+            <span class="tb-draw-count-row__max">из 30</span>
+          </div>
+
+          <div class="wf-toggle-row">
+            <label class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Квоты по подтемам" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></label>
+            <div class="tb-section-label wf-seclbl"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</div>
+          </div>
+
+          <div class="wf-quota-block">
+            <table class="tb-table wf-strata-grid">
+              <thead><tr><th>Подтема (тег вопроса)</th><th>Сколько</th><th>Режим</th><th aria-label="Действия"></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><div class="ou-select ou-field--m ou-field--full" data-ou-options="finance_base|finance_metrics|finance_invest"><button type="button" class="ou-select__trigger"><span class="ou-select__value">finance_base</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div></td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Сколько для finance_base" /></div></div></td>
+                  <td><div class="ou-seg ou-seg--s" role="group" aria-label="Режим finance_base"><button type="button" class="ou-seg__item is-active" aria-pressed="true">Ровно</button><button type="button" class="ou-seg__item" aria-pressed="false">Не менее</button></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить квоту"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><div class="ou-select ou-field--m ou-field--full" data-ou-options="finance_base|finance_metrics|finance_invest"><button type="button" class="ou-select__trigger"><span class="ou-select__value">finance_metrics</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div></td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Сколько для finance_metrics" /></div></div></td>
+                  <td><div class="ou-seg ou-seg--s" role="group" aria-label="Режим finance_metrics"><button type="button" class="ou-seg__item" aria-pressed="false">Ровно</button><button type="button" class="ou-seg__item is-active" aria-pressed="true">Не менее</button></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить квоту"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="wf-row-actions">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> Добавить квоту</button>
+            </div>
+            <div class="wf-sum">
+              <span>Σ квот: <strong>3</strong> из 6 · остаток <strong>3</strong> — случайно (min-теги могут дорасти)</span>
+              <span class="ou-tag ou-tag--success">в пределах выборки</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-off: квоты выключены ════════════════ -->
+    <div id="wf-off" class="wf-state">
+      <div class="tb-topic-row">
+        <div class="tb-topic-row__header">
+          <span class="tb-topic-row__name">Финансы</span>
+          <span class="tb-topic-row__count">30 вопросов</span>
+          <label class="wf-required">
+            <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+            Обязательная
+          </label>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Убрать тему «Финансы»"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+        </div>
+        <div class="tb-topic-row__body">
+          <div class="tb-draw-count-row">
+            <span class="tb-draw-count-row__label">Вопросов в тест</span>
+            <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="6" aria-label="Вопросов в тест из темы Финансы" /></div></div>
+            <span class="tb-draw-count-row__max">из 30</span>
+          </div>
+          <div class="wf-toggle-row">
+            <label class="ou-switch ou-switch--m"><input class="ou-switch__input" type="checkbox" aria-label="Квоты по подтемам" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></label>
+            <div class="tb-section-label wf-seclbl"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</div>
+          </div>
+          <div class="tb-card-desc">Выключено — выдача равномерная: случайные 6 из всех 30 вопросов темы (как во всех обычных тестах). Включите, чтобы гарантировать покрытие подтем.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-warning: нехватка вопросов с тегом ════════════════ -->
+    <div id="wf-warning" class="wf-state">
+      <div class="tb-topic-row">
+        <div class="tb-topic-row__header">
+          <span class="tb-topic-row__name">Финансы</span>
+          <span class="tb-topic-row__count">30 вопросов</span>
+          <label class="wf-required">
+            <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+            Обязательная
+          </label>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Убрать тему «Финансы»"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+        </div>
+        <div class="tb-topic-row__body">
+          <div class="tb-draw-count-row">
+            <span class="tb-draw-count-row__label">Вопросов в тест</span>
+            <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="6" aria-label="Вопросов в тест из темы Финансы" /></div></div>
+            <span class="tb-draw-count-row__max">из 30</span>
+          </div>
+          <div class="wf-toggle-row">
+            <label class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Квоты по подтемам" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></label>
+            <div class="tb-section-label wf-seclbl"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</div>
+          </div>
+          <div class="wf-quota-block">
+            <div class="ou-banner ou-banner--subtle ou-banner--warning" role="status">
+              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-triangle" /></svg></div>
+              <div class="ou-banner__body"><div class="ou-banner__desc">Подтема «finance_invest»: вопросов меньше квоты (<strong>2</strong> из <strong>3</strong>). Выдастся сколько есть — это не блокирует сохранение.</div></div>
+            </div>
+            <table class="tb-table wf-strata-grid">
+              <thead><tr><th>Подтема (тег вопроса)</th><th>Сколько</th><th>Режим</th><th>Доступно</th><th aria-label="Действия"></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><div class="ou-select ou-field--m ou-field--full" data-ou-options="finance_base|finance_metrics|finance_invest"><button type="button" class="ou-select__trigger"><span class="ou-select__value">finance_base</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div></td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Сколько для finance_base" /></div></div></td>
+                  <td><div class="ou-seg ou-seg--s" role="group" aria-label="Режим finance_base"><button type="button" class="ou-seg__item is-active" aria-pressed="true">Ровно</button><button type="button" class="ou-seg__item" aria-pressed="false">Не менее</button></div></td>
+                  <td><span class="wf-muted">5</span></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить квоту"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><div class="ou-select ou-field--m ou-field--full" data-ou-options="finance_base|finance_metrics|finance_invest"><button type="button" class="ou-select__trigger"><span class="ou-select__value">finance_invest</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div></td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="3" aria-label="Сколько для finance_invest" /></div></div></td>
+                  <td><div class="ou-seg ou-seg--s" role="group" aria-label="Режим finance_invest"><button type="button" class="ou-seg__item is-active" aria-pressed="true">Ровно</button><button type="button" class="ou-seg__item" aria-pressed="false">Не менее</button></div></td>
+                  <td><span class="ou-tag ou-tag--warning">2</span></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить квоту"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="wf-row-actions">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> Добавить квоту</button>
+            </div>
+            <div class="wf-sum">
+              <span>Σ квот: <strong>5</strong> из 6 · остаток <strong>1</strong></span>
+              <span class="ou-tag ou-tag--warning">нехватка по тегу</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-error: Σ count > draw_count ════════════════ -->
+    <div id="wf-error" class="wf-state">
+      <div class="tb-topic-row">
+        <div class="tb-topic-row__header">
+          <span class="tb-topic-row__name">Финансы</span>
+          <span class="tb-topic-row__count">30 вопросов</span>
+          <label class="wf-required">
+            <span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Тема обязательная" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span>
+            Обязательная
+          </label>
+          <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Убрать тему «Финансы»"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+        </div>
+        <div class="tb-topic-row__body">
+          <div class="tb-draw-count-row">
+            <span class="tb-draw-count-row__label">Вопросов в тест</span>
+            <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="6" aria-label="Вопросов в тест из темы Финансы" /></div></div>
+            <span class="tb-draw-count-row__max">из 30</span>
+          </div>
+          <div class="wf-toggle-row">
+            <label class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Квоты по подтемам" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></label>
+            <div class="tb-section-label wf-seclbl"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</div>
+          </div>
+          <div class="wf-quota-block">
+            <div class="ou-banner ou-banner--subtle ou-banner--error" role="alert">
+              <div class="ou-banner__ico"><svg width="16" height="16"><use href="#i-alert-circle" /></svg></div>
+              <div class="ou-banner__body"><div class="ou-banner__desc">Сумма квот (<strong>8</strong>) превышает «Вопросов в тест» (<strong>6</strong>). Квоты — это срезы внутри выборки. Сохранение заблокировано до исправления.</div></div>
+            </div>
+            <table class="tb-table wf-strata-grid">
+              <thead><tr><th>Подтема (тег вопроса)</th><th>Сколько</th><th>Режим</th><th aria-label="Действия"></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><div class="ou-select ou-field--m ou-field--full" data-ou-options="finance_base|finance_metrics|finance_invest"><button type="button" class="ou-select__trigger"><span class="ou-select__value">finance_base</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div></td>
+                  <td><div class="ou-field ou-field--s ou-field--error"><div class="ou-field__box"><input class="ou-field__input" type="text" value="5" aria-invalid="true" aria-label="Сколько для finance_base" /></div></div></td>
+                  <td><div class="ou-seg ou-seg--s" role="group" aria-label="Режим finance_base"><button type="button" class="ou-seg__item is-active" aria-pressed="true">Ровно</button><button type="button" class="ou-seg__item" aria-pressed="false">Не менее</button></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить квоту"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><div class="ou-select ou-field--m ou-field--full" data-ou-options="finance_base|finance_metrics|finance_invest"><button type="button" class="ou-select__trigger"><span class="ou-select__value">finance_metrics</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div></td>
+                  <td><div class="ou-field ou-field--s ou-field--error"><div class="ou-field__box"><input class="ou-field__input" type="text" value="3" aria-invalid="true" aria-label="Сколько для finance_metrics" /></div></div></td>
+                  <td><div class="ou-seg ou-seg--s" role="group" aria-label="Режим finance_metrics"><button type="button" class="ou-seg__item is-active" aria-pressed="true">Ровно</button><button type="button" class="ou-seg__item" aria-pressed="false">Не менее</button></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить квоту"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="wf-row-actions">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> Добавить квоту</button>
+            </div>
+            <div class="wf-sum wf-sum--error">
+              <span>Σ квот: <strong>8</strong> из 6 — превышение на 2</span>
+              <span class="ou-tag ou-tag--error">ошибка</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ Сопроводительные таблицы (Пояснения + DS Mapping) ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+      <div class="wf-notes">
+        <h3 class="wf-notes-title">Пояснения — Wireframe</h3>
+        <table>
+          <thead>
+            <tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Переключатель состояний</td><td><code>showState(btn, id)</code>, тоглы темы/плотности/аннотаций</td><td>Каркас эскиза; в продукте отсутствует</td></tr>
+            <tr><td>Поверхность</td><td>строка темы (<code>tb-topic-row</code>) во вкладке «Структура»</td><td>Реальный компонент: <code>topics-structure-section.tsx</code> (ui-kit). Шапка (название/кол-во/обязательная/удалить) и тело (Вопросов в тест + Обратная связь) — существующие</td></tr>
+            <tr><td>Свич «Квоты по подтемам»</td><td>наличие <code>draw_blueprint_json</code></td><td>Выкл = равномерная выдача (FR-02). Вкл → инлайн-блок (без модалки — конфиг мелкий, в отличие от «Обратной связи»)</td></tr>
+            <tr><td>Квота — ось доставки</td><td><code>test_sections.draw_blueprint_json</code> (§4)</td><td>Уточняет «Вопросов в тест» (<code>draw_count</code>). Ортогонально «Цене ответа» (PRD-10) и расчёту (FR-08)</td></tr>
+            <tr><td>Подтема = тег</td><td><code>questions.tags</code></td><td>Select показывает РЕАЛЬНЫЕ теги вопросов этой темы (не свободный ввод); отдельной сущности/иерархии тем нет (FR-07)</td></tr>
+            <tr><td>Строка квоты</td><td><code>strata[]: {tag, count, mode}</code></td><td>Тег — Select реальных тегов, count — NumberInput, режим — SegmentedControl В КАЖДОЙ строке</td></tr>
+            <tr><td>Режим (на тег)</td><td><code>mode</code>: <code>exact</code> / <code>min</code> — свойство КАЖДОГО тега, не темы</td><td>«Ровно» — РОВНО count; «Не менее» — минимум, остаток может добрать ещё этого тега. Дефолт «Ровно». Тогл «Общий/По тегам» убран (упрощено 2026-06-04)</td></tr>
+            <tr><td>Остаток выборки</td><td><code>draw_count − Σ count</code></td><td>Случайно из остальных вопросов; дедуп общий <code>used</code> (вопрос с несколькими тегами — один раз, FR-04)</td></tr>
+            <tr><td>Сумма квот</td><td><code>Σ count <= draw_count</code></td><td>Иначе — ошибка валидации, сохранение блокируется (FR-05)</td></tr>
+            <tr><td>Нехватка по тегу</td><td><code>доступно < count</code></td><td>НЕблокирующий warning (баннер + колонка «Доступно» + тег); выдаётся сколько есть (FR-06)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="wf-mapping">
+        <h2 class="wf-mapping-title">DS Mapping</h2>
+        <p class="wf-mapping-sub">Заполняется после gate этапа 3, до старта frontend (этап 3.5). Строка с «custom» в колонке DS-компонент — блокер.</p>
+        <table>
+          <thead>
+            <tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Строка темы</td><td><code>tb-topic-row</code> (tb-components)</td><td><code>--ou-*</code></td><td>Существующий компонент структуры; квота-блок добавляется в тело</td></tr>
+            <tr><td>Свич «Квоты по подтемам»</td><td><code>Switch</code> (<code>ou-switch</code>)</td><td><code>--ou-accent-*</code></td><td>Вкл/выкл квоты (как Switch «Обязательная»)</td></tr>
+            <tr><td>Режим</td><td><code>SegmentedControl</code> (<code>ou-seg</code>)</td><td><code>--ou-radius-s</code></td><td>Ровно/Не менее — взаимоисключающий выбор</td></tr>
+            <tr><td>Подтема (тег)</td><td><code>Select</code> / <code>Combobox</code> (<code>ou-select</code>)</td><td><code>--ou-radius-s</code></td><td>Опции = реальные теги вопросов темы</td></tr>
+            <tr><td>Количество</td><td><code>NumberInput</code> (<code>ou-field</code>)</td><td><code>--ou-border-default</code></td><td>Ошибка: <code>ou-field--error</code></td></tr>
+            <tr><td>Таблица квот</td><td><code>Table</code> (<code>tb-table</code>)</td><td><code>--ou-border-soft</code></td><td>Строки страт</td></tr>
+            <tr><td>Нехватка / ошибка</td><td><code>Banner</code> (warning/error)</td><td><code>--ou-warning-*</code>, <code>--ou-error-*</code></td><td>Реальные сообщения продукта</td></tr>
+            <tr><td>Доступно / статусы</td><td><code>Tag</code> (<code>ou-tag</code>)</td><td><code>--ou-warning-*</code>, <code>--ou-success-*</code></td><td>Индикаторы</td></tr>
+            <tr><td>Добавить / удалить</td><td><code>Button</code> / <code>IconButton</code> (<code>ou-btn</code>)</td><td><code>--ou-*</code></td><td>Иконки Lucide plus/trash</td></tr>
+          </tbody>
+        </table>
+      </div>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+      window.toggleAnnots = function toggleAnnots(btn) {
+        var on = document.body.classList.toggle('wf-annots-on');
+        if (btn) btn.classList.toggle('active', on);
+      };
+    </script>
+  </body>
+</html>
