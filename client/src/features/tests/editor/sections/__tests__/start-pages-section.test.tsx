@@ -26,6 +26,8 @@ const TEMPLATE = {
   name: "Базовый",
   manifest: {
     contentTemplates: [
+      { key: "start.standard", label: "Старт: стандартный", kind: "start", pageKind: "start", placeholders: [] },
+      { key: "results.standard", label: "Итоги теста: стандартные", kind: "results", pageKind: "results", placeholders: [] },
       {
         key: "info.text",
         label: "Материал",
@@ -259,11 +261,9 @@ describe("<StructureSection /> — flow mode + lifecycle", () => {
 });
 
 describe("<StructureSection /> — kind-aware layout", () => {
-  it("linear_flat: intro → «До теста», single questions row, summary → «После теста»", async () => {
+  it("linear_flat: no section intro/summary; single flat questions row", async () => {
     installApi([
-      buildPage({ id: "pg-intro", kind: "intro", position: "before", topicId: null, templateKey: "intro.hero", valuesJson: { values: { title: "Введение в курс" } } }),
       buildPage({ id: "pg-q", kind: "questions", position: "before", topicId: null, templateKey: "question.standard", valuesJson: { values: {} } }),
-      buildPage({ id: "pg-sum", kind: "summary", position: "after_topic", topicId: null, templateKey: "summary.result", valuesJson: { values: { title: "Ваш результат" } } }),
     ]);
     renderSection(
       baseModel({
@@ -275,15 +275,11 @@ describe("<StructureSection /> — kind-aware layout", () => {
       }),
     );
     await waitFor(() => expect(screen.getByTestId("structure-zone-before-test")).toBeInTheDocument());
-    // intro under «До теста»
-    expect(screen.getByTestId("structure-system-intro")).toHaveTextContent("Введение в курс");
-    // single flat questions row with the total count
+    // A flat test has no section «Введение/Итоги раздела».
+    expect(screen.queryByTestId("structure-system-intro")).toBeNull();
+    expect(screen.queryByTestId("structure-system-summary")).toBeNull();
+    // Single flat questions row with the total count.
     expect(screen.getByTestId("structure-flat-questions-row")).toHaveTextContent("Единый поток: 7 вопросов из 18");
-    // summary under «После теста»
-    expect(screen.getByTestId("structure-zone-after-test")).toContainElement(
-      screen.getByTestId("structure-system-summary"),
-    );
-    expect(screen.getByTestId("structure-system-summary")).toHaveTextContent("Ваш результат");
   });
 
   it("linear_by_topics: exactly one questions row per topic (no synthetic duplicate)", async () => {
@@ -307,10 +303,41 @@ describe("<StructureSection /> — kind-aware layout", () => {
     // The author info page renders as an editable row.
     expect(screen.getByTestId("structure-page-row-pg-info")).toHaveTextContent("Вводная А");
   });
+
+  it("renders start in «До теста» and results («Итоги теста») in «После теста»", async () => {
+    installApi([
+      buildPage({ id: "pg-start", kind: "start", position: "before", topicId: null, templateKey: "start.standard", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-results", kind: "results", position: "after", topicId: null, templateKey: "results.standard", valuesJson: { values: {} } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-zone-before-test")).toBeInTheDocument());
+    // Start is a test-level system row in «До теста».
+    expect(screen.getByTestId("structure-system-start")).toHaveTextContent("Старт");
+    // Results («Итоги теста») is a test-level system row in «После теста».
+    expect(screen.getByTestId("structure-zone-after-test")).toContainElement(
+      screen.getByTestId("structure-system-results"),
+    );
+    expect(screen.getByTestId("structure-system-results")).toHaveTextContent("Итоги теста");
+  });
+
+  it("linear_by_topics: section «Введение раздела»/«Итоги раздела» render inside the topic block", async () => {
+    installApi([
+      buildPage({ id: "pg-it1", kind: "intro", position: "before_topic", topicId: "t1", templateKey: "intro.hero", valuesJson: { values: { title: "Вступление" } } }),
+      buildPage({ id: "pg-st1", kind: "summary", position: "after_topic", topicId: "t1", templateKey: "summary.result", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-qt1", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_by_topics", sections: [buildSection({ topicId: "t1", topicName: "Тема А" })] }));
+    await waitFor(() => expect(screen.getByTestId("structure-zone-topic-t1")).toBeInTheDocument());
+    const topic = screen.getByTestId("structure-zone-topic-t1");
+    expect(topic).toContainElement(screen.getByTestId("structure-system-intro-t1"));
+    expect(topic).toContainElement(screen.getByTestId("structure-system-summary-t1"));
+    // No test-level intro/summary in «До теста»/«После теста».
+    expect(screen.queryByTestId("structure-system-intro")).toBeNull();
+  });
 });
 
 describe("<StructureSection /> — add page", () => {
-  it("insert-row → picks the info variant → POSTs a page that appears", async () => {
+  it("insert-row → picks the info variant → adds the page to the local draft (no write yet)", async () => {
     const spies = installApi([]);
     renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
     await waitFor(() => expect(screen.getByTestId("structure-zone-before-test")).toBeInTheDocument());
@@ -320,20 +347,15 @@ describe("<StructureSection /> — add page", () => {
     expect(screen.queryByTestId("structure-add-option-tpl:intro.hero")).toBeNull();
 
     fireEvent.click(screen.getByTestId("structure-add-confirm"));
-    await waitFor(() => expect(spies.post).toHaveBeenCalledTimes(1));
-    expect(spies.post.mock.calls[0][0]).toMatchObject({
-      position: "before",
-      topicId: null,
-      mode: "template",
-      type: "info",
-      templateKey: "info.text",
-    });
-    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-new-1")).toBeInTheDocument());
+    // The page appears immediately in the local draft (first draft id = draft-0);
+    // nothing is written until the drawer's «Сохранить» commits.
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-draft-0")).toBeInTheDocument());
+    expect(spies.post).not.toHaveBeenCalled();
   });
 });
 
 describe("<StructureSection /> — inline edit", () => {
-  it("expands a page, edits a field and PUTs the new values", async () => {
+  it("expands a page, edits a field and persists it to the local draft (no write yet)", async () => {
     const spies = installApi([
       buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, templateKey: "info.text", valuesJson: { values: { title: "Старое" } } }),
     ]);
@@ -345,8 +367,13 @@ describe("<StructureSection /> — inline edit", () => {
     fireEvent.change(titleInput, { target: { value: "Новый заголовок" } });
     fireEvent.click(screen.getByTestId("structure-page-edit-save-pg-1"));
 
-    await waitFor(() => expect(spies.put).toHaveBeenCalledTimes(1));
-    expect(spies.put.mock.calls[0][0].body.valuesJson.values.title).toBe("Новый заголовок");
+    // Saved into the local draft — the form collapses, but nothing is PUT yet.
+    await waitFor(() => expect(screen.queryByTestId("structure-page-edit-fields-pg-1")).toBeNull());
+    expect(spies.put).not.toHaveBeenCalled();
+    // Re-expand: the locally-saved value is there.
+    fireEvent.click(screen.getByTestId("structure-page-expand-pg-1"));
+    const reopened = (await screen.findByTestId("structure-page-field-pg-1-title")) as HTMLInputElement;
+    expect(reopened.value).toBe("Новый заголовок");
   });
 });
 
@@ -416,7 +443,7 @@ describe("<StructureSection /> — reorder (DnD wiring)", () => {
 });
 
 describe("<StructureSection /> — delete flow", () => {
-  it("confirm + delete calls DELETE and refetches the list", async () => {
+  it("confirm + delete removes the page from the local draft (no write yet)", async () => {
     const spies = installApi([
       buildPage({ id: "pg-1", kind: "info", position: "before", topicId: null, valuesJson: { values: { title: "К удалению" } } }),
     ]);
@@ -428,8 +455,9 @@ describe("<StructureSection /> — delete flow", () => {
     expect(screen.getByTestId("structure-page-delete-confirm-pg-1")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("structure-page-delete-confirm-pg-1"));
 
-    await waitFor(() => expect(spies.del).toHaveBeenCalledWith("pg-1"));
+    // Removed from the draft immediately; the DELETE only fires at commit (save).
     await waitFor(() => expect(screen.queryByTestId("structure-page-row-pg-1")).toBeNull());
+    expect(spies.del).not.toHaveBeenCalled();
   });
 
   it("cancel keeps the row and reverts the confirm prompt", async () => {
@@ -447,9 +475,11 @@ describe("<StructureSection /> — delete flow", () => {
 });
 
 describe("<StructureSection /> — warnings", () => {
-  it("renders a warning tag on pages whose templateKey is missing", async () => {
+  it("renders a warning tag on pages whose templateKey is missing from the template", async () => {
+    // `templateKeyMissing` is now derived client-side against the active catalogue:
+    // a key absent from the template (here `info.removed`) flags the page.
     installApi([
-      buildPage({ id: "pg-stale", kind: "info", position: "before", topicId: null, valuesJson: { values: { title: "Старая шапка" } }, templateKeyMissing: true }),
+      buildPage({ id: "pg-stale", kind: "info", position: "before", topicId: null, templateKey: "info.removed", valuesJson: { values: { title: "Старая шапка" } } }),
     ]);
     renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
     await waitFor(() => expect(screen.getByTestId("structure-page-missing-pg-stale")).toBeInTheDocument());
@@ -462,27 +492,43 @@ describe("<StructureSection /> — warnings", () => {
     renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
     await waitFor(() => expect(screen.getByTestId("structure-page-required-pg-req")).toBeInTheDocument());
   });
+
+  it("shows the «Доступно вариантов» hint on an info page when the template offers several", async () => {
+    // TEMPLATE declares 3 info variants → the author info row surfaces the hint,
+    // symmetric with the system row (and «Сменить вариант» lives in its «...» menu).
+    installApi([
+      buildPage({ id: "pg-info", kind: "info", position: "before", topicId: null, templateKey: "info.text", valuesJson: { values: { title: "T" } } }),
+    ]);
+    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
+    await waitFor(() => expect(screen.getByTestId("structure-page-row-pg-info")).toBeInTheDocument());
+    expect(screen.getByTestId("structure-page-pg-info-variant-hint")).toHaveTextContent("Доступно вариантов: 3");
+  });
 });
 
 describe("<StructureSection /> — switch variant of a system page", () => {
-  it("summary has >1 variant → «Сменить вариант» applies replace-variant", async () => {
+  it("section summary has >1 variant → «Сменить вариант» applies the new variant to the local draft", async () => {
     const spies = installApi([
-      buildPage({ id: "pg-sum", kind: "summary", position: "after_topic", topicId: null, templateKey: "summary.result", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-sum", kind: "summary", position: "after_topic", topicId: "t1", templateKey: "summary.result", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-qt1", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
     ]);
-    renderSection(baseModel({ flowMode: "linear_flat", sections: [buildSection()] }));
-    await waitFor(() => expect(screen.getByTestId("structure-system-summary")).toBeInTheDocument());
+    renderSection(baseModel({ flowMode: "linear_by_topics", sections: [buildSection({ topicId: "t1", topicName: "Тема А" })] }));
+    await waitFor(() => expect(screen.getByTestId("structure-system-summary-t1")).toBeInTheDocument());
 
-    // Two summary variants → the variant hint is shown.
-    expect(screen.getByTestId("structure-system-summary-variant-hint")).toBeInTheDocument();
+    // Two summary variants → the variant hint is shown on the per-topic summary row.
+    expect(screen.getByTestId("structure-system-summary-t1-variant-hint")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("structure-system-summary-actions"));
-    fireEvent.click(screen.getByTestId("structure-system-summary-replace"));
+    fireEvent.click(screen.getByTestId("structure-system-summary-t1-actions"));
+    fireEvent.click(screen.getByTestId("structure-system-summary-t1-replace"));
     await waitFor(() => expect(screen.getByTestId("structure-replace-option-summary.ring")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("structure-replace-option-summary.ring"));
     fireEvent.click(screen.getByTestId("structure-replace-confirm"));
 
-    await waitFor(() => expect(spies.replaceVariant).toHaveBeenCalledTimes(1));
-    expect(spies.replaceVariant.mock.calls[0][0]).toMatchObject({ id: "pg-sum", body: { newTemplateKey: "summary.ring" } });
+    // The system row's badge switches to the new variant label in the local draft;
+    // the replace-variant call only fires at commit (drawer save).
+    await waitFor(() =>
+      expect(screen.getByTestId("structure-system-summary-t1")).toHaveTextContent("Итог: кольцо"),
+    );
+    expect(spies.replaceVariant).not.toHaveBeenCalled();
   });
 
   it("questions has a single variant → no hint, «Сменить вариант» disabled", async () => {

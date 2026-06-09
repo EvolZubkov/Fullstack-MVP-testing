@@ -51,15 +51,22 @@ export function PagePreviewModal({ open, onClose, templateId, params, page, page
   const bundleQuery = useTemplateBundle(templateId, open);
   const bundle = bundleQuery.data;
 
-  // One ScreenSpec for THIS page. A `questions` section has no content
-  // placeholders — it must preview a SAMPLE question in the template's QUESTION
-  // layout, not the content layout (else it renders the content/intro screen).
-  // Content kinds (intro/info/summary/router) render the page's own values.
+  // One ScreenSpec for THIS page. `start` / `results` / `questions` are rendered
+  // by their OWN runtimes (landing, final results, question stream), not as
+  // content pages — preview them from the template's demo dataset via the SAME
+  // builders the player/«Предпросмотр» use (buildStartState / buildResultContext /
+  // demo question). Content kinds (intro/info/summary) render the page's own values.
   const spec = useMemo(() => {
     if (!bundle) return null;
-    if (page.kind === "questions") {
+    if (page.kind === "start" || page.kind === "results" || page.kind === "questions") {
       const demoScreens = bundle.demo ? buildScreenInputs(bundle.demo as PreviewDemoDataset, bundle.manifest) : [];
-      return demoScreens.find((s) => s.route.startsWith("question")) ?? null;
+      const matches =
+        page.kind === "start"
+          ? (r: string) => r === "start"
+          : page.kind === "results"
+            ? (r: string) => r === "results" || r === "results.adaptive"
+            : (r: string) => r.startsWith("question");
+      return demoScreens.find((s) => matches(s.route)) ?? null;
     }
     const values = (page.valuesJson as { values?: Record<string, unknown> } | null)?.values ?? {};
     const tpl = (bundle.manifest.contentTemplates ?? []).find((c) => c.key === page.templateKey);

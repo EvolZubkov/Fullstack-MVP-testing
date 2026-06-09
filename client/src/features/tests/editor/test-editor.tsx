@@ -166,7 +166,10 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
   // Hoist content-pages here too so the «Структура» section shares one hook
   // instance with the drawer — letting the tab reflect content-page warnings
   // (missing variant / unfilled required fields) in its status dot.
-  const contentPages = useContentPages(editor.model?.id);
+  // Pass the «Оформление» DRAFT template id so the variant catalogue (and the
+  // «Сменить вариант» / add-page options) follows the in-progress template
+  // selection immediately, before the design is saved.
+  const contentPages = useContentPages(editor.model?.id, design.draft.templateId);
   // Required-empty in any author page → Save is blocked (error).
   // templateKeyMissing → status-dot warning only (does not block Save).
   const structureErr = useMemo(
@@ -221,10 +224,10 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
   }, [open]);
 
   // Combined dirty / saving flags spanning the test-settings draft, the
-  // design-settings draft and the content-pages «Структура» tab. Structure
-  // mutations write directly to the API (no draft), so `contentPages.hasMutated`
-  // is the bridge: it lights up «Сохранить» after add / drag / reorder.
-  const combinedDirty = editor.isDirty || design.isDirty || contentPages.hasMutated;
+  // design-settings draft and the content-pages «Структура» draft. All three are
+  // buffered locally and committed together by «Сохранить»; `contentPages.isDirty`
+  // lights up «Сохранить» after add / edit / drag / reorder / variant change.
+  const combinedDirty = editor.isDirty || design.isDirty || contentPages.isDirty;
   const combinedSaving = editor.isSaving || design.isSaving;
   // Read-only when the test is published. Structure tab already enforces
   // this internally (drag-handles disabled, no row-menu, fieldset-disabled
@@ -301,7 +304,7 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
     // have already cleared their own state. The Save button covers all three
     // sources (test-settings draft, design draft, content-page mutations); the
     // toast confirms the user's action succeeded for whichever was dirty.
-    const wasDirty = editor.isDirty || design.isDirty || contentPages.hasMutated;
+    const wasDirty = editor.isDirty || design.isDirty || contentPages.isDirty;
     if (editor.isDirty) {
       const ok = await editor.save();
       if (!ok) return false;
@@ -309,10 +312,16 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
     if (design.isDirty) {
       await design.save();
     }
-    // Content-page mutations are already persisted at the API call site (no
-    // draft); clearing the bridge flag deactivates «Сохранить» until the next
-    // structure edit.
-    contentPages.resetMutated();
+    // Commit the «Структура» draft AFTER the design — so a template switch is
+    // persisted first and the content pages validate/persist against it. On a
+    // commit failure keep the drawer open (error surfaced via the structure banner).
+    if (contentPages.isDirty) {
+      try {
+        await contentPages.commit();
+      } catch {
+        return false;
+      }
+    }
     if (wasDirty) {
       toast({ title: "Изменения сохранены" });
     }
@@ -346,9 +355,9 @@ export function TestEditorView(props: TestEditorViewProps): React.JSX.Element | 
     setCloseDialogOpen(false);
     editor.reset();
     design.revert();
-    // Content-page mutations are already persisted; clearing the bridge flag
-    // ensures the next open of the drawer doesn't start with a stale dirty.
-    contentPages.resetMutated();
+    // Discard the buffered «Структура» draft so exit-without-save rolls back add /
+    // edit / reorder / variant changes too (full rollback).
+    contentPages.discard();
     onClose();
   }, [contentPages, design, editor, onClose]);
 
