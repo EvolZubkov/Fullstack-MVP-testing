@@ -2,9 +2,11 @@
  * @module shared/template/smoke-runner
  *
  * PRD-3 Phase 2: the client-side "проверка работоспособности" engine (NFR-03). It
- * renders every `manifest.preview.routes[]` screen against the template's demo
- * dataset through the SAME unified renderer ({@link module:shared/template/render-screen})
- * the runtime hosts use, in an isolated container, and collects a {@link SmokeReport}.
+ * renders every screen from {@link buildScreenInputs} (the `manifest.preview.routes[]`
+ * system screens PLUS each declared intro/info/summary content variant) against the
+ * template's demo dataset through the SAME unified renderer
+ * ({@link module:shared/template/render-screen}) the runtime hosts use, in an isolated
+ * container, and collects a {@link SmokeReport}.
  *
  * Per screen it flags a blocking error on: an unhandled render exception, a missing
  * or unfilled required slot, a console error during render, an empty render. Console
@@ -22,6 +24,8 @@ import { buildScreenInputs, type PreviewDemoDataset, type PreviewManifest } from
 
 /** Per-screen smoke result. */
 export interface SmokeRouteResult {
+  /** Unique screen id (matches {@link ScreenSpec.id}); identity for status lookup. */
+  id: string;
   route: string;
   label?: string;
   status: "pass" | "warn" | "fail";
@@ -80,7 +84,7 @@ function checkScreen(
   const layout = opts.layouts[spec.layoutKey];
   if (layout == null) {
     errors.push(`Не найден макет «${spec.layoutKey}»`);
-    return { route: spec.route, label: spec.label, status: "fail", errors, warnings };
+    return { id: spec.id, route: spec.route, label: spec.label, status: "fail", errors, warnings };
   }
 
   const root = (opts.createContainer ?? defaultContainer)();
@@ -115,7 +119,7 @@ function checkScreen(
     }
   }
 
-  return { route: spec.route, label: spec.label, status: rowStatus(errors, warnings), errors, warnings };
+  return { id: spec.id, route: spec.route, label: spec.label, status: rowStatus(errors, warnings), errors, warnings };
 }
 
 /** Syntax-check `template.js` (compile only, never execute — NFR-02). */
@@ -128,7 +132,7 @@ function checkTemplateJs(src: string): SmokeRouteResult {
   } catch (e) {
     errors.push("Синтаксическая ошибка в template.js: " + ((e as Error)?.message ?? String(e)));
   }
-  return { route: "template.js", label: "Скрипт шаблона", status: rowStatus(errors, []), errors, warnings: [] };
+  return { id: "template.js", route: "template.js", label: "Скрипт шаблона", status: rowStatus(errors, []), errors, warnings: [] };
 }
 
 /** JSON-parse the course rules file. */
@@ -139,7 +143,7 @@ function checkRules(src: string): SmokeRouteResult {
   } catch (e) {
     errors.push("Невалидный JSON правил: " + ((e as Error)?.message ?? String(e)));
   }
-  return { route: "rules", label: "Правила шаблона", status: rowStatus(errors, []), errors, warnings: [] };
+  return { id: "rules", route: "rules", label: "Правила шаблона", status: rowStatus(errors, []), errors, warnings: [] };
 }
 
 /**

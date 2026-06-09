@@ -47,32 +47,39 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
   const bundle = bundleQuery.data;
   const specs = useMemo(() => (bundle ? buildScreenInputs(bundle.demo, bundle.manifest) : []), [bundle]);
   const rail = useMemo(() => buildRail(specs), [specs]);
-  const specByRoute = useMemo(() => new Map(specs.map((s) => [s.route, s])), [specs]);
+  const specById = useMemo(() => new Map(specs.map((s) => [s.id, s])), [specs]);
 
   const [report, setReport] = useState<SmokeReport | null>(template.smokeTestJson ?? null);
   const [running, setRunning] = useState(false);
-  const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openTypes, setOpenTypes] = useState<Set<string>>(new Set());
 
   // Reset per open / template switch.
   useEffect(() => {
     if (open) {
       setReport(template.smokeTestJson ?? null);
-      setSelectedRoute(null);
+      setSelectedId(null);
       setRunning(false);
     }
   }, [open, template.id, template.smokeTestJson]);
 
-  // Once specs are available, select the default route and expand all types.
+  // Once specs are available, select the default screen and expand all types.
+  // `preview.defaultRoute` is a route; map it to a screen id (first match), so a
+  // template whose default points at a content kind still resolves to a variant.
   useEffect(() => {
-    if (open && specs.length && selectedRoute == null) {
-      setSelectedRoute(bundle?.manifest.preview?.defaultRoute ?? specs[0].route);
+    if (open && specs.length && selectedId == null) {
+      const wanted = bundle?.manifest.preview?.defaultRoute;
+      const initial =
+        specs.find((s) => s.id === wanted)?.id ??
+        specs.find((s) => s.route === wanted)?.id ??
+        specs[0].id;
+      setSelectedId(initial);
       setOpenTypes(new Set(rail.flatMap((s) => s.types.map((t) => t.key))));
     }
-  }, [open, specs, rail, selectedRoute, bundle]);
+  }, [open, specs, rail, selectedId, bundle]);
 
-  const statusByRoute = useMemo(
-    () => new Map<string, SmokeRouteResult>((report?.routes ?? []).map((r) => [r.route, r])),
+  const statusById = useMemo(
+    () => new Map<string, SmokeRouteResult>((report?.routes ?? []).map((r) => [r.id ?? r.route, r])),
     [report],
   );
 
@@ -91,7 +98,8 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
         });
         setReport(rep);
         const firstFail = rep.routes.find((r) => r.status === "fail");
-        if (firstFail && specByRoute.has(firstFail.route)) setSelectedRoute(firstFail.route);
+        const failId = firstFail?.id ?? firstFail?.route;
+        if (failId && specById.has(failId)) setSelectedId(failId);
         postReport.mutate({ id: template.id, report: rep });
       } finally {
         setRunning(false);
@@ -108,19 +116,19 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
     });
   };
 
-  const dotClass = (route: string): string => {
+  const dotClass = (id: string): string => {
     if (running) return "tpl-check-dot tpl-check-dot--run";
-    const s = statusByRoute.get(route)?.status;
+    const s = statusById.get(id)?.status;
     return "tpl-check-dot" + (s ? ` tpl-check-dot--${s}` : "");
   };
 
-  const selectedSpec = selectedRoute ? specByRoute.get(selectedRoute) : undefined;
+  const selectedSpec = selectedId ? specById.get(selectedId) : undefined;
   const selectedLayout = selectedSpec && bundle ? bundle.layouts[selectedSpec.layoutKey] : undefined;
-  const selectedResult = selectedRoute ? statusByRoute.get(selectedRoute) : undefined;
+  const selectedResult = selectedId ? statusById.get(selectedId) : undefined;
   const selectedLabel = selectedSpec
     ? rail
         .flatMap((sec) => sec.types.flatMap((t) => t.variants))
-        .find((v) => v.route === selectedRoute)?.label ?? selectedSpec.route
+        .find((v) => v.id === selectedId)?.label ?? selectedSpec.route
     : "";
 
   const isAlreadyActive = template.status === "active" || template.isActive === true;
@@ -217,14 +225,14 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
                     const v = type.variants[0];
                     return (
                       <button
-                        key={v.route}
+                        key={v.id}
                         type="button"
-                        className={"tpl-check-rail__var tpl-check-rail__var--top" + (v.route === selectedRoute ? " is-active" : "")}
-                        aria-current={v.route === selectedRoute ? "page" : undefined}
-                        onClick={() => setSelectedRoute(v.route)}
+                        className={"tpl-check-rail__var tpl-check-rail__var--top" + (v.id === selectedId ? " is-active" : "")}
+                        aria-current={v.id === selectedId ? "page" : undefined}
+                        onClick={() => setSelectedId(v.id)}
                       >
                         <span>{type.label}</span>
-                        <span className={dotClass(v.route)} aria-hidden="true" />
+                        <span className={dotClass(v.id)} aria-hidden="true" />
                       </button>
                     );
                   }
@@ -246,14 +254,14 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
                       {isOpen &&
                         type.variants.map((v) => (
                           <button
-                            key={v.route}
+                            key={v.id}
                             type="button"
-                            className={"tpl-check-rail__var" + (v.route === selectedRoute ? " is-active" : "")}
-                            aria-current={v.route === selectedRoute ? "page" : undefined}
-                            onClick={() => setSelectedRoute(v.route)}
+                            className={"tpl-check-rail__var" + (v.id === selectedId ? " is-active" : "")}
+                            aria-current={v.id === selectedId ? "page" : undefined}
+                            onClick={() => setSelectedId(v.id)}
                           >
                             <span>{v.label}</span>
-                            <span className={dotClass(v.route)} aria-hidden="true" />
+                            <span className={dotClass(v.id)} aria-hidden="true" />
                           </button>
                         ))}
                     </div>

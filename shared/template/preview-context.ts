@@ -3,10 +3,12 @@
  *
  * PRD-3 Phase 2 (preview + работоспособность). Bridges a template's
  * `PreviewDemoDataset` (spec-template-platform §5.5) into per-screen render inputs
- * for the unified renderer ({@link module:shared/template/render-screen}). One
- * {@link ScreenSpec} per `manifest.preview.routes[]` entry: the resolved layout key,
- * the public render context (built via the shared
- * {@link module:shared/template/start-state}/{@link module:shared/template/result-context}/
+ * for the unified renderer ({@link module:shared/template/render-screen}). It emits one
+ * {@link ScreenSpec} per `manifest.preview.routes[]` system screen PLUS one per declared
+ * `intro`/`info`/`summary` content variant in `manifest.contentTemplates` (so every
+ * variant previews + smoke-checks, not only the routes the author listed). Each spec
+ * carries: a unique `id`, the resolved layout key, the public render context (built via
+ * the shared {@link module:shared/template/start-state}/{@link module:shared/template/result-context}/
  * {@link module:shared/template/transition-context} builders), the controlled slots
  * (question interaction, content skeleton) and the slots the smoke-runner must find
  * filled.
@@ -31,6 +33,7 @@ export interface PreviewRouteTarget {
 /** A content template declaration (`manifest.contentTemplates[]`, subset). */
 export interface PreviewContentTemplate {
   key: string;
+  label?: string;
   kind?: string;
   pageKind?: string;
   placeholders?: PlaceholderDef[];
@@ -89,6 +92,14 @@ export interface PreviewDemoDataset {
 
 /** Render inputs + smoke expectations for a single preview screen. */
 export interface ScreenSpec {
+  /**
+   * Stable, UNIQUE identity for this screen — keys the preview rail, the status
+   * map and the smoke report. For most screens it equals `route`; when a content
+   * kind has several render variants that share one semantic route (e.g. two
+   * `content.intro` variants), the id is the variant's `contentTemplates[].key`
+   * so the variants stay distinguishable.
+   */
+  id: string;
   route: string;
   label?: string;
   /** Layout key to look up in the layouts map (resolved with fallback, §5.3). */
@@ -133,6 +144,57 @@ function resolveLayoutKey(route: string, manifest: PreviewManifest): string {
 /** Build a minimal content-page skeleton (one `data-placeholder` host per field). */
 function buildSkeleton(placeholders: PlaceholderDef[]): string {
   return placeholders.map((p) => `<div data-placeholder="${esc(p.key)}"></div>`).join("");
+}
+
+/** A demo topic for the router preview (subset of the dataset `topics`). */
+interface RouterTopic {
+  id: string;
+  title?: string;
+  status?: string;
+  required?: boolean;
+}
+
+/**
+ * Build the router topic-menu markup (`.router-topic-cards` → `.router-topic-card`),
+ * byte-for-byte the same structure/classes the SCORM runtime emits
+ * (`server/scorm/template/app/routerFlow.js → renderRouterPage`), so the preview
+ * shows the real topic menu on the template's demo topics. Demo `status` is mapped
+ * to the runtime's per-topic states (notStarted / inProgress / completed, plus a
+ * `locked` modifier) with the same status labels.
+ */
+function buildRouterCards(topics: RouterTopic[]): string {
+  const cards = topics
+    .map((t) => {
+      const demo = String(t.status ?? "available");
+      const locked = demo === "locked";
+      const status = demo === "completed" ? "completed" : demo === "inProgress" ? "inProgress" : "notStarted";
+      const lockedClass = locked ? " router-topic-card--locked" : "";
+      const disabled = status === "completed" || locked;
+      const statusText = locked
+        ? "Недоступна"
+        : status === "completed"
+          ? "Пройдена"
+          : status === "inProgress"
+            ? "В процессе"
+            : "Не начата";
+      return (
+        `<button type="button" class="router-topic-card router-topic-card--${status}${lockedClass}" role="listitem"` +
+        ` data-topic-id="${esc(t.id)}" data-router-status="${status}"${locked ? ' data-router-locked="true"' : ""}` +
+        `${disabled ? " disabled" : ""}>` +
+        `<span class="router-topic-card__name">${esc(t.title ?? t.id)}` +
+        (t.required === false ? ' <span class="router-topic-card__optional">(необязательная)</span>' : "") +
+        "</span>" +
+        `<span class="router-topic-card__status">${esc(statusText)}</span>` +
+        "</button>"
+      );
+    })
+    .join("");
+  return `<div class="router-topic-cards" role="list" aria-label="Доступные темы">${cards}</div>`;
+}
+
+/** True when a content route/kind is the router (topic menu). */
+function isRouterScreen(route: string, kind?: string): boolean {
+  return route === "content.router" || route === "router" || kind === "router";
 }
 
 // Drag-handle glyphs mirror the web host (client/pages/learner/template-question-screen)
@@ -282,7 +344,7 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
   const route = target.route;
   const layoutKey = resolveLayoutKey(route, manifest);
   const c = dataset.course;
-  const base = { route, label: target.label, layoutKey };
+  const base = { id: route, route, label: target.label, layoutKey };
 
   if (route === "start") {
     const { course, state } = buildStartState({
@@ -328,7 +390,8 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
 
   if (route.startsWith("content")) {
     const page = findContentPage(dataset, target);
-    const tpl = findContentTemplate(manifest, page?.templateKey ?? target.templateKey);
+    const variantKey = page?.templateKey ?? target.templateKey;
+    const tpl = findContentTemplate(manifest, variantKey);
     const placeholders = tpl?.placeholders ?? [];
     const skeleton = buildSkeleton(placeholders);
     // The «Итог раздела» page (content.summary, after_topic) reflects the SECTION
@@ -336,12 +399,20 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
     const isSummary = route === "content.summary" || (tpl?.kind ?? page?.type) === "summary";
     const result = isSummary ? sectionResultContextFromRuntime(dataset) : resultContextFromRuntime(dataset);
     const context = { course: { title: c.title }, result };
+    // Router screens append the runtime topic-menu (`.router-topic-cards`) built
+    // from the demo topics, so the preview shows the real menu, not a bare skeleton.
+    const pageContent = isRouterScreen(route, tpl?.kind ?? page?.type)
+      ? skeleton + buildRouterCards(c.topics ?? [])
+      : skeleton;
     return {
       ...base,
+      // A content screen is identified by its bound variant key, so two variants
+      // of the same kind (both route `content.intro`) remain distinct in the rail.
+      id: variantKey ?? route,
       requiredSlots: ["page-content"],
       input: {
         context,
-        slots: { "page-content": skeleton },
+        slots: { "page-content": pageContent },
         content: { template: { placeholders }, values: page?.values ?? {} },
       },
     };
@@ -366,13 +437,90 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
   return { ...base, requiredSlots: [], input: { context: { course: { title: c.title } } } };
 }
 
+/** Content-page kinds the preview enumerates per variant (вводные/учебные/итог/маршрутизатор). */
+const CONTENT_VARIANT_KINDS = new Set(["intro", "info", "summary", "router"]);
+
+/** Derive a variant kind from a `pageKind` like `content.info` → `info`. */
+function kindFromPageKind(pageKind?: string): string | undefined {
+  if (!pageKind) return undefined;
+  const m = /^content\.([a-z]+)$/i.exec(pageKind);
+  return m ? m[1] : undefined;
+}
+
 /**
- * Build a {@link ScreenSpec} for every `manifest.preview.routes[]` entry. The
- * smoke-runner attaches each layout's HTML and renders/checks the screens.
+ * Build a {@link ScreenSpec} for ONE declared content variant
+ * (`manifest.contentTemplates[]`), independent of whether the author listed it in
+ * `preview.routes`. Demo values come from the demo content page bound to this
+ * variant key (else the matching route, else empty). Mirrors {@link buildOne}'s
+ * content branch so the variant renders identically to the runtime.
+ */
+function buildContentVariant(
+  ct: PreviewContentTemplate,
+  kind: string,
+  dataset: PreviewDemoDataset,
+  manifest: PreviewManifest,
+): ScreenSpec {
+  const route = ct.pageKind ?? `content.${kind}`;
+  const layoutKey = resolveLayoutKey(route, manifest);
+  const placeholders = ct.placeholders ?? [];
+  const skeleton = buildSkeleton(placeholders);
+  const pages = dataset.course.contentPages ?? [];
+  const page = pages.find((p) => p.templateKey === ct.key) ?? pages.find((p) => p.route === route);
+  const isSummary = route === "content.summary" || kind === "summary";
+  const result = isSummary ? sectionResultContextFromRuntime(dataset) : resultContextFromRuntime(dataset);
+  // Router variants append the runtime topic-menu on the demo topics (see buildOne).
+  const pageContent = isRouterScreen(route, kind)
+    ? skeleton + buildRouterCards(dataset.course.topics ?? [])
+    : skeleton;
+  return {
+    id: ct.key,
+    route,
+    label: ct.label,
+    layoutKey,
+    requiredSlots: ["page-content"],
+    input: {
+      context: { course: { title: dataset.course.title }, result },
+      slots: { "page-content": pageContent },
+      content: { template: { placeholders }, values: page?.values ?? {} },
+    },
+  };
+}
+
+/**
+ * Build a {@link ScreenSpec} per preview screen. Non-content screens (start,
+ * question.*, results, system.*) come from `manifest.preview.routes[]`. Content
+ * screens cover EVERY declared content variant (PRD-3 §3.4: вводные / учебные /
+ * итог), not only those the author happened to list in `preview.routes` — the
+ * routes provide demo bindings/labels, and any intro/info/summary variant from
+ * `contentTemplates` that no route references is appended so it still
+ * renders + smoke-checks. The smoke-runner attaches each layout's HTML.
  */
 export function buildScreenInputs(dataset: PreviewDemoDataset, manifest: PreviewManifest): ScreenSpec[] {
   const targets = (manifest.preview?.routes ?? []).map(normalizeTarget);
-  return targets.map((t) => buildOne(t, dataset, manifest));
+  const specs: ScreenSpec[] = [];
+  // Variant keys already shown via a preview.routes entry — so we don't list
+  // a declared content variant twice when it is also hand-authored as a route.
+  const coveredVariantKeys = new Set<string>();
+
+  for (const t of targets) {
+    const spec = buildOne(t, dataset, manifest);
+    specs.push(spec);
+    if (t.route.startsWith("content")) {
+      const page = findContentPage(dataset, t);
+      const key = page?.templateKey ?? t.templateKey;
+      if (key) coveredVariantKeys.add(key);
+    }
+  }
+
+  for (const ct of manifest.contentTemplates ?? []) {
+    const kind = ct.kind ?? kindFromPageKind(ct.pageKind);
+    if (!kind || !CONTENT_VARIANT_KINDS.has(kind)) continue;
+    if (coveredVariantKeys.has(ct.key)) continue;
+    coveredVariantKeys.add(ct.key);
+    specs.push(buildContentVariant(ct, kind, dataset, manifest));
+  }
+
+  return specs;
 }
 
 /** Inputs for {@link buildContentPageScreen}: a single REAL content page. */
@@ -404,6 +552,7 @@ export function buildContentPageScreen(inp: ContentPageScreenInput): ScreenSpec 
   const skeleton = buildSkeleton(placeholders);
   const result = inp.result ?? { scorePercent: 0, status: "", passed: false };
   return {
+    id: inp.templateKey ?? inp.route,
     route: inp.route,
     layoutKey,
     requiredSlots: ["page-content"],

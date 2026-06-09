@@ -16,7 +16,9 @@
 import type { ScreenSpec } from "@shared/template/preview-context";
 
 export interface RailVariant {
-  /** Route key (matches a SmokeReport route — drives the status dot). */
+  /** Unique screen id (matches a SmokeReport row — drives selection + status dot). */
+  id: string;
+  /** Semantic route (drives grouping/layout); not unique across render variants. */
   route: string;
   /** Display name of this render variant. */
   label: string;
@@ -128,7 +130,7 @@ export function buildRail(specs: ScreenSpec[]): RailSection[] {
       type = { key: typeKey, label: typeLabel(typeKey), variants: [] };
       section.types.push(type);
     }
-    type.variants.push({ route: spec.route, label: variantLabel(spec), spec });
+    type.variants.push({ id: spec.id, route: spec.route, label: variantLabel(spec), spec });
   }
 
   return [...sections.values()].sort(
