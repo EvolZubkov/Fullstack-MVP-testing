@@ -1072,7 +1072,7 @@ export const contentPages = pgTable("content_pages", {
   /** @deprecated Use `kind` instead. Kept for backward compat in this release. */
   type: text("type", { enum: ["intro", "info", "summary", "html"] }).notNull(),
   /** PRD-1 §4.3: variant-binding kind. Drives lifecycle of system pages. */
-  kind: text("kind", { enum: ["questions", "router", "summary", "intro", "info"] }).notNull(),
+  kind: text("kind", { enum: ["start", "questions", "router", "summary", "results", "intro", "info"] }).notNull(),
   templateKey: text("template_key"),
   sortOrder: integer("sort_order").notNull().default(0),
   valuesJson: jsonb("values_json").notNull().default({}),
@@ -1103,7 +1103,7 @@ export type ScormAnswer = typeof scormAnswers.$inferSelect;
  * PRD-1 §4.3: variant.kind — functional role of a template variant.
  * Drives variant binding rules in PRD-7 §1.4 (silent binding for system kinds).
  */
-export const variantKindSchema = z.enum(["questions", "router", "summary", "intro", "info"]);
+export const variantKindSchema = z.enum(["start", "questions", "router", "summary", "results", "intro", "info"]);
 export type VariantKind = z.infer<typeof variantKindSchema>;
 
 /**
@@ -1140,10 +1140,10 @@ export const templateManifestSchema = z.object({
  * default itself must declare each system kind, otherwise reconcile silently
  * fails to materialize the corresponding `content_pages` row (G48 2026-05-28).
  *
- * System kinds: `intro`, `summary`, `router`, `questions`. The user kind `info`
- * is author-created and not lifecycle-managed.
+ * System kinds: `start`, `intro`, `summary`, `results`, `router`, `questions`. The
+ * user kind `info` is author-created and not lifecycle-managed.
  */
-const REQUIRED_DEFAULT_VARIANT_KINDS = ["intro", "summary", "router", "questions"] as const;
+const REQUIRED_DEFAULT_VARIANT_KINDS = ["start", "intro", "summary", "results", "router", "questions"] as const;
 
 export const defaultTemplateManifestSchema = templateManifestSchema.superRefine((m, ctx) => {
   const declared = new Set(m.contentTemplates.map((ct) => ct.kind));
