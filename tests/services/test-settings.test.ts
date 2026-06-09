@@ -357,7 +357,7 @@ describe("TestSettingsService._reconcileSystemPages — via create()", () => {
     svc = new TestSettingsService();
   });
 
-  it("creates intro + summary + flat questions on linear_flat create()", async () => {
+  it("creates only the flat questions row on linear_flat create() — no section intro/summary", async () => {
     setupSelectDispatch([
       [templates, [{ id: "default", manifest: defaultManifest }]],
       [contentPages, []],
@@ -375,7 +375,9 @@ describe("TestSettingsService._reconcileSystemPages — via create()", () => {
 
     const cpInserts = inserts.filter((i) => i.table === contentPages);
     const kinds = cpInserts.map((i) => (i.values as { kind: string }).kind).sort();
-    expect(kinds).toEqual(["intro", "questions", "summary"]);
+    // intro/summary are per-section now (none in a flat test); this fixture's
+    // template declares no start/results, so only the flat questions row is made.
+    expect(kinds).toEqual(["questions"]);
 
     const questionsRow = cpInserts.find((i) => (i.values as { kind: string }).kind === "questions");
     expect((questionsRow!.values as { topicId: string | null }).topicId).toBeNull();

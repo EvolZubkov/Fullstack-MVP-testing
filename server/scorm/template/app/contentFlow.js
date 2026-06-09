@@ -8,7 +8,11 @@
   function contentPagesFor(topicId, position) {
     return (TEST_DATA.contentPages || [])
       .filter(function (p) {
-        return p.topicId === topicId && p.position === position;
+        // `kind: "start"`/`"results"` are the landing and final-results screens,
+        // rendered separately by their own runtimes — they must never enter the
+        // content-page flow sequence.
+        return p.kind !== "start" && p.kind !== "results"
+          && p.topicId === topicId && p.position === position;
       })
       .sort(function (a, b) {
         return (a.sortOrder || 0) - (b.sortOrder || 0);
