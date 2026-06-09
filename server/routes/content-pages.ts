@@ -16,7 +16,7 @@
 import { Router } from "express";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
 import { templates } from "@shared/schema";
@@ -58,18 +58,46 @@ type ContentTemplateEntry = {
 };
 
 /**
- * Returns the contentTemplates array for the template currently selected in a test.
- * Falls back to the built-in "default" template.
+ * Returns the contentTemplates array a test's content pages validate against.
+ *
+ * Prefers `overrideTemplateId` — the in-progress «Оформление» DRAFT the editor
+ * sends as `?templateId=` — but ONLY when it resolves to an ACTIVE template, so
+ * structure edits (add / replace-variant / value validation) work against the
+ * chosen template before the design is saved. Otherwise falls back to the test's
+ * saved design template, then the built-in "default".
  */
-async function getTestContentTemplates(test: { designSettingsJson: unknown }): Promise<ContentTemplateEntry[] | null> {
+async function getTestContentTemplates(
+  test: { designSettingsJson: unknown },
+  overrideTemplateId?: string,
+): Promise<ContentTemplateEntry[] | null> {
   const settings = test.designSettingsJson as { templateId?: string } | null;
-  const templateId = settings?.templateId || "default";
+  const savedId = settings?.templateId || "default";
 
-  const [template] = await db.select().from(templates).where(eq(templates.id, templateId));
+  const readTemplates = (id: string, activeOnly: boolean) =>
+    db
+      .select()
+      .from(templates)
+      .where(activeOnly ? and(eq(templates.id, id), eq(templates.isActive, true)) : eq(templates.id, id));
+
+  // Draft override wins only when it points to a different, ACTIVE template.
+  if (overrideTemplateId && overrideTemplateId !== savedId) {
+    const [draftTpl] = await readTemplates(overrideTemplateId, true);
+    if (draftTpl) {
+      const manifest = draftTpl.manifest as { contentTemplates?: ContentTemplateEntry[] };
+      return manifest.contentTemplates ?? null;
+    }
+  }
+
+  const [template] = await readTemplates(savedId, false);
   if (!template) return null;
-
   const manifest = template.manifest as { contentTemplates?: ContentTemplateEntry[] };
   return manifest.contentTemplates ?? null;
+}
+
+/** The draft «Оформление» template id the editor sends as `?templateId=`, if any. */
+function draftTemplateIdFrom(req: { query: Record<string, unknown> }): string | undefined {
+  const v = req.query.templateId;
+  return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
 /**
@@ -309,7 +337,7 @@ router.get("/:id/content-pages", requirePermission("tests.read"), requireTestSco
     if (!test) return res.status(404).json({ error: "Test not found" });
 
     const pages = await storage.getContentPages(req.params.id);
-    const contentTemplates = await getTestContentTemplates(test);
+    const contentTemplates = await getTestContentTemplates(test, draftTemplateIdFrom(req));
     const validKeys = contentTemplates ? new Set(contentTemplates.map((ct) => ct.key)) : null;
 
     const result = pages.map((page) => ({
@@ -372,7 +400,7 @@ router.post("/:id/content-pages", requirePermission("tests.edit"), requireTestSc
       placeholderStyles: {},
     } as { values: Record<string, unknown>; placeholderStyles: Record<string, unknown> };
     if (mode === "template" || (!mode && templateKey)) {
-      const contentTemplates = await getTestContentTemplates(test);
+      const contentTemplates = await getTestContentTemplates(test, draftTemplateIdFrom(req));
       if (contentTemplates !== null) {
         const ct = contentTemplates.find((c) => c.key === templateKey);
         if (!ct) {
@@ -482,7 +510,7 @@ router.put("/:id/content-pages/:pageId", requirePermission("tests.edit"), requir
     const effectiveTemplateKey = templateKey !== undefined ? templateKey : existing.templateKey;
 
     if (effectiveMode === "template" && effectiveTemplateKey && valuesJson?.values !== undefined) {
-      const contentTemplates = await getTestContentTemplates(test);
+      const contentTemplates = await getTestContentTemplates(test, draftTemplateIdFrom(req));
       if (contentTemplates !== null) {
         const ct = contentTemplates.find((c) => c.key === effectiveTemplateKey);
         if (!ct) {
@@ -551,7 +579,7 @@ router.post("/:id/content-pages/:pageId/replace-variant", requirePermission("tes
       return res.status(404).json({ error: "Content page not found" });
     }
 
-    const contentTemplates = await getTestContentTemplates(test);
+    const contentTemplates = await getTestContentTemplates(test, draftTemplateIdFrom(req));
     if (!contentTemplates) {
       return res.status(422).json({ error: "Test has no resolvable template" });
     }

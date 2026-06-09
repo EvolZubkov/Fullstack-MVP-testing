@@ -688,4 +688,40 @@ describe("POST /api/tests/:id/content-pages/:pageId/replace-variant", () => {
     // Styles for dropped keys also gone
     expect(patch.valuesJson.placeholderStyles).not.toHaveProperty("subtitle");
   });
+
+  // ── Draft template override (?templateId=) — switch template before save ──────
+  // The editor sends the in-progress «Оформление» template so the variant change
+  // validates against the CHOSEN template, not the saved design.
+  it("validates against the DRAFT template via ?templateId= so a switch works before save", async () => {
+    // Saved design = default (no intro.334-bizo); the active DRAFT = my-template, which has it.
+    const myTemplate = {
+      id: "my-template",
+      isActive: true,
+      manifest: {
+        params: [],
+        contentTemplates: [
+          { key: "intro.e-migr-0", label: "Введение", kind: "intro", placeholders: [{ key: "title", type: "text", label: "T" }] },
+          { key: "intro.334-bizo", label: "Введение 2", kind: "intro", placeholders: [{ key: "title", type: "text", label: "T" }] },
+        ],
+      },
+    };
+    // First db.select (the override active-template query) resolves to my-template.
+    dbMock.select.mockReturnValueOnce(dbMock._makeChain([myTemplate]));
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages/page-1/replace-variant?templateId=my-template")
+      .send({ newTemplateKey: "intro.334-bizo" });
+    expect(res.status).toBe(200);
+    expect(res.body.applied).toBe(true);
+    const patch = (storageMock.updateContentPage.mock.calls[0] as unknown[])[1] as { templateKey: string };
+    expect(patch.templateKey).toBe("intro.334-bizo");
+  });
+
+  it("without ?templateId, a variant only in the draft template is rejected (validated against saved)", async () => {
+    // Saved default (multiVariantTemplate) lacks intro.334-bizo → 404.
+    const res = await request(makeApp())
+      .post("/api/tests/test-1/content-pages/page-1/replace-variant")
+      .send({ newTemplateKey: "intro.334-bizo" });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/not found in current template/);
+  });
 });
