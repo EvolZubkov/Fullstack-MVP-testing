@@ -442,3 +442,641 @@ describe("POST /import — обновление по ID", () => {
     expect(storageMock.updateQuestion).not.toHaveBeenCalled();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-14 Ф0 — matching: формат "лево || право", дистракторы, непозиционные пары
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Строка matching с разделителем сторон "||" (целевой формат Ф0). */
+function matchingRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    "Тема": "JavaScript",
+    "Тип вопроса": "matching",
+    "Текст вопроса": "Сопоставьте звуки",
+    "Балл": 1,
+    "Сложность": 50,
+    "Тексты вариантов ответа": "Кошка # Собака # Рыба || Мяу # Гав # Буль # Кваква",
+    "Номера правильных ответов": "1-2, 2-1, 3-3",
+    "Следование вариантов ответов": "Random",
+    "Обратная связь": "",
+    ...overrides,
+  };
+}
+
+describe("POST /import — matching (PRD-14 Ф0)", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopics.mockResolvedValue([dbTopic]);
+    storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
+    storageMock.createQuestion.mockResolvedValue({ ...dbQuestion });
+    app = makeApp();
+  });
+
+  it("разбирает формат '|| ' с дистракторами и непозиционными парами", async () => {
+    const buf = await makeImportXlsx([matchingRow()]);
+    const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.created).toBe(1);
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "matching",
+        dataJson: {
+          left: ["Кошка", "Собака", "Рыба"],
+          right: ["Мяу", "Гав", "Буль", "Кваква"],
+        },
+        correctJson: {
+          pairs: [
+            { left: 0, right: 1 },
+            { left: 1, right: 0 },
+            { left: 2, right: 2 },
+          ],
+        },
+      })
+    );
+  });
+
+  it("обратная совместимость: без '|| ' старый позиционный разбор", async () => {
+    const buf = await makeImportXlsx([
+      matchingRow({ "Тексты вариантов ответа": "A#1#B#2", "Номера правильных ответов": "" }),
+    ]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dataJson: { left: ["A", "B"], right: ["1", "2"] },
+        correctJson: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }] },
+      })
+    );
+  });
+
+  it("некорректная пара (вне диапазона) → ошибка строки, без создания", async () => {
+    const buf = await makeImportXlsx([matchingRow({ "Номера правильных ответов": "1-9" })]);
+    const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(res.body.errors).toHaveLength(1);
+    expect(res.body.errors[0]).toMatch(/пара/i);
+    expect(storageMock.createQuestion).not.toHaveBeenCalled();
+  });
+
+  it("пустые пары при '|| ' → позиционный fallback", async () => {
+    const buf = await makeImportXlsx([
+      matchingRow({
+        "Тексты вариантов ответа": "A # B || X # Y",
+        "Номера правильных ответов": "",
+      }),
+    ]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        correctJson: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }] },
+      })
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-14 Ф0 — ranking: явный правильный порядок
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Строка ranking. */
+function rankingRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    "Тема": "JavaScript",
+    "Тип вопроса": "ranking",
+    "Текст вопроса": "Расставьте по порядку",
+    "Балл": 1,
+    "Сложность": 50,
+    "Тексты вариантов ответа": "Шаг А # Шаг Б # Шаг В",
+    "Номера правильных ответов": "3,1,2",
+    "Следование вариантов ответов": "Fixed",
+    "Обратная связь": "",
+    ...overrides,
+  };
+}
+
+describe("POST /import — ranking (PRD-14 Ф0)", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopics.mockResolvedValue([dbTopic]);
+    storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
+    storageMock.createQuestion.mockResolvedValue({ ...dbQuestion });
+    app = makeApp();
+  });
+
+  it("читает явный порядок как 1-based перестановку", async () => {
+    const buf = await makeImportXlsx([rankingRow()]);
+    const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(res.body.created).toBe(1);
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dataJson: { items: ["Шаг А", "Шаг Б", "Шаг В"] },
+        correctJson: { correctOrder: [2, 0, 1] },
+      })
+    );
+  });
+
+  it("обратная совместимость: пустой порядок → элементы уже в правильном порядке", async () => {
+    const buf = await makeImportXlsx([rankingRow({ "Номера правильных ответов": "" })]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({ correctJson: { correctOrder: [0, 1, 2] } })
+    );
+  });
+
+  it("не-перестановка (дубликаты позиций) → ошибка строки", async () => {
+    const buf = await makeImportXlsx([rankingRow({ "Номера правильных ответов": "1,1,2" })]);
+    const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(res.body.errors).toHaveLength(1);
+    expect(res.body.errors[0]).toMatch(/порядок/i);
+    expect(storageMock.createQuestion).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-14 Ф0 — Балл/Сложность = 0 сохраняются; диапазон сложности
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("POST /import — Балл/Сложность = 0 (PRD-14 Ф0)", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopics.mockResolvedValue([dbTopic]);
+    storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
+    storageMock.createQuestion.mockResolvedValue({ ...dbQuestion });
+    app = makeApp();
+  });
+
+  it("Балл = 0 и Сложность = 0 сохраняются как 0, а не подменяются", async () => {
+    const buf = await makeImportXlsx([singleRow({ "Балл": 0, "Сложность": 0 })]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({ points: 0, difficulty: 0 })
+    );
+  });
+
+  it("Сложность вне диапазона 0..100 → ошибка строки", async () => {
+    const buf = await makeImportXlsx([singleRow({ "Сложность": 150 })]);
+    const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(res.body.errors).toHaveLength(1);
+    expect(res.body.errors[0]).toMatch(/сложност/i);
+    expect(storageMock.createQuestion).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-14 Ф0 — FR-05: согласование Режима ОС при обновлении по ID
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("POST /import — feedbackMode sync (PRD-14 Ф0)", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopics.mockResolvedValue([dbTopic]);
+    storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
+    storageMock.updateQuestion.mockResolvedValue({ ...dbQuestion });
+    app = makeApp();
+  });
+
+  it("переданная обратная связь выставляет feedbackMode='general'", async () => {
+    storageMock.getQuestion.mockResolvedValue(dbQuestion);
+
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Обратная связь": "Молодец!" })]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(storageMock.updateQuestion).toHaveBeenCalledWith(
+      "q1",
+      expect.objectContaining({ feedback: "Молодец!", feedbackMode: "general" })
+    );
+  });
+
+  it("пустая обратная связь не трогает feedbackMode", async () => {
+    storageMock.getQuestion.mockResolvedValue(dbQuestion);
+
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Обратная связь": "" })]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    const call = storageMock.updateQuestion.mock.calls[0];
+    expect(call[1]).not.toHaveProperty("feedbackMode");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-14 Ф0 — round-trip: экспорт matching → импорт того же файла
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Round-trip matching (PRD-14 Ф0)", () => {
+  const matchingQuestion = {
+    ...dbQuestion,
+    id: "m1",
+    type: "matching",
+    prompt: "Сопоставьте звуки",
+    dataJson: { left: ["Кошка", "Собака", "Рыба"], right: ["Мяу", "Гав", "Буль", "Кваква"] },
+    correctJson: { pairs: [{ left: 0, right: 1 }, { left: 1, right: 0 }, { left: 2, right: 2 }] },
+  };
+
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopics.mockResolvedValue([dbTopic]);
+    storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
+    storageMock.createQuestion.mockResolvedValue({ ...matchingQuestion });
+    app = makeApp();
+  });
+
+  it("экспорт пишет 'лево || право' и пары, импорт воспроизводит вопрос без потерь", async () => {
+    storageMock.getQuestions.mockResolvedValue([matchingQuestion]);
+
+    // 1) Экспорт
+    const exportRes = await asAuthor(
+      request(app).get("/api/questions/export").buffer(true).parse((r: any, cb: any) => {
+        const chunks: Buffer[] = [];
+        r.on("data", (c: Buffer) => chunks.push(c));
+        r.on("end", () => cb(null, Buffer.concat(chunks)));
+      })
+    );
+    const rows = await parseXlsxResponse(exportRes.body as Buffer);
+    expect(rows[0]["Тексты вариантов ответа"]).toBe("Кошка # Собака # Рыба || Мяу # Гав # Буль # Кваква");
+    expect(rows[0]["Номера правильных ответов"]).toBe("1-2, 2-1, 3-3");
+
+    // 2) Импорт того же файла (без ID, чтобы шёл путь создания)
+    const reimport = await makeImportXlsx([
+      {
+        "Тема": "JavaScript",
+        "Тип вопроса": rows[0]["Тип вопроса"],
+        "Текст вопроса": rows[0]["Текст вопроса"],
+        "Балл": rows[0]["Балл"],
+        "Сложность": rows[0]["Сложность"],
+        "Тексты вариантов ответа": rows[0]["Тексты вариантов ответа"],
+        "Номера правильных ответов": rows[0]["Номера правильных ответов"],
+        "Следование вариантов ответов": rows[0]["Следование вариантов ответов"],
+        "Обратная связь": rows[0]["Обратная связь"],
+      },
+    ]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", reimport, "q.xlsx"));
+
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "matching",
+        dataJson: matchingQuestion.dataJson,
+        correctJson: matchingQuestion.correctJson,
+      })
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-14 Ф1 — Теги (FR-06)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("POST /import — Теги (PRD-14 Ф1)", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopics.mockResolvedValue([dbTopic]);
+    storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
+    storageMock.createQuestion.mockResolvedValue({ ...dbQuestion });
+    app = makeApp();
+  });
+
+  it("разбирает теги с разделителями ';' и ',' и нормализует", async () => {
+    const buf = await makeImportXlsx([singleRow({ "Теги": "alpha; beta , alpha , Gamma" })]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({ tags: ["alpha", "beta", "Gamma"] })
+    );
+  });
+
+  it("экспорт пишет теги через '; '", async () => {
+    storageMock.getQuestions.mockResolvedValue([{ ...dbQuestion, tags: ["финансы", "учёт"] }]);
+
+    const res = await asAuthor(
+      request(app).get("/api/questions/export").buffer(true).parse((r: any, cb: any) => {
+        const chunks: Buffer[] = [];
+        r.on("data", (c: Buffer) => chunks.push(c));
+        r.on("end", () => cb(null, Buffer.concat(chunks)));
+      })
+    );
+    const rows = await parseXlsxResponse(res.body as Buffer);
+    expect(rows[0]["Теги"]).toBe("финансы; учёт");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-14 Ф1 — условная обратная связь (FR-07)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("POST /import — условная ОС (PRD-14 Ф1)", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopics.mockResolvedValue([dbTopic]);
+    storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
+    storageMock.createQuestion.mockResolvedValue({ ...dbQuestion });
+    app = makeApp();
+  });
+
+  it("Режим ОС=условная → conditional + correct/incorrect, общая обнуляется", async () => {
+    const buf = await makeImportXlsx([
+      singleRow({
+        "Режим ОС": "условная",
+        "Обратная связь": "общий текст",
+        "ОС при верном": "Верно!",
+        "ОС при неверном": "Неверно!",
+      }),
+    ]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        feedbackMode: "conditional",
+        feedback: null,
+        feedbackCorrect: "Верно!",
+        feedbackIncorrect: "Неверно!",
+      })
+    );
+  });
+
+  it("Режим ОС=общая → general + текст из «Обратная связь»", async () => {
+    const buf = await makeImportXlsx([
+      singleRow({ "Режим ОС": "общая", "Обратная связь": "Общий", "ОС при верном": "X" }),
+    ]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        feedbackMode: "general",
+        feedback: "Общий",
+        feedbackCorrect: null,
+        feedbackIncorrect: null,
+      })
+    );
+  });
+
+  it("экспорт условного вопроса пишет режим и тексты", async () => {
+    storageMock.getQuestions.mockResolvedValue([
+      {
+        ...dbQuestion,
+        feedbackMode: "conditional",
+        feedback: null,
+        feedbackCorrect: "Молодец",
+        feedbackIncorrect: "Подучи",
+      },
+    ]);
+
+    const res = await asAuthor(
+      request(app).get("/api/questions/export").buffer(true).parse((r: any, cb: any) => {
+        const chunks: Buffer[] = [];
+        r.on("data", (c: Buffer) => chunks.push(c));
+        r.on("end", () => cb(null, Buffer.concat(chunks)));
+      })
+    );
+    const rows = await parseXlsxResponse(res.body as Buffer);
+    expect(rows[0]["Режим ОС"]).toBe("условная");
+    expect(rows[0]["ОС при верном"]).toBe("Молодец");
+    expect(rows[0]["ОС при неверном"]).toBe("Подучи");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-14 Ф1 — Цена ответа (FR-08..FR-10)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("POST /import — Цена ответа (PRD-14 Ф1)", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopics.mockResolvedValue([dbTopic]);
+    storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
+    storageMock.createQuestion.mockResolvedValue({ ...dbQuestion });
+    app = makeApp();
+  });
+
+  it("weighted (single) разбирается и попадает в scoringJson", async () => {
+    const buf = await makeImportXlsx([
+      singleRow({ "Тексты вариантов ответа": "A#B#C", "Цена ответа": "веса: 2 # 0 # 1" }),
+    ]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({ scoringJson: { kind: "weighted", weights: [2, 0, 1] } })
+    );
+  });
+
+  it("tiered (multiple) разбирается", async () => {
+    const buf = await makeImportXlsx([
+      singleRow({
+        "Тип вопроса": "multiple_response",
+        "Тексты вариантов ответа": "A#B#C",
+        "Номера правильных ответов": "1,2",
+        "Цена ответа": "ступени: c==T & x==0 => 2; c>=1 => 1",
+      }),
+    ]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scoringJson: {
+          kind: "tiered",
+          tiers: [
+            { when: { all: [{ lhs: "c", op: "==", rhs: "T" }, { lhs: "x", op: "==", rhs: 0 }] }, score: 2 },
+            { when: { all: [{ lhs: "c", op: ">=", rhs: 1 }] }, score: 1 },
+          ],
+        },
+      })
+    );
+  });
+
+  it("невалидная «Цена ответа» → ошибка строки, без создания", async () => {
+    const buf = await makeImportXlsx([
+      singleRow({ "Тексты вариантов ответа": "A#B#C", "Цена ответа": "ступени: c>=1 => 1" }),
+    ]);
+    const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    // ступени для single недопустимы
+    expect(res.body.errors).toHaveLength(1);
+    expect(storageMock.createQuestion).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-14 Ф1 — FR-11: пустая ячейка vs отсутствие колонки (обновление по ID)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("POST /import — FR-11 (PRD-14 Ф1)", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopics.mockResolvedValue([dbTopic]);
+    storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
+    storageMock.getQuestion.mockResolvedValue(dbQuestion);
+    storageMock.updateQuestion.mockResolvedValue({ ...dbQuestion });
+    app = makeApp();
+  });
+
+  it("отсутствие колонки → поле не входит в payload обновления", async () => {
+    // Минимальный файл: только обязательные колонки + ID, без Балл/Теги/Цена ответа.
+    const buf = await makeImportXlsx([
+      {
+        "ID": "q1",
+        "Тема": "JavaScript",
+        "Тип вопроса": "multiple_choice",
+        "Текст вопроса": "What is JS?",
+        "Тексты вариантов ответа": "A#B",
+        "Номера правильных ответов": "1",
+      },
+    ]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    const payload = storageMock.updateQuestion.mock.calls[0][1];
+    expect(payload).not.toHaveProperty("points");
+    expect(payload).not.toHaveProperty("difficulty");
+    expect(payload).not.toHaveProperty("tags");
+    expect(payload).not.toHaveProperty("scoringJson");
+    expect(payload).not.toHaveProperty("feedback");
+    // обязательные поля присутствуют
+    expect(payload).toMatchObject({ topicId: "t1", type: "single", prompt: "What is JS?" });
+  });
+
+  it("присутствие колонки с пустым значением → сброс к умолчанию", async () => {
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Теги": "" })]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    const payload = storageMock.updateQuestion.mock.calls[0][1];
+    expect(payload).toHaveProperty("tags");
+    expect(payload.tags).toEqual([]);
+  });
+
+  it("присутствие колонки Теги со значением → теги обновляются", async () => {
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Теги": "x; y" })]);
+    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(storageMock.updateQuestion).toHaveBeenCalledWith(
+      "q1",
+      expect.objectContaining({ tags: ["x", "y"] })
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-14 Ф2 — шаблон (FR-12)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("GET /template (PRD-14 Ф2)", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    app = makeApp();
+  });
+
+  it("отдаёт книгу с листами «Вопросы» и «Справка», ID — первый заголовок", async () => {
+    const res = await asAuthor(
+      request(app).get("/api/questions/template").buffer(true).parse((r: any, cb: any) => {
+        const chunks: Buffer[] = [];
+        r.on("data", (c: Buffer) => chunks.push(c));
+        r.on("end", () => cb(null, Buffer.concat(chunks)));
+      })
+    );
+    expect(res.status).toBe(200);
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const names = wb.worksheets.map((w) => w.name);
+    expect(names).toContain("Вопросы");
+    expect(names).toContain("Справка");
+
+    const headers = sheetToArrays(wb.getWorksheet("Вопросы")!)[0] as string[];
+    expect(headers[0]).toBe("ID");
+    expect(headers).toContain("Цена ответа");
+    expect(headers).toContain("Теги");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-14 Ф2 — предпросмотр импорта (dry-run, FR-13)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("POST /import?dryRun=true (PRD-14 Ф2)", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTopics.mockResolvedValue([dbTopic]);
+    storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
+    app = makeApp();
+  });
+
+  it("считает план создания, но не пишет в БД", async () => {
+    const buf = await makeImportXlsx([singleRow()]);
+    const res = await asAuthor(
+      request(app).post("/api/questions/import?dryRun=true").attach("file", buf, "q.xlsx")
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ created: 1, dryRun: true });
+    expect(storageMock.createQuestion).not.toHaveBeenCalled();
+  });
+
+  it("считает план обновления по ID, но не пишет", async () => {
+    storageMock.getQuestion.mockResolvedValue(dbQuestion);
+
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1" })]);
+    const res = await asAuthor(
+      request(app).post("/api/questions/import?dryRun=true").attach("file", buf, "q.xlsx")
+    );
+
+    expect(res.body).toMatchObject({ updated: 1, dryRun: true });
+    expect(storageMock.updateQuestion).not.toHaveBeenCalled();
+  });
+
+  it("не создаёт новую тему в режиме предпросмотра", async () => {
+    storageMock.getTopics.mockResolvedValue([]);
+
+    const buf = await makeImportXlsx([singleRow({ "Тема": "Совсем новая тема" })]);
+    const res = await asAuthor(
+      request(app).post("/api/questions/import?dryRun=true").attach("file", buf, "q.xlsx")
+    );
+
+    expect(res.body).toMatchObject({ created: 1, dryRun: true });
+    expect(storageMock.createTopic).not.toHaveBeenCalled();
+  });
+
+  it("ошибки строк попадают в план предпросмотра", async () => {
+    const buf = await makeImportXlsx([singleRow({ "Сложность": 150 })]);
+    const res = await asAuthor(
+      request(app).post("/api/questions/import?dryRun=true").attach("file", buf, "q.xlsx")
+    );
+
+    expect(res.body.dryRun).toBe(true);
+    expect(res.body.errors).toHaveLength(1);
+    expect(storageMock.createQuestion).not.toHaveBeenCalled();
+  });
+});

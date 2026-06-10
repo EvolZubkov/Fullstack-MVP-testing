@@ -94,6 +94,10 @@ export default function QuestionsPage() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(new Set());
   const [importFile, setImportFile] = useState<File | null>(null);
+  // PRD-14 Ф2 (FR-13): результат предпросмотра (dry-run) до записи.
+  const [importPreview, setImportPreview] = useState<
+    { created: number; updated: number; skipped: number; errors: string[] } | null
+  >(null);
 
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [exportMode, setExportMode] = useState<"all" | "topics" | "test">("all");
@@ -195,10 +199,10 @@ export default function QuestionsPage() {
   });
 
   const importMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, dryRun }: { file: File; dryRun: boolean }) => {
       const formData = new FormData();
       formData.append("file", file);
-      const response = await fetch("/api/questions/import", {
+      const response = await fetch(`/api/questions/import${dryRun ? "?dryRun=true" : ""}`, {
         method: "POST",
         body: formData,
         credentials: "include",
@@ -206,7 +210,20 @@ export default function QuestionsPage() {
       if (!response.ok) throw new Error("Import failed");
       return response.json();
     },
-    onSuccess: (data: { created: number; updated?: number; skipped?: number; errors: string[] }) => {
+    onSuccess: (
+      data: { created: number; updated?: number; skipped?: number; errors: string[]; dryRun?: boolean },
+      variables,
+    ) => {
+      // PRD-14 Ф2 (FR-13): dry-run только показывает план — без записи и инвалидации.
+      if (variables.dryRun) {
+        setImportPreview({
+          created: data.created,
+          updated: data.updated ?? 0,
+          skipped: data.skipped ?? 0,
+          errors: data.errors,
+        });
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
       let description = `Добавлено: ${data.created}`;
@@ -222,6 +239,7 @@ export default function QuestionsPage() {
       toast({ title: t.questions.importSuccess, description });
       setIsImportDialogOpen(false);
       setImportFile(null);
+      setImportPreview(null);
     },
     onError: () => {
       toast({ variant: "destructive", title: t.common.error, description: t.questions.failedToImport });
@@ -257,10 +275,21 @@ export default function QuestionsPage() {
     );
   };
 
+  const handleCheckImport = () => {
+    if (importFile) {
+      importMutation.mutate({ file: importFile, dryRun: true });
+    }
+  };
+
   const handleImport = () => {
     if (importFile) {
-      importMutation.mutate(importFile);
+      importMutation.mutate({ file: importFile, dryRun: false });
     }
+  };
+
+  const handleImportFileChange = (file: File | null) => {
+    setImportFile(file);
+    setImportPreview(null); // новый файл — прежний предпросмотр недействителен
   };
   const guessMediaType = (mime: string): "image" | "audio" | "video" | "" => {
     if (!mime) return "";
@@ -1155,8 +1184,17 @@ export default function QuestionsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-        <DialogContent>
+      <Dialog
+        open={isImportDialogOpen}
+        onOpenChange={(open) => {
+          setIsImportDialogOpen(open);
+          if (!open) {
+            setImportFile(null);
+            setImportPreview(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{t.questions.importQuestions}</DialogTitle>
           </DialogHeader>
@@ -1168,14 +1206,58 @@ export default function QuestionsPage() {
               ref={fileInputRef}
               type="file"
               accept=".xlsx,.xls"
-              onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+              onChange={(e) => handleImportFileChange(e.target.files?.[0] || null)}
               className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground"
               data-testid="input-import-file"
             />
+
+            {/* PRD-14 Ф2 (FR-12): шаблон с заголовками и листом-справкой. */}
+            <a
+              href="/api/questions/template"
+              className="inline-flex items-center text-sm text-primary hover:underline"
+              data-testid="link-download-template"
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Скачать шаблон Excel
+            </a>
+
+            {/* PRD-14 Ф2 (FR-14): краткие подсказки по формату. */}
+            <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground space-y-1">
+              <p>Колонки берутся из шаблона. Обязательные: Тема, Тип вопроса, Текст вопроса, варианты и правильные ответы.</p>
+              <p>Тип: multiple_choice, multiple_response, matching, ranking. Разделитель вариантов — «#».</p>
+              <p>Заполненный «ID» обновляет вопрос; пустой — создаёт. Подробности — на листе «Справка».</p>
+            </div>
+
+            {/* PRD-14 Ф2 (FR-13): результат предпросмотра (dry-run). */}
+            {importPreview && (
+              <div className="rounded-md border p-3 text-sm space-y-2" data-testid="import-preview">
+                <p className="font-medium">Предпросмотр (запись ещё не выполнена):</p>
+                <p className="text-muted-foreground">
+                  Будет создано: {importPreview.created}. Обновлено: {importPreview.updated}. Пропущено дублей:{" "}
+                  {importPreview.skipped}. Ошибок: {importPreview.errors.length}.
+                </p>
+                {importPreview.errors.length > 0 && (
+                  <ul className="max-h-40 overflow-y-auto list-disc pl-5 text-destructive space-y-0.5">
+                    {importPreview.errors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsImportDialogOpen(false)}>
               {t.common.cancel}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleCheckImport}
+              disabled={!importFile || importMutation.isPending}
+              data-testid="button-check-import"
+            >
+              {importMutation.isPending && <LoadingSpinner className="mr-2" />}
+              Проверить
             </Button>
             <Button
               onClick={handleImport}

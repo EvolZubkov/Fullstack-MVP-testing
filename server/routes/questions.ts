@@ -1,10 +1,11 @@
 import { Router, Request, Response } from "express";
-import { createHash } from "crypto";
 import { logger } from "../logger";
 import ExcelJS from "exceljs";
 import {
+  addAoaSheet,
   addJsonSheet,
   readWorkbookFromBuffer,
+  sheetHeaders,
   sheetToObjects,
   workbookToBuffer,
 } from "../utils/excel";
@@ -13,6 +14,8 @@ import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
 import { questionScoringSchema, type QuestionScoring } from "@shared/schema";
 import { normalizeTags } from "@shared/tags";
+import { importQuestionRows } from "../services/questions-import";
+import { serializeQuestionRow, QUESTION_WIDTHS } from "../services/questions-export";
 
 // PRD-10: validate the optional graded-scoring config (FR-13). Null/undefined =
 // exact match (default); a present config must satisfy questionScoringSchema.
@@ -27,12 +30,6 @@ function validateScoring(
     return false;
   }
   return true;
-}
-
-// SHA-256 от type + prompt + нормализованные варианты ответов
-function computeQuestionHash(type: string, prompt: string, dataJson: unknown): string {
-  const normalized = JSON.stringify({ type, prompt: prompt.trim(), data: dataJson });
-  return createHash("sha256").update(normalized).digest("hex");
 }
 
 const router = Router();
@@ -80,23 +77,8 @@ interface ExportQuery {
   testId?: string;
 }
 
-// Маппинг типов: внутренний -> Excel
-const typeToExcel: Record<string, string> = {
-  single: "multiple_choice",
-  multiple: "multiple_response",
-  matching: "matching",
-  ranking: "ranking",
-};
-
-// Маппинг типов: Excel -> внутренний
-const typeFromExcel: Record<string, string> = {
-  multiple_choice: "single",
-  multiple_response: "multiple",
-  matching: "matching",
-  ranking: "ranking",
-  single: "single",
-  multiple: "multiple",
-};
+// Сериализация строки вопроса (экспорт) — server/services/questions-export.ts;
+// разбор (импорт) — server/services/questions-import.ts.
 
 // ============================================
 // GET /api/questions - Список вопросов
@@ -351,58 +333,11 @@ router.get(
         return topicA.localeCompare(topicB, "ru");
       });
 
-      // Формируем строки
-      const rows = questions.map((q) => {
-        const data = q.dataJson as any;
-        const correct = q.correctJson as any;
-
-        let optionsStr = "";
-        let correctStr = "";
-
-        if (q.type === "single" || q.type === "multiple") {
-          optionsStr = (data.options || []).join("#");
-
-          if (q.type === "single") {
-            correctStr = String((correct.correctIndex ?? 0) + 1);
-          } else {
-            correctStr = (correct.correctIndices || [])
-              .map((i: number) => i + 1)
-              .join(",");
-          }
-        } else if (q.type === "matching") {
-          const left = data.left || [];
-          const right = data.right || [];
-          const pairs: string[] = [];
-          for (let i = 0; i < left.length; i++) {
-            pairs.push(`${left[i]}#${right[i] || ""}`);
-          }
-          optionsStr = pairs.join("#");
-          correctStr = (correct.pairs || [])
-            .map((p: any) => `${p.left + 1}-${p.right + 1}`)
-            .join(",");
-        } else if (q.type === "ranking") {
-          optionsStr = (data.items || []).join("#");
-          correctStr = (correct.correctOrder || [])
-            .map((i: number) => i + 1)
-            .join(",");
-        }
-
-        return {
-          "ID": q.id,
-          "Тема": topicMap.get(q.topicId) || "",
-          "Тип вопроса": typeToExcel[q.type] || q.type,
-          "Текст вопроса": q.prompt,
-          "Балл": q.points || 1,
-          "Сложность": q.difficulty || 50,
-          "Тексты вариантов ответа": optionsStr,
-          "Номера правильных ответов": correctStr,
-          "Следование вариантов ответов": q.shuffleAnswers === false ? "Fixed" : "Random",
-          "Обратная связь": q.feedback || "",
-        };
-      });
+      // Формируем строки (общая сериализация — server/services/questions-export.ts)
+      const rows = questions.map((q) => serializeQuestionRow(q, topicMap.get(q.topicId) || ""));
 
       const wb = new ExcelJS.Workbook();
-      addJsonSheet(wb, "Вопросы", rows, [36, 25, 18, 50, 8, 12, 60, 25, 15, 40]);
+      addJsonSheet(wb, "Вопросы", rows, QUESTION_WIDTHS);
 
       const buffer = await workbookToBuffer(wb);
 
@@ -427,8 +362,77 @@ router.get(
 );
 
 // ============================================
+// GET /api/questions/template - Шаблон Excel для импорта (PRD-14 Ф2, FR-12)
+// ============================================
+// Canonical column order (must match the export — see спецификация формата §3).
+const TEMPLATE_HEADERS = [
+  "ID",
+  "Тема",
+  "Тип вопроса",
+  "Текст вопроса",
+  "Балл",
+  "Сложность",
+  "Тексты вариантов ответа",
+  "Номера правильных ответов",
+  "Следование вариантов ответов",
+  "Обратная связь",
+  "Теги",
+  "Режим ОС",
+  "ОС при верном",
+  "ОС при неверном",
+  "Цена ответа",
+];
+
+router.get(
+  "/template",
+  requirePermission("questions.importExport"),
+  async (_req: Request, res: Response) => {
+    try {
+      const wb = new ExcelJS.Workbook();
+      // Sheet 1 — headers only (the author fills rows below).
+      addAoaSheet(wb, "Вопросы", [TEMPLATE_HEADERS],
+        [36, 25, 18, 50, 8, 12, 60, 25, 15, 40, 25, 12, 30, 30, 40]);
+
+      // Sheet 2 — format reference per column / question type.
+      const help: string[][] = [
+        ["Колонка", "Описание / формат"],
+        ["ID", "Пусто — создать вопрос; заполнен и найден — обновить (см. экспорт)"],
+        ["Тема", "Обязательно. Имя темы; если её нет — будет создана"],
+        ["Тип вопроса", "Обязательно. multiple_choice | multiple_response | matching | ranking"],
+        ["Текст вопроса", "Обязательно. Формулировка"],
+        ["Балл", "Целое; по умолчанию 1"],
+        ["Сложность", "Целое 0..100; по умолчанию 50"],
+        ["Тексты вариантов ответа", "Разделитель вариантов — #. Для matching: «лево # ... || право # ...»"],
+        ["Номера правильных ответов", "1-based. multiple_choice: «2». multiple_response: «1,3». matching: «1-1, 2-2». ranking: порядок «3,1,2»"],
+        ["Следование вариантов ответов", "Random (по умолчанию) | Fixed"],
+        ["Обратная связь", "Общая обратная связь (режим «общая»)"],
+        ["Теги", "Список; разделители «;» и «,». Напр.: финансы; учёт"],
+        ["Режим ОС", "общая (по умолчанию) | условная"],
+        ["ОС при верном", "Текст; только при режиме «условная»"],
+        ["ОС при неверном", "Текст; только при режиме «условная»"],
+        ["Цена ответа", "Пусто/«точное» — точное совпадение. single: «веса: 2 # 0 # 1». multiple/matching/ranking: «ступени: c>=2 => 1; c==T & x==0 => 2»"],
+        ["", ""],
+        ["Пример (multiple_choice)", "Варианты «A # B # C», правильный «2»"],
+        ["Пример (matching)", "«Кошка # Собака || Мяу # Гав # Буль», пары «1-1, 2-2»"],
+        ["Пример (ranking)", "Элементы «Шаг А # Шаг Б # Шаг В», порядок «3,1,2»"],
+      ];
+      addAoaSheet(wb, "Справка", help, [32, 90]);
+
+      const buffer = await workbookToBuffer(wb);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent("questions_template.xlsx")}"`);
+      res.send(buffer);
+    } catch (error) {
+      logger.error("Questions template error: " + (error as Error).message);
+      res.status(500).json({ error: "Failed to build template" });
+    }
+  }
+);
+
+// ============================================
 // POST /api/questions/import - Импорт из Excel
 // ============================================
+// `?dryRun=true` (FR-13): валидирует и считает план без записи в БД.
 router.post(
   "/import",
   requirePermission("questions.importExport"),
@@ -439,204 +443,24 @@ router.post(
         return res.status(400).json({ error: "File required" });
       }
 
+      const dryRun = String(req.query.dryRun ?? "").toLowerCase() === "true";
+
       const workbook = await readWorkbookFromBuffer(req.file.buffer);
       const sheet = workbook.worksheets[0];
       if (!sheet) return res.status(400).json({ error: "File is empty" });
-      const rows = sheetToObjects(sheet);
 
-      const topics = await storage.getTopics();
-      // Нормализуем ключ: убираем все виды пробелов (включая \u00a0, \r и т.д.)
-      const normalizeName = (s: string) => s.replace(/[\s\u00a0\u200b\ufeff]+/g, " ").trim().toLowerCase();
-      const topicByName = new Map(topics.map((t) => [normalizeName(t.name), t]));
-
-      // Кэш хэшей по topicId — загружаем лениво при первом обращении к теме
-      const hashCache = new Map<string, Set<string>>();
-      const getTopicHashes = async (topicId: string): Promise<Set<string>> => {
-        if (!hashCache.has(topicId)) {
-          hashCache.set(topicId, await storage.getContentHashesByTopic(topicId));
-        }
-        return hashCache.get(topicId)!;
-      };
-
-      const results = { created: 0, updated: 0, skipped: 0, errors: [] as string[] };
-
-      for (let i = 0; i < rows.length; i++) {
-        const row = rows[i];
-        const rowNum = i + 2;
-
-        try {
-          // Тема — создаём если не существует
-          const topicNameRaw = String(row["Тема"] || "").replace(/[\s\u00a0\u200b\ufeff]+/g, " ").trim();
-          const topicNameKey = normalizeName(topicNameRaw);
-          if (!topicNameKey) {
-            results.errors.push(`Строка ${rowNum}: не указана тема`);
-            continue;
-          }
-          let topic = topicByName.get(topicNameKey);
-          if (!topic) {
-            logger.warn(`Import строка ${rowNum}: тема "${topicNameRaw}" не найдена, создаём новую`, "questions");
-            topic = await storage.createTopic({ name: topicNameRaw });
-            topicByName.set(topicNameKey, topic);
-          }
-
-          // Тип вопроса
-          const rawType = String(row["Тип вопроса"] || row["Тип"] || "").trim().toLowerCase();
-          const type = typeFromExcel[rawType] as "single" | "multiple" | "matching" | "ranking" | undefined;
-          if (!type) {
-            results.errors.push(`Строка ${rowNum}: неизвестный тип "${row["Тип вопроса"] || row["Тип"]}"`);
-            continue;
-          }
-
-          // Текст вопроса
-          const prompt = String(row["Текст вопроса"] || row["Вопрос"] || "").trim();
-          if (!prompt) {
-            results.errors.push(`Строка ${rowNum}: пустой вопрос`);
-            continue;
-          }
-
-          // Варианты и правильные ответы
-          const optionsStr = String(row["Тексты вариантов ответа"] || row["Варианты"] || "").trim();
-          const correctStr = String(row["Номера правильных ответов"] || row["Правильный ответ"] || "").trim();
-
-          let dataJson: unknown = {};
-          let correctJson: unknown = {};
-
-          if (type === "single" || type === "multiple") {
-            const separator = optionsStr.includes("#") ? "#" : "|";
-            const options = optionsStr.split(separator).map((s) => s.trim()).filter(Boolean);
-
-            if (options.length < 2) {
-              results.errors.push(`Строка ${rowNum}: нужно минимум 2 варианта ответа`);
-              continue;
-            }
-            dataJson = { options };
-
-            if (type === "single") {
-              const idx = parseInt(correctStr, 10) - 1;
-              if (isNaN(idx) || idx < 0 || idx >= options.length) {
-                results.errors.push(`Строка ${rowNum}: некорректный номер правильного ответа "${correctStr}"`);
-                continue;
-              }
-              correctJson = { correctIndex: idx };
-            } else {
-              const indices = correctStr
-                .split(/[,.\s]+/)
-                .map((s) => parseInt(s.trim(), 10) - 1)
-                .filter((i) => !isNaN(i));
-
-              if (indices.length === 0) {
-                results.errors.push(`Строка ${rowNum}: не указаны правильные ответы`);
-                continue;
-              }
-              if (indices.some((i) => i < 0 || i >= options.length)) {
-                results.errors.push(`Строка ${rowNum}: номера правильных ответов выходят за пределы`);
-                continue;
-              }
-              correctJson = { correctIndices: indices };
-            }
-          } else if (type === "matching") {
-            const left: string[] = [];
-            const right: string[] = [];
-
-            if (optionsStr.includes("→")) {
-              const pairs = optionsStr.split("|").map((s) => s.trim()).filter(Boolean);
-              for (const pair of pairs) {
-                const [l, r] = pair.split("→").map((s) => s.trim());
-                if (l && r) {
-                  left.push(l);
-                  right.push(r);
-                }
-              }
-            } else {
-              const parts = optionsStr.split("#").map((s) => s.trim()).filter(Boolean);
-              for (let j = 0; j < parts.length - 1; j += 2) {
-                left.push(parts[j]);
-                right.push(parts[j + 1] || "");
-              }
-            }
-
-            if (left.length < 2) {
-              results.errors.push(`Строка ${rowNum}: нужно минимум 2 пары для сопоставления`);
-              continue;
-            }
-
-            dataJson = { left, right };
-            correctJson = { pairs: left.map((_, idx) => ({ left: idx, right: idx })) };
-          } else if (type === "ranking") {
-            const separator = optionsStr.includes("#") ? "#" : "|";
-            const items = optionsStr.split(separator).map((s) => s.trim()).filter(Boolean);
-
-            if (items.length < 2) {
-              results.errors.push(`Строка ${rowNum}: нужно минимум 2 элемента для ранжирования`);
-              continue;
-            }
-
-            dataJson = { items };
-            correctJson = { correctOrder: items.map((_, idx) => idx) };
-          }
-
-          // Следование вариантов
-          const shuffleStr = String(row["Следование вариантов ответов"] || "Random").trim().toLowerCase();
-          const shuffleAnswers = shuffleStr !== "fixed";
-
-          const contentHash = computeQuestionHash(type, prompt, dataJson);
-
-          // Обновление по ID если указан
-          const rowId = String(row["ID"] || "").trim();
-          if (rowId) {
-            const existing = await storage.getQuestion(rowId);
-            if (existing) {
-              await storage.updateQuestion(rowId, {
-                topicId: topic.id,
-                type,
-                prompt,
-                dataJson: dataJson as any,
-                correctJson: correctJson as any,
-                points: parseInt(String(row["Балл"]), 10) || 1,
-                difficulty: parseInt(String(row["Сложность"]), 10) || 50,
-                shuffleAnswers,
-                feedback: String(row["Обратная связь"] || "").trim() || null,
-                contentHash,
-              } as any);
-              results.updated++;
-              continue;
-            }
-          }
-
-          // Дедупликация: проверяем хэш контента
-          const existingHashes = await getTopicHashes(topic.id);
-          if (existingHashes.has(contentHash)) {
-            results.skipped++;
-            continue;
-          }
-
-          // Создаём вопрос
-          await storage.createQuestion({
-            topicId: topic.id,
-            type,
-            prompt,
-            dataJson,
-            correctJson,
-            points: parseInt(String(row["Балл"]), 10) || 1,
-            difficulty: parseInt(String(row["Сложность"]), 10) || 50,
-            shuffleAnswers,
-            feedback: String(row["Обратная связь"] || "").trim() || null,
-            contentHash,
-          } as any);
-
-          // Добавляем в кэш чтобы не дублировать внутри одного файла
-          existingHashes.add(contentHash);
-          results.created++;
-        } catch (err) {
-          results.errors.push(`Строка ${rowNum}: ${(err as Error).message}`);
-        }
-      }
+      const result = await importQuestionRows(
+        sheetToObjects(sheet),
+        sheetHeaders(sheet),
+        { dryRun },
+      );
 
       res.json({
-        created: results.created,
-        updated: results.updated,
-        skipped: results.skipped,
-        errors: results.errors,
+        created: result.created,
+        updated: result.updated,
+        skipped: result.skipped,
+        errors: result.errors,
+        dryRun,
       });
     } catch (error) {
       logger.error("Import questions error: " + (error as Error).message);
