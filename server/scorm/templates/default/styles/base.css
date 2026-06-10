@@ -840,7 +840,10 @@ h1 {
   cursor: pointer;
   text-align: left;
   font: inherit;
-  color: inherit;
+  /* The card background is intentionally a fixed light tone, so the text must be a
+     fixed dark tone — `inherit` let the topic name pick up a light theme foreground
+     and vanish on the light card (e.g. in the preview Shadow DOM). */
+  color: hsl(0 0% 13%);
   transition: border-color .15s, background .15s;
 }
 .router-topic-card:hover:not(:disabled) {

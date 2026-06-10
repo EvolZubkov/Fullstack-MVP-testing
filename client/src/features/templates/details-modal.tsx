@@ -35,7 +35,10 @@ function smokeJournal(template: AdminTemplate): string {
     .map((r) => {
       const tag = r.status === "pass" ? "[OK]" : r.status === "warn" ? "[WARN]" : "[FAIL]";
       const notes = [...r.errors, ...r.warnings];
-      return `${tag} ${r.route}${notes.length ? ": " + notes.join("; ") : ""}`;
+      // Prefer the screen label so several render variants sharing one route
+      // (e.g. two content.info) read distinctly in the journal.
+      const name = r.label ?? r.route;
+      return `${tag} ${name}${notes.length ? ": " + notes.join("; ") : ""}`;
     })
     .join("\n");
 }

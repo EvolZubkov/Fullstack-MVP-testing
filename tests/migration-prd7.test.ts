@@ -102,6 +102,13 @@ async function withRollback(body: (client: pg.PoolClient) => Promise<void>): Pro
       await client.query(
         `UPDATE "content_pages" SET "position" = 'after_topic' WHERE "position" = 'after'`,
       );
+      // Migration 004 re-adds `content_pages_kind_check` with only the original
+      // five kinds; the later `start`/`results` system kinds (migration 018) would
+      // fail it. Rewrite them to a legacy kind inside this rolled-back transaction
+      // so the historical ADD CONSTRAINT validates; ROLLBACK restores them.
+      await client.query(
+        `UPDATE "content_pages" SET "kind" = 'intro' WHERE "kind" IN ('start', 'results')`,
+      );
       await body(client);
     } finally {
       await client.query("ROLLBACK");

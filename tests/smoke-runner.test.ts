@@ -37,8 +37,16 @@ const layouts = loadLayouts(manifest);
 describe("buildScreenInputs (demo dataset → screen specs)", () => {
   const specs = buildScreenInputs(demo, manifest);
 
-  it("produces one spec per manifest.preview.routes entry", () => {
-    expect(specs.length).toBe(manifest.preview.routes.length);
+  it("appends the declared router variant the default omits from preview.routes", () => {
+    // The default lists intro/info/summary in preview.routes but NOT its router
+    // variant (`router.menu`), so exactly that one content variant is appended.
+    expect(specs.length).toBe(manifest.preview.routes.length + 1);
+    expect(specs.some((s) => s.route === "content.router")).toBe(true);
+  });
+
+  it("assigns each spec a unique id", () => {
+    const ids = specs.map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("resolves layout keys with fallback (specific → general)", () => {
@@ -66,6 +74,106 @@ describe("buildScreenInputs (demo dataset → screen specs)", () => {
   });
 });
 
+// ─── comprehensive content-variant enumeration (PRD-3 §3.4) ──────────────────
+//
+// Regression: a template that declares several render variants of a content kind
+// (e.g. two `intro`, two `info`) but lists only some in preview.routes must still
+// produce a preview screen for EVERY declared intro/info/summary variant — so the
+// «учебные страницы» and the extra render variants are not silently dropped.
+describe("buildScreenInputs — every declared content variant is enumerated", () => {
+  const multiManifest = {
+    layouts: {
+      shell: "shell.html",
+      start: "layouts/start.html",
+      content: "layouts/content.html",
+      question: "layouts/question.html",
+      results: "layouts/results.html",
+    },
+    contentTemplates: [
+      { key: "intro.a", label: "Введение", kind: "intro", pageKind: "content.intro", placeholders: [{ key: "title", type: "text" }] },
+      { key: "info.a", label: "Материал", kind: "info", pageKind: "content.info", placeholders: [{ key: "title", type: "text" }, { key: "body", type: "richText" }] },
+      { key: "summary.a", label: "Итог", kind: "summary", pageKind: "content.summary", placeholders: [{ key: "title", type: "text" }] },
+      { key: "router.a", label: "Меню", kind: "router", pageKind: "content.router", placeholders: [] },
+      { key: "intro.b", label: "Введение 2", kind: "intro", pageKind: "content.intro", placeholders: [{ key: "title", type: "text" }] },
+      { key: "info.b", label: "Материал 2", kind: "info", pageKind: "content.info", placeholders: [{ key: "title", type: "text" }, { key: "body", type: "richText" }] },
+      { key: "questions.a", label: "Вопрос", kind: "questions", placeholders: [] },
+    ],
+    preview: {
+      defaultRoute: "start",
+      // Only ONE intro variant and NO info variant are listed here.
+      routes: [
+        { route: "start", label: "Старт" },
+        { route: "content.intro", templateKey: "intro.a", label: "Введение" },
+        { route: "content.summary", templateKey: "summary.a", label: "Итог" },
+        { route: "question.single", questionId: "q1", label: "Вопрос" },
+        { route: "results", label: "Результаты" },
+      ],
+    },
+  };
+  const multiDemo = {
+    course: {
+      title: "Демо",
+      questionCount: 1,
+      topics: [
+        { id: "t1", title: "Тема 1", status: "available" },
+        { id: "t2", title: "Тема 2", status: "locked" },
+      ],
+      contentPages: [
+        { id: "p-intro", type: "intro", route: "content.intro", templateKey: "intro.a", values: { title: "A" } },
+        { id: "p-info", type: "info", route: "content.info", templateKey: "info.a", values: { title: "M", body: "<p>x</p>" } },
+        { id: "p-summary", type: "summary", route: "content.summary", templateKey: "summary.a", values: { title: "S" } },
+      ],
+      questions: [{ id: "q1", type: "single", prompt: "P?", options: [{ id: "o1", text: "a", correct: true }] }],
+    },
+    runtime: { result: { scorePercent: 80, status: "passed", passed: true } },
+  };
+
+  const specs = buildScreenInputs(multiDemo as any, multiManifest as any);
+
+  it("includes BOTH intro variants and BOTH info variants", () => {
+    const ids = specs.map((s) => s.id);
+    expect(ids).toContain("intro.a");
+    expect(ids).toContain("intro.b"); // declared but absent from preview.routes
+    expect(ids).toContain("info.a"); // info kind entirely absent from preview.routes
+    expect(ids).toContain("info.b");
+    expect(ids).toContain("summary.a");
+  });
+
+  it("keeps every spec id unique even when variants share a route", () => {
+    const intros = specs.filter((s) => s.route === "content.intro");
+    expect(intros.map((s) => s.id).sort()).toEqual(["intro.a", "intro.b"]);
+    const infos = specs.filter((s) => s.route === "content.info");
+    expect(infos.map((s) => s.id).sort()).toEqual(["info.a", "info.b"]);
+    expect(new Set(specs.map((s) => s.id)).size).toBe(specs.length);
+  });
+
+  it("binds demo values by variant key, falling back to the kind's route page", () => {
+    // info.a is bound to its own demo content page by templateKey.
+    const infoA = specs.find((s) => s.id === "info.a")!;
+    expect(infoA.input.content!.values.title).toBe("M");
+    // info.b has no demo page of its own → reuses the content.info demo page by
+    // route, so the appended variant still renders representative (non-empty)
+    // content in the generic `content` layout the runtime uses.
+    const infoB = specs.find((s) => s.id === "info.b")!;
+    expect(infoB.input.content!.values.title).toBe("M");
+    expect(infoB.layoutKey).toBe("content");
+    expect(infoB.input.slots!["page-content"]).toContain('data-placeholder="body"');
+  });
+
+  it("enumerates the router variant (topic menu on demo topics) but NOT the questions kind", () => {
+    // Router IS previewed — its screen carries the runtime topic-menu built from
+    // the demo topics; the `questions` kind is shown via the question.* routes, not
+    // as a content screen.
+    expect(specs.some((s) => s.id === "questions.a")).toBe(false);
+    const router = specs.find((s) => s.id === "router.a")!;
+    expect(router.route).toBe("content.router");
+    const html = router.input.slots!["page-content"];
+    expect(html).toContain("router-topic-cards");
+    expect(html).toContain("Тема 1");
+    expect(html).toContain("router-topic-card--locked"); // t2 is locked
+  });
+});
+
 // ─── smoke-runner: the shipping default passes ──────────────────────────────
 
 describe("runSmokeChecks — default template passes its own smoke-test", () => {
@@ -77,8 +185,12 @@ describe("runSmokeChecks — default template passes its own smoke-test", () => 
     }
     expect(report.ok).toBe(true);
     expect(report.failed).toBe(0);
-    expect(report.total).toBe(manifest.preview.routes.length);
+    // +1: the default's `router.menu` variant is appended (not in preview.routes).
+    expect(report.total).toBe(manifest.preview.routes.length + 1);
     expect(report.passed).toBeGreaterThan(0);
+    // The appended router screen renders the topic menu on the demo topics.
+    const router = report.routes.find((r) => r.route === "content.router")!;
+    expect(router.status).not.toBe("fail");
   });
 
   it("passes a valid template.js and rules file as extra rows", () => {

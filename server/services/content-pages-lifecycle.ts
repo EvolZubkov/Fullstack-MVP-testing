@@ -26,7 +26,7 @@ import { bindSystemVariant } from "./variant-binding";
 export type FlowMode = "linear_flat" | "linear_by_topics" | "router_by_topics";
 
 /** System kinds the planner manages (excludes `info`). */
-export const SYSTEM_KINDS = ["intro", "summary", "router", "questions"] as const;
+export const SYSTEM_KINDS = ["start", "intro", "summary", "results", "router", "questions"] as const;
 export type SystemKind = (typeof SYSTEM_KINDS)[number];
 
 /** A system content_pages row currently in the database. */
@@ -87,9 +87,9 @@ export function needsRouter(flowMode: FlowMode): boolean {
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
-/** Plans the single-row-per-test system kinds (intro, summary, router). */
+/** Plans the single-row-per-test system kinds (start, results, router). */
 function planSingletonKind(
-  kind: "intro" | "summary" | "router",
+  kind: "start" | "results" | "router",
   existing: ExistingSystemPage[],
   desired: DesiredTestState,
   required: boolean,
@@ -243,6 +243,57 @@ function planQuestionsKind(
   };
 }
 
+/**
+ * Plans a PER-TOPIC-ONLY system kind (`intro` = «Введение раздела»,
+ * `summary` = «Итоги раздела»). One row per topic in per-topic modes
+ * (linear_by_topics / router_by_topics); ZERO rows in linear_flat — a flat test
+ * has no section, so it has no section intro/summary (PRD-1 §4.3 structure model).
+ *
+ * Rows are preserved by topicId across topic-list changes; a flowMode transition
+ * out of per-topic deletes them, and into per-topic creates fresh ones.
+ */
+function planPerTopicOnlyKind(
+  kind: "intro" | "summary",
+  existing: ExistingSystemPage[],
+  desired: DesiredTestState,
+): { keep: Array<{ id: string }>; create: ContentPageInsert[]; delete: Array<{ id: string }> } {
+  const owned = existing.filter((e) => e.kind === kind);
+  const binding = bindSystemVariant(desired.template, desired.defaultTemplate, kind);
+  if (!binding) {
+    return { keep: owned.map((e) => ({ id: e.id })), create: [], delete: [] };
+  }
+  const hints = {
+    fallbackUsed: binding.fallbackUsed,
+    hasMultipleChoices: binding.hasMultipleChoices,
+  };
+
+  // linear_flat: section intro/summary do not exist → remove any leftover rows.
+  if (!isPerTopicMode(desired.flowMode)) {
+    return { keep: [], create: [], delete: owned.map((e) => ({ id: e.id })) };
+  }
+
+  // Per-topic modes: exactly one row per topic, preserved by topicId.
+  const byTopic = new Map<string, ExistingSystemPage>();
+  for (const e of owned) {
+    if (e.topicId !== null && !byTopic.has(e.topicId)) byTopic.set(e.topicId, e);
+  }
+  const keep: Array<{ id: string }> = [];
+  const create: ContentPageInsert[] = [];
+  const keptIds = new Set<string>();
+  for (const topicId of desired.topicIds) {
+    const ex = byTopic.get(topicId);
+    if (ex) {
+      keep.push({ id: ex.id });
+      keptIds.add(ex.id);
+    } else {
+      create.push({ kind, topicId, templateKey: binding.variantKey, valuesJson: {}, bindingHints: hints });
+    }
+  }
+  // Delete everything not kept: null-topic rows, stale-topic rows AND duplicates.
+  const toDelete = owned.filter((e) => !keptIds.has(e.id)).map((e) => ({ id: e.id }));
+  return { keep, create, delete: toDelete };
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -254,14 +305,22 @@ export function planSystemPages(
   existing: ExistingSystemPage[],
   desired: DesiredTestState,
 ): ContentPagesPlan {
-  const intro = planSingletonKind("intro", existing, desired, true);
-  const summary = planSingletonKind("summary", existing, desired, true);
+  // `start` is the test landing screen — a single test-level row (До теста),
+  // always present, like intro/summary (PRD-1 §4.3: template-backed start).
+  const start = planSingletonKind("start", existing, desired, true);
+  // intro/summary are per-SECTION («Введение раздела»/«Итоги раздела») — one per
+  // topic in per-topic modes, none in linear_flat.
+  const intro = planPerTopicOnlyKind("intro", existing, desired);
+  const summary = planPerTopicOnlyKind("summary", existing, desired);
+  // `results` is the test-level final-results screen («После теста»), a single
+  // row, template-backed like start (PRD-1 §4.3: «Итоги теста»).
+  const results = planSingletonKind("results", existing, desired, true);
   const router = planSingletonKind("router", existing, desired, needsRouter(desired.flowMode));
   const questions = planQuestionsKind(existing, desired);
 
   return {
-    keep: [...intro.keep, ...summary.keep, ...router.keep, ...questions.keep],
-    create: [...intro.create, ...summary.create, ...router.create, ...questions.create],
-    delete: [...intro.delete, ...summary.delete, ...router.delete, ...questions.delete],
+    keep: [...start.keep, ...intro.keep, ...summary.keep, ...results.keep, ...router.keep, ...questions.keep],
+    create: [...start.create, ...intro.create, ...summary.create, ...results.create, ...router.create, ...questions.create],
+    delete: [...start.delete, ...intro.delete, ...summary.delete, ...results.delete, ...router.delete, ...questions.delete],
   };
 }

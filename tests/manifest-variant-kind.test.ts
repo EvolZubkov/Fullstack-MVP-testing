@@ -39,7 +39,7 @@ function loadManifest(id: string): Record<string, unknown> {
 // ─── VariantKind enum ─────────────────────────────────────────────────────────
 
 describe("variantKindSchema", () => {
-  it.each(["questions", "router", "summary", "intro", "info"] as const)(
+  it.each(["start", "questions", "router", "summary", "results", "intro", "info"] as const)(
     "accepts %s",
     (kind) => {
       expect(variantKindSchema.safeParse(kind).success).toBe(true);
@@ -154,24 +154,26 @@ describe("defaultTemplateManifestSchema", () => {
   };
 
   // The default template is the system-wide fallback for every system kind
-  // (PRD-1 §4.3.2). It must declare intro/summary/router/questions; otherwise
-  // bindSystemVariant() silently returns null and reconcile drops the row
-  // (G48 2026-05-28).
+  // (PRD-1 §4.3.2). It must declare start/intro/summary/router/questions;
+  // otherwise bindSystemVariant() silently returns null and reconcile drops the
+  // row (G48 2026-05-28).
   const allSystemKinds = [
+    { key: "start.simple", label: "Start", kind: "start" },
     { key: "intro.simple", label: "Intro", kind: "intro" },
     { key: "summary.simple", label: "Summary", kind: "summary" },
+    { key: "results.simple", label: "Results", kind: "results" },
     { key: "router.menu", label: "Router", kind: "router" },
     { key: "question.standard", label: "Q", kind: "questions" },
   ];
 
-  it("accepts manifest declaring all four system kinds", () => {
+  it("accepts manifest declaring all system kinds", () => {
     expect(defaultTemplateManifestSchema.safeParse({
       ...baseDefault,
       contentTemplates: allSystemKinds,
     }).success).toBe(true);
   });
 
-  it.each(["intro", "summary", "router", "questions"] as const)(
+  it.each(["start", "intro", "summary", "results", "router", "questions"] as const)(
     "rejects manifest missing kind:%s variant",
     (missing) => {
       const result = defaultTemplateManifestSchema.safeParse({
@@ -190,7 +192,7 @@ describe("defaultTemplateManifestSchema", () => {
 // ─── validateManifest gatekeeper ──────────────────────────────────────────────
 
 describe("validateManifest", () => {
-  it("returns null for a valid default-template manifest with all four system kinds", () => {
+  it("returns null for a valid default-template manifest with all system kinds", () => {
     expect(validateManifest(
       {
         id: "default",
@@ -198,8 +200,10 @@ describe("validateManifest", () => {
         version: "1.0.0",
         templateApiVersion: "1.0",
         contentTemplates: [
+          { key: "st.s", label: "St", kind: "start" },
           { key: "i.s", label: "I", kind: "intro" },
           { key: "s.s", label: "S", kind: "summary" },
+          { key: "res.s", label: "Res", kind: "results" },
           { key: "r.s", label: "R", kind: "router" },
           { key: "q.s", label: "Q", kind: "questions" },
         ],
@@ -208,12 +212,14 @@ describe("validateManifest", () => {
     )).toBeNull();
   });
 
-  it.each(["intro", "summary", "router", "questions"] as const)(
+  it.each(["start", "intro", "summary", "results", "router", "questions"] as const)(
     "rejects default-template manifest missing kind:%s variant",
     (missing) => {
       const allEntries = [
+        { key: "st.s", label: "St", kind: "start" },
         { key: "i.s", label: "I", kind: "intro" },
         { key: "s.s", label: "S", kind: "summary" },
+        { key: "res.s", label: "Res", kind: "results" },
         { key: "r.s", label: "R", kind: "router" },
         { key: "q.s", label: "Q", kind: "questions" },
       ];
@@ -273,12 +279,12 @@ describe("built-in manifests parse and validate", () => {
       const cts = m.contentTemplates as Record<string, unknown>[];
       for (const ct of cts) {
         expect(typeof ct.kind, `kind in ${id} → ${ct.key}`).toBe("string");
-        expect(["questions", "router", "summary", "intro", "info"]).toContain(ct.kind);
+        expect(["start", "questions", "router", "summary", "results", "intro", "info"]).toContain(ct.kind);
       }
     });
   }
 
-  it.each(["intro", "summary", "router", "questions"] as const)(
+  it.each(["start", "intro", "summary", "results", "router", "questions"] as const)(
     "default manifest declares at least one kind:%s variant",
     (kind) => {
       const m = loadManifest("default");

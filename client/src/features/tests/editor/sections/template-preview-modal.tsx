@@ -45,7 +45,7 @@ export function TemplatePreviewModal({ open, onClose, template, params }: Templa
     () => (bundle?.demo ? buildScreenInputs(bundle.demo as PreviewDemoDataset, bundle.manifest) : []),
     [bundle],
   );
-  const specByRoute = useMemo(() => new Map(specs.map((s) => [s.route, s])), [specs]);
+  const specById = useMemo(() => new Map(specs.map((s) => [s.id, s])), [specs]);
 
   // Draft params → CSS variables, via the SAME mapping the runtime uses.
   const cssVars = useMemo(
@@ -53,19 +53,25 @@ export function TemplatePreviewModal({ open, onClose, template, params }: Templa
     [params, bundle],
   );
 
-  const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // On open / template switch, select the manifest default route (or the first).
+  // On open / template switch, select the manifest default screen (or the first).
+  // `defaultRoute` is a route; resolve it to a screen id (first match).
   useEffect(() => {
     if (open && specs.length) {
-      setSelectedRoute(bundle?.manifest.preview?.defaultRoute ?? specs[0].route);
+      const wanted = bundle?.manifest.preview?.defaultRoute;
+      setSelectedId(
+        specs.find((s) => s.id === wanted)?.id ??
+          specs.find((s) => s.route === wanted)?.id ??
+          specs[0].id,
+      );
     }
-    if (!open) setSelectedRoute(null);
+    if (!open) setSelectedId(null);
   }, [open, template?.id, specs, bundle]);
 
   if (!template) return null;
 
-  const selectedSpec = selectedRoute ? specByRoute.get(selectedRoute) : undefined;
+  const selectedSpec = selectedId ? specById.get(selectedId) : undefined;
   const selectedLayout = selectedSpec && bundle ? bundle.layouts[selectedSpec.layoutKey] : undefined;
 
   return (
@@ -103,12 +109,12 @@ export function TemplatePreviewModal({ open, onClose, template, params }: Templa
             <nav className="tpl-check-rail" aria-label="Экраны шаблона">
               {specs.map((s) => (
                 <button
-                  key={s.route}
+                  key={s.id}
                   type="button"
-                  className={"tpl-check-rail__var tpl-check-rail__var--top" + (s.route === selectedRoute ? " is-active" : "")}
-                  aria-current={s.route === selectedRoute ? "page" : undefined}
-                  onClick={() => setSelectedRoute(s.route)}
-                  data-testid={`design-template-preview-screen-${s.route}`}
+                  className={"tpl-check-rail__var tpl-check-rail__var--top" + (s.id === selectedId ? " is-active" : "")}
+                  aria-current={s.id === selectedId ? "page" : undefined}
+                  onClick={() => setSelectedId(s.id)}
+                  data-testid={`design-template-preview-screen-${s.id}`}
                 >
                   <span>{s.label ?? s.route}</span>
                 </button>
@@ -132,7 +138,7 @@ export function TemplatePreviewModal({ open, onClose, template, params }: Templa
                   </p>
                 )}
               </div>
-              <div className="tpl-check-stage__caption">{selectedSpec?.label ?? selectedRoute}</div>
+              <div className="tpl-check-stage__caption">{selectedSpec?.label ?? selectedSpec?.route ?? ""}</div>
             </div>
           </div>
         )}

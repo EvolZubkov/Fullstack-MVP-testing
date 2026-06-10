@@ -6,23 +6,26 @@
  * Responsibilities:
  *   - Fetch all `content_pages` for a test via
  *     `GET /api/tests/:id/content-pages`.
- *   - Resolve the active template (`GET /api/tests/:id/design` →
- *     `GET /api/templates/:templateId`) and expose its
- *     `manifest.contentTemplates` variant catalogue. Author pages pick a
- *     variant with `kind === "info"` (PRD-1 §4.3).
+ *   - Resolve the active template and expose its `manifest.contentTemplates`
+ *     variant catalogue. The template id follows the in-progress «Оформление»
+ *     DRAFT when the caller passes `draftTemplateId` (so changing the template
+ *     there updates «Структура» variants before save), else the persisted design
+ *     (`GET /api/tests/:id/design`), else `default` — then
+ *     `GET /api/templates/:templateId`. Author pages pick a variant with
+ *     `kind === "info"` (PRD-1 §4.3).
  *   - Provide create / update / reorder / delete mutations that invalidate the
  *     list. Used by the «Структура» editor (PRD-7 closeout of PRD-1 §4).
  *
  * The design / template queries reuse the same React Query keys as
  * {@link useDesignSettings} so the two hooks share one network round-trip.
  */
-import { useCallback, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ContentPagePosition = "before" | "after" | "before_topic" | "after_topic";
-export type ContentPageKind = "questions" | "router" | "summary" | "intro" | "info";
+export type ContentPageKind = "start" | "questions" | "router" | "summary" | "results" | "intro" | "info";
 export type ContentPageMode = "template" | "standard" | "html";
 export type ContentPageType = "intro" | "info" | "summary" | "html";
 
@@ -100,8 +103,17 @@ export type ContentPageInput = {
 
 // ─── Network helpers ──────────────────────────────────────────────────────────
 
-async function fetchContentPages(testId: string): Promise<ContentPage[]> {
-  const res = await fetch(`/api/tests/${testId}/content-pages`, {
+/**
+ * Appends the in-progress «Оформление» DRAFT template id so the SERVER validates
+ * structure edits (list flags / add / value-validation / replace-variant) against
+ * the chosen template — making variant changes work BEFORE the design is saved.
+ */
+function tplQuery(draftTemplateId?: string): string {
+  return draftTemplateId ? `?templateId=${encodeURIComponent(draftTemplateId)}` : "";
+}
+
+async function fetchContentPages(testId: string, draftTemplateId?: string): Promise<ContentPage[]> {
+  const res = await fetch(`/api/tests/${testId}/content-pages${tplQuery(draftTemplateId)}`, {
     credentials: "include",
   });
   if (!res.ok) {
@@ -134,8 +146,12 @@ async function fetchTemplateVariants(templateId: string): Promise<ContentTemplat
   return data.manifest?.contentTemplates ?? [];
 }
 
-async function postContentPage(testId: string, input: ContentPageInput): Promise<ContentPage> {
-  const res = await fetch(`/api/tests/${testId}/content-pages`, {
+async function postContentPage(
+  testId: string,
+  input: ContentPageInput,
+  draftTemplateId?: string,
+): Promise<ContentPage> {
+  const res = await fetch(`/api/tests/${testId}/content-pages${tplQuery(draftTemplateId)}`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -152,8 +168,9 @@ async function putContentPage(
   testId: string,
   pageId: string,
   input: Partial<ContentPageInput>,
+  draftTemplateId?: string,
 ): Promise<ContentPage & { sanitizeDiagnostics?: SanitizeDiagnostics }> {
-  const res = await fetch(`/api/tests/${testId}/content-pages/${pageId}`, {
+  const res = await fetch(`/api/tests/${testId}/content-pages/${pageId}${tplQuery(draftTemplateId)}`, {
     method: "PUT",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -182,23 +199,6 @@ async function putReorder(
   }
 }
 
-async function postReplaceVariant(
-  testId: string,
-  pageId: string,
-  newTemplateKey: string,
-): Promise<void> {
-  const res = await fetch(`/api/tests/${testId}/content-pages/${pageId}/replace-variant`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ newTemplateKey }),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to replace variant: ${res.status} ${text}`);
-  }
-}
-
 async function deleteContentPage(testId: string, pageId: string): Promise<void> {
   const res = await fetch(`/api/tests/${testId}/content-pages/${pageId}`, {
     method: "DELETE",
@@ -208,6 +208,43 @@ async function deleteContentPage(testId: string, pageId: string): Promise<void> 
     const text = await res.text();
     throw new Error(`Failed to delete content page: ${res.status} ${text}`);
   }
+}
+
+// ─── Draft helpers ──────────────────────────────────────────────────────────
+
+/** Prefix for the client-only id of a page added in the draft but not yet committed. */
+const DRAFT_ID_PREFIX = "draft-";
+function isDraftId(id: string): boolean {
+  return id.startsWith(DRAFT_ID_PREFIX);
+}
+
+/** Reduce a (draft) page to the create/update payload sent at commit time. */
+function pageToInput(page: ContentPage): ContentPageInput {
+  return {
+    topicId: page.topicId,
+    position: page.position,
+    mode: page.mode,
+    type: page.type,
+    templateKey: page.templateKey,
+    valuesJson: page.valuesJson,
+    autoAdvance: page.autoAdvance,
+    autoAdvanceDelayMs: page.autoAdvanceDelayMs,
+    sortOrder: page.sortOrder,
+  };
+}
+
+/** True when two pages differ in any committed field (order is handled by reorder). */
+function pageChanged(a: ContentPage, b: ContentPage): boolean {
+  return (
+    a.templateKey !== b.templateKey ||
+    a.position !== b.position ||
+    a.topicId !== b.topicId ||
+    a.mode !== b.mode ||
+    a.type !== b.type ||
+    a.autoAdvance !== b.autoAdvance ||
+    a.autoAdvanceDelayMs !== b.autoAdvanceDelayMs ||
+    JSON.stringify(a.valuesJson ?? {}) !== JSON.stringify(b.valuesJson ?? {})
+  );
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -253,17 +290,22 @@ export type UseContentPagesResult = {
   isReplacingVariant: boolean;
   remove: (pageId: string) => Promise<void>;
   isRemoving: boolean;
-  /** First mutation error (create / update / reorder / delete), if any. */
+  /** Error from the last {@link commit} (replay to the server), if any. */
   mutationError: Error | null;
   /**
-   * True after the first successful content-page mutation in this drawer
-   * session. Drives the «Сохранить» button: structure mutations are written
-   * directly via the content-pages API (not through the test/design draft),
-   * but the user still expects «Сохранить» to light up after add / drag /
-   * reorder. The Drawer should call {@link resetMutated} after its save flow.
+   * True when the local «Структура» draft differs from the saved server state.
+   * Drives the «Сохранить» button alongside the test-settings / design drafts.
    */
-  hasMutated: boolean;
-  resetMutated: () => void;
+  isDirty: boolean;
+  /**
+   * Replays the buffered draft (add / edit / reorder / variant / delete) to the
+   * server. Called by the Drawer's unified «Сохранить». Resolves with the
+   * server-side sanitiser diagnostics produced during the commit (keyed by page
+   * id) and refetches so the draft re-syncs to the persisted state.
+   */
+  commit: () => Promise<Record<string, SanitizeDiagnostics>>;
+  /** Discards all buffered draft edits, resetting to the saved server state (Drawer «Отмена»). */
+  discard: () => void;
 };
 
 /** True when a placeholder value counts as unfilled for required-field checks. */
@@ -303,13 +345,20 @@ export function hasStructureWarnings(
   return pages.some((p) => p.kind === "info" && p.templateKeyMissing === true);
 }
 
-export function useContentPages(testId: string | undefined): UseContentPagesResult {
+export function useContentPages(
+  testId: string | undefined,
+  draftTemplateId?: string,
+): UseContentPagesResult {
   const queryClient = useQueryClient();
   const enabled = typeof testId === "string" && testId.length > 0;
 
+  // Include the draft template id so switching the template in «Оформление»
+  // refetches the list — its `templateKeyMissing` flags are recomputed against
+  // the chosen template (server-side, mirroring the catalogue). Invalidation by
+  // the `["tests", testId, "content-pages"]` prefix still matches this key.
   const pagesQuery = useQuery({
-    queryKey: ["tests", testId, "content-pages"],
-    queryFn: () => fetchContentPages(testId!),
+    queryKey: ["tests", testId, "content-pages", draftTemplateId ?? null],
+    queryFn: () => fetchContentPages(testId!, draftTemplateId),
     enabled,
   });
 
@@ -318,7 +367,14 @@ export function useContentPages(testId: string | undefined): UseContentPagesResu
     queryFn: () => fetchDesignSettings(testId!),
     enabled,
   });
-  const templateId = designQuery.data?.templateId || (enabled ? "default" : undefined);
+  // The variant catalogue follows the IN-PROGRESS «Оформление» draft when the
+  // caller supplies one (`draftTemplateId`), so switching the template there
+  // updates «Структура» variants — the «Сменить вариант» control and the add-page
+  // options — IMMEDIATELY, before save. Falls back to the persisted design, then
+  // `default`. The pages themselves still come from the saved content-pages API.
+  const templateId = enabled
+    ? draftTemplateId || designQuery.data?.templateId || "default"
+    : undefined;
 
   const templateQuery = useQuery({
     queryKey: ["templates", templateId, "content-templates"],
@@ -332,23 +388,22 @@ export function useContentPages(testId: string | undefined): UseContentPagesResu
     [contentTemplates],
   );
 
-  // `hasMutated` is the Drawer-level dirty signal for the «Структура» tab.
-  // Content-page mutations write directly to the API (no draft), but the user
-  // expects «Сохранить» to light up after add / drag / reorder; this flag is
-  // the bridge between direct-write mutations and the test/design draft dirty
-  // tracking the Drawer footer reads. Reset by the Drawer after save.
-  const [hasMutated, setHasMutated] = useState(false);
-  const resetMutated = useCallback(() => setHasMutated(false), []);
+  // ── Local draft of the page list (unified cancel) ─────────────────────────
+  // «Структура» edits are buffered here and committed only on the drawer's
+  // «Сохранить» (alongside the test-settings / design drafts), so «Отмена» rolls
+  // ALL of them back together. The draft re-syncs from the server list whenever
+  // it (re)loads AND the draft is clean — never clobbering in-progress edits.
+  const [draftPages, setDraftPages] = useState<ContentPage[]>([]);
+  const [syncedFrom, setSyncedFrom] = useState<ContentPage[] | undefined>(undefined);
+  const [dirty, setDirty] = useState(false);
+  const [commitError, setCommitError] = useState<Error | null>(null);
+  const tempSeq = useRef(0);
 
-  const onMutationSuccess = () => {
-    setHasMutated(true);
-    queryClient.invalidateQueries({ queryKey: ["tests", testId, "content-pages"] });
-  };
-
-  const createMutation = useMutation({
-    mutationFn: (input: ContentPageInput) => postContentPage(testId!, input),
-    onSuccess: onMutationSuccess,
-  });
+  const serverPages = Array.isArray(pagesQuery.data) ? pagesQuery.data : undefined;
+  if (serverPages && serverPages !== syncedFrom && !dirty) {
+    setSyncedFrom(serverPages);
+    setDraftPages(serverPages.map((p) => ({ ...p })));
+  }
 
   const [sanitizeDiagnostics, setSanitizeDiagnostics] = useState<
     Record<string, SanitizeDiagnostics>
@@ -362,72 +417,195 @@ export function useContentPages(testId: string | undefined): UseContentPagesResu
     });
   }, []);
 
-  const updateMutation = useMutation({
-    mutationFn: ({ pageId, input }: { pageId: string; input: Partial<ContentPageInput> }) =>
-      putContentPage(testId!, pageId, input),
-    onSuccess: (data, vars) => {
-      onMutationSuccess();
-      // Server returns `sanitizeDiagnostics` as a sibling field on the response
-      // when at least one placeholder was stripped. Store keyed by pageId so
-      // the edit form can show the s-sanitize warning banner; absence of any
-      // diagnostics clears any previously-shown banner for that page.
-      const diag = (data as { sanitizeDiagnostics?: SanitizeDiagnostics }).sanitizeDiagnostics;
-      setSanitizeDiagnostics((prev) => {
-        const next = { ...prev };
-        if (diag && Object.keys(diag).length > 0) {
-          next[vars.pageId] = diag;
-        } else {
-          delete next[vars.pageId];
-        }
-        return next;
-      });
+  // `pages` is the sorted draft, with `templateKeyMissing` derived against the
+  // CURRENT catalogue (so it tracks the draft template too), overriding any
+  // server flag.
+  const validKeys = useMemo(() => new Set(contentTemplates.map((v) => v.key)), [contentTemplates]);
+  const pages = useMemo<ContentPage[]>(
+    () =>
+      [...draftPages]
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map((p) => ({
+          ...p,
+          templateKeyMissing:
+            p.templateKey != null && contentTemplates.length > 0 && !validKeys.has(p.templateKey),
+        })),
+    [draftPages, validKeys, contentTemplates.length],
+  );
+
+  // ── Local mutators — mutate the draft only; no network until commit() ─────
+  const create = useCallback(
+    async (input: ContentPageInput): Promise<ContentPage> => {
+      const variant = contentTemplates.find((v) => v.key === input.templateKey);
+      const page: ContentPage = {
+        id: `${DRAFT_ID_PREFIX}${tempSeq.current++}`,
+        testId: testId ?? "",
+        topicId: input.topicId ?? null,
+        position: input.position,
+        mode: input.mode,
+        type: input.type,
+        kind: (variant?.kind as ContentPageKind | undefined) ?? "info",
+        templateKey: input.templateKey ?? null,
+        sortOrder: input.sortOrder ?? draftPages.length,
+        valuesJson: input.valuesJson ?? { values: {} },
+        autoAdvance: input.autoAdvance ?? false,
+        autoAdvanceDelayMs: input.autoAdvanceDelayMs ?? null,
+        createdAt: "",
+        updatedAt: "",
+      };
+      setDraftPages((prev) => [...prev, page]);
+      setDirty(true);
+      return page;
     },
-  });
+    [contentTemplates, draftPages.length, testId],
+  );
 
-  const reorderMutation = useMutation({
-    mutationFn: (updates: Array<{ id: string; sortOrder: number }>) =>
-      putReorder(testId!, updates),
-    onSuccess: onMutationSuccess,
-  });
+  const update = useCallback(
+    async (pageId: string, input: Partial<ContentPageInput>): Promise<ContentPage> => {
+      let updated: ContentPage | undefined;
+      setDraftPages((prev) =>
+        prev.map((p) => {
+          if (p.id !== pageId) return p;
+          updated = {
+            ...p,
+            ...(input.topicId !== undefined ? { topicId: input.topicId } : {}),
+            ...(input.position !== undefined ? { position: input.position } : {}),
+            ...(input.mode !== undefined ? { mode: input.mode } : {}),
+            ...(input.type !== undefined ? { type: input.type } : {}),
+            ...(input.templateKey !== undefined ? { templateKey: input.templateKey } : {}),
+            ...(input.valuesJson !== undefined ? { valuesJson: input.valuesJson } : {}),
+            ...(input.autoAdvance !== undefined ? { autoAdvance: input.autoAdvance } : {}),
+            ...(input.autoAdvanceDelayMs !== undefined
+              ? { autoAdvanceDelayMs: input.autoAdvanceDelayMs }
+              : {}),
+          };
+          return updated;
+        }),
+      );
+      setDirty(true);
+      return updated ?? (draftPages.find((p) => p.id === pageId) as ContentPage);
+    },
+    [draftPages],
+  );
 
-  const replaceVariantMutation = useMutation({
-    mutationFn: ({ pageId, newTemplateKey }: { pageId: string; newTemplateKey: string }) =>
-      postReplaceVariant(testId!, pageId, newTemplateKey),
-    onSuccess: onMutationSuccess,
-  });
+  const reorder = useCallback(
+    async (updates: Array<{ id: string; sortOrder: number }>): Promise<void> => {
+      const order = new Map(updates.map((u) => [u.id, u.sortOrder]));
+      setDraftPages((prev) =>
+        prev.map((p) => (order.has(p.id) ? { ...p, sortOrder: order.get(p.id)! } : p)),
+      );
+      setDirty(true);
+    },
+    [],
+  );
 
-  const removeMutation = useMutation({
-    mutationFn: (pageId: string) => deleteContentPage(testId!, pageId),
-    onSuccess: onMutationSuccess,
-  });
+  const replaceVariant = useCallback(
+    async (pageId: string, newTemplateKey: string): Promise<void> => {
+      const newVariant = contentTemplates.find((v) => v.key === newTemplateKey);
+      const newKeys = new Set((newVariant?.placeholders ?? []).map((ph) => ph.key));
+      setDraftPages((prev) =>
+        prev.map((p) => {
+          if (p.id !== pageId) return p;
+          // Preserve only placeholder values whose key exists in the new variant
+          // (mirrors the server's preserve-shared-keys migration).
+          const oldValues = (p.valuesJson?.values ?? {}) as Record<string, unknown>;
+          const oldStyles = (p.valuesJson?.placeholderStyles ?? {}) as Record<string, unknown>;
+          const values: Record<string, unknown> = {};
+          const placeholderStyles: Record<string, unknown> = {};
+          for (const k of Object.keys(oldValues)) if (newKeys.has(k)) values[k] = oldValues[k];
+          for (const k of Object.keys(oldStyles)) if (newKeys.has(k)) placeholderStyles[k] = oldStyles[k];
+          return { ...p, templateKey: newTemplateKey, valuesJson: { values, placeholderStyles } };
+        }),
+      );
+      setDirty(true);
+    },
+    [contentTemplates],
+  );
+
+  const remove = useCallback(async (pageId: string): Promise<void> => {
+    setDraftPages((prev) => prev.filter((p) => p.id !== pageId));
+    setDirty(true);
+  }, []);
+
+  // ── Commit / discard ──────────────────────────────────────────────────────
+  const commit = useCallback(async (): Promise<Record<string, SanitizeDiagnostics>> => {
+    if (!enabled) return {};
+    const server = serverPages ?? [];
+    const draft = draftPages;
+    const draftIds = new Set(draft.map((p) => p.id));
+    const diag: Record<string, SanitizeDiagnostics> = {};
+    try {
+      // 1) Deletes — server pages no longer in the draft.
+      for (const s of server) {
+        if (!draftIds.has(s.id)) await deleteContentPage(testId!, s.id);
+      }
+      // 2) Creates — new (draft-id) pages → POST; remember the real id.
+      const realId: Record<string, string> = {};
+      for (const p of draft) {
+        if (isDraftId(p.id)) {
+          const created = await postContentPage(testId!, pageToInput(p), draftTemplateId);
+          realId[p.id] = created.id;
+        }
+      }
+      // 3) Updates — existing pages whose committed fields changed.
+      const serverById = new Map(server.map((s) => [s.id, s]));
+      for (const p of draft) {
+        if (isDraftId(p.id)) continue;
+        const s = serverById.get(p.id);
+        if (s && pageChanged(s, p)) {
+          const res = await putContentPage(testId!, p.id, pageToInput(p), draftTemplateId);
+          const d = (res as { sanitizeDiagnostics?: SanitizeDiagnostics }).sanitizeDiagnostics;
+          if (d && Object.keys(d).length > 0) diag[p.id] = d;
+        }
+      }
+      // 4) Reorder — final order with resolved ids (idempotent; covers add/delete).
+      const finalIds = draft.map((p) => (isDraftId(p.id) ? realId[p.id] : p.id)).filter(Boolean) as string[];
+      if (finalIds.length > 0) {
+        await putReorder(testId!, finalIds.map((id, i) => ({ id, sortOrder: i })));
+      }
+
+      setCommitError(null);
+      setDirty(false);
+      setSanitizeDiagnostics(diag);
+      await queryClient.invalidateQueries({ queryKey: ["tests", testId, "content-pages"] });
+      return diag;
+    } catch (err) {
+      setCommitError(err as Error);
+      // Re-sync the draft to whatever actually persisted, then surface the error.
+      setDirty(false);
+      await queryClient.invalidateQueries({ queryKey: ["tests", testId, "content-pages"] });
+      throw err;
+    }
+  }, [draftPages, draftTemplateId, enabled, queryClient, serverPages, testId]);
+
+  const discard = useCallback(() => {
+    setDirty(false);
+    setCommitError(null);
+    setSanitizeDiagnostics({});
+    setDraftPages((serverPages ?? []).map((p) => ({ ...p })));
+  }, [serverPages]);
 
   return {
-    pages: pagesQuery.data ?? [],
+    pages,
     contentTemplates,
     infoVariants,
     isLoading: pagesQuery.isLoading,
     error: (pagesQuery.error as Error | null) ?? null,
-    create: (input) => createMutation.mutateAsync(input),
-    isCreating: createMutation.isPending,
-    update: (pageId, input) => updateMutation.mutateAsync({ pageId, input }),
-    isUpdating: updateMutation.isPending,
+    create,
+    isCreating: false,
+    update,
+    isUpdating: false,
     sanitizeDiagnostics,
     dismissSanitizeDiagnostics,
-    reorder: (updates) => reorderMutation.mutateAsync(updates),
-    isReordering: reorderMutation.isPending,
-    replaceVariant: (pageId, newTemplateKey) =>
-      replaceVariantMutation.mutateAsync({ pageId, newTemplateKey }),
-    isReplacingVariant: replaceVariantMutation.isPending,
-    remove: (pageId) => removeMutation.mutateAsync(pageId),
-    isRemoving: removeMutation.isPending,
-    mutationError:
-      (createMutation.error as Error | null) ??
-      (updateMutation.error as Error | null) ??
-      (reorderMutation.error as Error | null) ??
-      (replaceVariantMutation.error as Error | null) ??
-      (removeMutation.error as Error | null) ??
-      null,
-    hasMutated,
-    resetMutated,
+    reorder,
+    isReordering: false,
+    replaceVariant,
+    isReplacingVariant: false,
+    remove,
+    isRemoving: false,
+    mutationError: commitError,
+    isDirty: dirty,
+    commit,
+    discard,
   };
 }

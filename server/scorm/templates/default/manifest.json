@@ -119,6 +119,22 @@
   ],
   "contentTemplates": [
     {
+      "key": "start.standard",
+      "label": "Старт: стандартный",
+      "kind": "start",
+      "pageKind": "start",
+      "layoutFile": "layouts/start.html",
+      "placeholders": []
+    },
+    {
+      "key": "results.standard",
+      "label": "Итоги теста: стандартные",
+      "kind": "results",
+      "pageKind": "results",
+      "layoutFile": "layouts/results.html",
+      "placeholders": []
+    },
+    {
       "key": "intro.hero",
       "label": "Введение: заголовок и изображение",
       "kind": "intro",

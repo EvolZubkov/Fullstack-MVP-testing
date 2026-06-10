@@ -61,8 +61,10 @@ function extractTemplateId(designSettingsJson: unknown): string {
 function legacyTypeForKind(kind: SystemKind): "intro" | "info" | "summary" | "html" {
   switch (kind) {
     case "intro":   return "intro";
-    case "summary": return "summary";
-    case "router":
+    case "summary":
+    case "results": return "summary";
+    case "start":   // start/router/questions have no native legacy type (column is
+    case "router":  // deprecated, PRD-7 §1.12) — "info" is the neutral placeholder.
     case "questions":
     default:        return "info";
   }
@@ -72,10 +74,12 @@ function legacyTypeForKind(kind: SystemKind): "intro" | "info" | "summary" | "ht
  *  content-page placement before/after a topic; system kinds reuse it on a
  *  best-fit basis (intro → "before", summary → "after_topic",
  *  router/questions → "before_topic"). */
-function positionForKind(kind: SystemKind): "before" | "before_topic" | "after_topic" {
+function positionForKind(kind: SystemKind): "before" | "after" | "before_topic" | "after_topic" {
   switch (kind) {
-    case "intro":   return "before";
-    case "summary": return "after_topic";
+    case "start":   return "before"; // test landing — «До теста», before everything
+    case "results": return "after";  // test final results — «После теста»
+    case "intro":   // section intro/summary are per-topic («Введение/Итоги раздела»)
+    case "summary": return kind === "summary" ? "after_topic" : "before_topic";
     case "router":
     case "questions":
     default:        return "before_topic";

@@ -143,9 +143,11 @@ const FLOW_LABEL: Record<TestEditorModel["flowMode"], string> = {
 };
 
 const KIND_LABEL: Record<string, string> = {
+  start: "Старт",
   intro: "Введение",
   info: "Материал",
-  summary: "Итоги",
+  summary: "Итоги раздела",
+  results: "Итоги теста",
   router: "Маршрутизатор",
   questions: "Вопросы",
 };
@@ -466,14 +468,20 @@ function ZonesBlock(props: {
     pages.find((p) => p.kind === kind && p.topicId === null) ?? null;
   const questionsForTopic = (tid: string) =>
     pages.find((p) => p.kind === "questions" && p.topicId === tid) ?? null;
+  // Per-section system rows (PRD-1 §4.3 structure model): «Введение раздела» /
+  // «Итоги раздела» are one-per-topic in per-topic modes.
+  const introForTopic = (tid: string) =>
+    pages.find((p) => p.kind === "intro" && p.topicId === tid) ?? null;
+  const summaryForTopic = (tid: string) =>
+    pages.find((p) => p.kind === "summary" && p.topicId === tid) ?? null;
 
-  // «После теста» order list = author after-pages + the summary («Итоги»), by
-  // sortOrder. Reordering/adding here renumbers this combined list so «Итоги»
-  // stays the pre/post boundary the runtime reads.
+  // «После теста» order list = author after-pages + «Итоги теста» (results), by
+  // sortOrder. Reordering/adding here renumbers this combined list so «Итоги
+  // теста» stays the pre/post boundary the runtime reads.
   const afterCombined = (): ContentPage[] => {
-    const s = systemSingleton("summary");
+    const r = systemSingleton("results");
     const list = infoIn("after", null);
-    return s ? [...list, s].sort((a, b) => a.sortOrder - b.sortOrder) : list;
+    return r ? [...list, r].sort((a, b) => a.sortOrder - b.sortOrder) : list;
   };
 
   const activePage = activeId ? pages.find((p) => p.id === activeId) ?? null : null;
@@ -617,8 +625,8 @@ function ZonesBlock(props: {
     );
   }
 
-  const intro = systemSingleton("intro");
-  const summary = systemSingleton("summary");
+  const start = systemSingleton("start");
+  const results = systemSingleton("results");
   const router = systemSingleton("router");
 
   return (
@@ -632,12 +640,12 @@ function ZonesBlock(props: {
     <DropContext.Provider value={drop}>
     <div data-testid="structure-section-list">
       <Zone title="До теста" testId="structure-zone-before-test">
-        {intro && (
+        {start && (
           <SystemPageRow
-            page={intro}
-            title={pageTitle(intro)}
+            page={start}
+            title={pageTitle(start)}
             handlers={handlers}
-            testId="structure-system-intro"
+            testId="structure-system-start"
           />
         )}
         <AuthorPageGroup
@@ -667,6 +675,8 @@ function ZonesBlock(props: {
               sections={model.sections}
               infoIn={infoIn}
               questionsForTopic={questionsForTopic}
+              introForTopic={introForTopic}
+              summaryForTopic={summaryForTopic}
               dragEnabled={Boolean(updateModel) && !handlers.readOnly}
               dimGrip={handlers.readOnly}
             />
@@ -676,6 +686,8 @@ function ZonesBlock(props: {
                 key={section.topicId}
                 index={idx + 1}
                 section={section}
+                intro={introForTopic(section.topicId)}
+                summary={summaryForTopic(section.topicId)}
                 before={infoIn("before_topic", section.topicId)}
                 after={infoIn("after_topic", section.topicId)}
                 questions={questionsForTopic(section.topicId)}
@@ -689,7 +701,7 @@ function ZonesBlock(props: {
       )}
 
       <Zone title="После теста" testId="structure-zone-after-test">
-        <AfterTestZone summary={summary} afterPages={infoIn("after", null)} handlers={handlers} />
+        <AfterTestZone results={results} afterPages={infoIn("after", null)} handlers={handlers} />
       </Zone>
     </div>
       <DragOverlay>
@@ -734,6 +746,10 @@ function Zone(props: { title: string; testId: string; children: React.ReactNode 
 function TopicBlock(props: {
   index: number;
   section: TestEditorModel["sections"][number];
+  /** Per-section «Введение раздела» (kind: intro), shown first. */
+  intro: ContentPage | null;
+  /** Per-section «Итоги раздела» (kind: summary), shown last. */
+  summary: ContentPage | null;
   before: ContentPage[];
   after: ContentPage[];
   questions: ContentPage | null;
@@ -782,6 +798,14 @@ function TopicBlock(props: {
         <span className="topic-count">{section.drawCount} вопросов</span>
       </div>
       <div className="topic-body">
+        {props.intro && (
+          <SystemPageRow
+            page={props.intro}
+            title={pageTitle(props.intro)}
+            handlers={props.handlers}
+            testId={`structure-system-intro-${section.topicId}`}
+          />
+        )}
         <AuthorPageGroup
           pages={props.before}
           position="before_topic"
@@ -802,6 +826,14 @@ function TopicBlock(props: {
           zoneLabel={`«${section.topicName}» — после темы`}
           handlers={props.handlers}
         />
+        {props.summary && (
+          <SystemPageRow
+            page={props.summary}
+            title={pageTitle(props.summary)}
+            handlers={props.handlers}
+            testId={`structure-system-summary-${section.topicId}`}
+          />
+        )}
       </div>
     </section>
   );
@@ -821,11 +853,13 @@ function InsideTestZone(props: {
   sections: TestEditorModel["sections"];
   infoIn: (position: ContentPagePosition, topicId: string | null) => ContentPage[];
   questionsForTopic: (topicId: string) => ContentPage | null;
+  introForTopic: (topicId: string) => ContentPage | null;
+  summaryForTopic: (topicId: string) => ContentPage | null;
   dragEnabled: boolean;
   /** PRD-7 G19 read-only: dim topic grips without removing them. */
   dimGrip?: boolean;
 }) {
-  const { router, handlers, sections, infoIn, questionsForTopic, dragEnabled, dimGrip } = props;
+  const { router, handlers, sections, infoIn, questionsForTopic, introForTopic, summaryForTopic, dragEnabled, dimGrip } = props;
   return (
     <section className="inside-test" data-testid="structure-inside-test">
       <div className="inside-test__label">
@@ -848,6 +882,8 @@ function InsideTestZone(props: {
               <TopicBlock
                 index={idx + 1}
                 section={section}
+                intro={introForTopic(section.topicId)}
+                summary={summaryForTopic(section.topicId)}
                 before={infoIn("before_topic", section.topicId)}
                 after={infoIn("after_topic", section.topicId)}
                 questions={questionsForTopic(section.topicId)}
@@ -1097,21 +1133,21 @@ function AuthorPageGroup(props: {
  * renumber the WHOLE combined list (incl. «Итоги») so the boundary stays stable.
  */
 function AfterTestZone(props: {
-  summary: ContentPage | null;
+  results: ContentPage | null;
   afterPages: ContentPage[];
   handlers: ZoneHandlers;
 }) {
-  const { summary, afterPages, handlers } = props;
+  const { results, afterPages, handlers } = props;
   // Droppable (for dropping into an empty after-zone / its gap) but WITHOUT the
   // zone-wide dashed outline: this zone wraps «Итоги» + pages, so a full-zone
   // outline covered everything. The «Итоги» row and page rows give the precise
   // drop indicator instead.
   const { setNodeRef } = useDroppable({ id: zoneDroppableId("after", null) });
-  const combined: ContentPage[] = summary
-    ? [...afterPages, summary].sort((a, b) => a.sortOrder - b.sortOrder)
+  const combined: ContentPage[] = results
+    ? [...afterPages, results].sort((a, b) => a.sortOrder - b.sortOrder)
     : afterPages;
   // Insert at combined-position `index`: the modal renumbers `group` (incl. the
-  // summary) so the new page and «Итоги» keep a stable pre/post order.
+  // results row) so the new page and «Итоги теста» keep a stable pre/post order.
   const addAt = (index: number) =>
     handlers.onAdd({ position: "after", topicId: null, group: combined, index, zoneLabel: "После теста" });
 
@@ -1127,8 +1163,8 @@ function AfterTestZone(props: {
         )}
         {combined.map((item, idx) => (
           <Fragment key={item.id}>
-            {item.kind === "summary" ? (
-              <SummaryDropRow page={item} handlers={handlers} />
+            {item.kind === "results" ? (
+              <SystemDropRow page={item} handlers={handlers} />
             ) : (
               <SortablePageItem page={item} handlers={handlers} />
             )}
@@ -1178,11 +1214,12 @@ function SortablePageItem(props: { page: ContentPage; handlers: ZoneHandlers }) 
 }
 
 /**
- * «Итоги» rendered inside «После теста» as a non-draggable drop boundary: a page
- * dragged onto it lands before (pre-results) or after (post-results) by the
- * combined-list index. Shows the same insertion line as author rows.
+ * A system row («Итоги теста») rendered inside «После теста» as a non-draggable
+ * drop boundary: a page dragged onto it lands before (pre-results) or after
+ * (post-results) by the combined-list index. Shows the same insertion line as
+ * author rows. Test id follows the row kind (`structure-system-results`).
  */
-function SummaryDropRow(props: { page: ContentPage; handlers: ZoneHandlers }) {
+function SystemDropRow(props: { page: ContentPage; handlers: ZoneHandlers }) {
   const { page, handlers } = props;
   const { setNodeRef } = useDroppable({ id: page.id });
   const drop = useContext(DropContext);
@@ -1193,7 +1230,7 @@ function SummaryDropRow(props: { page: ContentPage; handlers: ZoneHandlers }) {
         page={page}
         title={pageTitle(page)}
         handlers={handlers}
-        testId="structure-system-summary"
+        testId={`structure-system-${page.kind}`}
       />
     </div>
   );
@@ -1240,11 +1277,12 @@ function AuthorPageRow(props: {
   const hasErr = missing.length > 0;
   const hasWarn = page.templateKeyMissing === true;
 
-  // PRD-7 G17: «Сменить вариант» is shown only when the active template
-  // actually offers more than one variant for this page's kind. For info
-  // pages this is the same logic the system row uses (line 892).
+  // PRD-7 G17: «Сменить вариант» + the «Доступно вариантов: N» hint are shown
+  // only when the active template offers more than one variant of this page's
+  // kind — the SAME rule the system row uses (`canSwitch`), so every page type
+  // surfaces variant availability consistently.
   const variantsForKind = cp.contentTemplates.filter((v) => v.kind === page.kind);
-  const canReplaceVariant = variantsForKind.length > 1;
+  const canReplaceVariant = variantsForKind.length > 1 && !props.readOnly;
 
   const title = pageTitle(page);
   const badge = variant?.label ?? KIND_LABEL[page.kind] ?? page.kind;
@@ -1348,7 +1386,7 @@ function AuthorPageRow(props: {
             </>
           )}
         </div>
-        {(hasErr || hasWarn) && (
+        {(hasErr || hasWarn || canReplaceVariant) && (
           <div className="page-row__meta">
             {page.templateKeyMissing && (
               <Tag tone="warning" size="s" data-testid={`structure-page-missing-${page.id}`}>
@@ -1360,6 +1398,14 @@ function AuthorPageRow(props: {
               <Tag tone="error" size="s" data-testid={`structure-page-required-${page.id}`}>
                 <AlertCircle className="h-3 w-3" aria-hidden="true" />
                 Не заполнено обязательных полей: {missing.length}
+              </Tag>
+            )}
+            {/* Same variant-availability hint as the system row, so author info
+                pages also surface that «Сменить вариант» (in the «...» menu) exists. */}
+            {canReplaceVariant && (
+              <Tag tone="info" size="s" data-testid={`structure-page-${page.id}-variant-hint`}>
+                <Info className="h-3 w-3" aria-hidden="true" />
+                Доступно вариантов: {variantsForKind.length}
               </Tag>
             )}
           </div>
