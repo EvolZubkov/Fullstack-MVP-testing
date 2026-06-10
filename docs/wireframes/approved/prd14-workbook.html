@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="ru" class="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-14 FR-15 — раздел «Импорт» в боковой навигации (DS AppShell + Sidebar)
+    Контракт: docs/specs/questions-import/format.md §12, docs/specs/prd-14/questions-import-export.md §5.4.
+
+    Размещение (решение 2026-06-10):
+      • ИМПОРТ — отдельный пункт «Импорт» в боковой навигации → страница раздела (одна точка
+        загрузки файла). Содержимое определяется автоматически по листам:
+          — только «Вопросы» → импорт в общий банк (целевой тест НЕ нужен);
+          — есть «Шкалы»/«Показатели»/«Вклады вопросов» → нужен «Целевой тест» (поле появляется).
+      • ЭКСПОРТ ТЕСТА — из меню действий конкретного теста (список тестов), тест неявный.
+      • ЭКСПОРТ ВОПРОСОВ — со страницы списка «Вопросы» (как сейчас).
+    Весь поток импорта — ИНЛАЙН на странице, без модалок/drawer.
+    Состояния (инлайн): empty → file-q (только вопросы) / file-full (+ шкалы…) → preview → errors → done.
+    Согласован 2026-06-11; перенесён в approved/. Реализация: client/src/pages/author/import.tsx.
+    -->
+    <title>PRD-14 — Импорт (раздел боковой навигации)</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <style>
+      .wf-sprite { display: none; }
+      .wf-imp { display: none; }
+      .wf-imp.is-shown { display: block; }
+      .wf-stack { display: flex; flex-direction: column; gap: var(--ou-space-3); }
+      .wf-row { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; }
+      .wf-mt-3 { margin-top: var(--ou-space-3); }
+      .wf-plan { display: flex; flex-direction: column; gap: var(--ou-space-2); margin: var(--ou-space-3) 0; }
+      .wf-plan__row { display: flex; align-items: center; gap: var(--ou-space-3); }
+      .wf-plan__name { flex: 1; font: var(--ou-text-body-m); font-weight: 600; }
+      .wf-plan__counts { display: flex; gap: var(--ou-space-2); flex-wrap: wrap; }
+      .wf-errs { margin: var(--ou-space-2) 0 0; padding-left: var(--ou-space-5); display: flex; flex-direction: column; gap: var(--ou-space-1); }
+      .wf-errs li { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+      .wf-cards { display: flex; flex-direction: column; gap: var(--ou-space-5); max-width: var(--wf-size-720, 720px); }
+      .wf-card-foot { display: flex; justify-content: flex-end; gap: var(--ou-space-2); margin-top: var(--ou-space-4); }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
+      .wf-sel-chev { margin-left: auto; color: var(--ou-fg-muted); }
+      /* Заголовок страницы в шапке оболочки (как .page-title в approved/prd3). */
+      .wf-page-title { font: var(--ou-text-heading-s); font-weight: 600; color: var(--ou-fg-default); }
+      /* Меню от аватара (DS Menu открывается порталом; в эскизе — абсолютно). */
+      .wf-usermenu { position: relative; }
+      .wf-usermenu__panel { position: absolute; top: 100%; right: 0; margin-top: var(--ou-space-1); z-index: 50; min-width: var(--wf-size-180, 200px); }
+    </style>
+
+    <style data-wf-template-overrides>
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+      .wf-state.active { display: block; }
+      .wf-state > .ou-shell { min-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></symbol>
+      <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z" /></symbol>
+      <symbol id="i-question" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M9.5 13a1.5 1.5 0 1 1 2 1.4c-.6.3-1 .8-1 1.6" /><line x1="10.5" y1="19" x2="10.51" y2="19" /></symbol>
+      <symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /></symbol>
+      <symbol id="i-layout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" /></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18" /><rect x="7" y="10" width="3" height="7" /><rect x="12" y="6" width="3" height="11" /><rect x="17" y="13" width="3" height="4" /></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3" /><path d="M5 21v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1" /></symbol>
+      <symbol id="i-import" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></symbol>
+      <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" /></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></symbol>
+      <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></symbol>
+      <symbol id="i-check-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <button type="button" class="active" onclick="impState(this, 'empty')">пусто</button>
+      <span class="wf-nav-sep"></span>
+      <span class="wf-nav-title">Файл:</span>
+      <button type="button" onclick="impState(this, 'file-q')">только вопросы</button>
+      <button type="button" onclick="impState(this, 'file-full')">+ шкалы/показатели</button>
+      <button type="button" onclick="impState(this, 'file-new')">новый тест</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="impState(this, 'preview')">предпросмотр</button>
+      <button type="button" onclick="impState(this, 'errors')">ошибки</button>
+      <button type="button" onclick="impState(this, 'done')">готово</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <button type="button" onclick="toggleAnnots(this)">Аннотации</button>
+    </nav>
+
+    <!-- ════════════════ page: раздел «Импорт» в оболочке ════════════════ -->
+    <div id="wf-page" class="wf-state active">
+      <div class="ou-shell">
+        <div class="ou-shell__side">
+          <aside class="ou-side">
+            <div class="ou-side__brand">
+              <span class="ou-shell__brand-mark"><svg width="16" height="16"><use href="#i-book" /></svg></span>
+              <span class="font-semibold">СкилУм</span>
+            </div>
+            <nav class="ou-side__nav">
+              <div class="ou-side__group">
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-folder" /></svg></span><span class="ou-side__lbl">Темы</span></button>
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-question" /></svg></span><span class="ou-side__lbl">Вопросы</span></button>
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-clipboard" /></svg></span><span class="ou-side__lbl">Тесты</span></button>
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-layout" /></svg></span><span class="ou-side__lbl">Шаблоны</span></button>
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-chart" /></svg></span><span class="ou-side__lbl">Аналитика</span></button>
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-users" /></svg></span><span class="ou-side__lbl">Пользователи</span></button>
+                <button type="button" class="ou-side__item"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-user" /></svg></span><span class="ou-side__lbl">Группы</span></button>
+                <button type="button" class="ou-side__item is-active" aria-current="page"><span class="ou-side__ico"><svg width="16" height="16"><use href="#i-import" /></svg></span><span class="ou-side__lbl">Импорт</span></button>
+              </div>
+            </nav>
+          </aside>
+        </div>
+        <header class="ou-shell__header">
+          <span class="wf-page-title">Импорт из Excel</span>
+          <div class="ou-shell__actions">
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Тема"><svg width="18" height="18"><use href="#i-moon" /></svg></button>
+            <div class="wf-usermenu">
+              <button class="ou-shell__user" type="button" aria-haspopup="menu" aria-expanded="true">
+                <span class="ou-shell__avatar" aria-hidden="true">А</span>
+                <span class="ou-shell__user-meta"><span class="ou-shell__user-name">Алексей Иванов</span><span class="ou-shell__user-role">Администратор</span></span>
+              </button>
+              <div class="ou-menu wf-usermenu__panel" role="menu">
+                <button type="button" class="ou-menu__item ou-menu__item--danger" role="menuitem">
+                  <span class="ou-menu__item-ico"><svg width="16" height="16"><use href="#i-logout" /></svg></span>
+                  <span class="ou-menu__item-text"><span class="ou-menu__item-title">Выход</span></span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+        <main class="ou-shell__main">
+          <div class="wf-cards">
+            <section class="ou-card ou-card--outlined">
+              <header class="ou-card__header"><div class="ou-card__heading">
+                <h3 class="ou-card__title">Загрузка файла</h3>
+              </div></header>
+              <div class="ou-card__body">
+
+                <!-- пусто: загрузчик -->
+                <div id="imp-empty" class="wf-imp is-shown">
+                  <label class="ou-uploader" tabindex="0">
+                    <span class="ou-uploader__icon" aria-hidden="true"><svg><use href="#i-upload" /></svg></span>
+                    <span class="ou-uploader__title">Перетащите файл .xlsx или выберите</span>
+                    <span class="ou-uploader__sub">Поддерживается формат .xlsx</span>
+                    <span class="ou-uploader__cta">Выбрать файл</span>
+                  </label>
+                  <div class="wf-row wf-mt-3">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-download" /></svg> Скачать шаблон</button>
+                  </div>
+                </div>
+
+                <!-- файл выбран: ТОЛЬКО ВОПРОСЫ → целевой тест не нужен -->
+                <div id="imp-file-q" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">questions.xlsx</span><span class="ou-file__meta">1 лист · 22 КБ</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл" onclick="impState(null, 'empty')"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="impState(null, 'preview')">Проверить</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="impState(null, 'done')">Импортировать</button>
+                  </div>
+                </div>
+
+                <!-- файл выбран: ЕСТЬ test-scoped листы → появляется «Целевой тест» -->
+                <div id="imp-file-full" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">mbi_test.xlsx</span><span class="ou-file__meta">4 листа · 48 КБ</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл" onclick="impState(null, 'empty')"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+                  <div class="ou-formfield wf-mt-3">
+                    <label class="ou-formfield__lbl" for="imp-test">Целевой тест <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box">
+                      <input class="ou-field__input" id="imp-test" type="text" placeholder="Выберите тест или создайте новый" />
+                      <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
+                    </div></div>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="impState(null, 'preview')">Проверить</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled aria-disabled="true" title="Укажите целевой тест">Импортировать</button>
+                  </div>
+                </div>
+
+                <!-- файл выбран + создаётся НОВЫЙ тест → поле названия -->
+                <div id="imp-file-new" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">mbi_test.xlsx</span><span class="ou-file__meta">4 листа · 48 КБ</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл" onclick="impState(null, 'empty')"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+                  <div class="ou-formfield wf-mt-3">
+                    <label class="ou-formfield__lbl" for="imp-test-n">Целевой тест</label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box">
+                      <input class="ou-field__input" id="imp-test-n" type="text" value="＋ Создать новый тест" readonly />
+                      <svg width="16" height="16" class="wf-sel-chev"><use href="#i-chevron-down" /></svg>
+                    </div></div>
+                  </div>
+                  <div class="ou-formfield wf-mt-3">
+                    <label class="ou-formfield__lbl" for="imp-newname">Название нового теста <span class="ou-formfield__lbl-req" aria-hidden="true">*</span></label>
+                    <div class="ou-field ou-field--m"><div class="ou-field__box">
+                      <input class="ou-field__input" id="imp-newname" type="text" value="Стресс-опросник 2026" />
+                    </div></div>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="impState(null, 'preview')">Проверить</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="impState(null, 'done')">Импортировать</button>
+                  </div>
+                </div>
+
+                <!-- предпросмотр (dry-run) -->
+                <div id="imp-preview" class="wf-imp">
+                  <div class="ou-file">
+                    <span class="ou-file__thumb ou-file__thumb--xls" aria-hidden="true">XLS</span>
+                    <div class="ou-file__main"><span class="ou-file__name">mbi_test.xlsx</span><span class="ou-file__meta">запись ещё не выполнена</span></div>
+                    <div class="ou-file__actions"><button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Убрать файл" onclick="impState(null, 'empty')"><svg width="14" height="14"><use href="#i-x" /></svg></button></div>
+                  </div>
+                  <p class="ou-formfield__lbl wf-mt-3">Целевой тест: <strong>Опросник выгорания (MBI)</strong></p>
+                  <div class="ou-banner ou-banner--success ou-banner--subtle wf-mt-3" role="status">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-check-circle" /></svg></span>
+                    <div class="ou-banner__body"><p class="ou-banner__desc">Ошибок не найдено — можно импортировать.</p></div>
+                  </div>
+                  <ul class="wf-plan">
+                    <li class="wf-plan__row"><span class="wf-plan__name">Вопросы <span class="text-muted-foreground">(банк)</span></span><span class="wf-plan__counts"><span class="ou-tag ou-tag--success ou-tag--outline">+3 создать</span><span class="ou-tag ou-tag--neutral ou-tag--outline">5 обновить</span><span class="ou-tag ou-tag--neutral ou-tag--outline">2 пропустить</span></span></li>
+                    <li class="wf-plan__row"><span class="wf-plan__name">Шкалы</span><span class="wf-plan__counts"><span class="ou-tag ou-tag--success ou-tag--outline">+1 создать</span><span class="ou-tag ou-tag--neutral ou-tag--outline">3 обновить</span></span></li>
+                    <li class="wf-plan__row"><span class="wf-plan__name">Показатели</span><span class="wf-plan__counts"><span class="ou-tag ou-tag--neutral ou-tag--outline">2 обновить</span></span></li>
+                    <li class="wf-plan__row"><span class="wf-plan__name">Вклады вопросов</span><span class="wf-plan__counts"><span class="ou-tag ou-tag--neutral ou-tag--outline">54 вклада · 12 вопросов</span></span></li>
+                  </ul>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="impState(null, 'file-full')">Назад</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="impState(null, 'done')">Импортировать</button>
+                  </div>
+                </div>
+
+                <!-- ошибки -->
+                <div id="imp-errors" class="wf-imp">
+                  <div class="ou-banner ou-banner--error" role="alert">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-x-circle" /></svg></span>
+                    <div class="ou-banner__body">
+                      <p class="ou-banner__title">3 строки пропущены из-за ошибок</p>
+                      <p class="ou-banner__desc">Остальные валидные строки можно импортировать — невалидные не записываются.</p>
+                    </div>
+                  </div>
+                  <ul class="wf-errs">
+                    <li>Лист «Показатели», строка 3: невалидная формула</li>
+                    <li>Лист «Вклады вопросов», строка 7: шкала "xx" не найдена</li>
+                    <li>Лист «Вклады вопросов», строка 9: ключ источника вне диапазона: "5"</li>
+                  </ul>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="impState(null, 'file-full')">Назад</button>
+                    <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="impState(null, 'done')">Импортировать валидные</button>
+                  </div>
+                </div>
+
+                <!-- готово -->
+                <div id="imp-done" class="wf-imp">
+                  <div class="ou-banner ou-banner--success" role="status">
+                    <span class="ou-banner__ico" aria-hidden="true"><svg width="14" height="14"><use href="#i-check-circle" /></svg></span>
+                    <div class="ou-banner__body">
+                      <p class="ou-banner__title">Импорт выполнен</p>
+                      <p class="ou-banner__desc">Вопросы: 3 создано, 5 обновлено · Шкалы: 1 создана, 3 обновлено · Показатели: 2 обновлено · Вклады: 54 (12 вопросов)</p>
+                    </div>
+                  </div>
+                  <div class="wf-card-foot">
+                    <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="impState(null, 'empty')">Импортировать ещё</button>
+                  </div>
+                </div>
+
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ════════════════ docs: Пояснения + DS Mapping ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+        <div class="wf-notes">
+          <h3 class="wf-notes-title">Пояснения — Раздел «Импорт» (PRD-14 FR-15)</h3>
+          <table>
+            <thead><tr><th>Элемент</th><th>Поведение / API</th><th>Примечание</th></tr></thead>
+            <tbody>
+              <tr><td>Размещение</td><td>Пункт «Импорт» в боковой навигации (DS Sidebar) → страница раздела в `ou-shell__main`. Только импорт</td><td>Гейт по `questions.importExport`</td></tr>
+              <tr><td>Автоопределение</td><td>По листам файла: только «Вопросы» → импорт в банк (целевой тест не нужен); есть «Шкалы»/«Показатели»/«Вклады вопросов» → нужен «Целевой тест»</td><td>Инспекция листов до записи — без `testId`</td></tr>
+              <tr><td>Целевой тест</td><td>Появляется ТОЛЬКО при наличии test-scoped листов; куда писать шкалы/показатели/вклады. «Импортировать» заблокирован, пока тест не выбран/не задано имя нового</td><td>FR-15.2</td></tr>
+              <tr><td>Создать новый тест</td><td>В «Целевом тесте» — опция «＋ Создать новый тест» → поле «Название нового теста». При импорте создаётся тест и шкалы/показатели/вклады пишутся в него</td><td>Бэкенд: создать тест (или объединённый эндпоинт) до workbook-import</td></tr>
+              <tr><td>Что в файле</td><td>Сводка определённых листов и куда что пойдёт (банк/тест) — показывается после загрузки/проверки</td><td>Не комментарий на холсте, а результат инспекции</td></tr>
+              <tr><td>«Проверить» (dry-run)</td><td>Только вопросы → <code>POST /api/questions/import?dryRun=true</code>; с тестом → <code>POST /api/tests/:id/workbook/import?dryRun=true</code></td><td>план инлайн, без записи</td></tr>
+              <tr><td>«Импортировать»</td><td>Те же эндпоинты без `dryRun`; порядок Вопросы→Шкалы→Вклады+Показатели</td><td>FR-15.7</td></tr>
+              <tr><td>Ошибки</td><td>Инлайн, построчно «Лист «…», строка N: причина»; невалидные пропускаются</td><td>NFR-03</td></tr>
+              <tr><td>Скачать шаблон</td><td>Пустые листы с заголовками + лист-справка</td><td>Опционально</td></tr>
+              <tr><td>Экспорт ТЕСТА</td><td>Из меню действий конкретного теста (список тестов) → <code>GET /api/tests/:id/workbook/export</code></td><td>Тест неявный, picker не нужен. НЕ в этом разделе</td></tr>
+              <tr><td>Экспорт ВОПРОСОВ</td><td>Со страницы «Вопросы» → <code>GET /api/questions/export</code> (как сейчас)</td><td>НЕ в этом разделе</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="wf-mapping">
+          <h2 class="wf-mapping-title">DS Mapping — Раздел «Импорт»</h2>
+          <p class="wf-mapping-sub">Заполняется до старта frontend. Строка с «custom» в колонке DS-компонент — блокер.</p>
+          <table>
+            <thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Токены</th><th>Примечания</th></tr></thead>
+            <tbody>
+              <tr><td>Оболочка + навигация</td><td><code>AppShell</code> + <code>Sidebar</code> (ui-kit)</td><td><code>--ou-shell-*</code></td><td>Пункт «Импорт» (lucide import/download)</td></tr>
+              <tr><td>Карточка</td><td><code>Card variant="outlined"</code> (<code>ou-card</code>)</td><td><code>--ou-border-soft</code></td><td></td></tr>
+              <tr><td>Загрузчик</td><td><code>Uploader</code> (<code>ou-uploader</code>)</td><td><code>--ou-border-default</code> dashed</td><td><code>is-error</code> для неверного типа</td></tr>
+              <tr><td>Выбранный файл</td><td><code>FileItem</code> (<code>ou-file</code>, <code>--xls</code>)</td><td><code>--ou-border-soft</code></td><td></td></tr>
+              <tr><td>Целевой тест</td><td><code>Combobox</code>/<code>Select</code> (ui-kit) c опцией «создать новый» + поле имени</td><td><code>--ou-field-*</code></td><td>условный; в эскизе — поле-плейсхолдер</td></tr>
+              <tr><td>Определение/результат</td><td><code>Banner</code> info/success/error</td><td><code>--ou-info-soft</code>/<code>--ou-success-soft</code>/<code>--ou-error-soft</code></td><td>инлайн на странице</td></tr>
+              <tr><td>Счётчики плана</td><td><code>Tag</code> success/neutral outline</td><td><code>--ou-success-default</code></td><td></td></tr>
+              <tr><td>Кнопки</td><td><code>Button</code> primary/secondary/ghost</td><td><code>--ou-accent-default</code></td><td>«Импортировать» disabled без файла/теста</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+        document.querySelectorAll('.wf-nav button[onclick*="State"]').forEach(function (b) { b.classList.toggle('active', b === btn); });
+      };
+      window.impState = function impState(btn, id) {
+        var page = document.getElementById('wf-page');
+        document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === page); });
+        document.querySelectorAll('.wf-imp').forEach(function (b) { b.classList.toggle('is-shown', b.id === 'imp-' + id); });
+        if (btn) document.querySelectorAll('.wf-nav button').forEach(function (b) { b.classList.toggle('active', b === btn); });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.classList.toggle('light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+      window.toggleAnnots = function toggleAnnots(btn) {
+        var on = document.body.classList.toggle('wf-annots-on');
+        if (btn) btn.classList.toggle('active', on);
+      };
+    </script>
+  </body>
+</html>

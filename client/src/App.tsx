@@ -21,6 +21,7 @@ import AnalyticsPage from "@/pages/author/analytics";
 import TestAnalyticsPage from "@/pages/author/test-analytics";
 import UsersPage from "@/pages/author/users";
 import GroupsPage from "@/pages/author/groups";
+import ImportPage from "@/pages/author/import";
 import { AuthorLayout } from "@/pages/author/layout";
 import LearnerTestListPage from "@/pages/learner/test-list";
 import TakeTestPage from "@/pages/learner/take-test";
@@ -165,6 +166,14 @@ function Router() {
         <ProtectedRoute requiredPermission="groups.manage">
           <AuthorLayout>
             <GroupsPage />
+          </AuthorLayout>
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/author/import">
+        <ProtectedRoute requiredPermission="questions.importExport">
+          <AuthorLayout>
+            <ImportPage />
           </AuthorLayout>
         </ProtectedRoute>
       </Route>
