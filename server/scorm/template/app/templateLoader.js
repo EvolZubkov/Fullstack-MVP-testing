@@ -51,6 +51,41 @@
     );
   }
 
+  /**
+   * PRD-7 G21: loads the bundled `default` template's layouts for the system
+   * kinds the active template doesn't declare (TEST_DATA.designSettings
+   * .fallbackKinds). Stored in state.fallbackLayouts so the start/results
+   * renderers can mount default's screen with default's CSS. No-op when there
+   * are no fallback kinds (the package then ships no template-default/).
+   */
+  function loadFallbackTemplate() {
+    var ds = (typeof TEST_DATA !== "undefined" && TEST_DATA.designSettings) || null;
+    var fallbackKinds = (ds && ds.fallbackKinds) || [];
+    state.fallbackLayouts = {};
+    if (!fallbackKinds.length) return Promise.resolve();
+    return fetchJson("template-default/manifest.json")
+      .then(function (manifest) {
+        state.fallbackManifest = manifest || null;
+        var layouts = (manifest && manifest.layouts) || {};
+        return Promise.all(
+          fallbackKinds.map(function (kind) {
+            var rel = layouts[kind];
+            if (!rel) return null;
+            return fetchText("template-default/" + rel)
+              .then(function (html) { return [kind, html]; })
+              .catch(function () { return null; });
+          })
+        ).then(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry) state.fallbackLayouts[entry[0]] = entry[1];
+          });
+        });
+      })
+      .catch(function (err) {
+        console.warn("[templateLoader] failed to load fallback template:", err);
+      });
+  }
+
   function loadDesignTemplate() {
     var manifestPromise = fetchJson("template/manifest.json");
     var shellPromise = fetchText("template/shell.html").catch(function () {
@@ -78,11 +113,13 @@
           loadedLayouts.forEach(function (entry) {
             state.templateLayouts[entry[0]] = entry[1];
           });
-          return loadRendererPlugins(state.templateManifest).then(function () {
-            if (root.TestBuilder && root.TestBuilder._init) {
-              root.TestBuilder._init((state.templateManifest && state.templateManifest.params) || []);
-            }
-            return state.templateManifest;
+          return loadFallbackTemplate().then(function () {
+            return loadRendererPlugins(state.templateManifest).then(function () {
+              if (root.TestBuilder && root.TestBuilder._init) {
+                root.TestBuilder._init((state.templateManifest && state.templateManifest.params) || []);
+              }
+              return state.templateManifest;
+            });
           });
         });
       })

@@ -1,4 +1,46 @@
+/**
+ * PRD-7 G21 fallback helpers. When the active template doesn't declare a system
+ * kind (start/results), the exporter bundles the `default` template under
+ * `template-default/` + `styles-default.css`; these helpers let the start/results
+ * renderers mount default's layout with default's CSS so the SCORM package matches
+ * «Структура» / the editor preview («Из стандартного шаблона»).
+ */
+function isFallbackKind(kind) {
+    var ds = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) || null;
+    var list = (ds && ds.fallbackKinds) || [];
+    return !!kind && list.indexOf(kind) >= 0;
+}
+
+/** Layout HTML for a system kind — the bundled default's when it's a fallback kind. */
+function systemLayout(kind) {
+    if (isFallbackKind(kind) && state.fallbackLayouts && state.fallbackLayouts[kind]) {
+        return state.fallbackLayouts[kind];
+    }
+    return state.templateLayouts && state.templateLayouts[kind];
+}
+
+/**
+ * Activates the bundled default stylesheet while a fallback system screen is shown
+ * and restores the active template's stylesheet otherwise. Safe no-op when the
+ * package ships no fallback (the `styles-fallback` link is absent). The package
+ * shows one full screen at a time, so a global stylesheet swap is conflict-free.
+ */
+function applySystemScreenStyles(kind) {
+    if (typeof document === 'undefined') return;
+    var alt = document.getElementById('styles-fallback');
+    if (!alt) return;
+    var useFallback = isFallbackKind(kind);
+    var main = document.getElementById('styles-main');
+    alt.disabled = !useFallback;
+    if (main) main.disabled = useFallback;
+}
+
 function render() {
+    // Reset to the active template's stylesheet on every render; fallback system
+    // screens (start/results) re-activate the default stylesheet from their own
+    // templated renderers below.
+    applySystemScreenStyles(null);
+
     // Check for adaptive mode
     if (TEST_DATA.mode === 'adaptive' && state.adaptiveState) {
       renderAdaptive();

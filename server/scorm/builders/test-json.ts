@@ -16,6 +16,13 @@ interface DesignSettingsExport {
   templateVersion?: string;
   templateApiVersion?: string;
   params: Record<string, unknown>;
+  /**
+   * System variant kinds (`start`/`results`) the active template does NOT declare
+   * in its `contentTemplates`, so the runtime must render them from the bundled
+   * `default` template (PRD-7 G21). Set by the exporter when it bundles the
+   * `template-default/` files; absent/empty means no fallback.
+   */
+  fallbackKinds?: string[];
 }
 
 interface ExportData {
@@ -248,6 +255,9 @@ export function buildTestJson(data: ExportData): string {
       templateVersion: data.designSettings.templateVersion,
       templateApiVersion: data.designSettings.templateApiVersion,
       params: data.designSettings.params,
+      ...(data.designSettings.fallbackKinds && data.designSettings.fallbackKinds.length > 0
+        ? { fallbackKinds: data.designSettings.fallbackKinds }
+        : {}),
     };
   }
 

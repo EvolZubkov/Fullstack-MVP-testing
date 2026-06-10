@@ -7,8 +7,9 @@
  * bespoke chrome for adaptive mode or when the design template is absent.
  */
 function renderStartPage() {
-  var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
-  var layout = layouts && layouts['start'];
+  // PRD-7 G21: `systemLayout('start')` is the bundled default's start when the
+  // active template doesn't declare a `start` contentTemplate.
+  var layout = (typeof systemLayout === 'function') ? systemLayout('start') : (state && state.templateLayouts && state.templateLayouts['start']);
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (layout && TB && TB.renderScreenInto && TEST_DATA.mode !== 'adaptive') {
     renderStartPageTemplated();
@@ -70,10 +71,14 @@ function wireStartAction(root, action, fn) {
 function renderStartPageTemplated() {
   var app = document.getElementById('app');
   var ctx = buildScormStartContext();
+  // PRD-7 G21: when `start` falls back to default, mount default's layout AND
+  // activate default's stylesheet so the screen is fully styled.
+  var layout = (typeof systemLayout === 'function') ? systemLayout('start') : state.templateLayouts['start'];
+  if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('start');
   app.innerHTML = '';
   var wrap = document.createElement('div');
   app.appendChild(wrap);
-  window.TBTemplate.renderScreenInto(wrap, { layout: state.templateLayouts['start'], context: ctx });
+  window.TBTemplate.renderScreenInto(wrap, { layout: layout, context: ctx });
   wireStartAction(wrap, 'start-test', startTest);
   wireStartAction(wrap, 'resume', continueSession);
   wireStartAction(wrap, 'restart', startTest);

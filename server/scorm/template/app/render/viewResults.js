@@ -15,8 +15,9 @@ function renderViewResults() {
     app.innerHTML = '<div style="padding:20px;"><p>Нет данных о попытке</p></div>';
     return;
   }
-  var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
-  var layout = layouts && layouts['results'];
+  // PRD-7 G21: `systemLayout('results')` is the bundled default's results layout
+  // when the active template declares no `results` contentTemplate.
+  var layout = (typeof systemLayout === 'function') ? systemLayout('results') : (state && state.templateLayouts && state.templateLayouts['results']);
   var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
   if (layout && TB && TB.renderScreenInto) {
     renderViewResultsTemplated(app, attempt);
@@ -85,10 +86,14 @@ function renderViewResultsTemplated(app, results) {
     backLabel: 'Вернуться к тесту'
   });
 
+  // PRD-7 G21: mount default's results layout + activate default's stylesheet
+  // when `results` falls back to the default template.
+  var layout = (typeof systemLayout === 'function') ? systemLayout('results') : state.templateLayouts['results'];
+  if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('results');
   app.innerHTML = '';
   var wrap = document.createElement('div');
   app.appendChild(wrap);
-  window.TBTemplate.renderScreenInto(wrap, { layout: state.templateLayouts['results'], context: ctx });
+  window.TBTemplate.renderScreenInto(wrap, { layout: layout, context: ctx });
   var backBtn = wrap.querySelector('[data-action="back-to-start"]');
   if (backBtn) backBtn.onclick = backToStart;
 }

@@ -896,7 +896,10 @@ h1 {
   cursor: pointer;
   text-align: left;
   font: inherit;
-  color: inherit;
+  /* The card background is intentionally a fixed light tone, so the text must be a
+     fixed dark tone — `inherit` let the topic name pick up a light theme foreground
+     and vanish on the light card (e.g. in the preview Shadow DOM). */
+  color: hsl(0 0% 13%);
   transition: border-color .15s, background .15s;
 }
 .router-topic-card:hover:not(:disabled) {
@@ -1212,7 +1215,7 @@ a.results-rec-item:hover { text-decoration: underline; }
       </div>
 
       <div class="pv-dialog-foot">
-        <span>10 экранов · 5 шаблонов контента · шаблон «Стандартный» v1.1.0</span>
+        <span>10 экранов · 7 шаблонов контента · шаблон «Стандартный» v1.1.0</span>
         <button type="button" class="pv-btn">Закрыть</button>
       </div>
     </div>
@@ -1341,6 +1344,22 @@ a.results-rec-item:hover { text-decoration: underline; }
     }
   ],
   "contentTemplates": [
+    {
+      "key": "start.standard",
+      "label": "Старт: стандартный",
+      "kind": "start",
+      "pageKind": "start",
+      "layoutFile": "layouts/start.html",
+      "placeholders": []
+    },
+    {
+      "key": "results.standard",
+      "label": "Итоги теста: стандартные",
+      "kind": "results",
+      "pageKind": "results",
+      "layoutFile": "layouts/results.html",
+      "placeholders": []
+    },
     {
       "key": "intro.hero",
       "label": "Введение: заголовок и изображение",
