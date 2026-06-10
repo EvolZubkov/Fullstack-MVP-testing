@@ -186,8 +186,9 @@ describe("lifecycle guards", () => {
   });
 
   it("deactivate switches dependent tests and returns the count", async () => {
-    // loadTemplate + the in-transaction dependents query both read selectResult;
-    // a single uploaded, active row drives loadTemplate and counts as 1 dependent.
+    // loadTemplate + the in-transaction default load + dependents query all read
+    // selectResult; a single uploaded, active row drives loadTemplate and counts
+    // as 1 dependent.
     dbMock.__state.selectResult = [
       { id: "acme", isBuiltin: false, sourceType: "uploaded", isActive: true, status: "active" },
     ];
@@ -196,6 +197,34 @@ describe("lifecycle guards", () => {
     expect(res.body.status).toBe("inactive");
     expect(typeof res.body.switchedTests).toBe("number");
     expect(dbMock.transaction).toHaveBeenCalled();
+  });
+
+  it("deactivate rebinds each dependent test to a clean `default` slepok (Fix A)", async () => {
+    // A dependent test carrying the removed template's params/version must come
+    // out repointed to `default` with the foreign params dropped.
+    dbMock.__state.selectResult = [
+      {
+        id: "acme",
+        isBuiltin: false,
+        sourceType: "uploaded",
+        isActive: true,
+        status: "active",
+        // Stand-in for both the `default` load and the dependent row (the mock
+        // returns one selectResult for every select); no manifest params here, so
+        // every saved param is treated as incompatible and dropped.
+        designSettingsJson: { templateId: "acme", templateVersion: "9.9.9", params: { logoUrl: "x.png" } },
+      },
+    ];
+    await asAuthor(request(makeApp()).put("/api/admin/templates/acme/deactivate"));
+
+    // Find the test-row update among the `set` calls (the other set is the
+    // template inactivation).
+    const slepokCall = dbMock.set.mock.calls
+      .map((c: any[]) => c[0])
+      .find((arg: any) => arg && arg.designSettingsJson);
+    expect(slepokCall).toBeTruthy();
+    expect(slepokCall.designSettingsJson.templateId).toBe("default");
+    expect(slepokCall.designSettingsJson.params).toEqual({});
   });
 
   it("smoke-test intake rejects a malformed report (400)", async () => {

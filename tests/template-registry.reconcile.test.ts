@@ -23,7 +23,17 @@ const { dbMock, pkgMock, valMock, state } = vi.hoisted(() => {
     deletes: 0,
   };
   const dbMock: any = {
-    select: () => ({ from: () => Promise.resolve(state.rows) }),
+    // `from()` returns a thenable that ALSO exposes `.where()`, so both the main
+    // list query (`await db.select().from(templates)`) and the in-transaction
+    // lookups (`db.select().from(templates).where(...)`) added by the §5.3
+    // dependent-test rebind resolve to `state.rows`.
+    select: () => ({
+      from: () => {
+        const result: any = Promise.resolve(state.rows);
+        result.where = () => Promise.resolve(state.rows);
+        return result;
+      },
+    }),
     update: () => ({
       set: (values: any) => ({
         where: () => {

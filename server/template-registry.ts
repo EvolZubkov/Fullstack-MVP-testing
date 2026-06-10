@@ -18,6 +18,12 @@ import {
 } from "@shared/schema";
 import { readDirEntries } from "./services/template-package";
 import { validateTemplatePackage, type TemplateValidationReport } from "./services/template-validation";
+import {
+  rebindToDefault,
+  manifestParamKeys,
+  type DefaultTemplateInfo,
+  type DesignSlepok,
+} from "./services/template-rebind";
 import { logger } from "./logger";
 
 // API-version helpers live in @shared/schema (db-free, shared with the validator);
@@ -174,13 +180,30 @@ export async function reconcileTemplates(): Promise<void> {
 
     // ── Orphaned built-in (phantom from an old build): remove it ───────────────
     // No longer shipped and no files on disk → not a real template. Repoint any
-    // dependent tests to `default`, then delete, transactionally (NFR-04).
+    // dependent tests to `default` (with a slepok consistent with `default` —
+    // same §5.3 rebind as the deactivate cascade), then delete, transactionally
+    // (NFR-04).
     if (row.sourceType === "builtin" && !present) {
       await db.transaction(async (tx) => {
-        await tx
-          .update(tests)
-          .set({ designSettingsJson: sql`jsonb_set(${tests.designSettingsJson}, '{templateId}', '"default"'::jsonb, true)` })
+        const [def] = await tx
+          .select()
+          .from(templates)
+          .where(eq(templates.id, DEFAULT_TEMPLATE_ID));
+        const defaultInfo: DefaultTemplateInfo = {
+          version: def?.version ?? null,
+          templateApiVersion: def?.templateApiVersion ?? null,
+          paramKeys: manifestParamKeys(def?.manifest),
+        };
+        const dependents = await tx
+          .select({ id: tests.id, designSettingsJson: tests.designSettingsJson })
+          .from(tests)
           .where(sql`${tests.designSettingsJson}->>'templateId' = ${row.id}`);
+        for (const dep of dependents) {
+          await tx
+            .update(tests)
+            .set({ designSettingsJson: rebindToDefault(dep.designSettingsJson as DesignSlepok, defaultInfo) })
+            .where(eq(tests.id, dep.id));
+        }
         await tx.delete(templates).where(eq(templates.id, row.id));
       });
       logger.warn(`Removed orphaned built-in template "${row.id}" (no longer shipped, source missing); dependent tests repointed to default`);
