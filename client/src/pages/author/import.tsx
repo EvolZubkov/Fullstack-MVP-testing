@@ -16,7 +16,7 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Download, X } from "lucide-react";
+import { Download, Upload, X } from "lucide-react";
 import {
   Banner,
   Button,
@@ -340,13 +340,19 @@ export default function ImportPage() {
             ) : !file ? (
               /* ── Empty: uploader + template ──────────────────────────── */
               <>
-                <FileUploader
-                  accept=".xlsx"
-                  title={tr.uploaderTitle}
-                  description={tr.uploaderSub}
-                  cta={tr.uploaderCta}
-                  onFiles={handleFiles}
-                />
+                {/* `children` overrides the uploader's built-in CTA «таблетка»
+                    (ou-uploader__cta) with a real DS Button; the whole dropzone
+                    stays clickable (root opens the picker via bubbling). */}
+                <FileUploader accept=".xlsx" onFiles={handleFiles}>
+                  <span className="ou-uploader__icon" aria-hidden="true">
+                    <Upload className="h-6 w-6" />
+                  </span>
+                  <span className="ou-uploader__title">{tr.uploaderTitle}</span>
+                  <span className="ou-uploader__sub">{tr.uploaderSub}</span>
+                  <Button variant="secondary" size="s" type="button" tabIndex={-1} className="mt-2">
+                    {tr.uploaderCta}
+                  </Button>
+                </FileUploader>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Button
                     variant="ghost"
