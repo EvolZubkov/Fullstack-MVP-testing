@@ -8,7 +8,7 @@ import { loadScoringConfig } from "../services/scoring-config";
 import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
 import { readResultsRenderPayload } from "../services/template-render";
-import { resolveTemplateDir } from "../services/template-dir";
+import { resolveSystemScreenDir } from "../services/template-dir";
 import type { QuestionType } from "@shared/scales/engine";
 import type { TestVariant, AttemptResult, TopicResult, PassRule, RetakePolicy } from "@shared/schema";
 
@@ -858,7 +858,10 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
     let render = null;
     if (resultJson && Array.isArray(resultJson.topicResults)) {
       const templateId = ((test?.designSettingsJson as any)?.templateId as string) || "default";
-      const dir = await resolveTemplateDir(templateId);
+      // Learner-facing render: never serve a non-active template, and when the
+      // active template declares no `results` contentTemplate, render the results
+      // screen from `default` (same fallback as «Структура» / the preview).
+      const dir = await resolveSystemScreenDir(templateId, "results", { activeOnly: true });
       render = readResultsRenderPayload(dir, resultJson, test?.title || "");
     }
 

@@ -7,7 +7,7 @@ import { db } from "../db";
 import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, retakePolicySchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate } from "../services/template-render";
-import { resolveTemplateDir } from "../services/template-dir";
+import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
 import { requireAuth, requirePermission } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { readableTestScope } from "../services/test-access";
@@ -260,6 +260,12 @@ const SCREEN_LAYOUTS: Record<string, string> = {
   blocked: "system.blocked.html",
   question: "question.html",
 };
+// System variant kind backing each screen (for the default-fallback resolution).
+// `blocked` is a pure system layout with no contentTemplate kind — never falls back.
+const SCREEN_KIND: Record<string, string | undefined> = {
+  start: "start",
+  question: "questions",
+};
 router.get("/:id/screen-template/:screen", requireAuth, async (req, res) => {
   try {
     const layoutFile = SCREEN_LAYOUTS[req.params.screen];
@@ -267,7 +273,13 @@ router.get("/:id/screen-template/:screen", requireAuth, async (req, res) => {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
     const templateId = ((test.designSettingsJson as any)?.templateId as string) || "default";
-    const dir = await resolveTemplateDir(templateId);
+    // Learner-facing render (PRD-12 web host): never serve a non-active template,
+    // and when the active template declares no contentTemplate of this screen's
+    // kind, render from `default` (same fallback as «Структура» / the preview).
+    const kind = SCREEN_KIND[req.params.screen];
+    const dir = kind
+      ? await resolveSystemScreenDir(templateId, kind, { activeOnly: true })
+      : await resolveTemplateDir(templateId, { activeOnly: true });
     const payload = readScreenTemplate(dir, layoutFile);
     if (!payload) return res.status(404).json({ error: "Template not found" });
     res.json(payload);
@@ -839,7 +851,9 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
     // Resolve the actual on-disk directory of the selected template (built-in or
     // uploaded PRD-3) so the exporter copies the right files instead of falling
     // back to `default` for uploaded ids (whose files live under uploads/templates).
-    const templateDir = await resolveTemplateDir(designTemplateId);
+    // The exported package is a learner-facing artifact: a non-active template
+    // must not ship — fall back to `default`.
+    const templateDir = await resolveTemplateDir(designTemplateId, { activeOnly: true });
 
     const buffer = await generateScormPackage({
       test,
