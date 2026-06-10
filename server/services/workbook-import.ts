@@ -1,0 +1,264 @@
+/**
+ * @module server/services/workbook-import
+ *
+ * Multi-sheet workbook import for ONE test (PRD-14 FR-15). A book has up to four
+ * sheets — «Вопросы» / «Шкалы» / «Показатели» / «Вклады вопросов» — recognized by name;
+ * missing sheets are skipped. Questions are global; scales, result variables and
+ * measurements are written into the target `testId`.
+ *
+ * Multi-pass order (FR-15.7): questions first (фиксируем `ID`↔`Ключ строки`),
+ * then scales (upsert by `key`), then measurements (resolve question by
+ * `ID`/alias and scale by `key`) and result variables (validate formula). Writes
+ * are skipped under `dryRun`; counts are still computed (FR-13).
+ *
+ * Upsert keys (FR-15 idempotency): scale = (test, key); result variable =
+ * (test, name); measurements are replaced per question (the sheet is
+ * authoritative for a question's contributions, matching the editor's PUT).
+ */
+
+import type ExcelJS from "exceljs";
+import { storage } from "../storage";
+import { sheetHeaders, sheetToObjects } from "../utils/excel";
+import {
+  insertScaleSchema,
+  insertResultVariableSchema,
+  type Scale,
+  type ResultVariable,
+} from "@shared/schema";
+import type { ValueType } from "@shared/formula";
+import { importQuestionRows, type ResolvedQuestion } from "./questions-import";
+import {
+  parseScaleRow,
+  parseResultVariableRow,
+  parseMeasurementRow,
+  validateSourceKey,
+} from "../utils/workbook-sheets";
+
+export interface WorkbookImportResult {
+  questions: { created: number; updated: number; skipped: number };
+  scales: { created: number; updated: number };
+  resultVariables: { created: number; updated: number };
+  measurements: { rows: number; questions: number };
+  errors: string[];
+  dryRun: boolean;
+}
+
+type QuestionType = "single" | "multiple" | "matching" | "ranking";
+
+/** Find a worksheet by role name (case-insensitive, trimmed). */
+function findSheet(wb: ExcelJS.Workbook, name: string): ExcelJS.Worksheet | undefined {
+  const target = name.trim().toLowerCase();
+  return wb.worksheets.find((w) => (w.name ?? "").trim().toLowerCase() === target);
+}
+
+/** Option/pair/item count of a stored question (for source-key validation). */
+function unitCountOfQuestion(q: { type: string; dataJson: unknown }): number {
+  const d = (q.dataJson ?? {}) as any;
+  if (q.type === "single" || q.type === "multiple") return d.options?.length ?? 0;
+  if (q.type === "matching") return d.left?.length ?? 0;
+  return d.items?.length ?? 0;
+}
+
+export async function importWorkbook(
+  testId: string,
+  workbook: ExcelJS.Workbook,
+  opts: { dryRun: boolean },
+): Promise<WorkbookImportResult> {
+  const { dryRun } = opts;
+  const result: WorkbookImportResult = {
+    questions: { created: 0, updated: 0, skipped: 0 },
+    scales: { created: 0, updated: 0 },
+    resultVariables: { created: 0, updated: 0 },
+    measurements: { rows: 0, questions: 0 },
+    errors: [],
+    dryRun,
+  };
+
+  // ── Pass 1: «Вопросы» (global). Records alias → resolved question. ──
+  const aliasToQuestion = new Map<string, ResolvedQuestion>();
+  const questionsSheet = findSheet(workbook, "Вопросы");
+  if (questionsSheet) {
+    const qres = await importQuestionRows(sheetToObjects(questionsSheet), sheetHeaders(questionsSheet), { dryRun });
+    result.questions = { created: qres.created, updated: qres.updated, skipped: qres.skipped };
+    for (const e of qres.errors) result.errors.push(`Лист «Вопросы», ${e}`);
+    for (const [alias, q] of qres.aliasToQuestion) aliasToQuestion.set(alias, q);
+  }
+
+  // ── Pass 2: «Шкалы» (upsert by key). Build key → scaleId for measurements. ──
+  const existingScales = await storage.getScales(testId);
+  const scaleIdByKey = new Map<string, string>(existingScales.map((s) => [s.key, s.id]));
+  const scaleByKey = new Map<string, Scale>(existingScales.map((s) => [s.key, s]));
+
+  const scalesSheet = findSheet(workbook, "Шкалы");
+  if (scalesSheet) {
+    const rows = sheetToObjects(scalesSheet);
+    for (let i = 0; i < rows.length; i++) {
+      const where = `Лист «Шкалы», строка ${i + 2}`;
+      const parsed = parseScaleRow(rows[i]);
+      if (!parsed.ok) {
+        result.errors.push(`${where}: ${parsed.error}`);
+        continue;
+      }
+      const existing = scaleByKey.get(String(parsed.value.key));
+      const sortOrder = existing?.sortOrder ?? scaleIdByKey.size;
+      const check = insertScaleSchema.safeParse({ ...parsed.value, testId, sortOrder });
+      if (!check.success) {
+        const first = check.error.issues[0];
+        result.errors.push(`${where}: ${first.message} (${first.path.join(".")})`);
+        continue;
+      }
+      const data = check.data;
+      if (existing) {
+        if (!dryRun) await storage.updateScale(existing.id, data);
+        result.scales.updated++;
+      } else {
+        let newId = `__newscale__:${data.key}`;
+        if (!dryRun) {
+          const created = await storage.createScale(data);
+          newId = created.id;
+        }
+        scaleIdByKey.set(data.key, newId);
+        scaleByKey.set(data.key, { ...(data as any), id: newId } as Scale);
+        result.scales.created++;
+      }
+    }
+  }
+
+  // ── Pass 3: «Показатели» (upsert by name; validate formula; controlsStatus guard). ──
+  const existingVars = await storage.getResultVariables(testId);
+  const varByName = new Map<string, ResultVariable>(existingVars.map((v) => [v.name, v]));
+  // Track which controller is taken (by another variable) to guard ≤1 each.
+  const controllerOwner = new Map<string, string>(); // status → name
+  for (const v of existingVars) {
+    if (v.controlsStatus === "success" || v.controlsStatus === "completion") {
+      controllerOwner.set(v.controlsStatus, v.name);
+    }
+  }
+
+  const varsSheet = findSheet(workbook, "Показатели");
+  if (varsSheet) {
+    const rows = sheetToObjects(varsSheet);
+    for (let i = 0; i < rows.length; i++) {
+      const where = `Лист «Показатели», строка ${i + 2}`;
+      const parsed = parseResultVariableRow(rows[i]);
+      if (!parsed.ok) {
+        result.errors.push(`${where}: ${parsed.error}`);
+        continue;
+      }
+      const existing = varByName.get(String(parsed.value.name));
+      const sortOrder = existing?.sortOrder ?? varByName.size;
+      const check = insertResultVariableSchema.safeParse({ ...parsed.value, testId, sortOrder });
+      if (!check.success) {
+        const first = check.error.issues[0];
+        result.errors.push(`${where}: ${first.message} (${first.path.join(".")})`);
+        continue;
+      }
+      const data = check.data;
+
+      // controlsStatus guard (≤1 success, ≤1 completion per test).
+      if (data.controlsStatus === "success" || data.controlsStatus === "completion") {
+        const owner = controllerOwner.get(data.controlsStatus);
+        if (owner && owner !== data.name) {
+          result.errors.push(`${where}: статусом «${data.controlsStatus}» уже управляет «${owner}»`);
+          continue;
+        }
+      }
+
+      const validation = await storage.validateResultVariableFormula(testId, data.formula, data.type as ValueType, {
+        sortOrder: data.sortOrder,
+        excludeId: existing?.id,
+        // Scales/variables defined in this workbook are not persisted yet under
+        // dryRun (and never, for a brand-new target test) — feed them in so the
+        // formula validator sees the full picture (FR-15 dry-run accuracy).
+        extraScaleKeys: [...scaleIdByKey.keys()],
+        extraVarNames: [...varByName.keys()],
+      });
+      if (!validation.valid) {
+        result.errors.push(`${where}: невалидная формула`);
+        continue;
+      }
+
+      if (existing) {
+        if (!dryRun) await storage.updateResultVariable(existing.id, data);
+        result.resultVariables.updated++;
+      } else {
+        if (!dryRun) await storage.createResultVariable(data);
+        varByName.set(data.name, { ...(data as any) } as ResultVariable);
+        result.resultVariables.created++;
+      }
+      if (data.controlsStatus === "success" || data.controlsStatus === "completion") {
+        controllerOwner.set(data.controlsStatus, data.name);
+      }
+    }
+  }
+
+  // ── Pass 4: «Вклады вопросов» (resolve question + scale; per-question replace). ──
+  const measSheet = findSheet(workbook, "Вклады вопросов");
+  if (measSheet) {
+    const rows = sheetToObjects(measSheet);
+
+    // Resolve a «Вопрос» cell → { id, type, unitCount }: alias first, then ID.
+    const questionCache = new Map<string, ResolvedQuestion | null>();
+    const resolveQuestion = async (ref: string): Promise<ResolvedQuestion | null> => {
+      if (aliasToQuestion.has(ref)) return aliasToQuestion.get(ref)!;
+      if (questionCache.has(ref)) return questionCache.get(ref)!;
+      const q = await storage.getQuestion(ref);
+      const resolved: ResolvedQuestion | null = q
+        ? { id: q.id, type: q.type as QuestionType, unitCount: unitCountOfQuestion(q) }
+        : null;
+      questionCache.set(ref, resolved);
+      return resolved;
+    };
+
+    // Group resolved rows by questionId (per-question replace).
+    const byQuestion = new Map<string, any[]>();
+    for (let i = 0; i < rows.length; i++) {
+      const where = `Лист «Вклады вопросов», строка ${i + 2}`;
+      const parsed = parseMeasurementRow(rows[i]);
+      if (!parsed.ok) {
+        result.errors.push(`${where}: ${parsed.error}`);
+        continue;
+      }
+      const m = parsed.value;
+
+      const q = await resolveQuestion(m.questionRef);
+      if (!q) {
+        result.errors.push(`${where}: вопрос "${m.questionRef}" не найден (ни ID, ни «Ключ строки»)`);
+        continue;
+      }
+      const scaleId = scaleIdByKey.get(m.scaleKey);
+      if (!scaleId) {
+        result.errors.push(`${where}: шкала "${m.scaleKey}" не найдена`);
+        continue;
+      }
+      const keyErr = validateSourceKey(m.sourceType, m.sourceKey, q.unitCount);
+      if (keyErr) {
+        result.errors.push(`${where}: ${keyErr}`);
+        continue;
+      }
+
+      const list = byQuestion.get(q.id) ?? [];
+      list.push({
+        testId,
+        questionId: q.id,
+        scaleId,
+        sourceType: m.sourceType,
+        sourceKey: m.sourceType === "question" ? null : m.sourceKey,
+        valueJson: m.value,
+        weight: m.weight,
+        sortOrder: list.length,
+      });
+      byQuestion.set(q.id, list);
+      result.measurements.rows++;
+    }
+
+    result.measurements.questions = byQuestion.size;
+    if (!dryRun) {
+      for (const [questionId, rowsForQ] of byQuestion) {
+        await storage.upsertQuestionMeasurements(testId, questionId, rowsForQ);
+      }
+    }
+  }
+
+  return result;
+}

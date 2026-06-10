@@ -235,7 +235,7 @@ export interface IStorage {
     testId: string,
     formula: string,
     type: ValueType,
-    opts?: { sortOrder?: number; excludeId?: string },
+    opts?: { sortOrder?: number; excludeId?: string; extraScaleKeys?: string[]; extraVarNames?: string[] },
   ): Promise<ValidationResult>;
   // PRD-5: scales and per-question measurements.
   getScales(testId: string): Promise<Scale[]>;
@@ -1493,7 +1493,7 @@ export class DatabaseStorage implements IStorage {
     testId: string,
     formula: string,
     type: ValueType,
-    opts: { sortOrder?: number; excludeId?: string } = {},
+    opts: { sortOrder?: number; excludeId?: string; extraScaleKeys?: string[]; extraVarNames?: string[] } = {},
   ): Promise<ValidationResult> {
     const sections = await db.select().from(testSections).where(eq(testSections.testId, testId));
     const topicIds = new Set(sections.map((s) => s.topicId));
@@ -1501,9 +1501,13 @@ export class DatabaseStorage implements IStorage {
     const prior = existing.filter(
       (rv) => rv.id !== opts.excludeId && (opts.sortOrder === undefined || rv.sortOrder < opts.sortOrder),
     );
-    const priorVarNames = new Set(prior.map((rv) => rv.name));
+    // `extraScaleKeys`/`extraVarNames`: scales/variables defined in the SAME
+    // workbook but not yet persisted (PRD-14 FR-15 dry-run, and a brand-new
+    // target test). Without them, a formula referencing a fresh scale/variable
+    // would falsely fail validation while the plan is computed without writes.
+    const priorVarNames = new Set([...prior.map((rv) => rv.name), ...(opts.extraVarNames ?? [])]);
     const scaleRows = await db.select().from(scales).where(eq(scales.testId, testId));
-    const scaleKeys = new Set(scaleRows.map((s) => s.key));
+    const scaleKeys = new Set([...scaleRows.map((s) => s.key), ...(opts.extraScaleKeys ?? [])]);
     return validate(formula, type, { topicIds, priorVarNames, scaleKeys });
   }
 

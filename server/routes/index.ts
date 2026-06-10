@@ -17,6 +17,8 @@ import adminTemplatesRouter from "./admin-templates";
 import contentPagesRouter from "./content-pages";
 import resultVariablesRouter from "./result-variables";
 import scalesRouter from "./scales";
+import testsWorkbookRouter from "./tests-workbook";
+import workbookRouter from "./workbook";
 
 export {
   foldersRouter,
@@ -38,6 +40,8 @@ export {
   contentPagesRouter,
   resultVariablesRouter,
   scalesRouter,
+  testsWorkbookRouter,
+  workbookRouter,
 };
 
 // Конфигурация монтирования роутеров
@@ -48,6 +52,8 @@ export const routerConfig = [
   { path: "/api/tests", router: contentPagesRouter },
   { path: "/api/tests", router: resultVariablesRouter },
   { path: "/api/tests", router: scalesRouter },
+  { path: "/api/tests", router: testsWorkbookRouter },
+  { path: "/api/workbook", router: workbookRouter },
   { path: "/api/folders", router: foldersRouter },
   { path: "/api/test-folders", router: testFoldersRouter },
   { path: "/api/topics", router: topicsRouter },
