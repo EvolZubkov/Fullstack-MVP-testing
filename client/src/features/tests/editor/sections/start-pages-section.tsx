@@ -299,6 +299,25 @@ const structureCollision: CollisionDetection = (args) => {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+/**
+ * Resolves which template the page-preview must render from. Mirrors the
+ * variant-binding fallback (PRD-7 G21 / PRD-1 §4.3.2): when the active template
+ * declares no `contentTemplate` of this page's kind, the planner binds the page
+ * to the built-in `default`, so the preview MUST render from `default` too —
+ * otherwise «Структура» shows «Из стандартного шаблона» while the preview renders
+ * the active template's own (or fallback) screen. Returns the draft template id
+ * when the active template owns a variant of the kind, else `"default"`.
+ */
+export function previewTemplateId(
+  cp: { contentTemplates: ReadonlyArray<{ kind?: string }> },
+  draftTemplateId: string | undefined,
+  page: { kind?: string | null },
+): string | undefined {
+  const hasOwnVariant =
+    page.kind != null && cp.contentTemplates.some((v) => v.kind === page.kind);
+  return hasOwnVariant ? draftTemplateId : "default";
+}
+
 export function StructureSection({ model, testId, content: contentProp, savedFlowMode, onGoToComposition, updateModel, readOnly = false, designDraft }: StructureSectionProps) {
   // Fallback hook so the section works standalone (component tests) when the
   // drawer has not hoisted the hook. Mirrors design-section's pattern.
@@ -370,7 +389,12 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
         <PagePreviewModal
           open
           onClose={() => setPreviewCtx(null)}
-          templateId={designDraft?.templateId}
+          // When the active template declares no variant of this page's kind, the
+          // planner binds the page to the built-in `default` (same rule as the
+          // «Из стандартного шаблона» badge). The preview MUST then render from
+          // `default` too — otherwise the structure says "standard" while the
+          // preview shows the active template (PRD-7 G21 consistency).
+          templateId={previewTemplateId(cp, designDraft?.templateId, previewCtx.page)}
           params={designDraft?.params ?? {}}
           page={previewCtx.page}
           pageTitle={pageTitle(previewCtx.page)}

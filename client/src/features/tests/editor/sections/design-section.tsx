@@ -288,6 +288,28 @@ function TemplatePane({
   if (!tpl) return null;
   return (
     <div data-testid="design-template-pane">
+      {design.templateOutdated && (
+        <Banner
+          tone="warning"
+          icon={<AlertTriangle width={16} height={16} aria-hidden="true" />}
+          title="Шаблон обновлён"
+          description={
+            <>
+              Шаблон «<strong>{tpl.manifest.name ?? tpl.name}</strong>» был
+              перезагружен (версия v{tpl.manifest.version ?? tpl.version}).
+              Сохранённое оформление могло устареть. Обновите его, чтобы
+              применить актуальные параметры шаблона.
+            </>
+          }
+          actions={[
+            {
+              label: "Обновить оформление",
+              onClick: design.refreshTemplateVersion,
+            },
+          ]}
+          data-testid="design-template-outdated"
+        />
+      )}
       <div className="tpl-block" data-testid="design-template-card">
         <button
           type="button"

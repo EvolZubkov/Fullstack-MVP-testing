@@ -198,6 +198,44 @@ describe("<DesignSection /> — Шаблон pane", () => {
   });
 });
 
+describe("<DesignSection /> — template-outdated banner (PRD-3)", () => {
+  it("shows the outdated banner when the saved version differs from the template's", async () => {
+    mockFetch((url) => {
+      if (url === `/api/tests/${TEST_ID}/design`)
+        return jsonResponse({ templateId: "corporate", templateVersion: "1.0.0", params: {} });
+      if (url === `/api/templates/corporate`) return jsonResponse(TEMPLATE);
+      return jsonResponse({ error: "unexpected" }, 500);
+    });
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-outdated")).toBeInTheDocument(),
+    );
+  });
+
+  it("does not show the banner when the saved version matches the template's", async () => {
+    mockFetch((url) => {
+      if (url === `/api/tests/${TEST_ID}/design`)
+        return jsonResponse({ templateId: "corporate", templateVersion: "1.2.0", params: {} });
+      if (url === `/api/templates/corporate`) return jsonResponse(TEMPLATE);
+      return jsonResponse({ error: "unexpected" }, 500);
+    });
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("design-template-outdated")).toBeNull();
+  });
+
+  it("does not show the banner when the slepok recorded no version", async () => {
+    // DESIGN_SETTINGS_DEFAULT has no templateVersion → nothing to reconcile.
+    renderWithClient(<DesignSection testId={TEST_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("design-template-pane")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("design-template-outdated")).toBeNull();
+  });
+});
+
 describe("<DesignSection /> — Брендирование pane", () => {
   it("renders one row per template param", async () => {
     renderWithClient(<DesignSection testId={TEST_ID} />);

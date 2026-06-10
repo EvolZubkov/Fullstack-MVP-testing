@@ -133,6 +133,16 @@ export type UseDesignSettingsResult = {
    * banner replaces the template card and disables the other panes.
    */
   templateMissing: boolean;
+  /**
+   * PRD-3: the current draft records a `templateVersion` that differs from the
+   * template's CURRENT version — the template's content was replaced under the
+   * same id (re-upload / delete+reupload). The render uses the new files but the
+   * saved `params` snapshot belongs to the old version. A banner offers a
+   * one-click {@link refreshTemplateVersion} to re-stamp the version and drop
+   * params that no longer exist in the new manifest; clicking it clears this flag
+   * immediately (it follows the draft), then the author saves.
+   */
+  templateOutdated: boolean;
   /** Patch a single param key in the draft. */
   setParam: (key: string, value: unknown) => void;
   /** Reset the draft to the manifest's defaults (clearing all params). */
@@ -149,6 +159,14 @@ export type UseDesignSettingsResult = {
    * the wf-template-incompatible banner.
    */
   applyDefaultTemplate: () => void;
+  /**
+   * PRD-3: reconcile the draft with the current template version — re-stamp
+   * `templateVersion`/`templateApiVersion` to the loaded template and keep only
+   * the params whose keys still exist in its manifest. Used by the
+   * "template-outdated" banner. Marks the draft dirty; the author saves to
+   * persist.
+   */
+  refreshTemplateVersion: () => void;
   /** Discard pending edits, reverting to the saved snapshot. */
   revert: () => void;
   /** Persist the draft via PUT. */
@@ -255,6 +273,26 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     setTemplate("default");
   };
 
+  const refreshTemplateVersion = () => {
+    const tpl = templateQuery.data;
+    if (!tpl) return;
+    // Keep only params whose keys still exist in the new manifest; drop the rest.
+    const allowed = new Set((tpl.manifest.params ?? []).map((p) => p.key));
+    setDraft((d) => {
+      const prevParams = d.params ?? {};
+      const kept: Record<string, unknown> = {};
+      for (const key of Object.keys(prevParams)) {
+        if (allowed.has(key)) kept[key] = prevParams[key];
+      }
+      return {
+        templateId: tpl.id,
+        templateVersion: tpl.version,
+        templateApiVersion: tpl.templateApiVersion,
+        params: kept,
+      };
+    });
+  };
+
   const revert = () => {
     if (persisted) {
       setDraft({ ...persisted, params: { ...(persisted.params ?? {}) } });
@@ -278,6 +316,17 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     !templateQuery.data &&
     Boolean(persisted?.templateId);
 
+  // PRD-3: the current design selection records a version that drifted from the
+  // template's current version (content replaced under the same id). Computed
+  // from the DRAFT (not the persisted snapshot) so the «Обновить оформление»
+  // action gives immediate feedback — the banner disappears the moment the draft
+  // is reconciled, before the author saves. Only meaningful once the template
+  // resolved (active) and the draft actually recorded a version.
+  const templateOutdated =
+    Boolean(draft.templateVersion) &&
+    Boolean(templateQuery.data) &&
+    draft.templateVersion !== templateQuery.data!.version;
+
   return {
     isLoading: designQuery.isLoading || templateQuery.isLoading,
     error: (designQuery.error as Error | null) ?? (templateQuery.error as Error | null),
@@ -285,10 +334,12 @@ export function useDesignSettings(testId: string | undefined): UseDesignSettings
     draft,
     isDirty,
     templateMissing,
+    templateOutdated,
     setParam,
     resetToDefaults,
     setTemplate,
     applyDefaultTemplate,
+    refreshTemplateVersion,
     revert,
     save: () => saveMutation.mutateAsync(),
     isSaving: saveMutation.isPending,
