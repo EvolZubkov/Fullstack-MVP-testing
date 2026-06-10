@@ -15,6 +15,13 @@
 
 /* ─── Local length tokens (1:1 with prd7-shared.css `--wf-*`) ─────────────── */
 .tb-tests-list {
+  /* Fill the height of the DS shell main (flex column with overflow:auto), so the
+     tree scrolls internally and the table spans the viewport instead of sizing to
+     its rows. min-height:0 lets the inner .tree-area actually shrink and scroll. */
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   --wf-border-w: 1px;
   --wf-space-half: 2px;
   --wf-space-1q: 3px;
@@ -84,7 +91,7 @@
 }
 
 /* ─── Tree container + 9-column grid (PRD-13: + "Владелец") ──────────────── */
-.tb-tests-list .tree-area { flex: 1; overflow-y: auto; }
+.tb-tests-list .tree-area { flex: 1; min-height: 0; overflow-y: auto; }
 
 .tb-tests-list .tree-header,
 .tb-tests-list .tree-root,
