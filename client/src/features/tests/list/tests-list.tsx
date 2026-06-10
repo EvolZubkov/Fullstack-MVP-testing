@@ -33,6 +33,7 @@ import {
   ChevronRight,
   ClipboardList,
   Download,
+  FileSpreadsheet,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -632,6 +633,16 @@ export function TestsListPage(): React.JSX.Element {
         >
           <Download className="h-3.5 w-3.5" />
           Экспорт SCORM
+        </a>
+        <a
+          className="dropdown-item"
+          role="menuitem"
+          href={`/api/tests/${test.id}/workbook/export`}
+          onClick={() => setTestMenu(null)}
+          data-testid={`menu-export-excel-${test.id}`}
+        >
+          <FileSpreadsheet className="h-3.5 w-3.5" />
+          Экспорт в Excel
         </a>
         <hr className="dropdown-sep" />
         <button
