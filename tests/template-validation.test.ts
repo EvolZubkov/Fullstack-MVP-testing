@@ -157,6 +157,39 @@ describe("validateTemplatePackage — blocking errors (§4.1)", () => {
     expect(codes(r)).toContain("QUESTION_CONTRACT");
   });
 
+  it("rejects a layout whose mustache does not compile (empty {{}})", () => {
+    const r = validateTemplatePackage(
+      validPackage({ files: { "layouts/results.html": '<button>{{}}</button>' } }),
+      { mode: "create" },
+    );
+    expect(r.ok).toBe(false);
+    expect(codes(r)).toContain("LAYOUT_TEMPLATE_SYNTAX");
+    expect(r.blocking.find((i) => i.code === "LAYOUT_TEMPLATE_SYNTAX")?.ref).toContain("layouts/results.html");
+  });
+
+  it("rejects a layout with an unclosed block ({{#if}})", () => {
+    const r = validateTemplatePackage(
+      validPackage({ files: { "layouts/results.html": '<div>{{#if x}}no close</div>' } }),
+      { mode: "create" },
+    );
+    expect(codes(r)).toContain("LAYOUT_TEMPLATE_SYNTAX");
+  });
+
+  it("rejects a malformed content-template layoutFile (compiled too)", () => {
+    const r = validateTemplatePackage(
+      validPackage({
+        manifest: {
+          contentTemplates: [
+            { key: "intro.x", label: "Введение", kind: "intro", layoutFile: "layouts/intro.html", placeholders: [] },
+          ],
+        },
+        files: { "layouts/intro.html": '<h1>{{ }}</h1>' },
+      }),
+      { mode: "create" },
+    );
+    expect(codes(r)).toContain("LAYOUT_TEMPLATE_SYNTAX");
+  });
+
   it("rejects invalid JSON in preview.demoData", () => {
     const r = validateTemplatePackage(
       validPackage({ files: { "demo/course.json": "{bad" } }),
