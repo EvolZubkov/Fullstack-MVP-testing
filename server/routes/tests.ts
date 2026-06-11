@@ -11,6 +11,7 @@ import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template
 import { requirePermission, requireUserContext } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { readableTestScope, canGrantAccess } from "../services/test-access";
+import { visibleTopic } from "../services/topic-access";
 import { assessTestPublish } from "../services/draw-feasibility";
 import { createTestSnapshot, getPublicationState, exportSourceForTest } from "../services/test-snapshot";
 import { generateScormPackage } from "../scorm-exporter";
@@ -110,6 +111,40 @@ function zodToFields(err: z.ZodError) {
 function logZodValidationFailure(route: string, err: z.ZodError) {
   const fields = zodToFields(err);
   logger.warn(`${route} validation failed: ${JSON.stringify(fields)}`, "tests");
+}
+
+/**
+ * PRD-15 block C (FR-22/E-13): a test may only reference topics its author can
+ * see. Validates every topic id referenced by the saved sections / adaptive
+ * settings against {@link visibleTopic}. Returns the first invisible topic id,
+ * or null when all are visible (or the actor is an admin, for whom every topic
+ * is visible). The delivery path is intentionally NOT gated this way — losing
+ * topic access must not break already published tests (FR-24).
+ *
+ * `exempt` carries the FR-25 derived in-context read: topics the test ALREADY
+ * references are kept even after a soft grant revoke, so the author can still
+ * re-save that test; only newly added references must be generally visible.
+ *
+ * @param roles - the actor's effective roles.
+ * @param userId - the actor's id.
+ * @param topicIds - the distinct topic ids referenced by the test body.
+ * @param exempt - topic ids already referenced by the test (in-context read).
+ * @returns the first topic id the actor cannot see, or null.
+ */
+async function firstInvisibleTopic(
+  roles: readonly import("@shared/access").Role[],
+  userId: string,
+  topicIds: readonly string[],
+  exempt: ReadonlySet<string> = new Set(),
+): Promise<string | null> {
+  for (const id of [...new Set(topicIds)]) {
+    if (exempt.has(id)) continue;
+    const topic = await storage.getTopic(id);
+    // A missing topic is left to the existing referential checks; only an
+    // existing-but-invisible topic is an access violation here.
+    if (topic && !(await visibleTopic(roles, userId, topic))) return id;
+  }
+  return null;
 }
 
 const router = Router();
@@ -406,6 +441,24 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       return res.status(400).json({ error: "Sections are required for standard tests" });
     }
 
+    // PRD-15 block C (FR-22/E-13): sections/levels may only cite visible topics.
+    const referencedTopics = [
+      ...(sections ?? []).map((s) => s.topicId),
+      ...((adaptiveSettings ?? []) as AdaptiveTopicPayload[]).map((a) => a.topicId),
+    ];
+    const invisible = await firstInvisibleTopic(
+      req.effectiveRoles ?? [],
+      req.currentUser?.id ?? "",
+      referencedTopics,
+    );
+    if (invisible) {
+      return res.status(403).json({
+        error: "topic_forbidden",
+        message: "Тест ссылается на недоступную тему",
+        topicId: invisible,
+      });
+    }
+
     const test = await testSettingsService.create({
       test: {
         title: title!,
@@ -614,6 +667,31 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
     const expectedVersion = typeof (req.body as { expectedVersion?: unknown })?.expectedVersion === "number"
       ? (req.body as { expectedVersion: number }).expectedVersion
       : undefined;
+
+    // PRD-15 block C (FR-22/E-13): sections/levels may only cite visible topics.
+    // FR-25 derived in-context read: topics already referenced by this test are
+    // exempt, so a soft grant revoke does not block re-saving an existing test.
+    const referencedTopics = [
+      ...(mode === "standard" ? (sections ?? []).map((s) => s.topicId) : []),
+      ...(mode === "adaptive"
+        ? ((adaptiveSettings ?? []) as AdaptiveTopicPayload[]).map((a) => a.topicId)
+        : []),
+    ];
+    const existingSections = await storage.getTestSections(req.params.id);
+    const exempt = new Set(existingSections.map((s) => s.topicId));
+    const invisible = await firstInvisibleTopic(
+      req.effectiveRoles ?? [],
+      req.currentUser?.id ?? "",
+      referencedTopics,
+      exempt,
+    );
+    if (invisible) {
+      return res.status(403).json({
+        error: "topic_forbidden",
+        message: "Тест ссылается на недоступную тему",
+        topicId: invisible,
+      });
+    }
 
     const test = await testSettingsService.save(req.params.id, {
       test: {

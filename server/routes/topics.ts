@@ -4,20 +4,36 @@ import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { assessTopicDeletion } from "../services/draw-feasibility";
 import {
-  canMutateContent,
   respondForbiddenContent,
   respondIfBlocked,
   mergeAssessments,
   isDryRun,
   respondDryRun,
 } from "../services/content-guard";
+import {
+  visibleTopicScope,
+  canManageTopicContent,
+  canDeleteTopic,
+  canGrantTopicAccess,
+  canChangeTopicOwner,
+  dependentTestsForGrant,
+  isAdminOrSuper,
+  sameOwnerNameClash,
+  visibleSameNameTopics,
+  duplicateNameGroups,
+} from "../services/topic-access";
+import { normalizeTopicName } from "@shared/topics/naming";
 
 const router = Router();
 
 // GET /api/topics - Список тем с курсами и количеством вопросов
-router.get("/", requirePermission("topics.manage"), async (req, res) => {
+// PRD-15 block C (FR-22): scoped to topics the actor may see (own, granted,
+// shared; admin sees all).
+router.get("/", requirePermission("topics.read"), async (req, res) => {
   try {
-    const topics = await storage.getTopics();
+    const scope = await visibleTopicScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+    const allTopics = await storage.getTopics();
+    const topics = scope.all ? allTopics : allTopics.filter((t) => scope.ids.has(t.id));
     const topicsWithDetails = await Promise.all(
       topics.map(async (topic) => {
         const courses = await storage.getTopicCourses(topic.id);
@@ -38,6 +54,49 @@ router.get("/", requirePermission("topics.manage"), async (req, res) => {
   }
 });
 
+// GET /api/topics/name-check — FR-27 live same-name check (in the visible area).
+// `sameOwner` is the hard per-owner clash (would block create); `duplicates`
+// are the non-blocking other-owner collisions worth a warning.
+router.get("/name-check", requirePermission("topics.read"), async (req, res) => {
+  try {
+    const name = String(req.query.name ?? "");
+    const excludeId = req.query.excludeId ? String(req.query.excludeId) : undefined;
+    if (!name.trim()) {
+      return res.json({ normalized: "", sameOwner: null, duplicates: [] });
+    }
+    const ownerId = req.currentUser?.id ?? null;
+    const sameOwner = await sameOwnerNameClash(ownerId, name, excludeId);
+    const duplicates = await visibleSameNameTopics(
+      req.effectiveRoles ?? [],
+      ownerId ?? "",
+      name,
+      excludeId,
+    );
+    res.json({
+      normalized: normalizeTopicName(name),
+      sameOwner: sameOwner ? { id: sameOwner.id, name: sameOwner.name } : null,
+      duplicates,
+    });
+  } catch (error) {
+    logger.error("Topic name-check error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to check topic name" });
+  }
+});
+
+// GET /api/topics/duplicates-report — FR-27 administrator report of system-wide
+// same-name groups. Authors hold `topics.read`, so the admin gate is explicit.
+router.get("/duplicates-report", requirePermission("topics.read"), async (req, res) => {
+  try {
+    if (!isAdminOrSuper(req.effectiveRoles ?? [])) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    res.json({ groups: await duplicateNameGroups() });
+  } catch (error) {
+    logger.error("Topic duplicates-report error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to build duplicates report" });
+  }
+});
+
 // POST /api/topics - Создать тему
 router.post("/", requirePermission("topics.manage"), async (req, res) => {
   try {
@@ -45,14 +104,33 @@ router.post("/", requirePermission("topics.manage"), async (req, res) => {
     if (!name) {
       return res.status(400).json({ error: "Name required" });
     }
+    const ownerId = req.currentUser?.id ?? null;
+    // FR-27 hard uniqueness within one owner.
+    const clash = await sameOwnerNameClash(ownerId, name);
+    if (clash) {
+      return res.status(409).json({
+        error: "duplicate_topic_name",
+        message: "У вас уже есть тема с таким названием",
+        topicId: clash.id,
+      });
+    }
     const topic = await storage.createTopic({
       name,
       description,
       feedback,
       folderId,
-      createdBy: req.currentUser?.id ?? null,
+      createdBy: ownerId,
     });
-    res.status(201).json(topic);
+    // FR-27 non-blocking warning: same name visible elsewhere (other owners).
+    const duplicates = await visibleSameNameTopics(
+      req.effectiveRoles ?? [],
+      ownerId ?? "",
+      name,
+      topic.id,
+    );
+    res.status(201).json(
+      duplicates.length > 0 ? { ...topic, warnings: [{ kind: "duplicate_name", topics: duplicates }] } : topic,
+    );
   } catch (error) {
     logger.error("Create topic error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to create topic" });
@@ -60,14 +138,46 @@ router.post("/", requirePermission("topics.manage"), async (req, res) => {
 });
 
 // PUT /api/topics/:id - Обновить тему
+// PRD-15 block C: editing a topic requires owner / manage-grant / admin.
 router.put("/:id", requirePermission("topics.manage"), async (req, res) => {
   try {
+    const topic = await storage.getTopic(req.params.id);
+    if (!topic) return res.status(404).json({ error: "Topic not found" });
+    if (!(await canManageTopicContent(req.effectiveRoles ?? [], req.currentUser?.id ?? "", topic))) {
+      respondForbiddenContent(res);
+      return;
+    }
     const { name, description, feedback, folderId } = req.body;
+    // FR-27: a rename to a name already used by ANOTHER of the owner's topics is
+    // a hard conflict; a clash with a different owner's visible topic only warns.
+    const renamed =
+      typeof name === "string" && name.length > 0 &&
+      normalizeTopicName(name) !== normalizeTopicName(topic.name);
+    if (renamed) {
+      const clash = await sameOwnerNameClash(topic.ownerId, name, topic.id);
+      if (clash) {
+        return res.status(409).json({
+          error: "duplicate_topic_name",
+          message: "У владельца уже есть тема с таким названием",
+          topicId: clash.id,
+        });
+      }
+    }
     const updated = await storage.updateTopic(req.params.id, { name, description, feedback, folderId });
     if (!updated) {
       return res.status(404).json({ error: "Topic not found" });
     }
-    res.json(updated);
+    let warnings: Array<{ kind: string; topics: unknown[] }> | undefined;
+    if (typeof name === "string" && name.length > 0) {
+      const duplicates = await visibleSameNameTopics(
+        req.effectiveRoles ?? [],
+        req.currentUser?.id ?? "",
+        name,
+        topic.id,
+      );
+      if (duplicates.length > 0) warnings = [{ kind: "duplicate_name", topics: duplicates }];
+    }
+    res.json(warnings ? { ...updated, warnings } : updated);
   } catch (error) {
     logger.error("Update topic error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to update topic" });
@@ -103,7 +213,7 @@ router.delete("/courses/:id", requirePermission("topics.manage"), async (req, re
 });
 
 // DELETE /api/topics/:id - Удалить тему
-// PRD-15 FR-02/FR-05 (E-2): creator/admin only; blocked while published tests
+// PRD-15 block C / FR-05 (E-2): owner/admin only; blocked while published tests
 // depend on the topic (409 with the dependents list; admin ?force=true).
 router.delete("/:id", requirePermission("topics.manage"), async (req, res) => {
   try {
@@ -111,7 +221,7 @@ router.delete("/:id", requirePermission("topics.manage"), async (req, res) => {
     if (!topic) {
       return res.status(404).json({ error: "Topic not found" });
     }
-    if (!canMutateContent(req, topic.createdBy)) {
+    if (!canDeleteTopic(req.effectiveRoles ?? [], req.currentUser?.id ?? "", topic)) {
       respondForbiddenContent(res);
       return;
     }
@@ -139,7 +249,7 @@ router.post("/bulk-delete", requirePermission("topics.manage"), async (req, res)
     }
     for (const id of ids) {
       const topic = await storage.getTopic(id);
-      if (topic && !canMutateContent(req, topic.createdBy)) {
+      if (topic && !canDeleteTopic(req.effectiveRoles ?? [], req.currentUser?.id ?? "", topic)) {
         respondForbiddenContent(res);
         return;
       }
@@ -168,6 +278,176 @@ router.post("/:id/duplicate", requirePermission("topics.manage"), async (req, re
   } catch (error) {
     logger.error("Duplicate topic error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to duplicate topic" });
+  }
+});
+
+// ─── Topic access grants and ownership (PRD-15 block C, T-27) ────────────────
+
+// GET /api/topics/:id/access — owner, visibility and grants (owner or admin).
+router.get("/:id/access", requirePermission("topics.access.grant"), async (req, res) => {
+  try {
+    const topic = await storage.getTopic(req.params.id);
+    if (!topic) return res.status(404).json({ error: "Topic not found" });
+    if (!canGrantTopicAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", topic)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const grants = await storage.getTopicGrants(topic.id);
+    // Resolve grantee display names for the panel.
+    const withNames = await Promise.all(
+      grants.map(async (g) => {
+        let granteeName: string | null = null;
+        if (g.granteeType === "user") granteeName = (await storage.getUser(g.granteeId))?.name ?? null;
+        else granteeName = (await storage.getGroup(g.granteeId))?.name ?? null;
+        return { ...g, granteeName };
+      }),
+    );
+    res.json({ topicId: topic.id, ownerId: topic.ownerId ?? null, visibility: topic.visibility, grants: withNames });
+  } catch (error) {
+    logger.error("Get topic access error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to get topic access" });
+  }
+});
+
+// POST /api/topics/:id/access — grant or update use/manage access for a user/group.
+router.post("/:id/access", requirePermission("topics.access.grant"), async (req, res) => {
+  try {
+    const topic = await storage.getTopic(req.params.id);
+    if (!topic) return res.status(404).json({ error: "Topic not found" });
+    if (!canGrantTopicAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", topic)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const { granteeType, granteeId, accessLevel } = req.body ?? {};
+    if (granteeType !== "user" && granteeType !== "group") {
+      return res.status(400).json({ error: "granteeType must be 'user' or 'group'" });
+    }
+    if (typeof granteeId !== "string" || !granteeId) {
+      return res.status(400).json({ error: "granteeId required" });
+    }
+    if (accessLevel !== "use" && accessLevel !== "manage") {
+      return res.status(400).json({ error: "accessLevel must be 'use' or 'manage'" });
+    }
+    const exists = granteeType === "user"
+      ? await storage.getUser(granteeId)
+      : await storage.getGroup(granteeId);
+    if (!exists) return res.status(404).json({ error: "Grantee not found" });
+    const grant = await storage.upsertTopicGrant({
+      topicId: topic.id,
+      granteeType,
+      granteeId,
+      accessLevel,
+      grantedBy: req.currentUser?.id ?? null,
+    });
+    logger.info(
+      `Topic grant: ${topic.id} -> ${granteeType}:${granteeId} ${accessLevel} by ${req.currentUser?.id ?? "?"}`,
+    );
+    res.status(201).json(grant);
+  } catch (error) {
+    logger.error("Grant topic access error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to grant topic access" });
+  }
+});
+
+// DELETE /api/topics/:id/access/:grantId — revoke a grant in one of two modes.
+//
+// Soft revoke (default, FR-25): the grant moves to `revoked_in_use`. It stops
+// granting bank access (the topic leaves the grantee's bank and new tests),
+// but the grantee keeps the derived in-context read for tests that already
+// reference the topic. Available to the owner and administrators.
+//
+// Hard revoke (`?mode=hard`, FR-26): administrator-only. The grant row is
+// removed outright. The grantee's dependent tests are listed; published
+// dependents block with 409 + resolution options unless an administrator
+// forces (`?force=true`) — the explicit, logged override.
+router.delete("/:id/access/:grantId", requirePermission("topics.access.grant"), async (req, res) => {
+  try {
+    const topic = await storage.getTopic(req.params.id);
+    if (!topic) return res.status(404).json({ error: "Topic not found" });
+    if (!canGrantTopicAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", topic)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const grant = (await storage.getTopicGrants(topic.id)).find((g) => g.id === req.params.grantId);
+    if (!grant) return res.status(404).json({ error: "Grant not found" });
+
+    if (req.query.mode !== "hard") {
+      // Soft revoke: keep the row, flip to revoked_in_use.
+      await storage.setTopicGrantState(grant.id, "revoked_in_use");
+      logger.info(
+        `Topic grant soft-revoked: ${grant.id} on ${topic.id} by ${req.currentUser?.id ?? "?"}`,
+      );
+      return res.json({ mode: "soft", grantId: grant.id, state: "revoked_in_use" });
+    }
+
+    // Hard revoke is administrator-only (FR-26).
+    if (!isAdminOrSuper(req.effectiveRoles ?? [])) {
+      return res.status(403).json({
+        error: "hard_revoke_admin_only",
+        message: "Жёсткий отзыв доступен только администратору",
+      });
+    }
+    const dependents = await dependentTestsForGrant(grant.topicId, grant.granteeType, grant.granteeId);
+    const blocking = dependents.filter((d) => d.status === "published");
+    const forced = req.query.force === "true";
+    if (blocking.length > 0 && !forced) {
+      return res.status(409).json({
+        error: "grant_in_use",
+        message: "Отзыв затрагивает опубликованные тесты получателя",
+        dependents,
+        // Author-facing resolution options surfaced by the client dialog.
+        resolutions: ["replace_sections", "unpublish", "change_owner", "materialize_snapshot"],
+      });
+    }
+    await storage.removeTopicGrant(grant.id);
+    logger.info(
+      `Topic grant hard-revoked: ${grant.id} on ${topic.id} by ${req.currentUser?.id ?? "?"} ` +
+        `(force=${forced}, dependents=${dependents.length})`,
+    );
+    res.json({ mode: "hard", grantId: grant.id, removed: true, dependents });
+  } catch (error) {
+    logger.error("Revoke topic access error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to revoke topic access" });
+  }
+});
+
+// PATCH /api/topics/:id/visibility — make a topic shared or private (owner/admin).
+router.patch("/:id/visibility", requirePermission("topics.access.grant"), async (req, res) => {
+  try {
+    const topic = await storage.getTopic(req.params.id);
+    if (!topic) return res.status(404).json({ error: "Topic not found" });
+    if (!canGrantTopicAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", topic)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const { visibility } = req.body ?? {};
+    if (visibility !== "private" && visibility !== "shared") {
+      return res.status(400).json({ error: "visibility must be 'private' or 'shared'" });
+    }
+    await storage.setTopicVisibility(topic.id, visibility);
+    res.json({ topicId: topic.id, visibility });
+  } catch (error) {
+    logger.error("Set topic visibility error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to set topic visibility" });
+  }
+});
+
+// PATCH /api/topics/:id/owner — change the topic owner (admin/super only).
+router.patch("/:id/owner", requirePermission("topics.owner.change"), async (req, res) => {
+  try {
+    const topic = await storage.getTopic(req.params.id);
+    if (!topic) return res.status(404).json({ error: "Topic not found" });
+    if (!canChangeTopicOwner(req.effectiveRoles ?? [])) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const { ownerId } = req.body ?? {};
+    if (ownerId !== null && typeof ownerId !== "string") {
+      return res.status(400).json({ error: "ownerId must be a string or null" });
+    }
+    if (typeof ownerId === "string" && !(await storage.getUser(ownerId))) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    await storage.setTopicOwner(topic.id, ownerId);
+    res.json({ topicId: topic.id, ownerId });
+  } catch (error) {
+    logger.error("Set topic owner error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to set topic owner" });
   }
 });
 

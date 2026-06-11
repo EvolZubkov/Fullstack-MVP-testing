@@ -18,13 +18,17 @@ import { importQuestionRows } from "../services/questions-import";
 import { serializeQuestionRow, QUESTION_WIDTHS } from "../services/questions-export";
 import { assessQuestionsRemoval, assessQuestionChange } from "../services/draw-feasibility";
 import {
-  canMutateContent,
   respondForbiddenContent,
   respondIfBlocked,
   mergeAssessments,
   isDryRun,
   respondDryRun,
 } from "../services/content-guard";
+import {
+  visibleTopicScope,
+  canManageTopicContent,
+  isAdminOrSuper,
+} from "../services/topic-access";
 import type { Question } from "@shared/schema";
 
 // PRD-15 FR-02: fields whose change affects delivery or grading of dependent
@@ -44,6 +48,27 @@ function gradingOrDrawFieldsChanged(existing: Question, body: UpdateQuestionBody
     (Array.isArray(body.tags) &&
       JSON.stringify(normalizeTags(body.tags)) !== JSON.stringify(existing.tags ?? []))
   );
+}
+
+/**
+ * PRD-15 block C (FR-22): a question is governed by its topic. CRUD on it
+ * requires `manage` on that topic (owner, manage grant, or admin). This
+ * replaces the block-A creator gate (`created_by`). A dangling question whose
+ * topic was deleted is administrator-only.
+ *
+ * @param req - the authenticated request (roles and current user).
+ * @param topicId - the question's topic id (or null for a dangling row).
+ * @returns whether the actor may create/update/delete this question.
+ */
+async function canManageQuestion(
+  req: Request,
+  topicId: string | null | undefined,
+): Promise<boolean> {
+  const roles = req.effectiveRoles ?? [];
+  if (isAdminOrSuper(roles)) return true;
+  if (!topicId) return false;
+  const topic = await storage.getTopic(topicId);
+  return topic ? canManageTopicContent(roles, req.currentUser?.id ?? "", topic) : false;
 }
 
 // PRD-10: validate the optional graded-scoring config (FR-13). Null/undefined =
@@ -112,13 +137,18 @@ interface ExportQuery {
 // ============================================
 // GET /api/questions - Список вопросов
 // ============================================
-router.get("/", requirePermission("questions.manage"), async (_req: Request, res: Response) => {
+router.get("/", requirePermission("questions.read"), async (req: Request, res: Response) => {
   try {
     const questions = await storage.getQuestions();
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
 
-    const questionsWithTopics = questions.map((q) => ({
+    // PRD-15 block C (FR-22): questions inherit their topic's visibility — only
+    // those in topics the actor may see are returned.
+    const scope = await visibleTopicScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+    const visible = scope.all ? questions : questions.filter((q) => scope.ids.has(q.topicId));
+
+    const questionsWithTopics = visible.map((q) => ({
       ...q,
       topicName: topicMap.get(q.topicId) || "Unknown",
     }));
@@ -161,6 +191,12 @@ router.post(
 
       if (!topicId || !type || !prompt) {
         return res.status(400).json({ error: "TopicId, type and prompt required" });
+      }
+
+      // PRD-15 block C: adding a question requires manage on the target topic.
+      if (!(await canManageQuestion(req, topicId))) {
+        respondForbiddenContent(res);
+        return;
       }
 
       if (!validateScoring(scoringJson, res)) return;
@@ -224,22 +260,27 @@ router.put(
 
       if (!validateScoring(scoringJson, res)) return;
 
-      // PRD-15 FR-02/FR-05: edits that change delivery or grading are limited
-      // to the creator/administrator; tag/difficulty/move edits additionally
-      // pass the draw-feasibility check against dependent tests (E-3/E-4).
+      // PRD-15 FR-05: tag/difficulty/move edits additionally pass the
+      // draw-feasibility check against dependent tests (E-3/E-4).
       const existing = await storage.getQuestion(req.params.id);
       if (!existing) {
         return res.status(404).json({ error: "Question not found" });
       }
+      // PRD-15 block C: editing any question requires manage on its topic; a
+      // move additionally requires manage on the destination topic.
+      if (!(await canManageQuestion(req, existing.topicId))) {
+        respondForbiddenContent(res);
+        return;
+      }
+      const movesTopic = topicId !== undefined && topicId !== existing.topicId;
+      if (movesTopic && !(await canManageQuestion(req, topicId))) {
+        respondForbiddenContent(res);
+        return;
+      }
       let feasibilityWarnings: unknown[] = [];
       const affectsDelivery = gradingOrDrawFieldsChanged(existing, req.body as UpdateQuestionBody);
       if (affectsDelivery) {
-        if (!canMutateContent(req, existing.createdBy)) {
-          respondForbiddenContent(res);
-          return;
-        }
         const nextTags = Array.isArray(tags) ? normalizeTags(tags) : undefined;
-        const movesTopic = topicId !== undefined && topicId !== existing.topicId;
         const assessments = [];
         if (nextTags !== undefined || difficulty !== undefined) {
           assessments.push(await assessQuestionChange(req.params.id, { tags: nextTags, difficulty }));
@@ -306,7 +347,7 @@ router.delete(
       if (!question) {
         return res.status(404).json({ error: "Question not found" });
       }
-      if (!canMutateContent(req, question.createdBy)) {
+      if (!(await canManageQuestion(req, question.topicId))) {
         respondForbiddenContent(res);
         return;
       }
@@ -340,7 +381,7 @@ router.post(
       }
       for (const id of ids) {
         const question = await storage.getQuestion(id);
-        if (question && !canMutateContent(req, question.createdBy)) {
+        if (question && !(await canManageQuestion(req, question.topicId))) {
           respondForbiddenContent(res);
           return;
         }
@@ -414,6 +455,13 @@ router.get(
       // Применяем фильтр
       if (filterTopicIds.length > 0) {
         questions = questions.filter((q) => filterTopicIds.includes(q.topicId));
+      }
+
+      // PRD-15 block C (FR-22): never export answer keys from topics the actor
+      // cannot see — restrict to the visible scope (admins see everything).
+      const scope = await visibleTopicScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+      if (!scope.all) {
+        questions = questions.filter((q) => scope.ids.has(q.topicId));
       }
 
       // Сортировка по теме
