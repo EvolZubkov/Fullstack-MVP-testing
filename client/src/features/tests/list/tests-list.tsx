@@ -62,6 +62,8 @@ import {
 } from "@universityrt/ui-kit";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
+import type { PublishCheckFinding, PublishInfeasibleError } from "@/features/content-protection/types";
 import { TestEditor } from "@/features/tests/editor/test-editor";
 import { TestAccessPanel } from "@/features/tests/access/test-access-panel";
 import { AssignTestDialog } from "@/components/assign-test-dialog";
@@ -249,12 +251,35 @@ export function TestsListPage(): React.JSX.Element {
   const [accessTest, setAccessTest] = useState<{ id: string; title: string } | null>(null);
   const canGrantAccess = can("tests.access.grant");
 
+  // PRD-15 T-12 (E-12): publish-infeasible findings to show in the impact dialog.
+  const [publishImpact, setPublishImpact] = useState<{
+    testId: string;
+    findings: PublishCheckFinding[];
+  } | null>(null);
+
   // ─── Mutations ───────────────────────────────────────────────────────────
   const statusMutation = useMutation({
     mutationFn: async (args: { id: string; status: "draft" | "published" | "archived" }) => {
       return apiRequest("PATCH", `/api/tests/${args.id}/status`, { status: args.status });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/tests"] }),
+    onError: (error: Error, args) => {
+      // apiRequest throws "409: <json>"; surface a publish-infeasible 409 as the
+      // content-impact dialog (PRD-15 FR-06), otherwise a generic toast.
+      const match = /^409:\s*([\s\S]+)$/.exec(error.message);
+      if (match) {
+        try {
+          const payload = JSON.parse(match[1]) as PublishInfeasibleError;
+          if (payload.error === "publish_infeasible") {
+            setPublishImpact({ testId: args.id, findings: payload.findings });
+            return;
+          }
+        } catch {
+          /* fall through to the toast */
+        }
+      }
+      toast({ variant: "destructive", title: "Ошибка", description: "Не удалось изменить статус теста" });
+    },
   });
 
   const moveMutation = useMutation({
@@ -583,6 +608,20 @@ export function TestsListPage(): React.JSX.Element {
 
       {/* Access panel (PRD-13, WF-2) ---------------------------------------- */}
       <TestAccessPanel test={accessTest} onClose={() => setAccessTest(null)} />
+
+      {/* PRD-15 T-12 (E-12): publish-infeasible impact dialog --------------- */}
+      <ContentImpactDialog
+        open={publishImpact !== null}
+        mode="publish"
+        title="Тест нельзя опубликовать: выдача вопросов невыполнима"
+        description="При текущем составе тем тест не сможет собрать вариант для прохождения."
+        findings={publishImpact?.findings ?? []}
+        onClose={() => setPublishImpact(null)}
+        onOpenStructure={() => {
+          if (publishImpact) setEditorTarget({ kind: "edit", testId: publishImpact.testId });
+          setPublishImpact(null);
+        }}
+      />
     </div>
   );
 

@@ -21,6 +21,8 @@ import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { LoadingState, LoadingSpinner } from "@/components/loading-state";
 import { t, formatQuestions } from "@/lib/i18n";
+import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
+import { useContentGuard } from "@/features/content-protection/use-content-guard";
 import type { Topic, TopicCourse, TopicEvent, Folder as FolderType } from "@shared/schema";
 
 const topicFormSchema = z.object({
@@ -57,6 +59,7 @@ interface TopicWithDetails extends Topic {
 
 export default function TopicsPage() {
   const { toast } = useToast();
+  const contentGuard = useContentGuard();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [courseDialogOpen, setCourseDialogOpen] = useState(false);
@@ -133,16 +136,7 @@ export default function TopicsPage() {
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/topics/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      toast({ title: t.topics.topicDeleted, description: t.topics.topicDeletedDescription });
-    },
-    onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.topics.failedToDelete });
-    },
-  });
+  // Topic deletion goes through the content guard (see handleDelete, PRD-15 T-12).
 
   const createFolderMutation = useMutation({
     mutationFn: (data: FolderFormData) => apiRequest("POST", "/api/folders", data),
@@ -241,19 +235,7 @@ export default function TopicsPage() {
     },
   });
 
-  const bulkDeleteMutation = useMutation({
-    mutationFn: (ids: string[]) => apiRequest("POST", "/api/topics/bulk-delete", { ids }),
-    onSuccess: (_, ids) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
-      toast({ title: t.topics.topicsDeleted, description: t.topics.topicsDeletedDescription(ids.length) });
-      setSelectedTopics(new Set());
-      setBulkDeleteDialogOpen(false);
-    },
-    onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.topics.failedToDeleteTopics });
-    },
-  });
+  // Bulk topic delete goes through the content guard (see confirmBulkDelete, PRD-15 T-12).
 
   const handleDuplicate = (id: string) => {
     duplicateMutation.mutate(id);
@@ -286,8 +268,31 @@ export default function TopicsPage() {
     }
   };
 
+  // PRD-15 T-12: the AlertDialog above is the plain confirm; on accept the guard
+  // dry-runs — a clean batch deletes, an impacting one opens the content dialog.
   const confirmBulkDelete = () => {
-    bulkDeleteMutation.mutate(Array.from(selectedTopics));
+    const ids = Array.from(selectedTopics);
+    setBulkDeleteDialogOpen(false);
+    contentGuard.guard({
+      url: "/api/topics/bulk-delete",
+      method: "POST",
+      body: { ids },
+      blockTitle: "Темы нельзя удалить: их используют опубликованные тесты",
+      blockDescription:
+        "Часть выбранных тем входит в выдачу вопросов опубликованных тестов. Удаление нарушит их работу.",
+      warnTitle: "Удалить выбранные темы? Это затронет другие тесты",
+      warnDescription: "Опубликованные тесты не пострадают, но есть последствия, о которых стоит знать.",
+      confirmLabel: `Удалить (${ids.length})`,
+      onDone: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
+        toast({
+          title: t.topics.topicsDeleted,
+          description: t.topics.topicsDeletedDescription(ids.length),
+        });
+        setSelectedTopics(new Set());
+      },
+    });
   };
 
   const handleOpenCreate = (folderId?: string | null) => {
@@ -401,10 +406,24 @@ export default function TopicsPage() {
     }
   };
 
+  // PRD-15 T-12: dry-run first. Clean delete keeps the plain confirm; a delete
+  // that affects published tests opens the content-impact dialog (block/warn).
   const handleDelete = (id: string) => {
-    if (confirm(t.topics.confirmDelete)) {
-      deleteMutation.mutate(id);
-    }
+    contentGuard.guard({
+      url: `/api/topics/${id}`,
+      method: "DELETE",
+      blockTitle: "Тему нельзя удалить: её используют опубликованные тесты",
+      blockDescription:
+        "Тема входит в выдачу вопросов опубликованных тестов. Удаление нарушит их работу.",
+      warnTitle: "Удалить тему? Это затронет другие тесты",
+      warnDescription: "Опубликованные тесты не пострадают, но есть последствия, о которых стоит знать.",
+      confirmLabel: "Удалить тему",
+      confirmClean: () => confirm(t.topics.confirmDelete),
+      onDone: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
+        toast({ title: t.topics.topicDeleted, description: t.topics.topicDeletedDescription });
+      },
+    });
   };
 
   const rootFolders = folders?.filter((f) => !f.parentId) || [];
@@ -1080,12 +1099,14 @@ export default function TopicsPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               data-testid="button-confirm-bulk-delete-topics"
             >
-              {bulkDeleteMutation.isPending && <LoadingSpinner className="mr-2" />}
               {t.common.delete}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* PRD-15 T-12: content-impact dialog for deletes affecting other tests */}
+      <ContentImpactDialog {...contentGuard.dialogProps} />
     </div>
   );
 }

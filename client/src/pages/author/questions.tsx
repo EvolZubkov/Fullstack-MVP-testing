@@ -23,6 +23,8 @@ import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/empty-state";
 import { LoadingState, LoadingSpinner } from "@/components/loading-state";
 import { t, formatPoints } from "@/lib/i18n";
+import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
+import { useContentGuard } from "@/features/content-protection/use-content-guard";
 import type { Question, Topic } from "@shared/schema";
 import {
   ScoringBuilder,
@@ -54,6 +56,7 @@ interface QuestionWithTopic extends Question {
 
 export default function QuestionsPage() {
   const { toast } = useToast();
+  const contentGuard = useContentGuard();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [selectedType, setSelectedType] = useState<QuestionType>("single");
@@ -147,31 +150,9 @@ export default function QuestionsPage() {
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      apiRequest("PUT", `/api/questions/${id}`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      toast({ title: t.questions.questionUpdated, description: t.questions.questionUpdatedDescription });
-      handleCloseDialog();
-    },
-    onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.questions.failedToUpdate });
-    },
-  });
+  // Question edits go through the content guard (see onSubmit, PRD-15 T-12).
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/questions/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      toast({ title: t.questions.questionDeleted, description: t.questions.questionDeletedDescription });
-    },
-    onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.questions.failedToDelete });
-    },
-  });
+  // Question deletion goes through the content guard (see handleDelete, PRD-15 T-12).
 
   const duplicateMutation = useMutation({
     mutationFn: (id: string) => apiRequest("POST", `/api/questions/${id}/duplicate`),
@@ -185,18 +166,7 @@ export default function QuestionsPage() {
     },
   });
 
-  const bulkDeleteMutation = useMutation({
-    mutationFn: (ids: string[]) => apiRequest("POST", "/api/questions/bulk-delete", { ids }),
-    onSuccess: (_, ids) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      toast({ title: t.questions.questionsDeleted, description: `${t.questions.deletedCount} ${ids.length}` });
-      setSelectedQuestions(new Set());
-    },
-    onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.questions.failedToDelete });
-    },
-  });
+  // Bulk delete goes through the content guard (see handleBulkDelete, PRD-15 T-12).
 
   const importMutation = useMutation({
     mutationFn: async ({ file, dryRun }: { file: File; dryRun: boolean }) => {
@@ -472,10 +442,28 @@ export default function QuestionsPage() {
     resetQuestionData();
   };
 
+  // PRD-15 T-12: dry-run first. Clean delete keeps the plain confirm; a delete
+  // that affects published tests opens the content-impact dialog (block/warn).
   const handleDelete = (id: string) => {
-    if (confirm(t.questions.confirmDelete)) {
-      deleteMutation.mutate(id);
-    }
+    contentGuard.guard({
+      url: `/api/questions/${id}`,
+      method: "DELETE",
+      blockTitle: "Вопрос нельзя удалить: его используют опубликованные тесты",
+      blockDescription:
+        "Вопрос входит в выдачу опубликованных тестов. Удаление нарушит их работу.",
+      warnTitle: "Удалить вопрос? Это затронет другие тесты",
+      warnDescription: "Опубликованные тесты не пострадают, но есть последствия, о которых стоит знать.",
+      confirmLabel: "Удалить вопрос",
+      confirmClean: () => confirm(t.questions.confirmDelete),
+      onDone: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
+        toast({
+          title: t.questions.questionDeleted,
+          description: t.questions.questionDeletedDescription,
+        });
+      },
+    });
   };
 
   const buildQuestionData = () => {
@@ -543,17 +531,61 @@ export default function QuestionsPage() {
     };
 
     if (editingQuestion) {
-      updateMutation.mutate({ id: editingQuestion.id, data });
+      // PRD-15 T-12: edits that affect delivery/grading of published tests are
+      // gated by the content guard (dry-run first). A clean edit saves directly;
+      // a warning-only edit asks for confirmation; a blocking one shows the 409.
+      contentGuard.guard({
+        url: `/api/questions/${editingQuestion.id}`,
+        method: "PUT",
+        body: data,
+        blockTitle: "Вопрос нельзя изменить: правка ломает опубликованные тесты",
+        blockDescription:
+          "Изменение состава, баллов или тегов нарушит выдачу или оценивание опубликованных тестов.",
+        warnTitle: "Сохранить изменения? Это затронет другие тесты",
+        warnDescription: "Опубликованные тесты не пострадают, но есть последствия, о которых стоит знать.",
+        confirmLabel: "Сохранить изменения",
+        confirmVariant: "primary",
+        onDone: () => {
+          queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
+          toast({
+            title: t.questions.questionUpdated,
+            description: t.questions.questionUpdatedDescription,
+          });
+          handleCloseDialog();
+        },
+      });
     } else {
       createMutation.mutate(data);
     }
   };
 
+  // PRD-15 T-12: bulk delete runs the same guard (dry-run first); a clean
+  // batch keeps the plain confirm, an impacting one opens the content dialog.
   const handleBulkDelete = () => {
     if (selectedQuestions.size === 0) return;
-    if (confirm(`${t.questions.confirmBulkDelete} ${selectedQuestions.size}?`)) {
-      bulkDeleteMutation.mutate(Array.from(selectedQuestions));
-    }
+    const ids = Array.from(selectedQuestions);
+    contentGuard.guard({
+      url: "/api/questions/bulk-delete",
+      method: "POST",
+      body: { ids },
+      blockTitle: "Вопросы нельзя удалить: их используют опубликованные тесты",
+      blockDescription:
+        "Часть выбранных вопросов входит в выдачу опубликованных тестов. Удаление нарушит их работу.",
+      warnTitle: "Удалить выбранные вопросы? Это затронет другие тесты",
+      warnDescription: "Опубликованные тесты не пострадают, но есть последствия, о которых стоит знать.",
+      confirmLabel: `Удалить (${ids.length})`,
+      confirmClean: () => confirm(`${t.questions.confirmBulkDelete} ${ids.length}?`),
+      onDone: () => {
+        queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
+        toast({
+          title: t.questions.questionsDeleted,
+          description: `${t.questions.deletedCount} ${ids.length}`,
+        });
+        setSelectedQuestions(new Set());
+      },
+    });
   };
 
   const toggleQuestionSelection = (id: string) => {
@@ -729,14 +761,9 @@ export default function QuestionsPage() {
                   variant="destructive"
                   size="sm"
                   onClick={handleBulkDelete}
-                  disabled={bulkDeleteMutation.isPending}
                   data-testid="button-bulk-delete"
                 >
-                  {bulkDeleteMutation.isPending ? (
-                    <LoadingSpinner className="mr-2" />
-                  ) : (
-                    <Trash2 className="h-4 w-4 mr-2" />
-                  )}
+                  <Trash2 className="h-4 w-4 mr-2" />
                   {t.questions.deleteSelected}
                 </Button>
               </div>
@@ -1170,12 +1197,10 @@ export default function QuestionsPage() {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isUploadingMedia || createMutation.isPending || updateMutation.isPending}
+                  disabled={isUploadingMedia || createMutation.isPending}
                   data-testid="button-submit-question"
                 >
-                  {(createMutation.isPending || updateMutation.isPending) && (
-                    <LoadingSpinner className="mr-2" />
-                  )}
+                  {createMutation.isPending && <LoadingSpinner className="mr-2" />}
                   {editingQuestion ? t.common.update : t.common.create}
                 </Button>
               </DialogFooter>
@@ -1371,6 +1396,9 @@ export default function QuestionsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* PRD-15 T-12: content-impact dialog for deletes affecting other tests */}
+      <ContentImpactDialog {...contentGuard.dialogProps} />
     </div>
   );
 }
