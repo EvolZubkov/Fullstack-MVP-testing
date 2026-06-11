@@ -1,10 +1,12 @@
 /**
  * @module tests/content-protection
  *
- * Acceptance tests of the PRD-15 block A content protection (FR-02/FR-05/
- * FR-06; audit matrix E-1..E-5, E-9, E-10, E-12): the creator restriction,
- * the 409 referential protection over published dependents, warnings for
- * drafts and drawAll, the admin force override and the publish-time gate.
+ * Acceptance tests of the PRD-15 content protection (FR-02/FR-05/FR-06; audit
+ * matrix E-1..E-5, E-9, E-10, E-12). With block C the destructive-operation
+ * gate is the TOPIC owner/grant (`canManageTopicContent`/`canDeleteTopic`), not
+ * the per-question creator; on top of that the 409 referential protection over
+ * published dependents, warnings for drafts and drawAll, the admin force
+ * override and the publish-time gate.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -21,6 +23,9 @@ const { storageMock } = vi.hoisted(() => ({
     // users / roles
     getUser: vi.fn(),
     getUserRoles: vi.fn(),
+    getUserGroups: vi.fn(),
+    // topic access (PRD-15 block C)
+    getActiveTopicGrantsForGrantees: vi.fn(),
     // topics & questions
     getTopic: vi.fn(),
     getTopics: vi.fn(),
@@ -113,7 +118,12 @@ const asAdmin = as("admin1");
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
-const topic = { id: "t1", name: "Финансы", createdBy: "author1", folderId: null };
+// PRD-15 block C: the topic is owned by author1; protection is governed by the
+// topic owner/grant, not the per-question creator.
+const topic = {
+  id: "t1", name: "Финансы", ownerId: "author1", visibility: "private",
+  createdBy: "author1", folderId: null,
+};
 const q1 = {
   id: "q1", topicId: "t1", type: "single", prompt: "Q1?",
   dataJson: { options: ["A", "B"] }, correctJson: { correctIndex: 0 },
@@ -137,6 +147,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   storageMock.getUser.mockImplementation(async (id: string) => users[id]);
   storageMock.getUserRoles.mockImplementation(async (id: string) => rolesByUser[id] ?? []);
+  storageMock.getUserGroups.mockResolvedValue([]);
+  storageMock.getActiveTopicGrantsForGrantees.mockResolvedValue([]);
   storageMock.getTopic.mockResolvedValue(topic);
   storageMock.getQuestion.mockImplementation(async (id: string) =>
     id === "q1" ? q1 : id === "q2" ? q2 : undefined,
@@ -171,7 +183,7 @@ beforeEach(() => {
 
 // ─── FR-02: creator restriction ──────────────────────────────────────────────
 
-describe("FR-02 — destructive operations are creator/admin only", () => {
+describe("FR-02 — destructive operations require topic ownership/manage (block C)", () => {
   it("denies a foreign author deleting someone else's topic (403)", async () => {
     const res = await asAuthor2(request(makeApp()).delete("/api/topics/t1"));
     expect(res.status).toBe(403);
@@ -179,7 +191,7 @@ describe("FR-02 — destructive operations are creator/admin only", () => {
     expect(storageMock.deleteTopic).not.toHaveBeenCalled();
   });
 
-  it("lets the creator delete their topic when nothing depends on it", async () => {
+  it("lets the owner delete their topic when nothing depends on it", async () => {
     const res = await asAuthor1(request(makeApp()).delete("/api/topics/t1"));
     expect(res.status).toBe(200);
   });
@@ -189,8 +201,8 @@ describe("FR-02 — destructive operations are creator/admin only", () => {
     expect(res.status).toBe(200);
   });
 
-  it("treats NULL-creator (legacy) content as admin-only", async () => {
-    storageMock.getTopic.mockResolvedValue({ ...topic, createdBy: null });
+  it("treats an unowned (legacy) topic as admin-only", async () => {
+    storageMock.getTopic.mockResolvedValue({ ...topic, ownerId: null });
     const res = await asAuthor1(request(makeApp()).delete("/api/topics/t1"));
     expect(res.status).toBe(403);
   });
@@ -202,9 +214,19 @@ describe("FR-02 — destructive operations are creator/admin only", () => {
     expect(res.status).toBe(403);
   });
 
-  it("allows a foreign author a non-grading edit (e.g. prompt typo)", async () => {
+  it("denies a foreign author even a non-grading edit (no topic manage)", async () => {
+    // Under block C the question inherits its topic's protection, so a typo fix
+    // in a topic the actor cannot manage is refused just like a grading edit.
     const res = await asAuthor2(
       request(makeApp()).put("/api/questions/q1").send({ prompt: "Fixed typo?" }),
+    );
+    expect(res.status).toBe(403);
+    expect(storageMock.updateQuestion).not.toHaveBeenCalled();
+  });
+
+  it("lets the topic owner edit a question (grading change passes the gate)", async () => {
+    const res = await asAuthor1(
+      request(makeApp()).put("/api/questions/q1").send({ prompt: "Reworded?" }),
     );
     expect(res.status).toBe(200);
   });

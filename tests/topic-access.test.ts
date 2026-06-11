@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ROLES } from "@shared/access";
+import { normalizeTopicName } from "@shared/topics/naming";
 
 const { storageMock } = vi.hoisted(() => ({
   storageMock: {
@@ -15,6 +16,8 @@ const { storageMock } = vi.hoisted(() => ({
     getActiveTopicGrantsForGrantees: vi.fn(),
     getSharedTopicIds: vi.fn(),
     getTopicIdsByOwner: vi.fn(),
+    getTestsUsingTopic: vi.fn(),
+    getGroupUsers: vi.fn(),
   },
 }));
 vi.mock("../server/storage", () => ({ storage: storageMock }));
@@ -26,6 +29,7 @@ import {
   canGrantTopicAccess,
   canChangeTopicOwner,
   visibleTopicScope,
+  dependentTestsForGrant,
 } from "../server/services/topic-access";
 
 const PRIVATE = { id: "tp1", ownerId: "owner-1", visibility: "private" as const };
@@ -37,6 +41,8 @@ beforeEach(() => {
   storageMock.getActiveTopicGrantsForGrantees.mockResolvedValue([]);
   storageMock.getSharedTopicIds.mockResolvedValue([]);
   storageMock.getTopicIdsByOwner.mockResolvedValue([]);
+  storageMock.getTestsUsingTopic.mockResolvedValue([]);
+  storageMock.getGroupUsers.mockResolvedValue([]);
 });
 
 describe("visibleTopic", () => {
@@ -123,5 +129,44 @@ describe("visibleTopicScope", () => {
     const scope = await visibleTopicScope([ROLES.MANAGER], "u1");
     expect(scope.ids.size).toBe(0);
     expect(storageMock.getSharedTopicIds).not.toHaveBeenCalled();
+  });
+});
+
+describe("normalizeTopicName (FR-27)", () => {
+  it("folds case, trims, collapses spaces and maps ё->е", () => {
+    expect(normalizeTopicName("  Финансы ")).toBe("финансы");
+    expect(normalizeTopicName("Ёлка")).toBe("елка");
+    expect(normalizeTopicName("Учёт   и  Аудит")).toBe("учет и аудит");
+  });
+  it("collides variants that differ only by case/space/ё", () => {
+    expect(normalizeTopicName("Тёма")).toBe(normalizeTopicName("тема"));
+  });
+});
+
+describe("dependentTestsForGrant (FR-26 hard-revoke feasibility)", () => {
+  const using = [
+    { id: "t-own", title: "Свой", ownerId: "u9", status: "published", mode: "standard" },
+    { id: "t-other", title: "Чужой", ownerId: "u-other", status: "published", mode: "standard" },
+    { id: "t-noown", title: "Без владельца", ownerId: null, status: "draft", mode: "standard" },
+  ];
+
+  it("for a user grant returns only the grantee's own dependent tests", async () => {
+    storageMock.getTestsUsingTopic.mockResolvedValue(using);
+    const deps = await dependentTestsForGrant("tp1", "user", "u9");
+    expect(deps).toEqual([{ testId: "t-own", title: "Свой", status: "published" }]);
+    expect(storageMock.getGroupUsers).not.toHaveBeenCalled();
+  });
+
+  it("for a group grant returns tests owned by any member", async () => {
+    storageMock.getTestsUsingTopic.mockResolvedValue(using);
+    storageMock.getGroupUsers.mockResolvedValue([{ id: "u9" }, { id: "u-other" }]);
+    const deps = await dependentTestsForGrant("tp1", "group", "grp1");
+    expect(deps.map((d) => d.testId).sort()).toEqual(["t-other", "t-own"]);
+  });
+
+  it("returns an empty list when no dependent test belongs to the grantee", async () => {
+    storageMock.getTestsUsingTopic.mockResolvedValue([using[1], using[2]]);
+    const deps = await dependentTestsForGrant("tp1", "user", "u9");
+    expect(deps).toEqual([]);
   });
 });

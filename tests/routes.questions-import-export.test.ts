@@ -22,7 +22,7 @@
  *   - Ответ содержит { created, updated, skipped, errors }
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import request from "supertest";
 import express from "express";
 import session from "express-session";
@@ -47,10 +47,16 @@ const { storageMock } = vi.hoisted(() => ({
     updateQuestion: vi.fn(),
     deleteQuestion: vi.fn(),
     getTopics: vi.fn(),
+    getTopic: vi.fn(),
     createTopic: vi.fn(),
     getTestSections: vi.fn(),
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
+    // PRD-15 block C: topic visibility scope for FR-28 import matching.
+    getUserGroups: vi.fn().mockResolvedValue([]),
+    getSharedTopicIds: vi.fn().mockResolvedValue([]),
+    getTopicIdsByOwner: vi.fn().mockResolvedValue([]),
+    getActiveTopicGrantsForGrantees: vi.fn().mockResolvedValue([]),
     getContentHashesByTopic: vi.fn(),
     // referential protection (PRD-15 FR-03..FR-05): defaults = no dependents,
     // so import updates pass the draw-feasibility guard.
@@ -210,7 +216,8 @@ describe("POST /import — автосоздание темы", () => {
     const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(res.status).toBe(200);
-    expect(storageMock.createTopic).toHaveBeenCalledWith({ name: "Новая тема" });
+    // FR-28: new topics created by import are owned by the importer.
+    expect(storageMock.createTopic).toHaveBeenCalledWith({ name: "Новая тема", createdBy: "author1" });
   });
 
   it("использует существующую тему (без учёта регистра)", async () => {
@@ -257,7 +264,63 @@ describe("POST /import — автосоздание темы", () => {
     const buf = await makeImportXlsx([singleRow({ "Тема": "Базы Данных" })]);
     await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
-    expect(storageMock.createTopic).toHaveBeenCalledWith({ name: "Базы Данных" });
+    expect(storageMock.createTopic).toHaveBeenCalledWith({ name: "Базы Данных", createdBy: "author1" });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMPORT — PRD-15 FR-28: visible-area matching, importer-owned new topics
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("POST /import — FR-28 visible-area topic matching (non-admin author)", () => {
+  let app: express.Express;
+  // An author who only sees the shared bank; private topics of others are hidden.
+  const foreignTopic = { id: "t-foreign", name: "Секретная", description: null, folderId: null, ownerId: "other", visibility: "private", createdAt: new Date() };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getUserRoles.mockResolvedValue(["author"]); // non-admin
+    storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
+    storageMock.createQuestion.mockResolvedValue({ ...dbQuestion });
+    app = makeApp();
+  });
+
+  // clearAllMocks keeps implementations, so restore the admin default this
+  // suite overrode — otherwise later describes inherit the "author" roles.
+  afterEach(() => {
+    storageMock.getUserRoles.mockResolvedValue(["administrator"]);
+  });
+
+  it("does NOT match a name that exists only outside the importer's visible area", async () => {
+    // The topic exists but is invisible (private, other owner) -> a new topic is
+    // created, owned by the importer, instead of matching the foreign one.
+    storageMock.getTopics.mockResolvedValue([foreignTopic]);
+    storageMock.createTopic.mockResolvedValue({ ...foreignTopic, id: "t-mine", ownerId: "author1" });
+
+    const buf = await makeImportXlsx([singleRow({ "Тема": "Секретная" })]);
+    const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(res.status).toBe(200);
+    expect(storageMock.createTopic).toHaveBeenCalledWith({ name: "Секретная", createdBy: "author1" });
+    // The created (importer-owned) topic is used, not the foreign one.
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({ topicId: "t-mine" }),
+    );
+  });
+
+  it("denies updating a question whose topic the importer does not manage", async () => {
+    storageMock.getTopics.mockResolvedValue([foreignTopic]);
+    storageMock.getQuestion.mockResolvedValue({ ...dbQuestion, topicId: "t-foreign" });
+    storageMock.getTopic.mockResolvedValue(foreignTopic);
+
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Тема": "Секретная" })]);
+    const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
+
+    expect(res.status).toBe(200);
+    expect(res.body.updated).toBe(0);
+    expect(res.body.errors.join(" ")).toContain("управляемой вами теме");
+    expect(storageMock.updateQuestion).not.toHaveBeenCalled();
   });
 });
 
