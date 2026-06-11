@@ -52,6 +52,15 @@ const { storageMock } = vi.hoisted(() => ({
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     getContentHashesByTopic: vi.fn(),
+    // referential protection (PRD-15 FR-03..FR-05): defaults = no dependents,
+    // so import updates pass the draw-feasibility guard.
+    getQuestionsByTopic: vi.fn().mockResolvedValue([]),
+    getTestsUsingTopic: vi.fn().mockResolvedValue([]),
+    getTestSectionsByTopic: vi.fn().mockResolvedValue([]),
+    getMeasurementsForQuestions: vi.fn().mockResolvedValue([]),
+    getTopicPageRefs: vi.fn().mockResolvedValue([]),
+    getAdaptiveLevels: vi.fn().mockResolvedValue([]),
+    getTest: vi.fn(),
   },
 }));
 

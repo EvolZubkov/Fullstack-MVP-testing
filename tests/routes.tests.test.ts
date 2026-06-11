@@ -159,6 +159,9 @@ describe("PATCH /api/tests/:id/status", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storageMock.getUser.mockResolvedValue(authorUser);
+    // PRD-15 FR-06 (E-12): publishing runs the draw-feasibility check over the
+    // test's sections; no sections = nothing to verify.
+    storageMock.getTestSections.mockResolvedValue([]);
     app = makeApp();
   });
 

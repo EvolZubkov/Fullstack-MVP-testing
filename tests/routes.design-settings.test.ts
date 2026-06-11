@@ -99,7 +99,12 @@ const corporateTemplate = {
 // ─── GET /api/tests/:id/design ────────────────────────────────────────────────
 
 describe("GET /api/tests/:id/design", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // PRD-15 FR-09: the GET resolves the user and the object-level read scope
+    // (requireUserContext + requireTestScope) instead of the bare session check.
+    storageMock.getUser.mockResolvedValue(authorUser);
+  });
 
   it("returns 401 when unauthenticated", async () => {
     const res = await request(makeApp(null)).get("/api/tests/test-1/design");

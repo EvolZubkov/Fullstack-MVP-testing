@@ -16,6 +16,7 @@ const { storageMock } = vi.hoisted(() => ({
     getTestGrantForUser: vi.fn(),
     getTestIdsByOwner: vi.fn(),
     getUserTestGrants: vi.fn(),
+    isTestAssignedToUser: vi.fn(),
   },
 }));
 vi.mock("../../server/storage", () => ({ storage: storageMock }));
@@ -42,6 +43,7 @@ beforeEach(() => {
   storageMock.getTestGrantForUser.mockResolvedValue(undefined);
   storageMock.getTestIdsByOwner.mockResolvedValue([]);
   storageMock.getUserTestGrants.mockResolvedValue([]);
+  storageMock.isTestAssignedToUser.mockResolvedValue(false);
 });
 
 describe("isAdminOrSuper", () => {
@@ -154,6 +156,31 @@ describe("canReadTest / canReadTestAnalytics — edit or assign scope", () => {
 
   it("denies a user with neither scope", async () => {
     await expect(canReadTest([ROLES.AUTHOR], "u2", TEST)).resolves.toBe(false);
+  });
+});
+
+describe("canReadTest — assignedToUser branch (role-model 6.4, PRD-15 FR-09)", () => {
+  it("lets a learner read a test assigned to them (directly or via group)", async () => {
+    storageMock.isTestAssignedToUser.mockResolvedValue(true);
+    await expect(canReadTest([ROLES.LEARNER], "u3", TEST)).resolves.toBe(true);
+    expect(storageMock.isTestAssignedToUser).toHaveBeenCalledWith(TEST.id, "u3");
+  });
+
+  it("lets an author without edit scope read a test assigned to them", async () => {
+    storageMock.isTestAssignedToUser.mockResolvedValue(true);
+    await expect(canReadTest([ROLES.AUTHOR], "u2", TEST)).resolves.toBe(true);
+  });
+
+  it("denies a learner without an assignment", async () => {
+    await expect(canReadTest([ROLES.LEARNER], "u3", TEST)).resolves.toBe(false);
+  });
+
+  it("does not widen edit/delete/assign/analytics scopes", async () => {
+    storageMock.isTestAssignedToUser.mockResolvedValue(true);
+    await expect(canEditTest([ROLES.LEARNER], "u3", TEST)).resolves.toBe(false);
+    await expect(canDeleteTest([ROLES.LEARNER], "u3", TEST)).resolves.toBe(false);
+    await expect(canAssignTest([ROLES.LEARNER], "u3", TEST)).resolves.toBe(false);
+    await expect(canReadTestAnalytics([ROLES.LEARNER], "u3", TEST)).resolves.toBe(false);
   });
 });
 

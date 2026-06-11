@@ -15,6 +15,10 @@ const { storageMock } = vi.hoisted(() => ({
     getTopicCourses: vi.fn(), createTopicCourse: vi.fn(), deleteTopicCourse: vi.fn(),
     getTopicEvents: vi.fn(), createTopicEvent: vi.fn(), deleteTopicEvent: vi.fn(),
     getQuestionsByTopic: vi.fn(),
+    // referential protection (PRD-15 FR-03..FR-05)
+    getTestsUsingTopic: vi.fn(), getTestSectionsByTopic: vi.fn(),
+    getMeasurementsForQuestions: vi.fn(), getTopicPageRefs: vi.fn(),
+    getTest: vi.fn(), getAdaptiveLevels: vi.fn(),
     // folders
     getFolders: vi.fn(), getFolder: vi.fn(), createFolder: vi.fn(),
     updateFolder: vi.fn(), deleteFolder: vi.fn(),
@@ -73,6 +77,14 @@ describe("Topics routes", () => {
     vi.clearAllMocks();
     storageMock.getUser.mockResolvedValue(authorUser);
     storageMock.getTopicEvents.mockResolvedValue([]);
+    // PRD-15 FR-05 defaults: the topic exists and has no dependent tests, so
+    // the referential protection lets destructive operations through.
+    storageMock.getTopic.mockResolvedValue(topic);
+    storageMock.getQuestionsByTopic.mockResolvedValue([]);
+    storageMock.getTestsUsingTopic.mockResolvedValue([]);
+    storageMock.getTestSectionsByTopic.mockResolvedValue([]);
+    storageMock.getMeasurementsForQuestions.mockResolvedValue([]);
+    storageMock.getTopicPageRefs.mockResolvedValue([]);
     app = makeApp(topicsRouter, "/api/topics");
   });
 

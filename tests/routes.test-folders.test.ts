@@ -121,7 +121,10 @@ describe("POST /api/test-folders", () => {
     const res = await asAuthor(request(makeApp()).post("/api/test-folders").send({ name: "Математика" }));
     expect(res.status).toBe(201);
     expect(res.body.id).toBe("f1");
-    expect(storageMock.createTestFolder).toHaveBeenCalledWith({ name: "Математика", parentId: null });
+    // PRD-15 FR-01: creation now records the actor in createdBy.
+    expect(storageMock.createTestFolder).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Математика", parentId: null }),
+    );
   });
 
   it("creates nested folder with parentId", async () => {
@@ -129,7 +132,9 @@ describe("POST /api/test-folders", () => {
     const res = await asAuthor(request(makeApp()).post("/api/test-folders").send({ name: "Алгебра", parentId: "f1" }));
     expect(res.status).toBe(201);
     expect(res.body.parentId).toBe("f1");
-    expect(storageMock.createTestFolder).toHaveBeenCalledWith({ name: "Алгебра", parentId: "f1" });
+    expect(storageMock.createTestFolder).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Алгебра", parentId: "f1" }),
+    );
   });
 
   it("trims whitespace from name", async () => {
