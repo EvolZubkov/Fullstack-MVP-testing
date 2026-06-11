@@ -23,7 +23,11 @@ router.post("/", requirePermission("folders.manage"), async (req, res) => {
     if (!name) {
       return res.status(400).json({ error: "Name required" });
     }
-    const folder = await storage.createFolder({ name, parentId: parentId || null });
+    const folder = await storage.createFolder({
+      name,
+      parentId: parentId || null,
+      createdBy: req.currentUser?.id ?? null,
+    });
     res.status(201).json(folder);
   } catch (error) {
     logger.error("Create folder error: " + (error as Error).message);

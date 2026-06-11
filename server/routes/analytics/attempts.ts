@@ -3,6 +3,7 @@ import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
+import { canReadTestAnalytics } from "../../services/test-access";
 import { checkAnswer } from "../../utils/check-answer";
 
 const router = Router();
@@ -88,6 +89,17 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
     const test = await storage.getTest(attempt.testId);
     if (!test) {
       return res.status(404).json({ error: "Test not found" });
+    }
+
+    // PRD-15 FR-08 (audit F-5): a single attempt is readable only within the
+    // analytics scope of its test (owner/grant/admin).
+    const allowed = await canReadTestAnalytics(
+      req.effectiveRoles ?? [],
+      req.currentUser?.id ?? "",
+      test,
+    );
+    if (!allowed) {
+      return res.status(403).json({ error: "Forbidden" });
     }
 
     const user = await storage.getUser(attempt.userId);

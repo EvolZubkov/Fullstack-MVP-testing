@@ -2,18 +2,26 @@ import { Router, Request, Response } from "express";
 import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
+import { analyticsScope } from "./helpers";
 
 const router = Router();
 
 // GET /api/analytics/scorm-attempts - Все SCORM попытки
-router.get("/scorm-attempts", requirePermission("analytics.read"), async (_req: Request, res: Response) => {
+router.get("/scorm-attempts", requirePermission("analytics.read"), async (req: Request, res: Response) => {
   try {
     const attempts = await storage.getAllScormAttempts();
     const packages = await storage.getScormPackages();
 
     const packageMap = new Map(packages.map(p => [p.id, p]));
 
-    const enrichedAttempts = await Promise.all(attempts.map(async (attempt) => {
+    // PRD-15 FR-08 (audit F-5): only attempts of readable tests; packages of
+    // deleted tests remain visible to administrators only.
+    const scope = await analyticsScope(req);
+    const scopedAttempts = attempts.filter((a) =>
+      scope.has(packageMap.get(a.packageId)?.testId ?? null),
+    );
+
+    const enrichedAttempts = await Promise.all(scopedAttempts.map(async (attempt) => {
       const pkg = packageMap.get(attempt.packageId);
       const answers = await storage.getScormAnswersByAttempt(attempt.id);
 
@@ -58,6 +66,14 @@ router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), as
     }
 
     const pkg = await storage.getScormPackage(attempt.packageId);
+
+    // PRD-15 FR-08 (audit F-5): a single LMS attempt is readable only within
+    // the analytics scope of its test.
+    const scope = await analyticsScope(req);
+    if (!scope.has(pkg?.testId ?? null)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
     const answers = await storage.getScormAnswersByAttempt(attempt.id);
 
     const duration = attempt.startedAt && attempt.finishedAt

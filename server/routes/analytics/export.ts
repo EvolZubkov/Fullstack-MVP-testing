@@ -7,6 +7,7 @@ import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { checkAnswer } from "../../utils/check-answer";
 import {
+  analyticsScope,
   formatQuestionType,
   formatAllOptions,
   formatCorrectAnswerText,
@@ -279,12 +280,20 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
 });
 
 // GET /api/export/filters - Данные для фильтров экспорта
-router.get("/export/filters", requirePermission("analytics.export"), async (_req: Request, res: Response) => {
+router.get("/export/filters", requirePermission("analytics.export"), async (req: Request, res: Response) => {
   try {
-    const tests = await storage.getTests();
-    const allAttempts = await storage.getAllAttempts();
-    const allScormAttempts = await storage.getAllScormAttempts();
-    const scormPackages = await storage.getScormPackages();
+    // PRD-15 FR-08 (audit F-5): the filter dictionary only exposes readable tests
+    // and the attempts/packages belonging to them.
+    const scope = await analyticsScope(req);
+    const tests = (await storage.getTests()).filter((t) => scope.has(t.id));
+    const allAttempts = (await storage.getAllAttempts()).filter((a) => scope.has(a.testId));
+    const scormPackages = (await storage.getScormPackages()).filter((p) =>
+      scope.has(p.testId ?? null),
+    );
+    const scopedPackageIds = new Set(scormPackages.map((p) => p.id));
+    const allScormAttempts = (await storage.getAllScormAttempts()).filter((a) =>
+      scopedPackageIds.has(a.packageId),
+    );
 
     const webTestIds = new Set(allAttempts.filter(a => a.finishedAt).map(a => a.testId));
     const lmsTestIds = new Set<string>();
@@ -392,8 +401,13 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
       return res.status(400).json({ error: "testIds is required" });
     }
 
+    // PRD-15 FR-08 (audit F-5): export only the tests within the actor's scope.
+    const scope = await analyticsScope(req);
     const tests = await storage.getTests();
-    const selectedTests = tests.filter(t => testIds.includes(t.id));
+    const selectedTests = tests.filter(t => testIds.includes(t.id) && scope.has(t.id));
+    if (selectedTests.length === 0) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const testTitleMap = new Map(selectedTests.map(t => [t.id, t.title]));
     const testModeMap = new Map(selectedTests.map(t => [t.id, t.mode || "standard"]));
 
@@ -402,8 +416,9 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
 
     const allAttempts = await storage.getAllAttempts();
 
-    // Filter attempts
-    let attempts = allAttempts.filter(a => testIds.includes(a.testId));
+    // Filter attempts (selectedTests is already scope-filtered, FR-08).
+    const selectedTestIds = new Set(selectedTests.map((t) => t.id));
+    let attempts = allAttempts.filter(a => selectedTestIds.has(a.testId));
 
     // Filter by groups
     let effectiveUserIds = [...userIds];
@@ -746,8 +761,15 @@ router.post("/export/excel-lms", requirePermission("analytics.export"), async (r
       return res.status(400).json({ error: "testIds is required" });
     }
 
+    // PRD-15 FR-08 (audit F-5): export only the tests within the actor's scope.
+    const scope = await analyticsScope(req);
+    const scopedTestIds = testIds.filter((id) => scope.has(id));
+    if (scopedTestIds.length === 0) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
     const tests = await storage.getTests();
-    const selectedTests = tests.filter(t => testIds.includes(t.id));
+    const selectedTests = tests.filter(t => scopedTestIds.includes(t.id));
     const testTitleMap = new Map(selectedTests.map(t => [t.id, t.title]));
 
     const topics = await storage.getTopics();
@@ -756,7 +778,7 @@ router.post("/export/excel-lms", requirePermission("analytics.export"), async (r
     const packages = await storage.getScormPackages();
     const packageMap = new Map(packages.map(p => [p.id, p]));
 
-    const relevantPackages = packages.filter(p => p.testId && testIds.includes(p.testId));
+    const relevantPackages = packages.filter(p => p.testId && scopedTestIds.includes(p.testId));
     const relevantPackageIds = new Set(relevantPackages.map(p => p.id));
 
     const allAttempts = await storage.getAllScormAttempts();

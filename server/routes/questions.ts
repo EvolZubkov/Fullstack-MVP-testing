@@ -16,6 +16,35 @@ import { questionScoringSchema, type QuestionScoring } from "@shared/schema";
 import { normalizeTags } from "@shared/tags";
 import { importQuestionRows } from "../services/questions-import";
 import { serializeQuestionRow, QUESTION_WIDTHS } from "../services/questions-export";
+import { assessQuestionsRemoval, assessQuestionChange } from "../services/draw-feasibility";
+import {
+  canMutateContent,
+  respondForbiddenContent,
+  respondIfBlocked,
+  mergeAssessments,
+  isDryRun,
+  respondDryRun,
+} from "../services/content-guard";
+import type { Question } from "@shared/schema";
+
+// PRD-15 FR-02: fields whose change affects delivery or grading of dependent
+// tests; such edits are restricted to the creator/administrator and, for
+// tags/difficulty/topic moves, run the draw-feasibility check (E-3/E-4).
+function gradingOrDrawFieldsChanged(existing: Question, body: UpdateQuestionBody): boolean {
+  const changed = (next: unknown, current: unknown) =>
+    next !== undefined && JSON.stringify(next) !== JSON.stringify(current);
+  return (
+    changed(body.type, existing.type) ||
+    changed(body.dataJson, existing.dataJson) ||
+    changed(body.correctJson, existing.correctJson) ||
+    changed(body.points, existing.points) ||
+    changed(body.scoringJson, existing.scoringJson) ||
+    changed(body.difficulty, existing.difficulty) ||
+    changed(body.topicId, existing.topicId) ||
+    (Array.isArray(body.tags) &&
+      JSON.stringify(normalizeTags(body.tags)) !== JSON.stringify(existing.tags ?? []))
+  );
+}
 
 // PRD-10: validate the optional graded-scoring config (FR-13). Null/undefined =
 // exact match (default); a present config must satisfy questionScoringSchema.
@@ -153,6 +182,7 @@ router.post(
         feedbackIncorrect: feedbackIncorrect || null,
         scoringJson: scoringJson ?? null,
         tags: normalizeTags(Array.isArray(tags) ? tags : []),
+        createdBy: req.currentUser?.id ?? null,
       } as any);
 
       res.status(201).json(question);
@@ -194,6 +224,40 @@ router.put(
 
       if (!validateScoring(scoringJson, res)) return;
 
+      // PRD-15 FR-02/FR-05: edits that change delivery or grading are limited
+      // to the creator/administrator; tag/difficulty/move edits additionally
+      // pass the draw-feasibility check against dependent tests (E-3/E-4).
+      const existing = await storage.getQuestion(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Question not found" });
+      }
+      let feasibilityWarnings: unknown[] = [];
+      const affectsDelivery = gradingOrDrawFieldsChanged(existing, req.body as UpdateQuestionBody);
+      if (affectsDelivery) {
+        if (!canMutateContent(req, existing.createdBy)) {
+          respondForbiddenContent(res);
+          return;
+        }
+        const nextTags = Array.isArray(tags) ? normalizeTags(tags) : undefined;
+        const movesTopic = topicId !== undefined && topicId !== existing.topicId;
+        const assessments = [];
+        if (nextTags !== undefined || difficulty !== undefined) {
+          assessments.push(await assessQuestionChange(req.params.id, { tags: nextTags, difficulty }));
+        }
+        if (movesTopic) {
+          // Leaving the old topic shrinks its pool exactly like a removal.
+          assessments.push(await assessQuestionsRemoval([req.params.id]));
+        }
+        const assessment =
+          assessments.length > 0 ? mergeAssessments(assessments) : { blocking: [], warnings: [] };
+        if (isDryRun(req)) return respondDryRun(req, res, assessment);
+        if (respondIfBlocked(req, res, assessment)) return;
+        feasibilityWarnings = assessment.warnings;
+      } else if (isDryRun(req)) {
+        // Nothing delivery-affecting changes -> the edit is always safe.
+        return respondDryRun(req, res, { blocking: [], warnings: [] });
+      }
+
       const updated = await storage.updateQuestion(req.params.id, {
         topicId,
         type,
@@ -218,7 +282,9 @@ router.put(
         return res.status(404).json({ error: "Question not found" });
       }
 
-      res.json(updated);
+      res.json(
+        feasibilityWarnings.length > 0 ? { ...updated, warnings: feasibilityWarnings } : updated,
+      );
     } catch (error) {
       logger.error("Update question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to update question" });
@@ -229,16 +295,29 @@ router.put(
 // ============================================
 // DELETE /api/questions/:id - Удалить вопрос
 // ============================================
+// PRD-15 FR-02/FR-05 (E-1/E-3/E-4/E-5): creator/admin only; blocked while
+// published tests depend on the question (409 with the dependents list).
 router.delete(
   "/:id",
   requirePermission("questions.manage"),
   async (req: Request, res: Response) => {
     try {
+      const question = await storage.getQuestion(req.params.id);
+      if (!question) {
+        return res.status(404).json({ error: "Question not found" });
+      }
+      if (!canMutateContent(req, question.createdBy)) {
+        respondForbiddenContent(res);
+        return;
+      }
+      const assessment = await assessQuestionsRemoval([req.params.id]);
+      if (isDryRun(req)) return respondDryRun(req, res, assessment);
+      if (respondIfBlocked(req, res, assessment)) return;
       const success = await storage.deleteQuestion(req.params.id);
       if (!success) {
         return res.status(404).json({ error: "Question not found" });
       }
-      res.json({ success: true });
+      res.json({ success: true, warnings: assessment.warnings });
     } catch (error) {
       logger.error("Delete question error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to delete question" });
@@ -249,6 +328,7 @@ router.delete(
 // ============================================
 // POST /api/questions/bulk-delete - Массовое удаление
 // ============================================
+// PRD-15 FR-05 (E-10): bulk paths run the same guards as single deletes.
 router.post(
   "/bulk-delete",
   requirePermission("questions.manage"),
@@ -258,8 +338,18 @@ router.post(
       if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ error: "IDs array required" });
       }
+      for (const id of ids) {
+        const question = await storage.getQuestion(id);
+        if (question && !canMutateContent(req, question.createdBy)) {
+          respondForbiddenContent(res);
+          return;
+        }
+      }
+      const assessment = await assessQuestionsRemoval(ids);
+      if (isDryRun(req)) return respondDryRun(req, res, assessment);
+      if (respondIfBlocked(req, res, assessment)) return;
       const deletedCount = await storage.deleteQuestionsBulk(ids);
-      res.json({ success: true, deletedCount });
+      res.json({ success: true, deletedCount, warnings: assessment.warnings });
     } catch (error) {
       logger.error("Bulk delete questions error: " + (error as Error).message);
       res.status(500).json({ error: "Failed to delete questions" });
@@ -410,7 +500,7 @@ router.get(
         ["Режим ОС", "общая (по умолчанию) | условная"],
         ["ОС при верном", "Текст; только при режиме «условная»"],
         ["ОС при неверном", "Текст; только при режиме «условная»"],
-        ["Цена ответа", "Пусто/«точное» — точное совпадение. single: «веса: 2 # 0 # 1». multiple/matching/ranking: «ступени: c>=2 => 1; c==T & x==0 => 2»"],
+        ["Цена ответа", "Пусто/«точное» — точное совпадение. single: «веса: 2 # 0 # 1». multiple/matching/ranking: «ступени: correct == total & wrong == 0 => 2; correct >= 1 & wrong <= 1 => 1» (correct — верных, wrong — неверных, total — всего верных)"],
         ["", ""],
         ["Пример (multiple_choice)", "Варианты «A # B # C», правильный «2»"],
         ["Пример (matching)", "«Кошка # Собака || Мяу # Гав # Буль», пары «1-1, 2-2»"],
@@ -452,7 +542,14 @@ router.post(
       const result = await importQuestionRows(
         sheetToObjects(sheet),
         sheetHeaders(sheet),
-        { dryRun },
+        {
+          dryRun,
+          // PRD-15 FR-02/FR-05: import respects the same creator and
+          // feasibility guards as the editor path.
+          actor: req.currentUser
+            ? { id: req.currentUser.id, roles: req.effectiveRoles ?? [] }
+            : undefined,
+        },
       );
 
       res.json({

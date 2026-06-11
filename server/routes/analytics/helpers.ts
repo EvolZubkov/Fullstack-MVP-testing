@@ -1,3 +1,22 @@
+import type { Request } from "express";
+import { readableTestScope } from "../../services/test-access";
+
+/**
+ * PRD-15 FR-08 (audit F-5): cross-test analytics aggregates and exports are
+ * limited to the tests the actor may read (ownership, grants, admin). Wraps
+ * {@link readableTestScope} into a predicate; `has(null)` is true only for
+ * administrators, so LMS attempts of deleted tests stay admin-visible only.
+ */
+export async function analyticsScope(
+  req: Request,
+): Promise<{ all: boolean; has: (testId: string | null | undefined) => boolean }> {
+  const scope = await readableTestScope(req.effectiveRoles ?? [], req.currentUser?.id ?? "");
+  return {
+    all: scope.all,
+    has: (testId) => scope.all || (!!testId && scope.ids.has(testId)),
+  };
+}
+
 /**
  * Форматирует тип вопроса для отображения
  */

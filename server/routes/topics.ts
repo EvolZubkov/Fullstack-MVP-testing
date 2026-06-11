@@ -2,6 +2,15 @@ import { Router } from "express";
 import { logger } from "../logger";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
+import { assessTopicDeletion } from "../services/draw-feasibility";
+import {
+  canMutateContent,
+  respondForbiddenContent,
+  respondIfBlocked,
+  mergeAssessments,
+  isDryRun,
+  respondDryRun,
+} from "../services/content-guard";
 
 const router = Router();
 
@@ -36,7 +45,13 @@ router.post("/", requirePermission("topics.manage"), async (req, res) => {
     if (!name) {
       return res.status(400).json({ error: "Name required" });
     }
-    const topic = await storage.createTopic({ name, description, feedback, folderId });
+    const topic = await storage.createTopic({
+      name,
+      description,
+      feedback,
+      folderId,
+      createdBy: req.currentUser?.id ?? null,
+    });
     res.status(201).json(topic);
   } catch (error) {
     logger.error("Create topic error: " + (error as Error).message);
@@ -88,13 +103,26 @@ router.delete("/courses/:id", requirePermission("topics.manage"), async (req, re
 });
 
 // DELETE /api/topics/:id - Удалить тему
+// PRD-15 FR-02/FR-05 (E-2): creator/admin only; blocked while published tests
+// depend on the topic (409 with the dependents list; admin ?force=true).
 router.delete("/:id", requirePermission("topics.manage"), async (req, res) => {
   try {
+    const topic = await storage.getTopic(req.params.id);
+    if (!topic) {
+      return res.status(404).json({ error: "Topic not found" });
+    }
+    if (!canMutateContent(req, topic.createdBy)) {
+      respondForbiddenContent(res);
+      return;
+    }
+    const assessment = await assessTopicDeletion(req.params.id);
+    if (isDryRun(req)) return respondDryRun(req, res, assessment);
+    if (respondIfBlocked(req, res, assessment)) return;
     const success = await storage.deleteTopic(req.params.id);
     if (!success) {
       return res.status(404).json({ error: "Topic not found" });
     }
-    res.json({ success: true });
+    res.json({ success: true, warnings: assessment.warnings });
   } catch (error) {
     logger.error("Delete topic error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to delete topic" });
@@ -102,14 +130,27 @@ router.delete("/:id", requirePermission("topics.manage"), async (req, res) => {
 });
 
 // POST /api/topics/bulk-delete - Массовое удаление тем
+// PRD-15 FR-05 (E-10): bulk paths run the same guards as single deletes.
 router.post("/bulk-delete", requirePermission("topics.manage"), async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: "IDs array required" });
     }
+    for (const id of ids) {
+      const topic = await storage.getTopic(id);
+      if (topic && !canMutateContent(req, topic.createdBy)) {
+        respondForbiddenContent(res);
+        return;
+      }
+    }
+    const assessment = mergeAssessments(
+      await Promise.all(ids.map((id: string) => assessTopicDeletion(id))),
+    );
+    if (isDryRun(req)) return respondDryRun(req, res, assessment);
+    if (respondIfBlocked(req, res, assessment)) return;
     const deletedCount = await storage.deleteTopicsBulk(ids);
-    res.json({ success: true, deletedCount });
+    res.json({ success: true, deletedCount, warnings: assessment.warnings });
   } catch (error) {
     logger.error("Bulk delete topics error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to delete topics" });

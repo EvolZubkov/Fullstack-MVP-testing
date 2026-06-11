@@ -3,6 +3,7 @@ import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
 import { checkAnswer } from "../../utils/check-answer";
+import { analyticsScope } from "./helpers";
 
 const router = Router();
 
@@ -11,6 +12,8 @@ router.get("/combined", requirePermission("analytics.read"), async (req: Request
   try {
     const source = req.query.source as string || "all";
     const testId = req.query.testId as string || null;
+    // PRD-15 FR-08 (audit F-5): aggregates only over readable tests.
+    const scope = await analyticsScope(req);
 
     let webAttempts: any[] = [];
     let lmsAttempts: any[] = [];
@@ -28,6 +31,7 @@ router.get("/combined", requirePermission("analytics.read"), async (req: Request
 
       webAttempts = attempts
         .filter(a => !testId || a.testId === testId)
+        .filter(a => scope.has(a.testId))
         .filter(a => a.finishedAt)
         .map(a => {
           const user = userMap.get(a.userId);
@@ -66,6 +70,7 @@ router.get("/combined", requirePermission("analytics.read"), async (req: Request
           const pkg = packageMap.get(a.packageId);
           return pkg?.testId === testId;
         })
+        .filter(a => scope.has(packageMap.get(a.packageId)?.testId ?? null))
         .filter(a => a.finishedAt)
         .map(a => {
           const pkg = packageMap.get(a.packageId);
@@ -134,6 +139,8 @@ router.get("/summary", requirePermission("analytics.read"), async (req: Request,
   try {
     const source = (req.query.source as string) || "all";
     const testIdFilter = req.query.testId as string | undefined;
+    // PRD-15 FR-08 (audit F-5): aggregates only over readable tests.
+    const scope = await analyticsScope(req);
 
     let webCount = 0, webPassed = 0, webPercent = 0, webAdaptive = 0, webAdaptivePassed = 0;
     let lmsCount = 0, lmsPassed = 0, lmsPercent = 0;
@@ -144,6 +151,7 @@ router.get("/summary", requirePermission("analytics.read"), async (req: Request,
       const attempts = await storage.getAllAttempts();
       const filtered = attempts
         .filter(a => !testIdFilter || a.testId === testIdFilter)
+        .filter(a => scope.has(a.testId))
         .filter(a => a.finishedAt);
 
       for (const a of filtered) {
@@ -172,6 +180,7 @@ router.get("/summary", requirePermission("analytics.read"), async (req: Request,
           const pkg = packageMap.get(a.packageId);
           return pkg?.testId === testIdFilter;
         })
+        .filter(a => scope.has(packageMap.get(a.packageId)?.testId ?? null))
         .filter(a => a.finishedAt);
 
       for (const a of filtered) {
@@ -212,6 +221,8 @@ router.get("/combined-full", requirePermission("analytics.read"), async (req: Re
   try {
     const source = (req.query.source as string) || "all";
     const testIdFilter = req.query.testId as string | undefined;
+    // PRD-15 FR-08 (audit F-5): aggregates only over readable tests.
+    const scope = await analyticsScope(req);
 
     let webAttempts: any[] = [];
     let lmsAttempts: any[] = [];
@@ -230,6 +241,7 @@ router.get("/combined-full", requirePermission("analytics.read"), async (req: Re
 
       webAttempts = attempts
         .filter(a => !testIdFilter || a.testId === testIdFilter)
+        .filter(a => scope.has(a.testId))
         .filter(a => a.finishedAt)
         .map(a => {
           const user = userMap.get(a.userId);
@@ -279,6 +291,7 @@ router.get("/combined-full", requirePermission("analytics.read"), async (req: Re
           const pkg = packageMap.get(a.packageId);
           return pkg?.testId === testIdFilter;
         })
+        .filter(a => scope.has(packageMap.get(a.packageId)?.testId ?? null))
         .filter(a => a.finishedAt)
         .map(a => {
           const pkg = packageMap.get(a.packageId);

@@ -8,9 +8,10 @@ import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, 
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate } from "../services/template-render";
 import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
-import { requireAuth, requirePermission } from "../middleware/auth";
+import { requirePermission, requireUserContext } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { readableTestScope } from "../services/test-access";
+import { assessTestPublish } from "../services/draw-feasibility";
 import { generateScormPackage } from "../scorm-exporter";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { logger } from "../logger";
@@ -139,6 +140,10 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
         ...s,
         topicName: topic?.name || "Unknown",
         maxQuestions: questions.length,
+        // PRD-10: the section's maximum attainable points (Σ points). Absolute
+        // pass thresholds are compared against earned POINTS at runtime, so the
+        // editor caps them by this, not by the question count.
+        maxPoints: questions.reduce((sum, q) => sum + (q.points ?? 1), 0),
       };
     }),
   );
@@ -213,6 +218,7 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
               ...s,
               topicName: topic?.name || "Unknown",
               maxQuestions: questions.length,
+              maxPoints: questions.reduce((sum, q) => sum + (q.points ?? 1), 0),
             };
           })
         );
@@ -266,7 +272,9 @@ const SCREEN_KIND: Record<string, string | undefined> = {
   start: "start",
   question: "questions",
 };
-router.get("/:id/screen-template/:screen", requireAuth, async (req, res) => {
+// PRD-15 FR-09: object-level read scope (owner/grant/admin/assigned learner)
+// instead of the bare session check.
+router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope("read"), async (req, res) => {
   try {
     const layoutFile = SCREEN_LAYOUTS[req.params.screen];
     if (!layoutFile) return res.status(400).json({ error: "Unknown screen" });
@@ -468,7 +476,8 @@ router.get("/:id/adaptive-settings", requirePermission("tests.read"), requireTes
 });
 
 // GET /api/tests/:id/design - Настройки оформления теста
-router.get("/:id/design", requireAuth, async (req, res) => {
+// PRD-15 FR-09: object-level read scope (owner/grant/admin/assigned learner).
+router.get("/:id/design", requireUserContext, requireTestScope("read"), async (req, res) => {
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
@@ -688,6 +697,20 @@ router.patch("/:id/status", requirePermission("tests.publish"), requireTestScope
         currentVersion: test.version,
         expectedVersion: Number(expectedVersion),
       });
+    }
+
+    // PRD-15 FR-06 (E-12): a test must not be published with an infeasible
+    // draw — pools, blueprint quotas and adaptive levels are checked against
+    // the current bank state.
+    if (status === "published") {
+      const findings = await assessTestPublish(req.params.id);
+      if (findings.length > 0) {
+        return res.status(409).json({
+          error: "publish_infeasible",
+          message: "Выдача вопросов невыполнима при текущем составе тем",
+          findings,
+        });
+      }
     }
 
     const updated = await storage.patchTestStatus(req.params.id, status as "draft" | "published" | "archived");
