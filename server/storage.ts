@@ -8,7 +8,7 @@ import {
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
   groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
   contentPages, resultVariables, scales, questionMeasurements,
-  userRoles, testAccessGrants,
+  userRoles, testAccessGrants, testSnapshots,
   type User, type InsertUser,
   type Folder, type InsertFolder,
   type TestFolder, type InsertTestFolder,
@@ -28,6 +28,7 @@ import {
   type Group, type InsertGroup,
   type UserGroup, type InsertUserGroup,
   type TestAccessGrant, type InsertTestAccessGrant,
+  type TestSnapshot,
   type TestAssignment, type InsertTestAssignment,
   type PasswordResetToken, type InsertPasswordResetToken,
   type AssignmentAccessToken, type InsertAssignmentAccessToken,
@@ -108,6 +109,21 @@ export interface IStorage {
   // "Where used" lookups (PRD-15 FR-03): tests depending on shared content.
   getTestsUsingTopic(topicId: string): Promise<TestUsageRef[]>;
   getTestsUsingQuestion(questionId: string): Promise<TestUsageRef[]>;
+
+  // Publication snapshots (PRD-15 block B, FR-10/FR-17).
+  createTestSnapshot(snapshot: {
+    testId: string;
+    version: number;
+    contentJson: unknown;
+    publishedBy: string | null;
+  }): Promise<TestSnapshot>;
+  getLatestSnapshot(testId: string): Promise<TestSnapshot | undefined>;
+  getSnapshot(id: string): Promise<TestSnapshot | undefined>;
+  getSnapshotsForTest(testId: string): Promise<TestSnapshot[]>;
+  deleteSnapshotsForTest(testId: string): Promise<void>;
+  /** Distinct snapshot ids still referenced by any attempt of the test (FR-17). */
+  getReferencedSnapshotIds(testId: string): Promise<string[]>;
+  deleteSnapshotById(id: string): Promise<void>;
 
   // Test Assignments
   getAssignment(id: string): Promise<TestAssignment | undefined>;
@@ -201,6 +217,8 @@ export interface IStorage {
   getAttemptsByUser(userId: string): Promise<Attempt[]>;
   getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]>;
   deleteAttemptsByUserAndTest(userId: string, testId: string): Promise<void>;
+  /** PRD-15 FR-14: annul (delete) all in-progress attempts of a test; returns the count. */
+  annulInProgressAttempts(testId: string): Promise<number>;
   getAllAttempts(): Promise<Attempt[]>;
 
   // Adaptive testing
@@ -547,6 +565,64 @@ export class DatabaseStorage implements IStorage {
     const seen = new Map<string, TestUsageRef>();
     for (const ref of [...byTopic, ...viaMeasurements]) seen.set(ref.id, ref);
     return [...seen.values()];
+  }
+
+  async createTestSnapshot(snapshot: {
+    testId: string;
+    version: number;
+    contentJson: unknown;
+    publishedBy: string | null;
+  }): Promise<TestSnapshot> {
+    const [row] = await db
+      .insert(testSnapshots)
+      .values({
+        id: randomUUID(),
+        testId: snapshot.testId,
+        version: snapshot.version,
+        contentJson: snapshot.contentJson,
+        publishedBy: snapshot.publishedBy,
+      })
+      .returning();
+    return row;
+  }
+
+  async getLatestSnapshot(testId: string): Promise<TestSnapshot | undefined> {
+    const [row] = await db
+      .select()
+      .from(testSnapshots)
+      .where(eq(testSnapshots.testId, testId))
+      .orderBy(desc(testSnapshots.version))
+      .limit(1);
+    return row || undefined;
+  }
+
+  async getSnapshot(id: string): Promise<TestSnapshot | undefined> {
+    const [row] = await db.select().from(testSnapshots).where(eq(testSnapshots.id, id));
+    return row || undefined;
+  }
+
+  async getSnapshotsForTest(testId: string): Promise<TestSnapshot[]> {
+    return db
+      .select()
+      .from(testSnapshots)
+      .where(eq(testSnapshots.testId, testId))
+      .orderBy(desc(testSnapshots.version));
+  }
+
+  async deleteSnapshotsForTest(testId: string): Promise<void> {
+    await db.delete(testSnapshots).where(eq(testSnapshots.testId, testId));
+  }
+
+  async getReferencedSnapshotIds(testId: string): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({ snapshotId: attempts.snapshotId })
+      .from(attempts)
+      .where(and(eq(attempts.testId, testId), sql`${attempts.snapshotId} IS NOT NULL`));
+    return rows.map((r) => r.snapshotId).filter((id): id is string => !!id);
+  }
+
+  async deleteSnapshotById(id: string): Promise<void> {
+    await db.delete(testSnapshots).where(eq(testSnapshots.id, id));
   }
 
   async getTestAccessGrants(testId: string): Promise<TestAccessGrant[]> {
@@ -1289,6 +1365,7 @@ export class DatabaseStorage implements IStorage {
       userId: attempt.userId,
       testId: attempt.testId,
       testVersion: attempt.testVersion || 1,
+      snapshotId: attempt.snapshotId ?? null,
       variantJson: attempt.variantJson,
       answersJson: attempt.answersJson || null,
       resultJson: attempt.resultJson || null,
@@ -1322,6 +1399,16 @@ export class DatabaseStorage implements IStorage {
     await db.delete(attempts).where(
       and(eq(attempts.userId, userId), eq(attempts.testId, testId))
     );
+  }
+
+  async annulInProgressAttempts(testId: string): Promise<number> {
+    // In-progress = finishedAt IS NULL. These were never completed, so they do
+    // not count toward the retake limit (PRD-6 counts completed only) — deleting
+    // them annuls without consuming an attempt (PRD-15 FR-14).
+    const result = await db
+      .delete(attempts)
+      .where(and(eq(attempts.testId, testId), isNull(attempts.finishedAt)));
+    return result.rowCount ?? 0;
   }
 
   async getAllAttempts(): Promise<Attempt[]> {
