@@ -111,7 +111,7 @@ describe("serializeScoring", () => {
   it("weighted", () => {
     expect(serializeScoring({ kind: "weighted", weights: [2, 0, 1] })).toBe("веса: 2 # 0 # 1");
   });
-  it("tiered", () => {
+  it("tiered — пишет читаемые слова correct/wrong/total", () => {
     const s: QuestionScoring = {
       kind: "tiered",
       tiers: [
@@ -119,7 +119,43 @@ describe("serializeScoring", () => {
         { when: { all: [{ lhs: "c", op: "==", rhs: "T" }, { lhs: "x", op: "==", rhs: 0 }] }, score: 2 },
       ],
     };
-    expect(serializeScoring(s)).toBe("ступени: c>=2 => 1; c==T & x==0 => 2");
+    expect(serializeScoring(s)).toBe("ступени: correct >= 2 => 1; correct == total & wrong == 0 => 2");
+  });
+});
+
+describe("parseScoringCell — читаемые слова (correct/wrong/total)", () => {
+  it("correct/wrong/total разбираются как c/x/T", () => {
+    const r = parseScoringCell("ступени: correct == total & wrong == 0 => 2; correct >= 1 & wrong <= 1 => 1", "multiple", 4);
+    expect(r.ok && r.value).toEqual({
+      kind: "tiered",
+      tiers: [
+        { when: { all: [{ lhs: "c", op: "==", rhs: "T" }, { lhs: "x", op: "==", rhs: 0 }] }, score: 2 },
+        { when: { all: [{ lhs: "c", op: ">=", rhs: 1 }, { lhs: "x", op: "<=", rhs: 1 }] }, score: 1 },
+      ],
+    });
+  });
+
+  it("total → P для matching, N для ranking", () => {
+    const m = parseScoringCell("ступени: correct == total => 3", "matching", 3);
+    expect(m.ok && (m.value as any).tiers[0].when.all[0].rhs).toBe("P");
+    const n = parseScoringCell("ступени: correct == total => 2", "ranking", 3);
+    expect(n.ok && (n.value as any).tiers[0].when.all[0].rhs).toBe("N");
+  });
+
+  it("старые токены c/x/T по-прежнему принимаются (back-compat)", () => {
+    expect(parseScoringCell("ступени: c==T & x==0 => 2", "multiple", 3).ok).toBe(true);
+  });
+
+  it("неизвестное слово в левой части → ошибка", () => {
+    expect(parseScoringCell("ступени: правильно >= 1 => 1", "multiple", 3).ok).toBe(false);
+  });
+
+  it("round-trip: c/x/T → сериализация в слова → реимпорт даёт то же", () => {
+    const parsed = parseScoringCell("ступени: c==T & x==0 => 2; c>=1 & x<=1 => 1", "multiple", 4);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const reparsed = parseScoringCell(serializeScoring(parsed.value), "multiple", 4);
+    expect(reparsed).toEqual(parsed);
   });
 });
 

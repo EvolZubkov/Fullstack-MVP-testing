@@ -17,6 +17,7 @@
  */
 
 import type { ScaleBand } from "@shared/scales/engine";
+import type { DrawStratum } from "@shared/schema";
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -314,5 +315,169 @@ export function serializeMeasurementRow(m: {
     "Ключ источника": m.sourceKey ?? "",
     "Значение": m.valueJson,
     "Вес": m.weight,
+  };
+}
+
+// ─── «Структура» / «Квоты» (PRD-14 FR-16: test sections + draw quotas) ─────────
+//
+// The test's structure — its sections (a topic + draw count + per-topic pass rule)
+// and the PRD-11 per-tag draw quotas — is the one part of the model the workbook
+// previously left to the editor. These two sheets carry it so a whole test (not
+// just its content) round-trips through Excel. The flow is fixed to
+// `router_by_topics` by the importer; the router page is materialized by the
+// service. A quota row maps 1:1 to a PRD-11 `DrawStratum` ({tag, count, mode}).
+
+/** Canonical «Структура» headers (one row per section). */
+export const STRUCTURE_HEADERS = [
+  "Раздел", "Порядок", "Вопросов в выборке", "Тип порога", "Порог", "Обязательный",
+];
+export const STRUCTURE_WIDTHS = [28, 10, 20, 16, 10, 14];
+
+/** Canonical «Квоты» headers (one row per PRD-11 stratum). */
+export const QUOTA_HEADERS = ["Раздел", "Тег", "Количество", "Режим"];
+export const QUOTA_WIDTHS = [28, 24, 14, 14];
+
+/** «Тип порога» cell → the editor's `topicPassRuleJson` shape (PRD-7). */
+const PASS_TYPE_FROM: Record<string, "percent" | "absolute"> = {
+  "процент": "percent",
+  "%": "percent",
+  "percent": "percent",
+  "сумма баллов": "absolute",
+  "баллы": "absolute",
+  "балл": "absolute",
+  "absolute": "absolute",
+};
+/** Internal pass type → «Тип порога» cell (export). */
+const PASS_TYPE_TO: Record<string, string> = { percent: "Процент", absolute: "Сумма баллов" };
+
+/** «Режим» cell → PRD-11 per-tag mode (default `exact`). */
+const QUOTA_MODE_FROM: Record<string, "exact" | "min"> = {
+  "": "exact",
+  "ровно": "exact",
+  "exact": "exact",
+  "не менее": "min",
+  "неменее": "min",
+  "min": "min",
+  "минимум": "min",
+};
+/** PRD-11 mode → «Режим» cell (export). */
+const QUOTA_MODE_TO: Record<string, string> = { exact: "Ровно", min: "Не менее" };
+
+/** One parsed «Структура» row (refs resolved later by the orchestrator). */
+export interface ParsedSection {
+  /** Topic name (resolved to `topicId` by the orchestrator). */
+  topicName: string;
+  /** Sort order; the orchestrator orders sections by this. */
+  sortOrder: number;
+  drawCount: number;
+  /** Editor-shape `topicPassRuleJson` (PRD-7): `{source, type?, value?}`. */
+  passRule: Record<string, unknown>;
+  required: boolean;
+}
+
+/** Parse a «Структура» row. `rowIndex` (0-based) is the «Порядок» fallback. */
+export function parseStructureRow(
+  row: Record<string, unknown>,
+  rowIndex: number,
+): ParseResult<ParsedSection> {
+  const topicName = String(row["Раздел"] ?? row["Тема"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
+  if (!topicName) return { ok: false, error: "не указан раздел (тема)" };
+
+  const orderRaw = String(row["Порядок"] ?? "").trim();
+  const sortOrder = orderRaw === "" ? rowIndex : Number(orderRaw);
+  if (!Number.isFinite(sortOrder)) return { ok: false, error: `некорректный «Порядок»: "${row["Порядок"]}"` };
+
+  const drawCount = Number(String(row["Вопросов в выборке"] ?? "").trim());
+  if (!Number.isInteger(drawCount) || drawCount < 1) {
+    return { ok: false, error: `«Вопросов в выборке» должно быть целым ≥ 1 ("${row["Вопросов в выборке"]}")` };
+  }
+
+  // Pass rule: empty / «как у теста» → inherit; «нет»/«не проверять» → none;
+  // otherwise a custom percent/absolute rule with a numeric «Порог».
+  const typeRaw = String(row["Тип порога"] ?? "").trim().toLowerCase();
+  let passRule: Record<string, unknown>;
+  if (typeRaw === "" || typeRaw === "как у теста" || typeRaw === "наследовать" || typeRaw === "inherit") {
+    passRule = { source: "inherit_overall" };
+  } else if (typeRaw === "нет" || typeRaw === "не проверять" || typeRaw === "none") {
+    passRule = { source: "none" };
+  } else {
+    const type = PASS_TYPE_FROM[typeRaw];
+    if (!type) return { ok: false, error: `неизвестный «Тип порога»: "${row["Тип порога"]}"` };
+    const value = Number(String(row["Порог"] ?? "").trim());
+    if (!Number.isFinite(value) || value < 0) {
+      return { ok: false, error: `некорректный «Порог»: "${row["Порог"]}"` };
+    }
+    passRule = { source: "custom", type, value };
+  }
+
+  // Default required = true (empty cell), else parse the boolean.
+  const requiredRaw = String(row["Обязательный"] ?? "").trim();
+  const required = requiredRaw === "" ? true : parseBool(requiredRaw);
+
+  return { ok: true, value: { topicName, sortOrder, drawCount, passRule, required } };
+}
+
+/** Serialize a section to a «Структура» row (export). */
+export function serializeStructureRow(s: {
+  topicName: string;
+  sortOrder: number;
+  drawCount: number;
+  topicPassRuleJson: unknown;
+  required: boolean;
+}): Record<string, unknown> {
+  const rule = (s.topicPassRuleJson ?? {}) as { source?: string; type?: string; value?: number };
+  let passType = "Как у теста";
+  let passValue: number | "" = "";
+  if (rule.source === "none") passType = "Нет";
+  else if (rule.source === "custom" && rule.type) {
+    passType = PASS_TYPE_TO[rule.type] ?? rule.type;
+    passValue = typeof rule.value === "number" ? rule.value : "";
+  }
+  return {
+    "Раздел": s.topicName,
+    "Порядок": s.sortOrder + 1,
+    "Вопросов в выборке": s.drawCount,
+    "Тип порога": passType,
+    "Порог": passValue,
+    "Обязательный": serBool(s.required),
+  };
+}
+
+/** One parsed «Квоты» row: a PRD-11 stratum scoped to a section (by topic name). */
+export interface ParsedQuota {
+  topicName: string;
+  tag: string;
+  count: number;
+  mode: "exact" | "min";
+}
+
+/** Parse a «Квоты» row into a section-scoped {@link DrawStratum}. */
+export function parseQuotaRow(row: Record<string, unknown>): ParseResult<ParsedQuota> {
+  const topicName = String(row["Раздел"] ?? row["Тема"] ?? "").replace(/[\s ​﻿]+/g, " ").trim();
+  if (!topicName) return { ok: false, error: "не указан раздел (тема)" };
+
+  const tag = String(row["Тег"] ?? "").trim();
+  if (!tag) return { ok: false, error: "не указан тег" };
+
+  const count = Number(String(row["Количество"] ?? "").trim());
+  if (!Number.isInteger(count) || count < 1) {
+    return { ok: false, error: `«Количество» должно быть целым ≥ 1 ("${row["Количество"]}")` };
+  }
+
+  const modeRaw = String(row["Режим"] ?? "").trim().toLowerCase();
+  const mode = QUOTA_MODE_FROM[modeRaw];
+  if (!mode) return { ok: false, error: `неизвестный «Режим»: "${row["Режим"]}"` };
+
+  return { ok: true, value: { topicName, tag, count, mode } };
+}
+
+/** Serialize a PRD-11 stratum to a «Квоты» row (export). */
+export function serializeQuotaRow(topicName: string, stratum: DrawStratum): Record<string, unknown> {
+  const mode = stratum.mode ?? "exact";
+  return {
+    "Раздел": topicName,
+    "Тег": stratum.tag,
+    "Количество": stratum.count,
+    "Режим": QUOTA_MODE_TO[mode] ?? mode,
   };
 }

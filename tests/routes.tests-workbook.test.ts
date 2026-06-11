@@ -16,7 +16,7 @@ vi.hoisted(() => {
   process.env.DATABASE_URL = "postgresql://fake/test";
 });
 
-const { storageMock } = vi.hoisted(() => ({
+const { storageMock, testSettingsMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(),
     getUser: vi.fn(),
@@ -42,9 +42,12 @@ const { storageMock } = vi.hoisted(() => ({
     getQuestions: vi.fn(),
     getQuestionMeasurements: vi.fn(),
   },
+  // FR-16: the structure pass applies sections via testSettingsService.save.
+  testSettingsMock: { create: vi.fn(), save: vi.fn() },
 }));
 
 vi.mock("../server/storage", () => ({ storage: storageMock }));
+vi.mock("../server/services/test-settings", () => ({ testSettingsService: testSettingsMock }));
 vi.mock("../server/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -107,6 +110,7 @@ beforeEach(() => {
   storageMock.createResultVariable.mockResolvedValue({ id: "rv-new" });
   storageMock.validateResultVariableFormula.mockResolvedValue({ valid: true });
   storageMock.upsertQuestionMeasurements.mockResolvedValue([]);
+  testSettingsMock.save.mockResolvedValue({ id: "test-1" });
 });
 
 describe("POST /:id/workbook/import — основной поток", () => {
@@ -242,6 +246,64 @@ describe("POST /:id/workbook/import?dryRun=true — предпросмотр", (
   });
 });
 
+describe("POST /:id/workbook/import — «Структура» + «Квоты» (FR-16)", () => {
+  it("создаёт разделы с порогом и квотами; режим router_by_topics", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Структура": [
+        { "Раздел": "JavaScript", "Порядок": "1", "Вопросов в выборке": "5", "Тип порога": "Сумма баллов", "Порог": "4", "Обязательный": "да" },
+      ],
+      "Квоты": [{ "Раздел": "JavaScript", "Тег": "basics", "Количество": "3", "Режим": "Ровно" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.structure).toEqual({ sections: 1, quotas: 1 });
+    expect(res.body.errors).toEqual([]);
+    expect(testSettingsMock.save).toHaveBeenCalledWith(
+      "test-1",
+      expect.objectContaining({
+        test: expect.objectContaining({ flowPolicyJson: { mode: "router_by_topics" } }),
+        sections: [
+          expect.objectContaining({
+            topicId: "t1",
+            drawCount: 5,
+            required: true,
+            topicPassRuleJson: { source: "custom", type: "absolute", value: 4 },
+            drawBlueprintJson: { strata: [{ tag: "basics", count: 3, mode: "exact" }] },
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("Σ квот > «Вопросов в выборке» → ошибка строки, save не вызывается", async () => {
+    const buf = await makeWorkbook({
+      "Структура": [{ "Раздел": "JavaScript", "Вопросов в выборке": "3", "Тип порога": "Сумма баллов", "Порог": "2" }],
+      "Квоты": [
+        { "Раздел": "JavaScript", "Тег": "a", "Количество": "2" },
+        { "Раздел": "JavaScript", "Тег": "b", "Количество": "3" },
+      ],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors.some((e: string) => /сумма квот/i.test(e))).toBe(true);
+    expect(res.body.structure.sections).toBe(0);
+    expect(testSettingsMock.save).not.toHaveBeenCalled();
+  });
+
+  it("dryRun: считает структуру, но не сохраняет", async () => {
+    const buf = await makeWorkbook({
+      "Структура": [{ "Раздел": "JavaScript", "Вопросов в выборке": "5", "Тип порога": "Сумма баллов", "Порог": "4" }],
+      "Квоты": [{ "Раздел": "JavaScript", "Тег": "basics", "Количество": "3" }],
+    });
+    const res = await postWorkbook(buf, "?dryRun=true");
+
+    expect(res.body.structure).toEqual({ sections: 1, quotas: 1 });
+    expect(testSettingsMock.save).not.toHaveBeenCalled();
+  });
+});
+
 // ─── Export ─────────────────────────────────────────────────────────────────
 
 const exportQuestion = {
@@ -288,7 +350,13 @@ function getExport() {
 
 describe("GET /:id/workbook/export", () => {
   beforeEach(() => {
-    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1" }]);
+    storageMock.getTestSections.mockResolvedValue([
+      {
+        topicId: "t1", drawCount: 5, sortOrder: 0, required: true,
+        topicPassRuleJson: { source: "custom", type: "absolute", value: 3 },
+        drawBlueprintJson: { strata: [{ tag: "basics", count: 2, mode: "exact" }] },
+      },
+    ]);
     storageMock.getQuestions.mockResolvedValue([exportQuestion]);
     storageMock.getScales.mockResolvedValue([exportScale]);
     storageMock.getResultVariables.mockResolvedValue([exportRv]);
@@ -300,10 +368,20 @@ describe("GET /:id/workbook/export", () => {
     expect(res.status).toBe(200);
     const wb = await readWorkbookFromBuffer(res.body as Buffer);
     const names = wb.worksheets.map((w) => w.name);
-    expect(names).toEqual(expect.arrayContaining(["Вопросы", "Шкалы", "Показатели", "Вклады вопросов"]));
+    expect(names).toEqual(
+      expect.arrayContaining(["Вопросы", "Структура", "Квоты", "Шкалы", "Показатели", "Вклады вопросов"]),
+    );
 
     const qRows = sheetToObjects(wb.getWorksheet("Вопросы")!);
     expect(qRows[0]).toMatchObject({ "Ключ строки": "q1", "ID": "q-1", "Тип вопроса": "multiple_choice" });
+
+    const structRows = sheetToObjects(wb.getWorksheet("Структура")!);
+    expect(structRows[0]).toMatchObject({
+      "Раздел": "JavaScript", "Вопросов в выборке": 5, "Тип порога": "Сумма баллов", "Порог": 3, "Обязательный": "да",
+    });
+
+    const quotaRows = sheetToObjects(wb.getWorksheet("Квоты")!);
+    expect(quotaRows[0]).toMatchObject({ "Раздел": "JavaScript", "Тег": "basics", "Количество": 2, "Режим": "Ровно" });
 
     const sRows = sheetToObjects(wb.getWorksheet("Шкалы")!);
     expect(sRows[0]).toMatchObject({ "Ключ": "ee", "Название": "Истощение" });
@@ -320,7 +398,13 @@ describe("GET /:id/workbook/export", () => {
 
 describe("Round-trip: экспорт → реимпорт", () => {
   beforeEach(() => {
-    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1" }]);
+    storageMock.getTestSections.mockResolvedValue([
+      {
+        topicId: "t1", drawCount: 5, sortOrder: 0, required: true,
+        topicPassRuleJson: { source: "custom", type: "absolute", value: 3 },
+        drawBlueprintJson: { strata: [{ tag: "basics", count: 2, mode: "exact" }] },
+      },
+    ]);
     storageMock.getQuestions.mockResolvedValue([exportQuestion]);
     storageMock.getScales.mockResolvedValue([exportScale]);
     storageMock.getResultVariables.mockResolvedValue([exportRv]);

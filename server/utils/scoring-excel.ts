@@ -11,10 +11,11 @@
  * - empty / `точное`              -> null (exact match, 0/1; FR-02 default)
  * - `веса: w1 # w2 # ...`         -> weighted (single only); fewer weights than
  *   options pad with 0, more is an error; optional `; sMax=<n>`
- * - `ступени: <c|x><op><rhs>[& ...] => <score>; ...` -> tiered (multiple/
+ * - `ступени: <correct|wrong><op><rhs>[& ...] => <score>; ...` -> tiered (multiple/
  *   matching/ranking); tiers split by `;` or `,`, conditions by `&`; score uses
- *   a dot decimal (comma is a list separator); `rhs` is a number or a token
- *   `T`/`P`/`N`; optional `sMax=<n>` segment.
+ *   a dot decimal (comma is a list separator); `rhs` is a number or the keyword
+ *   `total` (всего верных); optional `sMax=<n>` segment. Legacy single-letter
+ *   tokens (`c`/`x`/`T`/`P`/`N`) are still accepted on import for back-compat.
  *
  * The result is validated by `questionScoringSchema`; a mode that does not match
  * the question type, or any malformed segment, returns `{ ok: false }`.
@@ -42,10 +43,13 @@ export function serializeScoring(scoring: QuestionScoring | null | undefined): s
     return scoring.sMax != null ? `${base}; sMax=${scoring.sMax}` : base;
   }
 
-  // tiered
+  // tiered — write the readable keywords (correct/wrong/total), not c/x/T.
+  const lhsTo: Record<string, string> = { c: "correct", x: "wrong" };
+  const rhsTo = (rhs: number | string): string =>
+    rhs === "T" || rhs === "P" || rhs === "N" ? "total" : String(rhs);
   const tiers = scoring.tiers
     .map((t) => {
-      const conds = t.when.all.map((c) => `${c.lhs}${c.op}${c.rhs}`).join(" & ");
+      const conds = t.when.all.map((c) => `${lhsTo[c.lhs] ?? c.lhs} ${c.op} ${rhsTo(c.rhs)}`).join(" & ");
       return `${conds} => ${t.score}`;
     })
     .join("; ");
@@ -71,23 +75,42 @@ function extractSMax(body: string): { main: string; sMax?: number; error?: strin
   return { main: mainSegs.join(";"), sMax };
 }
 
-/** Parse one tier condition `<c|x><op><rhs>`. */
+/** Left-hand keyword → stored token. `correct`/`wrong` are canonical; the
+ *  single letters and Russian words are accepted aliases (back-compat / UX). */
+const LHS_FROM: Record<string, "c" | "x"> = {
+  correct: "c", c: "c", верно: "c", верных: "c",
+  wrong: "x", x: "x", неверно: "x", неверных: "x", лишних: "x",
+};
+
+/**
+ * Parse one tier condition `<correct|wrong> <op> <rhs>`. `rhs` is a number or the
+ * keyword `total` (всего верных), which maps to the per-type counter token
+ * `totalToken` (`T`/`P`/`N`). The legacy single-letter tokens are still accepted.
+ */
 function parseCondition(
   raw: string,
+  totalToken: "T" | "P" | "N",
 ): { ok: true; cond: { lhs: string; op: string; rhs: number | string } } | { ok: false; error: string } {
-  const m = /^([cx])\s*(==|>=|<=|<|>)\s*(.+)$/i.exec(raw.trim());
+  const m = /^([A-Za-zА-Яа-я]+)\s*(==|>=|<=|<|>)\s*(.+)$/.exec(raw.trim());
   if (!m) return { ok: false, error: `некорректное условие "${raw.trim()}"` };
+  const lhs = LHS_FROM[m[1].toLowerCase()];
+  if (!lhs) {
+    return { ok: false, error: `некорректная левая часть условия "${m[1]}" (ожидается correct/wrong)` };
+  }
   const rhsRaw = m[3].trim();
+  const rhsLower = rhsRaw.toLowerCase();
   const rhsUpper = rhsRaw.toUpperCase();
   let rhs: number | string;
-  if (rhsUpper === "T" || rhsUpper === "P" || rhsUpper === "N") {
+  if (rhsLower === "total" || rhsLower === "всего") {
+    rhs = totalToken;
+  } else if (rhsUpper === "T" || rhsUpper === "P" || rhsUpper === "N") {
     rhs = rhsUpper;
   } else {
     const n = Number(rhsRaw);
     if (!Number.isFinite(n)) return { ok: false, error: `некорректная правая часть условия "${rhsRaw}"` };
     rhs = n;
   }
-  return { ok: true, cond: { lhs: m[1].toLowerCase(), op: m[2], rhs } };
+  return { ok: true, cond: { lhs, op: m[2], rhs } };
 }
 
 /**
@@ -136,6 +159,8 @@ export function parseScoringCell(
     if (type === "single") {
       return { ok: false, error: "«ступени» недопустимы для одиночного выбора" };
     }
+    // `total` resolves to the per-type counter token: options/pairs/items.
+    const totalToken: "T" | "P" | "N" = type === "matching" ? "P" : type === "ranking" ? "N" : "T";
     const body = text.slice(text.indexOf(":") + 1);
     const segments = body.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
 
@@ -164,7 +189,7 @@ export function parseScoringCell(
 
       const all: Array<{ lhs: string; op: string; rhs: number | string }> = [];
       for (const cp of condParts) {
-        const parsed = parseCondition(cp);
+        const parsed = parseCondition(cp, totalToken);
         if (!parsed.ok) return parsed;
         all.push(parsed.cond);
       }

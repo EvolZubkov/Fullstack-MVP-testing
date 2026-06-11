@@ -24,13 +24,20 @@ import {
   serializeScaleRow,
   serializeResultVariableRow,
   serializeMeasurementRow,
+  serializeStructureRow,
+  serializeQuotaRow,
   SCALE_HEADERS,
   SCALE_WIDTHS,
   RESULT_VAR_HEADERS,
   RESULT_VAR_WIDTHS,
   MEASUREMENT_HEADERS,
   MEASUREMENT_WIDTHS,
+  STRUCTURE_HEADERS,
+  STRUCTURE_WIDTHS,
+  QUOTA_HEADERS,
+  QUOTA_WIDTHS,
 } from "../utils/workbook-sheets";
+import type { DrawBlueprint } from "@shared/schema";
 
 const router = Router();
 
@@ -112,8 +119,31 @@ router.get(
         .filter((m) => aliasByQuestionId.has(m.questionId) && scaleKeyById.has(m.scaleId))
         .map((m) => serializeMeasurementRow(m, aliasByQuestionId.get(m.questionId)!, scaleKeyById.get(m.scaleId)!));
 
+      // «Структура» + «Квоты» (FR-16): sections ordered by sortOrder; each
+      // section's blueprint strata flatten into «Квоты» rows (round-trip).
+      const orderedSections = sections.slice().sort((a, b) => a.sortOrder - b.sortOrder);
+      const structureRows = orderedSections.map((s) =>
+        serializeStructureRow({
+          topicName: topicName.get(s.topicId) || "",
+          sortOrder: s.sortOrder,
+          drawCount: s.drawCount,
+          topicPassRuleJson: s.topicPassRuleJson,
+          required: s.required,
+        }),
+      );
+      const quotaRows: Record<string, unknown>[] = [];
+      for (const s of orderedSections) {
+        const bp = s.drawBlueprintJson as DrawBlueprint | null;
+        if (bp?.strata?.length) {
+          const name = topicName.get(s.topicId) || "";
+          for (const st of bp.strata) quotaRows.push(serializeQuotaRow(name, st));
+        }
+      }
+
       const wb = new ExcelJS.Workbook();
       addSheet(wb, "Вопросы", questionRows, ["Ключ строки", ...QUESTION_HEADERS], [12, ...QUESTION_WIDTHS]);
+      addSheet(wb, "Структура", structureRows, STRUCTURE_HEADERS, STRUCTURE_WIDTHS);
+      addSheet(wb, "Квоты", quotaRows, QUOTA_HEADERS, QUOTA_WIDTHS);
       addSheet(wb, "Шкалы", scaleRows, SCALE_HEADERS, SCALE_WIDTHS);
       addSheet(wb, "Показатели", rvRows, RESULT_VAR_HEADERS, RESULT_VAR_WIDTHS);
       addSheet(wb, "Вклады вопросов", measRows, MEASUREMENT_HEADERS, MEASUREMENT_WIDTHS);

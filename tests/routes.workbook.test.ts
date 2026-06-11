@@ -21,6 +21,7 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     getUser: vi.fn(),
     getUserRoles: vi.fn().mockResolvedValue(["administrator"]),
     setTestOwner: vi.fn(),
+    getTest: vi.fn(),
     // questions import
     getTopics: vi.fn(),
     createTopic: vi.fn(),
@@ -38,7 +39,7 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     validateResultVariableFormula: vi.fn(),
     upsertQuestionMeasurements: vi.fn(),
   },
-  testSettingsMock: { create: vi.fn() },
+  testSettingsMock: { create: vi.fn(), save: vi.fn() },
 }));
 
 vi.mock("../server/storage", () => ({ storage: storageMock }));
@@ -95,7 +96,9 @@ beforeEach(() => {
   storageMock.createResultVariable.mockResolvedValue({ id: "rv-new" });
   storageMock.validateResultVariableFormula.mockResolvedValue({ valid: true });
   storageMock.upsertQuestionMeasurements.mockResolvedValue([]);
+  storageMock.getTest.mockResolvedValue({ id: "test-new", title: "Новый тест", status: "draft" });
   testSettingsMock.create.mockResolvedValue({ id: "test-new", title: "Новый тест" });
+  testSettingsMock.save.mockResolvedValue({ id: "test-new" });
 });
 
 describe("POST /api/workbook/inspect", () => {
@@ -117,6 +120,17 @@ describe("POST /api/workbook/inspect", () => {
     expect(res.body.hasScales).toBe(true);
     expect(res.body.requiresTest).toBe(true);
     expect(res.body.sheets).toEqual(expect.arrayContaining(["Вопросы", "Шкалы"]));
+  });
+
+  it("файл со «Структурой» → requiresTest=true", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Структура": [{ "Раздел": "JavaScript", "Вопросов в выборке": "5", "Тип порога": "Сумма баллов", "Порог": "4" }],
+    });
+    const res = await request(makeApp()).post("/api/workbook/inspect").attach("file", buf, "wb.xlsx");
+
+    expect(res.body.hasStructure).toBe(true);
+    expect(res.body.requiresTest).toBe(true);
   });
 
   it("без файла → 400", async () => {
@@ -159,6 +173,30 @@ describe("POST /api/workbook/import-new", () => {
     expect(storageMock.createScale).toHaveBeenCalled();
   });
 
+  it("со «Структурой»: создаёт тест и применяет разделы (router_by_topics)", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Структура": [
+        { "Раздел": "JavaScript", "Порядок": "1", "Вопросов в выборке": "5", "Тип порога": "Сумма баллов", "Порог": "4", "Обязательный": "да" },
+      ],
+      "Квоты": [{ "Раздел": "JavaScript", "Тег": "basics", "Количество": "3" }],
+    });
+    const res = await request(makeApp())
+      .post("/api/workbook/import-new")
+      .field("newTestTitle", "Сертификация")
+      .attach("file", buf, "wb.xlsx");
+
+    expect(res.status).toBe(201);
+    expect(res.body.structure).toEqual({ sections: 1, quotas: 1 });
+    expect(testSettingsMock.save).toHaveBeenCalledWith(
+      "test-new",
+      expect.objectContaining({
+        test: expect.objectContaining({ flowPolicyJson: { mode: "router_by_topics" } }),
+        sections: [expect.objectContaining({ topicId: "t1", drawCount: 5 })],
+      }),
+    );
+  });
+
   it("без названия нового теста → 400", async () => {
     const buf = await makeWorkbook({ "Шкалы": [scaleRow] });
     const res = await request(makeApp())
@@ -183,7 +221,7 @@ describe("GET /api/workbook/template", () => {
     const wb = await readWorkbookFromBuffer(res.body as Buffer);
     const names = wb.worksheets.map((w) => w.name);
     expect(names).toEqual(
-      expect.arrayContaining(["Вопросы", "Шкалы", "Показатели", "Вклады вопросов", "Справка"]),
+      expect.arrayContaining(["Вопросы", "Структура", "Квоты", "Шкалы", "Показатели", "Вклады вопросов", "Справка"]),
     );
   });
 });

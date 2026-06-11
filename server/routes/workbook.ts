@@ -41,6 +41,10 @@ import {
   RESULT_VAR_WIDTHS,
   MEASUREMENT_HEADERS,
   MEASUREMENT_WIDTHS,
+  STRUCTURE_HEADERS,
+  STRUCTURE_WIDTHS,
+  QUOTA_HEADERS,
+  QUOTA_WIDTHS,
 } from "../utils/workbook-sheets";
 
 const router = Router();
@@ -50,6 +54,8 @@ const SHEET_QUESTIONS = "Вопросы";
 const SHEET_SCALES = "Шкалы";
 const SHEET_RESULT_VARS = "Показатели";
 const SHEET_MEASUREMENTS = "Вклады вопросов";
+const SHEET_STRUCTURE = "Структура";
+const SHEET_QUOTAS = "Квоты";
 
 /** Synthetic target id for a new-test dry-run: every DB read returns empty. */
 const DRYRUN_NEW_TEST_ID = "__workbook_new__";
@@ -81,13 +87,18 @@ router.post(
       const scales = findSheet(workbook, SHEET_SCALES);
       const resultVars = findSheet(workbook, SHEET_RESULT_VARS);
       const measurements = findSheet(workbook, SHEET_MEASUREMENTS);
+      const structure = findSheet(workbook, SHEET_STRUCTURE);
+      const quotas = findSheet(workbook, SHEET_QUOTAS);
 
       const hasQuestions = !!questions;
       const hasScales = !!scales;
       const hasResultVariables = !!resultVars;
       const hasMeasurements = !!measurements;
+      const hasStructure = !!structure;
+      const hasQuotas = !!quotas;
       // Test-scoped sheets need a target test; «Вопросы» alone goes to the bank.
-      const requiresTest = hasScales || hasResultVariables || hasMeasurements;
+      const requiresTest =
+        hasScales || hasResultVariables || hasMeasurements || hasStructure || hasQuotas;
 
       res.json({
         sheets: workbook.worksheets.map((w) => w.name),
@@ -95,12 +106,16 @@ router.post(
         hasScales,
         hasResultVariables,
         hasMeasurements,
+        hasStructure,
+        hasQuotas,
         requiresTest,
         counts: {
           questions: rowCount(questions),
           scales: rowCount(scales),
           resultVariables: rowCount(resultVars),
           measurements: rowCount(measurements),
+          structure: rowCount(structure),
+          quotas: rowCount(quotas),
         },
       });
     } catch (error) {
@@ -162,6 +177,8 @@ router.get(
       // «Вопросы» and «Вклады вопросов» carry a leading «Ключ строки» (local
       // alias) so measurements can reference questions created in the same file.
       addAoaSheet(wb, SHEET_QUESTIONS, [["Ключ строки", ...QUESTION_HEADERS]], [12, ...QUESTION_WIDTHS]);
+      addAoaSheet(wb, SHEET_STRUCTURE, [STRUCTURE_HEADERS], STRUCTURE_WIDTHS);
+      addAoaSheet(wb, SHEET_QUOTAS, [QUOTA_HEADERS], QUOTA_WIDTHS);
       addAoaSheet(wb, SHEET_SCALES, [SCALE_HEADERS], SCALE_WIDTHS);
       addAoaSheet(wb, SHEET_RESULT_VARS, [RESULT_VAR_HEADERS], RESULT_VAR_WIDTHS);
       addAoaSheet(wb, SHEET_MEASUREMENTS, [MEASUREMENT_HEADERS], MEASUREMENT_WIDTHS);
@@ -169,15 +186,20 @@ router.get(
       const help: string[][] = [
         ["Лист", "Назначение"],
         [SHEET_QUESTIONS, "Банк вопросов (глобальный). Можно импортировать отдельным файлом — целевой тест не нужен"],
+        [SHEET_STRUCTURE, "Разделы теста: тема, «Вопросов в выборке», порог (Тип/Порог), обязательность. Требует целевого теста"],
+        [SHEET_QUOTAS, "Квоты выдачи по тегам (PRD-11): Раздел, Тег, Количество, Режим («Ровно»/«Не менее»). Σ количеств ≤ «Вопросов в выборке» раздела"],
         [SHEET_SCALES, "Шкалы теста. Требуют выбора целевого теста"],
         [SHEET_RESULT_VARS, "Показатели результата (формулы). Требуют выбора целевого теста"],
         [SHEET_MEASUREMENTS, "Вклады вопросов в шкалы. Требуют выбора целевого теста"],
         ["", ""],
         ["«Ключ строки»", "Локальный алиас вопроса в пределах файла; на него ссылается лист «Вклады вопросов»"],
-        ["Порядок импорта", "Вопросы → Шкалы → Вклады вопросов + Показатели"],
+        ["«Тип порога»", "«Сумма баллов» (порог в баллах) / «Процент» / «Нет» / «Как у теста». Для сертификации — «Сумма баллов»"],
+        ["«Режим» квоты", "«Ровно» = ровно N вопросов с тегом; «Не менее» = не менее N (остаток добирается случайно)"],
+        ["Поток", "Структура импортируется с режимом «со страницей-маршрутизатором» (router_by_topics)"],
+        ["Порядок импорта", "Вопросы → Шкалы → Вклады вопросов + Показатели → Структура + Квоты"],
         ["Справка по колонкам", "См. лист «Справка» в шаблоне вопросов (Вопросы → Скачать шаблон)"],
       ];
-      addAoaSheet(wb, "Справка", help, [22, 90]);
+      addAoaSheet(wb, "Справка", help, [22, 96]);
 
       const buffer = await workbookToBuffer(wb);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

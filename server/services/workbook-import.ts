@@ -24,14 +24,19 @@ import {
   insertResultVariableSchema,
   type Scale,
   type ResultVariable,
+  type DrawStratum,
 } from "@shared/schema";
 import type { ValueType } from "@shared/formula";
 import { importQuestionRows, type ResolvedQuestion } from "./questions-import";
+import { testSettingsService, type SectionPayload } from "./test-settings";
 import {
   parseScaleRow,
   parseResultVariableRow,
   parseMeasurementRow,
   validateSourceKey,
+  parseStructureRow,
+  parseQuotaRow,
+  type ParsedQuota,
 } from "../utils/workbook-sheets";
 
 export interface WorkbookImportResult {
@@ -39,8 +44,15 @@ export interface WorkbookImportResult {
   scales: { created: number; updated: number };
   resultVariables: { created: number; updated: number };
   measurements: { rows: number; questions: number };
+  /** PRD-14 FR-16: sections + quotas written from «Структура»/«Квоты». */
+  structure: { sections: number; quotas: number };
   errors: string[];
   dryRun: boolean;
+}
+
+/** Normalize a topic/section name for case/space-insensitive matching. */
+function normalizeName(s: string): string {
+  return s.replace(/[\s ​﻿]+/g, " ").trim().toLowerCase();
 }
 
 type QuestionType = "single" | "multiple" | "matching" | "ranking";
@@ -70,15 +82,24 @@ export async function importWorkbook(
     scales: { created: 0, updated: 0 },
     resultVariables: { created: 0, updated: 0 },
     measurements: { rows: 0, questions: 0 },
+    structure: { sections: 0, quotas: 0 },
     errors: [],
     dryRun,
   };
 
   // ── Pass 1: «Вопросы» (global). Records alias → resolved question. ──
   const aliasToQuestion = new Map<string, ResolvedQuestion>();
+  // Topic names seen on «Вопросы» — used to resolve «Структура» sections under
+  // dryRun (topics are not persisted then, so storage can't be consulted).
+  const questionTopicNames = new Set<string>();
   const questionsSheet = findSheet(workbook, "Вопросы");
   if (questionsSheet) {
-    const qres = await importQuestionRows(sheetToObjects(questionsSheet), sheetHeaders(questionsSheet), { dryRun });
+    const qrows = sheetToObjects(questionsSheet);
+    for (const r of qrows) {
+      const name = normalizeName(String(r["Тема"] ?? ""));
+      if (name) questionTopicNames.add(name);
+    }
+    const qres = await importQuestionRows(qrows, sheetHeaders(questionsSheet), { dryRun });
     result.questions = { created: qres.created, updated: qres.updated, skipped: qres.skipped };
     for (const e of qres.errors) result.errors.push(`Лист «Вопросы», ${e}`);
     for (const [alias, q] of qres.aliasToQuestion) aliasToQuestion.set(alias, q);
@@ -257,6 +278,111 @@ export async function importWorkbook(
       for (const [questionId, rowsForQ] of byQuestion) {
         await storage.upsertQuestionMeasurements(testId, questionId, rowsForQ);
       }
+    }
+  }
+
+  // ── Pass 5: «Структура» + «Квоты» (FR-16: sections + PRD-11 quotas, router). ──
+  // The whole test's structure: one section per «Структура» row (topic + draw
+  // count + per-topic pass rule), with «Квоты» rows supplying each section's
+  // per-tag draw blueprint. Applied via testSettingsService (it materializes the
+  // router page and runs flow validation). The flow is fixed to router_by_topics.
+  const structureSheet = findSheet(workbook, "Структура");
+  const quotasSheet = findSheet(workbook, "Квоты");
+
+  if (quotasSheet && !structureSheet) {
+    result.errors.push('Лист «Квоты» требует листа «Структура» (квоты привязаны к разделам)');
+  }
+
+  if (structureSheet) {
+    // Group quota rows by section (topic name) → strata.
+    const quotasByTopic = new Map<string, DrawStratum[]>();
+    if (quotasSheet) {
+      const qrows = sheetToObjects(quotasSheet);
+      for (let i = 0; i < qrows.length; i++) {
+        const parsed = parseQuotaRow(qrows[i]);
+        if (!parsed.ok) {
+          result.errors.push(`Лист «Квоты», строка ${i + 2}: ${parsed.error}`);
+          continue;
+        }
+        const q: ParsedQuota = parsed.value;
+        const key = normalizeName(q.topicName);
+        const list = quotasByTopic.get(key) ?? [];
+        list.push({ tag: q.tag, count: q.count, mode: q.mode });
+        quotasByTopic.set(key, list);
+      }
+    }
+
+    // Resolve topic names → ids. After pass 1 (non-dryRun) the topics are
+    // persisted; under dryRun they aren't, so a name present on «Вопросы» gets a
+    // synthetic id (never written — the save is skipped under dryRun).
+    const topics = await storage.getTopics();
+    const topicIdByName = new Map(topics.map((t) => [normalizeName(t.name), t.id]));
+
+    const structRows = sheetToObjects(structureSheet);
+    const pending: Array<{ order: number; payload: SectionPayload }> = [];
+    const usedTopicKeys = new Set<string>();
+    for (let i = 0; i < structRows.length; i++) {
+      const where = `Лист «Структура», строка ${i + 2}`;
+      const parsed = parseStructureRow(structRows[i], i);
+      if (!parsed.ok) {
+        result.errors.push(`${where}: ${parsed.error}`);
+        continue;
+      }
+      const sec = parsed.value;
+      const key = normalizeName(sec.topicName);
+
+      let topicId = topicIdByName.get(key);
+      if (!topicId) {
+        if (questionTopicNames.has(key)) {
+          topicId = `__newtopic__:${key}`; // dryRun only
+        } else {
+          result.errors.push(`${where}: тема "${sec.topicName}" не найдена (нет ни в БД, ни на листе «Вопросы»)`);
+          continue;
+        }
+      }
+      usedTopicKeys.add(key);
+
+      const strata = quotasByTopic.get(key) ?? [];
+      const quotaSum = strata.reduce((s, q) => s + q.count, 0);
+      if (quotaSum > sec.drawCount) {
+        result.errors.push(`${where}: сумма квот (${quotaSum}) превышает «Вопросов в выборке» (${sec.drawCount})`);
+        continue;
+      }
+
+      pending.push({
+        order: sec.sortOrder,
+        payload: {
+          topicId,
+          drawCount: sec.drawCount,
+          topicPassRuleJson: sec.passRule,
+          required: sec.required,
+          drawBlueprintJson: strata.length ? { strata } : null,
+        },
+      });
+      result.structure.quotas += strata.length;
+    }
+
+    // Quota rows pointing at a section absent from «Структура» are orphans.
+    for (const key of quotasByTopic.keys()) {
+      if (!usedTopicKeys.has(key)) {
+        result.errors.push(`Лист «Квоты»: раздел "${key}" не найден на листе «Структура»`);
+      }
+    }
+
+    // The array order becomes each section's sortOrder in the service.
+    pending.sort((a, b) => a.order - b.order);
+    const sections = pending.map((p) => p.payload);
+    result.structure.sections = sections.length;
+
+    if (!dryRun && sections.length > 0) {
+      const current = await storage.getTest(testId);
+      await testSettingsService.save(testId, {
+        test: {
+          flowPolicyJson: { mode: "router_by_topics" },
+          status: (current?.status as "draft" | "published" | "archived") ?? "draft",
+        },
+        sections,
+      });
     }
   }
 

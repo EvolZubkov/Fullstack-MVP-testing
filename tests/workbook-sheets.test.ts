@@ -12,6 +12,10 @@ import {
   parseMeasurementRow,
   validateSourceKey,
   parseBool,
+  parseStructureRow,
+  serializeStructureRow,
+  parseQuotaRow,
+  serializeQuotaRow,
 } from "../server/utils/workbook-sheets";
 
 describe("parseBands / serializeBands", () => {
@@ -152,6 +156,88 @@ describe("parseMeasurementRow", () => {
 
   it("нечисловое значение → ошибка", () => {
     expect(parseMeasurementRow({ "Вопрос": "q", "Шкала": "s", "Источник": "вопрос", "Значение": "abc" }).ok).toBe(false);
+  });
+});
+
+describe("parseStructureRow", () => {
+  it("разбирает раздел с порогом «Сумма баллов»", () => {
+    const r = parseStructureRow(
+      { "Раздел": "О компании", "Порядок": "1", "Вопросов в выборке": "12", "Тип порога": "Сумма баллов", "Порог": "15", "Обязательный": "да" },
+      0,
+    );
+    expect(r.ok && r.value).toEqual({
+      topicName: "О компании",
+      sortOrder: 1,
+      drawCount: 12,
+      passRule: { source: "custom", type: "absolute", value: 15 },
+      required: true,
+    });
+  });
+
+  it("«Процент» → custom percent", () => {
+    const r = parseStructureRow({ "Раздел": "X", "Вопросов в выборке": "5", "Тип порога": "Процент", "Порог": "70" }, 3);
+    expect(r.ok && r.value.passRule).toEqual({ source: "custom", type: "percent", value: 70 });
+    expect(r.ok && r.value.sortOrder).toBe(3); // «Порядок» пуст → индекс строки
+  });
+
+  it("пустой тип порога → наследование; «нет» → не проверять", () => {
+    const inh = parseStructureRow({ "Раздел": "X", "Вопросов в выборке": "5" }, 0);
+    expect(inh.ok && inh.value.passRule).toEqual({ source: "inherit_overall" });
+    const none = parseStructureRow({ "Раздел": "X", "Вопросов в выборке": "5", "Тип порога": "Нет" }, 0);
+    expect(none.ok && none.value.passRule).toEqual({ source: "none" });
+  });
+
+  it("required по умолчанию true, «нет» → false", () => {
+    expect(parseStructureRow({ "Раздел": "X", "Вопросов в выборке": "5" }, 0)).toMatchObject({ value: { required: true } });
+    expect(parseStructureRow({ "Раздел": "X", "Вопросов в выборке": "5", "Обязательный": "нет" }, 0)).toMatchObject({ value: { required: false } });
+  });
+
+  it("нет темы / некорректный drawCount / неизвестный тип → ошибка", () => {
+    expect(parseStructureRow({ "Вопросов в выборке": "5" }, 0).ok).toBe(false);
+    expect(parseStructureRow({ "Раздел": "X", "Вопросов в выборке": "0" }, 0).ok).toBe(false);
+    expect(parseStructureRow({ "Раздел": "X", "Вопросов в выборке": "5", "Тип порога": "abc", "Порог": "1" }, 0).ok).toBe(false);
+  });
+
+  it("round-trip serialize ∘ parse (absolute)", () => {
+    const row = { "Раздел": "О компании", "Порядок": "1", "Вопросов в выборке": "12", "Тип порога": "Сумма баллов", "Порог": "15", "Обязательный": "да" };
+    const parsed = parseStructureRow(row, 0);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    const out = serializeStructureRow({
+      topicName: parsed.value.topicName,
+      sortOrder: parsed.value.sortOrder,
+      drawCount: parsed.value.drawCount,
+      topicPassRuleJson: parsed.value.passRule,
+      required: parsed.value.required,
+    });
+    expect(out).toMatchObject({ "Раздел": "О компании", "Вопросов в выборке": 12, "Тип порога": "Сумма баллов", "Порог": 15, "Обязательный": "да" });
+  });
+});
+
+describe("parseQuotaRow", () => {
+  it("разбирает квоту (режим по умолчанию «Ровно» = exact)", () => {
+    const r = parseQuotaRow({ "Раздел": "О компании", "Тег": "Стратегия", "Количество": "4" });
+    expect(r.ok && r.value).toEqual({ topicName: "О компании", tag: "Стратегия", count: 4, mode: "exact" });
+  });
+
+  it("«Не менее» → min", () => {
+    const r = parseQuotaRow({ "Раздел": "X", "Тег": "t", "Количество": "2", "Режим": "Не менее" });
+    expect(r.ok && r.value.mode).toBe("min");
+  });
+
+  it("нет тега / count < 1 / неизвестный режим → ошибка", () => {
+    expect(parseQuotaRow({ "Раздел": "X", "Количество": "2" }).ok).toBe(false);
+    expect(parseQuotaRow({ "Раздел": "X", "Тег": "t", "Количество": "0" }).ok).toBe(false);
+    expect(parseQuotaRow({ "Раздел": "X", "Тег": "t", "Количество": "2", "Режим": "иногда" }).ok).toBe(false);
+  });
+
+  it("round-trip serialize ∘ parse", () => {
+    const r = parseQuotaRow({ "Раздел": "О компании", "Тег": "Стратегия", "Количество": "4", "Режим": "Не менее" });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(serializeQuotaRow(r.value.topicName, { tag: r.value.tag, count: r.value.count, mode: r.value.mode })).toEqual({
+      "Раздел": "О компании", "Тег": "Стратегия", "Количество": 4, "Режим": "Не менее",
+    });
   });
 });
 

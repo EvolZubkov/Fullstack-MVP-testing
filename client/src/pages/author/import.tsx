@@ -56,6 +56,7 @@ interface Plan {
   scales?: { created: number; updated: number };
   resultVariables?: { created: number; updated: number };
   measurements?: { rows: number; questions: number };
+  structure?: { sections: number; quotas: number };
   errors: string[];
   test?: { id: string | null; title: string } | null;
 }
@@ -86,6 +87,7 @@ function normalizePlan(data: any, requiresTest: boolean): Plan {
     scales: data.scales,
     resultVariables: data.resultVariables,
     measurements: data.measurements,
+    structure: data.structure,
     errors: data.errors ?? [],
     test: data.test ?? null,
   };
@@ -254,6 +256,9 @@ export default function ImportPage() {
     if (plan.measurements) {
       parts.push(`${tr.planMeasurements}: ${plan.measurements.rows}`);
     }
+    if (plan.structure && plan.structure.sections > 0) {
+      parts.push(`${tr.planStructure}: ${plan.structure.sections}`);
+    }
     return parts.join(" · ");
   }
 
@@ -301,6 +306,12 @@ export default function ImportPage() {
           <PlanRow
             name={tr.planMeasurements}
             extra={`${plan.measurements.rows} ${tr.measurementsSummary} · ${plan.measurements.questions} ${tr.questionsWord}`}
+          />
+        )}
+        {plan.structure && (plan.structure.sections > 0 || plan.structure.quotas > 0) && (
+          <PlanRow
+            name={tr.planStructure}
+            extra={`${plan.structure.sections} ${tr.sectionsWord} · ${plan.structure.quotas} ${tr.quotasWord}`}
           />
         )}
       </ul>
