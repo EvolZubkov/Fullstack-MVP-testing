@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, uuid, real } from "drizzle-orm/pg-core"
+import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, index, uuid, real } from "drizzle-orm/pg-core"
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { normalizeTag, normalizeTags, TAG_MAX_LENGTH } from "./tags";
@@ -96,6 +96,8 @@ export const folders = pgTable("folders", {
   id: varchar("id", { length: 36 }).primaryKey(),
   name: text("name").notNull(),
   parentId: varchar("parent_id", { length: 36 }),
+  // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
+  createdBy: varchar("created_by", { length: 36 }),
 });
 
 export const topics = pgTable("topics", {
@@ -104,6 +106,8 @@ export const topics = pgTable("topics", {
   description: text("description"),
   feedback: text("feedback"),
   folderId: varchar("folder_id", { length: 36 }),
+  // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
+  createdBy: varchar("created_by", { length: 36 }),
 });
 
 export const topicCourses = pgTable("topic_courses", {
@@ -200,6 +204,8 @@ export const questions = pgTable("questions", {
   tags: jsonb("tags").$type<string[]>().notNull().default([]),
   // PRD-10: graded answer scoring (correctness axis). Null = exact match (FR-02).
   scoringJson: jsonb("scoring_json").$type<QuestionScoring>(),
+  // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
+  createdBy: varchar("created_by", { length: 36 }),
 });
 
 export const testFolders = pgTable("test_folders", {
@@ -207,6 +213,8 @@ export const testFolders = pgTable("test_folders", {
   name: text("name").notNull(),
   parentId: varchar("parent_id", { length: 36 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
+  createdBy: varchar("created_by", { length: 36 }),
 });
 
 // ─── PRD-6: retake gate / cooldown (ограничение повторного прохождения) ──────
@@ -353,7 +361,10 @@ export const testSections = pgTable("test_sections", {
   // every save as the index of the topic in the editor's sections array, so
   // drag-reorder in Structure round-trips through getTestSections() ORDER BY.
   sortOrder: integer("sort_order").notNull().default(0),
-});
+}, (table) => ({
+  // PRD-15 FR-03: powers the "where used" lookup (tests depending on a topic).
+  topicIdIdx: index("test_sections_topic_id_idx").on(table.topicId),
+}));
 
 export const adaptiveTopicSettings = pgTable("adaptive_topic_settings", {
   id: varchar("id", { length: 36 }).primaryKey(),
