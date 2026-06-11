@@ -168,6 +168,9 @@ export default function TakeTestPage() {
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [flatQuestions, setFlatQuestions] = useState<FlatQuestion[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // PRD-15 FR-14: set when a submit/answer hits 404 because the attempt was
+  // annulled by an emergency re-publish — the learner is told to start over.
+  const [attemptGone, setAttemptGone] = useState(false);
   const [shuffleMappings, setShuffleMappings] = useState<Record<string, any>>({});
 
   // PRD-4 v1.1 §3.2 — per-topic (section) timer for the standard flow. The
@@ -874,6 +877,7 @@ export default function TakeTestPage() {
         body: JSON.stringify({ answers }),
       });
 
+      if (res.status === 404) { setAttemptGone(true); return; }
       if (!res.ok) throw new Error("Failed to submit");
       navigate(`/learner/result/${attempt.id}`);
     } catch (err) {
@@ -900,6 +904,7 @@ export default function TakeTestPage() {
         credentials: "include",
         body: JSON.stringify({ answers }),
       });
+      if (res.status === 404) { setAttemptGone(true); return; }
       if (!res.ok) throw new Error("Failed to submit");
       navigate(`/learner/result/${attempt.id}`);
     } catch (err) {
@@ -1039,6 +1044,7 @@ export default function TakeTestPage() {
         }),
       });
 
+      if (res.status === 404) { setAttemptGone(true); return; }
       if (!res.ok) throw new Error("Failed to submit answer");
       const data = await res.json();
 
@@ -1161,6 +1167,7 @@ export default function TakeTestPage() {
         }),
       });
 
+      if (res.status === 404) { setAttemptGone(true); return; }
       if (!res.ok) throw new Error("Failed to submit answer");
       const data = await res.json();
 
@@ -1239,6 +1246,32 @@ export default function TakeTestPage() {
   };
 
   // Loading state
+  // PRD-15 FR-14: the attempt was annulled by an emergency re-publish (404 on
+  // submit/answer). Tell the learner the attempt is not counted and let them
+  // restart — reloading re-enters the start flow with a fresh attempt.
+  if (attemptGone) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6">
+        <Card className="max-w-md w-full">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-primary" />
+              Тест обновлён
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Эта попытка прервана: тест переопубликован. Попытка не засчитана — начните прохождение заново.
+            </p>
+            <Button className="w-full" onClick={() => window.location.reload()}>
+              Начать заново
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (phase === "loading" || (isStarting && phase !== "start")) {
     return <LoadingState message={t.common.preparingTest} />;
   }

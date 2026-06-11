@@ -49,10 +49,12 @@ import {
   Search,
   Trash2,
   TriangleAlert,
+  Upload,
   Users,
   ArrowRight,
 } from "lucide-react";
 import {
+  Banner,
   Button,
   Input,
   ModalDialog,
@@ -105,6 +107,7 @@ function apiToEntry(row: ApiTestRow): TestListEntry {
     assignmentCount: (row as { assignmentCount?: number }).assignmentCount ?? 0,
     updatedAt: (row as { updatedAt?: string | Date | null }).updatedAt ?? null,
     createdAt: (row as { createdAt?: string | Date | null }).createdAt ?? null,
+    publicationState: (row as { publication?: { state?: TestListEntry["publicationState"] } }).publication?.state,
   };
 }
 
@@ -257,6 +260,9 @@ export function TestsListPage(): React.JSX.Element {
     findings: PublishCheckFinding[];
   } | null>(null);
 
+  // PRD-15 FR-14: emergency-republish confirm target.
+  const [forceRepublish, setForceRepublish] = useState<{ id: string; title: string } | null>(null);
+
   // ─── Mutations ───────────────────────────────────────────────────────────
   const statusMutation = useMutation({
     mutationFn: async (args: { id: string; status: "draft" | "published" | "archived" }) => {
@@ -279,6 +285,39 @@ export function TestsListPage(): React.JSX.Element {
         }
       }
       toast({ variant: "destructive", title: "Ошибка", description: "Не удалось изменить статус теста" });
+    },
+  });
+
+  // PRD-15 FR-14: emergency re-publish — new snapshot + annul in-progress attempts.
+  const forceRepublishMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/tests/${id}/republish-force`);
+      return res.json() as Promise<{ annulledAttempts: number }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tests"] });
+      setForceRepublish(null);
+      toast({
+        title: "Тест переопубликован",
+        description: `Прервано идущих попыток: ${data.annulledAttempts}`,
+      });
+    },
+    onError: (error: Error) => {
+      // A late-feasibility 409 (E-12) surfaces as the impact dialog.
+      const match = /^409:\s*([\s\S]+)$/.exec(error.message);
+      if (match && forceRepublish) {
+        try {
+          const payload = JSON.parse(match[1]) as PublishInfeasibleError;
+          if (payload.error === "publish_infeasible") {
+            setPublishImpact({ testId: forceRepublish.id, findings: payload.findings });
+            setForceRepublish(null);
+            return;
+          }
+        } catch {
+          /* fall through */
+        }
+      }
+      toast({ variant: "destructive", title: "Ошибка", description: "Не удалось переопубликовать тест" });
     },
   });
 
@@ -622,6 +661,48 @@ export function TestsListPage(): React.JSX.Element {
           setPublishImpact(null);
         }}
       />
+
+      {/* PRD-15 FR-14: emergency re-publish confirm ------------------------- */}
+      <ModalDialog
+        open={forceRepublish !== null}
+        onClose={() => setForceRepublish(null)}
+        size="m"
+        icon={<RotateCw size={20} />}
+        iconTone="danger"
+        title="Экстренно переопубликовать тест?"
+        description={
+          forceRepublish
+            ? `Тест «${forceRepublish.title}» будет переопубликован немедленно, а идущие попытки — прерваны.`
+            : undefined
+        }
+        closeOnBackdrop={!forceRepublishMutation.isPending}
+        footer={
+          <div className="cp-foot cp-foot--between">
+            <Button
+              variant="destructive"
+              size="m"
+              loading={forceRepublishMutation.isPending}
+              onClick={() => forceRepublish && forceRepublishMutation.mutate(forceRepublish.id)}
+            >
+              Переопубликовать и прервать
+            </Button>
+            <Button
+              variant="ghost"
+              size="m"
+              disabled={forceRepublishMutation.isPending}
+              onClick={() => setForceRepublish(null)}
+            >
+              Отмена
+            </Button>
+          </div>
+        }
+      >
+        <Banner
+          tone="warning"
+          title="Что произойдёт"
+          description="Идущие попытки будут аннулированы и не засчитаны в лимит попыток — ученики смогут пройти заново. Завершённые результаты сохраняются. Действие записывается в журнал. Используйте только при инцидентах (утёкший ключ, грубая ошибка в вопросе)."
+        />
+      </ModalDialog>
     </div>
   );
 
@@ -700,6 +781,39 @@ export function TestsListPage(): React.JSX.Element {
           <Globe className="h-3.5 w-3.5" />
           {test.status === "published" ? "Снять с публикации" : "Опубликовать"}
         </button>
+        {/* PRD-15 FR-12: re-publish the working version (new snapshot); only
+            when the published test has diverged. */}
+        {test.publicationState === "published_with_changes" && (
+          <button
+            type="button"
+            className="dropdown-item"
+            role="menuitem"
+            onClick={() => {
+              setTestMenu(null);
+              statusMutation.mutate({ id: test.id, status: "published" });
+            }}
+            data-testid={`menu-republish-${test.id}`}
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Опубликовать изменения
+          </button>
+        )}
+        {/* PRD-15 FR-14: emergency re-publish — annuls in-progress attempts. */}
+        {test.status === "published" && (
+          <button
+            type="button"
+            className="dropdown-item danger"
+            role="menuitem"
+            onClick={() => {
+              setTestMenu(null);
+              setForceRepublish({ id: test.id, title: test.title });
+            }}
+            data-testid={`menu-force-republish-${test.id}`}
+          >
+            <RotateCw className="h-3.5 w-3.5" />
+            Экстренная переопубликация...
+          </button>
+        )}
         <hr className="dropdown-sep" />
         <button
           type="button"
@@ -1095,7 +1209,7 @@ function TestRow(props: {
         <span>{e.ownerName ?? "—"}</span>
       </div>
       <div>
-        <StatusTag status={e.status} />
+        <StatusTag status={e.status} publicationState={e.publicationState} />
       </div>
       <div>
         <span className={"mode-badge " + e.mode} title={modeTitle(e.mode)}>
@@ -1171,9 +1285,25 @@ function TestRow(props: {
   );
 }
 
-function StatusTag({ status }: { status: TestListEntry["status"] }) {
+function StatusTag({
+  status,
+  publicationState,
+}: {
+  status: TestListEntry["status"];
+  publicationState?: TestListEntry["publicationState"];
+}) {
   if (status === "published") {
-    return <Tag tone="success" aria-label="Статус: опубликован">Опубликован</Tag>;
+    // PRD-15 FR-12: a published test whose working version diverged from the
+    // active snapshot stacks an "Есть изменения" warning chip (like prd7's
+    // "Требует обновления").
+    return (
+      <span className="tb-status-stack">
+        <Tag tone="success" aria-label="Статус: опубликован">Опубликован</Tag>
+        {publicationState === "published_with_changes" && (
+          <Tag tone="warning" aria-label="Есть неопубликованные изменения">Есть изменения</Tag>
+        )}
+      </span>
+    );
   }
   if (status === "archived") {
     return <Tag tone="neutral" aria-label="Статус: архив">Архив</Tag>;
