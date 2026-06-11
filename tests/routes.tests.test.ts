@@ -45,6 +45,17 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     getTestAccessGrants: vi.fn().mockResolvedValue([]),
     getUserTestGrants: vi.fn().mockResolvedValue([]),
     getTestIdsByOwner: vi.fn().mockResolvedValue([]),
+    // snapshot build on publish (PRD-15 block B)
+    getContentPages: vi.fn().mockResolvedValue([]),
+    getTopicCourses: vi.fn().mockResolvedValue([]),
+    getTopicEvents: vi.fn().mockResolvedValue([]),
+    getLatestSnapshot: vi.fn().mockResolvedValue(undefined),
+    createTestSnapshot: vi.fn().mockResolvedValue({ id: "snap-1", version: 1 }),
+    getSnapshotsForTest: vi.fn().mockResolvedValue([]),
+    getReferencedSnapshotIds: vi.fn().mockResolvedValue([]),
+    deleteSnapshotById: vi.fn().mockResolvedValue(undefined),
+    annulInProgressAttempts: vi.fn().mockResolvedValue(0),
+    getTopic: vi.fn().mockResolvedValue({ id: "tp1", name: "Тема" }),
   },
   serviceMock: {
     create: vi.fn(),
@@ -162,6 +173,8 @@ describe("PATCH /api/tests/:id/status", () => {
     // PRD-15 FR-06 (E-12): publishing runs the draw-feasibility check over the
     // test's sections; no sections = nothing to verify.
     storageMock.getTestSections.mockResolvedValue([]);
+    // PRD-15 block B: publishing also freezes a snapshot (empty test here).
+    storageMock.getTopics.mockResolvedValue([]);
     app = makeApp();
   });
 
@@ -218,6 +231,51 @@ describe("PATCH /api/tests/:id/status", () => {
   it("401 — unauthenticated request", async () => {
     const res = await request(app).patch("/api/tests/test1/status").send({ status: "draft" });
     expect(res.status).toBe(401);
+  });
+});
+
+// ─── POST /:id/republish-force (PRD-15 FR-14) ─────────────────────────────────
+describe("POST /api/tests/:id/republish-force", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getTopics.mockResolvedValue([]);
+    app = makeApp();
+  });
+
+  it("200 — annuls in-progress attempts and creates a new snapshot", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, status: "published" });
+    storageMock.annulInProgressAttempts.mockResolvedValue(3);
+    const res = await asAuthor(request(app).post("/api/tests/test1/republish-force"));
+    expect(res.status).toBe(200);
+    expect(res.body.annulledAttempts).toBe(3);
+    expect(storageMock.annulInProgressAttempts).toHaveBeenCalledWith("test1");
+    expect(storageMock.createTestSnapshot).toHaveBeenCalled();
+  });
+
+  it("400 — when the test is not published", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, status: "draft" });
+    const res = await asAuthor(request(app).post("/api/tests/test1/republish-force"));
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("not_published");
+    expect(storageMock.annulInProgressAttempts).not.toHaveBeenCalled();
+  });
+
+  it("409 — when the draw is infeasible, does not annul or snapshot", async () => {
+    storageMock.getTest.mockResolvedValue({ ...dbTest, status: "published", mode: "standard" });
+    storageMock.getTestSections.mockResolvedValue([
+      { id: "s1", testId: "test1", topicId: "tp1", drawCount: 5, drawAll: false, drawBlueprintJson: null },
+    ]);
+    storageMock.getQuestionsByTopic.mockResolvedValue([{ id: "q1", topicId: "tp1", tags: [], difficulty: 50 }]);
+    storageMock.getTopic.mockResolvedValue({ id: "tp1", name: "Тема" });
+    const res = await asAuthor(request(app).post("/api/tests/test1/republish-force"));
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("publish_infeasible");
+    expect(storageMock.annulInProgressAttempts).not.toHaveBeenCalled();
+    expect(storageMock.createTestSnapshot).not.toHaveBeenCalled();
   });
 });
 

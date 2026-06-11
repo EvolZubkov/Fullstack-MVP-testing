@@ -22,6 +22,9 @@ const { storageMock } = vi.hoisted(() => ({
     getTests: vi.fn(), getTopics: vi.fn(), getAllAttempts: vi.fn(),
     getTest: vi.fn(), getAttempt: vi.fn(), getQuestionsByIds: vi.fn(),
     getTopicCourses: vi.fn(), getTestSections: vi.fn(),
+    // PRD-15 T-20: publication-version resolution in analytics.
+    getSnapshotsForTest: vi.fn().mockResolvedValue([]),
+    getSnapshot: vi.fn().mockResolvedValue(undefined),
   }
 }));
 
@@ -381,6 +384,31 @@ describe("Analytics — attempts routes", () => {
     const res = await asAuthor(request(app).get("/api/analytics/tests/test1/attempts"));
     expect(res.status).toBe(200);
     expect(res.body.attempts).toHaveLength(1);
+  });
+
+  it("GET /tests/:testId/attempts — resolves snapshot version and the version breakdown (T-20)", async () => {
+    storageMock.getTest.mockResolvedValue({ id: "test1", title: "Test 1", mode: "standard" });
+    // Two attempts on snapshot v2, one legacy (no snapshot).
+    const onV2a = { ...dbAttemptResult, id: "a", snapshotId: "snap2" };
+    const onV2b = { ...dbAttemptResult, id: "b", snapshotId: "snap2" };
+    const legacy = { ...dbAttemptResult, id: "c", snapshotId: null };
+    storageMock.getAllAttempts.mockResolvedValue([onV2a, onV2b, legacy]);
+    storageMock.getSnapshotsForTest.mockResolvedValue([
+      { id: "snap2", version: 2 },
+      { id: "snap1", version: 1 },
+    ]);
+    storageMock.getUser.mockResolvedValue({ id: "u1", name: "User", email: "u@test.com" });
+
+    const res = await asAuthor(request(app).get("/api/analytics/tests/test1/attempts"));
+    expect(res.status).toBe(200);
+    expect(res.body.currentVersion).toBe(2);
+    // Newest version first, legacy (null) last.
+    expect(res.body.versions).toEqual([
+      { snapshotVersion: 2, attemptCount: 2 },
+      { snapshotVersion: null, attemptCount: 1 },
+    ]);
+    const byId = Object.fromEntries(res.body.attempts.map((a: any) => [a.attemptId, a.snapshotVersion]));
+    expect(byId).toEqual({ a: 2, b: 2, c: null });
   });
 
   it("GET /attempts/:attemptId — returns 404 when not found", async () => {

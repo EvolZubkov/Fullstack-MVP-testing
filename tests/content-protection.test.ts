@@ -44,6 +44,21 @@ const { storageMock } = vi.hoisted(() => ({
     // publish gate (E-12)
     getTestSections: vi.fn(),
     patchTestStatus: vi.fn(),
+    // snapshot build on publish (PRD-15 block B)
+    getScales: vi.fn(),
+    getQuestionMeasurements: vi.fn(),
+    getResultVariables: vi.fn(),
+    getContentPages: vi.fn(),
+    getTopicCourses: vi.fn(),
+    getTopicEvents: vi.fn(),
+    getAdaptiveTopicSettingsByTest: vi.fn(),
+    getAdaptiveLevelsByTest: vi.fn(),
+    getAdaptiveLevelLinks: vi.fn(),
+    getLatestSnapshot: vi.fn(),
+    createTestSnapshot: vi.fn(),
+    getSnapshotsForTest: vi.fn(),
+    getReferencedSnapshotIds: vi.fn(),
+    deleteSnapshotById: vi.fn(),
     // tests router extras pulled in by import
     getTests: vi.fn(),
     getTestIdsByOwner: vi.fn(),
@@ -134,6 +149,20 @@ beforeEach(() => {
   storageMock.getAdaptiveLevels.mockResolvedValue([]);
   storageMock.getResultVariables.mockResolvedValue([]);
   storageMock.getTestSections.mockResolvedValue([]);
+  // Snapshot-build defaults (empty test): the publish path freezes a snapshot.
+  storageMock.getScales.mockResolvedValue([]);
+  storageMock.getQuestionMeasurements.mockResolvedValue([]);
+  storageMock.getContentPages.mockResolvedValue([]);
+  storageMock.getTopicCourses.mockResolvedValue([]);
+  storageMock.getTopicEvents.mockResolvedValue([]);
+  storageMock.getAdaptiveTopicSettingsByTest.mockResolvedValue([]);
+  storageMock.getAdaptiveLevelsByTest.mockResolvedValue([]);
+  storageMock.getAdaptiveLevelLinks.mockResolvedValue([]);
+  storageMock.getLatestSnapshot.mockResolvedValue(undefined);
+  storageMock.createTestSnapshot.mockResolvedValue({ id: "snap-1", version: 1 });
+  storageMock.getSnapshotsForTest.mockResolvedValue([]);
+  storageMock.getReferencedSnapshotIds.mockResolvedValue([]);
+  storageMock.getTopics.mockResolvedValue([{ id: "tp1", name: "Финансы" }]);
   storageMock.deleteTopic.mockResolvedValue(true);
   storageMock.deleteQuestion.mockResolvedValue(true);
   storageMock.deleteQuestionsBulk.mockResolvedValue(1);
