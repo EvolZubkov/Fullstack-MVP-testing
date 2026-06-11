@@ -23,7 +23,7 @@ import {
   assessQuestionsRemoval,
   type FeasibilityAssessment,
 } from "./draw-feasibility";
-import { canActorMutateContent } from "./content-guard";
+import { visibleTopicScope, canManageTopicContent, isAdminOrSuper } from "./topic-access";
 
 /** Маппинг типов: Excel -> внутренний. */
 const typeFromExcel: Record<string, string> = {
@@ -91,7 +91,15 @@ export async function importQuestionRows(
 
   const topics = await storage.getTopics();
   const normalizeName = (s: string) => s.replace(/[\s ​﻿]+/g, " ").trim().toLowerCase();
-  const topicByName = new Map(topics.map((t) => [normalizeName(t.name), t]));
+  // PRD-15 FR-28: match topic names only within the importer's visible area;
+  // an unmatched name creates a NEW topic owned by the importer (below). Admins
+  // (scope.all) and actorless calls match against the whole bank.
+  let matchTopics = topics;
+  if (actor) {
+    const scope = await visibleTopicScope(actor.roles, actor.id);
+    if (!scope.all) matchTopics = topics.filter((t) => scope.ids.has(t.id));
+  }
+  const topicByName = new Map(matchTopics.map((t) => [normalizeName(t.name), t]));
 
   const hashCache = new Map<string, Set<string>>();
   const getTopicHashes = async (topicId: string): Promise<Set<string>> => {
@@ -134,7 +142,8 @@ export async function importQuestionRows(
           hashCache.set(topic.id, new Set());
         } else {
           logger.warn(`Import строка ${rowNum}: тема "${topicNameRaw}" не найдена, создаём новую`, "questions");
-          topic = await storage.createTopic({ name: topicNameRaw });
+          // FR-28: a topic created by import is owned by the importer.
+          topic = await storage.createTopic({ name: topicNameRaw, createdBy: actor?.id ?? null });
         }
         topicByName.set(topicNameKey, topic);
       }
@@ -327,13 +336,23 @@ export async function importQuestionRows(
       if (rowId) {
         const existing = await storage.getQuestion(rowId);
         if (existing) {
-          // PRD-15 FR-02: import updates respect the creator restriction —
-          // same rule as the editor path (creator/admin; NULL = admin only).
-          if (actor && !canActorMutateContent(actor.roles, actor.id, existing.createdBy)) {
-            result.errors.push(
-              `Строка ${rowNum}: изменять вопрос может его создатель или администратор`,
-            );
-            continue;
+          // PRD-15 block C: import updates respect topic ownership — the
+          // importer must manage the question's CURRENT topic (owner / manage
+          // grant / admin); a dangling question is admin-only. Admins skip the
+          // topic lookup entirely.
+          if (actor && !isAdminOrSuper(actor.roles)) {
+            const existingTopic = existing.topicId
+              ? await storage.getTopic(existing.topicId)
+              : undefined;
+            const canManage = existingTopic
+              ? await canManageTopicContent(actor.roles, actor.id, existingTopic)
+              : false;
+            if (!canManage) {
+              result.errors.push(
+                `Строка ${rowNum}: изменять вопрос можно только в управляемой вами теме`,
+              );
+              continue;
+            }
           }
           // PRD-15 FR-05 (E-10): re-tagging, difficulty change or a topic move
           // through import passes the same draw-feasibility check as the

@@ -40,6 +40,7 @@ import {
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
 import { validate, type ValidationResult, type ValueType } from "@shared/formula";
+import { normalizeTopicName } from "@shared/topics/naming";
 
 /**
  * Normalizes a test row from the DB for backward compatibility (PRD-7 §1.11).
@@ -969,12 +970,19 @@ export class DatabaseStorage implements IStorage {
       // default (F-10). Legacy rows keep owner NULL / visibility shared.
       ownerId: topic.ownerId ?? topic.createdBy ?? null,
       visibility: topic.visibility ?? "private",
+      // PRD-15 FR-27: keep the normalized name in sync with `name`.
+      nameNormalized: normalizeTopicName(topic.name),
     }).returning();
     return newTopic;
   }
 
   async updateTopic(id: string, updates: Partial<InsertTopic>): Promise<Topic | undefined> {
-    const [updated] = await db.update(topics).set(updates).where(eq(topics.id, id)).returning();
+    // PRD-15 FR-27: a rename must refresh the normalized name too.
+    const patch =
+      typeof updates.name === "string"
+        ? { ...updates, nameNormalized: normalizeTopicName(updates.name) }
+        : updates;
+    const [updated] = await db.update(topics).set(patch).where(eq(topics.id, id)).returning();
     return updated || undefined;
   }
 

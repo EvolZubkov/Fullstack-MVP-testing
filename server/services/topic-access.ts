@@ -20,7 +20,14 @@
 
 import { ROLES, type Role } from "@shared/access";
 import { storage } from "../storage";
-import type { Topic } from "@shared/schema";
+import { normalizeTopicName } from "@shared/topics/naming";
+import type { Topic, Test } from "@shared/schema";
+
+/** A topic reduced to what the same-name surfaces need. */
+type TopicSummary = Pick<Topic, "id" | "name" | "ownerId" | "visibility">;
+const toSummary = (t: Topic): TopicSummary => ({
+  id: t.id, name: t.name, ownerId: t.ownerId, visibility: t.visibility,
+});
 
 /** Minimal topic shape needed for resolution. */
 type TopicRef = Pick<Topic, "id" | "ownerId" | "visibility">;
@@ -113,4 +120,109 @@ export async function visibleTopicScope(
   const grants = await storage.getActiveTopicGrantsForGrantees(userId, await groupIdsOf(userId));
   for (const g of grants) ids.add(g.topicId);
   return { all: false, ids };
+}
+
+/** A grantee's test that references the topic — one line of the FR-26 report. */
+export interface RevokeDependent {
+  testId: string;
+  title: string;
+  status: Test["status"];
+}
+
+/**
+ * FR-26 hard-revoke feasibility: the grantee's tests that reference the topic
+ * and would lose their derived in-context read if the grant were fully removed.
+ * For a user grant these are the user's own tests; for a group grant, the tests
+ * owned by any member. Published dependents are the operationally blocking ones.
+ *
+ * @param topicId - the topic whose grant is being revoked.
+ * @param granteeType - whether the grant addresses a user or a group.
+ * @param granteeId - the user or group id of the grantee.
+ * @returns the dependent tests (id, title, status).
+ */
+export async function dependentTestsForGrant(
+  topicId: string,
+  granteeType: "user" | "group",
+  granteeId: string,
+): Promise<RevokeDependent[]> {
+  const using = await storage.getTestsUsingTopic(topicId);
+  let ownerIds: Set<string>;
+  if (granteeType === "user") {
+    ownerIds = new Set([granteeId]);
+  } else {
+    const members = await storage.getGroupUsers(granteeId);
+    ownerIds = new Set(members.map((u) => u.id));
+  }
+  return using
+    .filter((t) => t.ownerId !== null && ownerIds.has(t.ownerId))
+    .map((t) => ({ testId: t.id, title: t.title, status: t.status }));
+}
+
+// ─── Same-name policy (FR-27) ────────────────────────────────────────────────
+
+/**
+ * FR-27 hard uniqueness: another topic of the SAME owner already uses this
+ * normalized name. Unowned (legacy) names are never constrained. Returns the
+ * clashing topic or null.
+ *
+ * @param ownerId - the owner the new/renamed topic belongs to (null = legacy).
+ * @param name - the proposed raw name.
+ * @param excludeId - the topic being renamed (excluded from the comparison).
+ */
+export async function sameOwnerNameClash(
+  ownerId: string | null,
+  name: string,
+  excludeId?: string,
+): Promise<TopicSummary | null> {
+  if (!ownerId) return null;
+  const norm = normalizeTopicName(name);
+  const all = await storage.getTopics();
+  const hit = all.find(
+    (t) => t.ownerId === ownerId && t.id !== excludeId && normalizeTopicName(t.name) === norm,
+  );
+  return hit ? toSummary(hit) : null;
+}
+
+/**
+ * FR-27 non-blocking warning set: topics in the actor's visible area whose
+ * normalized name matches. After the hard same-owner check these are the
+ * other-owner collisions worth flagging to the author.
+ */
+export async function visibleSameNameTopics(
+  roles: readonly Role[],
+  userId: string,
+  name: string,
+  excludeId?: string,
+): Promise<TopicSummary[]> {
+  const norm = normalizeTopicName(name);
+  const scope = await visibleTopicScope(roles, userId);
+  const all = await storage.getTopics();
+  return all
+    .filter(
+      (t) =>
+        t.id !== excludeId &&
+        (scope.all || scope.ids.has(t.id)) &&
+        normalizeTopicName(t.name) === norm,
+    )
+    .map(toSummary);
+}
+
+/**
+ * FR-27 administrator report: groups of topics that share a normalized name
+ * across the whole system (each group has more than one member).
+ */
+export async function duplicateNameGroups(): Promise<
+  Array<{ nameNormalized: string; topics: TopicSummary[] }>
+> {
+  const all = await storage.getTopics();
+  const byNorm = new Map<string, Topic[]>();
+  for (const t of all) {
+    const key = normalizeTopicName(t.name);
+    const arr = byNorm.get(key) ?? [];
+    arr.push(t);
+    byNorm.set(key, arr);
+  }
+  return [...byNorm.entries()]
+    .filter(([, arr]) => arr.length > 1)
+    .map(([nameNormalized, arr]) => ({ nameNormalized, topics: arr.map(toSummary) }));
 }
