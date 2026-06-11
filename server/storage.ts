@@ -8,7 +8,7 @@ import {
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
   groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
   contentPages, resultVariables, scales, questionMeasurements,
-  userRoles, testAccessGrants, testSnapshots,
+  userRoles, testAccessGrants, testSnapshots, topicAccessGrants,
   type User, type InsertUser,
   type Folder, type InsertFolder,
   type TestFolder, type InsertTestFolder,
@@ -29,6 +29,7 @@ import {
   type UserGroup, type InsertUserGroup,
   type TestAccessGrant, type InsertTestAccessGrant,
   type TestSnapshot,
+  type TopicAccessGrant,
   type TestAssignment, type InsertTestAssignment,
   type PasswordResetToken, type InsertPasswordResetToken,
   type AssignmentAccessToken, type InsertAssignmentAccessToken,
@@ -964,6 +965,10 @@ export class DatabaseStorage implements IStorage {
       feedback: topic.feedback || null,
       folderId: topic.folderId || null,
       createdBy: topic.createdBy || null,
+      // PRD-15 block C: a new topic is owned by its creator and private by
+      // default (F-10). Legacy rows keep owner NULL / visibility shared.
+      ownerId: topic.ownerId ?? topic.createdBy ?? null,
+      visibility: topic.visibility ?? "private",
     }).returning();
     return newTopic;
   }
@@ -971,6 +976,107 @@ export class DatabaseStorage implements IStorage {
   async updateTopic(id: string, updates: Partial<InsertTopic>): Promise<Topic | undefined> {
     const [updated] = await db.update(topics).set(updates).where(eq(topics.id, id)).returning();
     return updated || undefined;
+  }
+
+  // ─── Topic ownership and access grants (PRD-15 block C) ────────────────────
+
+  async setTopicOwner(topicId: string, ownerId: string | null): Promise<void> {
+    await db.update(topics).set({ ownerId }).where(eq(topics.id, topicId));
+  }
+
+  async setTopicVisibility(topicId: string, visibility: "private" | "shared"): Promise<void> {
+    await db.update(topics).set({ visibility }).where(eq(topics.id, topicId));
+  }
+
+  async getTopicIdsByOwner(ownerId: string): Promise<string[]> {
+    const rows = await db.select({ id: topics.id }).from(topics).where(eq(topics.ownerId, ownerId));
+    return rows.map((r) => r.id);
+  }
+
+  async getSharedTopicIds(): Promise<string[]> {
+    const rows = await db.select({ id: topics.id }).from(topics).where(eq(topics.visibility, "shared"));
+    return rows.map((r) => r.id);
+  }
+
+  async getTopicGrants(topicId: string): Promise<TopicAccessGrant[]> {
+    return db.select().from(topicAccessGrants).where(eq(topicAccessGrants.topicId, topicId));
+  }
+
+  /** Active grants addressed to a user directly or to any of their groups. */
+  async getActiveTopicGrantsForGrantees(
+    userId: string,
+    groupIds: string[],
+  ): Promise<TopicAccessGrant[]> {
+    const userGrants = await db
+      .select()
+      .from(topicAccessGrants)
+      .where(and(
+        eq(topicAccessGrants.state, "active"),
+        eq(topicAccessGrants.granteeType, "user"),
+        eq(topicAccessGrants.granteeId, userId),
+      ));
+    let groupGrants: TopicAccessGrant[] = [];
+    if (groupIds.length > 0) {
+      groupGrants = await db
+        .select()
+        .from(topicAccessGrants)
+        .where(and(
+          eq(topicAccessGrants.state, "active"),
+          eq(topicAccessGrants.granteeType, "group"),
+          inArray(topicAccessGrants.granteeId, groupIds),
+        ));
+    }
+    return [...userGrants, ...groupGrants];
+  }
+
+  async getTopicGrantForGrantee(
+    topicId: string,
+    granteeType: "user" | "group",
+    granteeId: string,
+  ): Promise<TopicAccessGrant | undefined> {
+    const [row] = await db
+      .select()
+      .from(topicAccessGrants)
+      .where(and(
+        eq(topicAccessGrants.topicId, topicId),
+        eq(topicAccessGrants.granteeType, granteeType),
+        eq(topicAccessGrants.granteeId, granteeId),
+      ));
+    return row || undefined;
+  }
+
+  async upsertTopicGrant(grant: {
+    topicId: string;
+    granteeType: "user" | "group";
+    granteeId: string;
+    accessLevel: "use" | "manage";
+    grantedBy: string | null;
+  }): Promise<TopicAccessGrant> {
+    const [row] = await db
+      .insert(topicAccessGrants)
+      .values({
+        id: randomUUID(),
+        topicId: grant.topicId,
+        granteeType: grant.granteeType,
+        granteeId: grant.granteeId,
+        accessLevel: grant.accessLevel,
+        state: "active",
+        grantedBy: grant.grantedBy,
+      })
+      .onConflictDoUpdate({
+        target: [topicAccessGrants.topicId, topicAccessGrants.granteeType, topicAccessGrants.granteeId],
+        set: { accessLevel: grant.accessLevel, state: "active", grantedBy: grant.grantedBy },
+      })
+      .returning();
+    return row;
+  }
+
+  async setTopicGrantState(id: string, state: "active" | "revoked_in_use"): Promise<void> {
+    await db.update(topicAccessGrants).set({ state }).where(eq(topicAccessGrants.id, id));
+  }
+
+  async removeTopicGrant(id: string): Promise<void> {
+    await db.delete(topicAccessGrants).where(eq(topicAccessGrants.id, id));
   }
 
   async deleteTopic(id: string): Promise<boolean> {

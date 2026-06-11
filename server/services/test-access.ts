@@ -99,9 +99,15 @@ export async function canReadTestAnalytics(
   return false;
 }
 
-/** Granting access and changing the owner are admin/superadmin only. */
-export function canGrantAccess(roles: readonly Role[]): boolean {
-  return isAdminOrSuper(roles);
+/**
+ * Granting access to a test: the owner of that test (PRD-15 BRC-27) or an
+ * administrator/superadmin. The capability `tests.access.grant` is now held by
+ * authors too, so this object-level check is what stops an author granting on a
+ * test they do not own.
+ */
+export function canGrantAccess(roles: readonly Role[], userId: string, test: TestRef): boolean {
+  if (isAdminOrSuper(roles)) return true;
+  return hasRole(roles, ROLES.AUTHOR) && test.ownerId === userId;
 }
 
 /** Changing the test owner is admin/superadmin only. */

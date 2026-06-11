@@ -10,7 +10,7 @@ import { readScreenTemplate } from "../services/template-render";
 import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
 import { requirePermission, requireUserContext } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
-import { readableTestScope } from "../services/test-access";
+import { readableTestScope, canGrantAccess } from "../services/test-access";
 import { assessTestPublish } from "../services/draw-feasibility";
 import { createTestSnapshot, getPublicationState, exportSourceForTest } from "../services/test-snapshot";
 import { generateScormPackage } from "../scorm-exporter";
@@ -966,6 +966,9 @@ router.get("/:id/access", requirePermission("tests.access.grant"), async (req, r
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
+    if (!canGrantAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", test)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const grants = await storage.getTestAccessGrants(test.id);
     res.json({ testId: test.id, ownerId: test.ownerId ?? null, grants });
   } catch (error) {
@@ -979,6 +982,9 @@ router.post("/:id/access", requirePermission("tests.access.grant"), async (req, 
   try {
     const test = await storage.getTest(req.params.id);
     if (!test) return res.status(404).json({ error: "Test not found" });
+    if (!canGrantAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", test)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const { userId, accessLevel } = req.body ?? {};
     if (typeof userId !== "string" || !userId) {
       return res.status(400).json({ error: "userId required" });
@@ -1004,6 +1010,11 @@ router.post("/:id/access", requirePermission("tests.access.grant"), async (req, 
 // DELETE /api/tests/:id/access/:userId — revoke a user's access grant.
 router.delete("/:id/access/:userId", requirePermission("tests.access.grant"), async (req, res) => {
   try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    if (!canGrantAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", test)) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
     const removed = await storage.removeTestAccessGrant(req.params.id, req.params.userId);
     if (!removed) return res.status(404).json({ error: "Grant not found" });
     res.status(204).end();
