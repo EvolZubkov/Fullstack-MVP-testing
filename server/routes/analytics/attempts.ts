@@ -28,6 +28,12 @@ router.get("/tests/:testId/attempts", requirePermission("analytics.read"), requi
       if (u) userMap.set(u.id, u.name || u.email || "Unknown");
     }
 
+    // PRD-15 T-20 (FR-15): resolve each attempt's publication version. Attempts
+    // pinned to a snapshot carry its monotonic version; legacy/transitional
+    // attempts (no snapshot) report null.
+    const snapshots = await storage.getSnapshotsForTest(testId);
+    const versionBySnapshot = new Map(snapshots.map(s => [s.id, s.version]));
+
     const attemptsList = testAttempts.map(attempt => {
       const result = attempt.resultJson as any;
       const duration = attempt.startedAt && attempt.finishedAt
@@ -55,6 +61,8 @@ router.get("/tests/:testId/attempts", requirePermission("analytics.read"), requi
         passed: result?.overallPassed || false,
         completed: result !== null,
         achievedLevels,
+        // PRD-15 T-20: which published edition this attempt was taken on.
+        snapshotVersion: attempt.snapshotId ? versionBySnapshot.get(attempt.snapshotId) ?? null : null,
       };
     }).sort((a, b) => {
       if (a.completed !== b.completed) return b.completed ? 1 : -1;
@@ -63,10 +71,23 @@ router.get("/tests/:testId/attempts", requirePermission("analytics.read"), requi
       return dateB.localeCompare(dateA);
     });
 
+    // PRD-15 T-20: distribution of attempts across publication versions, so the
+    // author sees which edition learners took (sorted newest version first;
+    // `null` = legacy/pre-snapshot attempts).
+    const versionCounts = new Map<number | null, number>();
+    for (const a of attemptsList) {
+      versionCounts.set(a.snapshotVersion, (versionCounts.get(a.snapshotVersion) ?? 0) + 1);
+    }
+    const versions = [...versionCounts.entries()]
+      .map(([snapshotVersion, attemptCount]) => ({ snapshotVersion, attemptCount }))
+      .sort((a, b) => (b.snapshotVersion ?? -1) - (a.snapshotVersion ?? -1));
+
     res.json({
       testId: test.id,
       testTitle: test.title,
       testMode: test.mode,
+      currentVersion: snapshots[0]?.version ?? null,
+      versions,
       attempts: attemptsList,
     });
 
@@ -236,6 +257,11 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       ? (new Date(attempt.finishedAt).getTime() - new Date(attempt.startedAt).getTime()) / 1000
       : null;
 
+    // PRD-15 T-20: the publication edition this attempt was delivered from.
+    const snapshotVersion = attempt.snapshotId
+      ? (await storage.getSnapshot(attempt.snapshotId))?.version ?? null
+      : null;
+
     res.json({
       attemptId: attempt.id,
       userId: attempt.userId,
@@ -243,6 +269,7 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       testId: test.id,
       testTitle: test.title,
       testMode: test.mode,
+      snapshotVersion,
       startedAt: attempt.startedAt?.toISOString() || null,
       finishedAt: attempt.finishedAt?.toISOString() || null,
       duration,

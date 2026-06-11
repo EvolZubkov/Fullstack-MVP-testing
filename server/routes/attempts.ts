@@ -9,10 +9,40 @@ import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
 import { readResultsRenderPayload } from "../services/template-render";
 import { resolveSystemScreenDir } from "../services/template-dir";
+import {
+  liveDataSource,
+  snapshotDataSource,
+  dataSourceForAttempt,
+  type TestDataSource,
+  type TestSnapshotContent,
+} from "../services/test-snapshot";
 import type { QuestionType } from "@shared/scales/engine";
-import type { TestVariant, AttemptResult, TopicResult, PassRule, RetakePolicy } from "@shared/schema";
+import type { Test, TestVariant, AttemptResult, TopicResult, PassRule, RetakePolicy } from "@shared/schema";
 
 const router = Router();
+
+/**
+ * Resolves the data source for STARTING an attempt (PRD-15 block B). A published
+ * test with a snapshot is delivered frozen — the attempt is pinned to that
+ * snapshot and every read (sections, questions, scales, ...) comes from it.
+ * Drafts, preview and published tests without a snapshot (transitional) fall
+ * back to live storage with no pin.
+ */
+async function sourceForStart(
+  testId: string,
+): Promise<{ src: TestDataSource; snapshotId: string | null; test: Test } | null> {
+  const liveTest = await storage.getTest(testId);
+  if (!liveTest) return null;
+  if (liveTest.status === "published") {
+    const snap = await storage.getLatestSnapshot(testId);
+    if (snap) {
+      const src = snapshotDataSource(snap.contentJson as TestSnapshotContent);
+      const test = (await src.getTest(testId)) ?? liveTest;
+      return { src, snapshotId: snap.id, test };
+    }
+  }
+  return { src: liveDataSource(), snapshotId: null, test: liveTest };
+}
 
 /** Fisher-Yates in-place shuffle for the server-side variant draw (PRD-11). */
 function shuffleInPlace<T>(arr: T[]): T[] {
@@ -84,10 +114,13 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
 // POST /api/tests/:testId/attempts/start - Начать обычный тест
 router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"), async (req, res) => {
   try {
-    const test = await storage.getTest(req.params.testId);
-    if (!test) {
+    // PRD-15 block B: a published test is delivered from its snapshot; the
+    // attempt is pinned to it so later bank edits do not change this attempt.
+    const resolved = await sourceForStart(req.params.testId);
+    if (!resolved) {
       return res.status(404).json({ error: "Test not found" });
     }
+    const { src, snapshotId, test } = resolved;
 
     // Attempt gates: retake cooldown (PRD-6, web) + max attempts. Load the user's
     // attempts once and reuse for both checks.
@@ -112,15 +145,15 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       }
     }
 
-    const sections = await storage.getTestSections(test.id);
-    const topics = await storage.getTopics();
+    const sections = await src.getTestSections(test.id);
+    const topics = await src.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
 
     const variant: TestVariant = { sections: [] };
     const allQuestionIds: string[] = [];
 
     for (const section of sections) {
-      const questions = await storage.getQuestionsByTopic(section.topicId);
+      const questions = await src.getQuestionsByTopic(section.topicId);
       // PRD-11: stratified draw by tag quotas when a blueprint is set; otherwise
       // a uniform draw (FR-02). Shared with the SCORM runtime via shared/draw.
       const { selected } = drawSection(questions, section.drawCount, section.drawBlueprintJson, shuffleInPlace);
@@ -138,12 +171,13 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       allQuestionIds.push(...qIds);
     }
 
-    const allQuestions = await storage.getQuestionsByIds(allQuestionIds);
+    const allQuestions = await src.getQuestionsByIds(allQuestionIds);
 
     const attempt = await storage.createAttempt({
       userId: req.session.userId!,
       testId: test.id,
       testVersion: test.version || 1,
+      snapshotId,
       variantJson: variant,
       answersJson: null,
       resultJson: null,
@@ -171,10 +205,12 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
 // POST /api/tests/:testId/attempts/start-adaptive - Начать адаптивный тест
 router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempts.take"), async (req, res) => {
   try {
-    const test = await storage.getTest(req.params.testId);
-    if (!test) {
+    // PRD-15 block B: published adaptive tests are delivered from their snapshot.
+    const resolved = await sourceForStart(req.params.testId);
+    if (!resolved) {
       return res.status(404).json({ error: "Test not found" });
     }
+    const { src, snapshotId, test } = resolved;
 
     // Attempt gates: retake cooldown (PRD-6, web) + max attempts. Load the user's
     // attempts once and reuse for both checks.
@@ -203,13 +239,13 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
       return res.status(400).json({ error: "This is not an adaptive test" });
     }
 
-    const adaptiveSettings = await storage.getAdaptiveTopicSettingsByTest(test.id);
-    const adaptiveLevels = await storage.getAdaptiveLevelsByTest(test.id);
-    const topics = await storage.getTopics();
+    const adaptiveSettings = await src.getAdaptiveTopicSettingsByTest(test.id);
+    const adaptiveLevels = await src.getAdaptiveLevelsByTest(test.id);
+    const topics = await src.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
     // PRD-4 v1.1 §3.2: per-topic time budgets live on test_sections; join them
     // onto the adaptive topics by topicId so the runtime can run a topic timer.
-    const adaptiveSections = await storage.getTestSections(test.id);
+    const adaptiveSections = await src.getTestSections(test.id);
     const sectionLimitMap = new Map(
       adaptiveSections.map((s) => [s.topicId, s.timeLimitMinutes ?? null]),
     );
@@ -228,7 +264,7 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
 
       if (topicLevels.length === 0) continue;
 
-      const allQuestions = await storage.getQuestionsByTopic(topicSettings.topicId);
+      const allQuestions = await src.getQuestionsByTopic(topicSettings.topicId);
       const levelsState: any[] = [];
 
       for (const level of topicLevels) {
@@ -289,6 +325,7 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
       userId: req.session.userId!,
       testId: test.id,
       testVersion: test.version || 1,
+      snapshotId,
       variantJson: variant,
       answersJson: {},
       resultJson: null,
@@ -298,7 +335,7 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
 
     let firstQuestion = null;
     if (firstQuestionId) {
-      const questions = await storage.getQuestionsByIds([firstQuestionId]);
+      const questions = await src.getQuestionsByIds([firstQuestionId]);
       firstQuestion = questions[0] || null;
     }
 
@@ -352,7 +389,9 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
       return res.status(400).json({ error: "This is not an adaptive attempt" });
     }
 
-    const test = await storage.getTest(attempt.testId);
+    // PRD-15 block B: grade against the pinned snapshot, not the live bank.
+    const src = await dataSourceForAttempt(attempt.snapshotId);
+    const test = await src.getTest(attempt.testId);
     if (!test) {
       return res.status(404).json({ error: "Test not found" });
     }
@@ -364,7 +403,7 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
       return res.status(400).json({ error: "Unexpected question ID" });
     }
 
-    const questions = await storage.getQuestionsByIds([questionId]);
+    const questions = await src.getQuestionsByIds([questionId]);
     const question = questions[0];
     if (!question) {
       return res.status(404).json({ error: "Question not found" });
@@ -417,13 +456,13 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
           currentTopic.currentLevelIndex = nextLevelIndex;
           nextLevel.status = "in_progress";
           variant.currentQuestionId = nextLevel.questionIds[0];
-          nextQuestionData = await getNextQuestionData(nextLevel, currentTopic, 0, storage);
+          nextQuestionData = await getNextQuestionData(nextLevel, currentTopic, 0, src);
         } else {
           ({ topicTransition, nextQuestionData, isFinished } = await moveToNextTopicOrFinish(
             variant,
             currentTopic,
             currentLevel,
-            storage
+            src
           ));
         }
       } else {
@@ -431,7 +470,7 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
           variant,
           currentTopic,
           currentLevel,
-          storage
+          src
         ));
       }
     } else if (alreadyFailed || (allAnswered && correctCount < requiredCorrect)) {
@@ -442,7 +481,7 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
           variant,
           currentTopic,
           currentLevel,
-          storage
+          src
         ));
       } else {
         const prevLevelIndex = currentTopic.currentLevelIndex - 1;
@@ -458,14 +497,14 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
             currentTopic.currentLevelIndex = prevLevelIndex;
             prevLevel.status = "in_progress";
             variant.currentQuestionId = prevLevel.questionIds[0];
-            nextQuestionData = await getNextQuestionData(prevLevel, currentTopic, 0, storage);
+            nextQuestionData = await getNextQuestionData(prevLevel, currentTopic, 0, src);
           } else {
             currentTopic.finalLevelIndex = null;
             ({ topicTransition, nextQuestionData, isFinished } = await moveToNextTopicOrFinish(
               variant,
               currentTopic,
               currentLevel,
-              storage
+              src
             ));
           }
         } else {
@@ -474,7 +513,7 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
             variant,
             currentTopic,
             currentLevel,
-            storage
+            src
           ));
         }
       }
@@ -482,12 +521,12 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
       const currentQuestionIndex = currentLevel.questionIds.indexOf(questionId);
       const nextQuestionId = currentLevel.questionIds[currentQuestionIndex + 1];
       variant.currentQuestionId = nextQuestionId;
-      nextQuestionData = await getNextQuestionData(currentLevel, currentTopic, currentQuestionIndex + 1, storage);
+      nextQuestionData = await getNextQuestionData(currentLevel, currentTopic, currentQuestionIndex + 1, src);
     }
 
     let result: any = null;
     if (isFinished) {
-      result = await buildAdaptiveResult(variant, test.id, storage);
+      result = await buildAdaptiveResult(variant, test.id, src);
     }
 
     await storage.updateAttempt(attempt.id, {
@@ -540,7 +579,10 @@ router.post("/attempts/:attemptId/expire-topic-adaptive", requirePermission("att
       return res.status(400).json({ error: "This is not an adaptive attempt" });
     }
 
-    const test = await storage.getTest(attempt.testId);
+    // PRD-15 block B: this transition reads questions/adaptive config; source
+    // from the pinned snapshot.
+    const src = await dataSourceForAttempt(attempt.snapshotId);
+    const test = await src.getTest(attempt.testId);
     if (!test) {
       return res.status(404).json({ error: "Test not found" });
     }
@@ -560,7 +602,7 @@ router.post("/attempts/:attemptId/expire-topic-adaptive", requirePermission("att
     // Idempotent: the expired topic was already advanced past. Re-send the
     // current question so a lost-response retry re-syncs without double-advancing.
     if (!currentTopic || currentTopic.topicId !== topicId) {
-      const cur = await currentAdaptiveQuestion(variant, storage);
+      const cur = await currentAdaptiveQuestion(variant, src);
       return res.json({
         nextQuestion: cur,
         levelTransition: null,
@@ -572,11 +614,11 @@ router.post("/attempts/:attemptId/expire-topic-adaptive", requirePermission("att
 
     const currentLevel = currentTopic.levelsState[currentTopic.currentLevelIndex];
     const { levelTransition, topicTransition, nextQuestionData, isFinished } =
-      await moveToNextTopicOrFinish(variant, currentTopic, currentLevel, storage);
+      await moveToNextTopicOrFinish(variant, currentTopic, currentLevel, src);
 
     let result: any = null;
     if (isFinished) {
-      result = await buildAdaptiveResult(variant, test.id, storage);
+      result = await buildAdaptiveResult(variant, test.id, src);
     }
 
     await storage.updateAttempt(attempt.id, {
@@ -652,9 +694,12 @@ router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (r
       return res.json({ hasInProgress: false });
     }
 
+    // PRD-15 block B: resume the in-progress attempt from its pinned snapshot,
+    // so the questions match exactly what was started.
+    const src = await dataSourceForAttempt(inProgressAttempt.snapshotId);
     const variant = inProgressAttempt.variantJson as any;
     const allQuestionIds = variant.sections.flatMap((s: any) => s.questionIds);
-    const allQuestions = await storage.getQuestionsByIds(allQuestionIds);
+    const allQuestions = await src.getQuestionsByIds(allQuestionIds);
 
     const questionsForClient = test.showCorrectAnswers
       ? allQuestions
@@ -692,12 +737,14 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
 
     const { answers } = req.body;
     const variant = attempt.variantJson as TestVariant;
-    const test = await storage.getTest(attempt.testId);
+    // PRD-15 block B: grade against the pinned snapshot, not the live bank.
+    const src = await dataSourceForAttempt(attempt.snapshotId);
+    const test = await src.getTest(attempt.testId);
     if (!test) {
       return res.status(404).json({ error: "Test not found" });
     }
 
-    const sections = await storage.getTestSections(test.id);
+    const sections = await src.getTestSections(test.id);
     const sectionMap = new Map(sections.map((s) => [s.topicId, s]));
 
     let totalCorrect = 0;
@@ -710,8 +757,8 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
 
     for (const variantSection of variant.sections) {
       const section = sectionMap.get(variantSection.topicId);
-      const questions = await storage.getQuestionsByIds(variantSection.questionIds);
-      const courses = await storage.getTopicCourses(variantSection.topicId);
+      const questions = await src.getQuestionsByIds(variantSection.questionIds);
+      const courses = await src.getTopicCourses(variantSection.topicId);
 
       let sectionCorrect = 0;
       let sectionEarnedPoints = 0;
@@ -781,7 +828,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
 
     // PRD-12: graded namespaces (scales PRD-5 + result variables PRD-2) via the
     // shared engines, mirroring the SCORM runtime. No-op when the test has none.
-    const scoringConfig = await loadScoringConfig(test.id);
+    const scoringConfig = await loadScoringConfig(test.id, src);
     let scaleResults: AttemptResult["scaleResults"];
     let resultVariables: AttemptResult["resultVariables"];
     let status: AttemptResult["status"];

@@ -12,6 +12,7 @@ import { requirePermission, requireUserContext } from "../middleware/auth";
 import { requireTestScope } from "../middleware/test-scope";
 import { readableTestScope } from "../services/test-access";
 import { assessTestPublish } from "../services/draw-feasibility";
+import { createTestSnapshot, getPublicationState, exportSourceForTest } from "../services/test-snapshot";
 import { generateScormPackage } from "../scorm-exporter";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { logger } from "../logger";
@@ -181,7 +182,11 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
   const scales = await storage.getScales(test.id);
   const measurements = await storage.getQuestionMeasurements(test.id);
 
-  return { ...test, sections: sectionsWithDetails, adaptiveSettings, resultVariables, scales, measurements };
+  // PRD-15 FR-12: publication state (draft / published / published_with_changes)
+  // for the editor's status indicator and the «Опубликовать изменения» action.
+  const publication = await getPublicationState(test.id);
+
+  return { ...test, sections: sectionsWithDetails, adaptiveSettings, resultVariables, scales, measurements, publication };
 }
 
 // GET /api/tests - Список тестов
@@ -248,7 +253,10 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
         }
 
         const ownerName = test.ownerId ? ownerNameById.get(test.ownerId) ?? null : null;
-        return { ...test, ownerName, sections: sectionsWithDetails, adaptiveSettings };
+        // PRD-15 FR-12: publication state for the list badge ("опубликован,
+        // есть неопубликованные изменения"). Cheap for drafts (early return).
+        const publication = await getPublicationState(test.id);
+        return { ...test, ownerName, sections: sectionsWithDetails, adaptiveSettings, publication };
       })
     );
 
@@ -715,10 +723,54 @@ router.patch("/:id/status", requirePermission("tests.publish"), requireTestScope
 
     const updated = await storage.patchTestStatus(req.params.id, status as "draft" | "published" | "archived");
     if (!updated) return res.status(404).json({ error: "Test not found" });
+
+    // PRD-15 FR-10: publishing (and re-publishing) freezes the test into a new
+    // snapshot. Delivery of this test now reads from the snapshot; edits to the
+    // bank do not affect it until the next publish. Draft/archive create none.
+    if (status === "published") {
+      await createTestSnapshot(req.params.id, req.currentUser?.id ?? null);
+    }
+
     res.json(updated);
   } catch (error) {
     logger.error("PATCH status error: " + (error as Error).message, "tests");
     res.status(500).json({ error: "Failed to update test status" });
+  }
+});
+
+// POST /api/tests/:id/republish-force — экстренная переопубликация (PRD-15 FR-14).
+// Freezes a new snapshot AND annuls in-progress attempts: they are deleted, so
+// they do not count toward the retake limit (the learner may pass again). For
+// incident response (leaked key, broken question), not the routine path —
+// routine "Опубликовать изменения" is PATCH /status published (keeps attempts).
+router.post("/:id/republish-force", requirePermission("tests.publish"), requireTestScope("edit"), async (req, res) => {
+  try {
+    const test = await storage.getTest(req.params.id);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    if (test.status !== "published") {
+      return res.status(400).json({ error: "Test is not published", code: "not_published" });
+    }
+
+    // Publish-time feasibility still applies (E-12): do not freeze an unplayable test.
+    const findings = await assessTestPublish(req.params.id);
+    if (findings.length > 0) {
+      return res.status(409).json({
+        error: "publish_infeasible",
+        message: "Выдача вопросов невыполнима при текущем составе тем",
+        findings,
+      });
+    }
+
+    const annulled = await storage.annulInProgressAttempts(req.params.id);
+    await createTestSnapshot(req.params.id, req.currentUser?.id ?? null);
+    logger.info(
+      `Force republish: test ${req.params.id} by ${req.currentUser?.id ?? "?"}, annulled ${annulled} in-progress attempts`,
+      "tests",
+    );
+    res.json({ ok: true, annulledAttempts: annulled });
+  } catch (error) {
+    logger.error("Force republish error: " + (error as Error).message, "tests");
+    res.status(500).json({ error: "Failed to force republish" });
   }
 });
 
@@ -766,18 +818,21 @@ router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delet
 // GET /api/tests/:id/export/scorm - Экспорт SCORM
 router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), requireTestScope("edit"), async (req, res) => {
   try {
-    const test = await storage.getTest(req.params.id);
+    // PRD-15 FR-16: a published test exports from its active snapshot, so the
+    // package matches what the web delivers; a draft exports from live storage.
+    const src = await exportSourceForTest(req.params.id);
+    const test = await src.getTest(req.params.id);
     if (!test) {
       return res.status(404).json({ error: "Test not found" });
     }
 
-    const sections = await storage.getTestSections(test.id);
+    const sections = await src.getTestSections(test.id);
     const exportSections = await Promise.all(
       sections.map(async (s) => {
-        const topic = await storage.getTopic(s.topicId);
-        const questions = await storage.getQuestionsByTopic(s.topicId);
-        const courses = await storage.getTopicCourses(s.topicId);
-        const events = await storage.getTopicEvents(s.topicId);
+        const topic = await src.getTopic(s.topicId);
+        const questions = await src.getQuestionsByTopic(s.topicId);
+        const courses = await src.getTopicCourses(s.topicId);
+        const events = await src.getTopicEvents(s.topicId);
         return {
           ...s,
           topic: topic!,
@@ -810,25 +865,25 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
       : { templateId: "default", params: {} };
 
     // Load content pages for this test
-    const contentPages = await storage.getContentPages(test.id);
+    const contentPages = await src.getContentPages(test.id);
 
     // Load result variables (PRD-2) for this test
-    const resultVariables = await storage.getResultVariables(test.id);
+    const resultVariables = await src.getResultVariables(test.id);
 
     // Load scales + measurements (PRD-5) for this test
-    const scales = await storage.getScales(test.id);
-    const measurements = await storage.getQuestionMeasurements(test.id);
+    const scales = await src.getScales(test.id);
+    const measurements = await src.getQuestionMeasurements(test.id);
 
     // Load adaptive settings if test is adaptive
     let adaptiveSettings = null;
     if (test.mode === "adaptive") {
-      const topicSettings = await storage.getAdaptiveTopicSettingsByTest(test.id);
-      const levels = await storage.getAdaptiveLevelsByTest(test.id);
+      const topicSettings = await src.getAdaptiveTopicSettingsByTest(test.id);
+      const levels = await src.getAdaptiveLevelsByTest(test.id);
 
       // Load links for each level
       const levelsWithLinks = await Promise.all(
         levels.map(async (level) => {
-          const links = await storage.getAdaptiveLevelLinks(level.id);
+          const links = await src.getAdaptiveLevelLinks(level.id);
           return { ...level, links };
         })
       );
