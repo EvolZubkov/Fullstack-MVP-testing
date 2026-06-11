@@ -70,6 +70,7 @@ import { TestEditor } from "@/features/tests/editor/test-editor";
 import { TestAccessPanel } from "@/features/tests/access/test-access-panel";
 import { AssignTestDialog } from "@/components/assign-test-dialog";
 import { useAuth } from "@/lib/auth";
+import { ROLES } from "@shared/access";
 import type { Test, TestSection, TestFolder } from "@shared/schema";
 import {
   buildSearchRows,
@@ -140,7 +141,7 @@ const EMPTY_FOLDERS: TestFolder[] = [];
 
 export function TestsListPage(): React.JSX.Element {
   const { toast } = useToast();
-  const { can } = useAuth();
+  const { can, hasRole, user } = useAuth();
 
   // Data ----------------------------------------------------------------------
   const {
@@ -250,9 +251,13 @@ export function TestsListPage(): React.JSX.Element {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [assignTest, setAssignTest] = useState<{ id: string; title: string } | null>(null);
 
-  // Access panel (PRD-13, WF-2) — admin/superadmin only ---------------------
+  // Access panel (PRD-13 / PRD-15 BRC-27) — admin on any test, author on owned.
   const [accessTest, setAccessTest] = useState<{ id: string; title: string } | null>(null);
-  const canGrantAccess = can("tests.access.grant");
+  const canGrantAccessCap = can("tests.access.grant");
+  const isAdmin = hasRole(ROLES.ADMINISTRATOR) || hasRole(ROLES.SUPERADMIN);
+  /** May this user grant access to THIS test (object scope, BRC-27). */
+  const canGrantAccessFor = (test: TestListEntry) =>
+    canGrantAccessCap && (isAdmin || test.ownerId === user?.id);
 
   // PRD-15 T-12 (E-12): publish-infeasible findings to show in the impact dialog.
   const [publishImpact, setPublishImpact] = useState<{
@@ -729,7 +734,7 @@ export function TestsListPage(): React.JSX.Element {
           <Pencil className="h-3.5 w-3.5" />
           Редактировать
         </button>
-        {canGrantAccess && (
+        {canGrantAccessFor(test) && (
           <button
             type="button"
             className="dropdown-item"
