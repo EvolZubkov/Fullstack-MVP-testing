@@ -17,6 +17,13 @@ import { storage } from "../storage";
 import { logger } from "../logger";
 import { normalizeTags } from "@shared/tags";
 import { parseScoringCell } from "../utils/scoring-excel";
+import type { Role } from "@shared/access";
+import {
+  assessQuestionChange,
+  assessQuestionsRemoval,
+  type FeasibilityAssessment,
+} from "./draw-feasibility";
+import { canActorMutateContent } from "./content-guard";
 
 /** Маппинг типов: Excel -> внутренний. */
 const typeFromExcel: Record<string, string> = {
@@ -77,9 +84,9 @@ function unitCountOf(type: QuestionType, dataJson: any): number {
 export async function importQuestionRows(
   rows: Record<string, unknown>[],
   headerSet: Set<string>,
-  opts: { dryRun: boolean },
+  opts: { dryRun: boolean; actor?: { id: string; roles: readonly Role[] } },
 ): Promise<QuestionImportResult> {
-  const { dryRun } = opts;
+  const { dryRun, actor } = opts;
   const hasCol = (name: string) => headerSet.has(name);
 
   const topics = await storage.getTopics();
@@ -320,6 +327,48 @@ export async function importQuestionRows(
       if (rowId) {
         const existing = await storage.getQuestion(rowId);
         if (existing) {
+          // PRD-15 FR-02: import updates respect the creator restriction —
+          // same rule as the editor path (creator/admin; NULL = admin only).
+          if (actor && !canActorMutateContent(actor.roles, actor.id, existing.createdBy)) {
+            result.errors.push(
+              `Строка ${rowNum}: изменять вопрос может его создатель или администратор`,
+            );
+            continue;
+          }
+          // PRD-15 FR-05 (E-10): re-tagging, difficulty change or a topic move
+          // through import passes the same draw-feasibility check as the
+          // editor; a blocking conflict becomes a row error (also in dry-run,
+          // so the preview surfaces it before anything is written).
+          const nextTags = hasCol("Теги") ? tags : undefined;
+          const nextDifficulty = hasCol("Сложность") ? difficulty : undefined;
+          const movesTopic = existing.topicId !== topic.id;
+          const tagsChanged =
+            nextTags !== undefined &&
+            JSON.stringify(nextTags) !== JSON.stringify(existing.tags ?? []);
+          const difficultyChanged =
+            nextDifficulty !== undefined && nextDifficulty !== existing.difficulty;
+          if (tagsChanged || difficultyChanged || movesTopic) {
+            const assessments: FeasibilityAssessment[] = [];
+            if (tagsChanged || difficultyChanged) {
+              assessments.push(
+                await assessQuestionChange(rowId, {
+                  tags: tagsChanged ? nextTags : undefined,
+                  difficulty: difficultyChanged ? nextDifficulty : undefined,
+                }),
+              );
+            }
+            if (movesTopic) {
+              assessments.push(await assessQuestionsRemoval([rowId]));
+            }
+            const blocked = assessments.flatMap((a) => a.blocking);
+            if (blocked.length > 0) {
+              const titles = blocked.map((b) => b.title ?? b.testId).join(", ");
+              result.errors.push(
+                `Строка ${rowNum}: изменение нарушает выдачу опубликованных тестов: ${titles}`,
+              );
+              continue;
+            }
+          }
           // PRD-14 Ф1 (FR-11): обязательные поля всегда; опциональные — по наличию колонки.
           const updatePayload: Record<string, unknown> = {
             topicId: topic.id,
@@ -375,6 +424,7 @@ export async function importQuestionRows(
           tags,
           scoringJson,
           contentHash,
+          createdBy: actor?.id ?? null,
         } as any);
         if (created?.id) newId = created.id;
       }

@@ -51,6 +51,19 @@ function mapLegacyTest(row: Test): Test {
   return { ...row, status: status as Test["status"], published };
 }
 
+/**
+ * Minimal projection of a test that depends on a topic/question (PRD-15
+ * FR-03): enough for the 409 referential-protection payload and for the
+ * draw-feasibility policy (published vs draft, adaptive vs standard).
+ */
+export interface TestUsageRef {
+  id: string;
+  title: string;
+  ownerId: string | null;
+  status: Test["status"];
+  mode: Test["mode"];
+}
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -92,10 +105,15 @@ export interface IStorage {
   upsertTestAccessGrant(grant: InsertTestAccessGrant): Promise<TestAccessGrant>;
   removeTestAccessGrant(testId: string, userId: string): Promise<boolean>;
 
+  // "Where used" lookups (PRD-15 FR-03): tests depending on shared content.
+  getTestsUsingTopic(topicId: string): Promise<TestUsageRef[]>;
+  getTestsUsingQuestion(questionId: string): Promise<TestUsageRef[]>;
+
   // Test Assignments
   getAssignment(id: string): Promise<TestAssignment | undefined>;
   getTestAssignments(testId: string): Promise<TestAssignment[]>;
   getUserAssignments(userId: string): Promise<TestAssignment[]>;
+  isTestAssignedToUser(testId: string, userId: string): Promise<boolean>;
   getGroupAssignments(groupId: string): Promise<TestAssignment[]>;
   createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment>;
   deleteTestAssignment(id: string): Promise<boolean>;
@@ -156,6 +174,9 @@ export interface IStorage {
 
   getQuestions(): Promise<Question[]>;
   getQuestionsByTopic(topicId: string): Promise<Question[]>;
+  getTestSectionsByTopic(topicId: string): Promise<TestSection[]>;
+  getMeasurementsForQuestions(questionIds: string[]): Promise<Array<{ testId: string; questionId: string }>>;
+  getTopicPageRefs(topicId: string): Promise<Array<{ testId: string }>>;
   getContentHashesByTopic(topicId: string): Promise<Set<string>>;
   getQuestion(id: string): Promise<Question | undefined>;
   getQuestionsByIds(ids: string[]): Promise<Question[]>;
@@ -493,6 +514,41 @@ export class DatabaseStorage implements IStorage {
     return rows.map((r) => r.id);
   }
 
+  async getTestsUsingTopic(topicId: string): Promise<TestUsageRef[]> {
+    return db
+      .selectDistinct({
+        id: tests.id,
+        title: tests.title,
+        ownerId: tests.ownerId,
+        status: tests.status,
+        mode: tests.mode,
+      })
+      .from(testSections)
+      .innerJoin(tests, eq(testSections.testId, tests.id))
+      .where(eq(testSections.topicId, topicId));
+  }
+
+  async getTestsUsingQuestion(questionId: string): Promise<TestUsageRef[]> {
+    // A question is delivered through its topic's sections; scale contributions
+    // (question_measurements) add direct per-test dependencies (PRD-5).
+    const question = await this.getQuestion(questionId);
+    const byTopic = question ? await this.getTestsUsingTopic(question.topicId) : [];
+    const viaMeasurements = await db
+      .selectDistinct({
+        id: tests.id,
+        title: tests.title,
+        ownerId: tests.ownerId,
+        status: tests.status,
+        mode: tests.mode,
+      })
+      .from(questionMeasurements)
+      .innerJoin(tests, eq(questionMeasurements.testId, tests.id))
+      .where(eq(questionMeasurements.questionId, questionId));
+    const seen = new Map<string, TestUsageRef>();
+    for (const ref of [...byTopic, ...viaMeasurements]) seen.set(ref.id, ref);
+    return [...seen.values()];
+  }
+
   async getTestAccessGrants(testId: string): Promise<TestAccessGrant[]> {
     return db.select().from(testAccessGrants).where(eq(testAccessGrants.testId, testId));
   }
@@ -547,6 +603,24 @@ export class DatabaseStorage implements IStorage {
 
   async getGroupAssignments(groupId: string): Promise<TestAssignment[]> {
     return db.select().from(testAssignments).where(eq(testAssignments.groupId, groupId));
+  }
+
+  async isTestAssignedToUser(testId: string, userId: string): Promise<boolean> {
+    // Direct assignment first (cheapest), then via the user's groups.
+    const [direct] = await db
+      .select({ id: testAssignments.id })
+      .from(testAssignments)
+      .where(and(eq(testAssignments.testId, testId), eq(testAssignments.userId, userId)))
+      .limit(1);
+    if (direct) return true;
+    const groupIds = (await this.getUserGroups(userId)).map((g) => g.id);
+    if (groupIds.length === 0) return false;
+    const [viaGroup] = await db
+      .select({ id: testAssignments.id })
+      .from(testAssignments)
+      .where(and(eq(testAssignments.testId, testId), inArray(testAssignments.groupId, groupIds)))
+      .limit(1);
+    return !!viaGroup;
   }
 
   async createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment> {
@@ -709,6 +783,7 @@ export class DatabaseStorage implements IStorage {
       id,
       name: folder.name,
       parentId: folder.parentId || null,
+      createdBy: folder.createdBy || null,
     }).returning();
     return newFolder;
   }
@@ -737,6 +812,7 @@ export class DatabaseStorage implements IStorage {
       id,
       name: folder.name,
       parentId: folder.parentId || null,
+      createdBy: folder.createdBy || null,
     }).returning();
     return newFolder;
   }
@@ -811,6 +887,7 @@ export class DatabaseStorage implements IStorage {
       description: topic.description || null,
       feedback: topic.feedback || null,
       folderId: topic.folderId || null,
+      createdBy: topic.createdBy || null,
     }).returning();
     return newTopic;
   }
@@ -821,18 +898,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTopic(id: string): Promise<boolean> {
-    // Cascade delete: first delete questions and courses for this topic
+    // Full cascade (PRD-15 FR-07, audit F-8/F-4): questions, courses, events,
+    // dangling test sections and topic-scoped content pages all go with the
+    // topic. Deletion while published tests depend on it is gated upstream by
+    // the draw-feasibility check (FR-05), so reaching this point means the
+    // caller accepted the consequences.
     await db.delete(questions).where(eq(questions.topicId, id));
     await db.delete(topicCourses).where(eq(topicCourses.topicId, id));
+    await db.delete(topicEvents).where(eq(topicEvents.topicId, id));
+    await db.delete(testSections).where(eq(testSections.topicId, id));
+    await db.delete(contentPages).where(eq(contentPages.topicId, id));
     const result = await db.delete(topics).where(eq(topics.id, id)).returning();
     return result.length > 0;
   }
 
   async deleteTopicsBulk(ids: string[]): Promise<number> {
     if (ids.length === 0) return 0;
-    // Cascade delete: first delete questions and courses for these topics
+    // Same full cascade as deleteTopic (PRD-15 FR-07).
     await db.delete(questions).where(inArray(questions.topicId, ids));
     await db.delete(topicCourses).where(inArray(topicCourses.topicId, ids));
+    await db.delete(topicEvents).where(inArray(topicEvents.topicId, ids));
+    await db.delete(testSections).where(inArray(testSections.topicId, ids));
+    await db.delete(contentPages).where(inArray(contentPages.topicId, ids));
     const result = await db.delete(topics).where(inArray(topics.id, ids)).returning();
     return result.length;
   }
@@ -914,6 +1001,7 @@ export class DatabaseStorage implements IStorage {
       contentHash: question.contentHash || null,
       tags: question.tags ?? [],
       scoringJson: question.scoringJson ?? null,
+      createdBy: question.createdBy || null,
     }).returning();
     return newQuestion;
   }
@@ -1171,6 +1259,27 @@ export class DatabaseStorage implements IStorage {
       .from(testSections)
       .where(eq(testSections.testId, testId))
       .orderBy(testSections.sortOrder);
+  }
+
+  async getTestSectionsByTopic(topicId: string): Promise<TestSection[]> {
+    return db.select().from(testSections).where(eq(testSections.topicId, topicId));
+  }
+
+  async getMeasurementsForQuestions(
+    questionIds: string[],
+  ): Promise<Array<{ testId: string; questionId: string }>> {
+    if (questionIds.length === 0) return [];
+    return db
+      .select({ testId: questionMeasurements.testId, questionId: questionMeasurements.questionId })
+      .from(questionMeasurements)
+      .where(inArray(questionMeasurements.questionId, questionIds));
+  }
+
+  async getTopicPageRefs(topicId: string): Promise<Array<{ testId: string }>> {
+    return db
+      .select({ testId: contentPages.testId })
+      .from(contentPages)
+      .where(eq(contentPages.topicId, topicId));
   }
 
   async createAttempt(attempt: InsertAttempt): Promise<Attempt> {

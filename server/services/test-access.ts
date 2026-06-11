@@ -27,7 +27,11 @@ export function isAdminOrSuper(roles: readonly Role[]): boolean {
   return hasRole(roles, ROLES.SUPERADMIN) || hasRole(roles, ROLES.ADMINISTRATOR);
 }
 
-/** Can read the test: author edit-scope or manager assign-scope (plus admin/super). */
+/**
+ * Can read the test: author edit-scope, manager assign-scope, or the test is
+ * assigned to the user (role-model.md 6.4 `assignedToUser` branch — the
+ * learner runtime reads design/screen data of assigned tests; PRD-15 FR-09).
+ */
 export async function canReadTest(
   roles: readonly Role[],
   userId: string,
@@ -36,6 +40,7 @@ export async function canReadTest(
   if (isAdminOrSuper(roles)) return true;
   if (hasRole(roles, ROLES.AUTHOR) && (await canEditTest(roles, userId, test))) return true;
   if (hasRole(roles, ROLES.MANAGER) && (await canAssignTest(roles, userId, test))) return true;
+  if (await storage.isTestAssignedToUser(test.id, userId)) return true;
   return false;
 }
 
