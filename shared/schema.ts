@@ -108,7 +108,36 @@ export const topics = pgTable("topics", {
   folderId: varchar("folder_id", { length: 36 }),
   // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
   createdBy: varchar("created_by", { length: 36 }),
+  // PRD-15 block C (FR-18): topic owner. NULL = legacy (admin-managed). New
+  // topics are owned by their creator.
+  ownerId: varchar("owner_id", { length: 36 }),
+  // Visibility: `private` (owner + grants + admin) or `shared` (all authors may
+  // use). New topics default to private (confidentiality of keys, F-10); legacy
+  // rows are backfilled to shared so nothing changes on day one.
+  visibility: text("visibility", { enum: ["private", "shared"] }).notNull().default("shared"),
 });
+
+// PRD-15 block C (FR-19): access to a topic for a non-owner. The receiver is a
+// user or a group. `use` lets them see the topic and its questions and use the
+// topic in their tests; `manage` adds CRUD of the topic's questions and editing
+// the topic (not deletion — owner/admin only). `state` carries the soft-revoke
+// "revoked, in use" (FR-25). One grant per (topic, grantee).
+export const topicAccessGrants = pgTable("topic_access_grants", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  topicId: varchar("topic_id", { length: 36 }).notNull(),
+  granteeType: text("grantee_type", { enum: ["user", "group"] }).notNull(),
+  granteeId: varchar("grantee_id", { length: 36 }).notNull(),
+  accessLevel: text("access_level", { enum: ["use", "manage"] }).notNull(),
+  state: text("state", { enum: ["active", "revoked_in_use"] }).notNull().default("active"),
+  grantedBy: varchar("granted_by", { length: 36 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  topicGranteeIdx: uniqueIndex("topic_access_grants_topic_grantee_idx").on(
+    table.topicId, table.granteeType, table.granteeId,
+  ),
+}));
+
+export type TopicAccessGrant = typeof topicAccessGrants.$inferSelect;
 
 export const topicCourses = pgTable("topic_courses", {
   id: varchar("id", { length: 36 }).primaryKey(),
