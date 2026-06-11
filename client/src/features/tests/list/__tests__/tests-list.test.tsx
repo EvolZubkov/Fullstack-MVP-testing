@@ -21,9 +21,19 @@ import { TestsListPage } from "../tests-list";
 // context so the component renders without an AuthProvider; `authMock.can` is
 // mutable so individual tests can simulate a role. Reset to "all true" in
 // beforeEach so the rest of the suite keeps every action visible.
-const { authMock } = vi.hoisted(() => ({ authMock: { can: (_cap: string): boolean => true } }));
+const { authMock } = vi.hoisted(() => ({
+  authMock: {
+    can: (_cap: string): boolean => true,
+    roles: [] as string[],
+    userId: "current-user",
+  },
+}));
 vi.mock("@/lib/auth", () => ({
-  useAuth: () => ({ can: (cap: string) => authMock.can(cap) }),
+  useAuth: () => ({
+    can: (cap: string) => authMock.can(cap),
+    hasRole: (role: string) => authMock.roles.includes(role),
+    user: { id: authMock.userId },
+  }),
 }));
 
 /** Build a `can` that mirrors the real role -> permission map for the role set. */
@@ -84,6 +94,8 @@ beforeEach(() => {
   window.localStorage.clear();
   // Default: every capability granted (admin-like) so unrelated tests are unaffected.
   authMock.can = () => true;
+  authMock.roles = [ROLES.ADMINISTRATOR];
+  authMock.userId = "current-user";
 });
 
 afterEach(() => {
@@ -263,9 +275,22 @@ describe("<TestsListPage /> — owner column + action gating by role (PRD-13)", 
     expect(screen.queryByTestId("test-more-t-1")).toBeNull();
   });
 
-  it("the «Общий доступ» menu item is hidden without tests.access.grant (author)", async () => {
+  it("«Общий доступ» shows for the test owner (author, BRC-27)", async () => {
     authMock.can = canForRoles([ROLES.AUTHOR]);
-    mockMany({ "/api/tests": [buildApiTestRow()], "/api/test-folders": [] });
+    authMock.roles = [ROLES.AUTHOR];
+    authMock.userId = "current-user";
+    mockMany({ "/api/tests": [buildApiTestRow({ ownerId: "current-user" })], "/api/test-folders": [] });
+    renderPage();
+    await waitFor(() => screen.getByTestId("test-row-t-1"));
+    fireEvent.click(screen.getByTestId("test-more-t-1"));
+    expect(screen.getByTestId("menu-access-t-1")).toBeInTheDocument();
+  });
+
+  it("«Общий доступ» is hidden for a non-owner author (object scope, BRC-27)", async () => {
+    authMock.can = canForRoles([ROLES.AUTHOR]);
+    authMock.roles = [ROLES.AUTHOR];
+    authMock.userId = "current-user";
+    mockMany({ "/api/tests": [buildApiTestRow({ ownerId: "someone-else" })], "/api/test-folders": [] });
     renderPage();
     await waitFor(() => screen.getByTestId("test-row-t-1"));
     fireEvent.click(screen.getByTestId("test-more-t-1"));

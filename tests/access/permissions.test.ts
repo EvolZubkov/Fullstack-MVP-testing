@@ -43,7 +43,10 @@ const EXPECTED_AUTHOR: Capability[] = [
   "auth.self",
   "attempts.take",
   "attempts.self.read",
+  "topics.read",
   "topics.manage",
+  "topics.access.grant",
+  "questions.read",
   "questions.manage",
   "questions.importExport",
   "folders.manage",
@@ -53,6 +56,7 @@ const EXPECTED_AUTHOR: Capability[] = [
   "tests.publish",
   "tests.delete",
   "tests.export.scorm",
+  "tests.access.grant",
   "templates.read",
   "analytics.read",
   "analytics.export",
@@ -63,8 +67,8 @@ function sorted(values: Iterable<string>): string[] {
 }
 
 describe("capability catalogue", () => {
-  it("has 29 unique capabilities", () => {
-    expect(CAPABILITIES.length).toBe(29);
+  it("has 33 unique capabilities", () => {
+    expect(CAPABILITIES.length).toBe(33);
     expect(new Set(CAPABILITIES).size).toBe(CAPABILITIES.length);
   });
 

@@ -128,15 +128,23 @@ describe("AC-05 — manager assign scope (assign or edit grant)", () => {
   });
 });
 
-describe("AC-06 — granting access and changing owner are admin/super only", () => {
-  it("allows administrator and superadmin", () => {
-    expect(canGrantAccess([ROLES.ADMINISTRATOR])).toBe(true);
-    expect(canChangeOwner([ROLES.SUPERADMIN])).toBe(true);
+describe("AC-06 / BRC-27 — granting access (owner or admin); owner change admin-only", () => {
+  it("allows administrator and superadmin to grant on any test", () => {
+    expect(canGrantAccess([ROLES.ADMINISTRATOR], "anyone", TEST)).toBe(true);
+    expect(canGrantAccess([ROLES.SUPERADMIN], "anyone", TEST)).toBe(true);
   });
 
-  it("denies author and manager", () => {
-    expect(canGrantAccess([ROLES.AUTHOR])).toBe(false);
-    expect(canGrantAccess([ROLES.MANAGER])).toBe(false);
+  it("allows the test owner (author) to grant on their own test (BRC-27)", () => {
+    expect(canGrantAccess([ROLES.AUTHOR], "owner-1", TEST)).toBe(true);
+  });
+
+  it("denies a non-owner author and a manager", () => {
+    expect(canGrantAccess([ROLES.AUTHOR], "u2", TEST)).toBe(false);
+    expect(canGrantAccess([ROLES.MANAGER], "owner-1", TEST)).toBe(false);
+  });
+
+  it("owner change stays admin/super only", () => {
+    expect(canChangeOwner([ROLES.SUPERADMIN])).toBe(true);
     expect(canChangeOwner([ROLES.AUTHOR])).toBe(false);
     expect(canChangeOwner([ROLES.MANAGER])).toBe(false);
   });
