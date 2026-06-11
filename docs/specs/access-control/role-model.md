@@ -1,10 +1,12 @@
 # Ролевая модель и матрица полномочий
 
-**Версия:** 1.0
-**Статус:** Черновик на согласовании
-**Дата актуализации:** 2026-06-07
+**Версия:** 1.1
+**Статус:** Согласован (правки трека PRD-15 — 2026-06-11)
+**Дата актуализации:** 2026-06-11
 **Связанные документы:** [BRD](../brd-access-control.md),
 [PRD-13](../prd-13/role-based-access-control.md),
+[BRD владения контентом](../brd-content-ownership.md),
+[PRD-15](../prd-15/content-ownership.md),
 [Аудит требований архитектуры](../../AUDIT_ARCHITECTURE_REQUIREMENTS.md),
 [План требований архитектуры](../../PLAN_ARCHITECTURE_REQUIREMENTS.md)
 
@@ -19,6 +21,7 @@
 - карту «роль -> права»;
 - матрицу полномочий по функциональным доменам;
 - модель разграничения доступа к тестам (владелец и гранты);
+- модель разграничения доступа к темам: владелец, видимость и гранты (трек PRD-15);
 - правила назначения ролей с потолками;
 - механизм суперадминистратора из конфигурации;
 - сопоставление прав с эндпоинтами API.
@@ -68,17 +71,21 @@
 | `auth.self` | Вход, чтение своего профиля, смена своего пароля, первый вход | нет |
 | `attempts.take` | Прохождение назначенного теста (старт, ответ, сохранение, завершение) | по назначению |
 | `attempts.self.read` | Просмотр собственных результатов и истории | свои попытки |
-| `topics.manage` | CRUD тем, курсов, мероприятий, дублирование, массовые операции | нет |
-| `questions.manage` | CRUD вопросов, дублирование, массовые операции | нет |
-| `questions.importExport` | Импорт и экспорт вопросов | нет |
-| `folders.manage` | CRUD папок вопросов и папок тестов | нет |
+| `topics.read` | Список и чтение тем видимой области (для выбора в тесты) | видимая область (раздел 6.5) |
+| `topics.manage` | CRUD тем, курсов, мероприятий, дублирование, массовые операции | владение или грант `manage` (раздел 6.6) |
+| `topics.access.grant` | Выдача и отзыв грантов доступа к теме | владелец темы; AD/SU — любые |
+| `topics.owner.change` | Смена владельца темы | нет (только AD/SU) |
+| `questions.read` | Список и чтение вопросов видимых тем | видимая область (раздел 6.5) |
+| `questions.manage` | CRUD вопросов, дублирование, массовые операции | по теме вопроса: владение или грант `manage` |
+| `questions.importExport` | Импорт и экспорт вопросов | видимая область тем |
+| `folders.manage` | CRUD папок вопросов и папок тестов | нет (папки без владения) |
 | `tests.read` | Список и чтение тестов | по доступу |
 | `tests.create` | Создание теста (создатель становится владельцем) | нет |
 | `tests.edit` | Правка теста: секции, оформление, content-pages, показатели, шкалы | по доступу (edit) |
 | `tests.publish` | Смена статуса теста (черновик / опубликован / архив) | по доступу (edit) |
 | `tests.delete` | Удаление теста | только владелец |
 | `tests.export.scorm` | Экспорт теста в SCORM-пакет | по доступу (edit) |
-| `tests.access.grant` | Выдача и отзыв грантов доступа к тесту | нет (только AD/SU) |
+| `tests.access.grant` | Выдача и отзыв грантов доступа к тесту | владелец теста; AD/SU — любые |
 | `tests.owner.change` | Смена владельца теста | нет (только AD/SU) |
 | `templates.read` | Чтение каталога активных шаблонов для выбора в тесте | нет |
 | `adminTemplates.manage` | Жизненный цикл шаблонов: загрузка, активация, удаление, экспорт | нет |
@@ -108,9 +115,13 @@
 | `auth.self` | + | + | + | + | + |
 | `attempts.take` | + | + | + | + | + |
 | `attempts.self.read` | + | + | + | + | + |
-| `topics.manage` | + | + | + | | |
-| `questions.manage` | + | + | + | | |
-| `questions.importExport` | + | + | + | | |
+| `topics.read` | + | + | о | | |
+| `topics.manage` | + | + | о | | |
+| `topics.access.grant` | + | + | о | | |
+| `topics.owner.change` | + | + | | | |
+| `questions.read` | + | + | о | | |
+| `questions.manage` | + | + | о | | |
+| `questions.importExport` | + | + | о | | |
 | `folders.manage` | + | + | + | | |
 | `tests.read` | + | + | о | о | |
 | `tests.create` | + | + | + | | |
@@ -118,7 +129,7 @@
 | `tests.publish` | + | + | о | | |
 | `tests.delete` | + | + | о | | |
 | `tests.export.scorm` | + | + | о | | |
-| `tests.access.grant` | + | + | | | |
+| `tests.access.grant` | + | + | о | | |
 | `tests.owner.change` | + | + | | | |
 | `templates.read` | + | + | + | | |
 | `adminTemplates.manage` | + | + | | | |
@@ -137,6 +148,13 @@
 
 Примечания к ограничениям («о»):
 
+- `topics.read` / `questions.read` / `questions.importExport` для AU ограничены видимой
+  областью тем (раздел 6.5): свои, с грантом, общие.
+- `topics.manage` / `questions.manage` для AU ограничены владением темой или грантом
+  `manage` (раздел 6.6); удаление темы — только владелец и AD/SU.
+- `topics.access.grant` для AU — только на свои темы (владелец); AD/SU — на любые.
+- `tests.access.grant` для AU — только на свои тесты (владелец); AD/SU — на любые
+  (унификация PRD-15, BRC-27).
 - `tests.read` / `tests.edit` / `tests.publish` / `tests.delete` / `tests.export.scorm` для
   AU ограничены областью доступа (раздел 6): владение и гранты `edit`; удаление — только
   владение.
@@ -158,8 +176,9 @@
 | --- | :--: | :--: | :--: | :--: | :--: |
 | Вход, свой профиль, смена своего пароля | + | + | + | + | + |
 | Прохождение назначенных тестов, свои результаты и история | + | + | + | + | + |
-| Темы (CRUD, курсы, мероприятия) | + | + | + | | |
-| Вопросы (CRUD, импорт, экспорт, массовые операции) | + | + | + | | |
+| Темы (CRUD, курсы, мероприятия) | + | + | о видимые; правка по владению и грантам | | |
+| Вопросы (CRUD, импорт, экспорт, массовые операции) | + | + | о в пределах видимых тем | | |
+| Выдача и отзыв доступа к теме, смена владельца темы | + | + | о гранты своих тем | | |
 | Папки вопросов и папки тестов | + | + | + | | |
 | Тесты — правка, оформление, content-pages, показатели, шкалы | + | + | о свои и по доступу | | |
 | Тесты — удаление и архивирование | + | + | о только свои | | |
@@ -170,7 +189,7 @@
 | Пользователи — создание | + | + | | о только обычных | |
 | Пользователи — правка, блокировка, сброс пароля, импорт | + | + | | | |
 | Назначение роли пользователю | + все | о до Автора и Менеджера | | | |
-| Выдача и отзыв доступа к тесту, смена владельца | + | + | | | |
+| Выдача и отзыв доступа к тесту, смена владельца | + | + | о гранты своих тестов | | |
 | Аналитика и результаты | + | + | о по доступным тестам | о по назначаемым тестам | |
 | Админ-реестр шаблонов (загрузка, активация, удаление) | + | + | | | |
 | SCORM-пакеты (управление, регенерация ключей, телеметрия) | + | + | | | |
@@ -205,9 +224,10 @@
 
 ### 6.3 Кто выдаёт доступ
 
-Гранты доступа и смену владельца выполняют только Администратор и Суперадминистратор
-(права `tests.access.grant`, `tests.owner.change`). Владелец-Автор самостоятельно
-соавторов не добавляет.
+Гранты доступа к тесту выдаёт и отзывает владелец теста (на свои тесты) и
+Администратор/Суперадминистратор (на любые) — право `tests.access.grant` с областью
+владельца (унификация PRD-15, BRC-27). Смену владельца выполняют только Администратор и
+Суперадминистратор (`tests.owner.change`).
 
 ### 6.4 Алгоритм разрешения доступа
 
@@ -254,7 +274,7 @@ canReadTestAnalytics(u, t):
   hasRole(u, MG) AND canAssignTest(u, t)                      -> true
   else                                                        -> false
 
-canGrantAccess(u, t)  := isAdminOrSuper(u)
+canGrantAccess(u, t)  := isAdminOrSuper(u) OR (hasRole(u, AU) AND t.ownerId == u.id)
 canChangeOwner(u, t)  := isAdminOrSuper(u)
 ```
 
@@ -262,6 +282,70 @@ canChangeOwner(u, t)  := isAdminOrSuper(u)
 гранты `edit` (по роли Автора), гранты `assign` (по роли Менеджера), все тесты (по роли
 Администратора или суперадминистратору), назначенные тесты (для прохождения). Пользователь
 с ролями Автор и Менеджер видит объединение этих областей.
+
+### 6.5 Владение и видимость тем (PRD-15)
+
+Каждая тема имеет владельца (`topics.owner_id`) и видимость (`topics.visibility`):
+
+- приватная (`private`) — тему видят владелец, получатели грантов и AD/SU;
+- общая (`shared`) — тему видят все авторы на уровне использования.
+
+Новая тема создаётся приватной, владелец — создатель. Legacy-темы: владелец пуст,
+видимость общая (разрушающие операции над ними — только AD/SU). Смену владельца выполняет
+администратор (`topics.owner.change`). Вопросы наследуют область видимости своей темы;
+отдельных прав на вопрос нет.
+
+Видимая область автора = свои темы + темы с грантом (личным или через группу) + общие.
+
+### 6.6 Гранты доступа к темам
+
+Грант хранится в `topic_access_grants`; получатель — пользователь или группа.
+
+| Уровень гранта | Что разрешает |
+| --- | --- |
+| `use` | Видеть тему и её вопросы, использовать тему в своих тестах |
+| `manage` | Дополнительно: CRUD вопросов темы, правка самой темы (без удаления) |
+
+Удаление темы — только владелец и AD/SU. Гранты на свою тему выдаёт и отзывает владелец
+(`topics.access.grant` с областью владельца); AD/SU — на любые. Выдача и отзыв
+журналируются.
+
+### 6.7 Отзыв грантов темы
+
+Отзыв не блокируется наличием зависимых тестов. Два режима:
+
+- мягкий (по умолчанию): грант переходит в состояние «отозван, используется» — тема
+  исчезает из банка получателя и недоступна новым тестам; для существующих тестов
+  получателя действует производное право чтения «тема в контексте моего теста» (состав
+  секций, вопросы выдачи, статистика), без доступа к банку;
+- жёсткий (AD/SU): через разрешение зависимостей (замена или удаление секций, снятие с
+  публикации, смена владельца, материализация снапшота); принудительно — только
+  административным переопределением с записью в журнал.
+
+### 6.8 Инвариант доставки
+
+Путь доставки и оценивания (выдача вопросов в попытке, проверка ответов, собранный
+SCORM-пакет) права на контент не проверяет: обучаемый проходит тест по факту назначения.
+Потеря автором доступа к теме не влияет на работу опубликованных тестов.
+
+```text
+visibleTopic(u, topic):
+  isAdminOrSuper(u)                                  -> true
+  topic.visibility == shared AND hasRole(u, AU)      -> true
+  topic.ownerId == u.id                              -> true
+  grant(topic, u | groups(u), use|manage) is active  -> true
+  else                                               -> false
+
+canManageTopicContent(u, topic):
+  isAdminOrSuper(u)                                  -> true
+  topic.ownerId == u.id                              -> true
+  grant(topic, u | groups(u), manage) is active      -> true
+  else                                               -> false
+
+canDeleteTopic(u, topic)      := isAdminOrSuper(u) OR topic.ownerId == u.id
+canGrantTopicAccess(u, topic) := isAdminOrSuper(u) OR topic.ownerId == u.id
+canChangeTopicOwner(u, topic) := isAdminOrSuper(u)
+```
 
 ---
 
@@ -360,10 +444,15 @@ applyRoleChange(actor, target, requestedRoles):
 | `POST /api/tests/:id/attempts/start`, `start-adaptive` | `attempts.take` | по назначению |
 | `POST /api/attempts/:id/answer-adaptive`, `save-progress`, `finish` | `attempts.take` | своя попытка |
 | `GET /api/tests/:id/resume`, `GET /api/attempts/:id/result` | `attempts.take` | своя попытка |
-| `GET /api/topics`, `GET /api/questions`, `GET /api/folders`, `GET /api/test-folders` | соответствующее `*.read` или `manage` | — |
-| `POST/PUT/DELETE /api/topics/*` | `topics.manage` | — |
-| `POST/PUT/DELETE /api/questions/*`, `bulk-*`, `duplicate` | `questions.manage` | — |
-| `GET /api/questions/export`, `POST /api/questions/import` | `questions.importExport` | — |
+| `GET /api/topics`, `GET /api/questions` | `topics.read` / `questions.read` | видимая область (6.5) |
+| `GET /api/folders`, `GET /api/test-folders` | `folders.manage` | — |
+| `POST /api/topics` | `topics.manage` | создатель становится владельцем |
+| `PUT/DELETE /api/topics/*`, `bulk-*`, `duplicate` | `topics.manage` | владение или грант `manage`; удаление — владелец; плюс выполнимость выдачи (PRD-15) |
+| `GET/POST/DELETE /api/topics/:id/access` | `topics.access.grant` | владелец темы; AD/SU — любые |
+| `PATCH /api/topics/:id/owner` | `topics.owner.change` | — |
+| `GET /api/topics/duplicates` | `topics.owner.change` | — (административный отчёт) |
+| `POST/PUT/DELETE /api/questions/*`, `bulk-*`, `duplicate` | `questions.manage` | по теме вопроса (6.6); плюс выполнимость выдачи |
+| `GET /api/questions/export`, `POST /api/questions/import` | `questions.importExport` | видимая область тем |
 | `POST/PUT/DELETE /api/folders/*`, `/api/test-folders/*` | `folders.manage` | — |
 | `GET /api/tests`, `GET /api/tests/:id` | `tests.read` | по доступу |
 | `POST /api/tests` | `tests.create` | — |
@@ -371,8 +460,11 @@ applyRoleChange(actor, target, requestedRoles):
 | `PATCH /api/tests/:id/status`, `POST /api/tests/:id/restore` | `tests.publish` | edit |
 | `DELETE /api/tests/:id` | `tests.delete` | владелец |
 | `GET /api/tests/:id/export/scorm` | `tests.export.scorm` | edit |
-| `GET /api/tests/:id/access`, `POST /api/tests/:id/access`, `DELETE /api/tests/:id/access/:userId` | `tests.access.grant` | — |
+| `GET /api/tests/:id/access`, `POST /api/tests/:id/access`, `DELETE /api/tests/:id/access/:userId` | `tests.access.grant` | владелец теста; AD/SU — любые |
 | `PATCH /api/tests/:id/owner` | `tests.owner.change` | — |
+| `GET /api/tests/:id/design`, `GET /api/tests/:id/screen-template/:screen` | сессия | область чтения теста, включая назначение (6.4) |
+| `POST /api/tests/:id/republish-force` | `tests.publish` | edit (экстренная переопубликация, PRD-15) |
+| `GET/PUT /api/tests/:id/question-scoring` | `tests.read` / `tests.edit` | по доступу / edit (PRD-15) |
 | `GET /api/templates`, `GET /api/templates/:id` | `templates.read` | — |
 | `GET/POST/PUT/DELETE /api/admin/templates/*` | `adminTemplates.manage` | — |
 | `GET/POST/DELETE /api/tests/:id/assignments`, `bulk` | `assignments.manage` | assign |
@@ -397,8 +489,13 @@ applyRoleChange(actor, target, requestedRoles):
   конфигурации.
 - Эффективный набор прав — итоговое множество прав пользователя, вычисленное как
   объединение по набору ролей.
-- Область (scope) — дополнительная проверка применимости действия к конкретному тесту по
-  владельцу или гранту.
-- Грант — запись в `test_access_grants`, дающая пользователю доступ уровня `edit` или
-  `assign` к конкретному тесту.
+- Область (scope) — дополнительная проверка применимости действия к конкретному объекту
+  (тесту или теме) по владельцу, гранту или видимости.
+- Грант — запись в `test_access_grants` (доступ `edit` / `assign` к тесту) или в
+  `topic_access_grants` (доступ `use` / `manage` к теме; получатель — пользователь или
+  группа).
+- Видимая область тем — множество тем, которые автор видит и может использовать: свои,
+  с активным грантом, общие (раздел 6.5).
+- Мягкий отзыв — состояние гранта темы «отозван, используется»: тема скрыта из банка
+  получателя, но его существующие тесты сохраняют производное чтение (раздел 6.7).
 - Потолок назначения — максимальная роль, которую данный субъект вправе назначить другому.
