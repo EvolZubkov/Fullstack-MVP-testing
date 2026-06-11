@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe PRD-15: Темы — фильтр области, меню «Доступ», пустые папки</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    .wf-state.active { display: block; }
+    /* PRD-15 list composition (DS tokens only) */
+    .tl-wrap { max-width: 1080px; margin: 0 auto; padding: var(--ou-space-6); display: flex; flex-direction: column; gap: var(--ou-space-5); }
+    .tl-toolbar { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; }
+    .tl-search { position: relative; flex: 1; min-width: var(--wf-size-150, 150px); }
+    .tl-search .ou-field { width: 100%; }
+    .tl-spacer { flex: 1; }
+    .tl-folder { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-3) var(--ou-space-4); background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-m); font: var(--ou-text-body-s); font-weight: 600; }
+    .tl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--ou-space-4); }
+    .tl-card-top { display: flex; align-items: flex-start; gap: var(--ou-space-3); }
+    .tl-card-title { flex: 1; min-width: 0; }
+    .tl-meta { display: flex; gap: var(--ou-space-4); color: var(--ou-fg-muted); font: var(--ou-text-body-s); margin-top: var(--ou-space-3); }
+    /* Menu escapes the card's overflow clip: rendered as a slot sibling, not a
+       card descendant (production uses a portaled DropdownMenu — never clipped). */
+    .tl-card-slot { position: relative; }
+    .tl-menu-pop { position: absolute; right: var(--ou-space-3); top: var(--ou-space-12); z-index: 20; }
+    .wf-sprite { display: none; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">PRD-15 · Темы:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-mine')">Мои</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-accessible')">Доступные</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-menu')">Меню действий</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-admin')">Админ: все + дубли</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- s-mine: фильтр «Мои» — карточки без меток принадлежности -->
+<div class="wf-state active" id="s-mine">
+  <div class="tl-wrap">
+    <div class="tl-toolbar">
+      <div class="ou-seg ou-seg--m" role="group" aria-label="Область тем">
+        <button type="button" class="ou-seg__item is-active" aria-pressed="true">Мои</button>
+        <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-accessible')">Доступные</button>
+        <button type="button" class="ou-seg__item" aria-pressed="false">Общие</button>
+      </div>
+      <div class="tl-search">
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск тем…" aria-label="Поиск тем" /></div></div>
+      </div>
+      <div class="ou-seg ou-seg--s" role="group" aria-label="Вид">
+        <button type="button" class="ou-seg__item is-active" aria-label="Карточки" aria-pressed="true"><svg width="16" height="16"><use href="#i-grid"/></svg></button>
+        <button type="button" class="ou-seg__item" aria-label="Список" aria-pressed="false"><svg width="16" height="16"><use href="#i-list"/></svg></button>
+      </div>
+      <button type="button" class="ou-btn ou-btn--primary ou-btn--m"><svg width="16" height="16"><use href="#i-plus"/></svg> Создать тему</button>
+    </div>
+
+    <div class="tl-folder"><svg width="18" height="18"><use href="#i-folder"/></svg> Личные финансы <span class="ou-tag ou-tag--neutral ou-tag--s">4</span></div>
+
+    <div class="tl-grid">
+      <section class="ou-card ou-card--outlined">
+        <div class="ou-card__body">
+          <div class="tl-card-top">
+            <div class="tl-card-title"><h3 class="ou-card__title">Финансовая грамотность</h3></div>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия"><svg width="16" height="16"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="tl-meta"><span>32 вопроса</span></div>
+        </div>
+      </section>
+      <section class="ou-card ou-card--outlined">
+        <div class="ou-card__body">
+          <div class="tl-card-top">
+            <div class="tl-card-title"><h3 class="ou-card__title">Налоги физлиц</h3></div>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия"><svg width="16" height="16"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="tl-meta"><span>18 вопросов</span></div>
+        </div>
+      </section>
+      <section class="ou-card ou-card--outlined">
+        <div class="ou-card__body">
+          <div class="tl-card-top">
+            <div class="tl-card-title"><h3 class="ou-card__title">Кредиты и вклады</h3></div>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия"><svg width="16" height="16"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="tl-meta"><span>24 вопроса</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- s-accessible: фильтр «Доступные» — те же карточки, область задаёт фильтр -->
+<div class="wf-state" id="s-accessible">
+  <div class="tl-wrap">
+    <div class="tl-toolbar">
+      <div class="ou-seg ou-seg--m" role="group" aria-label="Область тем">
+        <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-mine')">Мои</button>
+        <button type="button" class="ou-seg__item is-active" aria-pressed="true">Доступные</button>
+        <button type="button" class="ou-seg__item" aria-pressed="false">Общие</button>
+      </div>
+      <div class="tl-search">
+        <div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск тем…" aria-label="Поиск тем" /></div></div>
+      </div>
+    </div>
+
+    <div class="tl-grid">
+      <section class="ou-card ou-card--outlined">
+        <div class="ou-card__body">
+          <div class="tl-card-top">
+            <div class="tl-card-title"><h3 class="ou-card__title">Инвестиции</h3></div>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия"><svg width="16" height="16"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="tl-meta"><span>27 вопросов</span></div>
+        </div>
+      </section>
+      <section class="ou-card ou-card--outlined">
+        <div class="ou-card__body">
+          <div class="tl-card-top">
+            <div class="tl-card-title"><h3 class="ou-card__title">Страхование</h3></div>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия"><svg width="16" height="16"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="tl-meta"><span>15 вопросов</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- s-menu: меню действий темы открыто (пункт «Редактировать тему…» открывает единый Drawer) -->
+<div class="wf-state" id="s-menu">
+  <div class="tl-wrap">
+    <div class="tl-toolbar">
+      <div class="ou-seg ou-seg--m" role="group" aria-label="Область тем">
+        <button type="button" class="ou-seg__item is-active" aria-pressed="true">Мои</button>
+        <button type="button" class="ou-seg__item" aria-pressed="false">Доступные</button>
+        <button type="button" class="ou-seg__item" aria-pressed="false">Общие</button>
+      </div>
+      <div class="tl-spacer"></div>
+    </div>
+    <div class="tl-grid">
+      <div class="tl-card-slot">
+        <section class="ou-card ou-card--outlined">
+          <div class="ou-card__body">
+            <div class="tl-card-top">
+              <div class="tl-card-title"><h3 class="ou-card__title">Финансовая грамотность</h3></div>
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия" aria-expanded="true"><svg width="16" height="16"><use href="#i-more"/></svg></button>
+            </div>
+            <div class="tl-meta"><span>32 вопроса</span></div>
+          </div>
+        </section>
+        <!-- Меню — сиблинг карточки (вне overflow:hidden); в проде это порталируемый DropdownMenu -->
+        <div class="ou-menu ou-menu--sm tl-menu-pop" role="menu" aria-label="Действия темы">
+          <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-copy"/></svg></span>Дублировать</button>
+          <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></span>Редактировать тему…</button>
+          <div class="ou-menu__divider"></div>
+          <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></span>Удалить</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- s-admin: администратор — «Все» + тумблер пустых папок + отчёт о дублях -->
+<div class="wf-state" id="s-admin">
+  <div class="tl-wrap">
+    <div class="tl-toolbar">
+      <div class="ou-seg ou-seg--m" role="group" aria-label="Область тем">
+        <button type="button" class="ou-seg__item" aria-pressed="false">Мои</button>
+        <button type="button" class="ou-seg__item" aria-pressed="false">Доступные</button>
+        <button type="button" class="ou-seg__item" aria-pressed="false">Общие</button>
+        <button type="button" class="ou-seg__item is-active" aria-pressed="true">Все</button>
+      </div>
+      <div class="tl-spacer"></div>
+      <label class="ou-switch-field">
+        <span class="ou-switch ou-switch--s"><input type="checkbox" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+        <span class="ou-switch-field__text"><span class="ou-switch-field__label">Показывать пустые папки</span></span>
+      </label>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m">Отчёт о дублях</button>
+    </div>
+
+    <div class="tl-folder"><svg width="18" height="18"><use href="#i-folder"/></svg> Экономика <span class="ou-tag ou-tag--neutral ou-tag--s">12</span></div>
+
+    <div class="tl-grid">
+      <section class="ou-card ou-card--outlined">
+        <div class="ou-card__body">
+          <div class="tl-card-top">
+            <div class="tl-card-title"><h3 class="ou-card__title">Финансовая грамотность</h3></div>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия"><svg width="16" height="16"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="tl-meta"><span>32 вопроса</span></div>
+        </div>
+      </section>
+      <section class="ou-card ou-card--outlined">
+        <div class="ou-card__body">
+          <div class="tl-card-top">
+            <div class="tl-card-title"><h3 class="ou-card__title">Инвестиции</h3></div>
+            <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия"><svg width="16" height="16"><use href="#i-more"/></svg></button>
+          </div>
+          <div class="tl-meta"><span>27 вопросов</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- Пояснения -->
+<section class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения</h3>
+  <table>
+    <thead><tr><th>Элемент</th><th>Поведение</th><th>Правило (PRD-15)</th></tr></thead>
+    <tbody>
+      <tr><td>Карточка темы</td><td>Только название и метрики. Меток принадлежности/видимости на карточке нет — владелец и видимость в свойствах темы и в панели доступа</td><td>FR-22 (область отделена от карточки)</td></tr>
+      <tr><td>Фильтр «Мои / Доступные / Общие»</td><td>Сегмент задаёт область: свои темы / темы с грантом (личным или групповым) / общие. Список с сервера уже отфильтрован по видимости. Это и есть индикатор принадлежности — на уровне списка, не карточки</td><td>GET /api/topics, visibleTopicScope</td></tr>
+      <tr><td>Меню «Редактировать тему…»</td><td>Открывает единый Drawer темы (см. prd15-topic-access) с вкладками «Свойства» (имя/папка/описание/ОС) и «Доступ» (владелец, видимость, гранты). Отдельного модала редактирования нет. Вкладка «Доступ» видна владельцу и админу</td><td>PUT /api/topics/:id; topics.access.grant (FR-20); видимость FR-18</td></tr>
+      <tr><td>Пустые папки</td><td>Папки без видимых актору тем скрыты. Админ может включить «Показывать пустые папки»</td><td>FR-28</td></tr>
+      <tr><td>«Отчёт о дублях»</td><td>Только админ — отчёт об одноимённых темах по системе (см. prd15-duplicates-report)</td><td>FR-27, BRC-12</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- DS Mapping -->
+<section class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping — UniversityRT</h2>
+  <table>
+    <thead><tr><th>Класс</th><th>Где используется</th><th>DS компонент</th><th>React (ui-kit)</th></tr></thead>
+    <tbody>
+      <tr><td><code>.ou-seg</code></td><td>Фильтр области, переключатель вида</td><td>SegmentedControl</td><td><code>SegmentedControl</code></td></tr>
+      <tr><td><code>.ou-field</code></td><td>Поиск</td><td>Field / Input</td><td><code>Input</code></td></tr>
+      <tr><td><code>.ou-card</code></td><td>Карточка темы</td><td>Card</td><td><code>Card</code> (--outlined)</td></tr>
+      <tr><td><code>.ou-menu</code></td><td>Меню действий темы (порталируется в оверлей — не обрезается карточкой)</td><td>Menu</td><td><code>DropdownMenu</code> (portal)</td></tr>
+      <tr><td><code>.ou-switch</code></td><td>«Показывать пустые папки» (админ)</td><td>Switch</td><td><code>Switch</code></td></tr>
+      <tr><td><code>.ou-tag</code></td><td>Счётчик папки</td><td>Tag</td><td><code>Tag</code></td></tr>
+      <tr><td><code>.ou-btn</code></td><td>Создать, действия, отчёт о дублях</td><td>Button</td><td><code>Button</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById('wf-' + id) || document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+    document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+  };
+  window.toggleTheme = function toggleTheme(btn) {
+    var dark = document.body.classList.toggle('ou--dark');
+    document.body.classList.toggle('ou--light', !dark);
+    btn.textContent = dark ? 'Light' : 'Dark';
+    btn.classList.toggle('active', dark);
+  };
+  window.toggleDensity = function toggleDensity(btn) {
+    var compact = document.body.classList.toggle('ou--compact');
+    document.body.classList.toggle('ou--normal', !compact);
+    btn.textContent = compact ? 'Normal' : 'Compact';
+    btn.classList.toggle('active', compact);
+  };
+</script>
+
+</body>
+</html>
