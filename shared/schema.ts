@@ -1,4 +1,5 @@
 import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, index, uuid, real } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { normalizeTag, normalizeTags, TAG_MAX_LENGTH } from "./tags";
@@ -115,7 +116,17 @@ export const topics = pgTable("topics", {
   // use). New topics default to private (confidentiality of keys, F-10); legacy
   // rows are backfilled to shared so nothing changes on day one.
   visibility: text("visibility", { enum: ["private", "shared"] }).notNull().default("shared"),
-});
+  // PRD-15 FR-27: normalized name (lowercase, collapsed spaces, ё->е) backing
+  // the per-owner uniqueness index and the same-name warning. NULL only for rows
+  // not yet backfilled by migration 022.
+  nameNormalized: text("name_normalized"),
+}, (table) => ({
+  // FR-27: hard uniqueness only WITHIN one owner; legacy unowned rows (owner
+  // NULL) are excluded by the partial predicate, so they never collide.
+  ownerNameIdx: uniqueIndex("topics_owner_name_normalized_idx")
+    .on(table.ownerId, table.nameNormalized)
+    .where(sql`owner_id IS NOT NULL`),
+}));
 
 // PRD-15 block C (FR-19): access to a topic for a non-owner. The receiver is a
 // user or a group. `use` lets them see the topic and its questions and use the
