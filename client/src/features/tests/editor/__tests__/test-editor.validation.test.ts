@@ -48,6 +48,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
         topicId: "topic-1",
         topicName: "Topic One",
         maxQuestions: 10,
+        maxPoints: 10,
         drawCount: 5,
         required: true,
         timeLimit: { source: "inherit_test" },
@@ -312,7 +313,7 @@ describe("FR-13: drawCount range", () => {
 // ─── FR-15c-f: absolute pass rule constraints ──────────────────────────────
 
 describe("FR-15: absolute pass rule constraints", () => {
-  it("happy path — absolute pass rule <= total questions passes", () => {
+  it("happy path — overall absolute pass rule <= total points passes", () => {
     const model = baseModel({
       passRules: {
         decisionPolicy: "overall_only",
@@ -327,7 +328,7 @@ describe("FR-15: absolute pass rule constraints", () => {
     expect(rangeErrors).toHaveLength(0);
   });
 
-  it("sad path — absolute pass rule exceeds total questions produces range error", () => {
+  it("sad path — overall absolute pass rule exceeds total points produces range error", () => {
     const model = baseModel({
       passRules: {
         decisionPolicy: "overall_only",
@@ -345,13 +346,14 @@ describe("FR-15: absolute pass rule constraints", () => {
     );
   });
 
-  it("happy path — topic absolute pass rule <= topic drawCount passes", () => {
+  it("happy path — topic absolute pass rule <= topic max points passes", () => {
     const model = baseModel({
       sections: [
         {
           topicId: "topic-1",
           topicName: "Topic One",
           maxQuestions: 20,
+          maxPoints: 30,
           drawCount: 10,
           required: true,
           timeLimit: { source: "inherit_test" },
@@ -371,13 +373,44 @@ describe("FR-15: absolute pass rule constraints", () => {
     expect(topicErrors).toHaveLength(0);
   });
 
-  it("sad path — topic absolute pass rule exceeds topic drawCount produces error", () => {
+  // PRD-10: a graded points threshold may exceed the question count — the runtime
+  // compares against earned POINTS (e.g. matching = 3 points), so a 15-point bar
+  // over 10 questions (16 attainable points) must NOT be rejected.
+  it("happy path — topic absolute threshold above question count but within max points passes", () => {
+    const model = baseModel({
+      sections: [
+        {
+          topicId: "topic-1",
+          topicName: "Topic One",
+          maxQuestions: 10,
+          maxPoints: 16,
+          drawCount: 10,
+          required: true,
+          timeLimit: { source: "inherit_test" },
+          feedback: { format: "plain", text: "" },
+          feedbackLinks: [],
+          feedbackAssets: [],
+        },
+      ],
+      passRules: {
+        decisionPolicy: "overall_and_required_topics",
+        overall: { type: "percent", value: 60 },
+        byTopic: { "topic-1": { source: "custom", type: "absolute", value: 15 } },
+      },
+    });
+    const result = validateTestEditor(model);
+    const topicErrors = result.errors.filter((e) => e.field.includes("byTopic"));
+    expect(topicErrors).toHaveLength(0);
+  });
+
+  it("sad path — topic absolute pass rule exceeds topic max points produces error", () => {
     const model = baseModel({
       sections: [
         {
           topicId: "topic-1",
           topicName: "Topic One",
           maxQuestions: 20,
+          maxPoints: 10,
           drawCount: 10,
           required: true,
           timeLimit: { source: "inherit_test" },

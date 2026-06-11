@@ -312,6 +312,10 @@ function buildSectionsFromApi(src: ApiTestResponse): {
     const topicId = typeof raw.topicId === "string" ? raw.topicId : "";
     const topicName = typeof raw.topicName === "string" ? raw.topicName : "";
     const maxQuestions = typeof raw.maxQuestions === "number" ? raw.maxQuestions : 0;
+    // PRD-10: Σ points of the topic pool (falls back to the question count for an
+    // older API response without it — points >= 1 per question, so it stays a
+    // valid lower bound until the next save round-trips the real value).
+    const maxPoints = typeof raw.maxPoints === "number" ? raw.maxPoints : maxQuestions;
     const drawCount = typeof raw.drawCount === "number" ? raw.drawCount : 1;
     const drawAll = typeof raw.drawAll === "boolean" ? raw.drawAll : false;
     const required = typeof raw.required === "boolean" ? raw.required : true;
@@ -328,6 +332,7 @@ function buildSectionsFromApi(src: ApiTestResponse): {
       topicId,
       topicName,
       maxQuestions,
+      maxPoints,
       drawCount,
       drawAll,
       required,

@@ -38,9 +38,20 @@ function isValidHttpUrl(value: string): boolean {
   }
 }
 
-/** Calculate total questions across all sections (sum of drawCount). */
-function getTotalQuestionsCount(sections: EditorSection[]): number {
-  return sections.reduce((sum, section) => sum + section.drawCount, 0);
+/**
+ * A section's maximum attainable points (Σ question points). PRD-10: an absolute
+ * pass threshold is compared against earned POINTS at runtime (graded scoring),
+ * so it is bounded by this, not by the question count. Falls back to the question
+ * count when the pool's points are unknown (points >= 1 per question, so the count
+ * is a safe lower bound — see {@link EditorSection.maxPoints}).
+ */
+function getSectionMaxPoints(section: EditorSection): number {
+  return section.maxPoints ?? section.maxQuestions;
+}
+
+/** Total attainable points across all sections (Σ of {@link getSectionMaxPoints}). */
+function getTotalMaxPoints(sections: EditorSection[]): number {
+  return sections.reduce((sum, section) => sum + getSectionMaxPoints(section), 0);
 }
 
 /** Get section by topic ID; returns undefined if not found. */
@@ -163,16 +174,19 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
     }
   }
 
-  // FR-15c-f: absolute pass rules must not exceed available questions
-  const totalQuestions = getTotalQuestionsCount(model.sections);
+  // FR-15c-f: absolute pass thresholds must not exceed the attainable POINTS.
+  // PRD-10: graded scoring makes earned points (not the question count) the basis
+  // of an absolute pass, so a points threshold may legitimately exceed the number
+  // of questions (e.g. matching = 3 points). It is bounded by Σ question points.
+  const totalMaxPoints = getTotalMaxPoints(model.sections);
   if (
     model.passRules.overall.type === "absolute" &&
-    model.passRules.overall.value > totalQuestions
+    model.passRules.overall.value > totalMaxPoints
   ) {
     errors.push({
       field: "passRules.overall.value",
       code: "range",
-      message: `Overall absolute pass threshold (${model.passRules.overall.value}) cannot exceed total questions (${totalQuestions}).`,
+      message: `Overall absolute pass threshold (${model.passRules.overall.value}) cannot exceed total points (${totalMaxPoints}).`,
       severity: "error",
     });
   }
@@ -181,15 +195,14 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
     if (rule.source === "custom" && rule.type === "absolute") {
       const section = getSectionByTopicId(model.sections, topicId);
       if (section) {
-        // Effective draw: the full pool when drawing all, else drawCount.
-        const effectiveDraw = sectionDrawsAll(section.drawAll, model.mode)
-          ? section.maxQuestions
-          : section.drawCount;
-        if (rule.value > effectiveDraw) {
+        // A draw is a subset of the pool, so the pool's max points is a safe
+        // upper bound on any attempt's earned points for this section.
+        const maxPoints = getSectionMaxPoints(section);
+        if (rule.value > maxPoints) {
           errors.push({
             field: `passRules.byTopic[${topicId}].value`,
             code: "range",
-            message: `Topic absolute pass threshold (${rule.value}) cannot exceed draw count (${effectiveDraw}).`,
+            message: `Topic absolute pass threshold (${rule.value}) cannot exceed topic max points (${maxPoints}).`,
             severity: "error",
           });
         }

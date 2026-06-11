@@ -155,6 +155,14 @@ export type EditorSection = {
   topicId: string;
   topicName: string;
   maxQuestions: number;
+  /**
+   * PRD-10: the topic pool's maximum attainable points (Σ question points).
+   * Absolute pass thresholds are compared against earned POINTS at runtime
+   * (graded scoring), so the editor caps them by this rather than by the
+   * question count. Absent (e.g. a section built locally before the API
+   * round-trip) — validation falls back to {@link maxQuestions}.
+   */
+  maxPoints?: number;
   drawCount: number;
   /**
    * When true the topic draws its ENTIRE current question pool (ignoring
