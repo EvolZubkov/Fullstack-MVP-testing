@@ -399,12 +399,36 @@ export const attempts = pgTable("attempts", {
   userId: varchar("user_id", { length: 36 }).notNull(),
   testId: varchar("test_id", { length: 36 }).notNull(),
   testVersion: integer("test_version").notNull().default(1),
+  // PRD-15 block B (FR-13): the publication snapshot this attempt is delivered
+  // and graded from. NULL = legacy/live delivery (drafts, preview, or attempts
+  // started before snapshots existed) — the transitional mode.
+  snapshotId: varchar("snapshot_id", { length: 36 }),
   variantJson: jsonb("variant_json").notNull(),
   answersJson: jsonb("answers_json"),
   resultJson: jsonb("result_json"),
   startedAt: timestamp("started_at").notNull(),
   finishedAt: timestamp("finished_at"),
 });
+
+// PRD-15 block B (FR-10): a frozen, self-contained snapshot of a test created
+// on publish/republish. Delivery of a published test reads ONLY from the
+// snapshot, so later edits to the bank do not change in-flight or future
+// attempts until the next republish. `content_json` holds the resolved
+// deliverable (test row, sections, per-topic question pools, adaptive config,
+// scales, measurements, result variables, content pages, topic courses/events).
+// `version` is a per-test monotonic counter; one row per (test_id, version).
+export const testSnapshots = pgTable("test_snapshots", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  testId: varchar("test_id", { length: 36 }).notNull(),
+  version: integer("version").notNull(),
+  contentJson: jsonb("content_json").notNull(),
+  publishedAt: timestamp("published_at").notNull().defaultNow(),
+  publishedBy: varchar("published_by", { length: 36 }),
+}, (table) => ({
+  testVersionIdx: uniqueIndex("test_snapshots_test_version_idx").on(table.testId, table.version),
+}));
+
+export type TestSnapshot = typeof testSnapshots.$inferSelect;
 
 export const insertTestFolderSchema = createInsertSchema(testFolders).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
