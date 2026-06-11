@@ -34,7 +34,11 @@ const SELF_AND_TAKE: readonly Capability[] = [
 /** Capabilities of the Author role (content authoring, scoped to own tests). */
 const AUTHOR_CAPABILITIES: readonly Capability[] = [
   ...SELF_AND_TAKE,
+  "topics.read",
   "topics.manage",
+  // PRD-15 block C: an author grants access to topics they own (object-scoped).
+  "topics.access.grant",
+  "questions.read",
   "questions.manage",
   "questions.importExport",
   "folders.manage",
@@ -44,6 +48,8 @@ const AUTHOR_CAPABILITIES: readonly Capability[] = [
   "tests.publish",
   "tests.delete",
   "tests.export.scorm",
+  // PRD-15 BRC-27: an author grants access to tests they own (object-scoped).
+  "tests.access.grant",
   "templates.read",
   "analytics.read",
   "analytics.export",
