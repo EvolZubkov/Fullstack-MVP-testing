@@ -158,3 +158,14 @@
 - `npm test`, `npm run check`, `npm run lint:md` зелёные; golden-тесты скоринга без расхождений.
 - Поведение системы в день включения каждой миграции не изменилось (проверка на копии данных).
 - Документация актуальна: role-model.md, RUNBOOK, ROADMAP, матрица приёмки.
+
+---
+
+## 7. Задачи после PRD-15 (технический долг)
+
+Зафиксировано в ходе согласования эскизов T-32 (2026-06-12). Реализуется после закрытия PRD-15.
+
+| ID | Задача | Затрагивает | Причина |
+| --- | --- | --- | --- |
+| TD-01 | Гранты тем — только пользователи (убрать группы). Упростить `topic_access_grants` (убрать `grantee_type`/групповую ветку), `topic-access.ts` (`grantLevelFor`/`visibleTopic`/`canManageTopicContent`/`visibleTopicScope` без резолва групп; `dependentTestsForGrant` без `getGroupUsers`), `storage` (грант по пользователю, `upsertTopicGrant` без `granteeType`), `routes/topics.ts` (POST/DELETE `/access` без `granteeType`), тесты. Миграция 021 не применена — правится чисто | `topic_access_grants`, `topic-access.ts`, `storage.ts`, `routes/topics.ts`, тесты блока C | Группы в системе — исключительно для назначения тестов; доступ к темам группам не выдаётся |
+| TD-02 | Расширить общий редактор обратной связи (`feedback-editor-modal`, PRD-7 FR-36/37) ссылками на рекомендуемые мероприятия. Рекомендуемые курсы = ссылки фидбэка (уже есть); мероприятия — новый тип ссылок. Затем свести `topic_courses`/`topic_events` к ссылкам/файлам обратной связи (рендер результатов читает из фидбэка), миграция данных и отказ от отдельных таблиц/эндпоинтов | `feedbackContentSchema`, `feedback-editor-modal.tsx`, рендер результатов (`result-context`, SCORM `resultsPage`), `topic_courses`/`topic_events` | Курсы/мероприятия дублируют ссылки/файлы обратной связи; рекомендации свести в один механизм |
