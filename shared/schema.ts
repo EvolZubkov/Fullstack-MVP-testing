@@ -324,6 +324,9 @@ export const tests = pgTable("tests", {
   designSettingsJson: jsonb("design_settings_json").notNull().default({}),
   // PRD-6: optional retake gate / cooldown policy. Null = legacy (no gate).
   retakePolicyJson: jsonb("retake_policy_json").$type<RetakePolicy>(),
+  // PRD-15 block D (FR-31): test-wide default price of a question. Null = no
+  // default — the effective chain falls through to the system default (1 point).
+  defaultQuestionPoints: integer("default_question_points"),
 });
 
 /**
@@ -396,6 +399,9 @@ export const testSections = pgTable("test_sections", {
   feedbackJson: jsonb("feedback_json"),
   // PRD-11: optional stratified-draw blueprint. Null = uniform draw (FR-02).
   drawBlueprintJson: jsonb("draw_blueprint_json").$type<DrawBlueprint>(),
+  // PRD-15 block D (FR-31): per-section default price of a question. Null = no
+  // default — the chain falls through to the test default, then the system 1.
+  defaultPoints: integer("default_points"),
   // PRD-7 S13.5 / G47: explicit author-controlled topic order. Persisted on
   // every save as the index of the topic in the editor's sections array, so
   // drag-reorder in Structure round-trips through getTestSections() ORDER BY.
@@ -468,6 +474,42 @@ export const testSnapshots = pgTable("test_snapshots", {
 }));
 
 export type TestSnapshot = typeof testSnapshots.$inferSelect;
+
+// PRD-15 block D (FR-30): per-(test, question) scoring override — the price and
+// graded config are a property of the TEST; the question row carries content
+// only. Every value column is independently nullable: a null link falls through
+// the effective chain (override -> section default -> test default -> system;
+// shared/scoring/effective-scoring). `pinned_content_hash` is the question's
+// contentHash at authoring time — a mismatch with the current hash marks the
+// override as stale in the editor (FR-30). Rows die with their test or question
+// (FK cascade).
+export const testQuestionScoring = pgTable("test_question_scoring", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  testId: varchar("test_id", { length: 36 }).notNull().references(() => tests.id, { onDelete: "cascade" }),
+  questionId: varchar("question_id", { length: 36 }).notNull().references(() => questions.id, { onDelete: "cascade" }),
+  points: integer("points"),
+  scoringJson: jsonb("scoring_json").$type<QuestionScoring>(),
+  difficulty: integer("difficulty"),
+  pinnedContentHash: text("pinned_content_hash"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  testQuestionIdx: uniqueIndex("test_question_scoring_test_question_idx").on(table.testId, table.questionId),
+  questionIdIdx: index("test_question_scoring_question_id_idx").on(table.questionId),
+}));
+
+export const insertTestQuestionScoringSchema = createInsertSchema(testQuestionScoring)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({
+    // The override price allows an explicit 0 (an unscored question in THIS test).
+    points: z.number().int().min(0).nullish(),
+    difficulty: z.number().int().min(0).max(100).nullish(),
+    // drizzle-zod types jsonb loosely; validate the graded config explicitly.
+    scoringJson: questionScoringSchema.nullish(),
+  });
+
+export type TestQuestionScoring = typeof testQuestionScoring.$inferSelect;
+export type InsertTestQuestionScoring = z.infer<typeof insertTestQuestionScoringSchema>;
 
 export const insertTestFolderSchema = createInsertSchema(testFolders).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
