@@ -73,6 +73,7 @@
   <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
   <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
   <symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></symbol>
 </svg>
 
 <nav class="wf-nav" aria-label="Wireframe state switcher">
@@ -125,22 +126,49 @@
 
           <div class="ta-section">
             <span class="ta-label">Обратная связь по теме</span>
-            <!-- Стандартный компонент tb-feedback-preview (общий с тестами); открывает feedback-editor-modal -->
+            <!-- Стандартный компонент tb-feedback-preview (общий с тестами, TD-02):
+                 сгруппированные списки Документы/Курсы/Мероприятия + pencil → feedback-editor-modal.
+                 Имена элементов — функциональные ссылки; у мероприятия ссылка опциональна. -->
             <div class="tb-feedback-preview" aria-label="Обратная связь по теме Финансовая грамотность">
-              <div class="tb-feedback-preview__text">
+              <div class="tb-feedback-preview__head">
                 <span class="tb-feedback-preview__snippet">Поздравляем! Базовый блок по финансовой грамотности пройден.</span>
                 <button type="button" class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Редактировать обратную связь">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-pencil"/></svg>
                 </button>
               </div>
-              <div class="tb-feedback-preview__meta">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-link"/></svg>
-                1 ссылка <span class="tb-feedback-preview__sep">·</span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><use href="#i-paperclip"/></svg>
-                1 файл
+              <div class="tb-feedback-preview__group">
+                <div class="tb-feedback-preview__group-title">Документы</div>
+                <ul class="tb-feedback-preview__items">
+                  <li class="tb-feedback-preview__item">
+                    <span class="tb-feedback-preview__item-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-file-text"/></svg></span>
+                    <a href="#" download>Памятка по личному бюджету.pdf</a>
+                  </li>
+                </ul>
+              </div>
+              <div class="tb-feedback-preview__group">
+                <div class="tb-feedback-preview__group-title">Курсы</div>
+                <ul class="tb-feedback-preview__items">
+                  <li class="tb-feedback-preview__item">
+                    <span class="tb-feedback-preview__item-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-link"/></svg></span>
+                    <a href="#" target="_blank" rel="noopener noreferrer">Основы инвестирования</a>
+                  </li>
+                </ul>
+              </div>
+              <div class="tb-feedback-preview__group">
+                <div class="tb-feedback-preview__group-title">Мероприятия</div>
+                <ul class="tb-feedback-preview__items">
+                  <li class="tb-feedback-preview__item">
+                    <span class="tb-feedback-preview__item-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-link"/></svg></span>
+                    <a href="#" target="_blank" rel="noopener noreferrer">Вебинар «Личный бюджет за час»</a>
+                  </li>
+                  <li class="tb-feedback-preview__item">
+                    <span class="tb-feedback-preview__item-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><use href="#i-link"/></svg></span>
+                    <span>Мастер-класс по финансовому планированию</span>
+                  </li>
+                </ul>
               </div>
             </div>
-            <div class="ou-formfield__msg">Клик открывает общий с тестами редактор обратной связи (prd7-editor-drawer · s-feedback-edit): формат plain/rich/html, текст, ссылки, PDF.</div>
+            <div class="ou-formfield__msg">Клик по карандашу открывает общий с тестами редактор обратной связи (feedback-editor-modal): формат plain/rich/html, текст, документы (PDF), курсы (ссылки) и мероприятия (ссылка опциональна). Источник — topics.feedback_json.</div>
           </div>
         </div>
       </div>
@@ -487,7 +515,7 @@
     <tbody>
       <tr><td>Единый Drawer темы</td><td>Редактирование темы и управление доступом — в одном Drawer на вкладках «Свойства» и «Доступ». Открывается из меню темы пунктом «Редактировать тему…». Отдельного модала редактирования больше нет</td><td>FR-18..FR-20 (объединение)</td></tr>
       <tr><td>Вкладка «Свойства»</td><td>Имя, папка, описание, обратная связь — всё редактирование темы здесь, не на карточке. Проверка одноимённости — предупреждение для чужой видимой темы, 409 при дубле у владельца (визуалы как в диалоге создания)</td><td>FR-27; PUT /api/topics/:id</td></tr>
-      <tr><td>Обратная связь (tb-feedback-preview)</td><td>Стандартный превью-компонент (сниппет + мета «N ссылок · N файлов», пустой вариант «Не задано»); клик открывает ОБЩИЙ с тестами редактор (формат plain/rich/html, текст, ссылки, PDF). Рекомендуемые курсы = ссылки фидбэка (отдельной секции нет — это дубль). Рекомендуемые мероприятия — НОВЫЙ тип ссылок, требует расширения редактора (запланировано)</td><td>PRD-7 FR-36/FR-37; общий feedback-editor-modal</td></tr>
+      <tr><td>Обратная связь (tb-feedback-preview)</td><td>Стандартный превью-компонент (TD-02): сниппет текста + pencil, далее сгруппированные списки Документы (PDF) / Курсы (ссылки) / Мероприятия (ссылка опциональна); имена — функциональные ссылки; пустой вариант «Не задано — нажмите для редактирования». Карандаш открывает ОБЩИЙ с тестами редактор (формат plain/rich/html, текст, документы, курсы, мероприятия). Рекомендуемые курсы = ссылки фидбэка, мероприятия = тип events фидбэка — отдельных секций на карточке нет. Источник данных — topics.feedback_json (TD-02 r.2)</td><td>PRD-7 FR-36/FR-37; общий feedback-editor-modal; TD-02</td></tr>
       <tr><td>Видимость (тумблер)</td><td>Приватная ↔ Общая. Общую тему могут использовать все авторы</td><td>PATCH /visibility (FR-18). Новые темы приватные</td></tr>
       <tr><td>Получатель гранта — только пользователь</td><td>Группы в системе — исключительно для назначения тестов; грантов на темы группам НЕТ. Выбор пользователя + уровень + «Добавить»</td><td>grantee = user (FR-19)</td></tr>
       <tr><td>Уровень «Просмотр» / «Управление»</td><td>use — видеть и использовать; manage — дополнительно вести вопросы темы. Удаление темы — владелец/админ</td><td>Гранты use/manage (FR-19)</td></tr>
