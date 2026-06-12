@@ -58,6 +58,8 @@ export interface ResolvedQuestion {
   type: QuestionType;
   /** Options / pairs / items count — used to validate measurement source keys. */
   unitCount: number;
+  /** Content hash — pins «Оценка» overrides to the question state (FR-30). */
+  contentHash: string | null;
 }
 
 export interface QuestionImportResult {
@@ -412,7 +414,7 @@ export async function importQuestionRows(
           if (hasCol("Цена ответа")) updatePayload.scoringJson = scoringJson;
           if (!dryRun) await storage.updateQuestion(rowId, updatePayload as any);
           result.updated++;
-          recordAlias(row, { id: rowId, type, unitCount });
+          recordAlias(row, { id: rowId, type, unitCount, contentHash });
           continue;
         }
       }
@@ -450,7 +452,7 @@ export async function importQuestionRows(
 
       existingHashes.add(contentHash);
       result.created++;
-      recordAlias(row, { id: newId, type, unitCount });
+      recordAlias(row, { id: newId, type, unitCount, contentHash });
     } catch (err) {
       result.errors.push(`Строка ${rowNum}: ${(err as Error).message}`);
     }

@@ -41,6 +41,9 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     getTestSections: vi.fn(),
     getQuestions: vi.fn(),
     getQuestionMeasurements: vi.fn(),
+    // PRD-15 block D: «Оценка» sheet (per-test scoring overrides).
+    getTestQuestionScoring: vi.fn().mockResolvedValue([]),
+    replaceTestQuestionScoring: vi.fn().mockResolvedValue([]),
   },
   // FR-16: the structure pass applies sections via testSettingsService.save.
   testSettingsMock: { create: vi.fn(), save: vi.fn() },
@@ -110,6 +113,8 @@ beforeEach(() => {
   storageMock.createResultVariable.mockResolvedValue({ id: "rv-new" });
   storageMock.validateResultVariableFormula.mockResolvedValue({ valid: true });
   storageMock.upsertQuestionMeasurements.mockResolvedValue([]);
+  storageMock.getTestQuestionScoring.mockResolvedValue([]);
+  storageMock.replaceTestQuestionScoring.mockResolvedValue([]);
   testSettingsMock.save.mockResolvedValue({ id: "test-1" });
 });
 
@@ -304,6 +309,63 @@ describe("POST /:id/workbook/import — «Структура» + «Квоты» 
   });
 });
 
+// ─── «Оценка» (PRD-15 block D, FR-36) ─────────────────────────────────────────
+
+describe("POST /:id/workbook/import — «Оценка»", () => {
+  it("пишет переопределения по «Ключ строки» с пином contentHash (replace на тест)", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Оценка": [{ "Вопрос": "q1", "Балл": "2", "Цена ответа": "веса: 1 # 0 # 0", "Сложность": "80" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.scoring).toEqual({ rows: 1 });
+    expect(storageMock.replaceTestQuestionScoring).toHaveBeenCalledWith("test-1", [
+      expect.objectContaining({
+        questionId: "newq-1",
+        points: 2,
+        difficulty: 80,
+        scoringJson: { kind: "weighted", weights: [1, 0, 0] },
+        pinnedContentHash: expect.any(String),
+      }),
+    ]);
+  });
+
+  it("«точное» — явное точное переопределение", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Оценка": [{ "Вопрос": "q1", "Цена ответа": "точное" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.errors).toEqual([]);
+    expect(storageMock.replaceTestQuestionScoring).toHaveBeenCalledWith("test-1", [
+      expect.objectContaining({ scoringJson: { kind: "exact" } }),
+    ]);
+  });
+
+  it("невалидная грамматика «Цены ответа» — ошибка строки, строка не пишется", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Оценка": [{ "Вопрос": "q1", "Цена ответа": "ступени: correct == total => 2" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.errors.some((e: string) => e.includes("Оценка"))).toBe(true);
+    expect(res.body.scoring.rows).toBe(0);
+  });
+
+  it("dryRun: считает строки, но не пишет", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [questionRow],
+      "Оценка": [{ "Вопрос": "q1", "Балл": "3" }],
+    });
+    const res = await postWorkbook(buf, "?dryRun=true");
+    expect(res.body.scoring).toEqual({ rows: 1 });
+    expect(storageMock.replaceTestQuestionScoring).not.toHaveBeenCalled();
+  });
+});
+
 // ─── Export ─────────────────────────────────────────────────────────────────
 
 const exportQuestion = {
@@ -393,6 +455,21 @@ describe("GET /:id/workbook/export", () => {
     expect(mRows[0]).toMatchObject({
       "Вопрос": "q1", "Шкала": "ee", "Источник": "вариант", "Ключ источника": "1", "Значение": 3,
     });
+  });
+
+  // PRD-15 block D (FR-36): the test's scoring overrides round-trip via «Оценка».
+  it("выгружает лист «Оценка» с переопределениями по алиасу", async () => {
+    storageMock.getTestQuestionScoring.mockResolvedValue([
+      {
+        id: "ov-1", testId: "test-1", questionId: "q-1",
+        points: 7, scoringJson: null, difficulty: 90, pinnedContentHash: "h",
+      },
+    ]);
+    const res = await getExport();
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    expect(wb.worksheets.map((w) => w.name)).toContain("Оценка");
+    const rows = sheetToObjects(wb.getWorksheet("Оценка")!);
+    expect(rows[0]).toMatchObject({ "Вопрос": "q1", "Балл": 7, "Сложность": 90 });
   });
 });
 

@@ -17,7 +17,8 @@
  */
 
 import type { ScaleBand } from "@shared/scales/engine";
-import type { DrawStratum } from "@shared/schema";
+import type { DrawStratum, QuestionScoring } from "@shared/schema";
+import { serializeScoring } from "./scoring-excel";
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -479,5 +480,84 @@ export function serializeQuotaRow(topicName: string, stratum: DrawStratum): Reco
     "Тег": stratum.tag,
     "Количество": stratum.count,
     "Режим": QUOTA_MODE_TO[mode] ?? mode,
+  };
+}
+
+// ─── «Оценка» (PRD-15 block D, FR-36: per-test scoring overrides) ─────────────
+//
+// Scoring is a property of the TEST (block D): the per-question price, graded
+// config («Цена ответа», PRD-10 grammar) and difficulty move from the global
+// «Вопросы» sheet into this test-scoped sheet as override rows
+// (test_question_scoring). An EMPTY cell means "no override" — the effective
+// chain falls through (section default -> test default -> system / legacy);
+// «точное» in «Цена ответа» is an EXPLICIT exact override (it shadows a graded
+// config the question itself may carry). The sheet is authoritative for the
+// test's override set: importing it replaces all overrides of the target test.
+
+/** Canonical «Оценка» headers (one row per overridden question). */
+export const SCORING_OVERRIDE_HEADERS = ["Вопрос", "Балл", "Цена ответа", "Сложность"];
+export const SCORING_OVERRIDE_WIDTHS = [14, 8, 40, 12];
+
+/** One parsed «Оценка» row (the «Цена ответа» cell is resolved later — it
+ *  needs the question type and option count, known only to the orchestrator). */
+export interface ParsedScoringOverride {
+  /** Raw «Вопрос» cell: question `ID` or local «Ключ строки» alias. */
+  questionRef: string;
+  /** Override price; null = no points override (empty cell). */
+  points: number | null;
+  /** Raw «Цена ответа» cell text; "" = no scoring override. */
+  scoringRaw: string;
+  /** Override difficulty (0..100); null = no difficulty override. */
+  difficulty: number | null;
+}
+
+/** Parse an «Оценка» row. A row with no override values at all is an error. */
+export function parseScoringOverrideRow(
+  row: Record<string, unknown>,
+): ParseResult<ParsedScoringOverride> {
+  const questionRef = String(row["Вопрос"] ?? "").trim();
+  if (!questionRef) return { ok: false, error: "не указан вопрос" };
+
+  const pointsRaw = String(row["Балл"] ?? "").trim();
+  let points: number | null = null;
+  if (pointsRaw !== "") {
+    const n = Number(pointsRaw);
+    if (!Number.isInteger(n) || n < 0) {
+      return { ok: false, error: `«Балл» должен быть целым ≥ 0 ("${row["Балл"]}")` };
+    }
+    points = n;
+  }
+
+  const difficultyRaw = String(row["Сложность"] ?? "").trim();
+  let difficulty: number | null = null;
+  if (difficultyRaw !== "") {
+    const n = Number(difficultyRaw);
+    if (!Number.isInteger(n) || n < 0 || n > 100) {
+      return { ok: false, error: `«Сложность» должна быть целым 0..100 ("${row["Сложность"]}")` };
+    }
+    difficulty = n;
+  }
+
+  const scoringRaw = String(row["Цена ответа"] ?? "").trim();
+  if (points === null && difficulty === null && scoringRaw === "") {
+    return { ok: false, error: "строка без переопределений (укажите балл, цену ответа или сложность)" };
+  }
+
+  return { ok: true, value: { questionRef, points, scoringRaw, difficulty } };
+}
+
+/** Serialize an override DB row to an «Оценка» sheet row. An explicit exact
+ *  override exports as «точное» (an empty cell would re-import as "none"). */
+export function serializeScoringOverrideRow(
+  o: { points: number | null; scoringJson: QuestionScoring | null; difficulty: number | null },
+  questionRef: string,
+): Record<string, unknown> {
+  return {
+    "Вопрос": questionRef,
+    "Балл": o.points ?? "",
+    "Цена ответа": o.scoringJson
+      ? (o.scoringJson.kind === "exact" ? "точное" : serializeScoring(o.scoringJson))
+      : "",
+    "Сложность": o.difficulty ?? "",
   };
 }

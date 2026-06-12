@@ -16,6 +16,8 @@ import {
   serializeStructureRow,
   parseQuotaRow,
   serializeQuotaRow,
+  parseScoringOverrideRow,
+  serializeScoringOverrideRow,
 } from "../server/utils/workbook-sheets";
 
 describe("parseBands / serializeBands", () => {
@@ -257,5 +259,59 @@ describe("validateSourceKey", () => {
     expect(validateSourceKey("matching_pair", "2:0", 2)).not.toBeNull();
     expect(validateSourceKey("ranking_position", "1:0", 3)).toBeNull();
     expect(validateSourceKey("ranking_position", "x", 3)).not.toBeNull();
+  });
+});
+
+// ─── «Оценка» (PRD-15 block D, FR-36) ─────────────────────────────────────────
+
+describe("parseScoringOverrideRow", () => {
+  it("разбирает строку с баллом и сложностью; пустые ячейки → null", () => {
+    const r = parseScoringOverrideRow({ "Вопрос": "q1", "Балл": "7", "Сложность": "80" });
+    expect(r.ok && r.value).toEqual({ questionRef: "q1", points: 7, scoringRaw: "", difficulty: 80 });
+  });
+
+  it("балл 0 — валидное переопределение (без зачёта в этом тесте)", () => {
+    const r = parseScoringOverrideRow({ "Вопрос": "q1", "Балл": "0" });
+    expect(r.ok && r.value.points).toBe(0);
+  });
+
+  it("«Цена ответа» передаётся сырой строкой (резолв по типу вопроса позже)", () => {
+    const r = parseScoringOverrideRow({ "Вопрос": "q1", "Цена ответа": "веса: 1 # 0" });
+    expect(r.ok && r.value.scoringRaw).toBe("веса: 1 # 0");
+  });
+
+  it("ошибки: нет вопроса / нецелый балл / сложность вне 0..100 / пустая строка", () => {
+    expect(parseScoringOverrideRow({ "Балл": "1" }).ok).toBe(false);
+    expect(parseScoringOverrideRow({ "Вопрос": "q1", "Балл": "1.5" }).ok).toBe(false);
+    expect(parseScoringOverrideRow({ "Вопрос": "q1", "Балл": "-1" }).ok).toBe(false);
+    expect(parseScoringOverrideRow({ "Вопрос": "q1", "Сложность": "101" }).ok).toBe(false);
+    expect(parseScoringOverrideRow({ "Вопрос": "q1" }).ok).toBe(false);
+  });
+});
+
+describe("serializeScoringOverrideRow", () => {
+  it("сериализует переопределения; null → пустая ячейка", () => {
+    const row = serializeScoringOverrideRow(
+      { points: 5, scoringJson: null, difficulty: null },
+      "q1",
+    );
+    expect(row).toEqual({ "Вопрос": "q1", "Балл": 5, "Цена ответа": "", "Сложность": "" });
+  });
+
+  it("явное точное переопределение экспортируется как «точное»", () => {
+    const row = serializeScoringOverrideRow(
+      { points: null, scoringJson: { kind: "exact" }, difficulty: null },
+      "q1",
+    );
+    expect(row["Цена ответа"]).toBe("точное");
+  });
+
+  it("градуированная конфигурация — в грамматике PRD-10", () => {
+    const row = serializeScoringOverrideRow(
+      { points: null, scoringJson: { kind: "weighted", weights: [1, 0] } as any, difficulty: 90 },
+      "q2",
+    );
+    expect(row["Цена ответа"]).toBe("веса: 1 # 0");
+    expect(row["Сложность"]).toBe(90);
   });
 });

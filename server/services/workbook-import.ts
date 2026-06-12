@@ -1,19 +1,23 @@
 /**
  * @module server/services/workbook-import
  *
- * Multi-sheet workbook import for ONE test (PRD-14 FR-15). A book has up to four
- * sheets — «Вопросы» / «Шкалы» / «Показатели» / «Вклады вопросов» — recognized by name;
- * missing sheets are skipped. Questions are global; scales, result variables and
- * measurements are written into the target `testId`.
+ * Multi-sheet workbook import for ONE test (PRD-14 FR-15). Role sheets —
+ * «Вопросы» / «Шкалы» / «Показатели» / «Вклады вопросов» / «Оценка» /
+ * «Структура» / «Квоты» — are recognized by name; missing sheets are skipped.
+ * Questions are global; everything else is written into the target `testId`.
  *
  * Multi-pass order (FR-15.7): questions first (фиксируем `ID`↔`Ключ строки`),
  * then scales (upsert by `key`), then measurements (resolve question by
- * `ID`/alias and scale by `key`) and result variables (validate formula). Writes
- * are skipped under `dryRun`; counts are still computed (FR-13).
+ * `ID`/alias and scale by `key`) and result variables (validate formula), then
+ * the per-test scoring overrides («Оценка», PRD-15 block D FR-36) and finally
+ * the structure + quotas (FR-16). Writes are skipped under `dryRun`; counts are
+ * still computed (FR-13).
  *
  * Upsert keys (FR-15 idempotency): scale = (test, key); result variable =
  * (test, name); measurements are replaced per question (the sheet is
- * authoritative for a question's contributions, matching the editor's PUT).
+ * authoritative for a question's contributions, matching the editor's PUT);
+ * scoring overrides are replaced per test (the «Оценка» sheet is authoritative
+ * for the test's override set).
  */
 
 import type ExcelJS from "exceljs";
@@ -25,10 +29,13 @@ import {
   type Scale,
   type ResultVariable,
   type DrawStratum,
+  type QuestionScoring,
+  type InsertTestQuestionScoring,
 } from "@shared/schema";
 import type { ValueType } from "@shared/formula";
 import { importQuestionRows, type ResolvedQuestion } from "./questions-import";
 import { testSettingsService, type SectionPayload } from "./test-settings";
+import { parseScoringCell } from "../utils/scoring-excel";
 import {
   parseScaleRow,
   parseResultVariableRow,
@@ -36,6 +43,7 @@ import {
   validateSourceKey,
   parseStructureRow,
   parseQuotaRow,
+  parseScoringOverrideRow,
   type ParsedQuota,
 } from "../utils/workbook-sheets";
 
@@ -44,6 +52,8 @@ export interface WorkbookImportResult {
   scales: { created: number; updated: number };
   resultVariables: { created: number; updated: number };
   measurements: { rows: number; questions: number };
+  /** PRD-15 block D (FR-36): per-test overrides written from «Оценка». */
+  scoring: { rows: number };
   /** PRD-14 FR-16: sections + quotas written from «Структура»/«Квоты». */
   structure: { sections: number; quotas: number };
   errors: string[];
@@ -82,6 +92,7 @@ export async function importWorkbook(
     scales: { created: 0, updated: 0 },
     resultVariables: { created: 0, updated: 0 },
     measurements: { rows: 0, questions: 0 },
+    scoring: { rows: 0 },
     structure: { sections: 0, quotas: 0 },
     errors: [],
     dryRun,
@@ -213,23 +224,29 @@ export async function importWorkbook(
     }
   }
 
+  // Resolve a «Вопрос» cell → ResolvedQuestion: alias first, then ID. Shared by
+  // «Вклады вопросов» and «Оценка» (both reference questions the same way).
+  const questionCache = new Map<string, ResolvedQuestion | null>();
+  const resolveQuestion = async (ref: string): Promise<ResolvedQuestion | null> => {
+    if (aliasToQuestion.has(ref)) return aliasToQuestion.get(ref)!;
+    if (questionCache.has(ref)) return questionCache.get(ref)!;
+    const q = await storage.getQuestion(ref);
+    const resolved: ResolvedQuestion | null = q
+      ? {
+          id: q.id,
+          type: q.type as QuestionType,
+          unitCount: unitCountOfQuestion(q),
+          contentHash: q.contentHash ?? null,
+        }
+      : null;
+    questionCache.set(ref, resolved);
+    return resolved;
+  };
+
   // ── Pass 4: «Вклады вопросов» (resolve question + scale; per-question replace). ──
   const measSheet = findSheet(workbook, "Вклады вопросов");
   if (measSheet) {
     const rows = sheetToObjects(measSheet);
-
-    // Resolve a «Вопрос» cell → { id, type, unitCount }: alias first, then ID.
-    const questionCache = new Map<string, ResolvedQuestion | null>();
-    const resolveQuestion = async (ref: string): Promise<ResolvedQuestion | null> => {
-      if (aliasToQuestion.has(ref)) return aliasToQuestion.get(ref)!;
-      if (questionCache.has(ref)) return questionCache.get(ref)!;
-      const q = await storage.getQuestion(ref);
-      const resolved: ResolvedQuestion | null = q
-        ? { id: q.id, type: q.type as QuestionType, unitCount: unitCountOfQuestion(q) }
-        : null;
-      questionCache.set(ref, resolved);
-      return resolved;
-    };
 
     // Group resolved rows by questionId (per-question replace).
     const byQuestion = new Map<string, any[]>();
@@ -281,7 +298,67 @@ export async function importWorkbook(
     }
   }
 
-  // ── Pass 5: «Структура» + «Квоты» (FR-16: sections + PRD-11 quotas, router). ──
+  // ── Pass 5: «Оценка» (PRD-15 block D, FR-36: per-test scoring overrides). ──
+  // One row per overridden question: «Балл» / «Цена ответа» / «Сложность» are
+  // independent links of the effective chain (an empty cell = no override).
+  // The sheet is AUTHORITATIVE for the target test's override set: a successful
+  // import replaces all of the test's overrides with the sheet rows (an
+  // empty/header-only sheet clears them). Overrides are pinned to the
+  // question's current contentHash (FR-30 staleness).
+  const scoringSheet = findSheet(workbook, "Оценка");
+  if (scoringSheet) {
+    const rows = sheetToObjects(scoringSheet);
+    const overrideRows: Array<Omit<InsertTestQuestionScoring, "testId">> = [];
+    const seenQuestionIds = new Set<string>();
+
+    for (let i = 0; i < rows.length; i++) {
+      const where = `Лист «Оценка», строка ${i + 2}`;
+      const parsed = parseScoringOverrideRow(rows[i]);
+      if (!parsed.ok) {
+        result.errors.push(`${where}: ${parsed.error}`);
+        continue;
+      }
+      const o = parsed.value;
+
+      const q = await resolveQuestion(o.questionRef);
+      if (!q) {
+        result.errors.push(`${where}: вопрос "${o.questionRef}" не найден (ни ID, ни «Ключ строки»)`);
+        continue;
+      }
+      if (seenQuestionIds.has(q.id)) {
+        result.errors.push(`${where}: повторная строка для вопроса "${o.questionRef}"`);
+        continue;
+      }
+
+      // «Цена ответа» needs the question type/option count; "точное" becomes an
+      // EXPLICIT exact override (parseScoringCell returns null for it).
+      let scoringJson: QuestionScoring | null = null;
+      if (o.scoringRaw !== "") {
+        const sp = parseScoringCell(o.scoringRaw, q.type, q.unitCount);
+        if (!sp.ok) {
+          result.errors.push(`${where}: ${sp.error}`);
+          continue;
+        }
+        scoringJson = sp.value ?? { kind: "exact" };
+      }
+
+      seenQuestionIds.add(q.id);
+      overrideRows.push({
+        questionId: q.id,
+        points: o.points,
+        scoringJson,
+        difficulty: o.difficulty,
+        pinnedContentHash: q.contentHash,
+      });
+      result.scoring.rows++;
+    }
+
+    if (!dryRun) {
+      await storage.replaceTestQuestionScoring(testId, overrideRows);
+    }
+  }
+
+  // ── Pass 6: «Структура» + «Квоты» (FR-16: sections + PRD-11 quotas, router). ──
   // The whole test's structure: one section per «Структура» row (topic + draw
   // count + per-topic pass rule), with «Квоты» rows supplying each section's
   // per-tag draw blueprint. Applied via testSettingsService (it materializes the

@@ -6,9 +6,9 @@
  * the section page needs before a target test is known:
  *
  * - POST /inspect — read an uploaded .xlsx and report which role sheets it holds
- *   («Вопросы»/«Шкалы»/«Показатели»/«Вклады вопросов») WITHOUT a testId, so the
- *   client can decide whether a «Целевой тест» is required (only test-scoped
- *   sheets need one). No writes.
+ *   («Вопросы»/«Шкалы»/«Показатели»/«Вклады вопросов»/«Оценка»/«Структура»/
+ *   «Квоты») WITHOUT a testId, so the client can decide whether a «Целевой
+ *   тест» is required (only test-scoped sheets need one). No writes.
  * - POST /import-new?dryRun= — create a NEW (sectionless, draft) test from a
  *   title and import the workbook into it. `dryRun` validates and counts the plan
  *   against an empty target without creating anything.
@@ -45,6 +45,8 @@ import {
   STRUCTURE_WIDTHS,
   QUOTA_HEADERS,
   QUOTA_WIDTHS,
+  SCORING_OVERRIDE_HEADERS,
+  SCORING_OVERRIDE_WIDTHS,
 } from "../utils/workbook-sheets";
 
 const router = Router();
@@ -56,6 +58,7 @@ const SHEET_RESULT_VARS = "Показатели";
 const SHEET_MEASUREMENTS = "Вклады вопросов";
 const SHEET_STRUCTURE = "Структура";
 const SHEET_QUOTAS = "Квоты";
+const SHEET_SCORING = "Оценка";
 
 /** Synthetic target id for a new-test dry-run: every DB read returns empty. */
 const DRYRUN_NEW_TEST_ID = "__workbook_new__";
@@ -89,6 +92,7 @@ router.post(
       const measurements = findSheet(workbook, SHEET_MEASUREMENTS);
       const structure = findSheet(workbook, SHEET_STRUCTURE);
       const quotas = findSheet(workbook, SHEET_QUOTAS);
+      const scoring = findSheet(workbook, SHEET_SCORING);
 
       const hasQuestions = !!questions;
       const hasScales = !!scales;
@@ -96,9 +100,10 @@ router.post(
       const hasMeasurements = !!measurements;
       const hasStructure = !!structure;
       const hasQuotas = !!quotas;
+      const hasScoring = !!scoring;
       // Test-scoped sheets need a target test; «Вопросы» alone goes to the bank.
       const requiresTest =
-        hasScales || hasResultVariables || hasMeasurements || hasStructure || hasQuotas;
+        hasScales || hasResultVariables || hasMeasurements || hasStructure || hasQuotas || hasScoring;
 
       res.json({
         sheets: workbook.worksheets.map((w) => w.name),
@@ -108,6 +113,7 @@ router.post(
         hasMeasurements,
         hasStructure,
         hasQuotas,
+        hasScoring,
         requiresTest,
         counts: {
           questions: rowCount(questions),
@@ -116,6 +122,7 @@ router.post(
           measurements: rowCount(measurements),
           structure: rowCount(structure),
           quotas: rowCount(quotas),
+          scoring: rowCount(scoring),
         },
       });
     } catch (error) {
@@ -179,6 +186,7 @@ router.get(
       addAoaSheet(wb, SHEET_QUESTIONS, [["Ключ строки", ...QUESTION_HEADERS]], [12, ...QUESTION_WIDTHS]);
       addAoaSheet(wb, SHEET_STRUCTURE, [STRUCTURE_HEADERS], STRUCTURE_WIDTHS);
       addAoaSheet(wb, SHEET_QUOTAS, [QUOTA_HEADERS], QUOTA_WIDTHS);
+      addAoaSheet(wb, SHEET_SCORING, [SCORING_OVERRIDE_HEADERS], SCORING_OVERRIDE_WIDTHS);
       addAoaSheet(wb, SHEET_SCALES, [SCALE_HEADERS], SCALE_WIDTHS);
       addAoaSheet(wb, SHEET_RESULT_VARS, [RESULT_VAR_HEADERS], RESULT_VAR_WIDTHS);
       addAoaSheet(wb, SHEET_MEASUREMENTS, [MEASUREMENT_HEADERS], MEASUREMENT_WIDTHS);
@@ -188,15 +196,17 @@ router.get(
         [SHEET_QUESTIONS, "Банк вопросов (глобальный). Можно импортировать отдельным файлом — целевой тест не нужен"],
         [SHEET_STRUCTURE, "Разделы теста: тема, «Вопросов в выборке», порог (Тип/Порог), обязательность. Требует целевого теста"],
         [SHEET_QUOTAS, "Квоты выдачи по тегам (PRD-11): Раздел, Тег, Количество, Режим («Ровно»/«Не менее»). Σ количеств ≤ «Вопросов в выборке» раздела"],
+        [SHEET_SCORING, "Оценка вопросов в этом тесте: Балл, Цена ответа, Сложность — переопределения теста. Пустая ячейка = переопределения нет. Требует целевого теста"],
         [SHEET_SCALES, "Шкалы теста. Требуют выбора целевого теста"],
         [SHEET_RESULT_VARS, "Показатели результата (формулы). Требуют выбора целевого теста"],
         [SHEET_MEASUREMENTS, "Вклады вопросов в шкалы. Требуют выбора целевого теста"],
         ["", ""],
-        ["«Ключ строки»", "Локальный алиас вопроса в пределах файла; на него ссылается лист «Вклады вопросов»"],
+        ["«Ключ строки»", "Локальный алиас вопроса в пределах файла; на него ссылаются листы «Вклады вопросов» и «Оценка»"],
         ["«Тип порога»", "«Сумма баллов» (порог в баллах) / «Процент» / «Нет» / «Как у теста». Для сертификации — «Сумма баллов»"],
         ["«Режим» квоты", "«Ровно» = ровно N вопросов с тегом; «Не менее» = не менее N (остаток добирается случайно)"],
+        ["«Цена ответа»", "Грамматика PRD-10: пусто = нет переопределения; «точное» = точное совпадение; «веса: …» / «ступени: …» — частичный зачёт"],
         ["Поток", "Структура импортируется с режимом «со страницей-маршрутизатором» (router_by_topics)"],
-        ["Порядок импорта", "Вопросы → Шкалы → Вклады вопросов + Показатели → Структура + Квоты"],
+        ["Порядок импорта", "Вопросы → Шкалы → Вклады вопросов + Показатели → Оценка → Структура + Квоты"],
         ["Справка по колонкам", "См. лист «Справка» в шаблоне вопросов (Вопросы → Скачать шаблон)"],
       ];
       addAoaSheet(wb, "Справка", help, [22, 96]);
