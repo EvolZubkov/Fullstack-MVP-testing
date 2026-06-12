@@ -646,36 +646,37 @@ describe("DatabaseStorage — topic courses", () => {
   let storage: DatabaseStorage;
   beforeEach(() => { vi.clearAllMocks(); storage = new DatabaseStorage(); });
 
-  it("getTopicCourses — returns courses for topic", async () => {
-    setupSelect([dbTopicCourse]);
+  // TD-02 r.3: courses/events are derived from the topic's feedback_json (links →
+  // courses, events → events); getTopic* loads the topic, then maps the feedback.
+  it("getTopicCourses — derives courses from the topic feedback links", async () => {
+    setupSelect([{
+      id: "t1",
+      feedbackJson: { format: "plain", text: "", assets: [], events: [],
+        links: [{ title: "Course 1", url: "https://example.com" }] },
+    }]);
     const courses = await storage.getTopicCourses("t1");
     expect(courses).toHaveLength(1);
-    expect(courses[0].title).toBe("Course 1");
+    expect(courses[0]).toMatchObject({ topicId: "t1", title: "Course 1", url: "https://example.com" });
   });
 
-  it("getTopicCourses — returns empty array when none", async () => {
+  it("getTopicCourses — empty when the topic has no feedback links", async () => {
+    setupSelect([{ id: "t1", feedbackJson: null }]);
+    expect(await storage.getTopicCourses("t1")).toHaveLength(0);
+  });
+
+  it("getTopicCourses — empty when the topic is missing", async () => {
     setupSelect([]);
     expect(await storage.getTopicCourses("x")).toHaveLength(0);
   });
 
-  it("createTopicCourse — inserts course", async () => {
-    setupInsert(dbTopicCourse);
-    const course = await storage.createTopicCourse({
-      topicId: "t1",
-      title: "Course 1",
-      url: "https://example.com",
-    } as any);
-    expect(course.title).toBe("Course 1");
-    expect(dbMock.insert).toHaveBeenCalled();
-  });
-
-  it("deleteTopicCourse — returns true on success", async () => {
-    setupDelete(1);
-    expect(await storage.deleteTopicCourse("tc1")).toBe(true);
-  });
-
-  it("deleteTopicCourse — returns false when not found", async () => {
-    setupDelete(0);
-    expect(await storage.deleteTopicCourse("x")).toBe(false);
+  it("getTopicEvents — derives events from the topic feedback events", async () => {
+    setupSelect([{
+      id: "t1",
+      feedbackJson: { format: "plain", text: "", assets: [], links: [],
+        events: [{ title: "Вебинар" }] },
+    }]);
+    const events = await storage.getTopicEvents("t1");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ topicId: "t1", title: "Вебинар" });
   });
 });

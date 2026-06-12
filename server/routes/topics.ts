@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { logger } from "../logger";
 import { storage } from "../storage";
+import { topicCoursesFromFeedback, topicEventsFromFeedback } from "@shared/topics/recommendations";
 import { requirePermission } from "../middleware/auth";
 import { assessTopicDeletion } from "../services/draw-feasibility";
 import {
@@ -48,13 +49,13 @@ router.get("/", requirePermission("topics.read"), async (req, res) => {
     const topics = scope.all ? allTopics : allTopics.filter((t) => scope.ids.has(t.id));
     const topicsWithDetails = await Promise.all(
       topics.map(async (topic) => {
-        const courses = await storage.getTopicCourses(topic.id);
-        const events = await storage.getTopicEvents(topic.id);
         const questions = await storage.getQuestionsByTopic(topic.id);
         return {
           ...topic,
-          courses,
-          events,
+          // TD-02 r.3: recommended courses/events are derived from the topic's
+          // feedback (no extra queries; the legacy tables are no longer read).
+          courses: topicCoursesFromFeedback(topic),
+          events: topicEventsFromFeedback(topic),
           questionCount: questions.length,
         };
       })
@@ -213,33 +214,9 @@ router.put("/:id", requirePermission("topics.manage"), async (req, res) => {
   }
 });
 
-// DELETE /api/topics/events/:id - Удалить мероприятие (must be before /:id)
-router.delete("/events/:id", requirePermission("topics.manage"), async (req, res) => {
-  try {
-    const success = await storage.deleteTopicEvent(req.params.id);
-    if (!success) {
-      return res.status(404).json({ error: "Event not found" });
-    }
-    res.json({ success: true });
-  } catch (error) {
-    logger.error("Delete event error: " + (error as Error).message);
-    res.status(500).json({ error: "Failed to delete event" });
-  }
-});
-
-// DELETE /api/topics/courses/:id - Удалить курс (must be before /:id)
-router.delete("/courses/:id", requirePermission("topics.manage"), async (req, res) => {
-  try {
-    const success = await storage.deleteTopicCourse(req.params.id);
-    if (!success) {
-      return res.status(404).json({ error: "Course not found" });
-    }
-    res.json({ success: true });
-  } catch (error) {
-    logger.error("Delete course error: " + (error as Error).message);
-    res.status(500).json({ error: "Failed to delete course" });
-  }
-});
+// TD-02 r.3: the recommended-course / recommended-event CRUD endpoints
+// (DELETE/POST /courses, /events) were removed — recommendations are edited
+// inside the topic's rich feedback (PUT /api/topics/:id, feedback_json).
 
 // DELETE /api/topics/:id - Удалить тему
 // PRD-15 block C / FR-05 (E-2): owner/admin only; blocked while published tests
@@ -480,43 +457,9 @@ router.patch("/:id/owner", requirePermission("topics.owner.change"), async (req,
   }
 });
 
-// POST /api/topics/:topicId/courses - Добавить курс к теме
-router.post("/:topicId/courses", requirePermission("topics.manage"), async (req, res) => {
-  try {
-    const { title, url } = req.body;
-    if (!title || !url) {
-      return res.status(400).json({ error: "Title and URL required" });
-    }
-    const course = await storage.createTopicCourse({
-      topicId: req.params.topicId,
-      title,
-      url,
-    });
-    res.status(201).json(course);
-  } catch (error) {
-    logger.error("Create course error: " + (error as Error).message);
-    res.status(500).json({ error: "Failed to create course" });
-  }
-});
-
-// POST /api/topics/:topicId/events - Добавить мероприятие к теме
-router.post("/:topicId/events", requirePermission("topics.manage"), async (req, res) => {
-  try {
-    const { title } = req.body;
-    if (!title) {
-      return res.status(400).json({ error: "Title required" });
-    }
-    const event = await storage.createTopicEvent({
-      topicId: req.params.topicId,
-      title,
-    });
-    res.status(201).json(event);
-  } catch (error) {
-    logger.error("Create event error: " + (error as Error).message);
-    res.status(500).json({ error: "Failed to create event" });
-  }
-});
-
+// TD-02 r.3: POST /:topicId/courses and /:topicId/events were removed —
+// recommended courses/events are edited via the topic's rich feedback
+// (PUT /api/topics/:id, feedback_json.links / feedback_json.events).
 
 // GET /api/topics/:topicId/difficulty-distribution - Распределение сложности
 router.get("/:topicId/difficulty-distribution", requirePermission("topics.manage"), async (req, res) => {

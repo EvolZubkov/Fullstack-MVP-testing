@@ -13,8 +13,8 @@ import {
   type Folder, type InsertFolder,
   type TestFolder, type InsertTestFolder,
   type Topic, type InsertTopic,
-  type TopicCourse, type InsertTopicCourse,
-  type TopicEvent, type InsertTopicEvent,
+  type TopicCourse,
+  type TopicEvent,
   type Question, type InsertQuestion,
   type Test, type InsertTest,
   type TestSection, type InsertTestSection,
@@ -39,6 +39,7 @@ import {
   type QuestionMeasurement, type InsertQuestionMeasurement,
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
+import { topicCoursesFromFeedback, topicEventsFromFeedback } from "@shared/topics/recommendations";
 import { validate, type ValidationResult, type ValueType } from "@shared/formula";
 import { normalizeTopicName } from "@shared/topics/naming";
 
@@ -182,13 +183,10 @@ export interface IStorage {
   deleteTopic(id: string): Promise<boolean>;
   deleteTopicsBulk(ids: string[]): Promise<number>;
 
+  // TD-02 r.3: recommended courses/events are derived from topics.feedback_json
+  // (write paths removed). Only the read accessors remain, kept for delivery.
   getTopicCourses(topicId: string): Promise<TopicCourse[]>;
-  createTopicCourse(course: InsertTopicCourse): Promise<TopicCourse>;
-  deleteTopicCourse(id: string): Promise<boolean>;
-
   getTopicEvents(topicId: string): Promise<TopicEvent[]>;
-  createTopicEvent(event: InsertTopicEvent): Promise<TopicEvent>;
-  deleteTopicEvent(id: string): Promise<boolean>;
 
   getQuestions(): Promise<Question[]>;
   getQuestionsByTopic(topicId: string): Promise<Question[]>;
@@ -292,6 +290,7 @@ export interface IStorage {
     rows: InsertQuestionMeasurement[],
   ): Promise<QuestionMeasurement[]>;
 }
+
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
@@ -1115,34 +1114,20 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
+  // TD-02 r.3: recommended courses/events are now sourced from the topic's rich
+  // feedback (topics.feedback_json: links → courses, events → events), NOT the
+  // legacy topic_courses/topic_events tables (write paths removed in D1/D2). The
+  // accessor names/shapes are kept so delivery callers (attempts, SCORM export,
+  // snapshot capture, GET /api/topics) stay unchanged. The tables are write-dead
+  // and read-dead and will be dropped by a later migration.
   async getTopicCourses(topicId: string): Promise<TopicCourse[]> {
-    return db.select().from(topicCourses).where(eq(topicCourses.topicId, topicId));
-  }
-
-  async createTopicCourse(course: InsertTopicCourse): Promise<TopicCourse> {
-    const id = randomUUID();
-    const [newCourse] = await db.insert(topicCourses).values({ id, ...course }).returning();
-    return newCourse;
-  }
-
-  async deleteTopicCourse(id: string): Promise<boolean> {
-    const result = await db.delete(topicCourses).where(eq(topicCourses.id, id)).returning();
-    return result.length > 0;
+    const topic = await this.getTopic(topicId);
+    return topicCoursesFromFeedback(topic);
   }
 
   async getTopicEvents(topicId: string): Promise<TopicEvent[]> {
-    return db.select().from(topicEvents).where(eq(topicEvents.topicId, topicId));
-  }
-
-  async createTopicEvent(event: InsertTopicEvent): Promise<TopicEvent> {
-    const id = randomUUID();
-    const [newEvent] = await db.insert(topicEvents).values({ id, ...event }).returning();
-    return newEvent;
-  }
-
-  async deleteTopicEvent(id: string): Promise<boolean> {
-    const result = await db.delete(topicEvents).where(eq(topicEvents.id, id)).returning();
-    return result.length > 0;
+    const topic = await this.getTopic(topicId);
+    return topicEventsFromFeedback(topic);
   }
 
   async getQuestions(): Promise<Question[]> {
@@ -1234,17 +1219,10 @@ export class DatabaseStorage implements IStorage {
       name: originalTopic.name + " (копия)",
       description: originalTopic.description,
       feedback: originalTopic.feedback,
+      // TD-02 r.3: rich feedback (incl. recommended courses/events) travels with
+      // the copy; the legacy topic_courses copy is gone.
+      feedbackJson: originalTopic.feedbackJson,
     }).returning();
-
-    const originalCourses = await this.getTopicCourses(id);
-    for (const course of originalCourses) {
-      await db.insert(topicCourses).values({
-        id: randomUUID(),
-        topicId: newTopicId,
-        title: course.title,
-        url: course.url,
-      });
-    }
 
     const originalQuestions = await this.getQuestionsByTopic(id);
     const newQuestions: Question[] = [];
@@ -1951,14 +1929,25 @@ export async function seedDatabase() {
   const iptvTopicId = randomUUID();
   const wifiTopicId = randomUUID();
 
+  // TD-02 r.3: recommended courses live in the topic's rich feedback, not the
+  // legacy topic_courses table (which delivery no longer reads).
   await db.insert(topics).values([
-    { id: iptvTopicId, name: "IPTV", description: "Internet Protocol Television fundamentals and configuration" },
-    { id: wifiTopicId, name: "WiFi", description: "Wireless networking standards and troubleshooting" },
-  ]);
-
-  await db.insert(topicCourses).values([
-    { id: randomUUID(), topicId: iptvTopicId, title: "IPTV Fundamentals Course", url: "https://example.com/iptv-course" },
-    { id: randomUUID(), topicId: wifiTopicId, title: "WiFi Troubleshooting Guide", url: "https://example.com/wifi-course" },
+    {
+      id: iptvTopicId, name: "IPTV",
+      description: "Internet Protocol Television fundamentals and configuration",
+      feedbackJson: {
+        format: "plain", text: "", assets: [], events: [],
+        links: [{ title: "IPTV Fundamentals Course", url: "https://example.com/iptv-course" }],
+      },
+    },
+    {
+      id: wifiTopicId, name: "WiFi",
+      description: "Wireless networking standards and troubleshooting",
+      feedbackJson: {
+        format: "plain", text: "", assets: [], events: [],
+        links: [{ title: "WiFi Troubleshooting Guide", url: "https://example.com/wifi-course" }],
+      },
+    },
   ]);
 
   const iptvQuestions = [
