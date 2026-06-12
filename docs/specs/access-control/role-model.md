@@ -1,8 +1,9 @@
 # Ролевая модель и матрица полномочий
 
-**Версия:** 1.1
-**Статус:** Согласован (правки трека PRD-15 — 2026-06-11)
-**Дата актуализации:** 2026-06-11
+**Версия:** 1.2
+**Статус:** Согласован (правки трека PRD-15 — 2026-06-11; TD-01 гранты тем
+только пользователям — 2026-06-12)
+**Дата актуализации:** 2026-06-12
 **Связанные документы:** [BRD](../brd-access-control.md),
 [PRD-13](../prd-13/role-based-access-control.md),
 [BRD владения контентом](../brd-content-ownership.md),
@@ -295,11 +296,13 @@ canChangeOwner(u, t)  := isAdminOrSuper(u)
 администратор (`topics.owner.change`). Вопросы наследуют область видимости своей темы;
 отдельных прав на вопрос нет.
 
-Видимая область автора = свои темы + темы с грантом (личным или через группу) + общие.
+Видимая область автора = свои темы + темы с личным грантом + общие.
 
 ### 6.6 Гранты доступа к темам
 
-Грант хранится в `topic_access_grants`; получатель — пользователь или группа.
+Грант хранится в `topic_access_grants`; получатель — только пользователь
+(решение TD-01 от 2026-06-12: группы предназначены исключительно для назначения
+тестов, доступ к темам группам не выдаётся; миграция 025).
 
 | Уровень гранта | Что разрешает |
 | --- | --- |
@@ -333,13 +336,13 @@ visibleTopic(u, topic):
   isAdminOrSuper(u)                                  -> true
   topic.visibility == shared AND hasRole(u, AU)      -> true
   topic.ownerId == u.id                              -> true
-  grant(topic, u | groups(u), use|manage) is active  -> true
+  grant(topic, u, use|manage) is active              -> true
   else                                               -> false
 
 canManageTopicContent(u, topic):
   isAdminOrSuper(u)                                  -> true
   topic.ownerId == u.id                              -> true
-  grant(topic, u | groups(u), manage) is active      -> true
+  grant(topic, u, manage) is active                  -> true
   else                                               -> false
 
 canDeleteTopic(u, topic)      := isAdminOrSuper(u) OR topic.ownerId == u.id
@@ -492,8 +495,8 @@ applyRoleChange(actor, target, requestedRoles):
 - Область (scope) — дополнительная проверка применимости действия к конкретному объекту
   (тесту или теме) по владельцу, гранту или видимости.
 - Грант — запись в `test_access_grants` (доступ `edit` / `assign` к тесту) или в
-  `topic_access_grants` (доступ `use` / `manage` к теме; получатель — пользователь или
-  группа).
+  `topic_access_grants` (доступ `use` / `manage` к теме; получатель — только
+  пользователь, TD-01).
 - Видимая область тем — множество тем, которые автор видит и может использовать: свои,
   с активным грантом, общие (раздел 6.5).
 - Мягкий отзыв — состояние гранта темы «отозван, используется»: тема скрыта из банка

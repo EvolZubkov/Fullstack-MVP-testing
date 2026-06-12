@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+    Wireframe: PRD-15 блок D (T-39) — Оценка как свойство теста.
+    СОГЛАСОВАН 2026-06-12 (итерации: галочки вместо тегов «верный»; без текстовых
+    подписей источника; маркировка переопределений = полоска слева у строки +
+    заливка --ou-accent-soft каждой настроенной ячейки; сегмент без «Как у
+    вопроса», сброс кнопкой в футере модала; поля умолчаний показываются сразу).
+    В approved/.
+    Спека: docs/specs/prd-15/content-ownership.md §3.4 (FR-30, FR-31, FR-34, FR-35);
+    план: docs/specs/prd-15/implementation-plan.md (фаза 4).
+    Поверхности:
+      1) Редактор теста — НОВАЯ вкладка «Оценка»: балл за вопрос по умолчанию (тест),
+         умолчания секций и переопределения по вопросам с индикатором устаревших.
+      2) Модал «Оценка вопроса в тесте» — балл/цена ответа/сложность ДЛЯ ЭТОГО ТЕСТА;
+         конструктор градуировки переезжает сюда из карточки вопроса (prd10).
+      3) Карточка вопроса БЕЗ цены и конструктора (FR-35): остаются контент и базовая
+         сложность.
+    Состояния:
+      s-tab           — вкладка «Оценка» (умолчания + таблица вопросов по секциям)
+      s-override      — модал переопределения: ступени (конструктор из prd10)
+      s-stale         — модал переопределения на устаревшей настройке (FR-30)
+      s-question-card — карточка вопроса после переноса (без цены)
+      s-docs          — Пояснения + DS Mapping
+    Связанные эскизы: prd10-question-scoring.html (старое место конструктора),
+    prd2-prd5-scoring-tabs.html (вкладки Шкалы/Показатели того же редактора).
+    -->
+    <title>PRD-15 блок D — Оценка в тесте (T-39)</title>
+    <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+    <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+    <script defer src="/docs/wireframes/prd7-shared.js"></script>
+    <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+    <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+    <style>
+      /* WIREFRAME-каркас: только эскизные утилиты на токенах. */
+      .wf-sprite { display: none; }
+      .ou-select { padding: 0; border: 0; background: transparent; line-height: inherit; cursor: default; border-radius: 0; }
+      .ou-select:not(.is-open) .ou-select__menu { display: none; }
+      .wf-doc { padding: var(--ou-space-6) var(--ou-space-6) var(--ou-space-10); }
+      .wf-muted { color: var(--ou-fg-muted); }
+      .wf-correct { color: var(--ou-success-default); }
+      .wf-list-head {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: var(--ou-space-3); margin-bottom: var(--ou-space-3);
+      }
+      .wf-list-head .tb-section-label { margin-bottom: 0; }
+      /* Блок умолчания (тест/секция): подпись + узкое числовое поле + хинт. */
+      .wf-default-row {
+        display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap;
+        margin-bottom: var(--ou-space-4);
+      }
+      .wf-default-row .ou-field { width: var(--wf-size-72); }
+      .wf-default-row__lbl { font: var(--ou-text-body-m); font-weight: 600; }
+      .wf-default-row__hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+      /* Шапка секции внутри вкладки «Оценка». */
+      .wf-sec {
+        border: var(--wf-border-w) solid var(--ou-border-soft);
+        border-radius: var(--ou-radius-m);
+        padding: var(--ou-space-4);
+        margin-bottom: var(--ou-space-4);
+        background: var(--ou-bg-surface);
+      }
+      .wf-sec__head {
+        display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap;
+        margin-bottom: var(--ou-space-3);
+      }
+      .wf-sec__name { font: var(--ou-text-body-m); font-weight: 700; flex: 1; }
+      .wf-sec__default { display: inline-flex; align-items: center; gap: var(--ou-space-2); }
+      .wf-sec__default .ou-field { width: var(--wf-size-120); }
+      .wf-sec__default-lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+      /* Признак «настроено в тесте» (постоянный, в отличие от маркера
+         несохранённых изменений): полоска слева у строки с переопределением
+         (конвенция изменённых настроек VS Code) + настроенное значение
+         полужирным (конвенция JetBrains), подсказка при наведении. */
+      .wf-val { font-weight: 400; }
+      .wf-val--override { font-weight: 600; }
+      /* Переопределённое ЗНАЧЕНИЕ — мягкая акцентная заливка ячейки. */
+      .wf-sec .tb-table tbody td.wf-cell-override {
+        background: var(--ou-accent-soft);
+      }
+      /* Прозрачная рамка у всех строк сохраняет выравнивание текста. */
+      .wf-sec .tb-table tbody td:first-child {
+        border-left: var(--ou-space-1) solid transparent;
+      }
+      .wf-sec .tb-table tbody tr.wf-row-override > td:first-child {
+        border-left-color: var(--ou-accent-default);
+      }
+      .wf-q-actions { display: inline-flex; gap: var(--ou-space-1); }
+      /* Модал переопределения: recap вопроса (read-only контекст). */
+      .wf-q-recap {
+        padding: var(--ou-space-3) var(--ou-space-4);
+        border: var(--wf-border-w) solid var(--ou-border-soft);
+        border-radius: var(--ou-radius-m);
+        background: var(--ou-bg-page);
+        margin-bottom: var(--ou-space-4);
+        font: var(--ou-text-body-s); color: var(--ou-fg-muted);
+      }
+      .wf-q-recap b { color: var(--ou-fg-default); }
+      .wf-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ou-space-3) var(--ou-space-4); }
+      .wf-cond-row {
+        display: flex; gap: var(--ou-space-2); align-items: center; flex-wrap: wrap;
+        margin-bottom: var(--ou-space-2);
+      }
+      .wf-cond-row .ou-field--s .ou-field__box { width: var(--wf-size-72); }
+      .wf-row-actions { display: flex; gap: var(--ou-space-2); margin-top: var(--ou-space-3); }
+      .wf-weights-grid td:last-child .ou-field,
+      .wf-tier-grid td:nth-child(3) .ou-field { width: var(--ou-space-12); }
+      .wf-sep { border: none; border-top: var(--wf-border-w) solid var(--ou-border-soft); margin: var(--ou-space-5) 0; }
+      .wf-btn-ico { margin-right: var(--ou-space-2); }
+      /* Группа кнопок справа в футере «между». */
+      .ou-modal__foot--between > span { display: inline-flex; gap: var(--ou-space-2); }
+      /* Аннотационные бейджи FR-* (тогл «Аннотации»). */
+      .wf-annot-wrap--block { display: block; }
+      .wf-annot { display: none; }
+      body.wf-annots-on .wf-annot {
+        display: inline-block; margin: var(--ou-space-1) 0 0; padding: 0 var(--ou-space-2);
+        border-radius: var(--ou-radius-xs); background: var(--ou-accent-soft);
+        color: var(--ou-accent-default); font: var(--ou-text-caption); font-weight: 600;
+      }
+    </style>
+
+    <style data-wf-template-overrides>
+      /* WIREFRAME.html contract: meta-навигация и state-контейнеры. */
+      .wf-nav {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        display: flex; align-items: center; gap: var(--ou-space-2);
+        padding: var(--ou-space-2) var(--ou-space-4);
+        background: var(--ou-bg-elevated);
+        border-bottom: var(--wf-border-w) solid var(--ou-border-soft);
+        box-shadow: var(--ou-shadow-xs); color: var(--ou-fg-default); flex-wrap: wrap;
+      }
+      .wf-nav-title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin-right: var(--ou-space-2); white-space: nowrap; }
+      .wf-nav button {
+        padding: var(--ou-space-1) var(--ou-space-3);
+        border: var(--wf-border-w) solid var(--ou-border-default);
+        border-radius: var(--ou-radius-s); background: transparent;
+        color: var(--ou-fg-default); font: var(--ou-text-body-s); cursor: pointer;
+      }
+      .wf-nav button:hover { background: var(--ou-bg-hover); }
+      .wf-nav button.active { background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border-color: var(--ou-accent-default); }
+      .wf-nav-sep { width: var(--wf-border-w); height: var(--ou-space-5); background: var(--ou-border-soft); margin: 0 var(--ou-space-2); }
+      .wf-nav-link { font: var(--ou-text-body-s); color: var(--ou-accent-default); white-space: nowrap; }
+      .wf-state { display: none; padding-top: var(--wf-nav-offset, var(--wf-size-52)); }
+      .wf-state.active { display: block; }
+      .wf-state > .ou-drawer-root { top: var(--wf-nav-offset, var(--wf-size-52)); bottom: 0; height: auto; }
+      .wf-state > .ou-drawer-root > .ou-drawer {
+        height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+        max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)));
+      }
+      .wf-state > .ou-modal-root { top: var(--wf-nav-offset, var(--wf-size-52)); place-items: start center; }
+      .wf-state > .ou-modal-root .ou-modal { max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52)) - var(--ou-space-8)); }
+      /* Стабильный фрейм модала переопределения (как prd10): единая ширина xl и
+         фиксированная высота, скролл только в body — без layout shift. */
+      .wf-state > .ou-modal-root .ou-modal--xl {
+        height: min(680px, calc(100vh - var(--wf-nav-offset, var(--wf-size-52)) - var(--ou-space-8)));
+      }
+      .wf-state > .ou-modal-root .ou-modal--xl .ou-modal__body { flex: 1 1 auto; min-height: 0; }
+    </style>
+  </head>
+  <body class="ou ou--light ou--normal">
+    <svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+      </symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+      </symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="6 9 12 15 18 9" />
+      </symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+      </symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+      </symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" />
+      </symbol>
+      <symbol id="i-rotate-ccw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="20 6 9 17 4 12" />
+      </symbol>
+      <symbol id="i-grip" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <circle cx="9" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" />
+        <circle cx="15" cy="6" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="15" cy="18" r="1.4" />
+      </symbol>
+    </svg>
+
+    <nav class="wf-nav" aria-label="Wireframe state switcher">
+      <span class="wf-nav-title">Оценка в тесте:</span>
+      <button type="button" class="active" onclick="showState(this, 'tab')">вкладка «Оценка»</button>
+      <button type="button" onclick="showState(this, 'override')">переопределение</button>
+      <button type="button" onclick="showState(this, 'stale')">настройка устарела</button>
+      <button type="button" onclick="showState(this, 'question-card')">карточка вопроса</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="showState(this, 'docs')">Пояснения</button>
+      <span class="wf-nav-sep"></span>
+      <button type="button" onclick="toggleTheme(this)">Dark</button>
+      <button type="button" onclick="toggleDensity(this)">Compact</button>
+      <button type="button" onclick="toggleAnnots(this)">Аннотации</button>
+      <span class="wf-nav-sep"></span>
+      <a class="wf-nav-link" href="prd10-question-scoring.html">&larr; Цена ответа (вопрос)</a>
+      <a class="wf-nav-link" href="prd2-prd5-scoring-tabs.html">&harr; Шкалы / Показатели</a>
+    </nav>
+
+    <!-- ════════════════ s-tab: вкладка «Оценка» редактора теста ════════════════ -->
+    <div id="wf-tab" class="wf-state active">
+      <div class="ou-drawer-root" role="dialog" aria-modal="true">
+        <div class="ou-drawer__backdrop"></div>
+        <aside class="ou-drawer ou-drawer--xl ou-drawer--right">
+          <header class="ou-drawer__head">
+            <div class="ou-drawer__head-text">
+              <h1 class="ou-drawer__title">Сертификация руководителей</h1>
+            </div>
+            <span class="ou-tag ou-tag--success">Опубликован</span>
+            <button type="button" class="ou-drawer__close" aria-label="Закрыть редактор">
+              <svg width="16" height="16"><use href="#i-x" /></svg>
+            </button>
+          </header>
+          <nav class="ou-tabs ou-tabs--underline ou-tabs--m">
+            <div class="ou-tabs__list" role="tablist" aria-label="Разделы редактора">
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Состав</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Настройки</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Оформление</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Структура</button>
+              <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Оценка</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Шкалы</button>
+              <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Показатели</button>
+            </div>
+          </nav>
+          <div class="ou-drawer__body" tabindex="0">
+            <span class="wf-annot-wrap wf-annot-wrap--block">
+              <div class="wf-default-row">
+                <span class="wf-default-row__lbl">Балл за вопрос по умолчанию</span>
+                <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" placeholder="1" aria-label="Балл за вопрос по умолчанию для теста" /></div></div>
+                <span class="wf-default-row__hint">Пусто — системное умолчание: 1 балл за полностью верный ответ.</span>
+              </div>
+              <span class="wf-annot">FR-31</span>
+            </span>
+
+            <!-- Секция «Финансы» -->
+            <div class="wf-sec">
+              <div class="wf-sec__head">
+                <span class="wf-sec__name">Финансы</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--outline">выдача 5 из 12</span>
+                <span class="wf-annot-wrap">
+                  <span class="wf-sec__default">
+                    <span class="wf-sec__default-lbl">Балл по умолчанию в секции</span>
+                    <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Балл по умолчанию секции Финансы" /></div></div>
+                  </span>
+                  <span class="wf-annot">FR-31</span>
+                </span>
+              </div>
+              <table class="tb-table">
+                <thead>
+                  <tr><th>Вопрос</th><th>Балл</th><th>Цена ответа</th><th>Сложность</th><th aria-label="Состояние"></th><th aria-label="Действия"></th></tr>
+                </thead>
+                <tbody>
+                  <tr class="wf-row-override">
+                    <td>Какой документ закрепляет лимиты расходов?</td>
+                    <td class="wf-cell-override" title="Настроено в тесте"><span class="wf-val wf-val--override">5</span></td>
+                    <td class="wf-cell-override" title="Настроено в тесте"><span class="ou-tag ou-tag--neutral ou-tag--outline">Ступени</span></td>
+                    <td class="wf-cell-override" title="Настроено в тесте"><span class="wf-val wf-val--override">70</span></td>
+                    <td></td>
+                    <td>
+                      <div class="wf-q-actions">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--s" aria-label="Изменить оценку вопроса" onclick="showState(null, 'override')"><svg width="14" height="14"><use href="#i-pencil" /></svg></button>
+                        <button type="button" class="ou-iconbtn ou-iconbtn--s" aria-label="Сбросить настройку оценки"><svg width="14" height="14"><use href="#i-rotate-ccw" /></svg></button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr class="wf-row-override">
+                    <td>Сопоставьте статьи бюджета с категориями</td>
+                    <td class="wf-cell-override" title="Настроено в тесте"><span class="wf-val wf-val--override">3</span></td>
+                    <td class="wf-cell-override" title="Настроено в тесте"><span class="ou-tag ou-tag--neutral ou-tag--outline">Ступени</span></td>
+                    <td><span class="wf-val">50</span></td>
+                    <td>
+                      <span class="wf-annot-wrap">
+                        <span class="ou-tag ou-tag--warning" title="Состав вариантов вопроса изменился после настройки оценки">Настройка устарела</span>
+                        <span class="wf-annot">FR-30</span>
+                      </span>
+                    </td>
+                    <td>
+                      <div class="wf-q-actions">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--s" aria-label="Изменить оценку вопроса" onclick="showState(null, 'stale')"><svg width="14" height="14"><use href="#i-pencil" /></svg></button>
+                        <button type="button" class="ou-iconbtn ou-iconbtn--s" aria-label="Сбросить настройку оценки"><svg width="14" height="14"><use href="#i-rotate-ccw" /></svg></button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td>Что входит в операционные расходы?</td>
+                    <td><span class="wf-val">1</span></td>
+                    <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Точное</span></td>
+                    <td><span class="wf-val">40</span></td>
+                    <td></td>
+                    <td>
+                      <div class="wf-q-actions">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--s" aria-label="Настроить оценку вопроса" onclick="showState(null, 'override')"><svg width="14" height="14"><use href="#i-pencil" /></svg></button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Секция «Управление командой» -->
+            <div class="wf-sec">
+              <div class="wf-sec__head">
+                <span class="wf-sec__name">Управление командой</span>
+                <span class="ou-tag ou-tag--neutral ou-tag--outline">выдача 3 из 8</span>
+                <span class="wf-sec__default">
+                  <span class="wf-sec__default-lbl">Балл по умолчанию в секции</span>
+                  <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="" placeholder="1" aria-label="Балл по умолчанию секции Управление командой" /></div></div>
+                </span>
+              </div>
+              <table class="tb-table">
+                <thead>
+                  <tr><th>Вопрос</th><th>Балл</th><th>Цена ответа</th><th>Сложность</th><th aria-label="Состояние"></th><th aria-label="Действия"></th></tr>
+                </thead>
+                <tbody>
+                  <tr class="wf-row-override">
+                    <td>Соберите команду под новый проект…</td>
+                    <td><span class="wf-val">2</span></td>
+                    <td><span class="ou-tag ou-tag--neutral ou-tag--outline">Веса</span></td>
+                    <td class="wf-cell-override" title="Настроено в тесте"><span class="wf-annot-wrap"><span class="wf-val wf-val--override">85</span><span class="wf-annot">FR-34</span></span></td>
+                    <td></td>
+                    <td>
+                      <div class="wf-q-actions">
+                        <button type="button" class="ou-iconbtn ou-iconbtn--s" aria-label="Изменить оценку вопроса" onclick="showState(null, 'override')"><svg width="14" height="14"><use href="#i-pencil" /></svg></button>
+                        <button type="button" class="ou-iconbtn ou-iconbtn--s" aria-label="Сбросить настройку оценки"><svg width="14" height="14"><use href="#i-rotate-ccw" /></svg></button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <footer class="ou-drawer__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </aside>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-override: модал «Оценка вопроса в тесте» ════════════════ -->
+    <div id="wf-override" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title">Оценка вопроса в тесте</h1>
+              <p class="ou-modal__desc">Тест «Сертификация руководителей» · секция «Финансы»</p>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Множественный выбор</span>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null, 'tab')"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="wf-q-recap">
+              <b>Какой документ закрепляет лимиты расходов?</b><br />
+              Эталон: А, Б (всего верных T = 2) · базовая сложность вопроса: 50.
+              Текст и варианты правятся в банке вопросов; здесь — только оценка для этого теста.
+            </div>
+
+            <div class="wf-grid-2">
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="ov-points">Балл за вопрос в этом тесте</label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="ov-points" type="text" value="5" /></div></div>
+                <div class="ou-formfield__msg">Пусто — балл по цепочке умолчаний (секция &rarr; тест &rarr; 1). 0 — вопрос без баллов в этом тесте.</div>
+              </div>
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="ov-diff">Сложность в этом тесте</label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="ov-diff" type="text" value="" placeholder="50" /></div></div>
+                <div class="ou-formfield__msg">Пусто — базовая сложность вопроса.</div>
+              </div>
+            </div>
+
+            <hr class="wf-sep" />
+
+            <div class="wf-list-head">
+              <div class="tb-section-label">Цена ответа в этом тесте</div>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 2</span>
+            </div>
+            <div class="ou-seg" role="group" aria-label="Цена ответа в этом тесте">
+              <button type="button" class="ou-seg__item" aria-pressed="false">Точное совпадение</button>
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Ступенчато</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Веса опций</button>
+            </div>
+            <div class="wf-list-head">
+              <div class="tb-section-label">Ступени балла · проверяются сверху вниз, первое совпадение</div>
+            </div>
+            <table class="tb-table wf-tier-grid">
+              <thead><tr><th aria-label="Порядок"></th><th>Если (все условия)</th><th>Балл</th><th aria-label="Действия"></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Перетащить строку"><svg width="14" height="14"><use href="#i-grip" /></svg></button></td>
+                  <td>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s" data-ou-options="Верных (c)|Лишних (x)|Всего верных (T)"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Верных (c)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">=</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="T" aria-label="Значение условия 1" /></div></div>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить условие"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+                    </div>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> И условие</button>
+                  </td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Балл строки 1" /></div></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Перетащить строку"><svg width="14" height="14"><use href="#i-grip" /></svg></button></td>
+                  <td>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s" data-ou-options="Верных (c)|Лишних (x)|Всего верных (T)"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Верных (c)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">&ge;</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Значение условия 1" /></div></div>
+                      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить условие"><svg width="14" height="14"><use href="#i-x" /></svg></button>
+                    </div>
+                    <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> И условие</button>
+                  </td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="1" aria-label="Балл строки 2" /></div></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><svg width="14" height="14" class="wf-muted"><use href="#i-grip" /></svg></td>
+                  <td><em class="wf-muted">Иначе — во всех остальных случаях</em></td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="Балл по умолчанию" /></div></div></td>
+                  <td><span class="wf-muted">—</span></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="wf-row-actions">
+              <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus" /></svg> Добавить строку</button>
+            </div>
+          </div>
+          <footer class="ou-modal__foot ou-modal__foot--between">
+            <button type="button" class="ou-btn ou-btn--ghost"><svg class="wf-btn-ico" width="14" height="14"><use href="#i-rotate-ccw" /></svg>Сбросить настройку</button>
+            <span>
+              <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'tab')">Отмена</button>
+              <button type="button" class="ou-btn ou-btn--ghost">Предпросмотр балла</button>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Применить</button>
+            </span>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-stale: модал на устаревшей настройке (FR-30) ════════════════ -->
+    <div id="wf-stale" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title">Оценка вопроса в тесте</h1>
+              <p class="ou-modal__desc">Тест «Сертификация руководителей» · секция «Финансы»</p>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Сопоставление</span>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null, 'tab')"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <span class="wf-annot-wrap wf-annot-wrap--block">
+              <div class="ou-banner ou-banner--warning ou-banner--subtle" role="alert">
+                <span class="ou-banner__ico" aria-hidden="true"><svg width="16" height="16"><use href="#i-alert" /></svg></span>
+                <div class="ou-banner__body">
+                  <span class="ou-banner__title">Настройка устарела</span>
+                  <span class="ou-banner__desc">Состав вариантов вопроса изменился после настройки оценки (было 4 пары, стало 5). Проверьте ступени и подтвердите актуальность.</span>
+                </div>
+                <div class="ou-banner__actions">
+                  <button type="button" class="ou-btn ou-btn--secondary ou-btn--s">Подтвердить актуальность</button>
+                </div>
+              </div>
+              <span class="wf-annot">FR-30</span>
+            </span>
+
+            <div class="wf-q-recap">
+              <b>Сопоставьте статьи бюджета с категориями</b><br />
+              Эталон: 5 пар (всего пар P = 5) · базовая сложность вопроса: 50.
+            </div>
+
+            <div class="wf-grid-2">
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="st-points">Балл за вопрос в этом тесте</label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="st-points" type="text" value="3" /></div></div>
+                <div class="ou-formfield__msg">Пусто — балл по цепочке умолчаний (секция &rarr; тест &rarr; 1).</div>
+              </div>
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="st-diff">Сложность в этом тесте</label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="st-diff" type="text" value="" placeholder="50" /></div></div>
+              </div>
+            </div>
+
+            <hr class="wf-sep" />
+
+            <div class="wf-list-head">
+              <div class="tb-section-label">Цена ответа в этом тесте</div>
+              <span class="ou-tag ou-tag--neutral ou-tag--outline">Макс. балл sMax = 3</span>
+            </div>
+            <div class="ou-seg" role="group" aria-label="Цена ответа в этом тесте">
+              <button type="button" class="ou-seg__item" aria-pressed="false">Точное совпадение</button>
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Ступенчато</button>
+            </div>
+            <table class="tb-table wf-tier-grid">
+              <thead><tr><th aria-label="Порядок"></th><th>Если (все условия)</th><th>Балл</th><th aria-label="Действия"></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Перетащить строку"><svg width="14" height="14"><use href="#i-grip" /></svg></button></td>
+                  <td>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s" data-ou-options="Верных пар (c)|Всего пар (P)"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Верных пар (c)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">=</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="P" aria-label="Значение условия" /></div></div>
+                    </div>
+                  </td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="3" aria-label="Балл строки 1" /></div></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Перетащить строку"><svg width="14" height="14"><use href="#i-grip" /></svg></button></td>
+                  <td>
+                    <div class="wf-cond-row">
+                      <div class="ou-select ou-field--s" data-ou-options="Верных пар (c)|Всего пар (P)"><button type="button" class="ou-select__trigger"><span class="ou-select__value">Верных пар (c)</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-select ou-field--s" data-ou-options="=|&ge;|&le;|&lt;|&gt;"><button type="button" class="ou-select__trigger"><span class="ou-select__value">&ge;</span><svg class="ou-select__chev" width="14" height="14"><use href="#i-chevron-down" /></svg></button></div>
+                      <div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="3" aria-label="Значение условия" /></div></div>
+                    </div>
+                  </td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="2" aria-label="Балл строки 2" /></div></div></td>
+                  <td><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить строку"><svg width="14" height="14"><use href="#i-trash" /></svg></button></td>
+                </tr>
+                <tr>
+                  <td><svg width="14" height="14" class="wf-muted"><use href="#i-grip" /></svg></td>
+                  <td><em class="wf-muted">Иначе — во всех остальных случаях</em></td>
+                  <td><div class="ou-field ou-field--s"><div class="ou-field__box"><input class="ou-field__input" type="text" value="0" aria-label="Балл по умолчанию" /></div></div></td>
+                  <td><span class="wf-muted">—</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <footer class="ou-modal__foot ou-modal__foot--between">
+            <button type="button" class="ou-btn ou-btn--ghost"><svg class="wf-btn-ico" width="14" height="14"><use href="#i-rotate-ccw" /></svg>Сбросить настройку</button>
+            <span>
+              <button type="button" class="ou-btn ou-btn--ghost" onclick="showState(null, 'tab')">Отмена</button>
+              <button type="button" class="ou-btn ou-btn--ghost">Предпросмотр балла</button>
+              <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Применить</button>
+            </span>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ s-question-card: карточка вопроса после переноса ════════════════ -->
+    <div id="wf-question-card" class="wf-state">
+      <div class="ou-modal-root" role="dialog" aria-modal="true">
+        <div class="ou-modal__backdrop"></div>
+        <div class="ou-modal ou-modal--xl">
+          <header class="ou-modal__head">
+            <div class="ou-modal__head-text">
+              <h1 class="ou-modal__title">Редактирование вопроса</h1>
+              <p class="ou-modal__desc">Тема «Финансы» · банк вопросов</p>
+            </div>
+            <span class="ou-tag ou-tag--neutral ou-tag--outline">Множественный выбор</span>
+            <button type="button" class="ou-modal__close" aria-label="Закрыть"><svg width="16" height="16"><use href="#i-x" /></svg></button>
+          </header>
+          <div class="ou-modal__body">
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl" for="qc-prompt">Текст вопроса</label>
+              <div class="ou-field ou-field--m ou-field--full"><div class="ou-field__box"><input class="ou-field__input" id="qc-prompt" type="text" value="Какой документ закрепляет лимиты расходов?" /></div></div>
+            </div>
+            <div class="wf-grid-2">
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="qc-diff">Сложность (базовая)</label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="qc-diff" type="text" value="50" /></div></div>
+                <div class="ou-formfield__msg">0–100. Тест может переопределить сложность для своей адаптивной выдачи.</div>
+              </div>
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="qc-tags">Теги</label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="qc-tags" type="text" value="бюджет; лимиты" /></div></div>
+              </div>
+            </div>
+
+            <span class="wf-annot-wrap wf-annot-wrap--block">
+              <div class="ou-banner ou-banner--subtle" role="note">
+                <span class="ou-banner__ico" aria-hidden="true"><svg width="16" height="16"><use href="#i-info" /></svg></span>
+                <div class="ou-banner__body">
+                  <span class="ou-banner__desc">Балл и цена ответа настраиваются в каждом тесте отдельно — вкладка «Оценка» редактора теста. В банке вопрос хранит только содержание.</span>
+                </div>
+              </div>
+              <span class="wf-annot">FR-35</span>
+            </span>
+
+            <hr class="wf-sep" />
+            <div class="tb-section-label">Варианты ответа</div>
+            <table class="tb-table">
+              <thead><tr><th>Вариант</th><th>Правильный</th></tr></thead>
+              <tbody>
+                <tr><td>А. Бюджетный регламент</td><td><svg class="wf-correct" width="16" height="16" aria-label="правильный вариант"><use href="#i-check" /></svg></td></tr>
+                <tr><td>Б. Финансовая политика</td><td><svg class="wf-correct" width="16" height="16" aria-label="правильный вариант"><use href="#i-check" /></svg></td></tr>
+                <tr><td>В. Устав компании</td><td><span class="wf-muted">—</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <footer class="ou-modal__foot">
+            <button type="button" class="ou-btn ou-btn--ghost">Отмена</button>
+            <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════════════ Сопроводительные таблицы (Пояснения + DS Mapping) ════════════════ -->
+    <div id="wf-docs" class="wf-state">
+      <div class="wf-doc">
+        <div class="wf-notes">
+          <h3 class="wf-notes-title">Пояснения — покрытие PRD-15 FR-30 / FR-31 / FR-34 / FR-35</h3>
+          <table>
+            <thead><tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr></thead>
+            <tbody>
+              <tr><td>Вкладка «Оценка»</td><td>новая вкладка редактора теста (между «Структура» и «Шкалы»)</td><td>Оценка — ось правильности (балл, цена ответа) + сложность для адаптива. Шкалы/Показатели — оси измерения и результата, не смешиваются</td></tr>
+              <tr><td>Балл за вопрос по умолчанию (тест)</td><td><code>tests.default_question_points</code>, пусто = системное умолчание 1</td><td>FR-31. Действует на вопросы без переопределения и без балла секции</td></tr>
+              <tr><td>Балл по умолчанию в секции</td><td><code>test_sections.default_points</code>, пусто = как у теста</td><td>FR-31. Цепочка: переопределение &rarr; секция &rarr; тест &rarr; 1</td></tr>
+              <tr><td>Таблица вопросов секции</td><td>полный пул темы (не только выдача): Балл / Цена ответа / Сложность — действующие значения</td><td>Признак «настроено в тесте» — постоянный и отличается от маркера несохранённых изменений: полоска слева у строки с переопределением (быстрый скан, конвенция VS Code) + мягкая акцентная заливка КАЖДОЙ переопределённой ячейки с подсказкой при наведении (видно, какой именно параметр настроен); унаследованное — без пометок. Дублирующий признак — кнопка «Сбросить» только у строк с настройкой</td></tr>
+              <tr><td>«Настройка устарела»</td><td><code>pinned_content_hash &ne; contentHash</code> вопроса</td><td>FR-30. Состав вариантов изменился после настройки; оценка продолжает действовать. Действия: «Подтвердить актуальность» (перепривязка к новому хэшу) / «Сбросить настройку» (удалить переопределение)</td></tr>
+              <tr><td>Сбросить настройку оценки</td><td>иконка-кнопка в строке; DELETE переопределения</td><td>Вопрос возвращается к цепочке умолчаний. Кнопка есть только у строк с переопределением</td></tr>
+              <tr><td>Модал «Оценка вопроса в тесте»</td><td>балл + цена ответа + сложность одного вопроса в этом тесте</td><td>FR-35. Конструктор ступеней/весов перенесён из карточки вопроса (prd10) без изменений механики. Поля и сегмент инициализируются действующими значениями (из вопроса или цепочки умолчаний); признак настройки в форме — заполненное поле (пустое с плейсхолдером = наследуется), любое изменение = переопределение</td></tr>
+              <tr><td>«Сбросить настройку» в модале</td><td>удаляет переопределение целиком (балл, цена, сложность)</td><td>Вопрос возвращается к действующим значениям без настройки в тесте; то же действие, что иконка «Сбросить» в строке таблицы</td></tr>
+              <tr><td>Сложность в этом тесте</td><td><code>test_question_scoring.difficulty</code>, пусто = базовая</td><td>FR-34. Адаптивная выдача и проверки выполнимости используют действующую сложность</td></tr>
+              <tr><td>Карточка вопроса</td><td>поля «Балл» и «Цена ответа» удалены; «Сложность (базовая)» и «Теги» остаются</td><td>FR-35. Инфо-баннер ведёт во вкладку «Оценка». Конструктор градуировки из карточки удаляется</td></tr>
+              <tr><td>Переходный период (до T-40)</td><td>колонки <code>questions.points</code>/<code>scoring_json</code> ещё живы</td><td>Значения из банка продолжают действовать, переопределения работают сразу. Умолчания секции/теста начнут действовать после удаления колонок (T-40, отдельный релиз) — до этого значение из банка имеет приоритет. РЕШЕНО (согласование 2026-06-12): поля умолчаний показываются в UI сразу</td></tr>
+              <tr><td>maxPoints секций</td><td>Σ действующих баллов вопросов</td><td>Абсолютные пороги в «Настройках» капятся по действующим значениям (уже на сервере)</td></tr>
+              <tr><td>Изменения = новая версия</td><td>сохранение вкладки бампает версию теста</td><td>Для опубликованного теста появится «Есть изменения» (prd15-publication-state); ученики увидят новую оценку после переопубликации</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="wf-mapping">
+          <h2 class="wf-mapping-title">DS Mapping</h2>
+          <p class="wf-mapping-sub">Строка с «custom» в колонке DS-компонент — блокер.</p>
+          <table>
+            <thead><tr><th>Элемент wireframe</th><th>DS-компонент</th><th>Используемые токены</th><th>Примечания</th></tr></thead>
+            <tbody>
+              <tr><td>Редактор теста</td><td><code>Drawer</code> (<code>ou-drawer--xl</code>) + <code>Tabs</code> (<code>ou-tabs--underline</code>)</td><td><code>--ou-*</code></td><td>Существующий каркас; добавляется вкладка «Оценка»</td></tr>
+              <tr><td>Умолчания (тест/секция)</td><td><code>NumberInput</code> (<code>ou-field--s</code>)</td><td><code>--ou-border-default</code></td><td>Пустое значение = наследование; placeholder показывает действующий источник</td></tr>
+              <tr><td>Таблица вопросов</td><td><code>Table</code> (<code>tb-table</code>)</td><td><code>--ou-border-soft</code>, <code>--ou-accent-soft</code></td><td>Строка с переопределением — полоска слева (<code>--ou-accent-default</code>, рамка первой ячейки); переопределённая ячейка — заливка <code>--ou-accent-soft</code> + tooltip; унаследованная — без пометок</td></tr>
+              <tr><td>Вид цены ответа</td><td><code>Tag</code> (<code>ou-tag--neutral ou-tag--outline</code>)</td><td><code>--ou-*</code></td><td>«Точное» / «Веса» / «Ступени»; признак настройки несёт заливка ячейки</td></tr>
+              <tr><td>«Настройка устарела»</td><td><code>Tag</code> (<code>ou-tag--warning</code>); в модале — <code>Banner</code> (<code>ou-banner--warning</code>)</td><td><code>--ou-warning-*</code></td><td>FR-30; действия в <code>ou-banner__actions</code></td></tr>
+              <tr><td>Изменить / сбросить</td><td><code>IconButton</code> (<code>ou-iconbtn--s</code>)</td><td><code>--ou-*</code></td><td>Lucide: pencil, rotate-ccw; aria-label обязателен</td></tr>
+              <tr><td>Модал переопределения</td><td><code>Modal</code> (<code>ou-modal--xl</code>, стабильный фрейм)</td><td><code>--ou-*</code></td><td>Та же геометрия, что у prd10 (без layout shift)</td></tr>
+              <tr><td>Способ цены ответа</td><td><code>SegmentedControl</code> (<code>ou-seg</code>)</td><td><code>--ou-radius-s</code></td><td>Точное / Ступенчато / Веса (как prd10); взаимоисключающий выбор — не Tabs</td></tr>
+              <tr><td>«Сбросить настройку»</td><td><code>Button</code> (<code>ou-btn--ghost</code>) слева в <code>ou-modal__foot--between</code></td><td><code>--ou-*</code></td><td>Lucide rotate-ccw; то же действие, что иконка в строке таблицы</td></tr>
+              <tr><td>Конструктор ступеней/весов</td><td><code>Table</code> + <code>Select</code> + <code>NumberInput</code> (как prd10)</td><td><code>--ou-*</code></td><td>Перенос разметки prd10 as-is (scoring-builder.tsx переезжает в редактор теста)</td></tr>
+              <tr><td>Баннер в карточке вопроса</td><td><code>Banner</code> (<code>ou-banner--subtle</code>, info)</td><td><code>--ou-fg-muted</code></td><td>Ссылка-навигация во вкладку «Оценка» теста</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Wireframe state switcher (канон approved/prd*). prd7-shared.js затем
+      // дооборачивает window.showState для пере-инициализации ou-select.
+      window.showState = function showState(btn, id) {
+        var target = document.getElementById('wf-' + id) || document.getElementById(id);
+        document.querySelectorAll('.wf-state').forEach(function (el) {
+          el.classList.toggle('active', el === target);
+        });
+        document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) {
+          button.classList.toggle('active', button === btn);
+        });
+      };
+      window.toggleTheme = function toggleTheme(btn) {
+        var dark = document.body.classList.toggle('ou--dark');
+        document.body.classList.toggle('ou--light', !dark);
+        btn.textContent = dark ? 'Light' : 'Dark';
+        btn.classList.toggle('active', dark);
+      };
+      window.toggleDensity = function toggleDensity(btn) {
+        var compact = document.body.classList.toggle('ou--compact');
+        document.body.classList.toggle('ou--normal', !compact);
+        btn.textContent = compact ? 'Normal' : 'Compact';
+        btn.classList.toggle('active', compact);
+      };
+      window.toggleAnnots = function toggleAnnots(btn) {
+        var on = document.body.classList.toggle('wf-annots-on');
+        if (btn) btn.classList.toggle('active', on);
+      };
+    </script>
+  </body>
+</html>
