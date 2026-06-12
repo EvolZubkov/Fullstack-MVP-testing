@@ -7,7 +7,7 @@ import {
   users, topics, questions, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
   groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
-  contentPages, resultVariables, scales, questionMeasurements,
+  contentPages, resultVariables, scales, questionMeasurements, testQuestionScoring,
   userRoles, testAccessGrants, testSnapshots, topicAccessGrants,
   type User, type InsertUser,
   type Folder, type InsertFolder,
@@ -37,6 +37,7 @@ import {
   type ResultVariable, type InsertResultVariable,
   type Scale, type InsertScale,
   type QuestionMeasurement, type InsertQuestionMeasurement,
+  type TestQuestionScoring, type InsertTestQuestionScoring,
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
 import { topicCoursesFromFeedback, topicEventsFromFeedback } from "@shared/topics/recommendations";
@@ -289,6 +290,18 @@ export interface IStorage {
     questionId: string,
     rows: InsertQuestionMeasurement[],
   ): Promise<QuestionMeasurement[]>;
+  // PRD-15 block D: per-(test, question) scoring overrides (FR-30).
+  getTestQuestionScoring(testId: string): Promise<TestQuestionScoring[]>;
+  upsertTestQuestionScoring(
+    testId: string,
+    questionId: string,
+    values: Omit<InsertTestQuestionScoring, "testId" | "questionId">,
+  ): Promise<TestQuestionScoring>;
+  deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean>;
+  replaceTestQuestionScoring(
+    testId: string,
+    rows: Omit<InsertTestQuestionScoring, "testId">[],
+  ): Promise<TestQuestionScoring[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1321,6 +1334,7 @@ export class DatabaseStorage implements IStorage {
           timeLimitMinutes: section.timeLimitMinutes ?? null,
           feedbackJson: section.feedbackJson ?? null,
           drawBlueprintJson: section.drawBlueprintJson ?? null,
+          defaultPoints: section.defaultPoints ?? null,
         });
       }
 
@@ -1377,6 +1391,7 @@ export class DatabaseStorage implements IStorage {
             timeLimitMinutes: section.timeLimitMinutes ?? null,
             feedbackJson: section.feedbackJson ?? null,
             drawBlueprintJson: section.drawBlueprintJson ?? null,
+            defaultPoints: section.defaultPoints ?? null,
           });
         }
       }
@@ -1851,6 +1866,68 @@ export class DatabaseStorage implements IStorage {
       if (rows.length === 0) return [];
       return tx.insert(questionMeasurements)
         .values(rows.map((r) => ({ ...r, testId, questionId })))
+        .returning();
+    });
+  }
+
+  // ─── PRD-15 block D: per-(test, question) scoring overrides (FR-30) ──────────
+
+  async getTestQuestionScoring(testId: string): Promise<TestQuestionScoring[]> {
+    return db.select().from(testQuestionScoring)
+      .where(eq(testQuestionScoring.testId, testId));
+  }
+
+  /**
+   * Insert or update the single override row of one question in one test.
+   * All value columns are replaced as a unit — a null/undefined value clears
+   * that link of the chain.
+   */
+  async upsertTestQuestionScoring(
+    testId: string,
+    questionId: string,
+    values: Omit<InsertTestQuestionScoring, "testId" | "questionId">,
+  ): Promise<TestQuestionScoring> {
+    const patch = {
+      points: values.points ?? null,
+      scoringJson: values.scoringJson ?? null,
+      difficulty: values.difficulty ?? null,
+      pinnedContentHash: values.pinnedContentHash ?? null,
+    };
+    const [row] = await db.insert(testQuestionScoring)
+      .values({ testId, questionId, ...patch })
+      .onConflictDoUpdate({
+        target: [testQuestionScoring.testId, testQuestionScoring.questionId],
+        set: { ...patch, updatedAt: new Date() },
+      })
+      .returning();
+    return row;
+  }
+
+  async deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean> {
+    const result = await db.delete(testQuestionScoring)
+      .where(and(
+        eq(testQuestionScoring.testId, testId),
+        eq(testQuestionScoring.questionId, questionId),
+      ))
+      .returning();
+    return result.length > 0;
+  }
+
+  /**
+   * Replace ALL scoring overrides of a test with `rows` (delete-then-insert in
+   * a transaction) — the workbook «Оценка» sheet is authoritative for the
+   * test's override set (PRD-14/PRD-15 FR-36 round-trip). An empty `rows`
+   * clears every override.
+   */
+  async replaceTestQuestionScoring(
+    testId: string,
+    rows: Omit<InsertTestQuestionScoring, "testId">[],
+  ): Promise<TestQuestionScoring[]> {
+    return db.transaction(async (tx) => {
+      await tx.delete(testQuestionScoring).where(eq(testQuestionScoring.testId, testId));
+      if (rows.length === 0) return [];
+      return tx.insert(testQuestionScoring)
+        .values(rows.map((r) => ({ ...r, testId })))
         .returning();
     });
   }

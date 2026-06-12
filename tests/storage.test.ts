@@ -653,3 +653,87 @@ describe("DatabaseStorage — password reset tokens", () => {
     expect(dbMock.update).toHaveBeenCalled();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRD-15 block D — test_question_scoring DAL (FR-30)
+// ─────────────────────────────────────────────────────────────────────────────
+describe("DatabaseStorage — test question scoring overrides", () => {
+  let storage: DatabaseStorage;
+
+  const dbOverride = {
+    id: "ov1",
+    testId: "test1",
+    questionId: "q1",
+    points: 5,
+    scoringJson: null,
+    difficulty: null,
+    pinnedContentHash: "h1",
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storage = new DatabaseStorage();
+  });
+
+  it("getTestQuestionScoring — selects the test's override rows", async () => {
+    setupSelectReturning([dbOverride]);
+    const rows = await storage.getTestQuestionScoring("test1");
+    expect(rows).toEqual([dbOverride]);
+    expect(dbMock.select).toHaveBeenCalled();
+  });
+
+  it("upsertTestQuestionScoring — inserts with conflict-update on (test, question)", async () => {
+    const chain = makeChain([dbOverride]);
+    chain.onConflictDoUpdate = vi.fn().mockReturnValue(chain);
+    dbMock.insert.mockReturnValue(chain);
+
+    const row = await storage.upsertTestQuestionScoring("test1", "q1", { points: 5, pinnedContentHash: "h1" });
+    expect(row).toEqual(dbOverride);
+    // Unset value columns are explicitly cleared (the row is replaced as a unit).
+    expect(chain.values).toHaveBeenCalledWith(
+      expect.objectContaining({ testId: "test1", questionId: "q1", points: 5, scoringJson: null, difficulty: null }),
+    );
+    expect(chain.onConflictDoUpdate).toHaveBeenCalled();
+  });
+
+  it("deleteTestQuestionScoring — true when a row was removed, false otherwise", async () => {
+    setupDeleteReturning(1);
+    expect(await storage.deleteTestQuestionScoring("test1", "q1")).toBe(true);
+    setupDeleteReturning(0);
+    expect(await storage.deleteTestQuestionScoring("test1", "q1")).toBe(false);
+  });
+
+  it("replaceTestQuestionScoring — delete-then-insert in a transaction", async () => {
+    const deleteChain: any = {};
+    deleteChain.where = vi.fn().mockResolvedValue(undefined);
+    const insertChain = makeChain([dbOverride]);
+    const tx = {
+      delete: vi.fn().mockReturnValue(deleteChain),
+      insert: vi.fn().mockReturnValue(insertChain),
+    };
+    (dbMock as any).transaction = vi.fn(async (cb: any) => cb(tx));
+
+    const rows = await storage.replaceTestQuestionScoring("test1", [
+      { questionId: "q1", points: 5, pinnedContentHash: "h1" },
+    ]);
+    expect(rows).toEqual([dbOverride]);
+    expect(tx.delete).toHaveBeenCalled();
+    expect(insertChain.values).toHaveBeenCalledWith([
+      expect.objectContaining({ testId: "test1", questionId: "q1", points: 5 }),
+    ]);
+  });
+
+  it("replaceTestQuestionScoring — an empty set clears all overrides", async () => {
+    const deleteChain: any = {};
+    deleteChain.where = vi.fn().mockResolvedValue(undefined);
+    const tx = { delete: vi.fn().mockReturnValue(deleteChain), insert: vi.fn() };
+    (dbMock as any).transaction = vi.fn(async (cb: any) => cb(tx));
+
+    const rows = await storage.replaceTestQuestionScoring("test1", []);
+    expect(rows).toEqual([]);
+    expect(tx.delete).toHaveBeenCalled();
+    expect(tx.insert).not.toHaveBeenCalled();
+  });
+});
