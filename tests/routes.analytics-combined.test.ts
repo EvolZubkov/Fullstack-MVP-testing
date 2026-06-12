@@ -22,6 +22,10 @@ const { storageMock } = vi.hoisted(() => ({
     getAttempt: vi.fn(),
     getScormAnswersByAttempt: vi.fn(),
     getQuestionsByIds: vi.fn(),
+    // PRD-15 block D: effective-scoring chain sources (no overrides by default).
+    getTest: vi.fn(),
+    getTestSections: vi.fn(),
+    getTestQuestionScoring: vi.fn(),
   },
 }));
 

@@ -3,6 +3,7 @@ import { logger } from "../../logger";
 import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
 import { checkAnswer } from "../../utils/check-answer";
+import { loadTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 import { analyticsScope } from "./helpers";
 
 const router = Router();
@@ -444,10 +445,20 @@ router.get("/combined-full", requirePermission("analytics.read"), async (req: Re
     const allQuestions = await storage.getQuestionsByIds(Array.from(questionIdsAll));
     const questionMap = new Map(allQuestions.map(q => [q.id, q]));
 
+    // PRD-15 block D (FR-32): correctness uses the test-effective graded config
+    // — one resolution context per involved test.
+    const scoringByTest = new Map<string, TestScoringContext>();
+    for (const testId of new Set(
+      webAttemptsFullAll.filter((a): a is NonNullable<typeof a> => !!a).map((a) => a.testId),
+    )) {
+      scoringByTest.set(testId, await loadTestScoringContext(testId, storage));
+    }
+
     // Стандартные web попытки — считаем по ответам
     for (let i = 0; i < webAttempts.length; i++) {
       if (webAttempts[i].isAdaptive) continue;
       const answers = webAnswersMaps[i];
+      const scoring = scoringByTest.get(webAttemptsFullAll[i]?.testId ?? "");
       for (const [qId, userAnswer] of Object.entries(answers)) {
         const q = questionMap.get(qId);
         if (!q) continue;
@@ -460,7 +471,7 @@ router.get("/combined-full", requirePermission("analytics.read"), async (req: Re
           failureCount: 0,
         };
         existing.totalAnswers++;
-        const isCorrect = checkAnswer(q, userAnswer) === 1;
+        const isCorrect = checkAnswer(q, userAnswer, scoring?.resolve(q).scoring) === 1;
         if (isCorrect) existing.correctAnswers++;
         else existing.failureCount++;
         topicStatsMap.set(q.topicId, existing);

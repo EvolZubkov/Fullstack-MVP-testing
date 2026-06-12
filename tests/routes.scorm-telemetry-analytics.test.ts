@@ -22,6 +22,8 @@ const { storageMock } = vi.hoisted(() => ({
     getTests: vi.fn(), getTopics: vi.fn(), getAllAttempts: vi.fn(),
     getTest: vi.fn(), getAttempt: vi.fn(), getQuestionsByIds: vi.fn(),
     getTopicCourses: vi.fn(), getTestSections: vi.fn(),
+    // PRD-15 block D: effective-scoring chain (no overrides by default).
+    getTestQuestionScoring: vi.fn().mockResolvedValue([]),
     // PRD-15 T-20: publication-version resolution in analytics.
     getSnapshotsForTest: vi.fn().mockResolvedValue([]),
     getSnapshot: vi.fn().mockResolvedValue(undefined),
@@ -415,6 +417,120 @@ describe("Analytics — attempts routes", () => {
     storageMock.getAttempt.mockResolvedValue(undefined);
     const res = await asAuthor(request(app).get("/api/analytics/attempts/x"));
     expect(res.status).toBe(404);
+  });
+
+  // Drilldown: per-answer detail across all 4 question types with formatted
+  // user/correct answers; PRD-15 block D — points/difficulty come from the
+  // test-effective chain (override beats the question's own values).
+  it("GET /attempts/:attemptId — details every answer with effective scoring", async () => {
+    const questions = [
+      {
+        id: "q1", topicId: "t1", type: "single", prompt: "S?",
+        dataJson: { options: ["A", "B"] }, correctJson: { correctIndex: 0 },
+        points: 5, difficulty: 60, scoringJson: null, contentHash: "h1",
+      },
+      {
+        id: "q2", topicId: "t1", type: "multiple", prompt: "M?",
+        dataJson: { options: ["X", "Y", "Z"] }, correctJson: { correctIndices: [0, 2] },
+        points: 1, difficulty: 50, scoringJson: null, contentHash: "h2",
+      },
+      {
+        id: "q3", topicId: "t1", type: "matching", prompt: "P?",
+        dataJson: { left: ["L1", "L2"], right: ["R1", "R2"] },
+        correctJson: { pairs: [{ left: 0, right: 0 }, { left: 1, right: 1 }] },
+        points: 1, difficulty: 50, scoringJson: null, contentHash: "h3",
+      },
+      {
+        id: "q4", topicId: "t1", type: "ranking", prompt: "R?",
+        dataJson: { items: ["I1", "I2"] }, correctJson: { correctOrder: [0, 1] },
+        points: 1, difficulty: 50, scoringJson: null, contentHash: "h4",
+      },
+    ];
+    const attempt = {
+      ...dbAttemptResult,
+      variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q1", "q2", "q3", "q4"] }] },
+      answersJson: { q1: 0, q2: [0, 2], q3: { 0: 0, 1: 1 }, q4: [1, 0] },
+    };
+    storageMock.getAttempt.mockResolvedValue(attempt);
+    storageMock.getTest.mockResolvedValue({ id: "test1", title: "Test 1", mode: "standard" });
+    storageMock.getUser
+      .mockResolvedValueOnce(authorUser) // middleware
+      .mockResolvedValue({ id: "u1", name: "User", email: "u@test.com" });
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByIds.mockResolvedValue(questions);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", defaultPoints: null }]);
+    // Block D: this test prices q1 at 10 and re-pins its difficulty to 90.
+    storageMock.getTestQuestionScoring.mockResolvedValue([
+      { id: "ov1", testId: "test1", questionId: "q1", points: 10, scoringJson: null, difficulty: 90, pinnedContentHash: "h1" },
+    ]);
+
+    const res = await asAuthor(request(app).get("/api/analytics/attempts/atmp1"));
+    expect(res.status).toBe(200);
+
+    const byId = Object.fromEntries(res.body.answers.map((a: any) => [a.questionId, a]));
+    // q1: correct, override price + override difficulty.
+    expect(byId.q1).toMatchObject({
+      isCorrect: true, earnedPoints: 10, possiblePoints: 10, difficulty: 90,
+      userAnswer: "A",
+    });
+    // q2: correct multiple — options formatted by index.
+    expect(byId.q2.isCorrect).toBe(true);
+    expect(byId.q2.userAnswer).toEqual(["X", "Z"]);
+    expect(byId.q2.possiblePoints).toBe(1);
+    // q3: matching pairs formatted left/right.
+    expect(byId.q3.isCorrect).toBe(true);
+    expect(byId.q3.userAnswer).toEqual([
+      { left: "L1", right: "R1" },
+      { left: "L2", right: "R2" },
+    ]);
+    // q4: wrong ranking — zero earned, formatted by items.
+    expect(byId.q4.isCorrect).toBe(false);
+    expect(byId.q4.earnedPoints).toBe(0);
+    expect(byId.q4.userAnswer).toEqual(["I2", "I1"]);
+  });
+
+  it("GET /attempts/:attemptId — adaptive drilldown: trajectory, achieved levels, levelName", async () => {
+    const attempt = {
+      ...dbAttemptResult,
+      snapshotId: "snap1",
+      variantJson: {
+        mode: "adaptive",
+        topics: [{
+          topicId: "t1", topicName: "JS", finalLevelIndex: 1,
+          levelsState: [
+            { levelIndex: 0, levelName: "База", questionIds: ["q1"], answeredQuestionIds: ["q1"], correctCount: 1, status: "passed" },
+            { levelIndex: 1, levelName: "Профи", questionIds: ["q2"], answeredQuestionIds: ["q2"], correctCount: 0, status: "failed" },
+          ],
+        }],
+      },
+      answersJson: { q1: 0 },
+      resultJson: { mode: "adaptive", overallPassed: true, topicResults: [] },
+    };
+    storageMock.getAttempt.mockResolvedValue(attempt);
+    storageMock.getTest.mockResolvedValue({ id: "test1", title: "Test 1", mode: "adaptive" });
+    storageMock.getUser
+      .mockResolvedValueOnce(authorUser)
+      .mockResolvedValue({ id: "u1", name: "User", email: "u@test.com" });
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByIds.mockResolvedValue([{
+      id: "q1", topicId: "t1", type: "single", prompt: "S?",
+      dataJson: { options: ["A", "B"] }, correctJson: { correctIndex: 0 },
+      points: 1, difficulty: 50, scoringJson: null, contentHash: "h1",
+    }]);
+    storageMock.getTestSections.mockResolvedValue([]);
+    storageMock.getSnapshot.mockResolvedValue({ id: "snap1", version: 3 });
+
+    const res = await asAuthor(request(app).get("/api/analytics/attempts/atmp1"));
+    expect(res.status).toBe(200);
+    expect(res.body.snapshotVersion).toBe(3);
+    expect(res.body.answers[0].levelName).toBe("База");
+    expect(res.body.achievedLevels).toEqual([
+      { topicId: "t1", topicName: "JS", levelIndex: 1, levelName: "Профи" },
+    ]);
+    expect(res.body.trajectory).toEqual([
+      expect.objectContaining({ action: "level_up", levelName: "База" }),
+      expect.objectContaining({ action: "level_down", levelName: "Профи" }),
+    ]);
   });
 });
 

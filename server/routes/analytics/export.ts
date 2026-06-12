@@ -6,6 +6,7 @@ import { storage } from "../../storage";
 import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { checkAnswer } from "../../utils/check-answer";
+import { loadTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 import {
   analyticsScope,
   formatQuestionType,
@@ -63,6 +64,9 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
 
     const questions = await storage.getQuestionsByIds(Array.from(allQuestionIds));
     const questionMap = new Map(questions.map(q => [q.id, q]));
+
+    // PRD-15 block D (FR-32): recompute with the test-effective price/config.
+    const scoring = await loadTestScoringContext(testId, storage);
 
     // ЛИСТ 1: Сводка
     const summaryData: any[][] = [
@@ -169,7 +173,8 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
         const question = questionMap.get(qId);
         if (!question) continue;
 
-        const isCorrect = checkAnswer(question, userAnswer) === 1;
+        const effective = scoring.resolve(question);
+        const isCorrect = checkAnswer(question, userAnswer, effective.scoring) === 1;
         const dataJson = question.dataJson as any;
         const correctJson = question.correctJson as any;
 
@@ -192,12 +197,12 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
           question.prompt,
           topicMap.get(question.topicId) || "Unknown",
           formatQuestionType(question.type),
-          question.difficulty || 50,
+          scoring.difficultyOf(question) || 50,
           formatAllOptions(question.type, dataJson),
           formatCorrectAnswerText(question.type, dataJson, correctJson),
           formatUserAnswerText(question.type, dataJson, userAnswer),
           isCorrect ? "Верно" : "Неверно",
-          isCorrect ? (question.points || 1) : 0,
+          isCorrect ? effective.points : 0,
         ];
 
         if (test.mode === "adaptive") {
@@ -219,7 +224,7 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
 
         const stats = questionStatsMap.get(qId) || { total: 0, correct: 0 };
         stats.total++;
-        if (checkAnswer(question, answer) === 1) {
+        if (checkAnswer(question, answer, scoring.resolve(question).scoring) === 1) {
           stats.correct++;
         }
         questionStatsMap.set(qId, stats);
@@ -241,7 +246,7 @@ router.get("/tests/:testId/export/excel", requirePermission("analytics.export"),
         question.prompt,
         topicMap.get(question.topicId) || "Unknown",
         formatQuestionType(question.type),
-        question.difficulty || 50,
+        scoring.difficultyOf(question) || 50,
         formatAllOptions(question.type, dataJson),
         formatCorrectAnswerText(question.type, dataJson, correctJson),
         stats.total,
@@ -521,6 +526,13 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
     const questions = await storage.getQuestionsByIds(Array.from(allQuestionIds));
     const questionMap = new Map(questions.map(q => [q.id, q]));
 
+    // PRD-15 block D (FR-32): the effective price/config/difficulty of the same
+    // question differ between tests — one resolution context per selected test.
+    const scoringByTest = new Map<string, TestScoringContext>();
+    for (const t of selectedTests) {
+      scoringByTest.set(t.id, await loadTestScoringContext(t.id, storage));
+    }
+
     const wb = new ExcelJS.Workbook();
 
     // Sheet: Summary
@@ -588,12 +600,14 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         const answers = (attempt.answersJson || {}) as Record<string, unknown>;
         const username = userMap.get(attempt.userId) || "Unknown";
         const startStr = attempt.startedAt ? new Date(attempt.startedAt).toLocaleString("ru-RU") : "";
+        const scoring = scoringByTest.get(attempt.testId);
 
         for (const [qId, userAnswer] of Object.entries(answers)) {
           const q = questionMap.get(qId);
           if (!q) continue;
 
-          const isCorrect = checkAnswer(q, userAnswer) === 1;
+          const effective = scoring?.resolve(q);
+          const isCorrect = checkAnswer(q, userAnswer, effective?.scoring) === 1;
           const dataJson = q.dataJson as any;
           const correctJson = q.correctJson as any;
 
@@ -605,12 +619,12 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
             q.prompt,
             topicMap.get(q.topicId) || "Unknown",
             formatQuestionType(q.type),
-            q.difficulty || 50,
+            (scoring ? scoring.difficultyOf(q) : q.difficulty) || 50,
             formatAllOptions(q.type, dataJson),
             formatCorrectAnswerText(q.type, dataJson, correctJson),
             formatUserAnswerText(q.type, dataJson, userAnswer),
             isCorrect ? "Верно" : "Неверно",
-            isCorrect ? (q.points || 1) : 0,
+            isCorrect ? (effective?.points ?? (q.points || 1)) : 0,
           ]);
         }
       }
@@ -624,6 +638,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
 
       for (const attempt of completed) {
         const answers = (attempt.answersJson || {}) as Record<string, unknown>;
+        const scoring = scoringByTest.get(attempt.testId);
         for (const [qId, ans] of Object.entries(answers)) {
           const q = questionMap.get(qId);
           if (!q) continue;
@@ -631,7 +646,7 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
           const key = `${attempt.testId}:${qId}`;
           const s = stat.get(key) || { total: 0, correct: 0, testId: attempt.testId };
           s.total++;
-          if (checkAnswer(q, ans) === 1) s.correct++;
+          if (checkAnswer(q, ans, scoring?.resolve(q).scoring) === 1) s.correct++;
           stat.set(key, s);
         }
       }
@@ -641,13 +656,14 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
         const qId = key.split(":")[1];
         const q = questionMap.get(qId);
         if (!q) continue;
+        const scoring = scoringByTest.get(s.testId);
 
         rows.push([
           testTitleMap.get(s.testId) || s.testId,
           q.prompt,
           topicMap.get(q.topicId) || "Unknown",
           formatQuestionType(q.type),
-          q.difficulty || 50,
+          (scoring ? scoring.difficultyOf(q) : q.difficulty) || 50,
           s.total,
           s.correct,
           s.total ? `${((s.correct / s.total) * 100).toFixed(1)}%` : "0%",

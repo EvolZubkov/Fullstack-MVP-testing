@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, retakePolicySchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, retakePolicySchema, questionScoringSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate } from "../services/template-render";
 import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
@@ -25,6 +25,7 @@ import {
 } from "../services/test-settings";
 import { RequiredFieldsMissingError } from "../services/required-fields-validator";
 import { FlowPolicyValidationError } from "../services/flow-policy-validator";
+import { buildTestScoringContext } from "../services/effective-scoring";
 
 // ─── Validation schemas (PRD-7 §5.4) ─────────────────────────────────────────
 
@@ -43,6 +44,8 @@ const sectionBodySchema = z
     timeLimitMinutes: z.number().int().positive().nullable().optional(),
     feedbackJson: z.unknown().optional(),
     drawBlueprintJson: drawBlueprintSchema.nullish(),
+    // PRD-15 block D (FR-31): per-section default price; null = inherit test.
+    defaultPoints: z.number().int().min(0).nullable().optional(),
   })
   .superRefine((s, ctx) => {
     // PRD-11 FR-05: the quotas are minimums inside the topic's sample, so their
@@ -82,6 +85,8 @@ const testBodyBaseSchema = z.object({
   feedbackJson: feedbackContentSchema.nullable().optional(),
   flowPolicyJson: z.unknown().optional(),
   retakePolicyJson: retakePolicySchema.nullish(), // PRD-6
+  // PRD-15 block D (FR-31): test-wide default price; null = system default (1).
+  defaultQuestionPoints: z.number().int().min(0).nullable().optional(),
 
   /** Destination folder for create (PRD-7 §5.5 — FAB folder-pick modal). */
   folderId: z.string().nullable().optional(),
@@ -168,6 +173,11 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
   const topics = await storage.getTopics();
   const topicMap = new Map(topics.map((t) => [t.id, t]));
 
+  // PRD-15 block D: per-test scoring overrides — the editor needs the raw rows
+  // (override values + staleness pins), and maxPoints must sum EFFECTIVE prices.
+  const questionScoring = await storage.getTestQuestionScoring(test.id);
+  const scoringCtx = buildTestScoringContext(test, sections, questionScoring);
+
   const sectionsWithDetails = await Promise.all(
     sections.map(async (s) => {
       const topic = topicMap.get(s.topicId);
@@ -178,8 +188,9 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
         maxQuestions: questions.length,
         // PRD-10: the section's maximum attainable points (Σ points). Absolute
         // pass thresholds are compared against earned POINTS at runtime, so the
-        // editor caps them by this, not by the question count.
-        maxPoints: questions.reduce((sum, q) => sum + (q.points ?? 1), 0),
+        // editor caps them by this, not by the question count. Block D: the sum
+        // is over EFFECTIVE prices (override -> defaults -> legacy -> system).
+        maxPoints: questions.reduce((sum, q) => sum + scoringCtx.resolve(q).points, 0),
       };
     }),
   );
@@ -221,7 +232,7 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
   // for the editor's status indicator and the «Опубликовать изменения» action.
   const publication = await getPublicationState(test.id);
 
-  return { ...test, sections: sectionsWithDetails, adaptiveSettings, resultVariables, scales, measurements, publication };
+  return { ...test, sections: sectionsWithDetails, adaptiveSettings, resultVariables, scales, measurements, questionScoring, publication };
 }
 
 // GET /api/tests - Список тестов
@@ -250,6 +261,12 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
     const testsWithSections = await Promise.all(
       visibleTests.map(async (test) => {
         const sections = await storage.getTestSections(test.id);
+        // PRD-15 block D: maxPoints sums EFFECTIVE prices for this test.
+        const scoringCtx = buildTestScoringContext(
+          test,
+          sections,
+          await storage.getTestQuestionScoring(test.id),
+        );
         const sectionsWithDetails = await Promise.all(
           sections.map(async (s) => {
             const topic = topicMap.get(s.topicId);
@@ -258,7 +275,7 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
               ...s,
               topicName: topic?.name || "Unknown",
               maxQuestions: questions.length,
-              maxPoints: questions.reduce((sum, q) => sum + (q.points ?? 1), 0),
+              maxPoints: questions.reduce((sum, q) => sum + scoringCtx.resolve(q).points, 0),
             };
           })
         );
@@ -433,6 +450,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       feedbackJson,
       flowPolicyJson,
       retakePolicyJson,
+      defaultQuestionPoints,
       folderId,
     } = parsed.data;
 
@@ -478,6 +496,7 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         feedbackJson: feedbackJson ?? null,
         flowPolicyJson: flowPolicyJson ?? null,
         retakePolicyJson: retakePolicyJson ?? null,
+        defaultQuestionPoints: defaultQuestionPoints ?? null,
         folderId: folderId ?? null,
       },
       sections: (sections ?? []) as SectionPayload[],
@@ -662,6 +681,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       feedbackJson,
       flowPolicyJson,
       retakePolicyJson,
+      defaultQuestionPoints,
     } = parsed.data;
 
     const expectedVersion = typeof (req.body as { expectedVersion?: unknown })?.expectedVersion === "number"
@@ -712,6 +732,7 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         feedbackJson: feedbackJson ?? undefined,
         flowPolicyJson: flowPolicyJson ?? undefined,
         retakePolicyJson: retakePolicyJson ?? undefined,
+        defaultQuestionPoints,
       },
       // PRD-7 §6.3: sections live with the standard mode only. For adaptive,
       // sections come from the adaptive levels instead.
@@ -952,6 +973,11 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
     const scales = await src.getScales(test.id);
     const measurements = await src.getQuestionMeasurements(test.id);
 
+    // PRD-15 block D (FR-32): per-test scoring overrides — the bake resolves
+    // effective points/scoring/difficulty into TEST_DATA. Snapshot exports read
+    // the frozen rows; drafts read live.
+    const questionScoring = await src.getTestQuestionScoring(test.id);
+
     // Load adaptive settings if test is adaptive
     let adaptiveSettings = null;
     if (test.mode === "adaptive") {
@@ -1014,6 +1040,7 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
     const buffer = await generateScormPackage({
       test,
       sections: exportSections,
+      questionScoring,
       adaptiveSettings,
       contentPages,
       resultVariables,
@@ -1036,6 +1063,99 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
     res.status(500).json({ error: "Failed to export SCORM package" });
   }
 });
+
+// ─── PRD-15 block D: per-(test, question) scoring overrides (FR-30/FR-35) ─────
+
+/** Override payload: each value is an independent link of the effective chain. */
+const questionScoringBodySchema = z.object({
+  points: z.number().int().min(0).nullable().optional(),
+  scoringJson: questionScoringSchema.nullable().optional(),
+  difficulty: z.number().int().min(0).max(100).nullable().optional(),
+});
+
+// GET /api/tests/:id/question-scoring — the test's override rows (the «Оценка»
+// tab reads them fresh, outside the editor draft).
+router.get(
+  "/:id/question-scoring",
+  requirePermission("tests.read"),
+  requireTestScope("read"),
+  async (req, res) => {
+    try {
+      const rows = await storage.getTestQuestionScoring(req.params.id);
+      res.json(rows);
+    } catch (error) {
+      logger.error("Get question scoring error: " + (error as Error).message, "tests");
+      res.status(500).json({ error: "Failed to fetch question scoring" });
+    }
+  },
+);
+
+// PUT /api/tests/:id/question-scoring/:questionId — upsert the override.
+// Pins the question's CURRENT contentHash (FR-30): saving from the editor
+// (including «Подтвердить актуальность», which re-sends the same values)
+// re-pins a stale override. An all-empty body clears the override instead of
+// storing a no-op row. Both writes bump the test version so a published test
+// flips to «Опубликован, есть изменения» (FR-12).
+router.put(
+  "/:id/question-scoring/:questionId",
+  requirePermission("tests.edit"),
+  requireTestScope("edit"),
+  async (req, res) => {
+    try {
+      const parsed = questionScoringBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Validation failed", fields: zodToFields(parsed.error) });
+      }
+      const { points, scoringJson, difficulty } = parsed.data;
+
+      const question = await storage.getQuestion(req.params.questionId);
+      if (!question) return res.status(404).json({ error: "Question not found" });
+
+      // The override only makes sense for a question of the test's own topics.
+      const sections = await storage.getTestSections(req.params.id);
+      if (!sections.some((s) => s.topicId === question.topicId)) {
+        return res.status(422).json({ error: "question_not_in_test", message: "Вопрос не входит в темы теста" });
+      }
+
+      if (points == null && scoringJson == null && difficulty == null) {
+        await storage.deleteTestQuestionScoring(req.params.id, question.id);
+        await storage.updateTest(req.params.id, {});
+        return res.json({ cleared: true });
+      }
+
+      const row = await storage.upsertTestQuestionScoring(req.params.id, question.id, {
+        points: points ?? null,
+        scoringJson: scoringJson ?? null,
+        difficulty: difficulty ?? null,
+        pinnedContentHash: question.contentHash ?? null,
+      });
+      await storage.updateTest(req.params.id, {});
+      res.json(row);
+    } catch (error) {
+      logger.error("Upsert question scoring error: " + (error as Error).message, "tests");
+      res.status(500).json({ error: "Failed to save question scoring" });
+    }
+  },
+);
+
+// DELETE /api/tests/:id/question-scoring/:questionId — reset to the default
+// chain («Сбросить настройку» in the row and in the override modal).
+router.delete(
+  "/:id/question-scoring/:questionId",
+  requirePermission("tests.edit"),
+  requireTestScope("edit"),
+  async (req, res) => {
+    try {
+      const deleted = await storage.deleteTestQuestionScoring(req.params.id, req.params.questionId);
+      if (!deleted) return res.status(404).json({ error: "Override not found" });
+      await storage.updateTest(req.params.id, {});
+      res.json({ success: true });
+    } catch (error) {
+      logger.error("Delete question scoring error: " + (error as Error).message, "tests");
+      res.status(500).json({ error: "Failed to delete question scoring" });
+    }
+  },
+);
 
 // ─── PRD-13: per-test access management (administrators / superadmin only) ────
 

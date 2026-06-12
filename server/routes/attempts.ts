@@ -5,6 +5,7 @@ import { requirePermission } from "../middleware/auth";
 import { checkAnswer } from "../utils/check-answer";
 import { drawSection } from "@shared/draw/blueprint";
 import { loadScoringConfig } from "../services/scoring-config";
+import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
 import { readResultsRenderPayload } from "../services/template-render";
@@ -254,6 +255,10 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
       return res.status(400).json({ error: "Adaptive test has no settings configured" });
     }
 
+    // PRD-15 block D (FR-34): level matching uses the EFFECTIVE difficulty —
+    // the per-test override wins over the question's base value.
+    const scoring = await loadTestScoringContext(test.id, src);
+
     // Build adaptive variant
     const adaptiveTopics: any[] = [];
 
@@ -268,9 +273,10 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
       const levelsState: any[] = [];
 
       for (const level of topicLevels) {
-        const levelQuestions = allQuestions.filter(
-          (q) => (q.difficulty ?? 50) >= level.minDifficulty && (q.difficulty ?? 50) <= level.maxDifficulty
-        );
+        const levelQuestions = allQuestions.filter((q) => {
+          const difficulty = scoring.difficultyOf(q);
+          return difficulty >= level.minDifficulty && difficulty <= level.maxDifficulty;
+        });
 
         const shuffled = levelQuestions.sort(() => Math.random() - 0.5);
         const selected = shuffled.slice(0, level.questionsCount);
@@ -409,7 +415,9 @@ router.post("/attempts/:attemptId/answer-adaptive", requirePermission("attempts.
       return res.status(404).json({ error: "Question not found" });
     }
 
-    const isCorrect = checkAnswer(question, answer) === 1;
+    // PRD-15 block D (FR-32): grade with the test-effective graded config.
+    const scoring = await loadTestScoringContext(test.id, src);
+    const isCorrect = checkAnswer(question, answer, scoring.resolve(question).scoring) === 1;
     const updatedAnswers = { ...((attempt.answersJson as any) || {}), [questionId]: answer };
 
     currentLevel.answeredQuestionIds.push(questionId);
@@ -746,6 +754,10 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
 
     const sections = await src.getTestSections(test.id);
     const sectionMap = new Map(sections.map((s) => [s.topicId, s]));
+    // PRD-15 block D (FR-32): price and graded config come from the test-side
+    // chain (override -> section default -> test default -> system), resolved
+    // against the SAME source as delivery (snapshot or live).
+    const scoring = await loadTestScoringContext(test.id, src);
 
     let totalCorrect = 0;
     let totalQuestions = 0;
@@ -769,8 +781,9 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       for (const q of questions) {
         questionTypes[q.id] = q.type as QuestionType;
         const answer = answers?.[q.id];
-        const scoreRatio = checkAnswer(q, answer);
-        const qPoints = q.points || 1;
+        const effective = scoring.resolve(q);
+        const scoreRatio = checkAnswer(q, answer, effective.scoring);
+        const qPoints = effective.points;
         sectionPossiblePoints += qPoints;
 
         if (scoreRatio === 1) {

@@ -32,6 +32,8 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     getResultVariables: vi.fn().mockResolvedValue([]),
     getScales: vi.fn().mockResolvedValue([]),
     getQuestionMeasurements: vi.fn().mockResolvedValue([]),
+    // PRD-15 block D: per-test scoring overrides (none by default).
+    getTestQuestionScoring: vi.fn().mockResolvedValue([]),
     getAdaptiveLevelLinks: vi.fn(),
     deleteAdaptiveLevelLinksByTest: vi.fn(),
     deleteAdaptiveLevelsByTest: vi.fn(),
@@ -56,6 +58,10 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     deleteSnapshotById: vi.fn().mockResolvedValue(undefined),
     annulInProgressAttempts: vi.fn().mockResolvedValue(0),
     getTopic: vi.fn().mockResolvedValue({ id: "tp1", name: "Тема" }),
+    // PRD-15 block D: per-(test, question) scoring overrides.
+    getQuestion: vi.fn(),
+    upsertTestQuestionScoring: vi.fn(),
+    deleteTestQuestionScoring: vi.fn(),
   },
   serviceMock: {
     create: vi.fn(),
@@ -670,5 +676,99 @@ describe("GET /api/tests/:id — legacy test opens", () => {
     expect(res.body.status).toBe("published");
     expect(Array.isArray(res.body.sections)).toBe(true);
     expect(res.body.sections[0].topicName).toBe("JS");
+  });
+});
+
+// ─── PRD-15 block D: per-(test, question) scoring overrides (FR-30/FR-35) ────
+describe("PUT/DELETE /api/tests/:id/question-scoring/:questionId", () => {
+  let app: express.Express;
+  const dbQuestion = {
+    id: "q1", topicId: "t1", type: "single", prompt: "Q?",
+    dataJson: { options: ["A", "B"] }, correctJson: { correctIndex: 0 },
+    points: 1, difficulty: 50, scoringJson: null, contentHash: "h-current",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getTestSections.mockResolvedValue([dbSection]);
+    storageMock.getQuestion.mockResolvedValue(dbQuestion);
+    storageMock.upsertTestQuestionScoring.mockImplementation(
+      async (testId: string, questionId: string, values: Record<string, unknown>) =>
+        ({ id: "ov1", testId, questionId, ...values }),
+    );
+    storageMock.deleteTestQuestionScoring.mockResolvedValue(true);
+    storageMock.updateTest.mockResolvedValue(dbTest);
+    app = makeApp();
+  });
+
+  it("PUT — upserts pinned to the question's current contentHash and bumps the version", async () => {
+    const res = await asAuthor(request(app)
+      .put("/api/tests/test1/question-scoring/q1")
+      .send({ points: 5, difficulty: 90 }));
+    expect(res.status).toBe(200);
+    expect(storageMock.upsertTestQuestionScoring).toHaveBeenCalledWith("test1", "q1", {
+      points: 5,
+      scoringJson: null,
+      difficulty: 90,
+      pinnedContentHash: "h-current",
+    });
+    // FR-12: the edit must surface as «Опубликован, есть изменения».
+    expect(storageMock.updateTest).toHaveBeenCalledWith("test1", {});
+  });
+
+  it("PUT — accepts a graded config and a zero price", async () => {
+    const scoring = { kind: "weighted", weights: [1, 0] };
+    const res = await asAuthor(request(app)
+      .put("/api/tests/test1/question-scoring/q1")
+      .send({ points: 0, scoringJson: scoring }));
+    expect(res.status).toBe(200);
+    expect(storageMock.upsertTestQuestionScoring).toHaveBeenCalledWith("test1", "q1",
+      expect.objectContaining({ points: 0, scoringJson: scoring }));
+  });
+
+  it("PUT — an all-empty body clears the override instead of storing a no-op row", async () => {
+    const res = await asAuthor(request(app)
+      .put("/api/tests/test1/question-scoring/q1")
+      .send({}));
+    expect(res.status).toBe(200);
+    expect(res.body.cleared).toBe(true);
+    expect(storageMock.deleteTestQuestionScoring).toHaveBeenCalledWith("test1", "q1");
+    expect(storageMock.upsertTestQuestionScoring).not.toHaveBeenCalled();
+  });
+
+  it("PUT — 422 when the question is outside the test's topics", async () => {
+    storageMock.getQuestion.mockResolvedValue({ ...dbQuestion, topicId: "other-topic" });
+    const res = await asAuthor(request(app)
+      .put("/api/tests/test1/question-scoring/q1")
+      .send({ points: 5 }));
+    expect(res.status).toBe(422);
+    expect(res.body.error).toBe("question_not_in_test");
+  });
+
+  it("PUT — 404 for a missing question; 400 for an invalid graded config", async () => {
+    storageMock.getQuestion.mockResolvedValue(undefined);
+    const missing = await asAuthor(request(app)
+      .put("/api/tests/test1/question-scoring/q1")
+      .send({ points: 5 }));
+    expect(missing.status).toBe(404);
+
+    storageMock.getQuestion.mockResolvedValue(dbQuestion);
+    const invalid = await asAuthor(request(app)
+      .put("/api/tests/test1/question-scoring/q1")
+      .send({ scoringJson: { kind: "weighted" } })); // weights missing
+    expect(invalid.status).toBe(400);
+  });
+
+  it("DELETE — resets the override and bumps the version; 404 when absent", async () => {
+    const ok = await asAuthor(request(app).delete("/api/tests/test1/question-scoring/q1"));
+    expect(ok.status).toBe(200);
+    expect(storageMock.deleteTestQuestionScoring).toHaveBeenCalledWith("test1", "q1");
+    expect(storageMock.updateTest).toHaveBeenCalledWith("test1", {});
+
+    storageMock.deleteTestQuestionScoring.mockResolvedValue(false);
+    const gone = await asAuthor(request(app).delete("/api/tests/test1/question-scoring/q1"));
+    expect(gone.status).toBe(404);
   });
 });

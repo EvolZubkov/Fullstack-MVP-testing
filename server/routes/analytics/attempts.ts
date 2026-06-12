@@ -5,6 +5,7 @@ import { requirePermission } from "../../middleware/auth";
 import { requireTestScope } from "../../middleware/test-scope";
 import { canReadTestAnalytics } from "../../services/test-access";
 import { checkAnswer } from "../../utils/check-answer";
+import { loadTestScoringContext } from "../../services/effective-scoring";
 
 const router = Router();
 
@@ -149,13 +150,18 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
     const questions = await storage.getQuestionsByIds(uniqueQuestionIds);
     const questionMap = new Map(questions.map(q => [q.id, q]));
 
+    // PRD-15 block D (FR-32): the recompute mirrors delivery — price, graded
+    // config and difficulty come from the test-effective chain.
+    const scoring = await loadTestScoringContext(test.id, storage);
+
     const detailedAnswers: any[] = [];
 
     for (const [qId, userAnswer] of Object.entries(answers)) {
       const question = questionMap.get(qId);
       if (!question) continue;
 
-      const isCorrect = checkAnswer(question, userAnswer) === 1;
+      const effective = scoring.resolve(question);
+      const isCorrect = checkAnswer(question, userAnswer, effective.scoring) === 1;
 
       let levelName: string | undefined;
       let levelIndex: number | undefined;
@@ -212,9 +218,9 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
         correctAnswer: formattedCorrectAnswer,
         correctAnswerRaw: correctJson,
         isCorrect,
-        earnedPoints: isCorrect ? (question.points || 1) : 0,
-        possiblePoints: question.points || 1,
-        difficulty: question.difficulty || 50,
+        earnedPoints: isCorrect ? effective.points : 0,
+        possiblePoints: effective.points,
+        difficulty: scoring.difficultyOf(question) || 50,
         levelName,
         levelIndex,
         questionData: dataJson,
