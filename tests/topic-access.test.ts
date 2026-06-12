@@ -150,23 +150,17 @@ describe("dependentTestsForGrant (FR-26 hard-revoke feasibility)", () => {
     { id: "t-noown", title: "Без владельца", ownerId: null, status: "draft", mode: "standard" },
   ];
 
-  it("for a user grant returns only the grantee's own dependent tests", async () => {
+  // TD-01: grantees are users only — only the grantee's own dependent tests.
+  it("returns only the grantee's own dependent tests", async () => {
     storageMock.getTestsUsingTopic.mockResolvedValue(using);
-    const deps = await dependentTestsForGrant("tp1", "user", "u9");
+    const deps = await dependentTestsForGrant("tp1", "u9");
     expect(deps).toEqual([{ testId: "t-own", title: "Свой", status: "published" }]);
     expect(storageMock.getGroupUsers).not.toHaveBeenCalled();
   });
 
-  it("for a group grant returns tests owned by any member", async () => {
-    storageMock.getTestsUsingTopic.mockResolvedValue(using);
-    storageMock.getGroupUsers.mockResolvedValue([{ id: "u9" }, { id: "u-other" }]);
-    const deps = await dependentTestsForGrant("tp1", "group", "grp1");
-    expect(deps.map((d) => d.testId).sort()).toEqual(["t-other", "t-own"]);
-  });
-
   it("returns an empty list when no dependent test belongs to the grantee", async () => {
     storageMock.getTestsUsingTopic.mockResolvedValue([using[1], using[2]]);
-    const deps = await dependentTestsForGrant("tp1", "user", "u9");
+    const deps = await dependentTestsForGrant("tp1", "u9");
     expect(deps).toEqual([]);
   });
 });

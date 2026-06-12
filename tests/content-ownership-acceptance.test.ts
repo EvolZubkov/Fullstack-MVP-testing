@@ -186,7 +186,7 @@ describe("PRD-15 block C — acceptance matrix (decision rules)", () => {
     storageMock.getTestsUsingTopic.mockResolvedValue([
       { id: "pub1", title: "T", ownerId: "u9", status: "published", mode: "standard" },
     ]);
-    const deps = await dependentTestsForGrant("t1", "user", "u9");
+    const deps = await dependentTestsForGrant("t1", "u9");
     expect(deps).toEqual([{ testId: "pub1", title: "T", status: "published" }]);
   });
 

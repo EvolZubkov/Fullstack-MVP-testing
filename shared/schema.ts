@@ -135,15 +135,16 @@ export const topics = pgTable("topics", {
     .where(sql`owner_id IS NOT NULL`),
 }));
 
-// PRD-15 block C (FR-19): access to a topic for a non-owner. The receiver is a
-// user or a group. `use` lets them see the topic and its questions and use the
-// topic in their tests; `manage` adds CRUD of the topic's questions and editing
-// the topic (not deletion — owner/admin only). `state` carries the soft-revoke
-// "revoked, in use" (FR-25). One grant per (topic, grantee).
+// PRD-15 block C (FR-19): access to a topic for a non-owner USER. `use` lets
+// them see the topic and its questions and use the topic in their tests;
+// `manage` adds CRUD of the topic's questions and editing the topic (not
+// deletion — owner/admin only). `state` carries the soft-revoke "revoked, in
+// use" (FR-25). One grant per (topic, user). TD-01: grants address users only —
+// groups are for test assignment, not content access (the grantee_type column
+// was dropped, migration 025).
 export const topicAccessGrants = pgTable("topic_access_grants", {
   id: varchar("id", { length: 36 }).primaryKey(),
   topicId: varchar("topic_id", { length: 36 }).notNull(),
-  granteeType: text("grantee_type", { enum: ["user", "group"] }).notNull(),
   granteeId: varchar("grantee_id", { length: 36 }).notNull(),
   accessLevel: text("access_level", { enum: ["use", "manage"] }).notNull(),
   state: text("state", { enum: ["active", "revoked_in_use"] }).notNull().default("active"),
@@ -151,7 +152,7 @@ export const topicAccessGrants = pgTable("topic_access_grants", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
   topicGranteeIdx: uniqueIndex("topic_access_grants_topic_grantee_idx").on(
-    table.topicId, table.granteeType, table.granteeId,
+    table.topicId, table.granteeId,
   ),
 }));
 

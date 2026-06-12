@@ -1010,36 +1010,19 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(topicAccessGrants).where(eq(topicAccessGrants.topicId, topicId));
   }
 
-  /** Active grants addressed to a user directly or to any of their groups. */
-  async getActiveTopicGrantsForGrantees(
-    userId: string,
-    groupIds: string[],
-  ): Promise<TopicAccessGrant[]> {
-    const userGrants = await db
+  /** Active grants addressed to a user (TD-01: user-only, no group resolution). */
+  async getActiveTopicGrantsForGrantees(userId: string): Promise<TopicAccessGrant[]> {
+    return db
       .select()
       .from(topicAccessGrants)
       .where(and(
         eq(topicAccessGrants.state, "active"),
-        eq(topicAccessGrants.granteeType, "user"),
         eq(topicAccessGrants.granteeId, userId),
       ));
-    let groupGrants: TopicAccessGrant[] = [];
-    if (groupIds.length > 0) {
-      groupGrants = await db
-        .select()
-        .from(topicAccessGrants)
-        .where(and(
-          eq(topicAccessGrants.state, "active"),
-          eq(topicAccessGrants.granteeType, "group"),
-          inArray(topicAccessGrants.granteeId, groupIds),
-        ));
-    }
-    return [...userGrants, ...groupGrants];
   }
 
   async getTopicGrantForGrantee(
     topicId: string,
-    granteeType: "user" | "group",
     granteeId: string,
   ): Promise<TopicAccessGrant | undefined> {
     const [row] = await db
@@ -1047,7 +1030,6 @@ export class DatabaseStorage implements IStorage {
       .from(topicAccessGrants)
       .where(and(
         eq(topicAccessGrants.topicId, topicId),
-        eq(topicAccessGrants.granteeType, granteeType),
         eq(topicAccessGrants.granteeId, granteeId),
       ));
     return row || undefined;
@@ -1055,7 +1037,6 @@ export class DatabaseStorage implements IStorage {
 
   async upsertTopicGrant(grant: {
     topicId: string;
-    granteeType: "user" | "group";
     granteeId: string;
     accessLevel: "use" | "manage";
     grantedBy: string | null;
@@ -1065,14 +1046,13 @@ export class DatabaseStorage implements IStorage {
       .values({
         id: randomUUID(),
         topicId: grant.topicId,
-        granteeType: grant.granteeType,
         granteeId: grant.granteeId,
         accessLevel: grant.accessLevel,
         state: "active",
         grantedBy: grant.grantedBy,
       })
       .onConflictDoUpdate({
-        target: [topicAccessGrants.topicId, topicAccessGrants.granteeType, topicAccessGrants.granteeId],
+        target: [topicAccessGrants.topicId, topicAccessGrants.granteeId],
         set: { accessLevel: grant.accessLevel, state: "active", grantedBy: grant.grantedBy },
       })
       .returning();

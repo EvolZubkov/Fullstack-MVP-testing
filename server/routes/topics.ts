@@ -298,14 +298,12 @@ router.get("/:id/access", requirePermission("topics.access.grant"), async (req, 
       return res.status(403).json({ error: "Forbidden" });
     }
     const grants = await storage.getTopicGrants(topic.id);
-    // Resolve grantee display names for the panel.
+    // Resolve grantee (user) display names for the panel.
     const withNames = await Promise.all(
-      grants.map(async (g) => {
-        let granteeName: string | null = null;
-        if (g.granteeType === "user") granteeName = (await storage.getUser(g.granteeId))?.name ?? null;
-        else granteeName = (await storage.getGroup(g.granteeId))?.name ?? null;
-        return { ...g, granteeName };
-      }),
+      grants.map(async (g) => ({
+        ...g,
+        granteeName: (await storage.getUser(g.granteeId))?.name ?? null,
+      })),
     );
     res.json({ topicId: topic.id, ownerId: topic.ownerId ?? null, visibility: topic.visibility, grants: withNames });
   } catch (error) {
@@ -314,7 +312,8 @@ router.get("/:id/access", requirePermission("topics.access.grant"), async (req, 
   }
 });
 
-// POST /api/topics/:id/access — grant or update use/manage access for a user/group.
+// POST /api/topics/:id/access — grant or update use/manage access for a USER
+// (TD-01: topic access is granted to users only; groups are for assignment).
 router.post("/:id/access", requirePermission("topics.access.grant"), async (req, res) => {
   try {
     const topic = await storage.getTopic(req.params.id);
@@ -322,29 +321,24 @@ router.post("/:id/access", requirePermission("topics.access.grant"), async (req,
     if (!canGrantTopicAccess(req.effectiveRoles ?? [], req.currentUser?.id ?? "", topic)) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    const { granteeType, granteeId, accessLevel } = req.body ?? {};
-    if (granteeType !== "user" && granteeType !== "group") {
-      return res.status(400).json({ error: "granteeType must be 'user' or 'group'" });
-    }
+    const { granteeId, accessLevel } = req.body ?? {};
     if (typeof granteeId !== "string" || !granteeId) {
       return res.status(400).json({ error: "granteeId required" });
     }
     if (accessLevel !== "use" && accessLevel !== "manage") {
       return res.status(400).json({ error: "accessLevel must be 'use' or 'manage'" });
     }
-    const exists = granteeType === "user"
-      ? await storage.getUser(granteeId)
-      : await storage.getGroup(granteeId);
-    if (!exists) return res.status(404).json({ error: "Grantee not found" });
+    if (!(await storage.getUser(granteeId))) {
+      return res.status(404).json({ error: "Grantee not found" });
+    }
     const grant = await storage.upsertTopicGrant({
       topicId: topic.id,
-      granteeType,
       granteeId,
       accessLevel,
       grantedBy: req.currentUser?.id ?? null,
     });
     logger.info(
-      `Topic grant: ${topic.id} -> ${granteeType}:${granteeId} ${accessLevel} by ${req.currentUser?.id ?? "?"}`,
+      `Topic grant: ${topic.id} -> user:${granteeId} ${accessLevel} by ${req.currentUser?.id ?? "?"}`,
     );
     res.status(201).json(grant);
   } catch (error) {
@@ -390,7 +384,7 @@ router.delete("/:id/access/:grantId", requirePermission("topics.access.grant"), 
         message: "Жёсткий отзыв доступен только администратору",
       });
     }
-    const dependents = await dependentTestsForGrant(grant.topicId, grant.granteeType, grant.granteeId);
+    const dependents = await dependentTestsForGrant(grant.topicId, grant.granteeId);
     const blocking = dependents.filter((d) => d.status === "published");
     const forced = req.query.force === "true";
     if (blocking.length > 0 && !forced) {

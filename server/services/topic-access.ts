@@ -40,18 +40,13 @@ export function isAdminOrSuper(roles: readonly Role[]): boolean {
   return hasRole(roles, ROLES.SUPERADMIN) || hasRole(roles, ROLES.ADMINISTRATOR);
 }
 
-/** A user's group ids — needed to resolve group-addressed grants. */
-async function groupIdsOf(userId: string): Promise<string[]> {
-  const groups = await storage.getUserGroups(userId);
-  return groups.map((g) => g.id);
-}
-
-/** The highest active grant level a user holds on a topic (direct or via group). */
+/** The highest active grant level a user holds on a topic (TD-01: direct grants
+ *  only — topic access is never granted to groups). */
 async function grantLevelFor(
   topicId: string,
   userId: string,
 ): Promise<"use" | "manage" | null> {
-  const grants = await storage.getActiveTopicGrantsForGrantees(userId, await groupIdsOf(userId));
+  const grants = await storage.getActiveTopicGrantsForGrantees(userId);
   let level: "use" | "manage" | null = null;
   for (const g of grants) {
     if (g.topicId !== topicId) continue;
@@ -117,7 +112,7 @@ export async function visibleTopicScope(
   const shared = await storage.getSharedTopicIds();
   for (const id of shared) ids.add(id);
   for (const id of await storage.getTopicIdsByOwner(userId)) ids.add(id);
-  const grants = await storage.getActiveTopicGrantsForGrantees(userId, await groupIdsOf(userId));
+  const grants = await storage.getActiveTopicGrantsForGrantees(userId);
   for (const g of grants) ids.add(g.topicId);
   return { all: false, ids };
 }
@@ -130,31 +125,22 @@ export interface RevokeDependent {
 }
 
 /**
- * FR-26 hard-revoke feasibility: the grantee's tests that reference the topic
- * and would lose their derived in-context read if the grant were fully removed.
- * For a user grant these are the user's own tests; for a group grant, the tests
- * owned by any member. Published dependents are the operationally blocking ones.
+ * FR-26 hard-revoke feasibility: the grantee's own tests that reference the
+ * topic and would lose their derived in-context read if the grant were fully
+ * removed. TD-01: grantees are users, so these are the user's own tests.
+ * Published dependents are the operationally blocking ones.
  *
  * @param topicId - the topic whose grant is being revoked.
- * @param granteeType - whether the grant addresses a user or a group.
- * @param granteeId - the user or group id of the grantee.
+ * @param granteeId - the user id of the grantee.
  * @returns the dependent tests (id, title, status).
  */
 export async function dependentTestsForGrant(
   topicId: string,
-  granteeType: "user" | "group",
   granteeId: string,
 ): Promise<RevokeDependent[]> {
   const using = await storage.getTestsUsingTopic(topicId);
-  let ownerIds: Set<string>;
-  if (granteeType === "user") {
-    ownerIds = new Set([granteeId]);
-  } else {
-    const members = await storage.getGroupUsers(granteeId);
-    ownerIds = new Set(members.map((u) => u.id));
-  }
   return using
-    .filter((t) => t.ownerId !== null && ownerIds.has(t.ownerId))
+    .filter((t) => t.ownerId === granteeId)
     .map((t) => ({ testId: t.id, title: t.title, status: t.status }));
 }
 

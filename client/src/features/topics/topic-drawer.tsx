@@ -276,7 +276,7 @@ export function TopicDrawer({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ granteeType: "user", ...vars }),
+        body: JSON.stringify(vars),
       });
       if (!res.ok) throw new Error((await res.json()).error || "Не удалось выдать доступ");
     },
