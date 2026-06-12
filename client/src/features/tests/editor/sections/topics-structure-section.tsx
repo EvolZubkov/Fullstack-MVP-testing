@@ -72,7 +72,7 @@ async function fetchTopicsWithCount(): Promise<TopicWithQuestionCount[]> {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: CompositionSectionProps) {
-  const { data: allTopics = [] } = useQuery<TopicWithQuestionCount[]>({
+  const { data: allTopics = [], isSuccess: topicsLoaded } = useQuery<TopicWithQuestionCount[]>({
     queryKey: ["/api/topics"],
     queryFn: fetchTopicsWithCount,
   });
@@ -91,6 +91,9 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
     () => allTopics.filter((t) => !usedTopicIds.has(t.id)),
     [allTopics, usedTopicIds],
   );
+  // PRD-15 E-11: /api/topics is visibility-scoped, so a section whose topicId is
+  // absent here references a topic the author can no longer see.
+  const visibleTopicIds = useMemo(() => new Set(allTopics.map((t) => t.id)), [allTopics]);
 
   const updateSection = (topicId: string, patch: Partial<EditorSection>) => {
     updateModel((m) => ({
@@ -166,6 +169,7 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
           key={section.topicId}
           index={index}
           section={section}
+          unavailable={topicsLoaded && !visibleTopicIds.has(section.topicId)}
           adaptive={model.mode === "adaptive"}
           drawCountError={fieldErrors.get(`sections[${index}].drawCount`)}
           blueprintError={fieldErrors.get(`sections[${index}].drawBlueprintJson`)}
@@ -240,6 +244,10 @@ function TopicRow(props: {
   onRemove: () => void;
   /** Called with a partial EditorSection patch when feedback is saved. */
   onSaveFeedback: (patch: Partial<EditorSection>) => void;
+  /** PRD-15 E-11: the author can no longer see this section's topic (grant
+   * revoked / made private). The test still works and saves; only new draws
+   * from this topic are blocked. */
+  unavailable?: boolean;
 }) {
   const { section } = props;
   const maxQ = Math.max(section.maxQuestions, 1);
@@ -255,6 +263,11 @@ function TopicRow(props: {
       <div className="tb-topic-row" data-testid={`topic-row-${section.topicId}`}>
         <div className="tb-topic-row__header">
           <span className="tb-topic-row__name">{section.topicName}</span>
+          {props.unavailable && (
+            <Tag tone="warning" size="s" data-testid={`topic-unavailable-${section.topicId}`}>
+              Тема недоступна
+            </Tag>
+          )}
           <span className="tb-topic-row__count">
             {section.maxQuestions} вопрос{plural(section.maxQuestions)}
           </span>

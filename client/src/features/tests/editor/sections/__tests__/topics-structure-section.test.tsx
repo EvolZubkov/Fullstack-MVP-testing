@@ -114,6 +114,22 @@ describe("<CompositionSection />", () => {
     expect((screen.getByTestId("topic-drawcount-top-1") as HTMLInputElement).value).toBe("4");
   });
 
+  // PRD-15 E-11: a section whose topic is no longer in the visibility-scoped
+  // /api/topics is flagged «Тема недоступна»; a visible one is not.
+  it("flags a section whose topic the author can no longer see (E-11)", async () => {
+    const model = baseModel({
+      sections: [
+        buildSection({ topicId: "top-1", topicName: "Основы ИБ" }),
+        buildSection({ topicId: "gone", topicName: "Скрытая тема" }),
+      ],
+    });
+    renderWithClient(<CompositionSection model={model} updateModel={() => {}} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("topic-unavailable-gone")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("topic-unavailable-top-1")).not.toBeInTheDocument();
+  });
+
   function runUpdater(
     updateModel: ReturnType<typeof vi.fn>,
     model: TestEditorModel,
