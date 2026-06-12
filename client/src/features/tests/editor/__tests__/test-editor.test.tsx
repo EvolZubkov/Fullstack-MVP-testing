@@ -380,6 +380,7 @@ describe("useTestEditor — create mode", () => {
             feedback: { format: "plain", text: "" },
             feedbackLinks: [],
             feedbackAssets: [],
+            feedbackEvents: [],
           },
         ],
       }));
@@ -461,6 +462,7 @@ describe("useTestEditor — create adaptive mode (Gap 4)", () => {
             feedback: { format: "plain", text: "" },
             feedbackLinks: [],
             feedbackAssets: [],
+            feedbackEvents: [],
           },
         ],
         adaptive: {

@@ -95,14 +95,14 @@ describe("<FeedbackEditorModal /> — body editor", () => {
 describe("<FeedbackEditorModal /> — links", () => {
   it("shows no link list when links is empty, only the add button", () => {
     renderModal({ value: baseValue({ links: [] }) });
-    expect(screen.queryByRole("list", { name: /Ссылки/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: /Курсы/i })).not.toBeInTheDocument();
     expect(screen.getByTestId("feedback-editor-link-add")).toBeInTheDocument();
   });
 
   it("«Добавить ссылку» appends a link row", () => {
     renderModal();
     fireEvent.click(screen.getByTestId("feedback-editor-link-add"));
-    expect(screen.getByRole("list", { name: /Ссылки/i })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: /Курсы/i })).toBeInTheDocument();
     expect(screen.getByTestId("feedback-editor-link-title-0")).toBeInTheDocument();
     expect(screen.getByTestId("feedback-editor-link-url-0")).toBeInTheDocument();
   });
@@ -127,6 +127,47 @@ describe("<FeedbackEditorModal /> — links", () => {
     renderModal();
     const btn = screen.getByTestId("feedback-editor-link-add");
     expect(btn.parentElement?.tagName).toBe("DIV");
+  });
+});
+
+// ─── Tests: events section (TD-02) ───────────────────────────────────────────
+
+describe("<FeedbackEditorModal /> — events", () => {
+  it("«Добавить мероприятие» appends an event row (title + optional URL)", () => {
+    renderModal();
+    fireEvent.click(screen.getByTestId("feedback-editor-event-add"));
+    expect(screen.getByRole("list", { name: /Мероприятия/i })).toBeInTheDocument();
+    expect(screen.getByTestId("feedback-editor-event-title-0")).toBeInTheDocument();
+    expect(screen.getByTestId("feedback-editor-event-url-0")).toBeInTheDocument();
+  });
+
+  it("renders existing events from the initial value", () => {
+    renderModal({ value: baseValue({ events: [{ title: "Вебинар", url: "https://e.com" }] }) });
+    expect(screen.getByTestId("feedback-editor-event-title-0")).toBeInTheDocument();
+  });
+
+  it("saves an event without a URL (URL optional)", () => {
+    const { onSave } = renderModal({ value: baseValue({ events: [{ title: "Очно" }] }) });
+    fireEvent.click(screen.getByTestId("feedback-editor-save"));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ events: [{ title: "Очно" }] }),
+    );
+  });
+
+  it("removes an event row on trash click", () => {
+    renderModal({ value: baseValue({ events: [{ title: "X" }] }) });
+    fireEvent.click(screen.getByTestId("feedback-editor-event-remove-0"));
+    expect(screen.queryByTestId("feedback-editor-event-title-0")).not.toBeInTheDocument();
+  });
+
+  it("hideEvents hides the events section entirely", () => {
+    renderModal({ hideEvents: true, value: baseValue({ events: [{ title: "X" }] }) });
+    expect(screen.queryByTestId("feedback-editor-event-add")).not.toBeInTheDocument();
+  });
+
+  it("renders the courses list under «Курсы» (links relabel)", () => {
+    renderModal({ value: baseValue({ links: [{ title: "Курс", url: "https://e.com" }] }) });
+    expect(screen.getByRole("list", { name: /Курсы/i })).toBeInTheDocument();
   });
 });
 

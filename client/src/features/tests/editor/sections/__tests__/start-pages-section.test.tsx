@@ -78,6 +78,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       feedback: { format: "plain", text: "" },
       feedbackLinks: [],
       feedbackAssets: [],
+      feedbackEvents: [],
       webhookUrl: "",
       telemetryEnabled: false,
     },
@@ -105,6 +106,7 @@ function buildSection(over: Partial<EditorSection> = {}): EditorSection {
     feedback: { format: "plain", text: "" },
     feedbackLinks: [],
     feedbackAssets: [],
+    feedbackEvents: [],
     ...over,
   };
 }

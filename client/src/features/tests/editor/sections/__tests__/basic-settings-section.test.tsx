@@ -35,6 +35,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       feedback: { format: "plain", text: "" },
       feedbackLinks: [],
       feedbackAssets: [],
+      feedbackEvents: [],
       webhookUrl: "",
       telemetryEnabled: false,
     },
@@ -186,6 +187,7 @@ const sampleSection: TestEditorModel["sections"][number] = {
   feedback: { format: "plain", text: "" },
   feedbackLinks: [],
   feedbackAssets: [],
+  feedbackEvents: [],
 };
 
 const sampleAdaptiveTopic: TestEditorModel["adaptive"]["topics"][number] = {
@@ -442,6 +444,7 @@ describe("<SettingsSection /> — Правила прохождения pane", (
       feedback: { format: "plain" as const, text: "" },
       feedbackLinks: [],
       feedbackAssets: [],
+      feedbackEvents: [],
       ...over,
     };
   }
@@ -586,6 +589,7 @@ describe("<SettingsSection /> — Адаптивный режим pane (mode = a
       feedback: { format: "plain" as const, text: "" },
       feedbackLinks: [],
       feedbackAssets: [],
+      feedbackEvents: [],
       ...over,
     };
   }

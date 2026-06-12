@@ -81,14 +81,41 @@ describe("feedbackAssetSchema", () => {
 
 describe("feedbackContentSchema", () => {
   it("accepts the canonical empty default (decisions.md §4.3)", () => {
-    const empty = { format: "plain" as const, text: "", links: [], assets: [] };
+    const empty = { format: "plain" as const, text: "", links: [], assets: [], events: [] };
     expect(feedbackContentSchema.parse(empty)).toEqual(empty);
   });
 
-  it("defaults missing links/assets to empty arrays", () => {
+  it("defaults missing links/assets/events to empty arrays", () => {
     const result = feedbackContentSchema.parse({ format: "plain", text: "hi" });
     expect(result.links).toEqual([]);
     expect(result.assets).toEqual([]);
+    expect(result.events).toEqual([]);
+  });
+
+  // TD-02: recommended events — URL is OPTIONAL (unlike course links).
+  it("accepts an event with a URL, without a URL, and with an empty URL", () => {
+    const r = feedbackContentSchema.parse({
+      format: "plain",
+      text: "",
+      events: [
+        { title: "Вебинар", url: "https://example.com/webinar" },
+        { title: "Очная встреча" },
+        { title: "День открытых дверей", url: "" },
+      ],
+    });
+    expect(r.events).toHaveLength(3);
+    expect(r.events[1].url).toBeUndefined();
+    expect(r.events[2].url).toBe("");
+  });
+
+  it("rejects an event with a non-empty invalid URL", () => {
+    expect(() =>
+      feedbackContentSchema.parse({
+        format: "plain",
+        text: "",
+        events: [{ title: "X", url: "not-a-url" }],
+      }),
+    ).toThrow();
   });
 
   it("accepts full structure with nested links and assets", () => {
