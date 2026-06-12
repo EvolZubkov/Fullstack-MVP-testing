@@ -755,8 +755,8 @@ describe("<SettingsSection /> — Адаптивный режим pane (mode = a
     render(<SettingsSection model={model} updateModel={updateModel} />);
     fireEvent.click(screen.getByTestId("settings-rail-adaptive"));
     fireEvent.click(screen.getByTestId("adaptive-topic-toggle-t1"));
-    // Open the feedback editor modal for level 0
-    fireEvent.click(screen.getByTestId("adaptive-level-t1-0-feedback"));
+    // Open the feedback editor modal for level 0 (non-empty → pencil opens it).
+    fireEvent.click(screen.getByTestId("adaptive-level-t1-0-feedback-edit"));
     // Remove the only link inside the modal
     fireEvent.click(screen.getByTestId("feedback-editor-link-remove-0"));
     // Save closes the modal and propagates the new links array via onSave

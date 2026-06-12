@@ -19,7 +19,7 @@
  */
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import {
   Accordion,
   AccordionItem,
@@ -1583,39 +1583,23 @@ function FeedbackEditTrigger(props: {
   testId: string;
 }) {
   const [open, setOpen] = useState(false);
-  const preview =
-    props.text.trim() !== ""
-      ? props.text.replace(/<[^>]+>/g, "").slice(0, 80)
-      : "Не задано — нажмите для редактирования";
-  const isEmpty = props.text.trim() === "" && props.links.length === 0;
 
   return (
     <>
       <label className="ou-formfield__lbl">{props.label}</label>
-      <button
-        type="button"
-        className={
-          "tb-feedback-preview" + (isEmpty ? " is-empty" : "")
-        }
-        onClick={() => setOpen(true)}
-        aria-label={props.buttonAriaLabel}
-        data-testid={props.testId}
-      >
-        <span className="tb-feedback-preview__text">
-          <span className="tb-feedback-preview__snippet">{preview}</span>
-          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-        </span>
-        {(props.links.length > 0) && (
-          <span className="tb-feedback-preview__meta">
-            {props.links.length} ссыл
-            {props.links.length === 1
-              ? "ка"
-              : props.links.length >= 2 && props.links.length <= 4
-                ? "ки"
-                : "ок"}
-          </span>
-        )}
-      </button>
+      {/* TD-02: standard grouped-list preview (here only «Курсы» links — assets
+          and events are not used at the adaptive level), shared with test/topic
+          feedback so the preview is identical at every level. */}
+      <FeedbackPreview
+        format="plain"
+        text={props.text}
+        links={props.links}
+        assets={[]}
+        events={[]}
+        onEdit={() => setOpen(true)}
+        editAriaLabel={props.buttonAriaLabel}
+        testId={props.testId}
+      />
       <FeedbackEditorModal
         open={open}
         title={props.modalTitle}
