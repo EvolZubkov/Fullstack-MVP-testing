@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Plus, Search, Pencil, Trash2, FolderOpen, ExternalLink, BookMarked, Copy, CheckSquare, Square, Folder, ChevronRight, ChevronDown, FolderPlus, LayoutGrid, List, CalendarDays, Shield } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -60,6 +60,23 @@ interface TopicWithDetails extends Topic {
   questionCount: number;
 }
 
+/** Live same-name check response (PRD-15 FR-27, GET /api/topics/name-check). */
+interface NameCheckResponse {
+  normalized: string;
+  sameOwner: { id: string; name: string } | null;
+  duplicates: { id: string; name: string }[];
+}
+
+/** Debounce a changing value (no shared hook in the codebase). */
+function useDebouncedValue<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
+
 export default function TopicsPage() {
   const { toast } = useToast();
   const contentGuard = useContentGuard();
@@ -82,6 +99,10 @@ export default function TopicsPage() {
   const [editingFolder, setEditingFolder] = useState<FolderType | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  // PRD-15 block C (FR-22): scope filter. Server already returns only visible
+  // topics; this narrows the view client-side by relationship.
+  const [topicFilter, setTopicFilter] = useState<"mine" | "accessible" | "shared" | "all">("mine");
+  const [showEmptyFolders, setShowEmptyFolders] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     return (localStorage.getItem("topics_view") as any) || "grid";
   });
@@ -121,6 +142,29 @@ export default function TopicsPage() {
     defaultValues: { title: "" },
   });
 
+  // PRD-15 FR-27: live same-name check while typing the topic name. `sameOwner`
+  // is the hard per-owner clash (Save blocked → 409); `duplicates` are the
+  // non-blocking cross-owner collisions in the visible area.
+  const watchedName = form.watch("name");
+  const debouncedName = useDebouncedValue(watchedName ?? "", 400);
+  const { data: nameCheck } = useQuery<NameCheckResponse>({
+    queryKey: ["/api/topics/name-check", debouncedName, editingTopic?.id ?? ""],
+    queryFn: async () => {
+      const params = new URLSearchParams({ name: debouncedName });
+      if (editingTopic?.id) params.set("excludeId", editingTopic.id);
+      const res = await fetch(`/api/topics/name-check?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("name-check failed");
+      return res.json();
+    },
+    enabled: isDialogOpen && debouncedName.trim().length > 0,
+  });
+  // Hard clash applies only when the typed name still matches the clash (avoid a
+  // stale debounced result blocking Save after the user edits the name again).
+  const nameClash =
+    nameCheck?.sameOwner && debouncedName.trim() === (watchedName ?? "").trim()
+      ? nameCheck.sameOwner
+      : null;
+
   const createMutation = useMutation({
     mutationFn: (data: TopicFormData) => apiRequest("POST", "/api/topics", data),
     onSuccess: () => {
@@ -128,8 +172,13 @@ export default function TopicsPage() {
       toast({ title: t.topics.topicCreated, description: t.topics.topicCreatedDescription });
       handleCloseDialog();
     },
-    onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.topics.failedToCreate });
+    onError: (e: Error) => {
+      const dup = e.message.includes("duplicate_topic_name");
+      toast({
+        variant: "destructive",
+        title: t.common.error,
+        description: dup ? "У вас уже есть тема с таким названием" : t.topics.failedToCreate,
+      });
     },
   });
 
@@ -141,8 +190,13 @@ export default function TopicsPage() {
       toast({ title: t.topics.topicUpdated, description: t.topics.topicUpdatedDescription });
       handleCloseDialog();
     },
-    onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.topics.failedToUpdate });
+    onError: (e: Error) => {
+      const dup = e.message.includes("duplicate_topic_name");
+      toast({
+        variant: "destructive",
+        title: t.common.error,
+        description: dup ? "У владельца уже есть тема с таким названием" : t.topics.failedToUpdate,
+      });
     },
   });
 
@@ -438,13 +492,32 @@ export default function TopicsPage() {
 
   const rootFolders = folders?.filter((f) => !f.parentId) || [];
   const getChildFolders = (parentId: string) => folders?.filter((f) => f.parentId === parentId) || [];
+
+  // PRD-15 FR-22: classify a topic by relationship for the scope filter. The
+  // server already returns only visible topics, so an unowned non-shared one
+  // is, by definition, visible via a grant.
+  const matchesFilter = (topic: Topic): boolean => {
+    if (topicFilter === "all") return true;
+    if (topicFilter === "shared") return topic.visibility === "shared";
+    if (topicFilter === "mine") return topic.ownerId === user?.id;
+    return topic.ownerId !== user?.id && topic.visibility !== "shared"; // accessible (granted)
+  };
+
   const getTopicsInFolder = (folderId: string | null) =>
-    topics?.filter((topic) => topic.folderId === folderId) || [];
+    topics?.filter((topic) => topic.folderId === folderId && matchesFilter(topic)) || [];
+
+  // FR-28: a folder is shown only if it (or a descendant) holds a matching
+  // topic — unless the admin opts to show empty folders.
+  const folderHasVisibleTopics = (folderId: string): boolean =>
+    getTopicsInFolder(folderId).length > 0 ||
+    getChildFolders(folderId).some((c) => folderHasVisibleTopics(c.id));
 
   const searchedTopics = searchQuery
     ? topics?.filter((topic) =>
-      topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (topic.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+      matchesFilter(topic) && (
+        topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (topic.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+      )
     ) || []
     : null;
 
@@ -662,6 +735,9 @@ export default function TopicsPage() {
   );
 
   const renderFolder = (folder: FolderType, depth: number = 0) => {
+    // FR-28: hide folders with no topics visible in the current filter (unless
+    // the admin enabled «Показывать пустые папки»).
+    if (!showEmptyFolders && !folderHasVisibleTopics(folder.id)) return null;
     const isExpanded = expandedFolders.has(folder.id);
     const folderTopics = getTopicsInFolder(folder.id);
     const childFolders = getChildFolders(folder.id);
@@ -782,8 +858,28 @@ export default function TopicsPage() {
         }
       />
 
-      <div className="flex items-center gap-3 mb-6">
-        <div className="relative flex-1">
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        {/* PRD-15 FR-22: scope filter (Мои / Доступные / Общие [/ Все]) */}
+        <div className="inline-flex items-center border rounded-md overflow-hidden">
+          {([
+            { value: "mine", label: "Мои" },
+            { value: "accessible", label: "Доступные" },
+            { value: "shared", label: "Общие" },
+            ...(isAdmin ? [{ value: "all", label: "Все" } as const] : []),
+          ] as { value: typeof topicFilter; label: string }[]).map((f) => (
+            <Button
+              key={f.value}
+              variant={topicFilter === f.value ? "secondary" : "ghost"}
+              size="sm"
+              className="rounded-none h-9"
+              onClick={() => setTopicFilter(f.value)}
+              data-testid={`filter-topics-${f.value}`}
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-[12rem]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-9"
@@ -792,6 +888,16 @@ export default function TopicsPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+        {isAdmin && (
+          <label className="flex items-center gap-2 text-sm text-muted-foreground whitespace-nowrap">
+            <Checkbox
+              checked={showEmptyFolders}
+              onCheckedChange={(v) => setShowEmptyFolders(!!v)}
+              data-testid="toggle-show-empty-folders"
+            />
+            Показывать пустые папки
+          </label>
+        )}
         <div className="flex items-center border rounded-md">
           <Button
             variant={viewMode === "grid" ? "secondary" : "ghost"}
@@ -871,6 +977,16 @@ export default function TopicsPage() {
                       <Input {...field} placeholder={t.topics.topicNamePlaceholder} data-testid="input-topic-name" />
                     </FormControl>
                     <FormMessage />
+                    {/* PRD-15 FR-27: live same-name feedback */}
+                    {nameClash ? (
+                      <p className="text-sm text-destructive" data-testid="topic-name-clash">
+                        У вас уже есть тема «{nameClash.name}». Выберите другое название.
+                      </p>
+                    ) : (nameCheck?.duplicates?.length ?? 0) > 0 ? (
+                      <p className="text-sm text-amber-600 dark:text-amber-500" data-testid="topic-name-warning">
+                        Тема с таким названием уже есть в доступной вам области (у других авторов). Создать можно — это не помешает.
+                      </p>
+                    ) : null}
                   </FormItem>
                 )}
               />
@@ -945,7 +1061,7 @@ export default function TopicsPage() {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
+                  disabled={createMutation.isPending || updateMutation.isPending || !!nameClash}
                   data-testid="button-submit-topic"
                 >
                   {(createMutation.isPending || updateMutation.isPending) && (
