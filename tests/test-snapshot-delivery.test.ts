@@ -24,6 +24,7 @@ const { storageMock } = vi.hoisted(() => ({
     getQuestionMeasurements: vi.fn(),
     getResultVariables: vi.fn(),
     getContentPages: vi.fn(),
+    getTestQuestionScoring: vi.fn(),
     getAdaptiveTopicSettingsByTest: vi.fn(),
     getAdaptiveLevelsByTest: vi.fn(),
     getAdaptiveLevelLinks: vi.fn(),
@@ -61,6 +62,7 @@ beforeEach(() => {
   storageMock.getQuestionMeasurements.mockResolvedValue([]);
   storageMock.getResultVariables.mockResolvedValue([]);
   storageMock.getContentPages.mockResolvedValue([]);
+  storageMock.getTestQuestionScoring.mockResolvedValue([]);
   storageMock.getLatestSnapshot.mockResolvedValue(undefined);
   storageMock.getSnapshotsForTest.mockResolvedValue([]);
   storageMock.getReferencedSnapshotIds.mockResolvedValue([]);
@@ -78,6 +80,22 @@ describe("buildSnapshotContent — captures the deliverable", () => {
   it("returns null for a missing test", async () => {
     storageMock.getTest.mockResolvedValue(undefined);
     expect(await buildSnapshotContent("gone")).toBeNull();
+  });
+
+  // PRD-15 block D (FR-32): overrides freeze RAW and resolve at delivery.
+  it("freezes the per-test scoring overrides raw", async () => {
+    const row = { id: "ov1", testId: "t1", questionId: "q1", points: 7, scoringJson: null, difficulty: null, pinnedContentHash: "h1" };
+    storageMock.getTestQuestionScoring.mockResolvedValue([row]);
+    const content = await buildSnapshotContent("t1");
+    expect(content?.questionScoring).toEqual([row]);
+  });
+
+  it("a pre-block-D snapshot (no questionScoring) serves an empty override set", async () => {
+    const frozen = await buildSnapshotContent("t1");
+    delete (frozen as any).questionScoring; // emulate an old snapshot blob
+    storageMock.getSnapshot.mockResolvedValue({ id: "snap-old", contentJson: frozen });
+    const src = await dataSourceForAttempt("snap-old");
+    expect(await src.getTestQuestionScoring("t1")).toEqual([]);
   });
 });
 

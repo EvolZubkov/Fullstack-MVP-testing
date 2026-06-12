@@ -56,6 +56,8 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     getResultVariables: vi.fn().mockResolvedValue([]),
     getScales: vi.fn().mockResolvedValue([]),
     getQuestionMeasurements: vi.fn().mockResolvedValue([]),
+    // PRD-15 block D: per-test scoring overrides (none by default).
+    getTestQuestionScoring: vi.fn().mockResolvedValue([]),
     getContentPages: vi.fn().mockResolvedValue([]),
     getLatestSnapshot: vi.fn().mockResolvedValue(undefined),
     getSnapshotsForTest: vi.fn().mockResolvedValue([]),

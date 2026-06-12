@@ -44,6 +44,7 @@ const { storageMock } = vi.hoisted(() => ({
     getMeasurementsForQuestions: vi.fn(),
     getTopicPageRefs: vi.fn(),
     getAdaptiveLevels: vi.fn(),
+    getTestQuestionScoring: vi.fn(),
     getResultVariables: vi.fn(),
     getTest: vi.fn(),
     // publish gate (E-12)
@@ -161,6 +162,7 @@ beforeEach(() => {
   storageMock.getAdaptiveLevels.mockResolvedValue([]);
   storageMock.getResultVariables.mockResolvedValue([]);
   storageMock.getTestSections.mockResolvedValue([]);
+  storageMock.getTestQuestionScoring.mockResolvedValue([]);
   // Snapshot-build defaults (empty test): the publish path freezes a snapshot.
   storageMock.getScales.mockResolvedValue([]);
   storageMock.getQuestionMeasurements.mockResolvedValue([]);

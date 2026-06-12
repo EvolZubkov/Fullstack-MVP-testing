@@ -221,9 +221,26 @@ async function buildRequirements(
       })),
       measurementQuestionIds: measurementsByTest.get(ref.id) ?? [],
       topicPageCount: pagesByTest.get(ref.id) ?? 0,
+      // PRD-15 block D (FR-34): adaptive level matching in the core uses the
+      // EFFECTIVE difficulty — per-test overrides win over the base value.
+      difficultyOverrides: adaptive.length > 0 ? await difficultyOverridesOf(ref.id) : null,
     });
   }
   return requirements;
+}
+
+/**
+ * Per-test difficulty overrides (block D, FR-34): questionId -> effective
+ * difficulty for this test. Null when the test overrides nothing — the core
+ * then reads the questions' base difficulty.
+ */
+async function difficultyOverridesOf(testId: string): Promise<Record<string, number> | null> {
+  const rows = await storage.getTestQuestionScoring(testId);
+  const map: Record<string, number> = {};
+  for (const row of rows) {
+    if (typeof row.difficulty === "number") map[row.questionId] = row.difficulty;
+  }
+  return Object.keys(map).length > 0 ? map : null;
 }
 
 /** Feasibility of deleting a whole topic: the pool empties, all questions go. */
@@ -287,6 +304,10 @@ export async function assessTestPublish(testId: string): Promise<PublishCheckFin
   const test = await storage.getTest(testId);
   if (!test) return [];
   const sections = await storage.getTestSections(testId);
+  // PRD-15 block D (FR-34): publish-time adaptive checks must see the same
+  // effective difficulty the delivery will use.
+  const difficultyOverrides =
+    test.mode === "adaptive" ? await difficultyOverridesOf(testId) : null;
   const findings: PublishCheckFinding[] = [];
   for (const section of sections) {
     const pool = (await storage.getQuestionsByTopic(section.topicId)).map(toPoolQuestion);
@@ -312,6 +333,7 @@ export async function assessTestPublish(testId: string): Promise<PublishCheckFin
             maxDifficulty: level.maxDifficulty,
             questionsCount: level.questionsCount,
           })),
+          difficultyOverrides,
         },
       ],
     });

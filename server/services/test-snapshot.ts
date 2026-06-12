@@ -18,9 +18,10 @@
  * Why raw rows and not the SCORM `buildTestJson` shape: the web runtime keys
  * everything by DB UUIDs and calls storage getters, whereas the SCORM bake is
  * index-id / scales-by-key tailored for the in-package player. Storing raw rows
- * keeps the snapshot a drop-in for the live storage reads. When block D (per-test
- * scoring) lands, the builder is the single place to resolve effective points
- * before freezing.
+ * keeps the snapshot a drop-in for the live storage reads. Block D follows the
+ * same rule: per-test scoring overrides are frozen RAW (`questionScoring`) and
+ * resolved at delivery through the shared effective-scoring chain, so live and
+ * snapshot attempts share one resolution code path (FR-32).
  */
 
 import { storage } from "../storage";
@@ -38,6 +39,7 @@ import type {
   QuestionMeasurement,
   ResultVariable,
   ContentPage,
+  TestQuestionScoring,
 } from "@shared/schema";
 
 /** The frozen deliverable of a test (stored as test_snapshots.content_json). */
@@ -57,6 +59,13 @@ export interface TestSnapshotContent {
   measurements: QuestionMeasurement[];
   resultVariables: ResultVariable[];
   contentPages: ContentPage[];
+  /**
+   * PRD-15 block D (FR-32): the test's per-question scoring overrides, frozen
+   * RAW — delivery resolves them through the shared effective-scoring chain,
+   * the same code path as live attempts. Absent in pre-block-D snapshots
+   * (read as []).
+   */
+  questionScoring?: TestQuestionScoring[];
 }
 
 /**
@@ -80,6 +89,7 @@ export interface TestDataSource {
   getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]>;
   getResultVariables(testId: string): Promise<ResultVariable[]>;
   getContentPages(testId: string): Promise<ContentPage[]>;
+  getTestQuestionScoring(testId: string): Promise<TestQuestionScoring[]>;
 }
 
 /**
@@ -90,7 +100,7 @@ export async function buildSnapshotContent(testId: string): Promise<TestSnapshot
   const test = await storage.getTest(testId);
   if (!test) return null;
 
-  const [sections, allTopics, scales, measurements, resultVariables, contentPages] =
+  const [sections, allTopics, scales, measurements, resultVariables, contentPages, questionScoring] =
     await Promise.all([
       storage.getTestSections(testId),
       storage.getTopics(),
@@ -98,6 +108,7 @@ export async function buildSnapshotContent(testId: string): Promise<TestSnapshot
       storage.getQuestionMeasurements(testId),
       storage.getResultVariables(testId),
       storage.getContentPages(testId),
+      storage.getTestQuestionScoring(testId),
     ]);
 
   // Topics referenced by sections (plus any referenced by content pages).
@@ -143,6 +154,7 @@ export async function buildSnapshotContent(testId: string): Promise<TestSnapshot
     measurements,
     resultVariables,
     contentPages,
+    questionScoring,
   };
 }
 
@@ -197,6 +209,7 @@ export function liveDataSource(): TestDataSource {
     getQuestionMeasurements: (id) => storage.getQuestionMeasurements(id),
     getResultVariables: (id) => storage.getResultVariables(id),
     getContentPages: (id) => storage.getContentPages(id),
+    getTestQuestionScoring: (id) => storage.getTestQuestionScoring(id),
   };
 }
 
@@ -254,6 +267,10 @@ export function snapshotDataSource(content: TestSnapshotContent): TestDataSource
     },
     async getContentPages() {
       return content.contentPages;
+    },
+    async getTestQuestionScoring() {
+      // Pre-block-D snapshots have no overrides — the chain falls to legacy.
+      return content.questionScoring ?? [];
     },
   };
 }

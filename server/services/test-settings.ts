@@ -115,6 +115,8 @@ export interface SectionPayload {
   feedbackJson?: unknown;
   /** PRD-11: optional stratified-draw blueprint; null/absent = uniform draw. */
   drawBlueprintJson?: DrawBlueprint | null;
+  /** PRD-15 block D (FR-31): per-section default price; null = inherit test. */
+  defaultPoints?: number | null;
 }
 
 export interface AdaptiveLevelPayload {
@@ -157,6 +159,8 @@ export interface TestPayload {
   showDifficultyLevel?: boolean;
   designSettingsJson?: unknown;
   folderId?: string | null;
+  /** PRD-15 block D (FR-31): test-wide default price; null = system default. */
+  defaultQuestionPoints?: number | null;
 }
 
 export interface CreatePayload {
@@ -222,6 +226,7 @@ export class TestSettingsService {
         showDifficultyLevel: payload.test.showDifficultyLevel ?? true,
         designSettingsJson: (payload.test.designSettingsJson as Record<string, unknown>) ?? {},
         folderId: payload.test.folderId ?? null,
+        defaultQuestionPoints: payload.test.defaultQuestionPoints ?? null,
       }).returning();
 
       await this._insertSections(tx, id, payload.sections);
@@ -584,6 +589,7 @@ export class TestSettingsService {
         timeLimitMinutes: s.timeLimitMinutes ?? null,
         feedbackJson: s.feedbackJson ?? null,
         drawBlueprintJson: s.drawBlueprintJson ?? null,
+        defaultPoints: s.defaultPoints ?? null,
         sortOrder: i,
       });
     }
