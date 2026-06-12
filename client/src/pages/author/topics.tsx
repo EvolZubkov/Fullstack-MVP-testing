@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Pencil, Trash2, FolderOpen, ExternalLink, BookMarked, Copy, CheckSquare, Square, Folder, ChevronRight, ChevronDown, FolderPlus, LayoutGrid, List, CalendarDays } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, FolderOpen, ExternalLink, BookMarked, Copy, CheckSquare, Square, Folder, ChevronRight, ChevronDown, FolderPlus, LayoutGrid, List, CalendarDays, Shield } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,6 +23,9 @@ import { LoadingState, LoadingSpinner } from "@/components/loading-state";
 import { t, formatQuestions } from "@/lib/i18n";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import { useContentGuard } from "@/features/content-protection/use-content-guard";
+import { TopicAccessPanel } from "@/features/topics/access/topic-access-panel";
+import { useAuth } from "@/lib/auth";
+import { ROLES } from "@shared/access";
 import type { Topic, TopicCourse, TopicEvent, Folder as FolderType } from "@shared/schema";
 
 const topicFormSchema = z.object({
@@ -60,6 +63,13 @@ interface TopicWithDetails extends Topic {
 export default function TopicsPage() {
   const { toast } = useToast();
   const contentGuard = useContentGuard();
+  // PRD-15 block C: topic access management (owner/visibility/grants).
+  const { can, hasRole, user } = useAuth();
+  const isAdmin = hasRole(ROLES.ADMINISTRATOR) || hasRole(ROLES.SUPERADMIN);
+  const canGrantAccessCap = can("topics.access.grant");
+  const canGrantAccessFor = (topic: Topic) =>
+    canGrantAccessCap && (isAdmin || topic.ownerId === user?.id);
+  const [accessTarget, setAccessTarget] = useState<{ id: string; name: string } | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [courseDialogOpen, setCourseDialogOpen] = useState(false);
@@ -476,6 +486,17 @@ export default function TopicsPage() {
           >
             <Pencil className="h-4 w-4" />
           </Button>
+          {canGrantAccessFor(topic) && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setAccessTarget({ id: topic.id, name: topic.name })}
+              title="Доступ к теме"
+              data-testid={`button-access-topic-${topic.id}`}
+            >
+              <Shield className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -608,6 +629,11 @@ export default function TopicsPage() {
           <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(topic)} data-testid={`button-edit-topic-${topic.id}`}>
             <Pencil className="h-4 w-4" />
           </Button>
+          {canGrantAccessFor(topic) && (
+            <Button variant="ghost" size="icon" onClick={() => setAccessTarget({ id: topic.id, name: topic.name })} title="Доступ к теме" data-testid={`button-access-topic-${topic.id}`}>
+              <Shield className="h-4 w-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={() => handleDelete(topic.id)} data-testid={`button-delete-topic-${topic.id}`}>
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -1107,6 +1133,13 @@ export default function TopicsPage() {
 
       {/* PRD-15 T-12: content-impact dialog for deletes affecting other tests */}
       <ContentImpactDialog {...contentGuard.dialogProps} />
+
+      {/* PRD-15 block C: topic access management (owner / visibility / grants) */}
+      <TopicAccessPanel
+        topic={accessTarget}
+        isAdmin={isAdmin}
+        onClose={() => setAccessTarget(null)}
+      />
     </div>
   );
 }
