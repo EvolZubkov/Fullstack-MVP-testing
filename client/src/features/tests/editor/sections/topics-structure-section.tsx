@@ -136,6 +136,7 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
           feedbackAssets: [],
           feedbackEvents: [],
           drawBlueprint: null,
+          defaultPoints: null,
         },
       ],
     }));

@@ -84,6 +84,8 @@ export type ApiTestResponse = {
   sections?: unknown[];
   adaptiveSettings?: unknown;
   retakePolicyJson?: unknown;
+  /** PRD-15 block D (FR-31): test-wide default price; null = system (1). */
+  defaultQuestionPoints?: number | null;
 };
 
 // ─── Type guards ──────────────────────────────────────────────────────────────
@@ -347,6 +349,8 @@ function buildSectionsFromApi(src: ApiTestResponse): {
       feedbackAssets: fb.assets,
       feedbackEvents: fb.events,
       drawBlueprint: readDrawBlueprintFromApi(raw.drawBlueprintJson),
+      // PRD-15 block D (FR-31): per-section default price (null = inherit test).
+      defaultPoints: typeof raw.defaultPoints === "number" ? raw.defaultPoints : null,
     });
   }
 
@@ -722,6 +726,7 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
     scales: [],
     measurements: [],
     retakePolicy: defaultRetakePolicy(),
+    scoring: { defaultQuestionPoints: null },
   };
 }
 
@@ -806,6 +811,10 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     scales: scalesModel,
     measurements: buildMeasurementsFromApi(src, scalesModel),
     retakePolicy: readRetakePolicyFromApi(src),
+    scoring: {
+      defaultQuestionPoints:
+        typeof src.defaultQuestionPoints === "number" ? src.defaultQuestionPoints : null,
+    },
   };
 }
 
@@ -849,6 +858,9 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     // PRD-6 FR-02: a disabled policy persists as `null` so the export stays
     // byte-identical to legacy tests (the gate is omitted from the package).
     retakePolicyJson: model.retakePolicy.enabled ? model.retakePolicy : null,
+    // PRD-15 block D (FR-31): test-wide default price (null = system default).
+    // Defensive `?.` — drafts persisted before block D have no scoring slice.
+    defaultQuestionPoints: model.scoring?.defaultQuestionPoints ?? null,
     expectedVersion: model.version,
     folderId: model.folderId,
   };
@@ -898,6 +910,8 @@ export function mapEditorSectionsToPayload(model: TestEditorModel): TestSectionP
       timeLimitMinutes: timeLimitToMinutes(section.timeLimit),
       feedbackJson,
       drawBlueprintJson,
+      // PRD-15 block D (FR-31): per-section default price.
+      defaultPoints: section.defaultPoints ?? null,
     };
   });
 }

@@ -26,12 +26,6 @@ import { t, formatPoints } from "@/lib/i18n";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import { useContentGuard } from "@/features/content-protection/use-content-guard";
 import type { Question, Topic } from "@shared/schema";
-import {
-  ScoringBuilder,
-  buildScoringJson,
-  type ScoringMode,
-  type TierDraft,
-} from "./scoring-builder";
 import { TagsInput } from "./tags-input";
 
 const questionTypes = [
@@ -43,11 +37,12 @@ const questionTypes = [
 
 type QuestionType = typeof questionTypes[number]["value"];
 
+// PRD-15 block D (FR-35): the question card carries CONTENT only — the price
+// and the graded config are configured per test («Оценка» tab of the editor).
 const baseQuestionSchema = z.object({
   topicId: z.string().min(1, t.questions.topicRequired),
   type: z.enum(["single", "multiple", "matching", "ranking"]),
   prompt: z.string().min(1, t.questions.textRequired),
-  points: z.coerce.number().min(1, t.questions.minPoints).default(1),
 });
 
 interface QuestionWithTopic extends Question {
@@ -78,9 +73,6 @@ export default function QuestionsPage() {
   const [rankingItems, setRankingItems] = useState<string[]>(["", "", "", ""]);
 
   // PRD-10: graded answer scoring (цена ответа) draft state.
-  const [scoringMode, setScoringMode] = useState<ScoringMode>("exact");
-  const [scoringWeights, setScoringWeights] = useState<string[]>([]);
-  const [scoringTiers, setScoringTiers] = useState<TierDraft[]>([]);
 
   const [mediaUrl, setMediaUrl] = useState<string>("");
   const [mediaType, setMediaType] = useState<"image" | "audio" | "video" | "">("");
@@ -133,7 +125,6 @@ export default function QuestionsPage() {
       topicId: "",
       type: "single" as QuestionType,
       prompt: "",
-      points: 1,
     },
   });
 
@@ -355,9 +346,6 @@ export default function QuestionsPage() {
     setMatchingRight(["", "", ""]);
     setMatchingPairs([]);
     setRankingItems(["", "", "", ""]);
-    setScoringMode("exact");
-    setScoringWeights([]);
-    setScoringTiers([]);
     setMediaUrl("");
     setMediaType("");
     setShuffleAnswers(true);
@@ -375,7 +363,7 @@ export default function QuestionsPage() {
 
   const handleOpenCreate = () => {
     setEditingQuestion(null);
-    form.reset({ topicId: "", type: "single", prompt: "", points: 1 });
+    form.reset({ topicId: "", type: "single", prompt: "" });
     setSelectedType("single");
     resetQuestionData();
     setIsDialogOpen(true);
@@ -387,7 +375,6 @@ export default function QuestionsPage() {
       topicId: question.topicId,
       type: question.type as QuestionType,
       prompt: question.prompt,
-      points: question.points || 1,
     });
     setSelectedType(question.type as QuestionType);
 
@@ -407,20 +394,6 @@ export default function QuestionsPage() {
     } else if (question.type === "ranking") {
       setRankingItems(data.items || ["", "", "", ""]);
     }
-
-    const scoring = question.scoringJson as any;
-    setScoringMode(scoring?.kind ?? "exact");
-    setScoringWeights(
-      scoring?.kind === "weighted" ? (scoring.weights as number[]).map(String) : [],
-    );
-    setScoringTiers(
-      scoring?.kind === "tiered"
-        ? (scoring.tiers as any[]).map((tier) => ({
-            conds: (tier.when?.all ?? []).map((c: any) => ({ lhs: c.lhs, op: c.op, rhs: String(c.rhs) })),
-            score: String(tier.score),
-          }))
-        : [],
-    );
 
     setMediaUrl(question.mediaUrl || "");
     setMediaType((question.mediaType as "image" | "audio" | "video" | "") || "");
@@ -526,7 +499,6 @@ export default function QuestionsPage() {
       feedback: feedbackMode === "general" ? (feedback.trim() || null) : null,
       feedbackCorrect: feedbackMode === "conditional" ? (feedbackCorrect.trim() || null) : null,
       feedbackIncorrect: feedbackMode === "conditional" ? (feedbackIncorrect.trim() || null) : null,
-      scoringJson: buildScoringJson(selectedType, singleOptions, scoringMode, scoringWeights, scoringTiers),
       tags,
     };
 
@@ -785,7 +757,6 @@ export default function QuestionsPage() {
                       <Badge className={getTypeBadgeColor(question.type)}>
                         {questionTypes.find((ty) => ty.value === question.type)?.label}
                       </Badge>
-                      <Badge variant="outline">{formatPoints(question.points || 1)}</Badge>
                       <Badge variant="outline" className={getDifficultyBadgeColor(question.difficulty ?? 50)}>
                         {t.questions.difficulty}: {question.difficulty ?? 50}
                       </Badge>
@@ -915,28 +886,6 @@ export default function QuestionsPage() {
               />
 
               <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="points"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t.questions.points}</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={1}
-                          placeholder="1"
-                          className="w-32"
-                          data-testid="input-question-points"
-                          value={field.value}
-                          onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
                 <FormItem>
                   <FormLabel>{t.questions.difficulty}</FormLabel>
                   <div className="flex items-center gap-4">
@@ -1178,16 +1127,14 @@ export default function QuestionsPage() {
                 />
               )}
 
-              <ScoringBuilder
-                type={selectedType}
-                options={selectedType === "single" ? singleOptions : []}
-                mode={scoringMode}
-                setMode={setScoringMode}
-                weights={scoringWeights}
-                setWeights={setScoringWeights}
-                tiers={scoringTiers}
-                setTiers={setScoringTiers}
-              />
+              {/* PRD-15 block D (FR-35): балл и цена ответа переехали в тест. */}
+              <div
+                className="rounded-md border border-dashed p-3 text-sm text-muted-foreground"
+                data-testid="question-scoring-moved-hint"
+              >
+                Балл и цена ответа настраиваются в каждом тесте отдельно — вкладка «Оценка»
+                редактора теста. В банке вопрос хранит только содержание.
+              </div>
 
               <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
 

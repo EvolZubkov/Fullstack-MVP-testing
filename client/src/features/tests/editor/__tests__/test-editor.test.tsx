@@ -381,6 +381,7 @@ describe("useTestEditor — create mode", () => {
             feedbackLinks: [],
             feedbackAssets: [],
             feedbackEvents: [],
+            defaultPoints: null,
           },
         ],
       }));
@@ -463,6 +464,7 @@ describe("useTestEditor — create adaptive mode (Gap 4)", () => {
             feedbackLinks: [],
             feedbackAssets: [],
             feedbackEvents: [],
+            defaultPoints: null,
           },
         ],
         adaptive: {

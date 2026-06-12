@@ -188,6 +188,12 @@ export type EditorSection = {
    * When present, `strata` lists per-sub-topic quotas (tag + count + per-tag mode).
    */
   drawBlueprint?: DrawBlueprint | null;
+  /**
+   * PRD-15 block D (FR-31): per-section default price of a question. `null` =
+   * inherit the test default. Edited in the «Оценка» tab, persisted with the
+   * section row.
+   */
+  defaultPoints: number | null;
 };
 
 /**
@@ -355,6 +361,15 @@ export type TestEditorModel = {
   measurements: QuestionMeasurementModel[];
   /** PRD-6 retake gate. `enabled: false` = legacy behaviour (no cooldown). */
   retakePolicy: RetakePolicy;
+  /**
+   * PRD-15 block D (FR-31): test-wide scoring defaults edited in the «Оценка»
+   * tab. `defaultQuestionPoints = null` = system default (1 point). Per-question
+   * overrides are NOT part of the draft — they persist immediately through
+   * dedicated endpoints (see scoring-api.ts).
+   */
+  scoring: {
+    defaultQuestionPoints: number | null;
+  };
 };
 
 // ─── API DTO payloads ─────────────────────────────────────────────────────────
@@ -400,6 +415,8 @@ export type TestSettingsPayload = {
   telemetryEnabled: boolean;
   /** PRD-6 retake gate; `null` when disabled (= legacy behaviour, FR-02). */
   retakePolicyJson?: RetakePolicy | null;
+  /** PRD-15 block D (FR-31): test-wide default price; `null` = system (1). */
+  defaultQuestionPoints: number | null;
   expectedVersion: number;
   /** Only sent on create (FAB folder-pick). PUT path leaves it undefined and
    *  uses the dedicated `/api/test-folders/move/:id` endpoint instead. */
@@ -417,6 +434,8 @@ export type TestSectionPayload = {
   feedbackJson: FeedbackPayload;
   /** PRD-11: per-tag draw quotas; `null` = uniform draw (FR-02). */
   drawBlueprintJson: DrawBlueprint | null;
+  /** PRD-15 block D (FR-31): per-section default price; `null` = inherit test. */
+  defaultPoints: number | null;
 };
 
 export type AdaptiveSettingsPayload = {

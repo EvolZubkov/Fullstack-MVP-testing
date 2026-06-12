@@ -51,6 +51,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     scales: [],
     measurements: [],
     retakePolicy: defaultRetakePolicy(),
+    scoring: { defaultQuestionPoints: null },
     ...overrides,
   };
 }
@@ -188,6 +189,7 @@ const sampleSection: TestEditorModel["sections"][number] = {
   feedbackLinks: [],
   feedbackAssets: [],
   feedbackEvents: [],
+  defaultPoints: null,
 };
 
 const sampleAdaptiveTopic: TestEditorModel["adaptive"]["topics"][number] = {
@@ -445,6 +447,7 @@ describe("<SettingsSection /> — Правила прохождения pane", (
       feedbackLinks: [],
       feedbackAssets: [],
       feedbackEvents: [],
+      defaultPoints: null,
       ...over,
     };
   }
@@ -590,6 +593,7 @@ describe("<SettingsSection /> — Адаптивный режим pane (mode = a
       feedbackLinks: [],
       feedbackAssets: [],
       feedbackEvents: [],
+      defaultPoints: null,
       ...over,
     };
   }

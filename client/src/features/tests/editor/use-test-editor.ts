@@ -49,12 +49,13 @@ import type {
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
-/** The four primary tabs of the editor Drawer. */
+/** The primary tabs of the editor Drawer. */
 export type EditorTabKey =
   | "composition"
   | "settings"
   | "design"
   | "structure"
+  | "scoring"
   | "scales"
   | "metrics";
 
@@ -179,6 +180,7 @@ function tabOfField(field: string): EditorTabKey {
   if (field.startsWith("basic")) return "settings";
   if (field.startsWith("design")) return "design";
   if (field.startsWith("flow") || field.startsWith("structure")) return "structure";
+  if (field.startsWith("scoring")) return "scoring";
   if (field.startsWith("scales")) return "scales";
   if (field.startsWith("resultVariables")) return "metrics";
   return "composition";
@@ -194,6 +196,7 @@ function buildTabStatuses(
     settings: { ...EMPTY_TAB_STATUS },
     design: { ...EMPTY_TAB_STATUS },
     structure: { ...EMPTY_TAB_STATUS },
+    scoring: { ...EMPTY_TAB_STATUS },
     scales: { ...EMPTY_TAB_STATUS },
     metrics: { ...EMPTY_TAB_STATUS },
   };
@@ -214,8 +217,20 @@ function diffDirtyTabs(
   snapshot: TestEditorModel,
 ): Set<EditorTabKey> {
   const dirty = new Set<EditorTabKey>();
-  if (!shallowEqualJson(draft.sections, snapshot.sections)) {
+  // PRD-15 block D: section default points are edited in the «Оценка» tab, so
+  // they are excluded from the Состав diff and attributed to «Оценка» below.
+  const sansDefaults = (sections: TestEditorModel["sections"]) =>
+    sections.map(({ defaultPoints: _defaultPoints, ...rest }) => rest);
+  if (!shallowEqualJson(sansDefaults(draft.sections), sansDefaults(snapshot.sections))) {
     dirty.add("composition");
+  }
+  const sectionDefaults = (sections: TestEditorModel["sections"]) =>
+    sections.map((s) => s.defaultPoints ?? null);
+  if (
+    !shallowEqualJson(draft.scoring, snapshot.scoring) ||
+    !shallowEqualJson(sectionDefaults(draft.sections), sectionDefaults(snapshot.sections))
+  ) {
+    dirty.add("scoring");
   }
   if (
     !shallowEqualJson(draft.basic, snapshot.basic) ||
@@ -452,6 +467,7 @@ export function useTestEditor(
         settings: { ...EMPTY_TAB_STATUS },
         design: { ...EMPTY_TAB_STATUS },
         structure: { ...EMPTY_TAB_STATUS },
+        scoring: { ...EMPTY_TAB_STATUS },
         scales: { ...EMPTY_TAB_STATUS },
         metrics: { ...EMPTY_TAB_STATUS },
       };

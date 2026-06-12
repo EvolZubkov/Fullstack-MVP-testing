@@ -1784,3 +1784,46 @@
   font: var(--ou-text-body-s);
   color: var(--ou-fg-muted);
 }
+
+/* ─── PRD-15 block D — вкладка «Оценка» редактора теста ──────────────────────
+   Wireframe: docs/wireframes/approved/prd15-test-scoring.html (s-tab).
+   Признак «настроено в тесте» — ПОСТОЯННЫЙ и отличается от маркера
+   несохранённых изменений: полоска слева у строки с переопределением +
+   мягкая акцентная заливка каждой настроенной ячейки (tooltip на ячейке). */
+.tb-qscoring { display: flex; flex-direction: column; gap: var(--ou-space-4); padding: var(--ou-space-1) 0; }
+.tb-qscoring__default-row { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; }
+.tb-qscoring__default-lbl { font: var(--ou-text-body-m); font-weight: 600; }
+.tb-qscoring__default-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+.tb-qscoring__num { width: var(--tb-input-w-sm); }
+.tb-qscoring__sec {
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-4);
+  background: var(--ou-bg-surface);
+}
+.tb-qscoring__sec-head { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; margin-bottom: var(--ou-space-2); }
+.tb-qscoring__sec-name { font: var(--ou-text-body-m); font-weight: 700; flex: 1; }
+.tb-qscoring__sec-default { display: inline-flex; align-items: center; gap: var(--ou-space-2); }
+.tb-qscoring__sec-default-lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+/* Прозрачная рамка у всех строк сохраняет выравнивание; у переопределённых
+   она акцентная (быстрый скан «в этой строке что-то настроено»). */
+.tb-qscoring .tb-table tbody td:first-child { border-left: var(--ou-space-1) solid transparent; }
+.tb-qscoring .tb-table tbody tr.tb-qscoring__row--override > td:first-child { border-left-color: var(--ou-accent-default); }
+/* Переопределённое ЗНАЧЕНИЕ — мягкая акцентная заливка ячейки. */
+.tb-qscoring .tb-table tbody td.tb-qscoring__cell--override { background: var(--ou-accent-soft); }
+.tb-qscoring__actions { display: inline-flex; gap: var(--ou-space-1); justify-content: flex-end; }
+/* Recap вопроса в модале переопределения (read-only контекст). */
+.tb-qscoring__recap {
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  background: var(--ou-bg-page);
+  margin-bottom: var(--ou-space-4);
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+.tb-qscoring__recap b { color: var(--ou-fg-default); }
+.tb-qscoring__modal-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ou-space-3) var(--ou-space-4); margin-bottom: var(--ou-space-4); }
+/* Футер модала переопределения: «Сбросить настройку» прижата влево
+   (эскиз prd15-test-scoring, ou-modal__foot--between). */
+.ou-modal__foot .tb-qscoring__foot-left { margin-right: auto; }

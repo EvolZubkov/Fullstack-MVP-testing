@@ -1,10 +1,12 @@
 /**
- * @module pages/author/scoring-builder
- * @description PRD-10 Stage 4: the "Цена ответа" (graded answer scoring) section
- * of the question editor (questions.tsx). Lets the author pick a scoring mode and
- * configure it; the result is serialized to `question.scoringJson`
- * (scoring-model §11). Built with the form's shadcn/ui kit for visual consistency
- * (the approved DS wireframe is the layout/behaviour spec, not a literal render).
+ * @module features/tests/editor/sections/scoring-builder
+ * @description PRD-10 Stage 4 / PRD-15 block D (FR-35): the "Цена ответа"
+ * (graded answer scoring) constructor. Originally part of the question editor
+ * (questions.tsx); relocated UNCHANGED into the test editor — scoring is a
+ * property of the test, the config is serialized into the per-(test, question)
+ * override (`test_question_scoring.scoring_json`, scoring-model §11). Built
+ * with the form's shadcn/ui kit for visual consistency (the approved DS
+ * wireframe is the layout/behaviour spec, not a literal render).
  *
  * Modes by type (engine support, scoring-model §11.3-11.5):
  * - single                       — exact | weighted (option weights)
@@ -19,7 +21,9 @@ import { Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { FormLabel } from "@/components/ui/form";
+// Standalone Label (not FormLabel): the constructor is rendered both inside
+// and outside a react-hook-form context (the test editor's override modal).
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -136,7 +140,7 @@ export function ScoringBuilder({
   return (
     <div className="space-y-4" data-testid="scoring-builder">
       <div className="flex items-center justify-between gap-2">
-        <FormLabel className="mb-0">Цена ответа</FormLabel>
+        <Label className="mb-0">Цена ответа</Label>
         <Badge variant="outline" data-testid="scoring-smax">
           Макс. балл sMax = {sMax}
         </Badge>
@@ -277,6 +281,39 @@ export function ScoringBuilder({
       )}
     </div>
   );
+}
+
+/**
+ * Parse a stored `scoring_json` value into the builder's draft state. The
+ * inverse of {@link buildScoringJson}; used to initialise the constructor from
+ * an existing override (or, transitionally, the question's own config).
+ */
+export function parseScoringJson(raw: unknown): {
+  mode: ScoringMode;
+  weights: string[];
+  tiers: TierDraft[];
+} {
+  const scoring = raw as { kind?: string; weights?: number[]; tiers?: unknown[] } | null;
+  const mode: ScoringMode =
+    scoring?.kind === "weighted" || scoring?.kind === "tiered" ? scoring.kind : "exact";
+  const weights =
+    scoring?.kind === "weighted" && Array.isArray(scoring.weights)
+      ? scoring.weights.map(String)
+      : [];
+  const tiers: TierDraft[] =
+    scoring?.kind === "tiered" && Array.isArray(scoring.tiers)
+      ? (scoring.tiers as Array<{ when?: { all?: Array<{ lhs: string; op: string; rhs: unknown }> }; score?: number }>).map(
+          (tier) => ({
+            conds: (tier.when?.all ?? []).map((c) => ({
+              lhs: c.lhs as CondLhs,
+              op: c.op as CondOp,
+              rhs: String(c.rhs),
+            })),
+            score: String(tier.score ?? 0),
+          }),
+        )
+      : [];
+  return { mode, weights, tiers };
 }
 
 /**

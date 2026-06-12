@@ -52,6 +52,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     scales: [],
     measurements: [],
     retakePolicy: defaultRetakePolicy(),
+    scoring: { defaultQuestionPoints: null },
     ...overrides,
   };
 }
@@ -69,6 +70,7 @@ function buildSection(over: Partial<EditorSection> = {}): EditorSection {
     feedbackLinks: [],
     feedbackAssets: [],
     feedbackEvents: [],
+    defaultPoints: null,
     ...over,
   };
 }
