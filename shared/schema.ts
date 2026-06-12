@@ -603,16 +603,30 @@ export const feedbackAssetSchema = z.object({
   scormHref: z.string().optional(),
 });
 
+/**
+ * Recommended event (TD-02): a named event the learner may attend. Unlike a
+ * course link (`feedbackLinkSchema`, URL required), the event URL is OPTIONAL —
+ * an event may have no registration page.
+ */
+export const feedbackEventSchema = z.object({
+  title: z.string().min(1),
+  url: z.union([z.string().url(), z.literal("")]).optional(),
+});
+
 export const feedbackContentSchema = z.object({
   format: feedbackFormatSchema,
   text: z.string(),
+  // `links` carries recommended courses (UI label «Курсы»); `assets` — documents
+  // (PDF); `events` — recommended events with an optional link.
   links: z.array(feedbackLinkSchema).default([]),
   assets: z.array(feedbackAssetSchema).default([]),
+  events: z.array(feedbackEventSchema).default([]),
 });
 
 export type FeedbackFormat = z.infer<typeof feedbackFormatSchema>;
 export type FeedbackLink = z.infer<typeof feedbackLinkSchema>;
 export type FeedbackAsset = z.infer<typeof feedbackAssetSchema>;
+export type FeedbackEvent = z.infer<typeof feedbackEventSchema>;
 export type FeedbackContent = z.infer<typeof feedbackContentSchema>;
 
 export const singleChoiceDataSchema = z.object({
