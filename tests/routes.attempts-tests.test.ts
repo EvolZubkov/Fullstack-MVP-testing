@@ -20,6 +20,7 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
     setTestOwner: vi.fn().mockResolvedValue(undefined),
     getTopics: vi.fn(), getQuestionsByTopic: vi.fn(),
     getQuestionsByIds: vi.fn(), getTopicCourses: vi.fn(),
+    getTopicEvents: vi.fn().mockResolvedValue([]),
     getAssignedTestsForUser: vi.fn(),
     getAdaptiveTopicSettingsByTest: vi.fn(), getAdaptiveLevelsByTest: vi.fn(),
     getResultVariables: vi.fn().mockResolvedValue([]),

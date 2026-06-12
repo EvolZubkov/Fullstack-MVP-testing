@@ -704,6 +704,9 @@ export const topicResultSchema = z.object({
   passed: z.boolean().nullable(),
   passRule: passRuleSchema.nullable(),
   recommendedCourses: z.array(z.object({ title: z.string(), url: z.string() })),
+  // TD-02: recommended events for a failed topic (url optional). `.default([])`
+  // keeps legacy stored results (without the field) valid.
+  recommendedEvents: z.array(z.object({ title: z.string(), url: z.string().optional() })).default([]),
 });
 
 export const attemptResultSchema = z.object({

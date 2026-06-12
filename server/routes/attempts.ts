@@ -759,6 +759,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
       const section = sectionMap.get(variantSection.topicId);
       const questions = await src.getQuestionsByIds(variantSection.questionIds);
       const courses = await src.getTopicCourses(variantSection.topicId);
+      const events = await src.getTopicEvents(variantSection.topicId);
 
       let sectionCorrect = 0;
       let sectionEarnedPoints = 0;
@@ -806,6 +807,7 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
         passed,
         passRule,
         recommendedCourses: courses.map((c) => ({ title: c.title, url: c.url })),
+        recommendedEvents: events.map((e) => ({ title: e.title })),
       });
     }
 

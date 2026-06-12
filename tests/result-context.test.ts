@@ -77,6 +77,52 @@ describe("buildResultContext → render real results.html (e2e)", () => {
   });
 });
 
+// TD-02: recommended courses (links) and events from FAILED topics must surface
+// on the web template results screen, deduped, mirroring the SCORM runtime.
+describe("buildResultContext recommendations (TD-02 web parity)", () => {
+  const withRecs: AttemptResult = {
+    ...attemptResult,
+    topicResults: [
+      // Passed topic — its recommendations must be IGNORED.
+      {
+        topicId: "t1", topicName: "Тема A", correct: 4, total: 5, percent: 80,
+        earnedPoints: 4, possiblePoints: 5, passed: true, passRule: null,
+        recommendedCourses: [{ title: "Курс зачёт", url: "https://e.test/ok" }],
+        recommendedEvents: [{ title: "Вебинар зачёт" }],
+      },
+      // Failed topic — its recommendations surface.
+      {
+        topicId: "t2", topicName: "Тема B", correct: 2, total: 5, percent: 40,
+        earnedPoints: 2, possiblePoints: 5, passed: false, passRule: null,
+        recommendedCourses: [{ title: "Курс по ИБ", url: "https://e.test/sec" }],
+        recommendedEvents: [{ title: "Конференция по ИБ", url: "https://e.test/conf" }, { title: "Митап" }],
+      },
+      // Second failed topic — duplicate course (deduped) + duplicate event (deduped).
+      {
+        topicId: "t3", topicName: "Тема C", correct: 1, total: 5, percent: 20,
+        earnedPoints: 1, possiblePoints: 5, passed: false, passRule: null,
+        recommendedCourses: [{ title: "Курс по ИБ", url: "https://e.test/sec" }],
+        recommendedEvents: [{ title: "Митап" }],
+      },
+    ],
+  } as AttemptResult;
+  const ctx = buildResultContext(withRecs, "Демо-тест");
+
+  it("aggregates + dedups courses/events from FAILED topics only", () => {
+    const courses = (ctx.result.recommendedCourses ?? []) as Array<{ title: string; url?: string }>;
+    const events = (ctx.result.recommendedEvents ?? []) as Array<{ title: string; url?: string }>;
+    expect(courses.map((c) => c.title)).toEqual(["Курс по ИБ"]);
+    expect(events.map((e) => e.title)).toEqual(["Конференция по ИБ", "Митап"]);
+  });
+
+  it("renders the events into the real results.html", () => {
+    const root = document.createElement("div");
+    renderScreenInto(root, { layout: resultsLayout, context: ctx });
+    expect(root.textContent).toContain("Конференция по ИБ");
+    expect(root.textContent).toContain("Митап");
+  });
+});
+
 const adaptiveLayout = fs.readFileSync(
   path.join(process.cwd(), "server", "scorm", "templates", "default", "layouts", "results.adaptive.html"),
   "utf8",
