@@ -67,6 +67,16 @@ interface NameCheckResponse {
   duplicates: { id: string; name: string }[];
 }
 
+/** Admin duplicates report (PRD-15 FR-27/BRC-12, GET /api/topics/duplicates-report). */
+interface DuplicatesReport {
+  groups: {
+    nameNormalized: string;
+    topics: { id: string; name: string; ownerId: string | null; visibility: "private" | "shared" }[];
+  }[];
+}
+
+interface ReportUser { id: string; name: string | null; email: string }
+
 /** Debounce a changing value (no shared hook in the codebase). */
 function useDebouncedValue<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -103,6 +113,7 @@ export default function TopicsPage() {
   // topics; this narrows the view client-side by relationship.
   const [topicFilter, setTopicFilter] = useState<"mine" | "accessible" | "shared" | "all">("mine");
   const [showEmptyFolders, setShowEmptyFolders] = useState(false);
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     return (localStorage.getItem("topics_view") as any) || "grid";
   });
@@ -164,6 +175,26 @@ export default function TopicsPage() {
     nameCheck?.sameOwner && debouncedName.trim() === (watchedName ?? "").trim()
       ? nameCheck.sameOwner
       : null;
+
+  // PRD-15 FR-27/BRC-12: admin-only system-wide duplicates report.
+  const { data: duplicates } = useQuery<DuplicatesReport>({
+    queryKey: ["/api/topics/duplicates-report"],
+    queryFn: async () => {
+      const res = await fetch("/api/topics/duplicates-report", { credentials: "include" });
+      if (!res.ok) throw new Error("Не удалось загрузить отчёт");
+      return res.json();
+    },
+    enabled: duplicatesOpen && isAdmin,
+  });
+  const { data: reportUsers = [] } = useQuery<ReportUser[]>({
+    queryKey: ["/api/users"],
+    enabled: duplicatesOpen && isAdmin,
+  });
+  const ownerLabel = (id: string | null): string => {
+    if (!id) return "не назначен";
+    const u = reportUsers.find((x) => x.id === id);
+    return u?.name?.trim() || u?.email || id;
+  };
 
   const createMutation = useMutation({
     mutationFn: (data: TopicFormData) => apiRequest("POST", "/api/topics", data),
@@ -898,6 +929,16 @@ export default function TopicsPage() {
             Показывать пустые папки
           </label>
         )}
+        {isAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDuplicatesOpen(true)}
+            data-testid="button-duplicates-report"
+          >
+            Отчёт о дублях
+          </Button>
+        )}
         <div className="flex items-center border rounded-md">
           <Button
             variant={viewMode === "grid" ? "secondary" : "ghost"}
@@ -1256,6 +1297,54 @@ export default function TopicsPage() {
         isAdmin={isAdmin}
         onClose={() => setAccessTarget(null)}
       />
+
+      {/* PRD-15 FR-27 / BRC-12: admin duplicates report */}
+      <Dialog open={duplicatesOpen} onOpenChange={setDuplicatesOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Дублирующиеся темы</DialogTitle>
+          </DialogHeader>
+          {!duplicates ? (
+            <p className="text-sm text-muted-foreground">Загрузка…</p>
+          ) : duplicates.groups.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Одноимённых тем по системе не найдено</p>
+          ) : (
+            <div className="space-y-6 max-h-[60vh] overflow-auto">
+              {duplicates.groups.map((g) => (
+                <div key={g.nameNormalized}>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                    «{g.nameNormalized}» · {g.topics.length}
+                  </p>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 border-b">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium">Название</th>
+                          <th className="text-left px-3 py-2 font-medium">Владелец</th>
+                          <th className="text-left px-3 py-2 font-medium">Видимость</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.topics.map((tp) => (
+                          <tr key={tp.id} className="border-b last:border-0">
+                            <td className="px-3 py-2">{tp.name}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{ownerLabel(tp.ownerId)}</td>
+                            <td className="px-3 py-2">
+                              <Badge variant={tp.visibility === "shared" ? "default" : "secondary"}>
+                                {tp.visibility === "shared" ? "Общая" : "Приватная"}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
