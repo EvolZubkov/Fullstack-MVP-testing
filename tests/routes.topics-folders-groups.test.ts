@@ -131,6 +131,66 @@ describe("Topics routes", () => {
     expect(res.status).toBe(404);
   });
 
+  // ── TD-02 r.2: rich topic feedbackJson round-trip (additive) ────────────────
+
+  const feedbackJson = {
+    format: "plain",
+    text: "Повторите главу 3",
+    links: [{ title: "Курс по JS", url: "https://example.com/js" }],
+    events: [{ title: "Вебинар по JS" }],
+  };
+
+  it("POST / — persists a valid feedbackJson", async () => {
+    storageMock.createTopic.mockResolvedValue(topic);
+    const res = await asAuthor(
+      request(app).post("/api/topics").send({ name: "JS", feedbackJson }),
+    );
+    expect(res.status).toBe(201);
+    expect(storageMock.createTopic).toHaveBeenCalledWith(
+      expect.objectContaining({
+        feedbackJson: expect.objectContaining({
+          text: "Повторите главу 3",
+          links: [{ title: "Курс по JS", url: "https://example.com/js" }],
+          events: [{ title: "Вебинар по JS" }],
+          assets: [],
+        }),
+      }),
+    );
+  });
+
+  it("POST / — returns 400 on malformed feedbackJson", async () => {
+    const res = await asAuthor(
+      request(app).post("/api/topics").send({ name: "JS", feedbackJson: { format: "bogus" } }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_feedback_json");
+    expect(storageMock.createTopic).not.toHaveBeenCalled();
+  });
+
+  it("PUT /:id — persists feedbackJson when sent", async () => {
+    storageMock.updateTopic.mockResolvedValue(topic);
+    const res = await asAuthor(
+      request(app).put("/api/topics/t1").send({ name: "JS", feedbackJson }),
+    );
+    expect(res.status).toBe(200);
+    expect(storageMock.updateTopic.mock.calls[0][1]).toHaveProperty("feedbackJson");
+  });
+
+  it("PUT /:id — omits feedbackJson from the patch when not sent (preserves stored)", async () => {
+    storageMock.updateTopic.mockResolvedValue(topic);
+    const res = await asAuthor(request(app).put("/api/topics/t1").send({ name: "JS" }));
+    expect(res.status).toBe(200);
+    expect(storageMock.updateTopic.mock.calls[0][1]).not.toHaveProperty("feedbackJson");
+  });
+
+  it("PUT /:id — returns 400 on malformed feedbackJson", async () => {
+    const res = await asAuthor(
+      request(app).put("/api/topics/t1").send({ name: "JS", feedbackJson: { text: 5 } }),
+    );
+    expect(res.status).toBe(400);
+    expect(storageMock.updateTopic).not.toHaveBeenCalled();
+  });
+
   it("DELETE /:id — deletes topic", async () => {
     storageMock.deleteTopic.mockResolvedValue(true);
     const res = await asAuthor(request(app).delete("/api/topics/t1"));

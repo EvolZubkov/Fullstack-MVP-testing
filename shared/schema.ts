@@ -106,6 +106,13 @@ export const topics = pgTable("topics", {
   name: text("name").notNull(),
   description: text("description"),
   feedback: text("feedback"),
+  // TD-02 (additive, variant A): rich topic feedback mirroring tests/sections
+  // `feedback_json` ({ format, text, links (courses), assets (PDF), events }).
+  // Backfilled from the legacy `feedback` text + topic_courses + topic_events by
+  // migration 023. Delivery readers (web results, SCORM, snapshots) still source
+  // the legacy tables until r.3; this column backs the unified topic feedback
+  // editor (T-32 Drawer). NULL = not yet backfilled.
+  feedbackJson: jsonb("feedback_json"),
   folderId: varchar("folder_id", { length: 36 }),
   // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
   createdBy: varchar("created_by", { length: 36 }),

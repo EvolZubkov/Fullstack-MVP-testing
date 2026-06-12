@@ -23,8 +23,20 @@ import {
   duplicateNameGroups,
 } from "../services/topic-access";
 import { normalizeTopicName } from "@shared/topics/naming";
+import { feedbackContentSchema, type FeedbackContent } from "@shared/schema";
 
 const router = Router();
+
+/**
+ * Validate the optional rich `feedbackJson` body field (TD-02). `undefined`/`null`
+ * means "not provided" — left untouched. A malformed object yields `null` so the
+ * caller can answer 400 instead of persisting garbage.
+ */
+function parseFeedbackJson(raw: unknown): { ok: true; value: FeedbackContent | undefined } | { ok: false } {
+  if (raw === undefined || raw === null) return { ok: true, value: undefined };
+  const parsed = feedbackContentSchema.safeParse(raw);
+  return parsed.success ? { ok: true, value: parsed.data } : { ok: false };
+}
 
 // GET /api/topics - Список тем с курсами и количеством вопросов
 // PRD-15 block C (FR-22): scoped to topics the actor may see (own, granted,
@@ -100,9 +112,13 @@ router.get("/duplicates-report", requirePermission("topics.read"), async (req, r
 // POST /api/topics - Создать тему
 router.post("/", requirePermission("topics.manage"), async (req, res) => {
   try {
-    const { name, description, feedback, folderId } = req.body;
+    const { name, description, feedback, folderId, feedbackJson } = req.body;
     if (!name) {
       return res.status(400).json({ error: "Name required" });
+    }
+    const fb = parseFeedbackJson(feedbackJson);
+    if (!fb.ok) {
+      return res.status(400).json({ error: "invalid_feedback_json" });
     }
     const ownerId = req.currentUser?.id ?? null;
     // FR-27 hard uniqueness within one owner.
@@ -118,6 +134,7 @@ router.post("/", requirePermission("topics.manage"), async (req, res) => {
       name,
       description,
       feedback,
+      feedbackJson: fb.value,
       folderId,
       createdBy: ownerId,
     });
@@ -147,7 +164,11 @@ router.put("/:id", requirePermission("topics.manage"), async (req, res) => {
       respondForbiddenContent(res);
       return;
     }
-    const { name, description, feedback, folderId } = req.body;
+    const { name, description, feedback, folderId, feedbackJson } = req.body;
+    const fb = parseFeedbackJson(feedbackJson);
+    if (!fb.ok) {
+      return res.status(400).json({ error: "invalid_feedback_json" });
+    }
     // FR-27: a rename to a name already used by ANOTHER of the owner's topics is
     // a hard conflict; a clash with a different owner's visible topic only warns.
     const renamed =
@@ -163,7 +184,15 @@ router.put("/:id", requirePermission("topics.manage"), async (req, res) => {
         });
       }
     }
-    const updated = await storage.updateTopic(req.params.id, { name, description, feedback, folderId });
+    const updated = await storage.updateTopic(req.params.id, {
+      name,
+      description,
+      feedback,
+      folderId,
+      // Only overwrite feedbackJson when the client sent it; undefined is skipped
+      // by Drizzle's .set(), so omitting it preserves the stored value.
+      ...(fb.value !== undefined ? { feedbackJson: fb.value } : {}),
+    });
     if (!updated) {
       return res.status(404).json({ error: "Topic not found" });
     }

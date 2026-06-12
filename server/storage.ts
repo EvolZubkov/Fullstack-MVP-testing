@@ -964,6 +964,7 @@ export class DatabaseStorage implements IStorage {
       name: topic.name,
       description: topic.description || null,
       feedback: topic.feedback || null,
+      feedbackJson: topic.feedbackJson ?? null,
       folderId: topic.folderId || null,
       createdBy: topic.createdBy || null,
       // PRD-15 block C: a new topic is owned by its creator and private by
