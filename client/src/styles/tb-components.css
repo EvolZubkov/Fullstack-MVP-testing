@@ -614,13 +614,14 @@
   padding: var(--ou-space-2) var(--ou-space-3);
   font: var(--ou-text-body-s);
   background: var(--ou-bg-elevated);
-  cursor: pointer;
   text-align: left;
 }
-.tb-feedback-preview:hover { border-color: var(--ou-accent-default); }
+/* TD-02: only the empty placeholder is click-to-edit; non-empty cards edit via
+   the pencil button and carry real item links. */
 .tb-feedback-preview.is-empty {
-  color: var(--ou-fg-muted); font-style: italic;
+  color: var(--ou-fg-muted); font-style: italic; cursor: pointer;
 }
+.tb-feedback-preview.is-empty:hover { border-color: var(--ou-accent-default); }
 .tb-feedback-preview__text {
   display: flex; align-items: baseline; gap: var(--ou-space-2);
 }
@@ -645,6 +646,31 @@
   display: flex; justify-content: flex-end; margin-top: var(--ou-space-1);
   color: var(--ou-fg-muted);
 }
+/* TD-02: head row (snippet/rich text + pencil edit button) */
+.tb-feedback-preview__head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--ou-space-2);
+}
+.tb-feedback-preview__head .tb-feedback-preview__snippet,
+.tb-feedback-preview__head .tb-feedback-preview__rich { flex: 1; min-width: 0; }
+/* TD-02: grouped reference lists (Документы / Курсы / Мероприятия) */
+.tb-feedback-preview__group { margin-top: var(--ou-space-2); }
+.tb-feedback-preview__group-title {
+  font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: var(--ou-space-1);
+}
+.tb-feedback-preview__items {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: var(--ou-space-1);
+}
+.tb-feedback-preview__item {
+  display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0;
+}
+.tb-feedback-preview__item-ico {
+  display: inline-flex; flex-shrink: 0; color: var(--ou-fg-muted);
+}
+.tb-feedback-preview__item a { color: var(--ou-accent-default); text-decoration: none; }
+.tb-feedback-preview__item a:hover { text-decoration: underline; }
 
 /* ── Saving overlay (наложение со спиннером поверх Drawer body) ─────────
    Используется во время атомарного сохранения теста (PUT /api/tests/:id).

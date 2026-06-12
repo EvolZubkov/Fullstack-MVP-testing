@@ -27,6 +27,7 @@ import type {
   EditorSection,
   FeedbackAsset,
   FeedbackContent,
+  FeedbackEvent,
   FeedbackFormat,
   FeedbackLink,
   FeedbackPayload,
@@ -138,15 +139,17 @@ function parseFeedbackObject(raw: unknown): {
   content: FeedbackContent;
   links: FeedbackLink[];
   assets: FeedbackAsset[];
+  events: FeedbackEvent[];
 } {
   if (isPlainObject(raw)) {
     const format: FeedbackFormat = isFeedbackFormat(raw.format) ? raw.format : "plain";
     const text = typeof raw.text === "string" ? raw.text : "";
     const links = Array.isArray(raw.links) ? (raw.links as FeedbackLink[]) : [];
     const assets = Array.isArray(raw.assets) ? (raw.assets as FeedbackAsset[]) : [];
-    return { content: { format, text }, links, assets };
+    const events = Array.isArray(raw.events) ? (raw.events as FeedbackEvent[]) : [];
+    return { content: { format, text }, links, assets, events };
   }
-  return { content: { format: "plain", text: "" }, links: [], assets: [] };
+  return { content: { format: "plain", text: "" }, links: [], assets: [], events: [] };
 }
 
 /**
@@ -158,6 +161,7 @@ function readFeedbackFromApi(api: ApiTestResponse): {
   content: FeedbackContent;
   links: FeedbackLink[];
   assets: FeedbackAsset[];
+  events: FeedbackEvent[];
 } {
   if (isPlainObject(api.feedbackJson)) {
     return parseFeedbackObject(api.feedbackJson);
@@ -167,6 +171,7 @@ function readFeedbackFromApi(api: ApiTestResponse): {
     content: { format: "plain", text: legacyText },
     links: [],
     assets: [],
+    events: [],
   };
 }
 
@@ -340,6 +345,7 @@ function buildSectionsFromApi(src: ApiTestResponse): {
       feedback: fb.content,
       feedbackLinks: fb.links,
       feedbackAssets: fb.assets,
+      feedbackEvents: fb.events,
       drawBlueprint: readDrawBlueprintFromApi(raw.drawBlueprintJson),
     });
   }
@@ -692,6 +698,7 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
       feedback: { format: "plain", text: "" },
       feedbackLinks: [],
       feedbackAssets: [],
+      feedbackEvents: [],
       webhookUrl: "",
       telemetryEnabled: false,
     },
@@ -772,6 +779,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       feedback: feedback.content,
       feedbackLinks: feedback.links,
       feedbackAssets: feedback.assets,
+      feedbackEvents: feedback.events,
       webhookUrl: typeof src.webhookUrl === "string" ? src.webhookUrl : "",
       telemetryEnabled:
         typeof src.telemetryEnabled === "boolean" ? src.telemetryEnabled : false,
@@ -821,6 +829,7 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     text: model.basic.feedback.text,
     links: model.basic.feedbackLinks,
     assets: stripScormHref(model.basic.feedbackAssets),
+    events: model.basic.feedbackEvents,
   };
 
   const payload: TestSettingsPayload = {
@@ -869,6 +878,7 @@ export function mapEditorSectionsToPayload(model: TestEditorModel): TestSectionP
       text: section.feedback.text,
       links: section.feedbackLinks,
       assets: stripScormHref(section.feedbackAssets),
+      events: section.feedbackEvents,
     };
 
     // PRD-11: send the blueprint only when it has at least one stratum; an empty

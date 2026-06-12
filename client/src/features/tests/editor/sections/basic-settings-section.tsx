@@ -41,12 +41,14 @@ import {
   FeedbackEditorModal,
   type FeedbackEditorValue,
 } from "./feedback-editor-modal";
+import { FeedbackPreview } from "./feedback-preview";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
   AdaptiveTopicConfig,
   FeedbackAsset,
   FeedbackContent,
+  FeedbackEvent,
   FeedbackLink,
   FlowMode,
   OverallPassRule,
@@ -331,6 +333,7 @@ function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: Set
             feedback={model.basic.feedback}
             links={model.basic.feedbackLinks}
             assets={model.basic.feedbackAssets}
+            events={model.basic.feedbackEvents}
             onSave={(next) => {
               updateModel((m) => ({
                 ...m,
@@ -339,6 +342,7 @@ function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: Set
                   feedback: { format: next.format, text: next.text },
                   feedbackLinks: next.links,
                   feedbackAssets: next.assets,
+                  feedbackEvents: next.events,
                 },
               }));
             }}
@@ -1507,54 +1511,31 @@ function TestFeedbackTrigger(props: {
   feedback: FeedbackContent;
   links: FeedbackLink[];
   assets: FeedbackAsset[];
+  events: FeedbackEvent[];
   onSave: (next: {
     format: FeedbackContent["format"];
     text: string;
     links: FeedbackLink[];
     assets: FeedbackAsset[];
+    events: FeedbackEvent[];
   }) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const isEmpty =
-    props.feedback.text.trim() === "" &&
-    props.links.length === 0 &&
-    props.assets.length === 0;
-  const preview =
-    props.feedback.text.trim() !== ""
-      ? props.feedback.text.replace(/<[^>]+>/g, "").slice(0, 80)
-      : "Не задано - нажмите для редактирования";
-  // Compact meta line: «N ссыл..., M PDF» rendered alongside the preview.
-  // Pluralisation matches FeedbackEditTrigger for visual consistency.
-  const metaParts: string[] = [];
-  if (props.links.length > 0) {
-    const n = props.links.length;
-    const word = n === 1 ? "ка" : n >= 2 && n <= 4 ? "ки" : "ок";
-    metaParts.push(`${n} ссыл${word}`);
-  }
-  if (props.assets.length > 0) {
-    metaParts.push(`${props.assets.length} PDF`);
-  }
 
   return (
     <>
       <label className="ou-formfield__lbl">Обратная связь после прохождения</label>
-      <button
-        type="button"
-        className={"tb-feedback-preview" + (isEmpty ? " is-empty" : "")}
-        onClick={() => setOpen(true)}
-        aria-label="Редактировать обратную связь теста"
-        data-testid="settings-feedback-trigger"
-      >
-        <span className="tb-feedback-preview__text">
-          <span className="tb-feedback-preview__snippet">{preview}</span>
-          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-        </span>
-        {metaParts.length > 0 && (
-          <span className="tb-feedback-preview__meta">
-            {metaParts.join(" · ")}
-          </span>
-        )}
-      </button>
+      {/* TD-02: grouped-list preview (Документы / Курсы / Мероприятия) + pencil. */}
+      <FeedbackPreview
+        format={props.feedback.format}
+        text={props.feedback.text}
+        links={props.links}
+        assets={props.assets}
+        events={props.events}
+        onEdit={() => setOpen(true)}
+        editAriaLabel="Редактировать обратную связь теста"
+        testId="settings-feedback-trigger"
+      />
       <FeedbackEditorModal
         open={open}
         title="Общая обратная связь теста"
@@ -1564,6 +1545,7 @@ function TestFeedbackTrigger(props: {
           text: props.feedback.text,
           links: props.links,
           assets: props.assets,
+          events: props.events,
         }}
         onCancel={() => setOpen(false)}
         onSave={(v: FeedbackEditorValue) => {
@@ -1572,6 +1554,7 @@ function TestFeedbackTrigger(props: {
             text: v.text,
             links: v.links,
             assets: v.assets,
+            events: v.events ?? [],
           });
           setOpen(false);
         }}
@@ -1644,6 +1627,7 @@ function FeedbackEditTrigger(props: {
           assets: [],
         }}
         hideAssets={props.hideAssets}
+        hideEvents
         onCancel={() => setOpen(false)}
         onSave={(v: FeedbackEditorValue) => {
           props.onSave({ text: v.text, links: v.links });

@@ -21,7 +21,7 @@
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Layers, Pencil, Plus, Trash2, X, Link as LinkIcon, Paperclip } from "lucide-react";
+import { Layers, Plus, Trash2, X } from "lucide-react";
 import type { DrawBlueprint, Topic } from "@shared/schema";
 import { tagKey } from "@shared/tags";
 import {
@@ -38,6 +38,7 @@ import {
   Tag,
 } from "@universityrt/ui-kit";
 import { FeedbackEditorModal } from "./feedback-editor-modal";
+import { FeedbackPreview as SharedFeedbackPreview } from "./feedback-preview";
 import type {
   EditorSection,
   TestEditorModel,
@@ -130,6 +131,7 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
           feedback: { format: "plain", text: "" },
           feedbackLinks: [],
           feedbackAssets: [],
+          feedbackEvents: [],
           drawBlueprint: null,
         },
       ],
@@ -344,6 +346,7 @@ function TopicRow(props: {
           text: section.feedback.text,
           links: section.feedbackLinks,
           assets: section.feedbackAssets,
+          events: section.feedbackEvents,
         }}
         onCancel={() => setFeedbackOpen(false)}
         onSave={(v) => {
@@ -351,6 +354,7 @@ function TopicRow(props: {
             feedback: { format: v.format, text: v.text },
             feedbackLinks: v.links,
             feedbackAssets: v.assets,
+            feedbackEvents: v.events ?? [],
           });
           setFeedbackOpen(false);
         }}
@@ -578,104 +582,25 @@ function FeedbackPreview({
   section: EditorSection;
   onEdit?: () => void;
 }) {
-  const hasText = section.feedback.text.trim() !== "";
-  const linkCount = section.feedbackLinks.length;
-  const assetCount = section.feedbackAssets.length;
-  const isRich = section.feedback.format === "richText" || section.feedback.format === "html";
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      onEdit?.();
-    }
-  };
-
-  if (!hasText && linkCount === 0 && assetCount === 0) {
-    const cls = "tb-feedback-preview is-empty";
-    const label = "Редактировать обратную связь по теме";
-    const empty = "Не задано — нажмите для редактирования";
-    const emptyReadonly = "Не задано — обратная связь по теме пока не настроена";
-    if (onEdit) {
-      return (
-        <div
-          role="button"
-          tabIndex={0}
-          className={cls}
-          onClick={onEdit}
-          onKeyDown={handleKeyDown}
-          aria-label={label}
-          data-testid={`feedback-preview-${section.topicId}`}
-        >
-          {empty}
-        </div>
-      );
-    }
-    return <div className={cls}>{emptyReadonly}</div>;
-  }
-
-  const meta = (linkCount > 0 || assetCount > 0) && (
-    <div className="tb-feedback-preview__meta">
-      {linkCount > 0 && (
-        <>
-          <LinkIcon aria-hidden="true" />
-          {linkCount} ссыл{plural(linkCount, "ка", "ки", "ок")}
-        </>
-      )}
-      {linkCount > 0 && assetCount > 0 && (
-        <span className="tb-feedback-preview__sep">·</span>
-      )}
-      {assetCount > 0 && (
-        <>
-          <Paperclip aria-hidden="true" />
-          {assetCount} файл{plural(assetCount)}
-        </>
-      )}
-    </div>
+  // TD-02: delegate to the shared grouped-list preview (Документы / Курсы /
+  // Мероприятия) with a pencil edit trigger.
+  return (
+    <SharedFeedbackPreview
+      format={section.feedback.format}
+      text={section.feedback.text}
+      links={section.feedbackLinks}
+      assets={section.feedbackAssets}
+      events={section.feedbackEvents}
+      onEdit={onEdit}
+      editAriaLabel="Редактировать обратную связь по теме"
+      emptyLabel={
+        onEdit
+          ? "Не задано — нажмите для редактирования"
+          : "Не задано — обратная связь по теме пока не настроена"
+      }
+      testId={`feedback-preview-${section.topicId}`}
+    />
   );
-
-  const inner = isRich && hasText ? (
-    <>
-      <div
-        className="tb-feedback-preview__rich"
-        // Author-controlled RTE content — rendered in the author's editor UI only.
-        dangerouslySetInnerHTML={{ __html: section.feedback.text }}
-      />
-      {meta}
-      <div className="tb-feedback-preview__edit-hint">
-        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-      </div>
-    </>
-  ) : (
-    <>
-      <div className="tb-feedback-preview__text">
-        <span className="tb-feedback-preview__snippet">
-          {hasText
-            ? section.feedback.text.replace(/<[^>]+>/g, "").slice(0, 120)
-            : "Без текста"}
-        </span>
-        <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-      </div>
-      {meta}
-    </>
-  );
-
-  if (onEdit) {
-    return (
-      <div
-        role="button"
-        tabIndex={0}
-        className="tb-feedback-preview"
-        onClick={onEdit}
-        onKeyDown={handleKeyDown}
-        aria-label="Редактировать обратную связь по теме"
-        data-testid={`feedback-preview-${section.topicId}`}
-      >
-        {inner}
-      </div>
-    );
-  }
-
-  return <div className="tb-feedback-preview">{inner}</div>;
 }
 
 function TopicPickerModal(props: {

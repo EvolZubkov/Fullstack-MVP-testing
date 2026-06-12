@@ -72,6 +72,12 @@ export type FeedbackLink = {
   url: string;
 };
 
+/** Recommended event (TD-02). URL optional — an event may have no page. */
+export type FeedbackEvent = {
+  title: string;
+  url?: string;
+};
+
 // ─── Adaptive ─────────────────────────────────────────────────────────────────
 
 export type AdaptiveLinkConfig = {
@@ -176,6 +182,7 @@ export type EditorSection = {
   feedback: FeedbackContent;
   feedbackLinks: FeedbackLink[];
   feedbackAssets: FeedbackAsset[];
+  feedbackEvents: FeedbackEvent[];
   /**
    * PRD-11: optional per-tag draw quotas. Absent/`null` = uniform draw (FR-02).
    * When present, `strata` lists per-sub-topic quotas (tag + count + per-tag mode).
@@ -324,6 +331,7 @@ export type TestEditorModel = {
     feedback: FeedbackContent;
     feedbackLinks: FeedbackLink[];
     feedbackAssets: FeedbackAsset[];
+    feedbackEvents: FeedbackEvent[];
     webhookUrl: string;
     telemetryEnabled: boolean;
   };
@@ -362,6 +370,7 @@ export type FeedbackPayload = {
   text: string;
   links: FeedbackLink[];
   assets: FeedbackAsset[];
+  events: FeedbackEvent[];
 };
 
 /**
