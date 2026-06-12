@@ -157,19 +157,10 @@ export const topicAccessGrants = pgTable("topic_access_grants", {
 
 export type TopicAccessGrant = typeof topicAccessGrants.$inferSelect;
 
-export const topicCourses = pgTable("topic_courses", {
-  id: varchar("id", { length: 36 }).primaryKey(),
-  topicId: varchar("topic_id", { length: 36 }).notNull(),
-  title: text("title").notNull(),
-  url: text("url").notNull(),
-});
-
-// Рекомендуемые мероприятия (офлайн: мастер-класс, лабораторная и т.д.)
-export const topicEvents = pgTable("topic_events", {
-  id: varchar("id", { length: 36 }).primaryKey(),
-  topicId: varchar("topic_id", { length: 36 }).notNull(),
-  title: text("title").notNull(),
-});
+// TD-02 r.3: the topic_courses / topic_events tables were dropped (migration
+// 024). Recommended courses/events live in topics.feedback_json; these shapes
+// are kept as standalone types for the delivery projection (see
+// shared/topics/recommendations.ts and TestSnapshotContent).
 
 // ─── PRD-10: graded answer scoring (цена ответа) ─────────────────────────────
 // Per-question scoring config on the correctness axis (how many points an answer
@@ -481,8 +472,6 @@ export const insertTestFolderSchema = createInsertSchema(testFolders).omit({ id:
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertFolderSchema = createInsertSchema(folders).omit({ id: true });
 export const insertTopicSchema = createInsertSchema(topics).omit({ id: true });
-export const insertTopicCourseSchema = createInsertSchema(topicCourses).omit({ id: true });
-export const insertTopicEventSchema = createInsertSchema(topicEvents).omit({ id: true });
 export const insertQuestionSchema = createInsertSchema(questions)
   .omit({ id: true })
   // drizzle-zod types jsonb loosely; validate the scoring config explicitly (FR-13)
@@ -530,11 +519,11 @@ export type TestFolder = typeof testFolders.$inferSelect;
 export type InsertTopic = z.infer<typeof insertTopicSchema>;
 export type Topic = typeof topics.$inferSelect;
 
-export type InsertTopicCourse = z.infer<typeof insertTopicCourseSchema>;
-export type TopicCourse = typeof topicCourses.$inferSelect;
-
-export type InsertTopicEvent = z.infer<typeof insertTopicEventSchema>;
-export type TopicEvent = typeof topicEvents.$inferSelect;
+// TD-02 r.3: standalone projection shapes (the backing tables were dropped,
+// migration 024). A recommended course = a feedback link; an event = a feedback
+// event title. Ids are synthetic (index-based) — see shared/topics/recommendations.
+export type TopicCourse = { id: string; topicId: string; title: string; url: string };
+export type TopicEvent = { id: string; topicId: string; title: string };
 
 export type InsertQuestion = z.infer<typeof insertQuestionSchema>;
 export type Question = typeof questions.$inferSelect;

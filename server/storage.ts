@@ -4,7 +4,7 @@ import { eq, inArray, and, sql, desc, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { encryptEmail, decryptEmail, hashEmail } from "./utils/crypto";
 import {
-  users, topics, topicCourses, topicEvents, questions, tests, testSections, attempts, folders, testFolders,
+  users, topics, questions, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
   groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
   contentPages, resultVariables, scales, questionMeasurements,
@@ -1088,14 +1088,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTopic(id: string): Promise<boolean> {
-    // Full cascade (PRD-15 FR-07, audit F-8/F-4): questions, courses, events,
-    // dangling test sections and topic-scoped content pages all go with the
-    // topic. Deletion while published tests depend on it is gated upstream by
-    // the draw-feasibility check (FR-05), so reaching this point means the
-    // caller accepted the consequences.
+    // Full cascade (PRD-15 FR-07, audit F-8/F-4): questions, dangling test
+    // sections and topic-scoped content pages all go with the topic.
+    // Recommended courses/events live in topics.feedback_json (deleted with the
+    // row). Deletion while published tests depend on it is gated upstream by the
+    // draw-feasibility check (FR-05), so reaching this point means the caller
+    // accepted the consequences.
     await db.delete(questions).where(eq(questions.topicId, id));
-    await db.delete(topicCourses).where(eq(topicCourses.topicId, id));
-    await db.delete(topicEvents).where(eq(topicEvents.topicId, id));
     await db.delete(testSections).where(eq(testSections.topicId, id));
     await db.delete(contentPages).where(eq(contentPages.topicId, id));
     const result = await db.delete(topics).where(eq(topics.id, id)).returning();
@@ -1106,8 +1105,6 @@ export class DatabaseStorage implements IStorage {
     if (ids.length === 0) return 0;
     // Same full cascade as deleteTopic (PRD-15 FR-07).
     await db.delete(questions).where(inArray(questions.topicId, ids));
-    await db.delete(topicCourses).where(inArray(topicCourses.topicId, ids));
-    await db.delete(topicEvents).where(inArray(topicEvents.topicId, ids));
     await db.delete(testSections).where(inArray(testSections.topicId, ids));
     await db.delete(contentPages).where(inArray(contentPages.topicId, ids));
     const result = await db.delete(topics).where(inArray(topics.id, ids)).returning();
