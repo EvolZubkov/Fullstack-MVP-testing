@@ -1,13 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Pencil, Trash2, FolderOpen, ExternalLink, BookMarked, Copy, CheckSquare, Square, Folder, ChevronRight, ChevronDown, FolderPlus, LayoutGrid, List, CalendarDays, Shield } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, FolderOpen, Copy, CheckSquare, Square, Folder, ChevronRight, ChevronDown, FolderPlus, LayoutGrid, List, Shield } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
@@ -23,48 +22,24 @@ import { LoadingState, LoadingSpinner } from "@/components/loading-state";
 import { t, formatQuestions } from "@/lib/i18n";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import { useContentGuard } from "@/features/content-protection/use-content-guard";
-import { TopicAccessPanel } from "@/features/topics/access/topic-access-panel";
+import { TopicDrawer, type TopicDrawerTarget } from "@/features/topics/topic-drawer";
 import { useAuth } from "@/lib/auth";
 import { ROLES } from "@shared/access";
-import type { Topic, TopicCourse, TopicEvent, Folder as FolderType } from "@shared/schema";
+import type { Topic, TopicCourse, TopicEvent, Folder as FolderType, FeedbackContent } from "@shared/schema";
 
-const topicFormSchema = z.object({
-  name: z.string().min(1, t.topics.nameRequired),
-  description: z.string().optional(),
-  feedback: z.string().optional(),
-  folderId: z.string().nullable().optional(),
-});
-
+// Topic / course / event form schemas moved into <TopicDrawer/> (PRD-15 T-32);
+// the page keeps only the folder form.
 const folderFormSchema = z.object({
   name: z.string().min(1, t.topics.nameRequired),
   parentId: z.string().nullable().optional(),
 });
 
-const courseFormSchema = z.object({
-  title: z.string().min(1, t.topics.titleRequired),
-  url: z.string().url(t.topics.validUrl),
-});
-
-const eventFormSchema = z.object({
-  title: z.string().min(1, "Название обязательно"),
-});
-
-type TopicFormData = z.infer<typeof topicFormSchema>;
 type FolderFormData = z.infer<typeof folderFormSchema>;
-type CourseFormData = z.infer<typeof courseFormSchema>;
-type EventFormData = z.infer<typeof eventFormSchema>;
 
 interface TopicWithDetails extends Topic {
   courses: TopicCourse[];
   events: TopicEvent[];
   questionCount: number;
-}
-
-/** Live same-name check response (PRD-15 FR-27, GET /api/topics/name-check). */
-interface NameCheckResponse {
-  normalized: string;
-  sameOwner: { id: string; name: string } | null;
-  duplicates: { id: string; name: string }[];
 }
 
 /** Admin duplicates report (PRD-15 FR-27/BRC-12, GET /api/topics/duplicates-report). */
@@ -77,14 +52,15 @@ interface DuplicatesReport {
 
 interface ReportUser { id: string; name: string | null; email: string }
 
-/** Debounce a changing value (no shared hook in the codebase). */
-function useDebouncedValue<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(id);
-  }, [value, delay]);
-  return debounced;
+/** Recommended-item counts derived from the topic's rich feedback (TD-02): links
+ *  are courses, assets are documents, events are events. */
+function feedbackCounts(topic: { feedbackJson?: unknown }): { courses: number; docs: number; events: number } {
+  const fb = (topic.feedbackJson ?? null) as FeedbackContent | null;
+  return {
+    courses: fb?.links?.length ?? 0,
+    docs: fb?.assets?.length ?? 0,
+    events: fb?.events?.length ?? 0,
+  };
 }
 
 export default function TopicsPage() {
@@ -96,13 +72,10 @@ export default function TopicsPage() {
   const canGrantAccessCap = can("topics.access.grant");
   const canGrantAccessFor = (topic: Topic) =>
     canGrantAccessCap && (isAdmin || topic.ownerId === user?.id);
-  const [accessTarget, setAccessTarget] = useState<{ id: string; name: string } | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
-  const [courseDialogOpen, setCourseDialogOpen] = useState(false);
-  const [selectedTopicForCourse, setSelectedTopicForCourse] = useState<string | null>(null);
-  const [eventDialogOpen, setEventDialogOpen] = useState(false);
-  const [selectedTopicForEvent, setSelectedTopicForEvent] = useState<string | null>(null);
+  // PRD-15 T-32: unified topic Drawer (Свойства + Доступ). Replaces the old edit
+  // dialog, the standalone access panel and the per-card course/event dialogs.
+  const [drawerTarget, setDrawerTarget] = useState<TopicDrawerTarget | null>(null);
+  const [drawerTab, setDrawerTab] = useState<"props" | "access">("props");
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
@@ -133,48 +106,10 @@ export default function TopicsPage() {
 
   const isLoading = topicsLoading || foldersLoading;
 
-  const form = useForm<TopicFormData>({
-    resolver: zodResolver(topicFormSchema),
-    defaultValues: { name: "", description: "", feedback: "", folderId: null },
-  });
-
   const folderForm = useForm<FolderFormData>({
     resolver: zodResolver(folderFormSchema),
     defaultValues: { name: "", parentId: null },
   });
-
-  const courseForm = useForm<CourseFormData>({
-    resolver: zodResolver(courseFormSchema),
-    defaultValues: { title: "", url: "" },
-  });
-
-  const eventForm = useForm<EventFormData>({
-    resolver: zodResolver(eventFormSchema),
-    defaultValues: { title: "" },
-  });
-
-  // PRD-15 FR-27: live same-name check while typing the topic name. `sameOwner`
-  // is the hard per-owner clash (Save blocked → 409); `duplicates` are the
-  // non-blocking cross-owner collisions in the visible area.
-  const watchedName = form.watch("name");
-  const debouncedName = useDebouncedValue(watchedName ?? "", 400);
-  const { data: nameCheck } = useQuery<NameCheckResponse>({
-    queryKey: ["/api/topics/name-check", debouncedName, editingTopic?.id ?? ""],
-    queryFn: async () => {
-      const params = new URLSearchParams({ name: debouncedName });
-      if (editingTopic?.id) params.set("excludeId", editingTopic.id);
-      const res = await fetch(`/api/topics/name-check?${params.toString()}`, { credentials: "include" });
-      if (!res.ok) throw new Error("name-check failed");
-      return res.json();
-    },
-    enabled: isDialogOpen && debouncedName.trim().length > 0,
-  });
-  // Hard clash applies only when the typed name still matches the clash (avoid a
-  // stale debounced result blocking Save after the user edits the name again).
-  const nameClash =
-    nameCheck?.sameOwner && debouncedName.trim() === (watchedName ?? "").trim()
-      ? nameCheck.sameOwner
-      : null;
 
   // PRD-15 FR-27/BRC-12: admin-only system-wide duplicates report.
   const { data: duplicates } = useQuery<DuplicatesReport>({
@@ -196,41 +131,7 @@ export default function TopicsPage() {
     return u?.name?.trim() || u?.email || id;
   };
 
-  const createMutation = useMutation({
-    mutationFn: (data: TopicFormData) => apiRequest("POST", "/api/topics", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      toast({ title: t.topics.topicCreated, description: t.topics.topicCreatedDescription });
-      handleCloseDialog();
-    },
-    onError: (e: Error) => {
-      const dup = e.message.includes("duplicate_topic_name");
-      toast({
-        variant: "destructive",
-        title: t.common.error,
-        description: dup ? "У вас уже есть тема с таким названием" : t.topics.failedToCreate,
-      });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: TopicFormData }) =>
-      apiRequest("PUT", `/api/topics/${id}`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      toast({ title: t.topics.topicUpdated, description: t.topics.topicUpdatedDescription });
-      handleCloseDialog();
-    },
-    onError: (e: Error) => {
-      const dup = e.message.includes("duplicate_topic_name");
-      toast({
-        variant: "destructive",
-        title: t.common.error,
-        description: dup ? "У владельца уже есть тема с таким названием" : t.topics.failedToUpdate,
-      });
-    },
-  });
-
+  // Topic create/update now lives in the unified <TopicDrawer/> (PRD-15 T-32).
   // Topic deletion goes through the content guard (see handleDelete, PRD-15 T-12).
 
   const createFolderMutation = useMutation({
@@ -270,53 +171,8 @@ export default function TopicsPage() {
     },
   });
 
-  const addCourseMutation = useMutation({
-    mutationFn: ({ topicId, data }: { topicId: string; data: CourseFormData }) =>
-      apiRequest("POST", `/api/topics/${topicId}/courses`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      toast({ title: t.topics.courseAdded, description: t.topics.courseAddedDescription });
-      handleCloseCourseDialog();
-    },
-    onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.topics.failedToAddCourse });
-    },
-  });
-
-  const deleteCourseMutation = useMutation({
-    mutationFn: (courseId: string) => apiRequest("DELETE", `/api/courses/${courseId}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      toast({ title: t.topics.courseRemoved, description: t.topics.courseRemovedDescription });
-    },
-    onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: t.topics.failedToRemoveCourse });
-    },
-  });
-
-  const addEventMutation = useMutation({
-    mutationFn: ({ topicId, data }: { topicId: string; data: EventFormData }) =>
-      apiRequest("POST", `/api/topics/${topicId}/events`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      toast({ title: "Мероприятие добавлено" });
-      handleCloseEventDialog();
-    },
-    onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось добавить мероприятие" });
-    },
-  });
-
-  const deleteEventMutation = useMutation({
-    mutationFn: (eventId: string) => apiRequest("DELETE", `/api/topics/events/${eventId}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
-      toast({ title: "Мероприятие удалено" });
-    },
-    onError: () => {
-      toast({ variant: "destructive", title: t.common.error, description: "Не удалось удалить мероприятие" });
-    },
-  });
+  // Recommended courses / events are now edited inside the topic feedback
+  // (TD-02); the per-card course/event dialogs and their mutations are gone.
 
   const duplicateMutation = useMutation({
     mutationFn: (id: string) => apiRequest("POST", `/api/topics/${id}/duplicate`),
@@ -391,26 +247,18 @@ export default function TopicsPage() {
   };
 
   const handleOpenCreate = (folderId?: string | null) => {
-    setEditingTopic(null);
-    form.reset({ name: "", description: "", feedback: "", folderId: folderId || null });
-    setIsDialogOpen(true);
+    setDrawerTab("props");
+    setDrawerTarget({ mode: "create", folderId: folderId ?? null });
   };
 
   const handleOpenEdit = (topic: Topic) => {
-    setEditingTopic(topic);
-    form.reset({
-      name: topic.name,
-      description: topic.description || "",
-      feedback: topic.feedback || "",
-      folderId: topic.folderId || null
-    });
-    setIsDialogOpen(true);
+    setDrawerTab("props");
+    setDrawerTarget({ mode: "edit", topic });
   };
 
-  const handleCloseDialog = () => {
-    setIsDialogOpen(false);
-    setEditingTopic(null);
-    form.reset();
+  const handleOpenAccess = (topic: Topic) => {
+    setDrawerTab("access");
+    setDrawerTarget({ mode: "edit", topic });
   };
 
   const handleOpenCreateFolder = (parentId?: string | null) => {
@@ -437,30 +285,6 @@ export default function TopicsPage() {
     }
   };
 
-  const handleOpenCourseDialog = (topicId: string) => {
-    setSelectedTopicForCourse(topicId);
-    courseForm.reset({ title: "", url: "" });
-    setCourseDialogOpen(true);
-  };
-
-  const handleCloseCourseDialog = () => {
-    setCourseDialogOpen(false);
-    setSelectedTopicForCourse(null);
-    courseForm.reset();
-  };
-
-  const handleOpenEventDialog = (topicId: string) => {
-    setSelectedTopicForEvent(topicId);
-    eventForm.reset({ title: "" });
-    setEventDialogOpen(true);
-  };
-
-  const handleCloseEventDialog = () => {
-    setEventDialogOpen(false);
-    setSelectedTopicForEvent(null);
-    eventForm.reset();
-  };
-
   const toggleFolder = (folderId: string) => {
     setExpandedFolders((prev) => {
       const next = new Set(prev);
@@ -473,31 +297,11 @@ export default function TopicsPage() {
     });
   };
 
-  const onSubmit = (data: TopicFormData) => {
-    if (editingTopic) {
-      updateMutation.mutate({ id: editingTopic.id, data });
-    } else {
-      createMutation.mutate(data);
-    }
-  };
-
   const onSubmitFolder = (data: FolderFormData) => {
     if (editingFolder) {
       updateFolderMutation.mutate({ id: editingFolder.id, data });
     } else {
       createFolderMutation.mutate(data);
-    }
-  };
-
-  const onSubmitCourse = (data: CourseFormData) => {
-    if (selectedTopicForCourse) {
-      addCourseMutation.mutate({ topicId: selectedTopicForCourse, data });
-    }
-  };
-
-  const onSubmitEvent = (data: EventFormData) => {
-    if (selectedTopicForEvent) {
-      addEventMutation.mutate({ topicId: selectedTopicForEvent, data });
     }
   };
 
@@ -594,7 +398,7 @@ export default function TopicsPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setAccessTarget({ id: topic.id, name: topic.name })}
+              onClick={() => handleOpenAccess(topic)}
               title="Доступ к теме"
               data-testid={`button-access-topic-${topic.id}`}
             >
@@ -612,95 +416,22 @@ export default function TopicsPage() {
         </div>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+        {/* TD-02: recommended courses / documents / events are part of the topic
+            feedback now; the card shows only their counts. Edit them in the Drawer. */}
+        <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
           <span>{formatQuestions(topic.questionCount)}</span>
-          <span>{topic.courses.length} {t.common.courses}</span>
-          {topic.events?.length > 0 && <span>{topic.events.length} мероприятий</span>}
+          {(() => {
+            const fb = feedbackCounts(topic);
+            return (
+              <>
+                {fb.courses > 0 && <span>{fb.courses} {t.common.courses}</span>}
+                {fb.docs > 0 && <span>{fb.docs} док.</span>}
+                {fb.events > 0 && <span>{fb.events} мероприятий</span>}
+              </>
+            );
+          })()}
         </div>
-
-        {topic.courses.length > 0 && (
-          <div className="mt-4 space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              {t.topics.recommendedCourses}
-            </p>
-            <div className="space-y-1">
-              {topic.courses.map((course) => (
-                <div
-                  key={course.id}
-                  className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted"
-                >
-                  <a
-                    href={course.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-sm hover:underline truncate"
-                  >
-                    <ExternalLink className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{course.title}</span>
-                  </a>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 shrink-0"
-                    onClick={() => deleteCourseMutation.mutate(course.id)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {topic.events?.length > 0 && (
-          <div className="mt-4 space-y-2">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Рекомендуемые мероприятия
-            </p>
-            <div className="space-y-1">
-              {topic.events.map((event) => (
-                <div
-                  key={event.id}
-                  className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted"
-                >
-                  <div className="flex items-center gap-2 text-sm truncate">
-                    <CalendarDays className="h-3 w-3 shrink-0 text-muted-foreground" />
-                    <span className="truncate">{event.title}</span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 shrink-0"
-                    onClick={() => deleteEventMutation.mutate(event.id)}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </CardContent>
-      <CardFooter className="flex gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => handleOpenCourseDialog(topic.id)}
-          data-testid={`button-add-course-${topic.id}`}
-        >
-          <BookMarked className="h-4 w-4 mr-2" />
-          {t.topics.addCourse}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => handleOpenEventDialog(topic.id)}
-          data-testid={`button-add-event-${topic.id}`}
-        >
-          <CalendarDays className="h-4 w-4 mr-2" />
-          Мероприятие
-        </Button>
-      </CardFooter>
     </Card>
   );
 
@@ -718,23 +449,17 @@ export default function TopicsPage() {
         {topic.description && <p className="text-xs text-muted-foreground line-clamp-1">{topic.description}</p>}
       </td>
       <td className="px-4 py-3 text-sm text-muted-foreground">{formatQuestions(topic.questionCount)}</td>
-      <td className="px-4 py-3 text-sm text-muted-foreground">{topic.courses.length} {t.common.courses}</td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">{feedbackCounts(topic).courses} {t.common.courses}</td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1 justify-end">
           <Button variant="ghost" size="icon" onClick={() => handleDuplicate(topic.id)} data-testid={`button-duplicate-topic-${topic.id}`}>
             <Copy className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => handleOpenCourseDialog(topic.id)} data-testid={`button-add-course-${topic.id}`}>
-            <BookMarked className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => handleOpenEventDialog(topic.id)} data-testid={`button-add-event-${topic.id}`}>
-            <CalendarDays className="h-4 w-4" />
-          </Button>
           <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(topic)} data-testid={`button-edit-topic-${topic.id}`}>
             <Pencil className="h-4 w-4" />
           </Button>
           {canGrantAccessFor(topic) && (
-            <Button variant="ghost" size="icon" onClick={() => setAccessTarget({ id: topic.id, name: topic.name })} title="Доступ к теме" data-testid={`button-access-topic-${topic.id}`}>
+            <Button variant="ghost" size="icon" onClick={() => handleOpenAccess(topic)} title="Доступ к теме" data-testid={`button-access-topic-${topic.id}`}>
               <Shield className="h-4 w-4" />
             </Button>
           )}
@@ -999,123 +724,6 @@ export default function TopicsPage() {
         </div>
       )}
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingTopic ? t.topics.editTopic : t.topics.createTopic}
-            </DialogTitle>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t.topics.topicName}</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder={t.topics.topicNamePlaceholder} data-testid="input-topic-name" />
-                    </FormControl>
-                    <FormMessage />
-                    {/* PRD-15 FR-27: live same-name feedback */}
-                    {nameClash ? (
-                      <p className="text-sm text-destructive" data-testid="topic-name-clash">
-                        У вас уже есть тема «{nameClash.name}». Выберите другое название.
-                      </p>
-                    ) : (nameCheck?.duplicates?.length ?? 0) > 0 ? (
-                      <p className="text-sm text-amber-600 dark:text-amber-500" data-testid="topic-name-warning">
-                        Тема с таким названием уже есть в доступной вам области (у других авторов). Создать можно — это не помешает.
-                      </p>
-                    ) : null}
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="folderId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t.topics.folder}</FormLabel>
-                    <Select
-                      value={field.value || "__none__"}
-                      onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
-                    >
-                      <FormControl>
-                        <SelectTrigger data-testid="select-topic-folder">
-                          <SelectValue placeholder={t.topics.selectFolder} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="__none__">{t.topics.noFolder}</SelectItem>
-                        {folders?.map((folder) => (
-                          <SelectItem key={folder.id} value={folder.id}>
-                            {folder.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t.topics.topicDescription}</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        {...field}
-                        placeholder={t.topics.topicDescriptionPlaceholder}
-                        rows={3}
-                        data-testid="input-topic-description"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="feedback"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t.topics.feedback}</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        {...field}
-                        value={field.value || ""}
-                        placeholder={t.topics.feedbackPlaceholder}
-                        rows={2}
-                        data-testid="input-topic-feedback"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={handleCloseDialog}>
-                  {t.common.cancel}
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending || !!nameClash}
-                  data-testid="button-submit-topic"
-                >
-                  {(createMutation.isPending || updateMutation.isPending) && (
-                    <LoadingSpinner className="mr-2" />
-                  )}
-                  {editingTopic ? t.common.update : t.common.create}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1186,87 +794,6 @@ export default function TopicsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={courseDialogOpen} onOpenChange={setCourseDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.topics.addRecommendedCourse}</DialogTitle>
-          </DialogHeader>
-          <Form {...courseForm}>
-            <form onSubmit={courseForm.handleSubmit(onSubmitCourse)} className="space-y-4">
-              <FormField
-                control={courseForm.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t.topics.courseTitle}</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder={t.topics.courseTitlePlaceholder} data-testid="input-course-title" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={courseForm.control}
-                name="url"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t.topics.courseUrl}</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder={t.topics.courseUrlPlaceholder} data-testid="input-course-url" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={handleCloseCourseDialog}>
-                  {t.common.cancel}
-                </Button>
-                <Button type="submit" disabled={addCourseMutation.isPending} data-testid="button-submit-course">
-                  {addCourseMutation.isPending && <LoadingSpinner className="mr-2" />}
-                  {t.topics.addCourse}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={eventDialogOpen} onOpenChange={setEventDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Добавить рекомендуемое мероприятие</DialogTitle>
-          </DialogHeader>
-          <Form {...eventForm}>
-            <form onSubmit={eventForm.handleSubmit(onSubmitEvent)} className="space-y-4">
-              <FormField
-                control={eventForm.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Название мероприятия</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder="Например: Мастер-класс по теме, Лабораторная работа..." data-testid="input-event-title" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={handleCloseEventDialog}>
-                  {t.common.cancel}
-                </Button>
-                <Button type="submit" disabled={addEventMutation.isPending} data-testid="button-submit-event">
-                  {addEventMutation.isPending && <LoadingSpinner className="mr-2" />}
-                  Добавить
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
       <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1291,11 +818,13 @@ export default function TopicsPage() {
       {/* PRD-15 T-12: content-impact dialog for deletes affecting other tests */}
       <ContentImpactDialog {...contentGuard.dialogProps} />
 
-      {/* PRD-15 block C: topic access management (owner / visibility / grants) */}
-      <TopicAccessPanel
-        topic={accessTarget}
+      {/* PRD-15 T-32: unified topic Drawer — properties (incl. rich feedback) + access */}
+      <TopicDrawer
+        target={drawerTarget}
+        folders={folders ?? []}
         isAdmin={isAdmin}
-        onClose={() => setAccessTarget(null)}
+        initialTab={drawerTab}
+        onClose={() => setDrawerTarget(null)}
       />
 
       {/* PRD-15 FR-27 / BRC-12: admin duplicates report */}
