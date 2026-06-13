@@ -1,8 +1,8 @@
 import { Switch, Route, Redirect, useLocation } from "wouter";
+import { ToastProvider } from "@universityrt/ui-kit";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { ToastBridge } from "@/hooks/use-toast";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { LoadingState } from "@/components/loading-state";
@@ -225,12 +225,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TooltipProvider>
+        <ToastProvider>
+          <ToastBridge />
           <AuthProvider>
-            <Toaster />
             <Router />
           </AuthProvider>
-        </TooltipProvider>
+        </ToastProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

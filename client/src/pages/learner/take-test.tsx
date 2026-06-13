@@ -452,6 +452,7 @@ export default function TakeTestPage() {
       if (testMode === "adaptive") {
         // TODO: Реализовать восстановление адаптивного теста
         toast({
+          variant: "info",
           title: "Информация",
           description: "Восстановление адаптивного теста пока не поддерживается. Начинаем заново.",
         });
