@@ -16,7 +16,6 @@ import { createHash } from "crypto";
 import { storage } from "../storage";
 import { logger } from "../logger";
 import { normalizeTags } from "@shared/tags";
-import { parseScoringCell } from "../utils/scoring-excel";
 import type { Role } from "@shared/access";
 import {
   assessQuestionChange,
@@ -303,8 +302,8 @@ export async function importQuestionRows(
       const shuffleStr = String(row["Следование вариантов ответов"] || "Random").trim().toLowerCase();
       const shuffleAnswers = shuffleStr !== "fixed";
 
-      // PRD-14 Ф0 (FR-04): балл/сложность сохраняют явный 0; сложность 0..100.
-      const points = parseIntCell(row["Балл"], 1);
+      // PRD-14 Ф0 (FR-04): сложность сохраняет явный 0; диапазон 0..100. T-40:
+      // «Балл» больше не свойство вопроса — цена задаётся листом «Оценка» теста.
       const difficulty = parseIntCell(row["Сложность"], 50);
       if (difficulty < 0 || difficulty > 100) {
         result.errors.push(`Строка ${rowNum}: сложность вне диапазона 0..100 ("${row["Сложность"]}")`);
@@ -322,14 +321,8 @@ export async function importQuestionRows(
       const feedbackCorrect = String(row["ОС при верном"] || "").trim() || null;
       const feedbackIncorrect = String(row["ОС при неверном"] || "").trim() || null;
 
-      // PRD-14 Ф1 (FR-08..FR-10): «Цена ответа» (PRD-10).
+      // The unit count (options / pairs / items) backs the «Измерения» alias.
       const unitCount = unitCountOf(type, dataJson);
-      const scoringParsed = parseScoringCell(row["Цена ответа"], type, unitCount);
-      if (!scoringParsed.ok) {
-        result.errors.push(`Строка ${rowNum}: ${scoringParsed.error}`);
-        continue;
-      }
-      const scoringJson = scoringParsed.value;
 
       const contentHash = computeQuestionHash(type, prompt, dataJson);
 
@@ -399,7 +392,6 @@ export async function importQuestionRows(
             correctJson,
             contentHash,
           };
-          if (hasCol("Балл")) updatePayload.points = points;
           if (hasCol("Сложность")) updatePayload.difficulty = difficulty;
           if (hasCol("Следование вариантов ответов")) updatePayload.shuffleAnswers = shuffleAnswers;
           if (hasCol("Обратная связь")) updatePayload.feedback = feedback;
@@ -411,7 +403,6 @@ export async function importQuestionRows(
             updatePayload.feedbackMode = "general";
           }
           if (hasCol("Теги")) updatePayload.tags = tags;
-          if (hasCol("Цена ответа")) updatePayload.scoringJson = scoringJson;
           if (!dryRun) await storage.updateQuestion(rowId, updatePayload as any);
           result.updated++;
           recordAlias(row, { id: rowId, type, unitCount, contentHash });
@@ -435,7 +426,6 @@ export async function importQuestionRows(
           prompt,
           dataJson,
           correctJson,
-          points,
           difficulty,
           shuffleAnswers,
           feedbackMode,
@@ -443,7 +433,6 @@ export async function importQuestionRows(
           feedbackCorrect: feedbackMode === "conditional" ? feedbackCorrect : null,
           feedbackIncorrect: feedbackMode === "conditional" ? feedbackIncorrect : null,
           tags,
-          scoringJson,
           contentHash,
           createdBy: actor?.id ?? null,
         } as any);

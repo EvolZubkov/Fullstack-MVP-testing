@@ -12,7 +12,6 @@ import {
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { memoryUpload, rejectBase64MediaUrl } from "../middleware/upload";
-import { questionScoringSchema, type QuestionScoring } from "@shared/schema";
 import { normalizeTags } from "@shared/tags";
 import { importQuestionRows } from "../services/questions-import";
 import { serializeQuestionRow, QUESTION_WIDTHS } from "../services/questions-export";
@@ -41,8 +40,6 @@ function gradingOrDrawFieldsChanged(existing: Question, body: UpdateQuestionBody
     changed(body.type, existing.type) ||
     changed(body.dataJson, existing.dataJson) ||
     changed(body.correctJson, existing.correctJson) ||
-    changed(body.points, existing.points) ||
-    changed(body.scoringJson, existing.scoringJson) ||
     changed(body.difficulty, existing.difficulty) ||
     changed(body.topicId, existing.topicId) ||
     (Array.isArray(body.tags) &&
@@ -71,21 +68,6 @@ async function canManageQuestion(
   return topic ? canManageTopicContent(roles, req.currentUser?.id ?? "", topic) : false;
 }
 
-// PRD-10: validate the optional graded-scoring config (FR-13). Null/undefined =
-// exact match (default); a present config must satisfy questionScoringSchema.
-function validateScoring(
-  scoringJson: unknown,
-  res: Response,
-): scoringJson is QuestionScoring | null | undefined {
-  if (scoringJson == null) return true;
-  const parsed = questionScoringSchema.safeParse(scoringJson);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid scoring config", details: parsed.error.flatten() });
-    return false;
-  }
-  return true;
-}
-
 const router = Router();
 
 // ============================================
@@ -106,7 +88,6 @@ interface CreateQuestionBody {
   prompt: string;
   dataJson: unknown;
   correctJson: unknown;
-  points?: number;
   difficulty?: number;
   mediaUrl?: string;
   mediaType?: "image" | "audio" | "video" | null;
@@ -115,7 +96,6 @@ interface CreateQuestionBody {
   feedbackMode?: "general" | "conditional";
   feedbackCorrect?: string;
   feedbackIncorrect?: string;
-  scoringJson?: QuestionScoring | null;
   /** PRD-11 §3a: sub-topic tags; normalized on save (trim/collapse, dedup, cap). */
   tags?: string[];
 }
@@ -174,7 +154,6 @@ router.post(
         prompt,
         dataJson,
         correctJson,
-        points,
         difficulty,
         mediaUrl,
         mediaType,
@@ -183,7 +162,6 @@ router.post(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
-        scoringJson,
         tags,
       } = req.body;
 
@@ -199,15 +177,12 @@ router.post(
         return;
       }
 
-      if (!validateScoring(scoringJson, res)) return;
-
       const question = await storage.createQuestion({
         topicId,
         type,
         prompt,
         dataJson,
         correctJson,
-        points: points || 1,
         difficulty: difficulty || 50,
         mediaUrl: mediaUrl || null,
         mediaType: mediaType || null,
@@ -216,7 +191,6 @@ router.post(
         feedbackMode: feedbackMode || "general",
         feedbackCorrect: feedbackCorrect || null,
         feedbackIncorrect: feedbackIncorrect || null,
-        scoringJson: scoringJson ?? null,
         tags: normalizeTags(Array.isArray(tags) ? tags : []),
         createdBy: req.currentUser?.id ?? null,
       } as any);
@@ -243,7 +217,6 @@ router.put(
         prompt,
         dataJson,
         correctJson,
-        points,
         difficulty,
         mediaUrl,
         mediaType,
@@ -252,13 +225,10 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
-        scoringJson,
         tags,
       } = req.body as UpdateQuestionBody;
 
       if (rejectBase64MediaUrl(mediaUrl, res)) return;
-
-      if (!validateScoring(scoringJson, res)) return;
 
       // PRD-15 FR-05: tag/difficulty/move edits additionally pass the
       // draw-feasibility check against dependent tests (E-3/E-4).
@@ -305,7 +275,6 @@ router.put(
         prompt,
         dataJson,
         correctJson,
-        points,
         difficulty,
         mediaUrl,
         mediaType,
@@ -314,7 +283,6 @@ router.put(
         feedbackMode,
         feedbackCorrect,
         feedbackIncorrect,
-        scoringJson,
         // Only touch tags when the client sent them; otherwise leave unchanged.
         tags: Array.isArray(tags) ? normalizeTags(tags) : undefined,
       } as any);
@@ -503,12 +471,13 @@ router.get(
 // GET /api/questions/template - Шаблон Excel для импорта (PRD-14 Ф2, FR-12)
 // ============================================
 // Canonical column order (must match the export — see спецификация формата §3).
+// T-40: «Балл» / «Цена ответа» left the bank sheet — scoring is a property of
+// the test (the test-scoped «Оценка» sheet of the workbook), not the question.
 const TEMPLATE_HEADERS = [
   "ID",
   "Тема",
   "Тип вопроса",
   "Текст вопроса",
-  "Балл",
   "Сложность",
   "Тексты вариантов ответа",
   "Номера правильных ответов",
@@ -518,7 +487,6 @@ const TEMPLATE_HEADERS = [
   "Режим ОС",
   "ОС при верном",
   "ОС при неверном",
-  "Цена ответа",
 ];
 
 router.get(
@@ -529,7 +497,7 @@ router.get(
       const wb = new ExcelJS.Workbook();
       // Sheet 1 — headers only (the author fills rows below).
       addAoaSheet(wb, "Вопросы", [TEMPLATE_HEADERS],
-        [36, 25, 18, 50, 8, 12, 60, 25, 15, 40, 25, 12, 30, 30, 40]);
+        [36, 25, 18, 50, 12, 60, 25, 15, 40, 25, 12, 30, 30]);
 
       // Sheet 2 — format reference per column / question type.
       const help: string[][] = [
@@ -538,7 +506,6 @@ router.get(
         ["Тема", "Обязательно. Имя темы; если её нет — будет создана"],
         ["Тип вопроса", "Обязательно. multiple_choice | multiple_response | matching | ranking"],
         ["Текст вопроса", "Обязательно. Формулировка"],
-        ["Балл", "Целое; по умолчанию 1"],
         ["Сложность", "Целое 0..100; по умолчанию 50"],
         ["Тексты вариантов ответа", "Разделитель вариантов — #. Для matching: «лево # ... || право # ...»"],
         ["Номера правильных ответов", "1-based. multiple_choice: «2». multiple_response: «1,3». matching: «1-1, 2-2». ranking: порядок «3,1,2»"],
@@ -548,8 +515,8 @@ router.get(
         ["Режим ОС", "общая (по умолчанию) | условная"],
         ["ОС при верном", "Текст; только при режиме «условная»"],
         ["ОС при неверном", "Текст; только при режиме «условная»"],
-        ["Цена ответа", "Пусто/«точное» — точное совпадение. single: «веса: 2 # 0 # 1». multiple/matching/ranking: «ступени: correct == total & wrong == 0 => 2; correct >= 1 & wrong <= 1 => 1» (correct — верных, wrong — неверных, total — всего верных)"],
         ["", ""],
+        ["Цена ответа", "Задаётся в листе «Оценка» книги теста (не свойство вопроса — T-40)"],
         ["Пример (multiple_choice)", "Варианты «A # B # C», правильный «2»"],
         ["Пример (matching)", "«Кошка # Собака || Мяу # Гав # Буль», пары «1-1, 2-2»"],
         ["Пример (ranking)", "Элементы «Шаг А # Шаг Б # Шаг В», порядок «3,1,2»"],

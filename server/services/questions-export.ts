@@ -5,9 +5,12 @@
  * standalone question export (`GET /api/questions/export`) and the multi-sheet
  * workbook export (PRD-14 FR-15). Mirrors the import contract (спецификация
  * формата §3/§5), so a question round-trips through either path.
+ *
+ * PRD-15 block D, T-40: «Балл» and «Цена ответа» left this sheet — scoring is a
+ * property of the test, not the question, and lives in the test-scoped «Оценка»
+ * sheet (FR-36). The «Вопросы» sheet carries question content only.
  */
 
-import { serializeScoring } from "../utils/scoring-excel";
 import type { Question } from "@shared/schema";
 
 /** Маппинг типов: внутренний -> Excel. */
@@ -24,7 +27,6 @@ export const QUESTION_HEADERS = [
   "Тема",
   "Тип вопроса",
   "Текст вопроса",
-  "Балл",
   "Сложность",
   "Тексты вариантов ответа",
   "Номера правильных ответов",
@@ -34,11 +36,10 @@ export const QUESTION_HEADERS = [
   "Режим ОС",
   "ОС при верном",
   "ОС при неверном",
-  "Цена ответа",
 ];
 
 /** Column widths matching {@link QUESTION_HEADERS}. */
-export const QUESTION_WIDTHS = [36, 25, 18, 50, 8, 12, 60, 25, 15, 40, 25, 12, 30, 30, 40];
+export const QUESTION_WIDTHS = [36, 25, 18, 50, 12, 60, 25, 15, 40, 25, 12, 30, 30];
 
 /** Serialize one question into a «Вопросы» sheet row (without «Ключ строки»). */
 export function serializeQuestionRow(q: Question, topicName: string): Record<string, unknown> {
@@ -71,8 +72,6 @@ export function serializeQuestionRow(q: Question, topicName: string): Record<str
     "Тема": topicName,
     "Тип вопроса": typeToExcel[q.type] || q.type,
     "Текст вопроса": q.prompt,
-    // PRD-14 Ф0 (FR-04): `?? ` not `|| ` so an explicit 0 round-trips.
-    "Балл": q.points ?? 1,
     "Сложность": q.difficulty ?? 50,
     "Тексты вариантов ответа": optionsStr,
     "Номера правильных ответов": correctStr,
@@ -83,6 +82,5 @@ export function serializeQuestionRow(q: Question, topicName: string): Record<str
     "Режим ОС": q.feedbackMode === "conditional" ? "условная" : "общая",
     "ОС при верном": q.feedbackCorrect || "",
     "ОС при неверном": q.feedbackIncorrect || "",
-    "Цена ответа": serializeScoring(q.scoringJson),
   };
 }
