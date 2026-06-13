@@ -183,6 +183,15 @@ docker compose run --rm --no-deps --entrypoint sh app -c "node script/run-sql.cj
   migrations/028_prd15_drop_question_scoring_columns.sql"
 ok "Data migrations applied"
 
+# Safety gate: assert the destructive/ambiguous PRD-15 migrations took effect
+# BEFORE push runs. If the chain silently did not apply, push would prompt
+# "create vs rename test_question_scoring" and --force would DROP source
+# tables/columns without backfill. This turns that into a loud failure.
+info "Verifying schema is migrated before push (PRD-15 gate)..."
+docker compose run --rm --no-deps --entrypoint sh app -c "node script/run-sql.cjs script/verify-prd15-pre-push.sql" \
+    || error "Pre-push gate failed: PRD-15 data migrations did not take effect. NOT running push (would risk data loss). See message above."
+ok "Schema gate passed"
+
 info "Applying DB schema (drizzle-kit push)..."
 docker compose run --rm --no-deps --entrypoint sh app -c "npx drizzle-kit push --force"
 ok "DB schema up to date"

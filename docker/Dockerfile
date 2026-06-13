@@ -53,6 +53,8 @@ COPY --chown=nodejs:nodejs drizzle.config.ts ./
 # container and the DB is external (no psql/tsx available here).
 COPY --chown=nodejs:nodejs migrations ./migrations
 COPY --chown=nodejs:nodejs script/run-sql.cjs ./script/run-sql.cjs
+# PRD-15 pre-push safety gate (run via run-sql.cjs before drizzle-kit push).
+COPY --chown=nodejs:nodejs script/verify-prd15-pre-push.sql ./script/verify-prd15-pre-push.sql
 
 # Built-in design template manifests/previews — read from disk at runtime by
 # server/template-registry.ts and the preview routes (process.cwd()/server/scorm/templates).
