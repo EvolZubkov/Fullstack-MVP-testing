@@ -34,19 +34,28 @@
 
 BEGIN;
 
--- Step 1: idempotent re-backfill (mirrors migration 027).
-INSERT INTO "test_question_scoring"
-  ("test_id", "question_id", "points", "scoring_json", "pinned_content_hash")
-SELECT DISTINCT
-  ts."test_id",
-  q."id",
-  CASE WHEN q."points" NOT IN (0, 1) THEN q."points" END,
-  q."scoring_json",
-  q."content_hash"
-FROM "test_sections" ts
-JOIN "questions" q ON q."topic_id" = ts."topic_id"
-WHERE q."points" NOT IN (0, 1) OR q."scoring_json" IS NOT NULL
-ON CONFLICT ("test_id", "question_id") DO NOTHING;
+-- Step 1: idempotent re-backfill (mirrors migration 027). Guarded on the source
+-- columns existing so a re-run AFTER the drop below is a clean no-op (the SELECT
+-- reads questions.points/scoring_json; unguarded it would error once dropped).
+-- plpgsql plans the branch only when entered.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'questions' AND column_name = 'points') THEN
+    INSERT INTO "test_question_scoring"
+      ("test_id", "question_id", "points", "scoring_json", "pinned_content_hash")
+    SELECT DISTINCT
+      ts."test_id",
+      q."id",
+      CASE WHEN q."points" NOT IN (0, 1) THEN q."points" END,
+      q."scoring_json",
+      q."content_hash"
+    FROM "test_sections" ts
+    JOIN "questions" q ON q."topic_id" = ts."topic_id"
+    WHERE q."points" NOT IN (0, 1) OR q."scoring_json" IS NOT NULL
+    ON CONFLICT ("test_id", "question_id") DO NOTHING;
+  END IF;
+END $$;
 
 -- Step 2: drop the now-unused question scoring columns.
 ALTER TABLE "questions" DROP COLUMN IF EXISTS "points";

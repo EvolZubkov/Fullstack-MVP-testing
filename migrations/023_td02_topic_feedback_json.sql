@@ -24,20 +24,31 @@ BEGIN;
 ALTER TABLE "topics"
   ADD COLUMN IF NOT EXISTS "feedback_json" jsonb;
 
-UPDATE "topics" t
-  SET "feedback_json" = jsonb_build_object(
-    'format', 'plain',
-    'text', COALESCE(t."feedback", ''),
-    'links', COALESCE(
-      (SELECT jsonb_agg(jsonb_build_object('title', tc."title", 'url', tc."url"))
-         FROM "topic_courses" tc WHERE tc."topic_id" = t."id"),
-      '[]'::jsonb),
-    'assets', '[]'::jsonb,
-    'events', COALESCE(
-      (SELECT jsonb_agg(jsonb_build_object('title', te."title"))
-         FROM "topic_events" te WHERE te."topic_id" = t."id"),
-      '[]'::jsonb)
-  )
-  WHERE t."feedback_json" IS NULL;
+-- Guarded on the source tables existing so the file is idempotent AFTER migration
+-- 024 has dropped topic_courses/topic_events: the UPDATE's subqueries reference
+-- those tables and Postgres plans the whole statement (even though WHERE matches
+-- no rows once feedback_json is populated), so an unguarded re-run would error
+-- with "relation topic_courses does not exist". plpgsql plans the branch only
+-- when entered, so a post-024 re-run is a clean no-op.
+DO $$
+BEGIN
+  IF to_regclass('public.topic_courses') IS NOT NULL THEN
+    UPDATE "topics" t
+      SET "feedback_json" = jsonb_build_object(
+        'format', 'plain',
+        'text', COALESCE(t."feedback", ''),
+        'links', COALESCE(
+          (SELECT jsonb_agg(jsonb_build_object('title', tc."title", 'url', tc."url"))
+             FROM "topic_courses" tc WHERE tc."topic_id" = t."id"),
+          '[]'::jsonb),
+        'assets', '[]'::jsonb,
+        'events', COALESCE(
+          (SELECT jsonb_agg(jsonb_build_object('title', te."title"))
+             FROM "topic_events" te WHERE te."topic_id" = t."id"),
+          '[]'::jsonb)
+      )
+      WHERE t."feedback_json" IS NULL;
+  END IF;
+END $$;
 
 COMMIT;

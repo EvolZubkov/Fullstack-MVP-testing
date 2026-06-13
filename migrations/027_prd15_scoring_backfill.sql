@@ -27,17 +27,28 @@
 
 BEGIN;
 
-INSERT INTO "test_question_scoring"
-  ("test_id", "question_id", "points", "scoring_json", "pinned_content_hash")
-SELECT DISTINCT
-  ts."test_id",
-  q."id",
-  CASE WHEN q."points" NOT IN (0, 1) THEN q."points" END,
-  q."scoring_json",
-  q."content_hash"
-FROM "test_sections" ts
-JOIN "questions" q ON q."topic_id" = ts."topic_id"
-WHERE q."points" NOT IN (0, 1) OR q."scoring_json" IS NOT NULL
-ON CONFLICT ("test_id", "question_id") DO NOTHING;
+-- Guarded on the source columns existing so the file is idempotent AFTER T-40
+-- (028) has dropped questions.points/scoring_json: the backfill SELECT reads
+-- those columns, so an unguarded re-run would error with "column does not
+-- exist". plpgsql only plans the branch when entered, so a post-drop re-run is
+-- a clean no-op.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'questions' AND column_name = 'points') THEN
+    INSERT INTO "test_question_scoring"
+      ("test_id", "question_id", "points", "scoring_json", "pinned_content_hash")
+    SELECT DISTINCT
+      ts."test_id",
+      q."id",
+      CASE WHEN q."points" NOT IN (0, 1) THEN q."points" END,
+      q."scoring_json",
+      q."content_hash"
+    FROM "test_sections" ts
+    JOIN "questions" q ON q."topic_id" = ts."topic_id"
+    WHERE q."points" NOT IN (0, 1) OR q."scoring_json" IS NOT NULL
+    ON CONFLICT ("test_id", "question_id") DO NOTHING;
+  END IF;
+END $$;
 
 COMMIT;
