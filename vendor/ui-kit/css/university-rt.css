@@ -7278,3 +7278,124 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-wiz--horizontal .ou-wiz__label { align-items: center; padding-top: 0; max-width: 100%; }
 .ou-wiz--horizontal .ou-wiz__title { font: var(--ou-text-body-s); font-weight: 600; }
 .ou-wiz--horizontal .ou-wiz__sub { font: var(--ou-text-body-xs); line-height: 1.3; text-wrap: pretty; max-width: 14ch; }
+
+/* ─── separator.css (added: ui-kit Separator primitive) ──────────────── */
+.ou-separator { flex-shrink: 0; background: var(--ou-border-soft); border: 0; margin: 0; }
+.ou-separator--horizontal { width: 100%; height: 1px; }
+.ou-separator--vertical { width: 1px; height: 100%; align-self: stretch; }
+
+/* ─── scroll-area.css (added: ui-kit ScrollArea primitive) ───────────── */
+.ou-scroll { position: relative; }
+.ou-scroll--vertical { overflow-y: auto; overflow-x: hidden; }
+.ou-scroll--horizontal { overflow-x: auto; overflow-y: hidden; }
+.ou-scroll--both { overflow: auto; }
+@supports (scrollbar-width: thin) {
+  .ou-scroll { scrollbar-width: thin; scrollbar-color: var(--ou-border-default) transparent; }
+}
+.ou-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.ou-scroll::-webkit-scrollbar-track { background: transparent; }
+.ou-scroll::-webkit-scrollbar-thumb { background: var(--ou-border-default); border-radius: 4px; }
+.ou-scroll::-webkit-scrollbar-thumb:hover { background: var(--ou-border-strong, var(--ou-border-default)); }
+
+/* ─── layout.css (added: Stack / Cluster / Grid / Box primitives) ───── */
+.ou-stack { display: flex; flex-direction: column; min-width: 0; }
+.ou-stack--row { flex-direction: row; }
+.ou-stack--wrap { flex-wrap: wrap; }
+.ou-stack--full { width: 100%; }
+.ou-stack--gap-0 { gap: 0; }
+.ou-stack--gap-1 { gap: var(--ou-space-1); }
+.ou-stack--gap-2 { gap: var(--ou-space-2); }
+.ou-stack--gap-3 { gap: var(--ou-space-3); }
+.ou-stack--gap-4 { gap: var(--ou-space-4); }
+.ou-stack--gap-5 { gap: var(--ou-space-5); }
+.ou-stack--gap-6 { gap: var(--ou-space-6); }
+.ou-stack--gap-7 { gap: var(--ou-space-7); }
+.ou-stack--gap-8 { gap: var(--ou-space-8); }
+.ou-stack--ai-start { align-items: flex-start; }
+.ou-stack--ai-center { align-items: center; }
+.ou-stack--ai-end { align-items: flex-end; }
+.ou-stack--ai-stretch { align-items: stretch; }
+.ou-stack--ai-baseline { align-items: baseline; }
+.ou-stack--jc-start { justify-content: flex-start; }
+.ou-stack--jc-center { justify-content: center; }
+.ou-stack--jc-end { justify-content: flex-end; }
+.ou-stack--jc-between { justify-content: space-between; }
+.ou-stack--jc-around { justify-content: space-around; }
+
+.ou-grid { display: grid; min-width: 0; }
+.ou-grid--gap-0 { gap: 0; }
+.ou-grid--gap-1 { gap: var(--ou-space-1); }
+.ou-grid--gap-2 { gap: var(--ou-space-2); }
+.ou-grid--gap-3 { gap: var(--ou-space-3); }
+.ou-grid--gap-4 { gap: var(--ou-space-4); }
+.ou-grid--gap-5 { gap: var(--ou-space-5); }
+.ou-grid--gap-6 { gap: var(--ou-space-6); }
+.ou-grid--gap-7 { gap: var(--ou-space-7); }
+.ou-grid--gap-8 { gap: var(--ou-space-8); }
+.ou-grid--cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.ou-grid--cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ou-grid--cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ou-grid--cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ou-grid--cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.ou-grid--cols-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.ou-grid--auto { grid-template-columns: repeat(auto-fit, minmax(var(--ou-grid-min, 240px), 1fr)); }
+.ou-grid--min-xs { --ou-grid-min: 140px; }
+.ou-grid--min-sm { --ou-grid-min: 180px; }
+.ou-grid--min-md { --ou-grid-min: 240px; }
+.ou-grid--min-lg { --ou-grid-min: 300px; }
+.ou-grid--min-xl { --ou-grid-min: 380px; }
+
+.ou-box--pad-1 { padding: var(--ou-space-1); }
+.ou-box--pad-2 { padding: var(--ou-space-2); }
+.ou-box--pad-3 { padding: var(--ou-space-3); }
+.ou-box--pad-4 { padding: var(--ou-space-4); }
+.ou-box--pad-5 { padding: var(--ou-space-5); }
+.ou-box--pad-6 { padding: var(--ou-space-6); }
+.ou-box--pad-7 { padding: var(--ou-space-7); }
+.ou-box--pad-8 { padding: var(--ou-space-8); }
+.ou-box--surface-muted { background: var(--ou-bg-muted); }
+.ou-box--surface-subtle { background: var(--ou-bg-surface-2); }
+.ou-box--surface-elevated { background: var(--ou-bg-elevated); }
+.ou-box--border { border: 1px solid var(--ou-border-soft); }
+.ou-box--radius-s { border-radius: var(--ou-radius-s); }
+.ou-box--radius-m { border-radius: var(--ou-radius-m); }
+.ou-box--radius-l { border-radius: var(--ou-radius-l); }
+
+/* ─── text.css (added: Text typography primitive) ──────────────────── */
+.ou-text { margin: 0; }
+.ou-text--display-l { font: var(--ou-text-display-l); }
+.ou-text--display-m { font: var(--ou-text-display-m); }
+.ou-text--display-s { font: var(--ou-text-display-s); }
+.ou-text--heading-l { font: var(--ou-text-heading-l); }
+.ou-text--heading-m { font: var(--ou-text-heading-m); }
+.ou-text--heading-s { font: var(--ou-text-heading-s); }
+.ou-text--body-l { font: var(--ou-text-body-l); }
+.ou-text--body-m { font: var(--ou-text-body-m); }
+.ou-text--body-s { font: var(--ou-text-body-s); }
+.ou-text--body-xs { font: var(--ou-text-body-xs); }
+.ou-text--caption { font: var(--ou-text-caption); }
+.ou-text--tone-default { color: var(--ou-fg-default); }
+.ou-text--tone-muted { color: var(--ou-fg-muted); }
+.ou-text--tone-subtle { color: var(--ou-fg-subtle); }
+.ou-text--tone-success { color: var(--ou-success-600); }
+.ou-text--tone-warning { color: var(--ou-warning-600); }
+.ou-text--tone-error { color: var(--ou-error-600); }
+.ou-text--tone-info { color: var(--ou-info-600); }
+.ou-text--tone-accent { color: var(--ou-accent-default); }
+.ou-text--w-regular { font-weight: 400; }
+.ou-text--w-medium { font-weight: 500; }
+.ou-text--w-semibold { font-weight: 600; }
+.ou-text--w-bold { font-weight: 700; }
+.ou-text--center { text-align: center; }
+.ou-text--end { text-align: right; }
+.ou-text--truncate { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* ─── scroll-area.css (added: maxH presets) ────────────────────────── */
+.ou-scroll--mh-xs { max-height: 120px; }
+.ou-scroll--mh-sm { max-height: 160px; }
+.ou-scroll--mh-md { max-height: 240px; }
+.ou-scroll--mh-lg { max-height: 320px; }
+.ou-scroll--mh-xl { max-height: 480px; }
+
+.ou-grow { flex: 1 1 0%; min-width: 0; }
+.ou-text--mono-s { font: var(--ou-text-mono-s); }
