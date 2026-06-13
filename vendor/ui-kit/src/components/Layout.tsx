@@ -81,9 +81,9 @@ export const Grid = forwardRef<HTMLDivElement, GridProps>(
     <div
       ref={ref}
       className={cn(
-        'ou-grid',
-        `ou-grid--gap-${gap}`,
-        minItem ? `ou-grid--auto ou-grid--min-${minItem}` : cols && `ou-grid--cols-${cols}`,
+        'ou-lgrid',
+        `ou-lgrid--gap-${gap}`,
+        minItem ? `ou-lgrid--auto ou-lgrid--min-${minItem}` : cols && `ou-lgrid--cols-${cols}`,
         className,
       )}
       {...rest}
