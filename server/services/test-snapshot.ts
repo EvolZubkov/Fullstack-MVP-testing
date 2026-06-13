@@ -40,6 +40,7 @@ import type {
   ResultVariable,
   ContentPage,
   TestQuestionScoring,
+  QuestionScoring,
 } from "@shared/schema";
 
 /** The frozen deliverable of a test (stored as test_snapshots.content_json). */
@@ -269,10 +270,56 @@ export function snapshotDataSource(content: TestSnapshotContent): TestDataSource
       return content.contentPages;
     },
     async getTestQuestionScoring() {
-      // Pre-block-D snapshots have no overrides — the chain falls to legacy.
-      return content.questionScoring ?? [];
+      // Block-D+ snapshots froze the per-test overrides explicitly.
+      if (content.questionScoring && content.questionScoring.length > 0) {
+        return content.questionScoring;
+      }
+      // T-40 back-compat: a pre-block-D snapshot has no override rows, but its
+      // frozen question rows still carry their own points/scoring_json in
+      // content_json. The live resolver no longer reads those columns (they were
+      // dropped), so synthesize override rows from the frozen values to grade a
+      // pinned attempt EXACTLY as before the drop (the 0-change-for-pinned
+      // invariant). The predicate mirrors migration 027/028: materialize points
+      // only when they differ from the system default (NOT IN (0,1) — the old
+      // `q.points || 1` coercion treated 0 as 1), and scoring whenever set.
+      return synthesizeFrozenOverrides(content.test.id, allQuestions);
     },
   };
+}
+
+/**
+ * Reconstruct per-test scoring overrides from a pre-block-D snapshot's frozen
+ * question rows (T-40 back-compat; see {@link snapshotDataSource}). Reads the
+ * question's own points/scoring_json off the historical JSON via a loose cast —
+ * the {@link Question} type no longer declares them after the column drop.
+ */
+function synthesizeFrozenOverrides(
+  testId: string,
+  questions: Question[],
+): TestQuestionScoring[] {
+  const rows: TestQuestionScoring[] = [];
+  for (const q of questions) {
+    const frozen = q as unknown as { points?: number | null; scoringJson?: QuestionScoring | null };
+    const rawPoints = frozen.points;
+    const points =
+      typeof rawPoints === "number" && rawPoints !== 0 && rawPoints !== 1 ? rawPoints : null;
+    const scoringJson = frozen.scoringJson ?? null;
+    if (points === null && scoringJson === null) continue;
+    rows.push({
+      id: `frozen:${q.id}`,
+      testId,
+      questionId: q.id,
+      points,
+      scoringJson,
+      // Difficulty stays on the question (not dropped); never overridden here.
+      difficulty: null,
+      // Pin to the frozen question so the resolver never marks it stale.
+      pinnedContentHash: q.contentHash ?? null,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    });
+  }
+  return rows;
 }
 
 /**

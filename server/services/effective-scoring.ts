@@ -14,11 +14,12 @@
  * live storage or a publication snapshot (block B) — so live and frozen
  * attempts share one resolution path.
  *
- * Transitional (until T-40 drops the question columns): the question's own
- * `points`/`scoringJson` feed the resolver's `legacy` link as `q.points || 1`
- * — the exact coercion every runtime applied before block D (an explicit 0
- * behaved as 1), keeping pre-backfill behaviour bit-identical (BRC-26). A real
- * zero price is expressible through an override (`points: 0`).
+ * T-40 (2026-06-13) dropped `questions.points`/`questions.scoring_json`: scoring
+ * is now wholly a property of the test. The chain is override -> section default
+ * -> test default -> system default ("1 point, exact match"); the question row
+ * is content only. (Before T-40 the question's own columns fed the resolver's
+ * transitional `legacy` link; migration 027/028 backfilled every non-default
+ * value into per-test override rows, so the drop is behaviour-preserving.)
  */
 
 import {
@@ -75,9 +76,8 @@ export function buildTestScoringContext(
           sectionDefaultPoints: sectionDefaultByTopic.get(question.topicId) ?? null,
           testDefaultPoints,
         },
-        // Transitional legacy link (see the module header): `|| 1` reproduces
-        // the pre-block-D runtime coercion exactly, explicit 0 included.
-        legacy: { points: question.points || 1, scoring: question.scoringJson ?? null },
+        // T-40: the question no longer carries points/scoringJson — the chain
+        // resolves from the override and the section/test defaults only.
         questionContentHash: question.contentHash ?? null,
       });
     },

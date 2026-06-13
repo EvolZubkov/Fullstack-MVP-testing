@@ -10,10 +10,10 @@
  *
  * PRD-15 block D (FR-32): the graded config is a property of the TEST, so
  * grading paths pass the EFFECTIVE config (resolved via
- * server/services/effective-scoring) as `scoring`. When the argument is
- * omitted the question's own `scoringJson` applies — the transitional legacy
- * behaviour for callers outside a test context. Exact scoring (or none)
- * yields the legacy 0/1; weighted/tiered configs return a partial-credit
+ * server/services/effective-scoring) as `scoring`. T-40 dropped the question's
+ * own `scoring_json`, so when the argument is omitted there is no config and
+ * scoring falls back to exact match (the system default). Exact scoring (or
+ * none) yields the legacy 0/1; weighted/tiered configs return a partial-credit
  * ratio ("цена ответа") that callers multiply by the effective points.
  */
 
@@ -23,10 +23,10 @@ import type { Question, QuestionScoring } from "@shared/schema";
 /**
  * Scores a learner's answer to a question.
  *
- * @param question The question (its `correctJson`, and `scoringJson` fallback).
+ * @param question The question (its `correctJson`).
  * @param answer   The learner's answer in the runtime encoding for the type.
- * @param scoring  Effective graded config for the test context (block D);
- *                 omit to fall back to the question's own `scoringJson`.
+ * @param scoring  Effective graded config for the test context (block D); omit
+ *                 for exact match (the system default, post-T-40).
  * @returns Earned ratio in [0, 1] (0 = wrong / unanswered, 1 = full credit).
  */
 export function checkAnswer(
@@ -38,6 +38,6 @@ export function checkAnswer(
     type: question.type as QuestionType,
     correct: (question.correctJson ?? {}) as CorrectData,
     answer: answer as Answer,
-    scoring: scoring !== undefined ? scoring : (question.scoringJson ?? null),
+    scoring: scoring ?? null,
   }).ratio;
 }

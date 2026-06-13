@@ -33,8 +33,9 @@ interface ExportData {
    * PRD-15 block D (FR-32): per-(test, question) scoring overrides. The bake
    * resolves the EFFECTIVE price / graded config / difficulty per question and
    * writes the resolved values into TEST_DATA, so the in-package runtime keeps
-   * reading plain `q.points`/`q.scoring`/`q.difficulty` — no runtime change.
-   * Absent/empty = the legacy question-side values apply unchanged.
+   * reading plain `q.points`/`q.scoring`/`q.difficulty` from the baked JSON
+   * (not a DB column — unaffected by the T-40 column drop). Absent/empty = the
+   * chain falls through to the section/test defaults and the system default.
    */
   questionScoring?: TestQuestionScoring[];
   adaptiveSettings?: AdaptiveSettingsExport | null;

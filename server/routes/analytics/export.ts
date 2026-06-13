@@ -624,7 +624,9 @@ router.post("/export/excel", requirePermission("analytics.export"), async (req: 
             formatCorrectAnswerText(q.type, dataJson, correctJson),
             formatUserAnswerText(q.type, dataJson, userAnswer),
             isCorrect ? "Верно" : "Неверно",
-            isCorrect ? (effective?.points ?? (q.points || 1)) : 0,
+            // T-40: points come from the effective chain; the `?? 1` is the
+            // system default for the defensive case of a missing scoring context.
+            isCorrect ? (effective?.points ?? 1) : 0,
           ]);
         }
       }
