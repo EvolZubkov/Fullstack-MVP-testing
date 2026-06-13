@@ -344,14 +344,13 @@ describe("POST /import — обновление по ID", () => {
   it("вызывает updateQuestion когда ID найден", async () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
-    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Балл": 5 })]);
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1" })]);
     const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(res.status).toBe(200);
     expect(storageMock.updateQuestion).toHaveBeenCalledWith("q1", expect.objectContaining({
       prompt: "What is JS?",
       topicId: "t1",
-      points: 5,
     }));
     expect(storageMock.createQuestion).not.toHaveBeenCalled();
   });
@@ -434,14 +433,14 @@ describe("POST /import — обновление по ID", () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
     const buf = await makeImportXlsx([
-      singleRow({ "ID": "q1", "Балл": 2, "Текст вопроса": "First version?" }),
-      singleRow({ "ID": "q1", "Балл": 9, "Текст вопроса": "Second version?" }),
+      singleRow({ "ID": "q1", "Текст вопроса": "First version?" }),
+      singleRow({ "ID": "q1", "Текст вопроса": "Second version?" }),
     ]);
     await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(storageMock.updateQuestion).toHaveBeenCalledTimes(2);
     const lastCall = storageMock.updateQuestion.mock.calls[1];
-    expect(lastCall[1]).toMatchObject({ points: 9, prompt: "Second version?" });
+    expect(lastCall[1]).toMatchObject({ prompt: "Second version?" });
   });
 
   it("contentHash пересчитывается при обновлении", async () => {
@@ -481,14 +480,13 @@ describe("POST /import — обновление по ID", () => {
     expect(res.body.created).toBe(1);
   });
 
-  it("обновление балла и сложности без изменения контента", async () => {
+  it("обновление сложности без изменения контента", async () => {
     storageMock.getQuestion.mockResolvedValue(dbQuestion);
 
-    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Балл": 3, "Сложность": 75 })]);
+    const buf = await makeImportXlsx([singleRow({ "ID": "q1", "Сложность": 75 })]);
     await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(storageMock.updateQuestion).toHaveBeenCalledWith("q1", expect.objectContaining({
-      points: 3,
       difficulty: 75,
     }));
   });
@@ -679,7 +677,7 @@ describe("POST /import — ranking (PRD-14 Ф0)", () => {
 // PRD-14 Ф0 — Балл/Сложность = 0 сохраняются; диапазон сложности
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("POST /import — Балл/Сложность = 0 (PRD-14 Ф0)", () => {
+describe("POST /import — Сложность = 0 (PRD-14 Ф0)", () => {
   let app: express.Express;
 
   beforeEach(() => {
@@ -691,12 +689,12 @@ describe("POST /import — Балл/Сложность = 0 (PRD-14 Ф0)", () => 
     app = makeApp();
   });
 
-  it("Балл = 0 и Сложность = 0 сохраняются как 0, а не подменяются", async () => {
-    const buf = await makeImportXlsx([singleRow({ "Балл": 0, "Сложность": 0 })]);
+  it("Сложность = 0 сохраняется как 0, а не подменяется (T-40: «Балл» больше не в листе)", async () => {
+    const buf = await makeImportXlsx([singleRow({ "Сложность": 0 })]);
     await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
 
     expect(storageMock.createQuestion).toHaveBeenCalledWith(
-      expect.objectContaining({ points: 0, difficulty: 0 })
+      expect.objectContaining({ difficulty: 0 })
     );
   });
 
@@ -937,64 +935,10 @@ describe("POST /import — условная ОС (PRD-14 Ф1)", () => {
 // PRD-14 Ф1 — Цена ответа (FR-08..FR-10)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("POST /import — Цена ответа (PRD-14 Ф1)", () => {
-  let app: express.Express;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    storageMock.getUser.mockResolvedValue(authorUser);
-    storageMock.getTopics.mockResolvedValue([dbTopic]);
-    storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
-    storageMock.createQuestion.mockResolvedValue({ ...dbQuestion });
-    app = makeApp();
-  });
-
-  it("weighted (single) разбирается и попадает в scoringJson", async () => {
-    const buf = await makeImportXlsx([
-      singleRow({ "Тексты вариантов ответа": "A#B#C", "Цена ответа": "веса: 2 # 0 # 1" }),
-    ]);
-    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
-
-    expect(storageMock.createQuestion).toHaveBeenCalledWith(
-      expect.objectContaining({ scoringJson: { kind: "weighted", weights: [2, 0, 1] } })
-    );
-  });
-
-  it("tiered (multiple) разбирается", async () => {
-    const buf = await makeImportXlsx([
-      singleRow({
-        "Тип вопроса": "multiple_response",
-        "Тексты вариантов ответа": "A#B#C",
-        "Номера правильных ответов": "1,2",
-        "Цена ответа": "ступени: c==T & x==0 => 2; c>=1 => 1",
-      }),
-    ]);
-    await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
-
-    expect(storageMock.createQuestion).toHaveBeenCalledWith(
-      expect.objectContaining({
-        scoringJson: {
-          kind: "tiered",
-          tiers: [
-            { when: { all: [{ lhs: "c", op: "==", rhs: "T" }, { lhs: "x", op: "==", rhs: 0 }] }, score: 2 },
-            { when: { all: [{ lhs: "c", op: ">=", rhs: 1 }] }, score: 1 },
-          ],
-        },
-      })
-    );
-  });
-
-  it("невалидная «Цена ответа» → ошибка строки, без создания", async () => {
-    const buf = await makeImportXlsx([
-      singleRow({ "Тексты вариантов ответа": "A#B#C", "Цена ответа": "ступени: c>=1 => 1" }),
-    ]);
-    const res = await asAuthor(request(app).post("/api/questions/import").attach("file", buf, "q.xlsx"));
-
-    // ступени для single недопустимы
-    expect(res.body.errors).toHaveLength(1);
-    expect(storageMock.createQuestion).not.toHaveBeenCalled();
-  });
-});
+// T-40: «Цена ответа» (graded scoring) is no longer a column of the bank
+// «Вопросы» sheet — it moved to the test-scoped «Оценка» sheet of the workbook
+// (server/utils/workbook-sheets + tests/workbook-sheets.test.ts cover the
+// grammar there). The standalone questions import/export carries content only.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRD-14 Ф1 — FR-11: пустая ячейка vs отсутствие колонки (обновление по ID)
@@ -1086,8 +1030,10 @@ describe("GET /template (PRD-14 Ф2)", () => {
 
     const headers = sheetToArrays(wb.getWorksheet("Вопросы")!)[0] as string[];
     expect(headers[0]).toBe("ID");
-    expect(headers).toContain("Цена ответа");
     expect(headers).toContain("Теги");
+    // T-40: scoring left the bank sheet for the test-scoped «Оценка» sheet.
+    expect(headers).not.toContain("Цена ответа");
+    expect(headers).not.toContain("Балл");
   });
 });
 

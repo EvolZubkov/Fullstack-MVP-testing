@@ -119,11 +119,13 @@ describe("buildMetadataXml", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 import { buildTestJson } from "../server/scorm/builders/test-json";
 
+// T-40: the question carries no points/scoringJson — scoring is a property of
+// the test. With no override/default the bake resolves the system default (1).
 const dbQuestion: any = {
   id: "q1", topicId: "t1", type: "single", prompt: "What is JS?",
   dataJson: { options: ["A language", "A food"] },
   correctJson: { correctIndex: 0 },
-  points: 5, difficulty: 60, shuffleAnswers: true,
+  difficulty: 60, shuffleAnswers: true,
   mediaUrl: null, mediaType: null,
   feedback: null, feedbackMode: "general",
   feedbackCorrect: null, feedbackIncorrect: null,
@@ -211,7 +213,8 @@ describe("buildTestJson — standard mode", () => {
     const q = data.sections[0].questions[0];
     expect(q.id).toBe("q1");
     expect(q.type).toBe("single");
-    expect(q.points).toBe(5);
+    // T-40: no override/default -> effective system default (1 point).
+    expect(q.points).toBe(1);
     expect(q.difficulty).toBe(60);
     expect(q.data.options).toHaveLength(2);
     expect(q.correct.correctIndex).toBe(0);
@@ -223,14 +226,20 @@ describe("buildTestJson — standard mode", () => {
     expect(data.sections[0].questions[0].scoring).toBeUndefined();
   });
 
-  it("exports scoring into the runtime question when set", () => {
+  it("exports scoring into the runtime question when set via a per-test override", () => {
+    // T-40: scoring is a property of the test, supplied through a
+    // test_question_scoring override row, not the question's own column.
     const scoring = {
       kind: "tiered",
       tiers: [{ when: { all: [{ lhs: "c", op: "==", rhs: "T" }] }, score: 2 }],
     };
     const d = {
       ...exportData,
-      sections: [{ ...dbSection, questions: [{ ...dbQuestion, scoringJson: scoring }] }],
+      questionScoring: [{
+        id: "ov1", testId: "test-123", questionId: "q1",
+        points: null, scoringJson: scoring, difficulty: null, pinnedContentHash: null,
+        createdAt: new Date(0), updatedAt: new Date(0),
+      }],
     };
     const q = JSON.parse(buildTestJson(d)).sections[0].questions[0];
     expect(q.scoring).toEqual(scoring);

@@ -119,9 +119,9 @@ describe("buildTestJson — block D effective scoring bake", () => {
     expect(q.difficulty).toBe(85);
   });
 
-  it("keeps section/test defaults out of the bake while the legacy link exists", () => {
-    // Transitional: q.points (legacy) still wins over the new defaults until
-    // T-40 drops the question columns — bit-identical behaviour (BRC-26).
+  it("bakes the section default when no override is set (T-40: defaults reachable)", () => {
+    // After T-40 the question carries no points, so the chain resolves to the
+    // section default (which wins over the test default).
     const d = {
       ...exportData,
       test: { ...baseTest, defaultQuestionPoints: 3 },
@@ -129,6 +129,17 @@ describe("buildTestJson — block D effective scoring bake", () => {
       questionScoring: [],
     };
     const q = JSON.parse(buildTestJson(d)).sections[0].questions[0];
-    expect(q.points).toBe(5);
+    expect(q.points).toBe(4);
+  });
+
+  it("bakes the test default when neither override nor section default is set", () => {
+    const d = {
+      ...exportData,
+      test: { ...baseTest, defaultQuestionPoints: 3 },
+      sections: [{ ...dbSection, defaultPoints: null }],
+      questionScoring: [],
+    };
+    const q = JSON.parse(buildTestJson(d)).sections[0].questions[0];
+    expect(q.points).toBe(3);
   });
 });

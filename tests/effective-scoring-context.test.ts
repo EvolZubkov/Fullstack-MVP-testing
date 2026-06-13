@@ -4,8 +4,9 @@
  * Unit tests of the server-side effective-scoring context (PRD-15 block D,
  * FR-31/FR-32/FR-34; server/services/effective-scoring). The pure resolver is
  * covered by tests/effective-scoring.test.ts; here the wiring is the unit:
- * assembling the chain from DB-shaped rows (test row, sections, override rows)
- * and the transitional legacy coercion `q.points || 1`.
+ * assembling the chain from DB-shaped rows (test row, sections, override rows).
+ * After T-40 the question carries no points/scoring_json, so the chain is
+ * override -> section default -> test default -> system default.
  */
 
 import { describe, it, expect } from "vitest";
@@ -16,9 +17,7 @@ const question = (overrides: Record<string, unknown> = {}) =>
     id: "q1",
     topicId: "tp1",
     type: "single",
-    points: 1,
     difficulty: 50,
-    scoringJson: null,
     contentHash: "h1",
     ...overrides,
   }) as any;
@@ -42,33 +41,28 @@ describe("buildTestScoringContext — points chain from rows", () => {
     const ctx = buildTestScoringContext(undefined, [], []);
     const eff = ctx.resolve(question());
     expect(eff.points).toBe(1);
-    expect(eff.source.points).toBe("legacy"); // q.points || 1 feeds the legacy link
+    expect(eff.source.points).toBe("system");
   });
 
-  it("prefers the override row over the question's own points", () => {
+  it("prefers the override row over the chain defaults", () => {
     const ctx = buildTestScoringContext(
-      { defaultQuestionPoints: null } as any,
-      [],
+      { defaultQuestionPoints: 9 } as any,
+      [{ topicId: "tp1", defaultPoints: 4 }] as any,
       [overrideRow({ points: 7 })],
     );
-    expect(ctx.resolve(question({ points: 3 })).points).toBe(7);
+    const eff = ctx.resolve(question());
+    expect(eff.points).toBe(7);
+    expect(eff.source.points).toBe("override");
   });
 
   it("honours a zero-point override (unscored in THIS test)", () => {
     const ctx = buildTestScoringContext(undefined, [], [overrideRow({ points: 0 })]);
-    const eff = ctx.resolve(question({ points: 3 }));
+    const eff = ctx.resolve(question());
     expect(eff.points).toBe(0);
     expect(eff.source.points).toBe("override");
   });
 
-  it("keeps the pre-block-D coercion for a legacy zero (0 behaves as 1)", () => {
-    const ctx = buildTestScoringContext(undefined, [], []);
-    const eff = ctx.resolve(question({ points: 0 }));
-    expect(eff.points).toBe(1);
-    expect(eff.source.points).toBe("legacy");
-  });
-
-  it("matches the section default by the question's topic", () => {
+  it("matches the section default by the question's topic (now reachable post-T-40)", () => {
     const ctx = buildTestScoringContext(
       { defaultQuestionPoints: 9 } as any,
       [
@@ -77,34 +71,39 @@ describe("buildTestScoringContext — points chain from rows", () => {
       ] as any,
       [],
     );
-    // The question's own points (1 == system default via `|| 1`) still win the
-    // chain as the legacy link during the transition.
-    expect(ctx.resolve(question()).points).toBe(1);
-    // Without the legacy link (points null is impossible in DB, so emulate a
-    // question whose points coerce to a falsy-free chain via override-less
-    // resolution): the defaults are reachable only after T-40; here we assert
-    // the defaults are correctly KEYED, via the difficulty/override paths below.
-    expect(ctx.resolve(question({ id: "q2", topicId: "tp2" })).points).toBe(1);
+    // Section default wins for a question on a topic that has one.
+    expect(ctx.resolve(question()).points).toBe(4);
+    expect(ctx.resolve(question()).source.points).toBe("section");
+    expect(ctx.resolve(question({ id: "q2", topicId: "tp2" })).points).toBe(6);
+  });
+
+  it("falls through to the test default when the section has none", () => {
+    const ctx = buildTestScoringContext(
+      { defaultQuestionPoints: 9 } as any,
+      [{ topicId: "tp9", defaultPoints: 3 }] as any, // a different topic
+      [],
+    );
+    const eff = ctx.resolve(question()); // topic tp1 has no section default
+    expect(eff.points).toBe(9);
+    expect(eff.source.points).toBe("test");
   });
 });
 
 describe("buildTestScoringContext — graded config and difficulty", () => {
-  it("applies the override graded config over the question's own", () => {
+  it("applies the override graded config", () => {
     const ctx = buildTestScoringContext(undefined, [], [
       overrideRow({ scoringJson: { kind: "weighted", weights: [1, 0] } }),
     ]);
-    const eff = ctx.resolve(question({ scoringJson: { kind: "exact" } }));
+    const eff = ctx.resolve(question());
     expect(eff.scoring).toEqual({ kind: "weighted", weights: [1, 0] });
     expect(eff.source.scoring).toBe("override");
   });
 
-  it("falls back to the question's own scoringJson during the transition", () => {
+  it("defaults graded config to system exact when no override is set", () => {
     const ctx = buildTestScoringContext(undefined, [], []);
-    const eff = ctx.resolve(
-      question({ scoringJson: { kind: "weighted", weights: [2, 1] } }),
-    );
-    expect(eff.scoring).toEqual({ kind: "weighted", weights: [2, 1] });
-    expect(eff.source.scoring).toBe("legacy");
+    const eff = ctx.resolve(question());
+    expect(eff.scoring).toEqual({ kind: "exact" });
+    expect(eff.source.scoring).toBe("system");
   });
 
   it("difficultyOf prefers the per-test override (FR-34)", () => {
