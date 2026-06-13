@@ -26,9 +26,10 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Pencil, RotateCcw } from "lucide-react";
-import { Banner, IconButton, Input, Tag } from "@universityrt/ui-kit";
+import {
+  Banner, Collapsible, CollapsibleContent, CollapsibleTrigger, IconButton, Input, Tag,
+} from "@universityrt/ui-kit";
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
 import type { Question } from "@shared/schema";
 import type { TestEditorModel } from "../test-editor.types";

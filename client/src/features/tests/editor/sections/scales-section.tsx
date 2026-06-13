@@ -21,6 +21,9 @@ import {
   Banner,
   Button,
   Checkbox,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   EmptyState,
   IconButton,
   Input,
@@ -30,8 +33,6 @@ import {
   Switch,
 } from "@universityrt/ui-kit";
 import { ChevronDown, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
-
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 import type {
   QuestionMeasurementModel,

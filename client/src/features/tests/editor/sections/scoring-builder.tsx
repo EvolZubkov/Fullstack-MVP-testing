@@ -5,7 +5,7 @@
  * (questions.tsx); relocated UNCHANGED into the test editor — scoring is a
  * property of the test, the config is serialized into the per-(test, question)
  * override (`test_question_scoring.scoring_json`, scoring-model §11). Built
- * with the form's shadcn/ui kit for visual consistency (the approved DS
+ * with the design-system `@universityrt/ui-kit` components (the approved DS
  * wireframe is the layout/behaviour spec, not a literal render).
  *
  * Modes by type (engine support, scoring-model §11.3-11.5):
@@ -18,19 +18,15 @@
  * scores 0 (FR-07), so the implicit "иначе → 0" row is shown read-only.
  */
 import { Plus, Trash2, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-// Standalone Label (not FormLabel): the constructor is rendered both inside
-// and outside a react-hook-form context (the test editor's override modal).
-import { Label } from "@/components/ui/label";
 import {
+  Button,
+  IconButton,
+  Input,
+  Label,
+  SegmentedControl,
   Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Tag,
+} from "@universityrt/ui-kit";
 
 export type ScoringMode = "exact" | "weighted" | "tiered";
 export type CondLhs = "c" | "x";
@@ -141,31 +137,19 @@ export function ScoringBuilder({
     <div className="space-y-4" data-testid="scoring-builder">
       <div className="flex items-center justify-between gap-2">
         <Label className="mb-0">Цена ответа</Label>
-        <Badge variant="outline" data-testid="scoring-smax">
+        <Tag variant="outline" data-testid="scoring-smax">
           Макс. балл sMax = {sMax}
-        </Badge>
+        </Tag>
       </div>
 
       {/* Mode selector (segmented). */}
-      <div className="inline-flex rounded-md border border-input p-0.5" role="group" aria-label="Цена ответа">
-        {modes.map((m) => (
-          <button
-            key={m.value}
-            type="button"
-            aria-pressed={mode === m.value}
-            onClick={() => setMode(m.value)}
-            data-testid={`scoring-mode-${m.value}`}
-            className={
-              "rounded px-3 py-1.5 text-sm transition-colors " +
-              (mode === m.value
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-accent")
-            }
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        size="s"
+        aria-label="Цена ответа"
+        items={modes}
+        value={mode}
+        onChange={setMode}
+      />
 
       {/* exact — informational. */}
       {mode === "exact" && (
@@ -188,6 +172,7 @@ export function ScoringBuilder({
               <Input
                 type="number"
                 min={0}
+                fullWidth
                 value={weights[i] ?? ""}
                 onChange={(e) => setWeight(i, e.target.value)}
                 placeholder="0"
@@ -213,25 +198,23 @@ export function ScoringBuilder({
                 <div className="flex-1 space-y-2">
                   {tier.conds.map((cond, ci) => (
                     <div key={ci} className="flex flex-wrap items-center gap-2">
-                      <Select value={cond.lhs} onValueChange={(v) => setCond(ti, ci, { lhs: v as CondLhs })}>
-                        <SelectTrigger className="w-36" data-testid={`scoring-cond-lhs-${ti}-${ci}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="c">Верных (c)</SelectItem>
-                          <SelectItem value="x">Лишних (x)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Select value={cond.op} onValueChange={(v) => setCond(ti, ci, { op: v as CondOp })}>
-                        <SelectTrigger className="w-20" data-testid={`scoring-cond-op-${ti}-${ci}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {OPS.map((o) => (
-                            <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Select
+                        className="w-36"
+                        value={cond.lhs}
+                        onChange={(v) => setCond(ti, ci, { lhs: v as CondLhs })}
+                        options={[
+                          { value: "c", label: "Верных (c)" },
+                          { value: "x", label: "Лишних (x)" },
+                        ]}
+                        data-testid={`scoring-cond-lhs-${ti}-${ci}`}
+                      />
+                      <Select
+                        className="w-20"
+                        value={cond.op}
+                        onChange={(v) => setCond(ti, ci, { op: v as CondOp })}
+                        options={OPS.map((o) => ({ value: o.value, label: o.label }))}
+                        data-testid={`scoring-cond-op-${ti}-${ci}`}
+                      />
                       <Input
                         className="w-24"
                         value={cond.rhs}
@@ -240,14 +223,25 @@ export function ScoringBuilder({
                         data-testid={`scoring-cond-rhs-${ti}-${ci}`}
                       />
                       {tier.conds.length > 1 && (
-                        <Button type="button" variant="ghost" size="icon" onClick={() => removeCond(ti, ci)} aria-label="Удалить условие">
-                          <X className="h-4 w-4" />
-                        </Button>
+                        <IconButton
+                          variant="ghost"
+                          size="s"
+                          icon={<X className="h-4 w-4" />}
+                          onClick={() => removeCond(ti, ci)}
+                          aria-label="Удалить условие"
+                        />
                       )}
                     </div>
                   ))}
-                  <Button type="button" variant="ghost" size="sm" onClick={() => addCond(ti)} data-testid={`scoring-add-cond-${ti}`}>
-                    <Plus className="h-4 w-4 mr-1" /> И условие
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="s"
+                    leadingIcon={<Plus className="h-4 w-4" />}
+                    onClick={() => addCond(ti)}
+                    data-testid={`scoring-add-cond-${ti}`}
+                  >
+                    И условие
                   </Button>
                 </div>
                 <div className="flex items-center gap-2">
@@ -261,9 +255,13 @@ export function ScoringBuilder({
                     aria-label="Балл ступени"
                     data-testid={`scoring-tier-score-${ti}`}
                   />
-                  <Button type="button" variant="ghost" size="icon" onClick={() => removeTier(ti)} aria-label="Удалить строку">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <IconButton
+                    variant="ghost"
+                    size="s"
+                    icon={<Trash2 className="h-4 w-4" />}
+                    onClick={() => removeTier(ti)}
+                    aria-label="Удалить строку"
+                  />
                 </div>
               </div>
             </div>
@@ -274,8 +272,15 @@ export function ScoringBuilder({
             <span>0</span>
           </div>
 
-          <Button type="button" variant="outline" size="sm" onClick={addTier} data-testid="scoring-add-tier">
-            <Plus className="h-4 w-4 mr-2" /> Добавить строку
+          <Button
+            type="button"
+            variant="secondary"
+            size="s"
+            leadingIcon={<Plus className="h-4 w-4" />}
+            onClick={addTier}
+            data-testid="scoring-add-tier"
+          >
+            Добавить строку
           </Button>
         </div>
       )}
