@@ -76,9 +76,9 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
   const type = question.type as BuilderQuestionType;
   const options = questionOptions(question);
 
-  // The constructor initialises from the override config or, transitionally,
-  // the question's own scoringJson (the value that currently applies).
-  const initial = parseScoringJson(override?.scoringJson ?? question.scoringJson ?? null);
+  // The constructor initialises from the per-test override config (T-40: the
+  // question no longer carries its own scoring — the chain starts at the override).
+  const initial = parseScoringJson(override?.scoringJson ?? null);
   const [points, setPoints] = useState(override?.points?.toString() ?? "");
   const [difficulty, setDifficulty] = useState(override?.difficulty?.toString() ?? "");
   const [mode, setMode] = useState<ScoringMode>(initial.mode);
@@ -91,7 +91,7 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
     !!question.contentHash &&
     override.pinnedContentHash !== question.contentHash;
 
-  const inheritedPoints = sectionDefaultPoints ?? testDefaultPoints ?? (question.points || 1);
+  const inheritedPoints = sectionDefaultPoints ?? testDefaultPoints ?? 1;
 
   const apply = async () => {
     const parsedPoints = parseOverrideNumber(points);
@@ -104,12 +104,11 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
       setError("Сложность должна быть целым числом от 0 до 100.");
       return;
     }
-    // The constructor result is the override config. Exact is an EXPLICIT
-    // override only when it shadows the question's own graded config;
-    // otherwise null = no scoring override (the chain falls through).
+    // The constructor result is the override config. T-40: the question has no
+    // own graded config to shadow, so exact mode with no built config = null
+    // (no scoring override; the chain falls through to the system exact default).
     const built = buildScoringJson(type, options, mode, weights, tiers) as QuestionScoring | null;
-    const scoringJson: QuestionScoring | null =
-      built ?? (mode === "exact" && question.scoringJson ? { kind: "exact" } : null);
+    const scoringJson: QuestionScoring | null = built ?? null;
     try {
       await save.mutateAsync({
         questionId: question.id,

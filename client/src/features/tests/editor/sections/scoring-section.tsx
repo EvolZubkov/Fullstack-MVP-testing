@@ -192,7 +192,8 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                         sectionDefaultPoints: section.defaultPoints,
                         testDefaultPoints: model.scoring.defaultQuestionPoints,
                       },
-                      legacy: { points: q.points || 1, scoring: q.scoringJson ?? null },
+                      // T-40: the question no longer carries points/scoringJson;
+                      // the chain resolves from the override and the defaults.
                       questionContentHash: q.contentHash ?? null,
                     });
                     const difficulty = override?.difficulty ?? q.difficulty;
