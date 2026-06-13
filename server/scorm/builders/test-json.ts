@@ -359,7 +359,8 @@ export function buildTestJson(data: ExportData): string {
       const config = (s.configJson as { bands?: unknown }) ?? {};
       return {
         key: s.key,
-        label: s.label,
+        // Label is optional; fall back to the key so the package never shows blank.
+        label: s.label.trim() ? s.label : s.key,
         type: s.type,
         aggregation: s.aggregation,
         normalization: s.normalization,

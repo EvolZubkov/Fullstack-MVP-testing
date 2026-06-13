@@ -481,9 +481,11 @@ const SCALE_KEY_RE = /^[a-z][a-z0-9_]{0,63}$/;
 
 /**
  * Synchronous structural checks for scales (PRD-5). The checks the editor can
- * make from the draft alone: key grammar/uniqueness, required label, and the
- * interpretation bands' numeric validity, ordering and non-overlap (§5.3 — bands
- * are entered ascending on raw and must not overlap). Coverage (a scale with no
+ * make from the draft alone: key grammar/uniqueness and the interpretation bands'
+ * numeric validity, ordering and non-overlap (§5.3 — bands are entered ascending
+ * on raw and must not overlap). The label is OPTIONAL (per the approved wireframe —
+ * no required marker): an empty label is not an error; consumers fall back to the
+ * key for display (see scorm test-json bake). Coverage (a scale with no
  * contributions) is a soft warning surfaced in the section, not a save blocker.
  */
 function validateScales(model: TestEditorModel, errors: ValidationIssue[]): void {
@@ -519,14 +521,7 @@ function validateScales(model: TestEditorModel, errors: ValidationIssue[]): void
       }
     }
 
-    if (!s.label.trim()) {
-      errors.push({
-        field: `scales[${i}].label`,
-        code: "required",
-        message: "Укажите метку шкалы.",
-        severity: "error",
-      });
-    }
+    // Label is optional (empty -> key shown). Не валидируем.
 
     // Bands: each row must be numeric with min ≤ max; rows must be ascending and
     // non-overlapping on raw. A trailing fully-empty row (the "new" row) is

@@ -1395,7 +1395,9 @@ export const insertScaleSchema = createInsertSchema(scales)
     key: z
       .string()
       .regex(/^[a-z][a-z0-9_]{0,63}$/, "key: начинается с буквы; строчные/цифры/подчёркивание; до 64 символов"),
-    label: z.string().min(1).max(120),
+    // Label is OPTIONAL (per the approved wireframe). Empty is allowed; consumers
+    // fall back to the key for display. Column is NOT NULL, so "" (not null) is stored.
+    label: z.string().max(120).default(""),
   });
 
 export type InsertScale = z.infer<typeof insertScaleSchema>;

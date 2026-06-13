@@ -99,10 +99,15 @@ describe("validateTestEditor — scales", () => {
     expect(scaleErrors([scale()])).toEqual([]);
   });
 
-  it("requires a key and a label", () => {
+  it("requires a key but treats the label as optional", () => {
     const errors = scaleErrors([scale({ key: "", label: "  " })]);
     expect(errors.some((e) => e.field === "scales[0].key" && e.code === "required")).toBe(true);
-    expect(errors.some((e) => e.field === "scales[0].label" && e.code === "required")).toBe(true);
+    // Label is optional (per the approved wireframe) — empty must not be an error.
+    expect(errors.some((e) => e.field === "scales[0].label")).toBe(false);
+  });
+
+  it("accepts a scale with a valid key and an empty label", () => {
+    expect(scaleErrors([scale({ label: "" })])).toEqual([]);
   });
 
   it("flags an invalid key grammar", () => {
