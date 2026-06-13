@@ -1,28 +1,51 @@
-import { useState, useRef, type ChangeEvent } from "react";
+/**
+ * @module pages/author/questions
+ * @description Author question bank: a filterable card list of questions plus
+ * the question editor (ui-kit ModalDialog + react-hook-form), per-type answer
+ * builders (single/multiple/matching/ranking), media attachment, conditional
+ * feedback, sub-topic tags, and Excel import/export dialogs. Rendered entirely
+ * with the UniversityRT design system — layout via Stack/Cluster/Grid/Box,
+ * typography via Text, forms via FormGroup and the controls' built-in labels
+ * (no raw utility classes).
+ */
+import { useState, useRef, useId, type ChangeEvent } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Pencil, Trash2, FileQuestion, GripVertical, ArrowRight, Image, Music, Video, Copy, Upload, Download } from "lucide-react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { Plus, Search, Pencil, Trash2, FileQuestion, GripVertical, Image, Music, Video, Copy, Upload, Download } from "lucide-react";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
+import {
+  Box,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Checkbox,
+  Cluster,
+  EmptyState,
+  FormGroup,
+  Grid,
+  IconButton,
+  Input,
+  Label,
+  ModalDialog,
+  Radio,
+  RadioGroup,
+  ScrollArea,
+  Select,
+  Slider,
+  Stack,
+  Switch,
+  Tag,
+  Text,
+  Textarea,
+  type Tone,
+} from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState } from "@/components/empty-state";
-import { LoadingState, LoadingSpinner } from "@/components/loading-state";
-import { t, formatPoints } from "@/lib/i18n";
+import { LoadingState } from "@/components/loading-state";
+import { t } from "@/lib/i18n";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import { useContentGuard } from "@/features/content-protection/use-content-guard";
 import type { Question, Topic } from "@shared/schema";
@@ -36,6 +59,22 @@ const questionTypes = [
 ] as const;
 
 type QuestionType = typeof questionTypes[number]["value"];
+
+/** Map a question type to a design-system Tag tone (replaces the bespoke
+ *  Tailwind colour classes used with the old shadcn Badge). */
+const typeTone = (type: string): Tone => {
+  switch (type) {
+    case "single": return "info";
+    case "multiple": return "accent";
+    case "matching": return "success";
+    case "ranking": return "warning";
+    default: return "neutral";
+  }
+};
+
+/** Map a 0–100 difficulty to a Tag tone (easy / medium / hard). */
+const difficultyTone = (difficulty: number): Tone =>
+  difficulty <= 33 ? "success" : difficulty <= 66 ? "warning" : "error";
 
 // PRD-15 block D (FR-35): the question card carries CONTENT only — the price
 // and the graded config are configured per test («Оценка» tab of the editor).
@@ -315,7 +354,7 @@ export default function QuestionsPage() {
 
       const payload: { url: string; mime?: string } = await response.json();
 
-      setMediaUrl(payload.url); // ✅ короткий URL (без base64)
+      setMediaUrl(payload.url); // короткий URL (без base64)
       setMediaType(guessMediaType(payload.mime || file.type) || mt);
       setMediaFileName(file.name);
     } catch (err) {
@@ -592,744 +631,582 @@ export default function QuestionsPage() {
     }
   };
 
-  const getTypeBadgeColor = (type: string) => {
-    switch (type) {
-      case "single":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
-      case "multiple":
-        return "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200";
-      case "matching":
-        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-      case "ranking":
-        return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200";
-      default:
-        return "";
-    }
-  };
-
-  const getDifficultyBadgeColor = (difficulty: number) => {
-    if (difficulty <= 33) {
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-    } else if (difficulty <= 66) {
-      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-    } else {
-      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
-    }
-  };
-
   if (questionsLoading) {
     return <LoadingState message={t.questions.loadingQuestions} />;
   }
 
   return (
-    <div>
+    <Stack gap={6}>
       <PageHeader
         title={t.questions.title}
         description={t.questions.description}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={() => setIsImportDialogOpen(true)} data-testid="button-import-questions">
-              <Upload className="h-4 w-4 mr-2" />
+          <Cluster gap={2}>
+            <Button variant="secondary" leadingIcon={<Upload size={16} />} onClick={() => setIsImportDialogOpen(true)} data-testid="button-import-questions">
               {t.questions.import}
             </Button>
-            <Button variant="outline" onClick={() => setIsExportDialogOpen(true)} data-testid="button-export-questions">
-              <Download className="h-4 w-4 mr-2" />
+            <Button variant="secondary" leadingIcon={<Download size={16} />} onClick={() => setIsExportDialogOpen(true)} data-testid="button-export-questions">
               {t.questions.export}
             </Button>
-            <Button onClick={handleOpenCreate} data-testid="button-create-question">
-              <Plus className="h-4 w-4 mr-2" />
+            <Button leadingIcon={<Plus size={16} />} onClick={handleOpenCreate} data-testid="button-create-question">
               {t.questions.createQuestion}
             </Button>
-          </div>
+          </Cluster>
         }
       />
 
-      <div className="flex flex-wrap items-center gap-4 mb-6">
-        <div className="flex items-center gap-2">
-          <Label className="text-sm text-muted-foreground">{t.questions.topic}:</Label>
-          <Select value={filterTopicId} onValueChange={setFilterTopicId}>
-            <SelectTrigger className="w-40" data-testid="select-filter-topic">
-              <SelectValue placeholder={t.questions.allTopics} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t.questions.allTopics}</SelectItem>
-              {topics?.map((topic) => (
-                <SelectItem key={topic.id} value={topic.id}>
-                  {topic.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <Label className="text-sm text-muted-foreground">{t.questions.type}:</Label>
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-40" data-testid="select-filter-type">
-              <SelectValue placeholder={t.questions.allTypes} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t.questions.allTypes}</SelectItem>
-              {questionTypes.map((type) => (
-                <SelectItem key={type.value} value={type.value}>
-                  {type.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2">
-          <Label className="text-sm text-muted-foreground">{t.questions.difficulty}:</Label>
-          <Select value={filterDifficulty} onValueChange={setFilterDifficulty}>
-            <SelectTrigger className="w-44" data-testid="select-filter-difficulty">
-              <SelectValue placeholder={t.questions.allDifficulties} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t.questions.allDifficulties}</SelectItem>
-              <SelectItem value="easy">{t.questions.difficultyEasy}</SelectItem>
-              <SelectItem value="medium">{t.questions.difficultyMedium}</SelectItem>
-              <SelectItem value="hard">{t.questions.difficultyHard}</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Поиск по тексту вопроса..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-        </div>
-      </div>
+      <Cluster gap={4}>
+        <Cluster gap={2}>
+          <Text variant="body-s" tone="muted">{t.questions.topic}:</Text>
+          <Select
+            value={filterTopicId}
+            onChange={setFilterTopicId}
+            placeholder={t.questions.allTopics}
+            data-testid="select-filter-topic"
+            options={[
+              { value: "all", label: t.questions.allTopics },
+              ...(topics?.map((topic) => ({ value: topic.id, label: topic.name })) ?? []),
+            ]}
+          />
+        </Cluster>
+        <Cluster gap={2}>
+          <Text variant="body-s" tone="muted">{t.questions.type}:</Text>
+          <Select
+            value={filterType}
+            onChange={setFilterType}
+            placeholder={t.questions.allTypes}
+            data-testid="select-filter-type"
+            options={[
+              { value: "all", label: t.questions.allTypes },
+              ...questionTypes.map((type) => ({ value: type.value, label: type.label })),
+            ]}
+          />
+        </Cluster>
+        <Cluster gap={2}>
+          <Text variant="body-s" tone="muted">{t.questions.difficulty}:</Text>
+          <Select
+            value={filterDifficulty}
+            onChange={setFilterDifficulty}
+            placeholder={t.questions.allDifficulties}
+            data-testid="select-filter-difficulty"
+            options={[
+              { value: "all", label: t.questions.allDifficulties },
+              { value: "easy", label: t.questions.difficultyEasy },
+              { value: "medium", label: t.questions.difficultyMedium },
+              { value: "hard", label: t.questions.difficultyHard },
+            ]}
+          />
+        </Cluster>
+        <Box grow>
+          <Input
+            iconLeft={<Search size={16} />}
+            placeholder="Поиск по тексту вопроса..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            fullWidth
+          />
+        </Box>
+      </Cluster>
 
       {!filteredQuestions || filteredQuestions.length === 0 ? (
         <EmptyState
-          icon={FileQuestion}
+          art={<FileQuestion size={48} color="var(--ou-fg-muted)" />}
           title={t.questions.noQuestions}
           description={t.questions.noQuestionsDescription}
-          actionLabel={t.questions.createQuestion}
-          onAction={handleOpenCreate}
+          actions={
+            <Button leadingIcon={<Plus size={16} />} onClick={handleOpenCreate}>
+              {t.questions.createQuestion}
+            </Button>
+          }
         />
       ) : (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-4 p-3 rounded-md bg-muted/30">
-            <div className="flex items-center gap-2">
+        <Stack gap={4}>
+          <Box pad={3} surface="muted" radius="m">
+            <Cluster gap={4}>
               <Checkbox
-                id="selectAll"
+                label={selectedQuestions.size === filteredQuestions.length ? t.questions.deselectAll : t.questions.selectAll}
                 checked={selectedQuestions.size === filteredQuestions.length && filteredQuestions.length > 0}
-                onCheckedChange={toggleAllQuestions}
+                onChange={toggleAllQuestions}
                 data-testid="checkbox-select-all"
               />
-              <Label htmlFor="selectAll" className="text-sm cursor-pointer">
-                {selectedQuestions.size === filteredQuestions.length ? t.questions.deselectAll : t.questions.selectAll}
-              </Label>
-            </div>
-            {selectedQuestions.size > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  {selectedQuestions.size} {t.questions.selected}
-                </span>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleBulkDelete}
-                  data-testid="button-bulk-delete"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  {t.questions.deleteSelected}
-                </Button>
-              </div>
-            )}
-          </div>
+              {selectedQuestions.size > 0 && (
+                <Cluster gap={2}>
+                  <Text variant="body-s" tone="muted">
+                    {selectedQuestions.size} {t.questions.selected}
+                  </Text>
+                  <Button
+                    variant="destructive"
+                    size="s"
+                    leadingIcon={<Trash2 size={16} />}
+                    onClick={handleBulkDelete}
+                    data-testid="button-bulk-delete"
+                  >
+                    {t.questions.deleteSelected}
+                  </Button>
+                </Cluster>
+              )}
+            </Cluster>
+          </Box>
           {filteredQuestions.map((question) => (
             <Card key={question.id} data-testid={`card-question-${question.id}`}>
-              <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-2">
-                <div className="flex items-start gap-3 flex-1 min-w-0">
+              <CardHeader
+                lead={
                   <Checkbox
                     checked={selectedQuestions.has(question.id)}
-                    onCheckedChange={() => toggleQuestionSelection(question.id)}
+                    onChange={() => toggleQuestionSelection(question.id)}
+                    aria-label={`Выбрать вопрос`}
                     data-testid={`checkbox-question-${question.id}`}
-                    className="mt-1"
                   />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <Badge variant="secondary">{question.topicName}</Badge>
-                      <Badge className={getTypeBadgeColor(question.type)}>
-                        {questionTypes.find((ty) => ty.value === question.type)?.label}
-                      </Badge>
-                      <Badge variant="outline" className={getDifficultyBadgeColor(question.difficulty ?? 50)}>
-                        {t.questions.difficulty}: {question.difficulty ?? 50}
-                      </Badge>
-                    </div>
-                    <CardTitle className="text-base font-medium">{question.prompt}</CardTitle>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDuplicate(question.id)}
-                    data-testid={`button-duplicate-question-${question.id}`}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleOpenEdit(question)}
-                    data-testid={`button-edit-question-${question.id}`}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDelete(question.id)}
-                    data-testid={`button-delete-question-${question.id}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+                }
+                trail={
+                  <Cluster gap={1} wrap={false}>
+                    <IconButton
+                      variant="ghost"
+                      size="s"
+                      aria-label="Дублировать"
+                      icon={<Copy size={16} />}
+                      onClick={() => handleDuplicate(question.id)}
+                      data-testid={`button-duplicate-question-${question.id}`}
+                    />
+                    <IconButton
+                      variant="ghost"
+                      size="s"
+                      aria-label={t.common.edit}
+                      icon={<Pencil size={16} />}
+                      onClick={() => handleOpenEdit(question)}
+                      data-testid={`button-edit-question-${question.id}`}
+                    />
+                    <IconButton
+                      variant="ghost"
+                      size="s"
+                      aria-label={t.common.delete}
+                      icon={<Trash2 size={16} />}
+                      onClick={() => handleDelete(question.id)}
+                      data-testid={`button-delete-question-${question.id}`}
+                    />
+                  </Cluster>
+                }
+              >
+                <Stack gap={2}>
+                  <Cluster gap={2}>
+                    <Tag>{question.topicName}</Tag>
+                    <Tag tone={typeTone(question.type)}>
+                      {questionTypes.find((ty) => ty.value === question.type)?.label}
+                    </Tag>
+                    <Tag variant="outline" tone={difficultyTone(question.difficulty ?? 50)}>
+                      {t.questions.difficulty}: {question.difficulty ?? 50}
+                    </Tag>
+                  </Cluster>
+                  <Text as="p" variant="body-l" weight="medium">{question.prompt}</Text>
+                </Stack>
               </CardHeader>
-              <CardContent>
+              <CardBody>
                 <QuestionPreview question={question} />
-              </CardContent>
+              </CardBody>
             </Card>
           ))}
-        </div>
+        </Stack>
       )}
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingQuestion ? t.questions.editQuestion : t.questions.createQuestion}
-            </DialogTitle>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="topicId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t.questions.topic}</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-question-topic">
-                            <SelectValue placeholder={t.questions.selectTopic} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {topics?.map((topic) => (
-                            <SelectItem key={topic.id} value={topic.id}>
-                              {topic.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="type"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t.questions.questionType}</FormLabel>
-                      <Select
-                        onValueChange={(val) => {
-                          field.onChange(val);
-                          setSelectedType(val as QuestionType);
-                          resetQuestionData();
-                        }}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger data-testid="select-question-type">
-                            <SelectValue placeholder={t.questions.selectType} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {questionTypes.map((type) => (
-                            <SelectItem key={type.value} value={type.value}>
-                              {type.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="prompt"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t.questions.questionText}</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        {...field}
-                        placeholder={t.questions.questionTextPlaceholder}
-                        rows={2}
-                        data-testid="input-question-prompt"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormItem>
-                  <FormLabel>{t.questions.difficulty}</FormLabel>
-                  <div className="flex items-center gap-4">
-                    <Slider
-                      value={[difficulty]}
-                      onValueChange={(values) => setDifficulty(values[0])}
-                      min={0}
-                      max={100}
-                      step={1}
-                      className="flex-1"
-                      data-testid="slider-question-difficulty"
-                    />
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={difficulty}
-                      onChange={(e) => setDifficulty(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
-                      className="w-20"
-                      data-testid="input-question-difficulty"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">{t.questions.difficultyHint}</p>
-                </FormItem>
-              </div>
-
-              <div className="space-y-4">
-                <FormLabel>{t.questions.mediaOptional}</FormLabel>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">{t.questions.mediaUrl}</Label>
-                    <Input
-                      type="text"
-                      placeholder={t.questions.mediaUrlPlaceholder}
-                      value={mediaUrl}
-                      onChange={(e) => setMediaUrl(e.target.value)}
-                      data-testid="input-question-media-url"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">{t.questions.mediaType}</Label>
-                    <Select
-                      value={mediaType || "none"}
-                      onValueChange={(val) => setMediaType(val === "none" ? "" : val as "image" | "audio" | "video")}
-                    >
-                      <SelectTrigger data-testid="select-question-media-type">
-                        <SelectValue placeholder={t.questions.selectType} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">{t.common.none}</SelectItem>
-                        <SelectItem value="image">{t.questions.image}</SelectItem>
-                        <SelectItem value="audio">{t.questions.audio}</SelectItem>
-                        <SelectItem value="video">{t.questions.video}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handlePickMediaFile}
-                    disabled={isUploadingMedia}
-                    data-testid="button-upload-question-media"
-                  >
-                    {isUploadingMedia ? (
-                      <>
-                        <LoadingSpinner className="mr-2" />
-                        Загрузка...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4 mr-2" />
-                        Загрузить файл
-                      </>
-                    )}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={clearMedia}
-                    disabled={!mediaUrl || isUploadingMedia}
-                    data-testid="button-clear-question-media"
-                  >
-                    Очистить
-                  </Button>
-
-                  {mediaFileName && (
-                    <span className="text-xs text-muted-foreground">
-                      {mediaFileName}
-                    </span>
-                  )}
-                </div>
-
-                <input
-                  ref={mediaFileInputRef}
-                  type="file"
-                  accept="image/*,audio/*,video/*"
-                  className="hidden"
-                  onChange={handleMediaFileChange}
-                />
-                {mediaUrl && mediaType && (
-                  <div className="rounded-md border p-4">
-                    {mediaType === "image" && (
-                      <img
-                        src={mediaUrl}
-                        alt="Превью медиа вопроса"
-                        className="max-h-48 object-contain mx-auto"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
-                      />
-                    )}
-                    {mediaType === "audio" && (
-                      <audio controls className="w-full">
-                        <source src={mediaUrl} />
-                        {t.questions.browserNotSupported}
-                      </audio>
-                    )}
-                    {mediaType === "video" && (
-                      <video controls className="max-h-48 w-full">
-                        <source src={mediaUrl} />
-                        {t.questions.browserNotSupported}
-                      </video>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="shuffleAnswers"
-                  checked={shuffleAnswers}
-                  onCheckedChange={(checked) => setShuffleAnswers(checked === true)}
-                  data-testid="checkbox-shuffle-answers"
-                />
-                <div className="grid gap-1.5 leading-none">
-                  <Label htmlFor="shuffleAnswers" className="text-sm font-medium">
-                    {t.questions.shuffleAnswers}
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {t.questions.shuffleAnswersHint}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm text-muted-foreground">{t.questions.feedback}</Label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{t.questions.feedbackModeGeneral}</span>
-                    <Switch
-                      checked={feedbackMode === "conditional"}
-                      onCheckedChange={(checked) => setFeedbackMode(checked ? "conditional" : "general")}
-                      data-testid="switch-feedback-mode"
-                    />
-                    <span className="text-xs text-muted-foreground">{t.questions.feedbackModeConditional}</span>
-                  </div>
-                </div>
-
-                {feedbackMode === "general" ? (
-                  <div className="space-y-2">
-                    <Textarea
-                      value={feedback}
-                      onChange={(e) => setFeedback(e.target.value)}
-                      placeholder={t.questions.feedbackPlaceholder}
-                      rows={2}
-                      data-testid="input-question-feedback"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t.questions.feedbackHint}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label className="text-xs text-green-600 dark:text-green-400">{t.questions.feedbackCorrect}</Label>
-                      <Textarea
-                        value={feedbackCorrect}
-                        onChange={(e) => setFeedbackCorrect(e.target.value)}
-                        placeholder={t.questions.feedbackCorrectPlaceholder}
-                        rows={2}
-                        data-testid="input-question-feedback-correct"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-xs text-red-600 dark:text-red-400">{t.questions.feedbackIncorrect}</Label>
-                      <Textarea
-                        value={feedbackIncorrect}
-                        onChange={(e) => setFeedbackIncorrect(e.target.value)}
-                        placeholder={t.questions.feedbackIncorrectPlaceholder}
-                        rows={2}
-                        data-testid="input-question-feedback-incorrect"
-                      />
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {t.questions.feedbackConditionalHint}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {selectedType === "single" && (
-                <SingleChoiceBuilder
-                  options={singleOptions}
-                  setOptions={setSingleOptions}
-                  correctIndex={singleCorrect}
-                  setCorrectIndex={setSingleCorrect}
-                />
-              )}
-
-              {selectedType === "multiple" && (
-                <MultipleChoiceBuilder
-                  options={multipleOptions}
-                  setOptions={setMultipleOptions}
-                  correctIndices={multipleCorrect}
-                  setCorrectIndices={setMultipleCorrect}
-                />
-              )}
-
-              {selectedType === "matching" && (
-                <MatchingBuilder
-                  left={matchingLeft}
-                  setLeft={setMatchingLeft}
-                  right={matchingRight}
-                  setRight={setMatchingRight}
-                  pairs={matchingPairs}
-                  setPairs={setMatchingPairs}
-                />
-              )}
-
-              {selectedType === "ranking" && (
-                <RankingBuilder
-                  items={rankingItems}
-                  setItems={setRankingItems}
-                />
-              )}
-
-              {/* PRD-15 block D (FR-35): балл и цена ответа переехали в тест. */}
-              <div
-                className="rounded-md border border-dashed p-3 text-sm text-muted-foreground"
-                data-testid="question-scoring-moved-hint"
-              >
-                Балл и цена ответа настраиваются в каждом тесте отдельно — вкладка «Оценка»
-                редактора теста. В банке вопрос хранит только содержание.
-              </div>
-
-              <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
-
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={handleCloseDialog}>
-                  {t.common.cancel}
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isUploadingMedia || createMutation.isPending}
-                  data-testid="button-submit-question"
-                >
-                  {createMutation.isPending && <LoadingSpinner className="mr-2" />}
-                  {editingQuestion ? t.common.update : t.common.create}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={isImportDialogOpen}
-        onOpenChange={(open) => {
-          setIsImportDialogOpen(open);
-          if (!open) {
-            setImportFile(null);
-            setImportPreview(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{t.questions.importQuestions}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {t.questions.selectFile}
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={(e) => handleImportFileChange(e.target.files?.[0] || null)}
-              className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground"
-              data-testid="input-import-file"
-            />
-
-            {/* PRD-14 Ф2 (FR-12): шаблон с заголовками и листом-справкой. */}
-            <a
-              href="/api/questions/template"
-              className="inline-flex items-center text-sm text-primary hover:underline"
-              data-testid="link-download-template"
+      {/* Question editor — ui-kit ModalDialog + react-hook-form bridge
+          (Controller on the Selects, register on the prompt Textarea). */}
+      <ModalDialog
+        open={isDialogOpen}
+        onClose={handleCloseDialog}
+        size="xl"
+        title={editingQuestion ? t.questions.editQuestion : t.questions.createQuestion}
+        footer={
+          <>
+            <Button variant="secondary" onClick={handleCloseDialog}>{t.common.cancel}</Button>
+            <Button
+              onClick={form.handleSubmit(onSubmit)}
+              disabled={isUploadingMedia}
+              loading={createMutation.isPending}
+              data-testid="button-submit-question"
             >
-              <Download className="h-4 w-4 mr-1" />
-              Скачать шаблон Excel
-            </a>
+              {editingQuestion ? t.common.update : t.common.create}
+            </Button>
+          </>
+        }
+      >
+        <Stack gap={6}>
+          <FormGroup columns="two">
+            <Controller
+              control={form.control}
+              name="topicId"
+              render={({ field, fieldState }) => (
+                <Select
+                  label={t.questions.topic}
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder={t.questions.selectTopic}
+                  error={fieldState.error?.message}
+                  fullWidth
+                  data-testid="select-question-topic"
+                  options={topics?.map((topic) => ({ value: topic.id, label: topic.name })) ?? []}
+                />
+              )}
+            />
+            <Controller
+              control={form.control}
+              name="type"
+              render={({ field, fieldState }) => (
+                <Select
+                  label={t.questions.questionType}
+                  value={field.value}
+                  onChange={(val) => {
+                    field.onChange(val);
+                    setSelectedType(val as QuestionType);
+                    resetQuestionData();
+                  }}
+                  placeholder={t.questions.selectType}
+                  error={fieldState.error?.message}
+                  fullWidth
+                  data-testid="select-question-type"
+                  options={questionTypes.map((type) => ({ value: type.value, label: type.label }))}
+                />
+              )}
+            />
+          </FormGroup>
 
-            {/* PRD-14 Ф2 (FR-14): краткие подсказки по формату. */}
-            <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground space-y-1">
-              <p>Колонки берутся из шаблона. Обязательные: Тема, Тип вопроса, Текст вопроса, варианты и правильные ответы.</p>
-              <p>Тип: multiple_choice, multiple_response, matching, ranking. Разделитель вариантов — «#».</p>
-              <p>Заполненный «ID» обновляет вопрос; пустой — создаёт. Подробности — на листе «Справка».</p>
-            </div>
+          <Textarea
+            label={t.questions.questionText}
+            placeholder={t.questions.questionTextPlaceholder}
+            rows={2}
+            fullWidth
+            error={form.formState.errors.prompt?.message}
+            data-testid="input-question-prompt"
+            {...form.register("prompt")}
+          />
 
-            {/* PRD-14 Ф2 (FR-13): результат предпросмотра (dry-run). */}
-            {importPreview && (
-              <div className="rounded-md border p-3 text-sm space-y-2" data-testid="import-preview">
-                <p className="font-medium">Предпросмотр (запись ещё не выполнена):</p>
-                <p className="text-muted-foreground">
-                  Будет создано: {importPreview.created}. Обновлено: {importPreview.updated}. Пропущено дублей:{" "}
-                  {importPreview.skipped}. Ошибок: {importPreview.errors.length}.
-                </p>
-                {importPreview.errors.length > 0 && (
-                  <ul className="max-h-40 overflow-y-auto list-disc pl-5 text-destructive space-y-0.5">
-                    {importPreview.errors.map((err, i) => (
-                      <li key={i}>{err}</li>
-                    ))}
-                  </ul>
+          <Stack gap={2}>
+            <Label>{t.questions.difficulty}</Label>
+            <Cluster gap={4} wrap={false}>
+              <Box grow>
+                <Slider
+                  value={difficulty}
+                  onChange={(v) => setDifficulty(v as number)}
+                  min={0}
+                  max={100}
+                  step={1}
+                  ariaLabel={t.questions.difficulty}
+                  data-testid="slider-question-difficulty"
+                />
+              </Box>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={difficulty}
+                onChange={(e) => setDifficulty(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                data-testid="input-question-difficulty"
+              />
+            </Cluster>
+            <Text as="p" variant="body-xs" tone="muted">{t.questions.difficultyHint}</Text>
+          </Stack>
+
+          <Stack gap={4}>
+            <Label>{t.questions.mediaOptional}</Label>
+            <FormGroup columns="two">
+              <Input
+                label={t.questions.mediaUrl}
+                placeholder={t.questions.mediaUrlPlaceholder}
+                value={mediaUrl}
+                onChange={(e) => setMediaUrl(e.target.value)}
+                fullWidth
+                data-testid="input-question-media-url"
+              />
+              <Select
+                label={t.questions.mediaType}
+                value={mediaType || "none"}
+                onChange={(val) => setMediaType(val === "none" ? "" : val as "image" | "audio" | "video")}
+                placeholder={t.questions.selectType}
+                fullWidth
+                data-testid="select-question-media-type"
+                options={[
+                  { value: "none", label: t.common.none },
+                  { value: "image", label: t.questions.image },
+                  { value: "audio", label: t.questions.audio },
+                  { value: "video", label: t.questions.video },
+                ]}
+              />
+            </FormGroup>
+            <Cluster gap={2}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="s"
+                leadingIcon={isUploadingMedia ? undefined : <Upload size={16} />}
+                loading={isUploadingMedia}
+                onClick={handlePickMediaFile}
+                disabled={isUploadingMedia}
+                data-testid="button-upload-question-media"
+              >
+                {isUploadingMedia ? "Загрузка..." : "Загрузить файл"}
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="s"
+                onClick={clearMedia}
+                disabled={!mediaUrl || isUploadingMedia}
+                data-testid="button-clear-question-media"
+              >
+                Очистить
+              </Button>
+
+              {mediaFileName && (
+                <Text variant="body-xs" tone="muted">
+                  {mediaFileName}
+                </Text>
+              )}
+            </Cluster>
+
+            <input
+              ref={mediaFileInputRef}
+              type="file"
+              accept="image/*,audio/*,video/*"
+              hidden
+              onChange={handleMediaFileChange}
+            />
+            {mediaUrl && mediaType && (
+              <Box border radius="m" pad={4}>
+                {mediaType === "image" && (
+                  <Stack align="center">
+                    <img
+                      src={mediaUrl}
+                      alt="Превью медиа вопроса"
+                      style={{ maxHeight: "12rem", objectFit: "contain" }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  </Stack>
                 )}
-              </div>
+                {mediaType === "audio" && (
+                  <audio controls style={{ width: "100%" }}>
+                    <source src={mediaUrl} />
+                    {t.questions.browserNotSupported}
+                  </audio>
+                )}
+                {mediaType === "video" && (
+                  <video controls style={{ maxHeight: "12rem", width: "100%" }}>
+                    <source src={mediaUrl} />
+                    {t.questions.browserNotSupported}
+                  </video>
+                )}
+              </Box>
             )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsImportDialogOpen(false)}>
+          </Stack>
+
+          <Checkbox
+            label={t.questions.shuffleAnswers}
+            description={t.questions.shuffleAnswersHint}
+            checked={shuffleAnswers}
+            onChange={(e) => setShuffleAnswers(e.target.checked)}
+            data-testid="checkbox-shuffle-answers"
+          />
+
+          <Stack gap={3}>
+            <Cluster justify="between">
+              <Label>{t.questions.feedback}</Label>
+              <Cluster gap={2}>
+                <Text variant="body-xs" tone="muted">{t.questions.feedbackModeGeneral}</Text>
+                <Switch
+                  checked={feedbackMode === "conditional"}
+                  onChange={(e) => setFeedbackMode(e.target.checked ? "conditional" : "general")}
+                  data-testid="switch-feedback-mode"
+                />
+                <Text variant="body-xs" tone="muted">{t.questions.feedbackModeConditional}</Text>
+              </Cluster>
+            </Cluster>
+
+            {feedbackMode === "general" ? (
+              <Textarea
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder={t.questions.feedbackPlaceholder}
+                rows={2}
+                fullWidth
+                hint={t.questions.feedbackHint}
+                data-testid="input-question-feedback"
+              />
+            ) : (
+              <Stack gap={3}>
+                <Textarea
+                  label={<Text variant="body-s" weight="medium" tone="success">{t.questions.feedbackCorrect}</Text>}
+                  value={feedbackCorrect}
+                  onChange={(e) => setFeedbackCorrect(e.target.value)}
+                  placeholder={t.questions.feedbackCorrectPlaceholder}
+                  rows={2}
+                  fullWidth
+                  data-testid="input-question-feedback-correct"
+                />
+                <Textarea
+                  label={<Text variant="body-s" weight="medium" tone="error">{t.questions.feedbackIncorrect}</Text>}
+                  value={feedbackIncorrect}
+                  onChange={(e) => setFeedbackIncorrect(e.target.value)}
+                  placeholder={t.questions.feedbackIncorrectPlaceholder}
+                  rows={2}
+                  fullWidth
+                  hint={t.questions.feedbackConditionalHint}
+                  data-testid="input-question-feedback-incorrect"
+                />
+              </Stack>
+            )}
+          </Stack>
+
+          {selectedType === "single" && (
+            <SingleChoiceBuilder
+              options={singleOptions}
+              setOptions={setSingleOptions}
+              correctIndex={singleCorrect}
+              setCorrectIndex={setSingleCorrect}
+            />
+          )}
+
+          {selectedType === "multiple" && (
+            <MultipleChoiceBuilder
+              options={multipleOptions}
+              setOptions={setMultipleOptions}
+              correctIndices={multipleCorrect}
+              setCorrectIndices={setMultipleCorrect}
+            />
+          )}
+
+          {selectedType === "matching" && (
+            <MatchingBuilder
+              left={matchingLeft}
+              setLeft={setMatchingLeft}
+              right={matchingRight}
+              setRight={setMatchingRight}
+              pairs={matchingPairs}
+              setPairs={setMatchingPairs}
+            />
+          )}
+
+          {selectedType === "ranking" && (
+            <RankingBuilder
+              items={rankingItems}
+              setItems={setRankingItems}
+            />
+          )}
+
+          {/* PRD-15 block D (FR-35): балл и цена ответа переехали в тест. */}
+          <Box border radius="m" pad={3} data-testid="question-scoring-moved-hint">
+            <Text as="p" variant="body-s" tone="muted">
+              Балл и цена ответа настраиваются в каждом тесте отдельно — вкладка «Оценка»
+              редактора теста. В банке вопрос хранит только содержание.
+            </Text>
+          </Box>
+
+          <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
+        </Stack>
+      </ModalDialog>
+
+      <ModalDialog
+        open={isImportDialogOpen}
+        onClose={() => {
+          setIsImportDialogOpen(false);
+          setImportFile(null);
+          setImportPreview(null);
+        }}
+        size="l"
+        title={t.questions.importQuestions}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsImportDialogOpen(false)}>
               {t.common.cancel}
             </Button>
             <Button
-              variant="outline"
+              variant="secondary"
               onClick={handleCheckImport}
               disabled={!importFile || importMutation.isPending}
+              loading={importMutation.isPending}
               data-testid="button-check-import"
             >
-              {importMutation.isPending && <LoadingSpinner className="mr-2" />}
               Проверить
             </Button>
             <Button
               onClick={handleImport}
               disabled={!importFile || importMutation.isPending}
+              loading={importMutation.isPending}
               data-testid="button-confirm-import"
             >
-              {importMutation.isPending && <LoadingSpinner className="mr-2" />}
               {t.questions.uploadFile}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* Export Dialog */}
-      <Dialog open={isExportDialogOpen} onOpenChange={setIsExportDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Экспорт вопросов</DialogTitle>
-            <DialogDescription>
-              Выберите какие вопросы экспортировать в Excel
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <Label>Режим экспорта</Label>
-              <RadioGroup
-                value={exportMode}
-                onValueChange={(val) => {
-                  setExportMode(val as "all" | "topics" | "test");
-                  setExportTopicIds([]);
-                  setExportTestId("");
-                }}
-                className="space-y-2"
-              >
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="all" id="export-all" />
-                  <Label htmlFor="export-all" className="cursor-pointer">
-                    Все вопросы
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="topics" id="export-topics" />
-                  <Label htmlFor="export-topics" className="cursor-pointer">
-                    Выбрать темы
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="test" id="export-test" />
-                  <Label htmlFor="export-test" className="cursor-pointer">
-                    По тесту (все темы теста)
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
+          </>
+        }
+      >
+        <Stack gap={4}>
+          <Text as="p" variant="body-s" tone="muted">
+            {t.questions.selectFile}
+          </Text>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            aria-label={t.questions.selectFile}
+            onChange={(e) => handleImportFileChange(e.target.files?.[0] || null)}
+            data-testid="input-import-file"
+          />
 
-            {exportMode === "topics" && (
-              <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                {topics?.map((topic) => (
-                  <div key={topic.id} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`export-topic-${topic.id}`}
-                      checked={exportTopicIds.includes(topic.id)}
-                      onCheckedChange={() => toggleExportTopic(topic.id)}
-                    />
-                    <Label htmlFor={`export-topic-${topic.id}`} className="cursor-pointer text-sm">
-                      {topic.name}
-                    </Label>
-                  </div>
-                ))}
-                {(!topics || topics.length === 0) && (
-                  <p className="text-sm text-muted-foreground">Нет тем</p>
+          {/* PRD-14 Ф2 (FR-12): шаблон с заголовками и листом-справкой. */}
+          <a href="/api/questions/template" data-testid="link-download-template">
+            <Cluster gap={1}>
+              <Download size={16} color="var(--ou-accent-default)" />
+              <Text variant="body-s" tone="accent">Скачать шаблон Excel</Text>
+            </Cluster>
+          </a>
+
+          {/* PRD-14 Ф2 (FR-14): краткие подсказки по формату. */}
+          <Box border radius="m" pad={3}>
+            <Stack gap={1}>
+              <Text as="p" variant="body-xs" tone="muted">Колонки берутся из шаблона. Обязательные: Тема, Тип вопроса, Текст вопроса, варианты и правильные ответы.</Text>
+              <Text as="p" variant="body-xs" tone="muted">Тип: multiple_choice, multiple_response, matching, ranking. Разделитель вариантов — «#».</Text>
+              <Text as="p" variant="body-xs" tone="muted">Заполненный «ID» обновляет вопрос; пустой — создаёт. Подробности — на листе «Справка».</Text>
+            </Stack>
+          </Box>
+
+          {/* PRD-14 Ф2 (FR-13): результат предпросмотра (dry-run). */}
+          {importPreview && (
+            <Box border radius="m" pad={3} data-testid="import-preview">
+              <Stack gap={2}>
+                <Text as="p" variant="body-s" weight="medium">Предпросмотр (запись ещё не выполнена):</Text>
+                <Text as="p" variant="body-s" tone="muted">
+                  Будет создано: {importPreview.created}. Обновлено: {importPreview.updated}. Пропущено дублей:{" "}
+                  {importPreview.skipped}. Ошибок: {importPreview.errors.length}.
+                </Text>
+                {importPreview.errors.length > 0 && (
+                  <ScrollArea maxH="sm">
+                    <Stack gap={1} as="ul">
+                      {importPreview.errors.map((err, i) => (
+                        <Text as="li" key={i} variant="body-s" tone="error">{err}</Text>
+                      ))}
+                    </Stack>
+                  </ScrollArea>
                 )}
-              </div>
-            )}
+              </Stack>
+            </Box>
+          )}
+        </Stack>
+      </ModalDialog>
 
-            {exportMode === "test" && (
-              <Select value={exportTestId} onValueChange={setExportTestId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Выберите тест" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tests?.map((test) => (
-                    <SelectItem key={test.id} value={test.id}>
-                      {test.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-
-            {exportMode === "topics" && exportTopicIds.length > 0 && (
-              <p className="text-sm text-muted-foreground">
-                Выбрано тем: {exportTopicIds.length}
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsExportDialogOpen(false)}>
+      {/* Export Dialog */}
+      <ModalDialog
+        open={isExportDialogOpen}
+        onClose={() => setIsExportDialogOpen(false)}
+        size="m"
+        title="Экспорт вопросов"
+        description="Выберите какие вопросы экспортировать в Excel"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsExportDialogOpen(false)}>
               {t.common.cancel}
             </Button>
             <Button
+              leadingIcon={<Download size={16} />}
               onClick={handleExport}
               disabled={
                 (exportMode === "topics" && exportTopicIds.length === 0) ||
@@ -1337,16 +1214,70 @@ export default function QuestionsPage() {
               }
               data-testid="button-confirm-export"
             >
-              <Download className="h-4 w-4 mr-2" />
               {t.questions.export}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </>
+        }
+      >
+        <Stack gap={4}>
+          <Stack gap={3}>
+            <Label>Режим экспорта</Label>
+            <RadioGroup
+              value={exportMode}
+              onChange={(val) => {
+                setExportMode(val as "all" | "topics" | "test");
+                setExportTopicIds([]);
+                setExportTestId("");
+              }}
+              options={[
+                { value: "all", label: "Все вопросы" },
+                { value: "topics", label: "Выбрать темы" },
+                { value: "test", label: "По тесту (все темы теста)" },
+              ]}
+            />
+          </Stack>
+
+          {exportMode === "topics" && (
+            <Box border radius="m" pad={3}>
+              <ScrollArea maxH="sm">
+                <Stack gap={2}>
+                  {topics?.map((topic) => (
+                    <Checkbox
+                      key={topic.id}
+                      label={topic.name}
+                      checked={exportTopicIds.includes(topic.id)}
+                      onChange={() => toggleExportTopic(topic.id)}
+                    />
+                  ))}
+                  {(!topics || topics.length === 0) && (
+                    <Text variant="body-s" tone="muted">Нет тем</Text>
+                  )}
+                </Stack>
+              </ScrollArea>
+            </Box>
+          )}
+
+          {exportMode === "test" && (
+            <Select
+              value={exportTestId}
+              onChange={setExportTestId}
+              placeholder="Выберите тест"
+              fullWidth
+              options={tests?.map((test) => ({ value: test.id, label: test.title })) ?? []}
+            />
+          )}
+
+          {exportMode === "topics" && exportTopicIds.length > 0 && (
+            <Text as="p" variant="body-s" tone="muted">
+              Выбрано тем: {exportTopicIds.length}
+            </Text>
+          )}
+        </Stack>
+      </ModalDialog>
 
       {/* PRD-15 T-12: content-impact dialog for deletes affecting other tests */}
       <ContentImpactDialog {...contentGuard.dialogProps} />
-    </div>
+    </Stack>
   );
 }
 
@@ -1355,107 +1286,109 @@ function QuestionPreview({ question }: { question: Question }) {
   const correct = question.correctJson as any;
 
   const mediaSection = question.mediaUrl && question.mediaType ? (
-    <div className="mb-4">
+    <Box>
       {question.mediaType === "image" && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Image className="h-4 w-4" />
-          <span>Прикреплено изображение</span>
-        </div>
+        <Cluster gap={2}>
+          <Image size={16} color="var(--ou-fg-muted)" />
+          <Text variant="body-s" tone="muted">Прикреплено изображение</Text>
+        </Cluster>
       )}
       {question.mediaType === "audio" && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Music className="h-4 w-4" />
-          <span>Прикреплено аудио</span>
-        </div>
+        <Cluster gap={2}>
+          <Music size={16} color="var(--ou-fg-muted)" />
+          <Text variant="body-s" tone="muted">Прикреплено аудио</Text>
+        </Cluster>
       )}
       {question.mediaType === "video" && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Video className="h-4 w-4" />
-          <span>Прикреплено видео</span>
-        </div>
+        <Cluster gap={2}>
+          <Video size={16} color="var(--ou-fg-muted)" />
+          <Text variant="body-s" tone="muted">Прикреплено видео</Text>
+        </Cluster>
       )}
-    </div>
+    </Box>
   ) : null;
 
   if (question.type === "single") {
     return (
-      <div>
+      <Stack gap={4}>
         {mediaSection}
-        <div className="space-y-1">
+        <Stack gap={1}>
           {data.options?.map((opt: string, i: number) => (
-            <div
-              key={i}
-              className={`text-sm p-2 rounded ${i === correct.correctIndex
-                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                : "text-muted-foreground"
-                }`}
-            >
-              {i + 1}. {opt}
-            </div>
+            i === correct.correctIndex ? (
+              <Box key={i} pad={2} radius="s" surface="muted">
+                <Text variant="body-s" tone="success">{i + 1}. {opt}</Text>
+              </Box>
+            ) : (
+              <Box key={i} pad={2} radius="s">
+                <Text variant="body-s" tone="muted">{i + 1}. {opt}</Text>
+              </Box>
+            )
           ))}
-        </div>
-      </div>
+        </Stack>
+      </Stack>
     );
   }
 
   if (question.type === "multiple") {
     return (
-      <div>
+      <Stack gap={4}>
         {mediaSection}
-        <div className="space-y-1">
+        <Stack gap={1}>
           {data.options?.map((opt: string, i: number) => (
-            <div
-              key={i}
-              className={`text-sm p-2 rounded ${correct.correctIndices?.includes(i)
-                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300"
-                : "text-muted-foreground"
-                }`}
-            >
-              {i + 1}. {opt}
-            </div>
+            correct.correctIndices?.includes(i) ? (
+              <Box key={i} pad={2} radius="s" surface="muted">
+                <Text variant="body-s" tone="success">{i + 1}. {opt}</Text>
+              </Box>
+            ) : (
+              <Box key={i} pad={2} radius="s">
+                <Text variant="body-s" tone="muted">{i + 1}. {opt}</Text>
+              </Box>
+            )
           ))}
-        </div>
-      </div>
+        </Stack>
+      </Stack>
     );
   }
 
   if (question.type === "matching") {
     return (
-      <div>
+      <Stack gap={4}>
         {mediaSection}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1">
+        <Grid cols={2} gap={4}>
+          <Stack gap={1}>
             {data.left?.map((item: string, i: number) => (
-              <div key={i} className="text-sm p-2 bg-muted rounded">
-                {i + 1}. {item}
-              </div>
+              <Box key={i} pad={2} surface="muted" radius="s">
+                <Text variant="body-s">{i + 1}. {item}</Text>
+              </Box>
             ))}
-          </div>
-          <div className="space-y-1">
+          </Stack>
+          <Stack gap={1}>
             {data.right?.map((item: string, i: number) => (
-              <div key={i} className="text-sm p-2 bg-muted rounded">
-                {String.fromCharCode(65 + i)}. {item}
-              </div>
+              <Box key={i} pad={2} surface="muted" radius="s">
+                <Text variant="body-s">{String.fromCharCode(65 + i)}. {item}</Text>
+              </Box>
             ))}
-          </div>
-        </div>
-      </div>
+          </Stack>
+        </Grid>
+      </Stack>
     );
   }
 
   if (question.type === "ranking") {
     return (
-      <div>
+      <Stack gap={4}>
         {mediaSection}
-        <div className="space-y-1">
+        <Stack gap={1}>
           {data.items?.map((item: string, i: number) => (
-            <div key={i} className="text-sm p-2 bg-muted rounded flex items-center gap-2">
-              <GripVertical className="h-3 w-3 text-muted-foreground" />
-              {i + 1}. {item}
-            </div>
+            <Box key={i} pad={2} surface="muted" radius="s">
+              <Cluster gap={2}>
+                <GripVertical size={12} color="var(--ou-fg-muted)" />
+                <Text variant="body-s">{i + 1}. {item}</Text>
+              </Cluster>
+            </Box>
           ))}
-        </div>
-      </div>
+        </Stack>
+      </Stack>
     );
   }
 
@@ -1473,6 +1406,7 @@ function SingleChoiceBuilder({
   correctIndex: number;
   setCorrectIndex: (idx: number) => void;
 }) {
+  const groupName = useId();
   const updateOption = (idx: number, value: string) => {
     const newOpts = [...options];
     newOpts[idx] = value;
@@ -1489,41 +1423,42 @@ function SingleChoiceBuilder({
   };
 
   return (
-    <div className="space-y-4">
-      <FormLabel>{t.questions.correctAnswer}</FormLabel>
-      <RadioGroup
-        value={String(correctIndex)}
-        onValueChange={(val) => setCorrectIndex(Number(val))}
-        className="space-y-2"
-      >
+    <Stack gap={4}>
+      <Label>{t.questions.correctAnswer}</Label>
+      <Stack gap={2}>
         {options.map((opt, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <RadioGroupItem value={String(i)} id={`option-${i}`} />
-            <Input
-              value={opt}
-              onChange={(e) => updateOption(i, e.target.value)}
-              placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
-              className="flex-1"
-              data-testid={`input-option-${i}`}
+          <Cluster key={i} gap={2} wrap={false}>
+            <Radio
+              name={groupName}
+              checked={correctIndex === i}
+              onChange={() => setCorrectIndex(i)}
+              aria-label={`${t.questions.correctAnswer} ${i + 1}`}
             />
+            <Box grow>
+              <Input
+                value={opt}
+                onChange={(e) => updateOption(i, e.target.value)}
+                placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
+                fullWidth
+                data-testid={`input-option-${i}`}
+              />
+            </Box>
             {options.length > 2 && (
-              <Button
-                type="button"
+              <IconButton
                 variant="ghost"
-                size="icon"
+                size="s"
+                aria-label="Удалить вариант"
+                icon={<Trash2 size={16} />}
                 onClick={() => removeOption(i)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              />
             )}
-          </div>
+          </Cluster>
         ))}
-      </RadioGroup>
-      <Button type="button" variant="outline" size="sm" onClick={addOption}>
-        <Plus className="h-4 w-4 mr-2" />
+      </Stack>
+      <Button type="button" variant="secondary" size="s" leadingIcon={<Plus size={16} />} onClick={addOption}>
         {t.questions.addOption}
       </Button>
-    </div>
+    </Stack>
   );
 }
 
@@ -1561,41 +1496,41 @@ function MultipleChoiceBuilder({
   };
 
   return (
-    <div className="space-y-4">
-      <FormLabel>{t.questions.correctAnswers}</FormLabel>
-      <div className="space-y-2">
+    <Stack gap={4}>
+      <Label>{t.questions.correctAnswers}</Label>
+      <Stack gap={2}>
         {options.map((opt, i) => (
-          <div key={i} className="flex items-center gap-2">
+          <Cluster key={i} gap={2} wrap={false}>
             <Checkbox
               checked={correctIndices.includes(i)}
-              onCheckedChange={() => toggleCorrect(i)}
-              id={`multi-option-${i}`}
+              onChange={() => toggleCorrect(i)}
+              aria-label={`${t.questions.optionPlaceholder} ${i + 1}`}
             />
-            <Input
-              value={opt}
-              onChange={(e) => updateOption(i, e.target.value)}
-              placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
-              className="flex-1"
-              data-testid={`input-multi-option-${i}`}
-            />
+            <Box grow>
+              <Input
+                value={opt}
+                onChange={(e) => updateOption(i, e.target.value)}
+                placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
+                fullWidth
+                data-testid={`input-multi-option-${i}`}
+              />
+            </Box>
             {options.length > 2 && (
-              <Button
-                type="button"
+              <IconButton
                 variant="ghost"
-                size="icon"
+                size="s"
+                aria-label="Удалить вариант"
+                icon={<Trash2 size={16} />}
                 onClick={() => removeOption(i)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              />
             )}
-          </div>
+          </Cluster>
         ))}
-      </div>
-      <Button type="button" variant="outline" size="sm" onClick={addOption}>
-        <Plus className="h-4 w-4 mr-2" />
+      </Stack>
+      <Button type="button" variant="secondary" size="s" leadingIcon={<Plus size={16} />} onClick={addOption}>
         {t.questions.addOption}
       </Button>
-    </div>
+    </Stack>
   );
 }
 
@@ -1635,42 +1570,47 @@ function MatchingBuilder({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <FormLabel>{t.questions.leftItems}</FormLabel>
+    <Stack gap={4}>
+      <FormGroup columns="two">
+        <Stack gap={2}>
+          <Label>{t.questions.leftItems}</Label>
           {left.map((item, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="text-sm font-medium w-6">{i + 1}.</span>
-              <Input
-                value={item}
-                onChange={(e) => updateLeft(i, e.target.value)}
-                placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
-                data-testid={`input-matching-left-${i}`}
-              />
-            </div>
+            <Cluster key={i} gap={2} wrap={false}>
+              <Text variant="body-s" weight="medium">{i + 1}.</Text>
+              <Box grow>
+                <Input
+                  value={item}
+                  onChange={(e) => updateLeft(i, e.target.value)}
+                  placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
+                  fullWidth
+                  data-testid={`input-matching-left-${i}`}
+                />
+              </Box>
+            </Cluster>
           ))}
-        </div>
-        <div className="space-y-2">
-          <FormLabel>{t.questions.rightItems}</FormLabel>
+        </Stack>
+        <Stack gap={2}>
+          <Label>{t.questions.rightItems}</Label>
           {right.map((item, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="text-sm font-medium w-6">{String.fromCharCode(65 + i)}.</span>
-              <Input
-                value={item}
-                onChange={(e) => updateRight(i, e.target.value)}
-                placeholder={`${t.questions.optionPlaceholder} ${String.fromCharCode(65 + i)}`}
-                data-testid={`input-matching-right-${i}`}
-              />
-            </div>
+            <Cluster key={i} gap={2} wrap={false}>
+              <Text variant="body-s" weight="medium">{String.fromCharCode(65 + i)}.</Text>
+              <Box grow>
+                <Input
+                  value={item}
+                  onChange={(e) => updateRight(i, e.target.value)}
+                  placeholder={`${t.questions.optionPlaceholder} ${String.fromCharCode(65 + i)}`}
+                  fullWidth
+                  data-testid={`input-matching-right-${i}`}
+                />
+              </Box>
+            </Cluster>
           ))}
-        </div>
-      </div>
-      <Button type="button" variant="outline" size="sm" onClick={addPair}>
-        <Plus className="h-4 w-4 mr-2" />
+        </Stack>
+      </FormGroup>
+      <Button type="button" variant="secondary" size="s" leadingIcon={<Plus size={16} />} onClick={addPair}>
         {t.questions.addPair}
       </Button>
-    </div>
+    </Stack>
   );
 }
 
@@ -1694,38 +1634,38 @@ function RankingBuilder({
   };
 
   return (
-    <div className="space-y-4">
-      <FormLabel>{t.questions.itemsToRank}</FormLabel>
-      <p className="text-sm text-muted-foreground">{t.questions.orderItems}</p>
-      <div className="space-y-2">
+    <Stack gap={4}>
+      <Label>{t.questions.itemsToRank}</Label>
+      <Text as="p" variant="body-s" tone="muted">{t.questions.orderItems}</Text>
+      <Stack gap={2}>
         {items.map((item, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <GripVertical className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium w-6">{i + 1}.</span>
-            <Input
-              value={item}
-              onChange={(e) => updateItem(i, e.target.value)}
-              placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
-              className="flex-1"
-              data-testid={`input-ranking-${i}`}
-            />
+          <Cluster key={i} gap={2} wrap={false}>
+            <GripVertical size={16} color="var(--ou-fg-muted)" />
+            <Text variant="body-s" weight="medium">{i + 1}.</Text>
+            <Box grow>
+              <Input
+                value={item}
+                onChange={(e) => updateItem(i, e.target.value)}
+                placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
+                fullWidth
+                data-testid={`input-ranking-${i}`}
+              />
+            </Box>
             {items.length > 2 && (
-              <Button
-                type="button"
+              <IconButton
                 variant="ghost"
-                size="icon"
+                size="s"
+                aria-label="Удалить элемент"
+                icon={<Trash2 size={16} />}
                 onClick={() => removeItem(i)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              />
             )}
-          </div>
+          </Cluster>
         ))}
-      </div>
-      <Button type="button" variant="outline" size="sm" onClick={addItem}>
-        <Plus className="h-4 w-4 mr-2" />
+      </Stack>
+      <Button type="button" variant="secondary" size="s" leadingIcon={<Plus size={16} />} onClick={addItem}>
         {t.questions.addOption}
       </Button>
-    </div>
+    </Stack>
   );
 }

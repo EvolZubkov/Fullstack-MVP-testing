@@ -1,24 +1,38 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Plus, Search, Pencil, Trash2, FolderOpen, Copy, CheckSquare, Square, Folder, ChevronRight, ChevronDown, FolderPlus, LayoutGrid, List, Shield } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Box,
+  Button,
+  Cluster,
+  Grid,
+  IconButton,
+  Input,
+  Card,
+  CardBody,
+  CardHeader,
+  Checkbox,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  EmptyState,
+  ModalDialog,
+  ScrollArea,
+  SegmentedControl,
+  Select,
+  Stack,
+  Table,
+  Tag,
+  Text,
+  type TableColumn,
+} from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState } from "@/components/empty-state";
-import { LoadingState, LoadingSpinner } from "@/components/loading-state";
+import { LoadingState } from "@/components/loading-state";
 import { t, formatQuestions } from "@/lib/i18n";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import { useContentGuard } from "@/features/content-protection/use-content-guard";
@@ -35,6 +49,11 @@ const folderFormSchema = z.object({
 });
 
 type FolderFormData = z.infer<typeof folderFormSchema>;
+
+/** Sentinel value for «no parent folder» in the ui-kit Select (cannot bind null). */
+const NO_PARENT = "__none__";
+type TopicScopeFilter = "mine" | "accessible" | "shared" | "all";
+type TopicViewMode = "grid" | "list";
 
 interface TopicWithDetails extends Topic {
   courses: TopicCourse[];
@@ -85,14 +104,14 @@ export default function TopicsPage() {
   // PRD-15 block C (FR-22): scope filter. Server already returns only visible
   // topics; this narrows the view client-side by relationship. Default «Все»
   // (the full visible set) so any role lands on everything it can see.
-  const [topicFilter, setTopicFilter] = useState<"mine" | "accessible" | "shared" | "all">("all");
+  const [topicFilter, setTopicFilter] = useState<TopicScopeFilter>("all");
   const [showEmptyFolders, setShowEmptyFolders] = useState(false);
   const [duplicatesOpen, setDuplicatesOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
-    return (localStorage.getItem("topics_view") as any) || "grid";
+  const [viewMode, setViewMode] = useState<TopicViewMode>(() => {
+    return (localStorage.getItem("topics_view") as TopicViewMode) || "grid";
   });
 
-  const handleViewChange = (mode: "grid" | "list") => {
+  const handleViewChange = (mode: TopicViewMode) => {
     setViewMode(mode);
     localStorage.setItem("topics_view", mode);
   };
@@ -131,6 +150,30 @@ export default function TopicsPage() {
     const u = reportUsers.find((x) => x.id === id);
     return u?.name?.trim() || u?.email || id;
   };
+
+  // Columns for the per-group duplicates table (PRD-15 FR-27 / BRC-12).
+  type ReportTopic = DuplicatesReport["groups"][number]["topics"][number];
+  const duplicateColumns: TableColumn<ReportTopic>[] = [
+    {
+      key: "name",
+      header: "Название",
+      render: (tp) => <Text variant="body-s">{tp.name}</Text>,
+    },
+    {
+      key: "owner",
+      header: "Владелец",
+      render: (tp) => <Text variant="body-s" tone="muted">{ownerLabel(tp.ownerId)}</Text>,
+    },
+    {
+      key: "visibility",
+      header: "Видимость",
+      render: (tp) => (
+        <Tag tone={tp.visibility === "shared" ? "accent" : "neutral"}>
+          {tp.visibility === "shared" ? "Общая" : "Приватная"}
+        </Tag>
+      ),
+    },
+  ];
 
   // Topic create/update now lives in the unified <TopicDrawer/> (PRD-15 T-32).
   // Topic deletion goes through the content guard (see handleDelete, PRD-15 T-12).
@@ -210,7 +253,7 @@ export default function TopicsPage() {
     if (selectedTopics.size === topics.length) {
       setSelectedTopics(new Set());
     } else {
-      setSelectedTopics(new Set(topics.map((t) => t.id)));
+      setSelectedTopics(new Set(topics.map((topic) => topic.id)));
     }
   };
 
@@ -220,7 +263,7 @@ export default function TopicsPage() {
     }
   };
 
-  // PRD-15 T-12: the AlertDialog above is the plain confirm; on accept the guard
+  // PRD-15 T-12: the confirm modal above is the plain confirm; on accept the guard
   // dry-runs — a clean batch deletes, an impacting one opens the content dialog.
   const confirmBulkDelete = () => {
     const ids = Array.from(selectedTopics);
@@ -359,136 +402,130 @@ export default function TopicsPage() {
 
   const rootTopics = getTopicsInFolder(null);
 
+  // Shared row actions (duplicate / edit / access / delete) for both card and table.
+  const renderTopicActions = (topic: TopicWithDetails) => (
+    <Cluster gap={1} justify="end" wrap={false}>
+      <IconButton
+        variant="ghost"
+        size="s"
+        aria-label="Дублировать"
+        icon={<Copy size={16} />}
+        onClick={() => handleDuplicate(topic.id)}
+        data-testid={`button-duplicate-topic-${topic.id}`}
+      />
+      <IconButton
+        variant="ghost"
+        size="s"
+        aria-label={t.common.edit}
+        icon={<Pencil size={16} />}
+        onClick={() => handleOpenEdit(topic)}
+        data-testid={`button-edit-topic-${topic.id}`}
+      />
+      {canGrantAccessFor(topic) && (
+        <IconButton
+          variant="ghost"
+          size="s"
+          aria-label="Доступ к теме"
+          icon={<Shield size={16} />}
+          onClick={() => handleOpenAccess(topic)}
+          data-testid={`button-access-topic-${topic.id}`}
+        />
+      )}
+      <IconButton
+        variant="ghost"
+        size="s"
+        aria-label={t.common.delete}
+        icon={<Trash2 size={16} />}
+        onClick={() => handleDelete(topic.id)}
+        data-testid={`button-delete-topic-${topic.id}`}
+      />
+    </Cluster>
+  );
+
   const renderTopicCard = (topic: TopicWithDetails) => (
     <Card key={topic.id} data-testid={`card-topic-${topic.id}`}>
-      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
+      <CardHeader
+        lead={
           <Checkbox
             checked={selectedTopics.has(topic.id)}
-            onCheckedChange={() => handleToggleSelect(topic.id)}
+            onChange={() => handleToggleSelect(topic.id)}
+            aria-label={`Выбрать тему ${topic.name}`}
             data-testid={`checkbox-topic-${topic.id}`}
-            className="mt-1"
           />
-          <div className="flex-1 min-w-0">
-            <CardTitle className="text-lg truncate">{topic.name}</CardTitle>
-            {topic.description && (
-              <CardDescription className="mt-1 line-clamp-2">
-                {topic.description}
-              </CardDescription>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleDuplicate(topic.id)}
-            data-testid={`button-duplicate-topic-${topic.id}`}
-          >
-            <Copy className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleOpenEdit(topic)}
-            data-testid={`button-edit-topic-${topic.id}`}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-          {canGrantAccessFor(topic) && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => handleOpenAccess(topic)}
-              title="Доступ к теме"
-              data-testid={`button-access-topic-${topic.id}`}
-            >
-              <Shield className="h-4 w-4" />
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleDelete(topic.id)}
-            data-testid={`button-delete-topic-${topic.id}`}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
+        }
+        title={topic.name}
+        subtitle={topic.description || undefined}
+        trail={renderTopicActions(topic)}
+      />
+      <CardBody>
         {/* TD-02: recommended courses / documents / events are part of the topic
             feedback now; the card shows only their counts. Edit them in the Drawer. */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-          <span>{formatQuestions(topic.questionCount)}</span>
+        <Cluster gap={4}>
+          <Text variant="body-s" tone="muted">{formatQuestions(topic.questionCount)}</Text>
           {(() => {
             const fb = feedbackCounts(topic);
             return (
               <>
-                {fb.courses > 0 && <span>{fb.courses} {t.common.courses}</span>}
-                {fb.docs > 0 && <span>{fb.docs} док.</span>}
-                {fb.events > 0 && <span>{fb.events} мероприятий</span>}
+                {fb.courses > 0 && <Text variant="body-s" tone="muted">{fb.courses} {t.common.courses}</Text>}
+                {fb.docs > 0 && <Text variant="body-s" tone="muted">{fb.docs} док.</Text>}
+                {fb.events > 0 && <Text variant="body-s" tone="muted">{fb.events} мероприятий</Text>}
               </>
             );
           })()}
-        </div>
-      </CardContent>
+        </Cluster>
+      </CardBody>
     </Card>
   );
 
-  const renderTopicRow = (topic: TopicWithDetails) => (
-    <tr key={topic.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors" data-testid={`card-topic-${topic.id}`}>
-      <td className="px-4 py-3">
+  // List view: shared-Set selection (the checkbox column mirrors the grid cards
+  // and the global «Выбрать всё» button) — we deliberately do NOT use the Table's
+  // built-in `selectable`, whose per-table «select all» would clash with the
+  // folder-scoped rendering.
+  const topicColumns: TableColumn<TopicWithDetails>[] = [
+    {
+      key: "select",
+      header: "",
+      width: "40px",
+      render: (topic) => (
         <Checkbox
           checked={selectedTopics.has(topic.id)}
-          onCheckedChange={() => handleToggleSelect(topic.id)}
+          onChange={() => handleToggleSelect(topic.id)}
+          aria-label={`Выбрать тему ${topic.name}`}
           data-testid={`checkbox-topic-${topic.id}`}
         />
-      </td>
-      <td className="px-4 py-3">
-        <p className="font-medium">{topic.name}</p>
-        {topic.description && <p className="text-xs text-muted-foreground line-clamp-1">{topic.description}</p>}
-      </td>
-      <td className="px-4 py-3 text-sm text-muted-foreground">{formatQuestions(topic.questionCount)}</td>
-      <td className="px-4 py-3 text-sm text-muted-foreground">{feedbackCounts(topic).courses} {t.common.courses}</td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-1 justify-end">
-          <Button variant="ghost" size="icon" onClick={() => handleDuplicate(topic.id)} data-testid={`button-duplicate-topic-${topic.id}`}>
-            <Copy className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(topic)} data-testid={`button-edit-topic-${topic.id}`}>
-            <Pencil className="h-4 w-4" />
-          </Button>
-          {canGrantAccessFor(topic) && (
-            <Button variant="ghost" size="icon" onClick={() => handleOpenAccess(topic)} title="Доступ к теме" data-testid={`button-access-topic-${topic.id}`}>
-              <Shield className="h-4 w-4" />
-            </Button>
-          )}
-          <Button variant="ghost" size="icon" onClick={() => handleDelete(topic.id)} data-testid={`button-delete-topic-${topic.id}`}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </td>
-    </tr>
-  );
+      ),
+    },
+    {
+      key: "name",
+      header: "Тема",
+      render: (topic) => (
+        <Stack gap={1}>
+          <Text variant="body-s" weight="medium">{topic.name}</Text>
+          {topic.description && <Text variant="body-xs" tone="muted" truncate>{topic.description}</Text>}
+        </Stack>
+      ),
+    },
+    {
+      key: "questions",
+      header: "Вопросы",
+      render: (topic) => <Text variant="body-s" tone="muted">{formatQuestions(topic.questionCount)}</Text>,
+    },
+    {
+      key: "courses",
+      header: "Курсы",
+      render: (topic) => <Text variant="body-s" tone="muted">{feedbackCounts(topic).courses} {t.common.courses}</Text>,
+    },
+    {
+      key: "actions",
+      header: "",
+      width: "160px",
+      align: "right",
+      render: (topic) => renderTopicActions(topic),
+    },
+  ];
 
   const renderTopicsTable = (topicList: TopicWithDetails[]) => (
-    <div className="border rounded-lg overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 border-b">
-          <tr>
-            <th className="px-4 py-3 w-10" />
-            <th className="text-left px-4 py-3 font-medium">Тема</th>
-            <th className="text-left px-4 py-3 font-medium">Вопросы</th>
-            <th className="text-left px-4 py-3 font-medium">Курсы</th>
-            <th className="px-4 py-3 w-40" />
-          </tr>
-        </thead>
-        <tbody>
-          {topicList.map(renderTopicRow)}
-        </tbody>
-      </table>
-    </div>
+    <Table columns={topicColumns} rows={topicList} rowKey={(topic) => topic.id} />
   );
 
   const renderFolder = (folder: FolderType, depth: number = 0) => {
@@ -501,63 +538,74 @@ export default function TopicsPage() {
     const totalItems = folderTopics.length + childFolders.length;
 
     return (
-      <div key={folder.id} className="mb-4" style={{ marginLeft: depth * 16 }}>
+      // Tree indent has no DS depth-aware primitive; the left offset stays an
+      // inline style anchored to the --ou-space-4 token (see dsGaps).
+      <Box key={folder.id} style={{ marginLeft: `calc(${depth} * var(--ou-space-4))` }}>
         <Collapsible open={isExpanded} onOpenChange={() => toggleFolder(folder.id)}>
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 hover-elevate">
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6">
-                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              </Button>
-            </CollapsibleTrigger>
-            <Folder className="h-5 w-5 text-primary" />
-            <span className="font-medium flex-1">{folder.name}</span>
-            <Badge variant="secondary">{totalItems}</Badge>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => handleOpenCreate(folder.id)}
-              data-testid={`button-add-topic-to-folder-${folder.id}`}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => handleOpenCreateFolder(folder.id)}
-              data-testid={`button-add-subfolder-${folder.id}`}
-            >
-              <FolderPlus className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => handleOpenEditFolder(folder)}
-              data-testid={`button-edit-folder-${folder.id}`}
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => handleDeleteFolder(folder.id)}
-              data-testid={`button-delete-folder-${folder.id}`}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-          <CollapsibleContent className="mt-2">
-            {childFolders.map((childFolder) => renderFolder(childFolder, depth + 1))}
-            {folderTopics.length > 0 && (
-              <div className="mt-2 pl-8">
-                {viewMode === "grid"
-                  ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{folderTopics.map(renderTopicCard)}</div>
-                  : renderTopicsTable(folderTopics)
-                }
-              </div>
-            )}
+          <Box surface="muted" radius="l" pad={3} className="hover-elevate">
+            <Cluster gap={2} wrap={false}>
+              <CollapsibleTrigger asChild>
+                <IconButton
+                  variant="ghost"
+                  size="s"
+                  aria-label={isExpanded ? "Свернуть папку" : "Развернуть папку"}
+                  icon={isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                />
+              </CollapsibleTrigger>
+              <Folder size={20} color="var(--ou-accent-default)" />
+              <Box grow><Text variant="body-s" weight="medium" truncate>{folder.name}</Text></Box>
+              <Tag>{totalItems}</Tag>
+              <IconButton
+                variant="ghost"
+                size="s"
+                aria-label="Добавить тему в папку"
+                icon={<Plus size={16} />}
+                onClick={() => handleOpenCreate(folder.id)}
+                data-testid={`button-add-topic-to-folder-${folder.id}`}
+              />
+              <IconButton
+                variant="ghost"
+                size="s"
+                aria-label="Добавить подпапку"
+                icon={<FolderPlus size={16} />}
+                onClick={() => handleOpenCreateFolder(folder.id)}
+                data-testid={`button-add-subfolder-${folder.id}`}
+              />
+              <IconButton
+                variant="ghost"
+                size="s"
+                aria-label="Редактировать папку"
+                icon={<Pencil size={16} />}
+                onClick={() => handleOpenEditFolder(folder)}
+                data-testid={`button-edit-folder-${folder.id}`}
+              />
+              <IconButton
+                variant="ghost"
+                size="s"
+                aria-label="Удалить папку"
+                icon={<Trash2 size={16} />}
+                onClick={() => handleDeleteFolder(folder.id)}
+                data-testid={`button-delete-folder-${folder.id}`}
+              />
+            </Cluster>
+          </Box>
+          <CollapsibleContent>
+            <Stack gap={2}>
+              {childFolders.map((childFolder) => renderFolder(childFolder, depth + 1))}
+              {folderTopics.length > 0 && (
+                // Nested topics sit indented under the folder row; the left inset
+                // has no DS left-only padding primitive (see dsGaps).
+                <Box style={{ paddingInlineStart: "var(--ou-space-8)" }}>
+                  {viewMode === "grid"
+                    ? <Grid minItem="sm" gap={4}>{folderTopics.map(renderTopicCard)}</Grid>
+                    : renderTopicsTable(folderTopics)
+                  }
+                </Box>
+              )}
+            </Stack>
           </CollapsibleContent>
         </Collapsible>
-      </div>
+      </Box>
     );
   };
 
@@ -566,255 +614,215 @@ export default function TopicsPage() {
   }
 
   return (
-    <div>
+    <Stack gap={6}>
       <PageHeader
         title={t.topics.title}
         description={t.topics.description}
         actions={
-          <div className="flex items-center gap-2 flex-wrap">
+          <Cluster gap={2}>
             {topics && topics.length > 0 && (
               <>
                 <Button
-                  variant="outline"
+                  variant="secondary"
+                  leadingIcon={selectedTopics.size === topics.length ? <Square size={16} /> : <CheckSquare size={16} />}
                   onClick={handleSelectAll}
                   data-testid="button-select-all-topics"
                 >
-                  {selectedTopics.size === topics.length ? (
-                    <>
-                      <Square className="h-4 w-4 mr-2" />
-                      {t.topics.deselectAll}
-                    </>
-                  ) : (
-                    <>
-                      <CheckSquare className="h-4 w-4 mr-2" />
-                      {t.topics.selectAll}
-                    </>
-                  )}
+                  {selectedTopics.size === topics.length ? t.topics.deselectAll : t.topics.selectAll}
                 </Button>
                 {selectedTopics.size > 0 && (
                   <Button
                     variant="destructive"
+                    leadingIcon={<Trash2 size={16} />}
                     onClick={handleBulkDelete}
                     data-testid="button-delete-selected-topics"
                   >
-                    <Trash2 className="h-4 w-4 mr-2" />
                     {t.topics.deleteSelected} ({selectedTopics.size})
                   </Button>
                 )}
               </>
             )}
-            <Button variant="outline" onClick={() => handleOpenCreateFolder()} data-testid="button-create-folder">
-              <FolderPlus className="h-4 w-4 mr-2" />
+            <Button
+              variant="secondary"
+              leadingIcon={<FolderPlus size={16} />}
+              onClick={() => handleOpenCreateFolder()}
+              data-testid="button-create-folder"
+            >
               {t.folders.createFolder}
             </Button>
-            <Button onClick={() => handleOpenCreate()} data-testid="button-create-topic">
-              <Plus className="h-4 w-4 mr-2" />
+            <Button
+              leadingIcon={<Plus size={16} />}
+              onClick={() => handleOpenCreate()}
+              data-testid="button-create-topic"
+            >
               {t.topics.createTopic}
             </Button>
-          </div>
+          </Cluster>
         }
       />
 
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
+      <Cluster gap={3}>
         {/* PRD-15 FR-22: scope filter (Все / Мои / Доступные / Общие) */}
-        <div className="inline-flex items-center border rounded-md overflow-hidden">
-          {([
+        <SegmentedControl<TopicScopeFilter>
+          value={topicFilter}
+          onChange={setTopicFilter}
+          items={[
             { value: "all", label: "Все" },
             { value: "mine", label: "Мои" },
             { value: "accessible", label: "Доступные" },
             { value: "shared", label: "Общие" },
-          ] as { value: typeof topicFilter; label: string }[]).map((f) => (
-            <Button
-              key={f.value}
-              variant={topicFilter === f.value ? "secondary" : "ghost"}
-              size="sm"
-              className="rounded-none h-9"
-              onClick={() => setTopicFilter(f.value)}
-              data-testid={`filter-topics-${f.value}`}
-            >
-              {f.label}
-            </Button>
-          ))}
-        </div>
-        <div className="relative flex-1 min-w-[12rem]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          ]}
+        />
+        <Box grow>
           <Input
-            className="pl-9"
+            iconLeft={<Search size={16} />}
             placeholder="Поиск тем..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            fullWidth
           />
-        </div>
+        </Box>
         {isAdmin && (
-          <label className="flex items-center gap-2 text-sm text-muted-foreground whitespace-nowrap">
-            <Checkbox
-              checked={showEmptyFolders}
-              onCheckedChange={(v) => setShowEmptyFolders(!!v)}
-              data-testid="toggle-show-empty-folders"
-            />
-            Показывать пустые папки
-          </label>
+          <Checkbox
+            label="Показывать пустые папки"
+            checked={showEmptyFolders}
+            onChange={(e) => setShowEmptyFolders(e.target.checked)}
+            data-testid="toggle-show-empty-folders"
+          />
         )}
         {isAdmin && (
           <Button
-            variant="outline"
-            size="sm"
+            variant="secondary"
+            size="s"
             onClick={() => setDuplicatesOpen(true)}
             data-testid="button-duplicates-report"
           >
             Отчёт о дублях
           </Button>
         )}
-        <div className="flex items-center border rounded-md">
-          <Button
-            variant={viewMode === "grid" ? "secondary" : "ghost"}
-            size="icon"
-            className="rounded-r-none h-9 w-9"
-            onClick={() => handleViewChange("grid")}
-            title="Карточки"
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === "list" ? "secondary" : "ghost"}
-            size="icon"
-            className="rounded-l-none h-9 w-9"
-            onClick={() => handleViewChange("list")}
-            title="Список"
-          >
-            <List className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+        <SegmentedControl<TopicViewMode>
+          iconOnly
+          value={viewMode}
+          onChange={handleViewChange}
+          items={[
+            { value: "grid", icon: <LayoutGrid size={16} />, ariaLabel: "Карточки" },
+            { value: "list", icon: <List size={16} />, ariaLabel: "Список" },
+          ]}
+        />
+      </Cluster>
 
       {(!topics || topics.length === 0) && (!folders || folders.length === 0) ? (
         <EmptyState
-          icon={FolderOpen}
+          art={<FolderOpen size={48} color="var(--ou-fg-muted)" />}
           title={t.topics.noTopics}
           description={t.topics.noTopicsDescription}
-          actionLabel={t.topics.createTopic}
-          onAction={() => handleOpenCreate()}
+          actions={
+            <Button leadingIcon={<Plus size={16} />} onClick={() => handleOpenCreate()}>
+              {t.topics.createTopic}
+            </Button>
+          }
         />
       ) : (
-        <div className="space-y-6">
+        <Stack gap={6}>
           {searchedTopics ? (
             searchedTopics.length === 0
-              ? <p className="text-muted-foreground">Ничего не найдено</p>
+              ? <Text tone="muted">Ничего не найдено</Text>
               : viewMode === "grid"
-                ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{searchedTopics.map(renderTopicCard)}</div>
+                ? <Grid minItem="sm" gap={6}>{searchedTopics.map(renderTopicCard)}</Grid>
                 : renderTopicsTable(searchedTopics)
           ) : (
             <>
               {rootFolders.map((folder) => renderFolder(folder))}
               {rootTopics.length > 0 && (
-                <div>
+                <Stack gap={4}>
                   {rootFolders.length > 0 && (
-                    <div className="flex items-center gap-2 mb-4 text-muted-foreground">
-                      <FolderOpen className="h-4 w-4" />
-                      <span className="text-sm font-medium">{t.folders.root}</span>
-                    </div>
+                    <Cluster gap={2}>
+                      <FolderOpen size={16} color="var(--ou-fg-muted)" />
+                      <Text variant="body-s" weight="medium" tone="muted">{t.folders.root}</Text>
+                    </Cluster>
                   )}
                   {viewMode === "grid"
-                    ? <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{rootTopics.map(renderTopicCard)}</div>
+                    ? <Grid minItem="sm" gap={6}>{rootTopics.map(renderTopicCard)}</Grid>
                     : renderTopicsTable(rootTopics)
                   }
-                </div>
+                </Stack>
               )}
             </>
           )}
-        </div>
+        </Stack>
       )}
 
-      <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingFolder ? t.folders.editFolder : t.folders.createFolder}
-            </DialogTitle>
-          </DialogHeader>
-          <Form {...folderForm}>
-            <form onSubmit={folderForm.handleSubmit(onSubmitFolder)} className="space-y-4">
-              <FormField
-                control={folderForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t.folders.folderName}</FormLabel>
-                    <FormControl>
-                      <Input {...field} placeholder={t.folders.folderNamePlaceholder} data-testid="input-folder-name" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+      {/* Folder create / edit — ui-kit ModalDialog + react-hook-form bridge
+          (register on Input, Controller on Select). */}
+      <ModalDialog
+        open={folderDialogOpen}
+        onClose={handleCloseFolderDialog}
+        title={editingFolder ? t.folders.editFolder : t.folders.createFolder}
+        footer={
+          <>
+            <Button variant="secondary" onClick={handleCloseFolderDialog}>{t.common.cancel}</Button>
+            <Button
+              onClick={folderForm.handleSubmit(onSubmitFolder)}
+              loading={createFolderMutation.isPending || updateFolderMutation.isPending}
+              data-testid="button-submit-folder"
+            >
+              {editingFolder ? t.common.update : t.common.create}
+            </Button>
+          </>
+        }
+      >
+        <Stack gap={4}>
+          <Input
+            label={t.folders.folderName}
+            placeholder={t.folders.folderNamePlaceholder}
+            error={folderForm.formState.errors.name?.message}
+            fullWidth
+            data-testid="input-folder-name"
+            {...folderForm.register("name")}
+          />
+          <Controller
+            control={folderForm.control}
+            name="parentId"
+            render={({ field }) => (
+              <Select
+                label={t.folders.parentFolder}
+                value={field.value ?? NO_PARENT}
+                onChange={(value) => field.onChange(value === NO_PARENT ? null : value)}
+                fullWidth
+                options={[
+                  { value: NO_PARENT, label: t.folders.noParent },
+                  ...(folders
+                    ?.filter((f) => f.id !== editingFolder?.id)
+                    .map((folder) => ({ value: folder.id, label: folder.name })) ?? []),
+                ]}
               />
-              <FormField
-                control={folderForm.control}
-                name="parentId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t.folders.parentFolder}</FormLabel>
-                    <Select
-                      value={field.value || "__none__"}
-                      onValueChange={(value) => field.onChange(value === "__none__" ? null : value)}
-                    >
-                      <FormControl>
-                        <SelectTrigger data-testid="select-parent-folder">
-                          <SelectValue placeholder={t.folders.noParent} />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="__none__">{t.folders.noParent}</SelectItem>
-                        {folders?.filter(f => f.id !== editingFolder?.id).map((folder) => (
-                          <SelectItem key={folder.id} value={folder.id}>
-                            {folder.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={handleCloseFolderDialog}>
-                  {t.common.cancel}
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createFolderMutation.isPending || updateFolderMutation.isPending}
-                  data-testid="button-submit-folder"
-                >
-                  {(createFolderMutation.isPending || updateFolderMutation.isPending) && (
-                    <LoadingSpinner className="mr-2" />
-                  )}
-                  {editingFolder ? t.common.update : t.common.create}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
+            )}
+          />
+        </Stack>
+      </ModalDialog>
 
-      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t.topics.confirmBulkDelete}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t.topics.confirmBulkDeleteDescription(selectedTopics.size)}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
-            <AlertDialogAction
+      {/* PRD-15 T-12: bulk-delete confirm (the guard runs on accept) */}
+      <ModalDialog
+        open={bulkDeleteDialogOpen}
+        onClose={() => setBulkDeleteDialogOpen(false)}
+        size="s"
+        icon={<Trash2 size={20} />}
+        iconTone="danger"
+        title={t.topics.confirmBulkDelete}
+        description={t.topics.confirmBulkDeleteDescription(selectedTopics.size)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setBulkDeleteDialogOpen(false)}>{t.common.cancel}</Button>
+            <Button
+              variant="destructive"
               onClick={confirmBulkDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               data-testid="button-confirm-bulk-delete-topics"
             >
               {t.common.delete}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </>
+        }
+      />
 
       {/* PRD-15 T-12: content-impact dialog for deletes affecting other tests */}
       <ContentImpactDialog {...contentGuard.dialogProps} />
@@ -829,52 +837,35 @@ export default function TopicsPage() {
       />
 
       {/* PRD-15 FR-27 / BRC-12: admin duplicates report */}
-      <Dialog open={duplicatesOpen} onOpenChange={setDuplicatesOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Дублирующиеся темы</DialogTitle>
-          </DialogHeader>
-          {!duplicates ? (
-            <p className="text-sm text-muted-foreground">Загрузка…</p>
-          ) : duplicates.groups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Одноимённых тем по системе не найдено</p>
-          ) : (
-            <div className="space-y-6 max-h-[60vh] overflow-auto">
+      <ModalDialog
+        open={duplicatesOpen}
+        onClose={() => setDuplicatesOpen(false)}
+        size="xl"
+        title="Дублирующиеся темы"
+      >
+        {!duplicates ? (
+          <Text variant="body-s" tone="muted">Загрузка…</Text>
+        ) : duplicates.groups.length === 0 ? (
+          <Text variant="body-s" tone="muted">Одноимённых тем по системе не найдено</Text>
+        ) : (
+          <ScrollArea maxH="md">
+            <Stack gap={6}>
               {duplicates.groups.map((g) => (
-                <div key={g.nameNormalized}>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                <Stack key={g.nameNormalized} gap={2}>
+                  <Text variant="caption" weight="semibold" tone="muted">
                     «{g.nameNormalized}» · {g.topics.length}
-                  </p>
-                  <div className="border rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/50 border-b">
-                        <tr>
-                          <th className="text-left px-3 py-2 font-medium">Название</th>
-                          <th className="text-left px-3 py-2 font-medium">Владелец</th>
-                          <th className="text-left px-3 py-2 font-medium">Видимость</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {g.topics.map((tp) => (
-                          <tr key={tp.id} className="border-b last:border-0">
-                            <td className="px-3 py-2">{tp.name}</td>
-                            <td className="px-3 py-2 text-muted-foreground">{ownerLabel(tp.ownerId)}</td>
-                            <td className="px-3 py-2">
-                              <Badge variant={tp.visibility === "shared" ? "default" : "secondary"}>
-                                {tp.visibility === "shared" ? "Общая" : "Приватная"}
-                              </Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                  </Text>
+                  <Table
+                    columns={duplicateColumns}
+                    rows={g.topics}
+                    rowKey={(tp) => tp.id}
+                  />
+                </Stack>
               ))}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+            </Stack>
+          </ScrollArea>
+        )}
+      </ModalDialog>
+    </Stack>
   );
 }

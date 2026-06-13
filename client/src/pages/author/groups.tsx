@@ -1,3 +1,11 @@
+/**
+ * @module pages/author/groups
+ * @description Author groups management page: a searchable groups table with
+ * create/edit/delete dialogs, a members viewer and a member-add picker. Rendered
+ * entirely with the UniversityRT design system — layout via Stack/Cluster/Box,
+ * typography via Text, data via the DS Table/Tag/Input/Textarea/ModalDialog/
+ * EmptyState primitives (no raw utility classes).
+ */
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -9,49 +17,29 @@ import {
   UsersRound,
   UserPlus,
   UserMinus,
-  Loader2,
 } from "lucide-react";
 import { formatRoles } from "@/lib/roles";
 import type { Role } from "@shared/access";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { LoadingState } from "@/components/loading-state";
 import {
+  Box,
+  Button,
+  Cluster,
+  EmptyState,
+  IconButton,
+  Input,
+  MenuItem,
+  MenuTrigger,
+  MenuDivider,
+  ModalDialog,
+  ScrollArea,
+  Stack,
   Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+  Tag,
+  Text,
+  Textarea,
+  type TableColumn,
+} from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { t } from "@/lib/i18n";
 
@@ -239,14 +227,14 @@ export default function GroupsPage() {
 
   const handleAddMembers = async () => {
     if (!selectedGroup || selectedUserIds.length === 0) return;
-    
+
     for (const userId of selectedUserIds) {
       await addUserMutation.mutateAsync({ groupId: selectedGroup.id, userId });
     }
-    
+
     setIsAddMembersOpen(false);
     setSelectedUserIds([]);
-    
+
     // Refresh group details if members dialog is open
     if (selectedGroupDetails) {
       const details = await fetchGroupDetails(selectedGroup.id);
@@ -296,351 +284,270 @@ export default function GroupsPage() {
     });
   };
 
+  // ── Table columns ──
+  const groupColumns: TableColumn<Group>[] = [
+    { key: "name", header: t.groups.name, render: (g) => <Text variant="body-s" weight="medium">{g.name}</Text> },
+    {
+      key: "description",
+      header: t.groups.groupDescription,
+      render: (g) => <Text variant="body-s" tone="muted">{g.description || "—"}</Text>,
+    },
+    {
+      key: "members",
+      header: t.groups.membersCount,
+      render: (g) => (
+        <Tag style={{ cursor: "pointer" }} onClick={() => openMembersDialog(g)}>{g.userCount} чел.</Tag>
+      ),
+    },
+    {
+      key: "createdAt",
+      header: t.groups.createdAt,
+      render: (g) => <Text variant="body-s" tone="muted">{formatDate(g.createdAt)}</Text>,
+    },
+    {
+      key: "actions",
+      header: t.groups.actions,
+      width: "70px",
+      render: (g) => (
+        <MenuTrigger
+          placement="bottom-end"
+          trigger={
+            <IconButton variant="ghost" size="s" aria-label={t.groups.actions} icon={<MoreHorizontal size={16} />} />
+          }
+        >
+          <MenuItem icon={<UsersRound size={16} />} onClick={() => openMembersDialog(g)}>{t.groups.viewMembers}</MenuItem>
+          <MenuItem icon={<UserPlus size={16} />} onClick={() => openAddMembersDialog(g)}>{t.groups.addMembers}</MenuItem>
+          <MenuDivider />
+          <MenuItem icon={<Pencil size={16} />} onClick={() => openEditDialog(g)}>{t.common.edit}</MenuItem>
+          <MenuItem danger icon={<Trash2 size={16} />} onClick={() => openDeleteDialog(g)}>{t.common.delete}</MenuItem>
+        </MenuTrigger>
+      ),
+    },
+  ];
+
+  const memberColumns: TableColumn<User>[] = [
+    { key: "email", header: "Email", render: (u) => u.email },
+    { key: "name", header: t.users.name, render: (u) => u.name || "—" },
+    { key: "role", header: t.users.role, render: (u) => <Tag variant="outline">{formatRoles((u.roles ?? []) as Role[])}</Tag> },
+    {
+      key: "remove",
+      header: "",
+      width: "50px",
+      render: (u) => (
+        <IconButton
+          variant="ghost"
+          size="s"
+          aria-label="Удалить участника"
+          icon={<UserMinus size={16} color="var(--ou-error-600)" />}
+          onClick={() =>
+            selectedGroupDetails &&
+            removeUserMutation.mutate({ groupId: selectedGroupDetails.id, userId: u.id })
+          }
+        />
+      ),
+    },
+  ];
+
+  const availableUserColumns: TableColumn<User>[] = [
+    { key: "email", header: "Email", render: (u) => u.email },
+    { key: "name", header: t.users.name, render: (u) => u.name || "—" },
+    { key: "role", header: t.users.role, render: (u) => <Tag variant="outline">{formatRoles((u.roles ?? []) as Role[])}</Tag> },
+  ];
+
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState message={t.common.loading} />;
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">{t.groups.title}</h1>
-          <p className="text-muted-foreground">{t.groups.description}</p>
-        </div>
-        <Button onClick={() => { resetForm(); setIsCreateOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
+    <Stack gap={6}>
+      <Cluster justify="between" align="start">
+        <Stack gap={1}>
+          <Text as="h1" variant="display-s" weight="bold">{t.groups.title}</Text>
+          <Text as="p" tone="muted">{t.groups.description}</Text>
+        </Stack>
+        <Button leadingIcon={<Plus size={16} />} onClick={() => { resetForm(); setIsCreateOpen(true); }}>
           {t.groups.createGroup}
         </Button>
-      </div>
+      </Cluster>
 
       {/* Search */}
-      <div className="flex gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={t.groups.searchPlaceholder}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-      </div>
+      <Input
+        iconLeft={<Search size={16} />}
+        placeholder={t.groups.searchPlaceholder}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        fullWidth
+      />
 
       {/* Groups Table */}
       {filteredGroups.length === 0 ? (
-        <div className="text-center py-12">
-          <UsersRound className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium">{t.groups.noGroups}</h3>
-          <p className="text-muted-foreground">{t.groups.noGroupsDescription}</p>
-        </div>
+        <EmptyState
+          art={<UsersRound size={48} color="var(--ou-fg-muted)" />}
+          title={t.groups.noGroups}
+          description={t.groups.noGroupsDescription}
+        />
       ) : (
-        <div className="border rounded-lg">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t.groups.name}</TableHead>
-                <TableHead>{t.groups.groupDescription}</TableHead>
-                <TableHead>{t.groups.membersCount}</TableHead>
-                <TableHead>{t.groups.createdAt}</TableHead>
-                <TableHead className="w-[70px]">{t.groups.actions}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredGroups.map((group) => (
-                <TableRow key={group.id}>
-                  <TableCell className="font-medium">{group.name}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {group.description || "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className="cursor-pointer" onClick={() => openMembersDialog(group)}>
-                      {group.userCount} чел.
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {formatDate(group.createdAt)}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openMembersDialog(group)}>
-                          <UsersRound className="h-4 w-4 mr-2" />
-                          {t.groups.viewMembers}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openAddMembersDialog(group)}>
-                          <UserPlus className="h-4 w-4 mr-2" />
-                          {t.groups.addMembers}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => openEditDialog(group)}>
-                          <Pencil className="h-4 w-4 mr-2" />
-                          {t.common.edit}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => openDeleteDialog(group)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          {t.common.delete}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <Table columns={groupColumns} rows={filteredGroups} rowKey={(g) => g.id} />
       )}
 
       {/* Create Group Dialog */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.groups.createGroup}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">{t.groups.name} *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder={t.groups.namePlaceholder}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">{t.groups.groupDescription}</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder={t.groups.descriptionPlaceholder}
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-              {t.common.cancel}
-            </Button>
-            <Button
-              onClick={handleCreateGroup}
-              disabled={!formData.name || createGroupMutation.isPending}
-            >
-              {createGroupMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+      <ModalDialog
+        open={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        title={t.groups.createGroup}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsCreateOpen(false)}>{t.common.cancel}</Button>
+            <Button onClick={handleCreateGroup} disabled={!formData.name} loading={createGroupMutation.isPending}>
               {t.common.create}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </>
+        }
+      >
+        <Stack gap={4}>
+          <Input
+            label={t.groups.name}
+            required
+            fullWidth
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            placeholder={t.groups.namePlaceholder}
+          />
+          <Textarea
+            label={t.groups.groupDescription}
+            fullWidth
+            rows={3}
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            placeholder={t.groups.descriptionPlaceholder}
+          />
+        </Stack>
+      </ModalDialog>
 
       {/* Edit Group Dialog */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.groups.editGroup}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">{t.groups.name} *</Label>
-              <Input
-                id="edit-name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-description">{t.groups.groupDescription}</Label>
-              <Textarea
-                id="edit-description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditOpen(false)}>
-              {t.common.cancel}
-            </Button>
-            <Button
-              onClick={handleUpdateGroup}
-              disabled={!formData.name || updateGroupMutation.isPending}
-            >
-              {updateGroupMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+      <ModalDialog
+        open={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+        title={t.groups.editGroup}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsEditOpen(false)}>{t.common.cancel}</Button>
+            <Button onClick={handleUpdateGroup} disabled={!formData.name} loading={updateGroupMutation.isPending}>
               {t.common.save}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </>
+        }
+      >
+        <Stack gap={4}>
+          <Input
+            label={t.groups.name}
+            required
+            fullWidth
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          />
+          <Textarea
+            label={t.groups.groupDescription}
+            fullWidth
+            rows={3}
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          />
+        </Stack>
+      </ModalDialog>
 
       {/* Members Dialog */}
-      <Dialog open={isMembersOpen} onOpenChange={setIsMembersOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{selectedGroupDetails?.name} — {t.groups.members}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {selectedGroupDetails?.users.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                В группе пока нет участников
-              </p>
-            ) : (
-              <div className="border rounded-lg max-h-80 overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Email</TableHead>
-                      <TableHead>{t.users.name}</TableHead>
-                      <TableHead>{t.users.role}</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedGroupDetails?.users.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>{user.name || "—"}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {formatRoles((user.roles ?? []) as Role[])}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeUserMutation.mutate({
-                              groupId: selectedGroupDetails.id,
-                              userId: user.id,
-                            })}
-                          >
-                            <UserMinus className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsMembersOpen(false)}>
-              {t.common.cancel}
-            </Button>
-            <Button onClick={() => {
-              setIsMembersOpen(false);
-              if (selectedGroupDetails) {
-                openAddMembersDialog(selectedGroupDetails);
-              }
-            }}>
-              <UserPlus className="h-4 w-4 mr-2" />
+      <ModalDialog
+        open={isMembersOpen}
+        onClose={() => setIsMembersOpen(false)}
+        size="l"
+        title={`${selectedGroupDetails?.name ?? ""} — ${t.groups.members}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsMembersOpen(false)}>{t.common.cancel}</Button>
+            <Button
+              leadingIcon={<UserPlus size={16} />}
+              onClick={() => {
+                setIsMembersOpen(false);
+                if (selectedGroupDetails) openAddMembersDialog(selectedGroupDetails);
+              }}
+            >
               {t.groups.addMembers}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </>
+        }
+      >
+        {selectedGroupDetails?.users.length === 0 ? (
+          <Box pad={8}>
+            <Text as="p" align="center" tone="muted">В группе пока нет участников</Text>
+          </Box>
+        ) : (
+          <Box border radius="l">
+            <ScrollArea maxH="md">
+              <Table columns={memberColumns} rows={selectedGroupDetails?.users ?? []} rowKey={(u) => u.id} />
+            </ScrollArea>
+          </Box>
+        )}
+      </ModalDialog>
 
       {/* Add Members Dialog */}
-      <Dialog open={isAddMembersOpen} onOpenChange={setIsAddMembersOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{t.groups.addMembers}</DialogTitle>
-            <DialogDescription>
-              {t.groups.selectUsers}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {availableUsers.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                {t.groups.noUsersToAdd}
-              </p>
-            ) : (
-              <div className="border rounded-lg max-h-80 overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]"></TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>{t.users.name}</TableHead>
-                      <TableHead>{t.users.role}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {availableUsers.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedUserIds.includes(user.id)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedUserIds([...selectedUserIds, user.id]);
-                              } else {
-                                setSelectedUserIds(selectedUserIds.filter((id) => id !== user.id));
-                              }
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>{user.name || "—"}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {formatRoles((user.roles ?? []) as Role[])}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddMembersOpen(false)}>
-              {t.common.cancel}
-            </Button>
-            <Button
-              onClick={handleAddMembers}
-              disabled={selectedUserIds.length === 0 || addUserMutation.isPending}
-            >
-              {addUserMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+      <ModalDialog
+        open={isAddMembersOpen}
+        onClose={() => setIsAddMembersOpen(false)}
+        size="l"
+        title={t.groups.addMembers}
+        description={t.groups.selectUsers}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsAddMembersOpen(false)}>{t.common.cancel}</Button>
+            <Button onClick={handleAddMembers} disabled={selectedUserIds.length === 0} loading={addUserMutation.isPending}>
               {t.groups.addMembers} ({selectedUserIds.length})
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </>
+        }
+      >
+        {availableUsers.length === 0 ? (
+          <Box pad={8}>
+            <Text as="p" align="center" tone="muted">{t.groups.noUsersToAdd}</Text>
+          </Box>
+        ) : (
+          <Box border radius="l">
+            <ScrollArea maxH="md">
+              <Table
+                selectable
+                selected={selectedUserIds}
+                onSelectChange={setSelectedUserIds}
+                columns={availableUserColumns}
+                rows={availableUsers}
+                rowKey={(u) => u.id}
+              />
+            </ScrollArea>
+          </Box>
+        )}
+      </ModalDialog>
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t.groups.confirmDelete}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t.groups.confirmDeleteDescription}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
-            <AlertDialogAction
+      <ModalDialog
+        open={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        size="s"
+        icon={<Trash2 size={20} />}
+        iconTone="danger"
+        title={t.groups.confirmDelete}
+        description={t.groups.confirmDeleteDescription}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsDeleteOpen(false)}>{t.common.cancel}</Button>
+            <Button
+              variant="destructive"
               onClick={() => selectedGroup && deleteGroupMutation.mutate(selectedGroup.id)}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              loading={deleteGroupMutation.isPending}
             >
               {t.common.delete}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+            </Button>
+          </>
+        }
+      />
+    </Stack>
   );
 }

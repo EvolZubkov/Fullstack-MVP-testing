@@ -1,17 +1,38 @@
+/**
+ * @module pages/author/test-analytics
+ * @description Per-test analytics dashboard: summary KPIs, score-distribution and
+ * trend charts, per-topic / per-question / per-level statistics, an attempts table
+ * and a full attempt-details modal. Rendered entirely with the UniversityRT design
+ * system — layout via Stack/Cluster/Grid/Box, typography via Text, data via the DS
+ * Table/Card/Tabs/ProgressBar/Tag primitives (no raw utility classes). recharts
+ * charts use `--ou-*` tokens for colours.
+ */
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LoadingState } from "@/components/loading-state";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
+    Box,
+    Button,
+    Card,
+    CardBody,
+    CardHeader,
+    Cluster,
+    EmptyState,
+    Grid,
+    IconButton,
+    ModalDialog,
+    ProgressBar,
+    ScrollArea,
+    Stack,
+    Table,
+    Tabs,
+    Tag,
+    Text,
+    type ProgressTone,
+    type TableColumn,
+    type Tone,
+} from "@universityrt/ui-kit";
+import { LoadingState } from "@/components/loading-state";
 import {
     ArrowLeft,
     Users,
@@ -36,9 +57,6 @@ import {
     ResponsiveContainer,
     BarChart,
     Bar,
-    PieChart,
-    Pie,
-    Cell,
 } from "recharts";
 
 // Types
@@ -167,8 +185,6 @@ interface AttemptDetail {
     }>;
 }
 
-const COLORS = ["#3b82f6", "#22c55e", "#eab308", "#ef4444", "#8b5cf6", "#ec4899"];
-
 function formatDuration(seconds: number | null): string {
     if (seconds === null) return "—";
     const mins = Math.floor(seconds / 60);
@@ -186,6 +202,18 @@ function formatDate(dateStr: string | null): string {
     });
 }
 
+/** Map a 0–100 correctness percent to a semantic tone. */
+function percentTone(percent: number): "success" | "warning" | "error" {
+    return percent >= 70 ? "success" : percent >= 50 ? "warning" : "error";
+}
+
+/** Map a 0–100 correctness percent to a ProgressBar tone. */
+function percentProgressTone(percent: number): ProgressTone {
+    return percent >= 70 ? "success" : percent >= 50 ? "warning" : "error";
+}
+
+const chartTooltipStyle = { backgroundColor: "var(--ou-bg-elevated)", border: "1px solid var(--ou-border-soft)" };
+
 // Attempt Detail Modal
 function AttemptDetailModal({
     attemptId,
@@ -202,140 +230,136 @@ function AttemptDetailModal({
     });
 
     return (
-        <Dialog open={open} onOpenChange={onClose}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                    <DialogTitle>
-                        Детализация попытки
-                        {data && (
-                            <span className="ml-2 text-muted-foreground font-normal">
-                                — {data.username}
-                            </span>
-                        )}
-                    </DialogTitle>
-                </DialogHeader>
-
-                {isLoading ? (
-                    <LoadingState message="Загрузка..." />
-                ) : data ? (
-                    <div className="space-y-6">
+        <ModalDialog
+            open={open}
+            onClose={onClose}
+            size="xl"
+            title={
+                <Cluster gap={2}>
+                    <Text>Детализация попытки</Text>
+                    {data && <Text tone="muted">— {data.username}</Text>}
+                </Cluster>
+            }
+        >
+            {isLoading ? (
+                <LoadingState message="Загрузка..." />
+            ) : data ? (
+                <ScrollArea maxH="xl">
+                    <Stack gap={6}>
                         {/* Summary */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="text-center p-3 bg-muted rounded-lg">
-                                <div className="text-2xl font-bold">{data.overallPercent.toFixed(1)}%</div>
-                                <div className="text-sm text-muted-foreground">Результат</div>
-                            </div>
-                            <div className="text-center p-3 bg-muted rounded-lg">
-                                <div className="text-2xl font-bold">
-                                    {data.earnedPoints}/{data.possiblePoints}
-                                </div>
-                                <div className="text-sm text-muted-foreground">Баллы</div>
-                            </div>
-                            <div className="text-center p-3 bg-muted rounded-lg">
-                                <div className="text-2xl font-bold">{formatDuration(data.duration)}</div>
-                                <div className="text-sm text-muted-foreground">Время</div>
-                            </div>
-                            <div className="text-center p-3 bg-muted rounded-lg">
-                                <Badge variant={data.passed ? "default" : "destructive"} className="text-lg px-3 py-1">
-                                    {data.passed ? "Пройден" : "Не пройден"}
-                                </Badge>
-                            </div>
-                        </div>
+                        <Grid minItem="sm" gap={4}>
+                            <Box pad={3} surface="muted" radius="l">
+                                <Stack gap={1} align="center">
+                                    <Text variant="display-s" weight="bold">{data.overallPercent.toFixed(1)}%</Text>
+                                    <Text variant="body-s" tone="muted">Результат</Text>
+                                </Stack>
+                            </Box>
+                            <Box pad={3} surface="muted" radius="l">
+                                <Stack gap={1} align="center">
+                                    <Text variant="display-s" weight="bold">{data.earnedPoints}/{data.possiblePoints}</Text>
+                                    <Text variant="body-s" tone="muted">Баллы</Text>
+                                </Stack>
+                            </Box>
+                            <Box pad={3} surface="muted" radius="l">
+                                <Stack gap={1} align="center">
+                                    <Text variant="display-s" weight="bold">{formatDuration(data.duration)}</Text>
+                                    <Text variant="body-s" tone="muted">Время</Text>
+                                </Stack>
+                            </Box>
+                            <Box pad={3} surface="muted" radius="l">
+                                <Stack gap={1} align="center" justify="center" full>
+                                    <Tag tone={data.passed ? "success" : "error"} size="l">
+                                        {data.passed ? "Пройден" : "Не пройден"}
+                                    </Tag>
+                                </Stack>
+                            </Box>
+                        </Grid>
 
                         {/* Achieved Levels (for adaptive) */}
                         {data.testMode === "adaptive" && data.achievedLevels && (
                             <Card>
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-base flex items-center gap-2">
-                                        <Layers className="h-4 w-4" />
-                                        Достигнутые уровни
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="flex flex-wrap gap-2">
+                                <CardHeader lead={<Layers size={16} />} title="Достигнутые уровни" />
+                                <CardBody>
+                                    <Cluster gap={2}>
                                         {data.achievedLevels.map((level, idx) => (
-                                            <Badge key={idx} variant={level.levelName ? "default" : "secondary"}>
+                                            <Tag key={idx} tone={level.levelName ? "success" : "neutral"}>
                                                 {level.topicName}: {level.levelName || "Не достигнут"}
-                                            </Badge>
+                                            </Tag>
                                         ))}
-                                    </div>
-                                </CardContent>
+                                    </Cluster>
+                                </CardBody>
                             </Card>
                         )}
 
                         {/* Trajectory (for adaptive) */}
                         {data.trajectory && data.trajectory.length > 0 && (
                             <Card>
-                                <CardHeader className="pb-2">
-                                    <CardTitle className="text-base">Траектория прохождения</CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-2">
+                                <CardHeader title="Траектория прохождения" />
+                                <CardBody>
+                                    <Stack gap={2}>
                                         {data.trajectory.map((event, idx) => (
-                                            <div key={idx} className="flex items-center gap-2 text-sm">
+                                            <Cluster key={idx} gap={2}>
                                                 {event.action === "level_up" ? (
-                                                    <CheckCircle className="h-4 w-4 text-green-500" />
+                                                    <CheckCircle size={16} color="var(--ou-success-600)" />
                                                 ) : (
-                                                    <XCircle className="h-4 w-4 text-red-500" />
+                                                    <XCircle size={16} color="var(--ou-error-600)" />
                                                 )}
-                                                <span>{event.message}</span>
-                                            </div>
+                                                <Text variant="body-s">{event.message}</Text>
+                                            </Cluster>
                                         ))}
-                                    </div>
-                                </CardContent>
+                                    </Stack>
+                                </CardBody>
                             </Card>
                         )}
 
                         {/* Answers */}
                         <Card>
-                            <CardHeader className="pb-2">
-                                <CardTitle className="text-base">Ответы ({data.answers.length})</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-3 max-h-[400px] overflow-y-auto">
-                                    {data.answers.map((answer, idx) => (
-                                        <div
-                                            key={answer.questionId}
-                                            className={`p-3 rounded-lg border ${answer.isCorrect ? "border-green-500/30 bg-green-500/5" : "border-red-500/30 bg-red-500/5"
-                                                }`}
-                                        >
-                                            <div className="flex items-start justify-between gap-2">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className="text-xs text-muted-foreground">#{idx + 1}</span>
-                                                        <Badge variant="outline" className="text-xs">
-                                                            {answer.topicName}
-                                                        </Badge>
-                                                        {answer.levelName && (
-                                                            <Badge variant="secondary" className="text-xs">
-                                                                {answer.levelName}
-                                                            </Badge>
+                            <CardHeader title={`Ответы (${data.answers.length})`} />
+                            <CardBody>
+                                <ScrollArea maxH="md">
+                                    <Stack gap={3}>
+                                        {data.answers.map((answer, idx) => (
+                                            <Box
+                                                key={answer.questionId}
+                                                pad={3}
+                                                radius="l"
+                                                border
+                                                surface={answer.isCorrect ? "muted" : "subtle"}
+                                            >
+                                                <Cluster justify="between" align="start" gap={2}>
+                                                    <Stack gap={1} grow>
+                                                        <Cluster gap={2}>
+                                                            <Text variant="body-xs" tone="muted">#{idx + 1}</Text>
+                                                            <Tag variant="outline" size="s">{answer.topicName}</Tag>
+                                                            {answer.levelName && (
+                                                                <Tag size="s">{answer.levelName}</Tag>
+                                                            )}
+                                                        </Cluster>
+                                                        <Text variant="body-s" weight="medium">{answer.questionPrompt}</Text>
+                                                    </Stack>
+                                                    <Cluster gap={2} wrap={false}>
+                                                        <Text variant="body-s">
+                                                            {answer.earnedPoints}/{answer.possiblePoints}
+                                                        </Text>
+                                                        {answer.isCorrect ? (
+                                                            <CheckCircle size={20} color="var(--ou-success-600)" />
+                                                        ) : (
+                                                            <XCircle size={20} color="var(--ou-error-600)" />
                                                         )}
-                                                    </div>
-                                                    <p className="text-sm font-medium line-clamp-2">{answer.questionPrompt}</p>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm">
-                                                        {answer.earnedPoints}/{answer.possiblePoints}
-                                                    </span>
-                                                    {answer.isCorrect ? (
-                                                        <CheckCircle className="h-5 w-5 text-green-500" />
-                                                    ) : (
-                                                        <XCircle className="h-5 w-5 text-red-500" />
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
+                                                    </Cluster>
+                                                </Cluster>
+                                            </Box>
+                                        ))}
+                                    </Stack>
+                                </ScrollArea>
+                            </CardBody>
                         </Card>
-                    </div>
-                ) : (
-                    <p className="text-muted-foreground text-center py-8">Не удалось загрузить данные</p>
-                )}
-            </DialogContent>
-        </Dialog>
+                    </Stack>
+                </ScrollArea>
+            ) : (
+                <Box pad={8}><Text align="center" tone="muted">Не удалось загрузить данные</Text></Box>
+            )}
+        </ModalDialog>
     );
 }
 
@@ -372,456 +396,401 @@ export default function TestAnalyticsPage() {
 
     if (!analytics) {
         return (
-            <div className="flex flex-col items-center justify-center h-64 gap-4">
-                <p className="text-muted-foreground">Не удалось загрузить аналитику</p>
-                <Link href="/author/tests">
-                    <Button variant="outline">
-                        <ArrowLeft className="h-4 w-4 mr-2" />
-                        Назад к тестам
-                    </Button>
-                </Link>
-            </div>
+            <EmptyState
+                art={<HelpCircle size={48} color="var(--ou-fg-subtle)" />}
+                title="Не удалось загрузить аналитику"
+                actions={
+                    <Link href="/author/tests">
+                        <Button variant="secondary" leadingIcon={<ArrowLeft size={16} />}>
+                            Назад к тестам
+                        </Button>
+                    </Link>
+                }
+            />
         );
     }
 
     const { summary, topicStats, questionStats, levelStats, scoreDistribution, dailyTrends } = analytics;
 
+    const overviewPanel = (
+        <Stack gap={6}>
+            <Grid minItem="lg" gap={6}>
+                {/* Score Distribution */}
+                <Card>
+                    <CardHeader title="Распределение результатов" />
+                    <CardBody>
+                        {scoreDistribution.some((d) => d.count > 0) ? (
+                            <ResponsiveContainer width="100%" height={250}>
+                                <BarChart data={scoreDistribution}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--ou-border-soft)" />
+                                    <XAxis dataKey="range" fontSize={12} />
+                                    <YAxis fontSize={12} />
+                                    <Tooltip contentStyle={chartTooltipStyle} />
+                                    <Bar dataKey="count" fill="var(--ou-accent-default)" name="Попытки" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <Box pad={8}><Text align="center" tone="muted">Нет данных</Text></Box>
+                        )}
+                    </CardBody>
+                </Card>
+
+                {/* Daily Trends */}
+                <Card>
+                    <CardHeader title="Тренды (30 дней)" />
+                    <CardBody>
+                        {dailyTrends.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={250}>
+                                <LineChart data={dailyTrends}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--ou-border-soft)" />
+                                    <XAxis
+                                        dataKey="date"
+                                        tickFormatter={(val) =>
+                                            new Date(val).toLocaleDateString("ru-RU", {
+                                                day: "numeric",
+                                                month: "short",
+                                            })
+                                        }
+                                        fontSize={12}
+                                    />
+                                    <YAxis fontSize={12} />
+                                    <Tooltip
+                                        labelFormatter={(val) => new Date(val).toLocaleDateString("ru-RU")}
+                                        contentStyle={chartTooltipStyle}
+                                    />
+                                    <Line
+                                        type="monotone"
+                                        dataKey="avgPercent"
+                                        stroke="var(--ou-accent-default)"
+                                        strokeWidth={2}
+                                        name="Средний %"
+                                    />
+                                    <Line
+                                        type="monotone"
+                                        dataKey="passRate"
+                                        stroke="var(--ou-success-default)"
+                                        strokeWidth={2}
+                                        name="% прохождения"
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <Box pad={8}><Text align="center" tone="muted">Нет данных</Text></Box>
+                        )}
+                    </CardBody>
+                </Card>
+            </Grid>
+
+            {/* Topic Stats */}
+            <Card>
+                <CardHeader title="Статистика по темам" />
+                <CardBody>
+                    {topicStats.length > 0 ? (
+                        <Stack gap={3}>
+                            {topicStats.map((topic) => (
+                                <Box key={topic.topicId} pad={3} surface="muted" radius="l">
+                                    <Cluster justify="between" gap={4}>
+                                        <Stack gap={1} grow>
+                                            <Text weight="medium">{topic.topicName}</Text>
+                                            <Text variant="body-s" tone="muted">
+                                                {topic.correctAnswers} / {topic.totalAnswers} правильных
+                                            </Text>
+                                        </Stack>
+                                        <Cluster gap={3} wrap={false}>
+                                            <Tag>{topic.avgPercent.toFixed(1)}%</Tag>
+                                            {topic.passRate !== null && (
+                                                <Tag tone={topic.passRate >= 70 ? "success" : "error"}>
+                                                    {topic.passRate.toFixed(0)}% сдали
+                                                </Tag>
+                                            )}
+                                        </Cluster>
+                                    </Cluster>
+                                </Box>
+                            ))}
+                        </Stack>
+                    ) : (
+                        <Box pad={8}><Text align="center" tone="muted">Нет данных по темам</Text></Box>
+                    )}
+                </CardBody>
+            </Card>
+        </Stack>
+    );
+
+    const attemptColumns: TableColumn<AttemptListItem>[] = [
+        {
+            key: "user",
+            header: "Пользователь",
+            render: (a) => <Text variant="body-s" weight="medium">{a.username}</Text>,
+        },
+        {
+            key: "date",
+            header: "Дата",
+            render: (a) => <Text variant="body-xs" tone="muted">{formatDate(a.finishedAt)}</Text>,
+        },
+        {
+            key: "duration",
+            header: "Время",
+            align: "right",
+            render: (a) => <Text variant="body-s">{formatDuration(a.duration)}</Text>,
+        },
+        {
+            key: "result",
+            header: "Результат",
+            align: "right",
+            render: (a) =>
+                a.completed
+                    ? <Text variant="body-s" weight="medium">{a.overallPercent.toFixed(1)}%</Text>
+                    : <Text variant="body-s" tone="muted">—</Text>,
+        },
+        {
+            key: "status",
+            header: "Статус",
+            align: "right",
+            render: (a) =>
+                a.completed
+                    ? <Tag tone={a.passed ? "success" : "error"}>{a.passed ? "Сдан" : "Не сдан"}</Tag>
+                    : <Tag>В процессе</Tag>,
+        },
+        ...(analytics.testMode === "adaptive"
+            ? [{
+                key: "levels",
+                header: "Уровни",
+                render: (a: AttemptListItem) => (
+                    <Cluster gap={1}>
+                        {a.achievedLevels?.map((level, idx) => (
+                            <Tag key={idx} variant="outline" size="s">
+                                {level.levelName || "—"}
+                            </Tag>
+                        ))}
+                    </Cluster>
+                ),
+            } as TableColumn<AttemptListItem>]
+            : []),
+        {
+            key: "actions",
+            header: "",
+            width: "56px",
+            align: "center",
+            render: (a) =>
+                a.completed ? (
+                    <IconButton
+                        variant="ghost"
+                        size="s"
+                        aria-label="Детализация попытки"
+                        icon={<FileText size={16} />}
+                        onClick={() => setSelectedAttemptId(a.attemptId)}
+                    />
+                ) : null,
+        },
+    ];
+
+    const attemptsPanel = (
+        <Card>
+            <CardHeader title="Список попыток" />
+            <CardBody>
+                {attemptsLoading ? (
+                    <LoadingState message="Загрузка..." />
+                ) : attemptsData?.attempts && attemptsData.attempts.length > 0 ? (
+                    <Table
+                        columns={attemptColumns}
+                        rows={attemptsData.attempts}
+                        rowKey={(a) => a.attemptId}
+                    />
+                ) : (
+                    <Box pad={8}><Text align="center" tone="muted">Нет попыток</Text></Box>
+                )}
+            </CardBody>
+        </Card>
+    );
+
+    const questionsPanel = (
+        <Card>
+            <CardHeader lead={<HelpCircle size={20} />} title="Статистика по вопросам" />
+            <CardBody>
+                {questionStats.length > 0 ? (
+                    <Stack gap={3}>
+                        {questionStats.map((q, idx) => (
+                            <Box key={q.questionId} pad={3} radius="l" border>
+                                <Stack gap={2}>
+                                    <Cluster justify="between" align="start" gap={4}>
+                                        <Stack gap={1} grow>
+                                            <Cluster gap={2}>
+                                                <Text variant="body-xs" tone="muted">#{idx + 1}</Text>
+                                                <Tag variant="outline" size="s">{q.topicName}</Tag>
+                                                <Tag size="s">Сложность: {q.difficulty}</Tag>
+                                            </Cluster>
+                                            <Text variant="body-s">{q.questionPrompt}</Text>
+                                        </Stack>
+                                        <Stack gap={1} align="end">
+                                            <Text variant="heading-s" weight="bold" tone={percentTone(q.correctPercent)}>
+                                                {q.correctPercent.toFixed(0)}%
+                                            </Text>
+                                            <Text variant="body-xs" tone="muted">
+                                                {q.correctAnswers}/{q.totalAnswers}
+                                            </Text>
+                                        </Stack>
+                                    </Cluster>
+                                    <ProgressBar
+                                        value={q.correctPercent}
+                                        tone={percentProgressTone(q.correctPercent)}
+                                        size="s"
+                                        hideHeader
+                                    />
+                                </Stack>
+                            </Box>
+                        ))}
+                    </Stack>
+                ) : (
+                    <Box pad={8}><Text align="center" tone="muted">Нет данных по вопросам</Text></Box>
+                )}
+            </CardBody>
+        </Card>
+    );
+
+    const levelsPanel = (
+        <Card>
+            <CardHeader lead={<Layers size={20} />} title="Статистика по уровням" />
+            <CardBody>
+                {levelStats && levelStats.length > 0 ? (
+                    <Stack gap={4}>
+                        {/* Group by topic */}
+                        {Array.from(new Set(levelStats.map((l) => l.topicId))).map((topicId) => {
+                            const topicLevels = levelStats.filter((l) => l.topicId === topicId);
+                            const topicName = topicLevels[0]?.topicName || "Unknown";
+
+                            return (
+                                <Box key={topicId} pad={4} surface="muted" radius="l">
+                                    <Stack gap={3}>
+                                        <Text as="h4" variant="heading-s" weight="medium">{topicName}</Text>
+                                        <Grid minItem="sm" gap={3}>
+                                            {topicLevels
+                                                .sort((a, b) => a.levelIndex - b.levelIndex)
+                                                .map((level) => (
+                                                    <Box
+                                                        key={`${level.topicId}-${level.levelIndex}`}
+                                                        pad={3}
+                                                        radius="l"
+                                                        border
+                                                        surface="elevated"
+                                                    >
+                                                        <Stack gap={2}>
+                                                            <Cluster justify="between">
+                                                                <Text weight="medium">{level.levelName}</Text>
+                                                                <Tag>{level.achievedCount} достигли</Tag>
+                                                            </Cluster>
+                                                            <Stack gap={1}>
+                                                                <Cluster justify="between">
+                                                                    <Text variant="body-s" tone="muted">Попыток:</Text>
+                                                                    <Text variant="body-s">{level.attemptedCount}</Text>
+                                                                </Cluster>
+                                                                <Cluster justify="between">
+                                                                    <Text variant="body-s" tone="muted">Прошли/Провалили:</Text>
+                                                                    <Cluster gap={1} wrap={false}>
+                                                                        <Text variant="body-s" tone="success">{level.passedCount}</Text>
+                                                                        <Text variant="body-s" tone="muted">/</Text>
+                                                                        <Text variant="body-s" tone="error">{level.failedCount}</Text>
+                                                                    </Cluster>
+                                                                </Cluster>
+                                                                <Cluster justify="between">
+                                                                    <Text variant="body-s" tone="muted">Средний %:</Text>
+                                                                    <Text variant="body-s">{level.avgCorrectPercent.toFixed(1)}%</Text>
+                                                                </Cluster>
+                                                            </Stack>
+                                                        </Stack>
+                                                    </Box>
+                                                ))}
+                                        </Grid>
+                                    </Stack>
+                                </Box>
+                            );
+                        })}
+                    </Stack>
+                ) : (
+                    <Box pad={8}><Text align="center" tone="muted">Нет данных по уровням</Text></Box>
+                )}
+            </CardBody>
+        </Card>
+    );
+
     return (
-        <div className="space-y-6">
+        <Stack gap={6}>
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+            <Cluster justify="between">
+                <Cluster gap={4}>
                     <Link href="/author/tests">
-                        <Button variant="ghost" size="icon">
-                            <ArrowLeft className="h-5 w-5" />
-                        </Button>
+                        <IconButton variant="ghost" aria-label="Назад к тестам" icon={<ArrowLeft size={20} />} />
                     </Link>
-                    <div>
-                        <h1 className="text-2xl font-semibold">{analytics.testTitle}</h1>
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                            <span>Аналитика</span>
-                            <Badge variant={analytics.testMode === "adaptive" ? "default" : "secondary"}>
+                    <Stack gap={1}>
+                        <Text as="h1" variant="display-s" weight="semibold">{analytics.testTitle}</Text>
+                        <Cluster gap={2}>
+                            <Text tone="muted">Аналитика</Text>
+                            <Tag tone={analytics.testMode === "adaptive" ? "accent" : "neutral"}>
                                 {analytics.testMode === "adaptive" ? "Адаптивный" : "Стандартный"}
-                            </Badge>
-                        </div>
-                    </div>
-                </div>
-                <Button onClick={handleExportExcel} variant="outline">
-                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                            </Tag>
+                        </Cluster>
+                    </Stack>
+                </Cluster>
+                <Button onClick={handleExportExcel} variant="secondary" leadingIcon={<FileSpreadsheet size={16} />}>
                     Экспорт Excel
                 </Button>
-            </div>
+            </Cluster>
 
             {/* Summary Cards */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <Grid minItem="sm" gap={4}>
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Попытки</CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{summary.completedAttempts}</div>
-                        <p className="text-xs text-muted-foreground">
-                            {summary.uniqueUsers} уникальных пользователей
-                        </p>
-                    </CardContent>
+                    <CardHeader title="Попытки" trail={<Users size={16} color="var(--ou-fg-muted)" />} />
+                    <CardBody>
+                        <Text variant="display-s" weight="bold">{summary.completedAttempts}</Text>
+                        <Text as="p" variant="body-xs" tone="muted">{summary.uniqueUsers} уникальных пользователей</Text>
+                    </CardBody>
                 </Card>
 
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Средний балл</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{summary.avgPercent.toFixed(1)}%</div>
-                        <p className="text-xs text-muted-foreground">
-                            {summary.avgScore.toFixed(1)} из {summary.maxScore} баллов
-                        </p>
-                    </CardContent>
+                    <CardHeader title="Средний балл" trail={<TrendingUp size={16} color="var(--ou-fg-muted)" />} />
+                    <CardBody>
+                        <Text variant="display-s" weight="bold">{summary.avgPercent.toFixed(1)}%</Text>
+                        <Text as="p" variant="body-xs" tone="muted">{summary.avgScore.toFixed(1)} из {summary.maxScore} баллов</Text>
+                    </CardBody>
                 </Card>
 
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Прохождение</CardTitle>
-                        <Target className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{summary.passRate.toFixed(1)}%</div>
-                        <p className="text-xs text-muted-foreground">успешно сдали тест</p>
-                    </CardContent>
+                    <CardHeader title="Прохождение" trail={<Target size={16} color="var(--ou-fg-muted)" />} />
+                    <CardBody>
+                        <Text variant="display-s" weight="bold">{summary.passRate.toFixed(1)}%</Text>
+                        <Text as="p" variant="body-xs" tone="muted">успешно сдали тест</Text>
+                    </CardBody>
                 </Card>
 
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Среднее время</CardTitle>
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{formatDuration(summary.avgDuration)}</div>
-                        <p className="text-xs text-muted-foreground">на прохождение</p>
-                    </CardContent>
+                    <CardHeader title="Среднее время" trail={<Clock size={16} color="var(--ou-fg-muted)" />} />
+                    <CardBody>
+                        <Text variant="display-s" weight="bold">{formatDuration(summary.avgDuration)}</Text>
+                        <Text as="p" variant="body-xs" tone="muted">на прохождение</Text>
+                    </CardBody>
                 </Card>
 
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Всего</CardTitle>
-                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{summary.totalAttempts}</div>
-                        <p className="text-xs text-muted-foreground">
-                            {summary.totalAttempts - summary.completedAttempts} незавершённых
-                        </p>
-                    </CardContent>
+                    <CardHeader title="Всего" trail={<BarChart3 size={16} color="var(--ou-fg-muted)" />} />
+                    <CardBody>
+                        <Text variant="display-s" weight="bold">{summary.totalAttempts}</Text>
+                        <Text as="p" variant="body-xs" tone="muted">{summary.totalAttempts - summary.completedAttempts} незавершённых</Text>
+                    </CardBody>
                 </Card>
-            </div>
+            </Grid>
 
             {/* Tabs */}
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList>
-                    <TabsTrigger value="overview">Обзор</TabsTrigger>
-                    <TabsTrigger value="attempts">Попытки</TabsTrigger>
-                    <TabsTrigger value="questions">Вопросы</TabsTrigger>
-                    {analytics.testMode === "adaptive" && (
-                        <TabsTrigger value="levels">Уровни</TabsTrigger>
-                    )}
-                </TabsList>
-
-                {/* Overview Tab */}
-                <TabsContent value="overview" className="space-y-6">
-                    <div className="grid gap-6 lg:grid-cols-2">
-                        {/* Score Distribution */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-lg">Распределение результатов</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                {scoreDistribution.some((d) => d.count > 0) ? (
-                                    <ResponsiveContainer width="100%" height={250}>
-                                        <BarChart data={scoreDistribution}>
-                                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                            <XAxis dataKey="range" className="text-xs" />
-                                            <YAxis className="text-xs" />
-                                            <Tooltip
-                                                contentStyle={{
-                                                    backgroundColor: "hsl(var(--card))",
-                                                    border: "1px solid hsl(var(--border))",
-                                                }}
-                                            />
-                                            <Bar dataKey="count" fill="hsl(var(--primary))" name="Попытки" />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                ) : (
-                                    <div className="flex items-center justify-center h-[250px] text-muted-foreground">
-                                        Нет данных
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Daily Trends */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-lg">Тренды (30 дней)</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                {dailyTrends.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height={250}>
-                                        <LineChart data={dailyTrends}>
-                                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                            <XAxis
-                                                dataKey="date"
-                                                tickFormatter={(val) =>
-                                                    new Date(val).toLocaleDateString("ru-RU", {
-                                                        day: "numeric",
-                                                        month: "short",
-                                                    })
-                                                }
-                                                className="text-xs"
-                                            />
-                                            <YAxis className="text-xs" />
-                                            <Tooltip
-                                                labelFormatter={(val) => new Date(val).toLocaleDateString("ru-RU")}
-                                                contentStyle={{
-                                                    backgroundColor: "hsl(var(--card))",
-                                                    border: "1px solid hsl(var(--border))",
-                                                }}
-                                            />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="avgPercent"
-                                                stroke="hsl(var(--primary))"
-                                                strokeWidth={2}
-                                                name="Средний %"
-                                            />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="passRate"
-                                                stroke="hsl(var(--chart-2))"
-                                                strokeWidth={2}
-                                                name="% прохождения"
-                                            />
-                                        </LineChart>
-                                    </ResponsiveContainer>
-                                ) : (
-                                    <div className="flex items-center justify-center h-[250px] text-muted-foreground">
-                                        Нет данных
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    {/* Topic Stats */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-lg">Статистика по темам</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {topicStats.length > 0 ? (
-                                <div className="space-y-3">
-                                    {topicStats.map((topic) => (
-                                        <div
-                                            key={topic.topicId}
-                                            className="flex items-center justify-between gap-4 p-3 rounded-lg bg-muted/50"
-                                        >
-                                            <div>
-                                                <p className="font-medium">{topic.topicName}</p>
-                                                <p className="text-sm text-muted-foreground">
-                                                    {topic.correctAnswers} / {topic.totalAnswers} правильных
-                                                </p>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <Badge variant="secondary">{topic.avgPercent.toFixed(1)}%</Badge>
-                                                {topic.passRate !== null && (
-                                                    <Badge variant={topic.passRate >= 70 ? "default" : "destructive"}>
-                                                        {topic.passRate.toFixed(0)}% сдали
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-muted-foreground text-center py-8">Нет данных по темам</p>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Attempts Tab */}
-                <TabsContent value="attempts">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-lg">Список попыток</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {attemptsLoading ? (
-                                <LoadingState message="Загрузка..." />
-                            ) : attemptsData?.attempts && attemptsData.attempts.length > 0 ? (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr className="border-b">
-                                                <th className="text-left py-3 px-2 font-medium">Пользователь</th>
-                                                <th className="text-left py-3 px-2 font-medium">Дата</th>
-                                                <th className="text-right py-3 px-2 font-medium">Время</th>
-                                                <th className="text-right py-3 px-2 font-medium">Результат</th>
-                                                <th className="text-right py-3 px-2 font-medium">Статус</th>
-                                                {analytics.testMode === "adaptive" && (
-                                                    <th className="text-left py-3 px-2 font-medium">Уровни</th>
-                                                )}
-                                                <th className="py-3 px-2"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {attemptsData.attempts.map((attempt) => (
-                                                <tr key={attempt.attemptId} className="border-b hover:bg-muted/50">
-                                                    <td className="py-3 px-2">{attempt.username}</td>
-                                                    <td className="py-3 px-2">{formatDate(attempt.finishedAt)}</td>
-                                                    <td className="py-3 px-2 text-right">{formatDuration(attempt.duration)}</td>
-                                                    <td className="py-3 px-2 text-right">
-                                                        {attempt.completed ? (
-                                                            <span className="font-medium">{attempt.overallPercent.toFixed(1)}%</span>
-                                                        ) : (
-                                                            <span className="text-muted-foreground">—</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="py-3 px-2 text-right">
-                                                        {attempt.completed ? (
-                                                            <Badge variant={attempt.passed ? "default" : "destructive"}>
-                                                                {attempt.passed ? "Сдан" : "Не сдан"}
-                                                            </Badge>
-                                                        ) : (
-                                                            <Badge variant="secondary">В процессе</Badge>
-                                                        )}
-                                                    </td>
-                                                    {analytics.testMode === "adaptive" && (
-                                                        <td className="py-3 px-2">
-                                                            <div className="flex flex-wrap gap-1">
-                                                                {attempt.achievedLevels?.map((level, idx) => (
-                                                                    <Badge key={idx} variant="outline" className="text-xs">
-                                                                        {level.levelName || "—"}
-                                                                    </Badge>
-                                                                ))}
-                                                            </div>
-                                                        </td>
-                                                    )}
-                                                    <td className="py-3 px-2">
-                                                        {attempt.completed && (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="sm"
-                                                                onClick={() => setSelectedAttemptId(attempt.attemptId)}
-                                                            >
-                                                                <FileText className="h-4 w-4" />
-                                                            </Button>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ) : (
-                                <p className="text-muted-foreground text-center py-8">Нет попыток</p>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Questions Tab */}
-                <TabsContent value="questions">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-lg flex items-center gap-2">
-                                <HelpCircle className="h-5 w-5" />
-                                Статистика по вопросам
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {questionStats.length > 0 ? (
-                                <div className="space-y-3">
-                                    {questionStats.map((q, idx) => (
-                                        <div
-                                            key={q.questionId}
-                                            className="p-3 rounded-lg border"
-                                        >
-                                            <div className="flex items-start justify-between gap-4">
-                                                <div className="flex-1">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className="text-xs text-muted-foreground">#{idx + 1}</span>
-                                                        <Badge variant="outline" className="text-xs">
-                                                            {q.topicName}
-                                                        </Badge>
-                                                        <Badge variant="secondary" className="text-xs">
-                                                            Сложность: {q.difficulty}
-                                                        </Badge>
-                                                    </div>
-                                                    <p className="text-sm line-clamp-2">{q.questionPrompt}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div
-                                                        className={`text-lg font-bold ${q.correctPercent >= 70
-                                                            ? "text-green-500"
-                                                            : q.correctPercent >= 50
-                                                                ? "text-yellow-500"
-                                                                : "text-red-500"
-                                                            }`}
-                                                    >
-                                                        {q.correctPercent.toFixed(0)}%
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {q.correctAnswers}/{q.totalAnswers}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            {/* Progress bar */}
-                                            <div className="mt-2 h-2 bg-muted rounded-full overflow-hidden">
-                                                <div
-                                                    className={`h-full transition-all ${q.correctPercent >= 70
-                                                        ? "bg-green-500"
-                                                        : q.correctPercent >= 50
-                                                            ? "bg-yellow-500"
-                                                            : "bg-red-500"
-                                                        }`}
-                                                    style={{ width: `${q.correctPercent}%` }}
-                                                />
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-muted-foreground text-center py-8">Нет данных по вопросам</p>
-                            )}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
-
-                {/* Levels Tab (Adaptive only) */}
-                {analytics.testMode === "adaptive" && (
-                    <TabsContent value="levels">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="text-lg flex items-center gap-2">
-                                    <Layers className="h-5 w-5" />
-                                    Статистика по уровням
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                {levelStats && levelStats.length > 0 ? (
-                                    <div className="space-y-4">
-                                        {/* Group by topic */}
-                                        {Array.from(new Set(levelStats.map((l) => l.topicId))).map((topicId) => {
-                                            const topicLevels = levelStats.filter((l) => l.topicId === topicId);
-                                            const topicName = topicLevels[0]?.topicName || "Unknown";
-
-                                            return (
-                                                <div key={topicId} className="p-4 rounded-lg bg-muted/50">
-                                                    <h4 className="font-medium mb-3">{topicName}</h4>
-                                                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                        {topicLevels
-                                                            .sort((a, b) => a.levelIndex - b.levelIndex)
-                                                            .map((level) => (
-                                                                <div
-                                                                    key={`${level.topicId}-${level.levelIndex}`}
-                                                                    className="p-3 rounded-lg bg-background border"
-                                                                >
-                                                                    <div className="flex items-center justify-between mb-2">
-                                                                        <span className="font-medium">{level.levelName}</span>
-                                                                        <Badge variant="secondary">{level.achievedCount} достигли</Badge>
-                                                                    </div>
-                                                                    <div className="text-sm text-muted-foreground space-y-1">
-                                                                        <div className="flex justify-between">
-                                                                            <span>Попыток:</span>
-                                                                            <span>{level.attemptedCount}</span>
-                                                                        </div>
-                                                                        <div className="flex justify-between">
-                                                                            <span>Прошли/Провалили:</span>
-                                                                            <span className="text-green-500">{level.passedCount}</span>
-                                                                            <span>/</span>
-                                                                            <span className="text-red-500">{level.failedCount}</span>
-                                                                        </div>
-                                                                        <div className="flex justify-between">
-                                                                            <span>Средний %:</span>
-                                                                            <span>{level.avgCorrectPercent.toFixed(1)}%</span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <p className="text-muted-foreground text-center py-8">Нет данных по уровням</p>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </TabsContent>
-                )}
-            </Tabs>
+            <Tabs
+                value={activeTab}
+                onChange={setActiveTab}
+                items={[
+                    { id: "overview", label: "Обзор", content: overviewPanel },
+                    { id: "attempts", label: "Попытки", content: attemptsPanel },
+                    { id: "questions", label: "Вопросы", content: questionsPanel },
+                    ...(analytics.testMode === "adaptive"
+                        ? [{ id: "levels", label: "Уровни", content: levelsPanel }]
+                        : []),
+                ]}
+            />
 
             {/* Attempt Detail Modal */}
             <AttemptDetailModal
@@ -829,6 +798,6 @@ export default function TestAnalyticsPage() {
                 open={!!selectedAttemptId}
                 onClose={() => setSelectedAttemptId(null)}
             />
-        </div>
+        </Stack>
     );
 }
