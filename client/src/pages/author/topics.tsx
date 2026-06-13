@@ -83,8 +83,9 @@ export default function TopicsPage() {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
   // PRD-15 block C (FR-22): scope filter. Server already returns only visible
-  // topics; this narrows the view client-side by relationship.
-  const [topicFilter, setTopicFilter] = useState<"mine" | "accessible" | "shared" | "all">("mine");
+  // topics; this narrows the view client-side by relationship. Default «Все»
+  // (the full visible set) so any role lands on everything it can see.
+  const [topicFilter, setTopicFilter] = useState<"mine" | "accessible" | "shared" | "all">("all");
   const [showEmptyFolders, setShowEmptyFolders] = useState(false);
   const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
@@ -615,13 +616,13 @@ export default function TopicsPage() {
       />
 
       <div className="flex items-center gap-3 mb-6 flex-wrap">
-        {/* PRD-15 FR-22: scope filter (Мои / Доступные / Общие [/ Все]) */}
+        {/* PRD-15 FR-22: scope filter (Все / Мои / Доступные / Общие) */}
         <div className="inline-flex items-center border rounded-md overflow-hidden">
           {([
+            { value: "all", label: "Все" },
             { value: "mine", label: "Мои" },
             { value: "accessible", label: "Доступные" },
             { value: "shared", label: "Общие" },
-            ...(isAdmin ? [{ value: "all", label: "Все" } as const] : []),
           ] as { value: typeof topicFilter; label: string }[]).map((f) => (
             <Button
               key={f.value}
