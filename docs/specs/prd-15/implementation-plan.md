@@ -1,9 +1,8 @@
 # План реализации: владение контентом, целостность и модель публикации
 
-**Версия:** 1.3
-**Статус:** В реализации — фазы 0-4 (блоки A, B, C, D) выполнены, кроме T-40
-(удаление колонок вопроса — отдельный релиз после подтверждения паритета);
-фаза 5 (закрытие) не начата
+**Версия:** 1.5
+**Статус:** ТРЕК ЗАВЕРШЁН — фазы 0-5 (блоки A, B, C, D + закрытие) и T-40
+(удаление колонок оценки из `questions`, отдельный релиз 2026-06-13) выполнены
 **Дата актуализации:** 2026-06-13
 **Связанные документы:** [BRD](../brd-content-ownership.md),
 [PRD-15](./content-ownership.md),
@@ -166,9 +165,26 @@ T-40: цепочка содержит legacy-звено (`q.points || 1`, `q.sco
 каждая запись бампает версию теста -> «Есть изменения», FR-12); карточка
 вопроса без «Балла» и конструктора (остались базовая сложность и теги),
 бейдж цены убран из списка вопросов. Сверено с эскизом в живом приложении.
-Открыт: T-40 (отдельный релиз).
 
-Цель: цена и градуировка — свойство теста; вопрос — только контент.
+**T-40 (удаление колонок) выполнен 2026-06-13 отдельным релизом.** Миграция 028:
+идемпотентный re-backfill (повтор 027 — ловит пары тест/вопрос, созданные после
+027) + дроп `questions.points`/`questions.scoring_json`. Из `shared/schema.ts`
+убраны оба поля таблицы questions и `scoringJson` из `insertQuestionSchema`.
+Снято legacy-звено серверной обвязки резолвера (`server/services/effective-scoring`)
+— теперь цепочка резолвится только из override и умолчаний секции/теста, поэтому
+умолчания наконец действуют; чистый модуль `shared/scoring/effective-scoring`
+сохраняет необязательный seam `legacy` (никто не подаёт). `check-answer` без
+fallback на `question.scoringJson` (омит = exact). storage create/duplicate/seed
+без колонок. Questions API (`POST/PUT /api/questions`) и standalone-лист «Вопросы»
+(export/import/шаблон/«Справка») больше НЕ принимают/не эмитят «Балл»/«Цена
+ответа» — оценка задаётся test-scoped листом «Оценки» (контрактное изменение,
+модель блока D). SCORM bake и снапшоты читают эффективные значения через резолвер
+(без изменений). Защита инварианта: `snapshotDataSource` синтезирует override-строки
+из замороженных `points`/`scoring_json` для до-блок-D снапшотов — грейдинг
+запиненных попыток не меняется. Паритет подтверждён golden-тестами и полным
+прогоном. Backfill 027/028 трактует явный 0 как умолчание (`q.points || 1`).
+
+Цель: цена и градуировка — свойство теста; вопрос — только контент. ДОСТИГНУТА.
 
 | Задача | Содержание | Артефакты | Покрывает |
 | --- | --- | --- | --- |
@@ -178,17 +194,25 @@ T-40: цепочка содержит legacy-звено (`q.points || 1`, `q.sco
 | T-37 | Backfill отличающихся значений; прогон golden-тестов скоринга; сверка пересчёта попыток | `migrations/`, `tests/mbi-golden.test.ts` | FR-33, BRC-26 |
 | T-38 | Книга Excel: колонки оценки в test-scoped лист; шаблон, инспекция, round-trip | `server/utils/workbook-sheets.ts`, `server/services/workbook-import.ts` | FR-36 |
 | T-39 | Клиент: умолчания и переопределения в редакторе теста, индикатор устаревших, перенос конструктора градуировки из карточки вопроса (эскизы -> согласование -> код) | `client/src/features/tests/editor/`, `client/src/pages/author/questions.tsx`, `scoring-builder.tsx` | FR-35 |
-| T-40 | Отдельный релиз: удаление `questions.points` и `questions.scoring_json` после паритета | `migrations/`, `shared/schema.ts` | FR-33 |
+| T-40 | ВЫПОЛНЕН 2026-06-13 (отдельный релиз): удаление `questions.points` и `questions.scoring_json` после паритета (миграция 028 = re-backfill + дроп; снято legacy-звено; API/Excel «Вопросы» без оценки; снапшот-шим для инварианта) | `migrations/028`, `shared/schema.ts`, `server/services/effective-scoring.ts`, `server/routes/questions.ts`, `server/services/questions-{import,export}.ts`, `server/services/test-snapshot.ts` | FR-33 |
 
 ### Фаза 5. Закрытие
 
-**Статус: не начата** (сквозная приёмка, матрица, RUNBOOK и закрывающая
-актуализация документации — после блока D).
+**Статус: выполнена 2026-06-13** (T-41 - T-44). Сквозная приёмка: `npm run check`
+чисто, `npm test` — 137 файлов / 2607 тестов зелёные, локальный SCORM собран
+(`scorm:sample` -> `out/sample-default-template.zip`) и проигран в плеере
+(`scorm:player`) с эффективной ценой/баллом, шкалами и показателями из снапшота.
+Матрица приёмки [acceptance-matrix.md](./acceptance-matrix.md) сопоставляет
+E-1 - E-13 и FR-01 - FR-36 с покрывающими автотестами; RUNBOOK
+[RUNBOOK_prd15_content_ownership.md](../../RUNBOOK_prd15_content_ownership.md)
+фиксирует порядок миграций 019-027, переходный режим снапшотов и откат;
+актуализированы ROADMAP, CLAUDE.md и отложенный пункт аналитики acceptance-matrix
+PRD-13 (FR-08 закрыт `analyticsScope`/`canReadTestAnalytics`).
 
 | Задача | Содержание | Артефакты | Покрывает |
 | --- | --- | --- | --- |
 | T-41 | Сквозная приёмка: вся матрица E-1 - E-13, инвариант доставки, SCORM локально (`scorm:sample` + `scorm:player`) | `tests/`, `out/` | Раздел 8 PRD |
-| T-42 | Матрица приёмки трека (по образцу acceptance-matrix.md PRD-13) | `docs/specs/access-control/` или `docs/specs/prd-15/` | — |
+| T-42 | Матрица приёмки трека (по образцу acceptance-matrix.md PRD-13) | `docs/specs/prd-15/acceptance-matrix.md` | — |
 | T-43 | RUNBOOK развёртывания: порядок миграций, переходный режим снапшотов, откат | `docs/RUNBOOK_prd15_content_ownership.md` | — |
 | T-44 | Актуализация CLAUDE.md, ROADMAP, закрытие отложенных пунктов acceptance-matrix PRD-13 (аналитика) | `CLAUDE.md`, `docs/ROADMAP.md` | FR-08 |
 
