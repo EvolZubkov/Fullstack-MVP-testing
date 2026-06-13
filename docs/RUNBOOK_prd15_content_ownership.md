@@ -33,10 +33,33 @@
   и `canGrantAccess`.
 - Резервная копия БД перед прогоном миграций на проде.
 
+## КРИТИЧНО: `drizzle-kit push` НЕДОСТАТОЧЕН для выкладки
+
+`drizzle-kit push` (`npm run db:push`) синхронизирует ТОЛЬКО схему (DDL) и НЕ выполняет
+data-миграции из SQL-файлов. Полагаться на один push на БД с данными ОПАСНО по двум причинам:
+
+1. **Потеря данных при дропах.** push дропнет `topic_courses`/`topic_events` и
+   `questions.points`/`scoring_json` БЕЗ предшествующего backfill (023 → `feedback_json`,
+   027/028 → `test_question_scoring`). Backfill живёт только в SQL-файлах. Если push дропнет
+   раньше backfill — рекомендации и нестандартные цены теряются безвозвратно.
+2. **Потеря индексов.** Ряд индексов и частичных уникальных ограничений рукописные в миграциях
+   (002/004/007/008/009: `content_pages_*`, `question_measurements_*`, `result_variables_*`
+   (вкл. partial-unique `one_success_per_test`/`one_completion_per_test`), `scales_test_id_idx`,
+   `test_sections_test_id_sort_order_idx`) и НЕ выражены в `shared/schema.ts` (regex-CHECK,
+   частичные предикаты). push их не создаёт и при реконсиляции может удалить — деградация
+   производительности. Эмпирически: на стенде, поднятом через push, этих индексов НЕТ.
+
+**Канонический механизм выкладки:** прогон нумерованных SQL-файлов через `script/run-sql.cjs`
+(`node script/run-sql.cjs migrations/<file>.sql`, читает `DATABASE_URL`, exit ≠ 0 при ошибке —
+блокирует пайплайн). Этот скрипт и предназначен для data-шагов, которые push не делает. push —
+ТОЛЬКО как финальная аддитивная синхронизация ПОСЛЕ прогона SQL, и только если подтверждено, что
+он не предлагает деструктивных изменений (дроп колонок/индексов).
+
 ## Порядок миграций
 
-Файлы в `migrations/` применяются последовательно по номеру (прямой прогон SQL); схемные изменения
-синхронизирует `npm run db:push` (drizzle-kit) из `shared/schema.ts`. Все шаги идемпотентны.
+Файлы `migrations/` применяются последовательно по номеру через `script/run-sql.cjs` (все шаги
+идемпотентны: `IF [NOT] EXISTS`, `ON CONFLICT DO NOTHING`, backfill только по NULL/отсутствию).
+push — после, и только аддитивно.
 
 | Шаг | Миграция | Блок | Содержание |
 | --- | --- | --- | --- |
@@ -44,11 +67,12 @@
 | 2 | `020_prd15_test_snapshots.sql` | B | Таблица `test_snapshots`; пин `attempts.snapshot_id` |
 | 3 | `021_prd15_topic_ownership.sql` | C | `topics.owner_id`/`visibility`; таблица `topic_access_grants` |
 | 4 | `022_prd15_topic_name_normalized.sql` | C | `topics.name_normalized`; частичный уникальный индекс по владельцу |
-| 5 | `023_td02_topic_feedback_json.sql` | TD-02 | `topics.feedback_json` (backfill из плоского `feedback` + курсов/мероприятий) |
+| 5 | `023_td02_topic_feedback_json.sql` | TD-02 | `topics.feedback_json` (backfill из плоского `feedback` + курсов/мероприятий) — ОБЯЗАН пройти до шага 6 |
 | 6 | `024_td02_drop_topic_courses_events.sql` | TD-02 | Дроп `topic_courses`/`topic_events` (источник - `feedback_json`) |
 | 7 | `025_td01_topic_grants_user_only.sql` | TD-01 | Гранты тем - только пользователи (дроп `grantee_type`) |
 | 8 | `026_prd15_test_question_scoring.sql` | D | Таблица `test_question_scoring`; `default_points` на тесте и секции |
 | 9 | `027_prd15_scoring_backfill.sql` | D | Backfill переопределений, отличающихся от системного умолчания (пин `contentHash`) |
+| 10 | `028_prd15_drop_question_scoring_columns.sql` | D (T-40) | Идемпотентный re-backfill (повтор 027) + дроп `questions.points`/`scoring_json`. ОБЯЗАН пройти ДО push |
 
 Замечания по шагам:
 
@@ -60,6 +84,47 @@
 - Шаг 9: явный `0` баллов трактуется как системное умолчание (все рантаймы коэрсили `q.points || 1`),
   поэтому в backfill не попадает; реальная нулевая цена выражается переопределением. Сложность не
   бэкфиллится - базовое значение остаётся на вопросе (FR-34).
+
+## Проверка беспотерийности (до/после дропов)
+
+Pre-flight (перед шагами 6 и 10): снять бэкап и зафиксировать счётчики.
+
+```bash
+pg_dump -Fc "$DATABASE_URL" -f "backup-$(date +%s).dump"   # хранить >= 30 дней
+```
+
+```sql
+-- BEFORE: эталонные счётчики
+SELECT 'tqs_rows' k, count(*) v FROM test_question_scoring
+UNION ALL SELECT 'pairs_need_backfill',
+  count(DISTINCT (ts.test_id, q.id)) FROM test_sections ts
+  JOIN questions q ON q.topic_id = ts.topic_id
+  WHERE q.points NOT IN (0,1) OR q.scoring_json IS NOT NULL
+UNION ALL SELECT 'topics_feedback_null_with_legacy',  -- ДОЛЖНО быть 0 перед шагом 6
+  count(*) FROM topics t WHERE t.feedback_json IS NULL
+    AND (EXISTS(SELECT 1 FROM topic_courses c WHERE c.topic_id=t.id)
+      OR EXISTS(SELECT 1 FROM topic_events e WHERE e.topic_id=t.id));
+```
+
+Если `topics_feedback_null_with_legacy` > 0 — СТОП: 023 не отработал, дропать `topic_courses`
+нельзя. После шага 10:
+
+```sql
+-- AFTER: колонки удалены, оценка сохранена, нет сирот/дублей
+SELECT count(*) FROM information_schema.columns
+  WHERE table_name='questions' AND column_name IN ('points','scoring_json');   -- = 0
+SELECT count(*) FROM test_question_scoring;                                     -- >= pairs_need_backfill
+SELECT count(*) FROM (SELECT test_id,question_id FROM test_question_scoring
+  GROUP BY 1,2 HAVING count(*)>1) d;                                            -- = 0 (нет дублей)
+SELECT count(*) FROM test_question_scoring t
+  WHERE NOT EXISTS(SELECT 1 FROM tests x WHERE x.id=t.test_id)
+     OR NOT EXISTS(SELECT 1 FROM questions q WHERE q.id=t.question_id);         -- = 0 (нет сирот)
+```
+
+Авторские переопределения сохраняются: `ON CONFLICT DO NOTHING` не перетирает строку, выставленную
+автором (напр. вопрос с `points=2` и override `points=5` в тесте → останется 5). Проверено на
+docker-стенде 2026-06-13: `test_question_scoring` 1 → 9 строк, авторский override сохранён,
+эффективная оценка идентична до/после.
 
 ## Переходный режим снапшотов (блок B)
 
