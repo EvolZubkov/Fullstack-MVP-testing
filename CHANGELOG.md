@@ -1,6 +1,5099 @@
 # Changelog
 
-## [root](https://github.com/vvlad1973/Fullstack-MVP-testing/tree/)
+## [2.2.0-beta](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.1.0-beta...v2.2.0-beta)
+
+### Features
+
+- **feat**(editor): «Вклады вопросов» — группировка по секциям, folding и гейтинг вкладки (2026-06-13) [`245ba572cd8f098d93c8087b834c0cae1b6bfd76`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/245ba572cd8f098d93c8087b834c0cae1b6bfd76)
+  Плоский список всех вопросов организован так же, как «Оценка»: карточки
+  сгруппированы по секциям (сквозная нумерация), каждая секция сворачивается +
+  «Свернуть/Развернуть все» (общий section-fold; в ContributionQuestion добавлен
+  topicId для группировки). Пункт рейла «Вклады вопросов» теперь disabled, пока в
+  тесте нет ни одной шкалы — матрица без шкал бессмысленна (при удалении последней
+  шкалы — возврат на «Список шкал»). Маркер покрытия согласован: внутрь попадаешь
+  только со шкалами, поэтому жёлтая точка «не привязан» всегда действенна и
+  дублируется бейджем «X не привязано» в заголовке секции. Пустое состояние
+  «Список шкал» выровнено по DS (иконка info).
+
+- **feat**(editor): сворачиваемые секции на вкладке «Оценка» + общий примитив folding (2026-06-13) [`e87b613be710d7b2137df7b450d0f778d5388ece`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e87b613be710d7b2137df7b450d0f778d5388ece)
+  На длинных тестах таблица оценки по секциям не помещалась на экран. Добавлено
+  сворачивание секций (шеврон в заголовке) и глобальные «Свернуть все / Развернуть
+  все». Логика вынесена в общий примитив section-fold (useSectionFold +
+  FoldAllButtons), чтобы переиспользовать на других вкладках со списками по
+  секциям. CSS обобщён в классы tb-fold-* (+ disabled-состояние пункта рейла,
+  которого не было в DS). Состояние эфемерное, по умолчанию всё развёрнуто.
+
+- **feat**(topics): «Все» — первая вкладка фильтра и режим по умолчанию для всех ролей (2026-06-13) [`bdf55aae80059da04fe43fef783954a0f39a47c6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/bdf55aae80059da04fe43fef783954a0f39a47c6)
+  Вкладка «Все» была admin-only и стояла последней, а дефолт был «Мои».
+  Сделана первой и режимом по умолчанию для любой роли (снят isAdmin-гейт):
+  при заходе на «Темы» пользователь сразу видит весь доступный ему набор.
+  Логика фильтра не менялась — сервер по-прежнему отдаёт только видимые темы,
+  для не-админа «Все» = объединение «Мои + Доступные + Общие».
+
+- **feat**(deploy): пре-push гейт — падать, если PRD-15 миграции не прогнались (2026-06-13) [`c4a87ed464314bd7203de93541b0f0c524ee65c1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c4a87ed464314bd7203de93541b0f0c524ee65c1)
+  drizzle-kit push нельзя давать дойти до промпта create/rename
+  test_question_scoring: под --force он дропнул бы topic_courses/events и
+  questions.points/scoring_json без backfill. Новый script/verify-prd15-pre-push.sql
+  (DO-блок с RAISE) проверяет, что миграции 023/024/026/027/028 уже применились;
+  deploy.sh/deploy-test.sh гоняют его ПОСЛЕ цепочки и ДО push — при незавершённой
+  миграции деплой падает с понятной ошибкой и push не запускается (тихий дроп
+  превращается в громкий безопасный отказ). Dockerfile копирует гейт в образ.
+
+- **feat**(questions): убрать оценку из банка вопросов — API и лист «Вопросы» без «Балл»/«Цена ответа» (PRD-15 T-40) (2026-06-13) [`d6ba4a0e37d7af1c5138b99b7ff073aa5ad40c87`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d6ba4a0e37d7af1c5138b99b7ff073aa5ad40c87)
+  POST/PUT /api/questions больше не принимают points/scoringJson (сняты из тела,
+  dirty-check и валидации). Standalone-лист «Вопросы» (export/import/шаблон/
+  «Справка») без колонок «Балл»/«Цена ответа» — оценка задаётся test-scoped листом
+  «Оценка» (модель блока D). Импорт старой колонки молча игнорируется (обратная
+  совместимость старых файлов).
+
+- **feat**(db): удалить questions.points/scoring_json — оценка свойство теста (PRD-15 T-40, миграция 028) (2026-06-13) [`64c7958a1fd6407be8cd42f2edf29a3ea2558d22`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/64c7958a1fd6407be8cd42f2edf29a3ea2558d22)
+  Миграция 028: идемпотентный re-backfill (повтор 027 — ловит пары тест/вопрос,
+  созданные после 027) + дроп колонок points/scoring_json из questions. Из схемы
+  убраны оба поля таблицы questions и scoringJson из insertQuestionSchema. Чистый
+  резолвер shared/scoring/effective-scoring сохраняет необязательный seam legacy
+  (никто больше не подаёт). Прогонять 028 ДО drizzle-kit push (backfill раньше дропа).
+
+- **feat**(editor): вкладка «Оценка» (умолчания + переопределения по вопросам) (PRD-15 блок D) (2026-06-13) [`c17b7106b28fab42d0f230166a5e15b4bd941279`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c17b7106b28fab42d0f230166a5e15b4bd941279)
+  Вкладка «Оценка» редактора теста: per-test умолчания цены и модалка переопределений по вопросам (scoring-section + question-scoring-modal + scoring-api). Конструктор градуированной оценки PRD-10 перенесён из карточки вопроса в редактор теста (pages/author/scoring-builder.tsx → features/tests/editor/sections/), questions.tsx очищен.
+
+- **feat**(import): листы «Оценка»/«Структура»/«Квоты» в книге теста (PRD-15 блок D) (2026-06-13) [`3f2c18c28caa20e0633028c719c65bbce00986a1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3f2c18c28caa20e0633028c719c65bbce00986a1)
+  Книга теста расширена листами «Оценка» (умолчания цены + переопределения по вопросам), «Структура» (разделы/выборка/порог/режим) и «Квоты» (выдача по тегам). Инспекция файла учитывает эти test-scoped листы (требуется целевой тест); import-new создаёт тест и применяет структуру/квоты; шаблон содержит все листы.
+
+- **feat**(scoring): API умолчаний цены и переопределений по вопросам, аналитика по эффективной оценке (PRD-15 блок D) (2026-06-13) [`40e85f3336a41c152fe012551eb61275f1b2c692`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/40e85f3336a41c152fe012551eb61275f1b2c692)
+  Эндпоинты теста для умолчаний цены и переопределений оценки на вопрос; прохождения и аналитика (combined/export/test-details/attempts) считают баллы по эффективной оценке через резолвер, согласованно с вебом и SCORM.
+
+- **feat**(scoring): применять эффективную оценку в вебе, SCORM и снапшотах (PRD-15 блок D) (2026-06-13) [`9a4f4079abec1cd160c3c11d33ca8c4804cac242`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9a4f4079abec1cd160c3c11d33ca8c4804cac242)
+  Все потребители оценки идут через резолвер: вебовое выставление баллов (check-answer), запекание TEST_DATA для SCORM (test-json), публикационные снапшоты (test-snapshot) и проверка выполнимости выдачи. Снапшот фиксирует эффективную оценку на момент публикации.
+
+- **feat**(scoring): резолвер эффективной оценки + DAL переопределений (PRD-15 блок D) (2026-06-13) [`b1d4ce6c65b739c265a9292f6fb0553c997ec1ef`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b1d4ce6c65b739c265a9292f6fb0553c997ec1ef)
+  Единый источник истины по эффективным баллам/градуированной оценке/сложности вопроса в тесте: умолчание теста/секции → поле вопроса → переопределение test_question_scoring (с пином content-hash). server/services/effective-scoring.ts + методы storage для чтения/записи переопределений.
+
+- **feat**(db): таблица test_question_scoring + умолчания цены (PRD-15 блок D, миграции 026-027) (2026-06-13) [`12d78c2f71920d74cfc25992a87c1253ad5685bf`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/12d78c2f71920d74cfc25992a87c1253ad5685bf)
+  Оценка становится свойством теста: новая таблица test_question_scoring хранит переопределения баллов/градуированной оценки/сложности на пару (тест, вопрос) с pinned_content_hash для детекта устаревания; tests.default_question_points и test_sections.default_points задают умолчания цены. Миграция 027 — бэкфилл. Колонки nullable/defaulted: отсутствие = legacy-поведение.
+
+- **feat**(topics): единый Drawer темы — Свойства (с богатым фидбэком) + Доступ (PRD-15 T-32, D1) (2026-06-12) [`cc3f78ebc313324db9549dfd0c521e47f44aadb9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/cc3f78ebc313324db9549dfd0c521e47f44aadb9)
+  Редактирование темы и управление доступом объединены в один DS-Drawer на
+  вкладках «Свойства» и «Доступ» (по утверждённому эскизу prd15-topic-access).
+  Вкладка «Свойства»: имя с live-проверкой одноимённости (FR-27), папка, описание
+  и богатая обратная связь через общий с тестами редактор (FeedbackEditorModal /
+  FeedbackPreview) поверх topics.feedback_json (TD-02). Вкладка «Доступ»: владелец,
+  видимость, гранты use/manage с мягким/жёстким отзывом. Единое «Сохранить» = PUT
+  свойств + PATCH видимости/владельца; гранты/отзыв — немедленные действия.
+  
+  Удалён старый shadcn-диалог редактирования, отдельная панель доступа
+  (topic-access-panel) и диалоги добавления курсов/мероприятий с карточки —
+  рекомендованные курсы/мероприятия теперь часть обратной связи; карточка и строка
+  показывают только их счётчики из feedback_json.
+  
+  \- features/topics/topic-drawer.tsx — новый единый компонент
+  \- pages/author/topics.tsx — перепроводка на TopicDrawer, чистка мёртвого кода
+  \- удалён features/topics/access/topic-access-panel.tsx (логика поглощена)
+  \- тесты: topic-drawer (рендёр/сохранение/гранты/отзыв 409) + topics smoke
+
+- **feat**(topics): богатое поле обратной связи topics.feedback_json (TD-02 r.2, аддитивно) (2026-06-12) [`a34bafee00f18776727f9f3e7a040a54e17e2044`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a34bafee00f18776727f9f3e7a040a54e17e2044)
+  Тема получила единое богатое поле feedback_json (зеркало feedbackContentSchema:
+  формат/текст/документы/курсы/мероприятия), как у тестов и секций. Это
+  разблокирует богатый редактор обратной связи темы в едином Drawer (T-32).
+  
+  Изменение строго аддитивное (вариант A): доставка результатов (веб, SCORM,
+  снапшоты) и старый UI карточки тем по-прежнему читают плоский feedback и
+  таблицы topic_courses/topic_events. Полное переключение чтений и отказ от
+  таблиц вынесены в TD-02 r.3 (вместе с заменой старого экрана на Drawer).
+  
+  \- schema: topics.feedback_json (jsonb, nullable)
+  \- migration 023: ADD COLUMN + идемпотентный бэкфилл из feedback + topic_courses + topic_events
+  \- storage: create/updateTopic персистят feedback_json
+  \- routes/topics.ts: приём и валидация feedbackJson на POST/PUT (400 invalid_feedback_json),
+    пропуск ключа при отсутствии (не перетирает сохранённое)
+  \- tests: round-trip create/update, 400 на мусоре, сохранение при отсутствии поля
+  \- plan: §7 TD-02 r.1/r.2 отмечены сделанными, r.3 — остаток
+
+- **feat**(results): показывать рекомендуемые мероприятия темы ученику на веб-экране результатов (TD-02) (2026-06-12) [`f335f6e03d16ee3ef1a5cdd79c9c1444020cf7fe`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f335f6e03d16ee3ef1a5cdd79c9c1444020cf7fe)
+  Веб-шаблон результатов (TemplateResultPage) раньше не пробрасывал рекомендации:
+  курсы и мероприятия проваленных тем рендерил только SCORM-рантайм. Теперь
+  buildResultContext агрегирует и дедуплицирует recommendedCourses и
+  recommendedEvents из проваленных тем и передаёт их в общий билдер, как это
+  делает SCORM. Layout results.html уже умеет рендерить оба блока.
+  
+  \- schema: topicResultSchema.recommendedEvents (url опционально, default [])
+  \- attempts: загрузка getTopicEvents для секции и проброс в topicResults
+  \- result-context: агрегация+дедуп курсов/мероприятий по проваленным темам
+
+- **feat**(web): индикатор недоступной темы в составе теста (PRD-15 T-32, E-11) (2026-06-12) [`cc76914f2ce82ccf9c3528042e0c422f92b1b4db`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/cc76914f2ce82ccf9c3528042e0c422f92b1b4db)
+  Секция, чья тема отсутствует в видимом автору /api/topics (грант отозван/тема приватизирована), помечается тегом «Тема недоступна». Тест продолжает работать и сохраняться; недоступные темы не появляются в пикере (список scoped сервером). +тест.
+
+- **feat**(web): админ-отчёт о дублирующихся темах (PRD-15 T-32, BRC-12) (2026-06-12) [`17e58e8c3945eb7a909b850ba2253b171866f01b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/17e58e8c3945eb7a909b850ba2253b171866f01b)
+  Кнопка «Отчёт о дублях» (только админ) открывает диалог с группами одноимённых тем (GET /api/topics/duplicates-report): таблица «Название/Владелец/Видимость», имя владельца резолвится через /api/users.
+
+- **feat**(web): фильтр области тем, скрытие пустых папок, проверка одноимённости (PRD-15 T-32) (2026-06-12) [`22d029e9715cc5713c5a5cdcab90d67847f054c7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/22d029e9715cc5713c5a5cdcab90d67847f054c7)
+  Фильтр Мои/Доступные/Общие (+Все для админа) поверх отфильтрованного сервером списка; скрытие папок без видимых в фильтре тем + админ-тоггл «Показывать пустые папки». Живой name-check при создании/переименовании: жёсткая одноимённость у владельца блокирует Save (409), чужая видимая — предупреждение.
+
+- **feat**(web): кнопка «Доступ к теме» в списке тем, гейт владелец/админ (PRD-15 T-32) (2026-06-12) [`596c88607595effb7d3a2b3a4745b0b87a054be0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/596c88607595effb7d3a2b3a4745b0b87a054be0)
+  Действие-щит на карточке и в строке открывает панель доступа; видно при topics.access.grant и (владелец темы или администратор).
+
+- **feat**(web): панель доступа к теме — владелец, видимость, гранты, отзыв (PRD-15 T-32) (2026-06-12) [`063f41016782445eb7f72790a118d16d0d0f6595`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/063f41016782445eb7f72790a118d16d0d0f6595)
+  DS Drawer по образцу test-access-panel: смена владельца (админ), тумблер видимости приватная/общая, гранты только пользователям (Просмотр/Управление), двухрежимный отзыв (мягкий/жёсткий с 409-зависимостями), возврат отозванного. Владелец+видимость батчатся на «Сохранить»; гранты/отзыв — немедленные действия.
+
+- **feat**(web): обратная связь — раздел «Мероприятия», «Курсы», группированное превью (TD-02) (2026-06-12) [`b3c4df6f3d8ecba2917d6725dfdb98d05a315726`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b3c4df6f3d8ecba2917d6725dfdb98d05a315726)
+  Редактор: раздел «Мероприятия» (название + опц. ссылка), переименование «Ссылки»→«Курсы», флаг hideEvents. Новый общий feedback-preview: списки Документы/Курсы/Мероприятия с реальными ссылками и pen-кнопкой редактирования вместо счётчиков. events проходят насквозь типы/мапперы/callers (персист на уровне теста и темы).
+
+- **feat**(shared): рекомендуемые мероприятия в обратной связи (TD-02) (2026-06-12) [`01c8c3e5f0324ababd960973f84c3ffd847c4ccf`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/01c8c3e5f0324ababd960973f84c3ffd847c4ccf)
+  feedbackContentSchema: новый массив events ({title, url?}) с опциональным URL — курсы остаются ссылками, мероприятия добавляются как отдельный тип. Аддитивно (default []).
+
+- **feat**(server): API владения темами — гранты/видимость/владелец, фильтрация, отзыв, одноимённость (PRD-15 T-27..T-31) (2026-06-12) [`6f72bf941c37fb60262071e858fb2f3cd21c80e0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6f72bf941c37fb60262071e858fb2f3cd21c80e0)
+  topics: эндпоинты грантов (GET/POST/DELETE /access), смена владельца/видимости, двухрежимный отзыв (мягкий по умолчанию, жёсткий 409 для админа), /name-check и /duplicates-report, фильтрация списка по видимости. questions: чтение/CRUD по управлению темой, экспорт в видимой области. tests: секции/уровни только из видимых тем с производным чтением при пересохранении.
+
+- **feat**(server): сервисы владения темами — выполнимость отзыва, одноимённость, импорт (PRD-15 T-29..T-31) (2026-06-12) [`d85859b4c19ca60c1daecbccb9ede5277ab91d0d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d85859b4c19ca60c1daecbccb9ede5277ab91d0d)
+  topic-access: dependentTestsForGrant (жёсткий отзыв, FR-26), sameOwnerNameClash/visibleSameNameTopics/duplicateNameGroups (FR-27). storage: nameNormalized в create/updateTopic. questions-import: сопоставление тем в видимой импортёру области + владелец-импортёр, гейт обновления по управлению темой (FR-28).
+
+- **feat**(shared): нормализация имени темы для контроля одноимённости (PRD-15 T-30) (2026-06-12) [`c1b183241d5917339e5e20c186e3867418f382b9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c1b183241d5917339e5e20c186e3867418f382b9)
+  shared/topics/naming.normalizeTopicName (регистр, пробелы, ё-&gt;е) + колонка topics.nameNormalized с частичным уникальным индексом по владельцу.
+
+- **feat**(db): нормализованное имя темы и частичный индекс по владельцу (PRD-15 T-30) (2026-06-12) [`080ba6f60905ccbb0c7bfe78850d0b4336cb3496`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/080ba6f60905ccbb0c7bfe78850d0b4336cb3496)
+  topics.name_normalized + частичный уникальный индекс (owner_id, name_normalized) WHERE owner_id IS NOT NULL: жёсткая уникальность имён только в рамках владельца, legacy-темы (owner NULL) не конфликтуют. Бэкфилл зеркалит JS-нормализацию.
+
+- **feat**(web): «Общий доступ» виден владельцу теста и админу (PRD-15 BRC-27) (2026-06-11) [`de0f8da46a8ef1266f8307f2a4565d91bf5ffd5d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/de0f8da46a8ef1266f8307f2a4565d91bf5ffd5d)
+  Пункт меню «Общий доступ» гейтится по владению: автор видит его только для своих
+  тестов (canGrantAccessFor), администратор — для всех. Раньше было capability-only
+  (admin), теперь capability у автора есть, объектную проверку добавляет клиент.
+
+- **feat**(server): объектный доступ к темам и владельческие гранты тестов (PRD-15 блок C) (2026-06-11) [`9f0f7f94dbe48115d59c67c0f4c2dbeda67e9294`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9f0f7f94dbe48115d59c67c0f4c2dbeda67e9294)
+  \- services/topic-access.ts — visibleTopic / canManageTopicContent / canDeleteTopic
+    / canGrantTopicAccess (владелец|admin) / canChangeTopicOwner (admin) /
+    visibleTopicScope (shared+owned+granted); вопросы наследуют видимость темы;
+  \- storage.ts — владелец/видимость темы, DAL грантов (upsert/state/remove,
+    активные по user+группам), getSharedTopicIds, createTopic с владельцем-создателем
+    и приватностью по умолчанию;
+  \- test-access.ts/routes — canGrantAccess = владелец|admin (BRC-27); три
+    access-эндпоинта теста получили объектную проверку владения.
+
+- **feat**(access): права тем и делегирование грантов владельцу (PRD-15 блок C, BRC-27) (2026-06-11) [`a5d502246b31062b16160c40e0f6de67f6157f57`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a5d502246b31062b16160c40e0f6de67f6157f57)
+  Каталог +4 права (topics.read, questions.read, topics.access.grant,
+  topics.owner.change). AUTHOR получает чтение/гранты тем и tests.access.grant
+  (BRC-27 — владелец грантит доступ к своим тестам); смена владельца темы —
+  только админ. Все новые права scope-aware (объектная проверка по
+  владению/видимости в сервисах).
+
+- **feat**(shared): схема владения темами и грантов (PRD-15 блок C) (2026-06-11) [`e001d9e921e4bf15b4a272f45dba62712fbc3648`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e001d9e921e4bf15b4a272f45dba62712fbc3648)
+  topics.ownerId + visibility (private|shared) и topicAccessGrants — доступ к теме
+  для не-владельца (user/group, use/manage, состояние мягкого отзыва). Вопросы
+  наследуют видимость своей темы; отдельных прав на вопрос нет.
+
+- **feat**(db): владение темами и гранты доступа к темам (PRD-15 блок C) (2026-06-11) [`fd6e88258e330123eab1ecdeeca884da9a1bf480`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fd6e88258e330123eab1ecdeeca884da9a1bf480)
+  Миграция 021: topics.owner_id (NULL=legacy), topics.visibility (private|shared;
+  новые темы приватны, legacy backfill в shared) и topic_access_grants (получатель
+  user|group, уровень use|manage, soft-revoke state). Аддитивно: owner NULL +
+  visibility shared у существующих тем = поведение не меняется в день один.
+
+- **feat**(web): состояния публикации и экстренная переопубликация (PRD-15 T-23) (2026-06-11) [`20b74204e6439f586baffd248c7fd69ccaaf0f3b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/20b74204e6439f586baffd248c7fd69ccaaf0f3b)
+  \- список тестов: бейдж «Есть изменения» рядом со статусом при дрейфе
+    (publicationState), пункты меню «Опубликовать изменения» (новый снапшот) и
+    «Экстренная переопубликация» с диалогом-подтверждением (аннулирование без
+    списания лимита); 409 publish_infeasible открывает диалог влияния;
+  \- ученик: на 404 от аннулированной попытки — модал «Тест обновлён, начните
+    заново» (попытка не засчитана).
+
+- **feat**(server): доставка из снапшота, переопубликация и аналитика по версиям (PRD-15) (2026-06-11) [`0a658ad1c570280726c93942d1d558558413e9bb`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0a658ad1c570280726c93942d1d558558413e9bb)
+  \- routes/tests.ts — публикация/переопубликация создают снапшот (FR-10);
+    publicationState в списке и деталях (FR-12); POST republish-force с
+    аннулированием идущих попыток без списания лимита (FR-14); экспорт SCORM из
+    актуального снапшота (FR-16);
+  \- routes/attempts.ts — старт/ответ/финиш/resume/таймер во всех путях читают и
+    оценивают из пиннингованного снапшота; snapshotId NULL = живой путь (FR-11/13);
+  \- analytics/attempts.ts — snapshotVersion по попыткам + сводка распределения по
+    версиям публикации (FR-15).
+
+- **feat**(server): сервис снапшотов, фасад источника и DAL (PRD-15 блок B) (2026-06-11) [`1a5b10441e9e6bd40f0d2007c2f5406bfc545040`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/1a5b10441e9e6bd40f0d2007c2f5406bfc545040)
+  \- services/test-snapshot.ts — сборщик buildSnapshotContent (замораживает сырые
+    storage-строки), фасады snapshotDataSource/liveDataSource/dataSourceForAttempt
+    и exportSourceForTest (один интерфейс TestDataSource для рантайма), версионный
+    createTestSnapshot с pruneSnapshots (удержание, FR-17), getPublicationState
+    (дрейф пулов по contentHash, FR-12);
+  \- storage.ts — CRUD снапшотов, getReferencedSnapshotIds, annulInProgressAttempts
+    (FR-14), snapshotId в createAttempt;
+  \- scoring-config.ts — loadScoringConfig принимает источник (снапшот при доставке,
+    storage по умолчанию).
+
+- **feat**(shared): схема снапшотов теста и пин попытки (PRD-15 блок B) (2026-06-11) [`e2d87328d9559b56ca9b320127d94070b5a976d0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e2d87328d9559b56ca9b320127d94070b5a976d0)
+  testSnapshots — замороженный самодостаточный deliverable теста (content_json),
+  создаётся при публикации; attempts.snapshotId — снапшот, из которого попытка
+  доставляется и оценивается (FR-10/FR-13).
+
+- **feat**(db): таблица снапшотов публикации и пин attempts.snapshot_id (PRD-15) (2026-06-11) [`efa0f7075da71e5460eef4056ab5abfc2305c7c5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/efa0f7075da71e5460eef4056ab5abfc2305c7c5)
+  Миграция 020: test_snapshots (id, test_id, version, content_json, published_at,
+  published_by; unique по test_id+version) и nullable attempts.snapshot_id (пин
+  попытки на снапшот; NULL = живая доставка/legacy). Аддитивно, поведение в день
+  включения не меняется.
+
+- **feat**(import): импорт разделов и квот выдачи из книги Excel (PRD-14) (2026-06-11) [`96d759e6cce27b1ae934bd184399199d5cfade34`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/96d759e6cce27b1ae934bd184399199d5cfade34)
+  Расширение мультилистового импорта книги:
+  \- workbook-sheets.ts/workbook-import.ts — листы «Структура (разделы)» и квоты
+    выдачи по тегам, шаблон книги; scoring-excel.ts — словесные термины ступеней
+    «Цена ответа» (correct/wrong/total вместо c/x/T);
+  \- import.tsx + i18n — метки разделов/квот в предпросмотре импорта;
+  \- tests-workbook/workbook роуты + тесты round-trip и dry-run;
+  \- docs: format.md, prd-14, гайд import-template-guide.md, референс-книга.
+
+- **feat**(tests-editor): абсолютный порог прохождения по баллам, не по числу вопросов (PRD-10) (2026-06-11) [`7e8ab20b1e95a26ef8b6fdf293befd47c115c3d4`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7e8ab20b1e95a26ef8b6fdf293befd47c115c3d4)
+  Градуированная оценка делает основой абсолютного порога заработанные БАЛЛЫ, а не
+  число вопросов: редактор ограничивает порог Σ баллов пула секции (maxPoints,
+  с откатом к числу вопросов до round-trip). Обновлены mappers/types/validation
+  и их тесты.
+
+- **feat**(web): диалог влияния на тесты и dry-run-first защита (PRD-15 T-12) (2026-06-11) [`64fd3e052a2162bd833ea044683dd23ce3601b8a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/64fd3e052a2162bd833ea044683dd23ce3601b8a)
+  Модуль client/src/features/content-protection (ModalDialog+Tag+Banner из DS):
+  диалог в режимах block/warn/publish, хук useContentGuard с потоком dry-run-first
+  (чистая операция → обычное подтверждение, предупреждения → диалог, блокировка →
+  диалог с «Удалить принудительно» для админа). Подключено к удалению и правке тем
+  и вопросов (одиночное + массовое) и к публикации теста (onError ловит 409
+  publish_infeasible). Эскиз: docs/wireframes/prd15-content-in-use.html.
+
+- **feat**(server): применить защиту контента на роутах и scope аналитики (PRD-15) (2026-06-11) [`4e6295700f9fe5e0196d35a02e6481a7ce1ee067`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4e6295700f9fe5e0196d35a02e6481a7ce1ee067)
+  \- topics/questions/folders/test-folders: создатель в created_by, 409
+    content_in_use + ?force + ?dryRun на удалении/правке/массовых операциях;
+  \- tests: requireUserContext+scope на /design и /screen-template (FR-09),
+    publish-гейт 409 publish_infeasible (E-12);
+  \- analytics: фильтрация агрегатов, экспортов и attempt-by-id по области
+    видимости актора (F-5, FR-08), общий хелпер analyticsScope.
+  
+  Попутно в tests.ts/questions.ts едут малые хунки предыдущего трека PRD-10/14
+  (maxPoints секции, текст help-листа «Цена ответа») — те же файлы.
+
+- **feat**(server): ссылочная защита контента и dry-run (PRD-15 блок A) (2026-06-11) [`3966ce8a1155bdf267028c5cd08c677e879dc2e3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3966ce8a1155bdf267028c5cd08c677e879dc2e3)
+  Серверное ядро защиты общего контента:
+  \- services/draw-feasibility.ts — сбор зависимых тестов и оценка мутации
+    (удаление темы/вопросов, перетегирование), политика published→409/draft→warn,
+    publish-time проверка (E-12) и формулы PRD-2 по тегам (E-6);
+  \- services/content-guard.ts — гарды роутов: создатель/админ, 409 content_in_use
+    со списком зависимостей, admin ?force=true, ?dryRun=true предпросмотр;
+  \- services/test-access.ts — ветка assignedToUser в canReadTest (role-model 6.4);
+  \- services/questions-import.ts — те же гарды на пути импорта PRD-14;
+  \- middleware/auth.ts — requireUserContext (объектный scope без capability-гейта);
+  \- storage.ts — created_by в create-методах, getTestsUsingTopic/Question,
+    getTestSectionsByTopic, getMeasurementsForQuestions, getTopicPageRefs,
+    isTestAssignedToUser, полный каскад deleteTopic (events/sections/pages).
+
+- **feat**(shared): движки выполнимости выдачи и эффективной цены (PRD-15) (2026-06-11) [`f6063616c3aa8182e039ba36105696871bcec267`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f6063616c3aa8182e039ba36105696871bcec267)
+  Чистые, покрытые тестами модули без зависимостей от БД и сети:
+  \- shared/draw/feasibility.ts — оценка выполнимости выдачи по каждому
+    зависимому тесту (пул/квоты/адаптивные уровни/шкалы/формулы), симулирует
+    реальный drawSection для совпадения строгости с рантаймом;
+  \- shared/scoring/effective-scoring.ts — цепочка эффективной цены вопроса в
+    тесте (переопределение -&gt; секция -&gt; тест -&gt; системное умолчание) и
+    переопределение сложности (задел блока D);
+  \- shared/schema.ts — колонки created_by и индекс test_sections.topic_id.
+
+- **feat**(db): аудит created_by контента и индекс test_sections.topic_id (PRD-15) (2026-06-11) [`642467be1ceb425e69c099516115126b7e51ae67`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/642467be1ceb425e69c099516115126b7e51ae67)
+  Миграция 019: nullable created_by на topics/questions/folders/test_folders
+  (legacy-строки NULL = админ-управляемые) и индекс по test_sections.topic_id
+  для запроса «где используется». Аддитивно, поведение в день включения не
+  меняется.
+
+### Fixes
+
+- **fix**(ds): красное правило required-маркера в загружаемую копию DS-CSS (2026-06-13) [`b4a160b99d7dd8ae713e5b6a6001cc32e5763e4a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b4a160b99d7dd8ae713e5b6a6001cc32e5763e4a)
+  В прошлом коммите (c2b3046) правило .ou-field__lbl-req/.ou-combo__lbl-req ушло
+  только в «источник» vendor/ui-kit/css, а приложение импортирует отдельную копию
+  client/src/styles/vendor/university-rt.css. Поэтому span-маркер рендерился, но
+  без своего цвета наследовал цвет метки — звёздочка была не красной. Добавил то же
+  правило в загружаемую копию; обе копии теперь синхронны.
+
+- **fix**(ds): красная звёздочка обязательного поля у Input/Combobox (2026-06-13) [`c2b3046befaa5cc38fb2b9e2298d1fe8374c2ce7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c2b3046befaa5cc38fb2b9e2298d1fe8374c2ce7)
+  В DS-компонентах Input и Combobox не было пропа required (в отличие от
+  Textarea/FormField), поэтому звёздочку фейкали прямо в тексте метки
+  (label="Ключ *") — она выходила цветом метки, а не красной. Добавил проп
+  required, рендерящий маркер ou-field__lbl-req / ou-combo__lbl-req с цветом
+  --ou-error-default (зеркально Textarea), и мигрировал все обязательные поля
+  редактора и импорта (Ключ, Название, Имя, Целевой тест, Имя нового теста) на
+  label + required. Системный пробел DS, бил по всем обязательным полям, не только
+  по ключу шкалы.
+
+- **fix**(scales): метка шкалы — необязательная, fallback на ключ (PRD-5) (2026-06-13) [`c1dffcf6b586a76d39b6cf08540716c6db810128`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c1dffcf6b586a76d39b6cf08540716c6db810128)
+  Editor-валидация и бэкенд-схема требовали метку, хотя в утверждённом эскизе у
+  поля нет звёздочки (обязателен только ключ). Свежедобавленная шкала без метки
+  давала фантомную ошибку: баннер «Поля с ошибками» и блок сохранения, но карточка
+  поле не подсвечивала, а «Перейти к ошибкам» вела в несуществующий якорь. Снял
+  required-проверку метки в валидации и ослабил insertScaleSchema до пустой строки
+  (колонка notNull её принимает, миграция не нужна). Где метка нужна для
+  отображения — SCORM-bake — подставляется ключ.
+
+- **fix**(editor): пустое состояние «Показатели» по DS (page-layout + иконка + действие) (2026-06-13) [`33e94b192b6ad0539b83433ea58fd14707875727`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/33e94b192b6ad0539b83433ea58fd14707875727)
+  Пустое состояние вкладки использовало layout=inline (узкий вариант «для карточек»)
+  без иллюстрации и с кнопкой «Добавить показатель» в шапке над крошечным well.
+  Приведено к эскизу s-indicators-empty: ou-empty--page по центру, иконка info,
+  первичная кнопка действия внутри состояния, без строки-шапки (зеркалит пустое
+  состояние «Список шкал»).
+
+- **fix**(topics): не показывать баннер одноимённости при открытии темы без правки имени (PRD-15) (2026-06-13) [`ff6e46e68974481a6051ebc400355ce49796f7e8`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ff6e46e68974481a6051ebc400355ce49796f7e8)
+  Предупреждение FR-27 рендерилось в общем для create/edit блоке по
+  nameDuplicates.length&gt;0 без учёта режима, поэтому при открытии чужой
+  одноимённой темы всплывал текст «Создать можно», хотя ничего не создаётся.
+  Теперь баннер показывается только когда имя «новое» для Drawer: всегда при
+  создании и при редактировании лишь если тему реально переименовали в
+  одноимённую. Текст сделан нейтральным (годится и для создания, и для
+  переименования).
+
+- **fix**(deploy): build-test.bat гоняет всю PRD-15 цепочку + гейт до push (2026-06-13) [`57622c0472bd9b5bee20ad37630eb13633951dc3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/57622c0472bd9b5bee20ad37630eb13633951dc3)
+  Инлайновый ssh-блок build-test.bat (рекуррентный деплой кода на тест) хардкодил
+  прогон только migrations/016, затем drizzle-kit push --force — то же, что было в
+  deploy.sh: push упирался в промпт create/rename test_question_scoring и дропнул бы
+  topic_courses/events и questions.points/scoring_json без backfill. Теперь
+  прогоняет 016+023+024+026+027+028 одним мульти-файловым run-sql, затем пре-push
+  гейт verify-prd15-pre-push.sql, затем push (no-op). Прод-путь
+  (build-docker.bat/deploy-docker.bat -&gt; run-deploy.sh -&gt; deploy.sh) уже исправлен.
+
+- **fix**(deploy): прогонять PRD-15 data-миграции до drizzle-kit push (2026-06-13) [`198b20ae13ee1fd2550abf7106630c2a399388f4`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/198b20ae13ee1fd2550abf7106630c2a399388f4)
+  Деплой в pre-push шаге гонял через run-sql.cjs ТОЛЬКО 016, затем push --force.
+  Миграции 023/024/026/027/028 не запускались, поэтому push видел деструктивный
+  diff: спрашивал create/rename test_question_scoring и дропнул бы topic_courses/
+  events и questions.points/scoring_json БЕЗ backfill = потеря рекомендаций и цен.
+  \- run-sql.cjs принимает несколько файлов (прогон по порядку в одном соединении);
+  \- deploy.sh: цепочка 016,023,024,026,027,028 до push;
+  \- deploy-test.sh: цепочка 023,024,026,027,028 до push (роли — инлайн выше).
+  Теперь push выходит no-op. Цепочка идемпотентна (см. гаржи миграций), повторный
+  деплой безопасен.
+
+- **fix**(migrations): идемпотентность backfill после дропа источников (PRD-15) (2026-06-13) [`4ae2624ad117596b978425fdd38896db6965cea2`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4ae2624ad117596b978425fdd38896db6965cea2)
+  Backfill-миграции ссылались на колонки/таблицы, которые сами же дропают позже,
+  поэтому повторный прогон на уже мигрированной БД падал на этапе планирования
+  запроса (relation/column does not exist), хотя WHERE не матчил строк:
+  \- 023: UPDATE с подзапросами на topic_courses/topic_events -&gt; guard на
+    существование topic_courses;
+  \- 027/028: INSERT...SELECT на questions.points/scoring_json -&gt; guard на
+    существование колонки points;
+  \- 025: DELETE WHERE grantee_type -&gt; guard (push-деплоенная БД создаёт
+    topic_access_grants уже без grantee_type).
+  plpgsql планирует ветку только при входе, поэтому пост-дроп прогон — чистый
+  no-op. Проверено на стенде: повтор всей цепочки exit 0, состояние не изменилось.
+
+### Documentation
+
+- **docs**(prd-15): отложенный персист переопределений оценки в плане и эскизе (2026-06-13) [`2002d319c5820fe0ea4416dccee0baa51d5c429a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2002d319c5820fe0ea4416dccee0baa51d5c429a)
+  implementation-plan: датированное уточнение 2026-06-13 — переход с немедленного
+  PUT/DELETE на драфт + единое «Сохранить». prd15-test-scoring: аннотации «Сбросить»
+  и сохранения приведены к отложенной модели, отмечено, что несохранённое
+  переопределение зажигает точку несохранённых изменений. FR-30/31/35 не менялись.
+
+- **docs**(prd-15): RUNBOOK — деплой автоматизирует пре-push цепочку миграций (2026-06-13) [`ba0d2283cdef3154c8192922da0e5fdce5237bd6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ba0d2283cdef3154c8192922da0e5fdce5237bd6)
+  run-sql.cjs принимает несколько файлов; deploy.sh/deploy-test.sh гоняют
+  016/023/024/026/027/028 до push (раньше только 016 — это был баг); 025 не в
+  цепочке на push-деплоенной БД; миграции идемпотентны и защищены гаржами.
+
+- **docs**(prd-15): выверенная прод-процедура миграции — run-sql.cjs, запрет push для дропов (2026-06-13) [`eea901284744588eea19b772ec534e31503182a8`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/eea901284744588eea19b772ec534e31503182a8)
+  Зафиксирован adversarial-аудит беспотерийности и применение 028 на стенде:
+  \- секция «drizzle-kit push НЕДОСТАТОЧЕН»: push пропускает backfill (потеря данных
+    при дропе topic_courses/events и questions.points/scoring_json) И не создаёт/
+    может удалить рукописные индексы (002/004/007/008/009), которых нет в schema.ts;
+  \- канонический механизм — нумерованные SQL через script/run-sql.cjs по порядку,
+    023 до 024, 028 до push; push только аддитивно после;
+  \- шаг 028 в таблице миграций;
+  \- секция «Проверка беспотерийности (до/после)» с pre-flight бэкапом и
+    проверочными запросами (колонки удалены, оценка сохранена, нет дублей/сирот).
+
+- **docs**(prd-15): уточнить §9 — гибридная difficulty и теги на вопросе осознанно (2026-06-13) [`093974eeafce7edba6bdbc29e6c07ef831dea4d4`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/093974eeafce7edba6bdbc29e6c07ef831dea4d4)
+  Пункт «Вне объёма» о полном переносе difficulty/tags переформулирован как
+  рассмотрено-и-отклонено: difficulty намеренно гибридная (база на вопросе +
+  per-test override, FR-34 — целевая модель), tags остаются контентной
+  классификацией (опора квот PRD-11 и формул PRD-2). Чтобы пункт не читался как
+  недоделанный хвост трека.
+
+- **docs**(prd-15): закрытие трека — фаза 5 (приёмка/RUNBOOK) и T-40 (удаление колонок) (2026-06-13) [`ed613dea07de04053adef6d803b7e9307b53b389`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ed613dea07de04053adef6d803b7e9307b53b389)
+  Фаза 5: новая матрица приёмки (E-1..E-13 + FR-01..FR-36 -&gt; тесты) и RUNBOOK
+  развёртывания (порядок миграций 019-028, переходный режим снапшотов, откат).
+  T-40: статусы плана 1.5 / content-ownership 1.3 / ROADMAP — трек завершён;
+  секция T-40 в RUNBOOK (миграция 028 + откат); format.md — «Балл»/«Цена ответа»
+  удалены из листа «Вопросы»; CLAUDE.md и пункт аналитики PRD-13 актуализированы.
+
+- **docs**(scoring): PRD-15 блок D — план, content-ownership, role-model, ROADMAP, эскиз (2026-06-13) [`b53ee3f248b4f0484aeb7676d08b7d1f8d641a9e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b53ee3f248b4f0484aeb7676d08b7d1f8d641a9e)
+  Документация трека «оценка — свойство теста»: implementation-plan (T-34..T-44), content-ownership и role-model, запись в ROADMAP, согласованный эскиз prd15-test-scoring (конвенция маркировки переопределений).
+
+- **docs**(wireframes): привести превью обратной связи темы к отгруженному TD-02 (единый Drawer) (2026-06-12) [`c51969e57ac791ab8f851d2de94849e424eaba91`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c51969e57ac791ab8f851d2de94849e424eaba91)
+  Эскиз единого Drawer темы (prd15-topic-access.html, вкладка «Свойства») имел
+  устаревшее превью обратной связи (мета «N ссылок · N файлов» и сноска
+  «мероприятия запланировано») — до реализации TD-02. Привёл к виду отгруженного
+  компонента feedback-preview.tsx: шапка со сниппетом и карандашом + сгруппированные
+  списки Документы/Курсы/Мероприятия (ссылка мероприятия опциональна), источник —
+  topics.feedback_json. Новый файл не создавал (overlap с утверждённым эскизом).
+  
+  \- prd15-topic-access.html: разметка превью, иконка i-file-text, обновлённая сноска
+  \- tb-components.css (зеркало эскизов): синхронизированы TD-02-классы __head/__group/__items/__item
+
+- **docs**(prd15): TD-02 редактор обратной связи сделан, остаток в план §7 (2026-06-12) [`32ed7928ab7ca78ca7988d96157e15f6662b0824`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/32ed7928ab7ca78ca7988d96157e15f6662b0824)
+  Раздел «Мероприятия», «Курсы», группированное превью и плумбинг events — DONE. Остаток: показ событий ученику (result-context, SCORM resultsPage), адаптивный триггер, сведение topic_courses/events в фидбэк.
+
+- **docs**(prd15): задачи после PRD-15 — TD-01 гранты user-only, TD-02 редактор ОС (2026-06-12) [`ebf2c0c65088ca47c70b8746aedcd299a2fc603c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ebf2c0c65088ca47c70b8746aedcd299a2fc603c)
+  implementation-plan §7: гранты тем только пользователям (убрать группы); расширение редактора обратной связи ссылками на мероприятия и сведение курсов/событий в фидбэк.
+
+- **docs**(prd15): согласованные эскизы T-32 — Drawer темы, список, доступ, одноимённость, дубли (2026-06-12) [`c5d54a11c3283d762c57683f270aaae3fd18dbf4`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c5d54a11c3283d762c57683f270aaae3fd18dbf4)
+  approved/: единый Drawer темы (вкладки Свойства+Доступ, гранты только пользователям, выбор режима отзыва), список без меток принадлежности, диалог имени, индикатор недоступной темы (E-11), отчёт дублей; обновлены content-in-use и publication-state.
+
+- **docs**(prd15): эскиз состояний публикации и переопубликации (T-23) (2026-06-11) [`6ea26e082e42e8669f6a1fbe3af7f98f22e0eee5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6ea26e082e42e8669f6a1fbe3af7f98f22e0eee5)
+  4 состояния: бейджи в списке, индикатор в редакторе, диалог экстренной
+  переопубликации, уведомление ученику об аннулированной попытке (FR-12/FR-14).
+
+- **docs**(prd15): аудит владения данными, BRD/PRD-15, эскиз и правки role-model (2026-06-11) [`74eae7be98e4e643c1c5cbc082db8d1d78e42fa2`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/74eae7be98e4e643c1c5cbc082db8d1d78e42fa2)
+  \- AUDIT_DATA_OWNERSHIP.md — аудит парадигмы владения (находки F-1..F-10,
+    матрица E-1..E-13);
+  \- brd-content-ownership.md (BRC-01..27) + prd-15/ (FR-01..36 + план T-01..44);
+  \- role-model.md — владение и видимость тем, гранты use/manage, унификация
+    выдачи грантов тестов (BRC-27); brd-access-control.md — перекрёстная ссылка;
+  \- wireframes/prd15-content-in-use.html — эскиз диалога влияния (4 состояния).
+
+## [2.1.0-beta](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.0.1-beta...v2.1.0-beta)
+
+### Features
+
+- **feat**(tests): экспорт теста в Excel из меню действий (PRD-14 FR-15) (2026-06-11) [`e7566f3e2adcf50d184db2f1c89edb96d9ecadfb`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e7566f3e2adcf50d184db2f1c89edb96d9ecadfb)
+  В меню «...» теста добавлен пункт «Экспорт в Excel» (после «Экспорт SCORM», группа экспорта) → GET /api/tests/:id/workbook/export. Закрывает ветку экспорта теста из PRD-14: тест — из меню теста, вопросы — со страницы «Вопросы».
+
+- **feat**(import): раздел «Импорт» в боковой навигации (PRD-14 FR-15 UI) (2026-06-11) [`95b399893470b5ea8f64d5a6b3779f51cda8d218`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/95b399893470b5ea8f64d5a6b3779f51cda8d218)
+  Страница /author/import (import.tsx) на DS-компонентах по согласованному эскизу: инлайн-поток без модалок, автоопределение листов файла, ветка «Целевой тест» (существующий или создание нового), dry-run-предпросмотр плана, состояния пусто→файл→предпросмотр→готово.
+  
+  Маршрутизация: только вопросы → /api/questions/import; существующий тест → /api/tests/:id/workbook/import; новый → /api/workbook/import-new. Эскиз перенесён в approved/.
+  
+  Заголовок пока через PageHeader в контенте — переедет в шапку в рамках задачи header-title.
+
+- **feat**(import): мультилистовая книга теста и бэкенд раздела «Импорт» (PRD-14 FR-15) (2026-06-11) [`a5fd6a122c8f9ddcbe077fc7a95d9f294fa8d437`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a5fd6a122c8f9ddcbe077fc7a95d9f294fa8d437)
+  Книга = один тест с листами Вопросы/Шкалы/Показатели/«Вклады вопросов»: распознавание по имени, многопроходный импорт (вопросы→шкалы→вклады+показатели), upsert по естественным ключам, ссылка вклада на вопрос по ID или локальному «Ключ строки», симметричный экспорт и round-trip, dry-run без записи (tests-workbook.ts, workbook-import.ts, workbook-sheets.ts).
+  
+  Раздел «Импорт» получает свои эндпоинты без testId (workbook.ts): inspect (определение листов — нужен ли целевой тест), import-new (создание бессекционного черновика + импорт), template (пустые 4 листа + справка).
+  
+  validateResultVariableFormula принимает extraScaleKeys/extraVarNames, importWorkbook их прокидывает — формулы на ещё не записанные (dry-run, новый тест) шкалы/показатели не дают ложных ошибок.
+
+- **feat**(import): импорт/экспорт банка вопросов в Excel (PRD-14 Фазы 0-2) (2026-06-11) [`cf280e8c53464446fc4bb6196f67deeb77f17bd6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/cf280e8c53464446fc4bb6196f67deeb77f17bd6)
+  Round-trip для matching/ranking и сохранение нулевых Балл/Сложность (Ф0); паритет с моделью вопроса — теги, условная ОС, «Цена ответа» (PRD-10), правило «пустая ячейка = сброс / нет колонки = поле не меняется» (Ф1); скачивание шаблона и предпросмотр dry-run без записи (Ф2).
+  
+  Разбор и сериализация строки вопроса вынесены в общие сервисы (questions-import.ts/questions-export.ts), грамматика «Цены ответа» — в scoring-excel.ts; роут questions.ts стал тонкой обёрткой над ними (переиспользуются импортом книги теста, FR-15).
+
+- **feat**(editor): баннер «Шаблон обновлён», превью из default и инвалидация кэшей шаблонов (2026-06-10) [`b76dccd73678a49df84af478a768f1ded9556bb1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b76dccd73678a49df84af478a768f1ded9556bb1)
+  Три правки UI редактора под PRD-3/PRD-7 G21:
+  \- design-tab: при дрейфе версии черновика от текущей версии шаблона
+    (контент перезалит под тем же id) показывается баннер «Шаблон обновлён»
+    с действием «Обновить оформление» — refreshTemplateVersion
+    перештамповывает версию и отбрасывает params, которых больше нет в
+    манифесте. Флаг считается от черновика, поэтому баннер исчезает сразу
+    после реконсиляции, до сохранения.
+  \- «Структура»: previewTemplateId рендерит превью из default, когда
+    активный шаблон не объявляет вариант вида страницы — иначе «Структура»
+    пишет «Из стандартного шаблона», а превью показывает активный шаблон.
+  \- админ-реестр: лайфсайкл-мутации инвалидируют не только список реестра,
+    но и авторские кэши шаблонов (["templates"]); при staleTime: Infinity
+    иначе галерея «Заменить шаблон» и карточка design-tab не подхватывали
+    активацию/деактивацию/перезалив.
+
+- **feat**(scorm): паковать default для fallback системных экранов start/results (2026-06-10) [`e0bb586d36ef565f6e32f419bafff0855af4ce9f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e0bb586d36ef565f6e32f419bafff0855af4ce9f)
+  В выгрузке системные экраны start/results, которые активный шаблон не
+  объявляет в contentTemplates, теперь рендерятся из встроенного default —
+  паритет со «Структурой» и веб-превью (PRD-7 G21). Раньше пакет показывал
+  собственный (или пустой) экран активного шаблона.
+  
+  Экспортёр определяет fallbackKinds по манифесту, прокидывает их в
+  TEST_DATA, кладёт файлы default под template-default/ и его CSS как
+  styles-default.css. Рантайм (templateLoader/mainRender/startPage/
+  viewResults) подгружает fallback-лейауты и переключает таблицу стилей на
+  default только пока показан fallback-экран — пакет показывает один экран
+  за раз, поэтому подмена глобального стиля безопасна.
+  
+  Манифест default (preview.html) объявляет start/results как
+  contentTemplate; попутно поправлен цвет текста карточки роутера (фикс с
+  inherit на светлой карточке) и счётчик в подвале превью (5 -&gt; 7).
+
+- **feat**(templates): рендерить системные экраны из default, когда активный шаблон их не объявляет (2026-06-10) [`31c74cda4cd7f60e29f9ed2b1c9b7dcc53da0976`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/31c74cda4cd7f60e29f9ed2b1c9b7dcc53da0976)
+  Веб-хост (роуты screen-template и result) и экспорт SCORM теперь резолвят
+  каталог шаблона через resolveSystemScreenDir с activeOnly: PRD-7 G21.
+  
+  Два инварианта для ученических рендеров:
+  \- activeOnly: неактивный/черновой/невалидный шаблон не доходит до ученика
+    и в выгрузку — резолв проваливается на default (NFR-01).
+  \- fallback по виду: если активный шаблон не объявляет contentTemplate
+    нужного вида (start/results), системный экран рендерится из default —
+    так рантайм совпадает с превью «Структуры» и бейджем «Из стандартного
+    шаблона», а не показывает чужой/пустой экран.
+  
+  Статус активности фильтруется в JS, а не в SQL, чтобы резолвер оставался
+  юнит-тестируемым без живой БД.
+
+### Fixes
+
+- **fix**(deps): синхронизировать package-lock (добавить @emnapi) — чинит npm ci (2026-06-11) [`004a63da26c9099a3b3707a7d8089dbe7b1c1c3f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/004a63da26c9099a3b3707a7d8089dbe7b1c1c3f)
+  Lockfile был рассинхронизирован с package.json после бампа @tailwindcss/typography: отсутствовали транзитивные @emnapi/core и @emnapi/runtime (optional WASM-runtime для @tailwindcss/oxide-wasm32-wasi). Из-за этого npm ci падал с EUSAGE (Missing ... from lock file) при сборке Docker-образа. Пересинхронизировано через npm install --package-lock-only; package.json не изменён.
+
+- **fix**(tests): список тестов на всю высоту экрана, меню действий не обрезается (2026-06-11) [`4c86457c95bb9d0383508b30d772afefbe55093f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4c86457c95bb9d0383508b30d772afefbe55093f)
+  После миграции на DS AppShell .tb-tests-list не заполнял высоту ou-shell__main, из-за чего .tree-area была всего в несколько строк: таблица «обрезалась», а абсолютное .dropdown-menu выходило за короткий overflow-контейнер и резалось. Корень сделан flex-колонкой (flex:1; min-height:0), tree-area получила min-height:0 — таблица тянется на весь экран, меню помещается.
+
+- **fix**(import): стандартная DS-кнопка «Выбрать файл» в загрузчике (2026-06-11) [`8dd4d39d53601ae65b3ad2af28d0f776fda5c25c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8dd4d39d53601ae65b3ad2af28d0f776fda5c25c)
+  Серая «таблетка» ou-uploader__cta из FileUploader выглядела как сломанная кнопка (особенно в тёмной теме). Через слот children подставлена настоящая DS-кнопка (Button secondary) с иконкой/подписями; вся зона остаётся кликабельной. Общий DS-CSS не трогаем — правка локальная, чтобы не задеть другие загрузчики.
+
+- **fix**(templates): отбраковывать битый DSL-синтаксис layout-ов при импорте (2026-06-10) [`0a317da11843cd381970da7bb68ac864df89f88f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0a317da11843cd381970da7bb68ac864df89f88f)
+  Валидация пакета проверяла наличие layout-ов и слотов, но не компилировала их. Layout с недопустимым mustache (пустой {{}}, {{{ }}}, незакрытый блок) проходил импорт, сохранялся черновиком и падал необработанным исключением в предпросмотре/рантайме (оба хоста рендерят тем же компилятором). Теперь validateTemplatePackage компилирует каждый DSL-источник манифеста (layouts/partials/systemPages/contentTemplates) и блокирует импорт ошибкой LAYOUT_TEMPLATE_SYNTAX, покрывая загрузку, обновление и ре-валидацию.
+
+- **fix**(templates): консистентный ребайнд теста на default при деактивации/удалении (2026-06-10) [`09b047d6c605fc4749a28a622569b8b749ce9812`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/09b047d6c605fc4749a28a622569b8b749ce9812)
+  Каскад деактивации и startup-reconcile переключали в designSettingsJson
+  только templateId на "default", оставляя params, templateVersion и
+  templateApiVersion от удалённого шаблона. В итоге default рендерился с
+  чужими параметрами и устаревшим снимком версии, а автору приходилось
+  вручную сбрасывать оформление теста до того, как заново загруженный под
+  тем же id шаблон подхватывался корректно.
+  
+  Вынесен чистый хелпер rebindToDefault (PRD-3 §5.3): сохраняет только
+  params, чьи ключи всё ещё есть в манифесте default, и перештамповывает
+  поля версии под default. Переиспользуется обоими путями (роут деактивации
+  и reconcile осиротевшего builtin).
+
+### Documentation
+
+- **docs**(import): PRD-14, спецификация формата, BRD (BR-11) и ROADMAP (2026-06-11) [`a8ee259748e866177c1d132f053ea3fab1aa3dcb`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a8ee259748e866177c1d132f053ea3fab1aa3dcb)
+  Контракт формата Excel (колонки вопросов, грамматики «Цены ответа» и листов книги), PRD-14 с фазами 0-2 + мультилист FR-15 и реализованным разделом «Импорт» (§5.5), запись BR-11/Этап 12 в BRD, актуализация ROADMAP.
+
+## [2.0.1-beta](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.0.0-beta...v2.0.1-beta)
+
+### Features
+
+- **feat**(editor): черновик «Структуры» с полным откатом и новые системные строки (2026-06-09) [`b6bf6a250cb901b0f642a435f9d413958d46cb00`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b6bf6a250cb901b0f642a435f9d413958d46cb00)
+  Правки структуры (добавить/изменить/переставить/сменить вариант/удалить) теперь
+  копятся локально и применяются на «Сохранить», откатываются на «Отмена» — единый
+  цикл с черновиками теста и дизайна. Каталог вариантов следует за выбором шаблона
+  в «Оформлении» (до сохранения). Добавлены строки «Старт»/«Итоги теста» и
+  per-section «Введение/Итоги раздела»; их per-page предпросмотр рендерит настоящий
+  экран через buildStartState/buildResultContext. Подсказка «Доступно вариантов»
+  показывается для всех типов строк.
+
+- **feat**(structure): системные start/results и per-section intro/summary (2026-06-09) [`d54837c04f4c5239c6867261bd6c68a9ad9d3c5f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d54837c04f4c5239c6867261bd6c68a9ad9d3c5f)
+  Жизненный цикл создаёт «Старт» и «Итоги теста» как тест-уровневые синглтоны, а
+  «Введение/Итоги раздела» — по одной строке на тему: intro/summary стали
+  per-topic, в linear_flat их нет (у плоского теста нет раздела). Стандартный
+  шаблон объявляет start/results; SCORM-рантайм исключает их из потока контентных
+  страниц — они рисуются своими экранами.
+
+- **feat**(content-pages): валидировать правки структуры против чернового шаблона (2026-06-09) [`73b81f4e362c5a7c4727db888092146a9293301d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/73b81f4e362c5a7c4727db888092146a9293301d)
+  Редактор передаёт выбранный в «Оформлении» шаблон через ?templateId=, чтобы смена
+  варианта и добавление страниц работали ещё до сохранения дизайна, а не падали
+  404 на проверке ключа против сохранённого шаблона.
+
+- **feat**(schema): ввести виды вариантов start и results (PRD-1 §4.3) (2026-06-09) [`c28841af4cd6549ffacdbf26fbd30397df67c8a3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c28841af4cd6549ffacdbf26fbd30397df67c8a3)
+  Стартовый экран и итоги теста становятся template-backed элементами структуры:
+  добавлены в variantKindSchema, enum content_pages.kind и в обязательные виды
+  стандартного шаблона.
+
+- **feat**(db): расширить content_pages.kind видами start/results (2026-06-09) [`328741b1e1ee1e17b3f051d7516f8e8fe65bd436`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/328741b1e1ee1e17b3f051d7516f8e8fe65bd436)
+  Структурная пересборка вводит системные страницы «Старт» и «Итоги теста».
+  Миграция 018 добавляет их в CHECK content_pages_kind_check — иначе вставка
+  этих строк отвергалась бы на свежей БД.
+
+### Fixes
+
+- **fix**(preview): показывать все объявленные варианты страниц и меню роутера (2026-06-09) [`f6fdb226bfa8c85fdfd787da90560b50bb590dd6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f6fdb226bfa8c85fdfd787da90560b50bb590dd6)
+  Предпросмотр перечислял только preview.routes, теряя варианты intro/info/summary,
+  которых там нет (учебные страницы, вторые варианты). Теперь buildScreenInputs
+  добавляет каждый объявленный контентный вариант с уникальным id, а роутер
+  рендерит меню тем на демо-данных. Заодно чинит невидимое название темы в карточке
+  стандартного шаблона (текст наследовал светлый цвет на светлом фоне).
+
+### Documentation
+
+- **docs**: задокументировать структурную модель start/results и per-section intro/summary (2026-06-09) [`5b343acb512dda1cd1f3330330e2c52c39415c95`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5b343acb512dda1cd1f3330330e2c52c39415c95)
+  Обновлены PRD-1 §4.3 (виды вариантов, таблица гранулярности, жизненный цикл),
+  техспецификация платформы (page kinds, требования к стандартному шаблону) и
+  руководство разработчика (пример contentTemplates, справочник kind). Зафиксирована
+  итоговая модель: start/results — тест-уровневые, intro/summary — по разделам (в
+  linear_flat отсутствуют).
+
+## [2.0.0-beta](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v1.0.0...v2.0.0-beta)
+
+### Features
+
+- **feat**(editor): предпросмотр шаблона и страницы на едином renderScreenInto (2026-06-09) [`cfa34745bbc648c8a12924bcd1fb0d8d1cfcf241`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/cfa34745bbc648c8a12924bcd1fb0d8d1cfcf241)
+  Обе модалки («Оформление» и «Структура») переведены с легаси preview.html-iframe
+  на общий TemplateScreen/renderScreenInto — паритет с разделом «Шаблоны» (легаси
+  не удалён, спит). Превью рендерят по ЧЕРНОВИКУ дизайна (шаблон + параметры из
+  текущего «Оформления»), поэтому несохранённая смена шаблона видна сразу:
+  useDesignSettings следит за draft.templateId, параметры накладываются как
+  CSS-переменные на host. Фиксированный холст (1280×720) вписывается по ширине
+  (scale-to-fit + ResizeObserver) — без горизонтального скролла. Предпросмотр
+  страницы рендерит ОДНУ страницу по её kind: questions → образец вопроса в
+  layout вопроса, контентные kind → значения самой страницы.
+
+- **feat**(templates): общий движок предпросмотра — маппинг параметров, билдеры, bundle (2026-06-09) [`365b33bc474a0f4ea5cef16ce26654a462e68fa2`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/365b33bc474a0f4ea5cef16ce26654a462e68fa2)
+  Фундамент унификации предпросмотра на единый renderScreenInto (без второго
+  движка). shared/template/params-css — канонический маппинг параметр→CSS-var
+  (фон/текст/карточки согласованно); рантайм пакета templateCore.js делегирует в
+  него через TBTemplate-глобал с inline-фолбэком. preview-context получает
+  buildContentPageScreen (одна реальная контент-страница). readTemplateBundle
+  (manifest+demo+layouts+css, резолв через source_path) + эндпоинт
+  GET /api/templates/:id/bundle отдают файлы шаблона клиентским превью.
+
+- **feat**(learner): пер-topic таймер в веб-рантайме (PRD-4 v1.1 §3.2) (2026-06-09) [`a061ee902dab3c6bc6a2f2376fc4495a3d5920f9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a061ee902dab3c6bc6a2f2376fc4495a3d5920f9)
+  Веб-плеер получает паритет со SCORM по тайм-боксу темы. Бюджет времени темы
+  (test_sections.timeLimitMinutes) переносится в persisted variant и в адаптивные
+  topic-state; новый хук use-section-timer ведёт обратный отсчёт, а истечение
+  форс-завершает текущую тему через POST /attempts/:id/expire-topic-adaptive
+  (идемпотентно при потерянном/повторном ответе — ре-синк на текущий вопрос).
+  Поле variant.sections[].timeLimitMinutes добавлено в схему; отсутствие на
+  legacy in-progress попытках трактуется как null.
+
+- **feat**(access): UI ролей и прав + диалог доступа к тесту (PRD-13) (2026-06-08) [`47b9cb1ec3e09c6bec9f6668dbcaea2420d2efe7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/47b9cb1ec3e09c6bec9f6668dbcaea2420d2efe7)
+  Маршруты защищаются по capability (ProtectedRoute requiredPermission), стартовая страница выбирается по доступной зоне. Если у пользователя нет ни одной зоны — показывается экран «Нет доступа» вместо бесконечного редиректа на /learner (иначе пустой чёрный экран). auth-контекст отдаёт can()/hasRole() из server-permissions.
+  
+  Панель «Общий доступ» (features/tests/access): владелец + гранты edit/assign, выдача/смена/отзыв с явным сохранением. Меню уровня в строке таблицы рендерится поверх (overflow таблицы ослаблен, иначе DS Table обрезает инлайн-меню Select). Ролевые компоненты: role-picker, lib/roles (formatRoles); колонка владельца и действие «Общий доступ» в списке тестов; редактор пользователей/групп с мультиролями.
+
+- **feat**(access): серверный контроль доступа по правам (PRD-13) (2026-06-08) [`bf6eca2a585f2b577e8723296386d680cf29e1e1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/bf6eca2a585f2b577e8723296386d680cf29e1e1)
+  Заменяет жёсткие гарды роли (requireAuthor/requireLearner) на requirePermission(capability) во всех доменных роутах. Объектная видимость тестов — владелец + гранты (services/test-access, middleware/test-scope). Суперадмин вычисляется из SUPERADMIN_EMAILS по хешу email (server/config), нигде не хранится; provisionSuperadmins создаёт недостающие аккаунты на старте.
+  
+  /api/auth/login и /me теперь отдают effective roles + union permissions вместо одиночного role. storage: getUserRoles/addUserRole, seed заводит роли через user_roles. Гранулярная проверка прав на каждом эндпоинте.
+
+- **feat**(access): доменная модель ролей и прав + схема БД (PRD-13) (2026-06-08) [`fcbad9d0e8a9bb11688bc6b777034b228d6ac272`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fcbad9d0e8a9bb11688bc6b777034b228d6ac272)
+  Вводит RBAC-фундамент: shared/access (роли SU/AD/AU/MG/US, карта прав, правила назначения, конфиг-суперадмин) как единый источник правды для клиента, сервера и рантайма.
+  
+  Схема: убрана легаси-колонка users.role, роли вынесены в user_roles (many-to-many); добавлены tests.owner_id и test_access_grants (владелец + гранты edit/assign). Миграция 016 создаёт таблицы и переносит роли (author -&gt; administrator, learner -&gt; learner) под guard по наличию users.role (идемпотентно/безопасно при повторах), 017 дропает колонку.
+
+- **feat**(default-template): кольцевая диаграмма на странице «Итог раздела» (2026-06-07) [`8c4c6d7cdb4d16f2b653c283977c0a3b36406f94`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8c4c6d7cdb4d16f2b653c283977c0a3b36406f94)
+  \- manifest: summary.result разрешает core.ringChart (и делает его дефолтным);
+  \- demo: итог раздела рендерится кольцом (core.ringChart);
+  \- base.css: центрирование значения внутри кольца (.renderer--ring-chart);
+  \- preview.html перегенерирован под изменённый шаблон.
+
+- **feat**(template-registry): стартовая валидация шаблонов, отпечаток и чистка осиротевших (2026-06-07) [`a40cdf2725a7b506f6ca815f381d9ea0b64fcf5b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a40cdf2725a7b506f6ca815f381d9ea0b64fcf5b)
+  reconcileUploadedTemplates расширен до reconcileTemplates: на старте проверяет
+  каждый нешипованный шаблон тем же структурным валидатором, что и при загрузке.
+  Чтобы битый/осиротевший шаблон не оказался активным на проде:
+  
+  \- осиротевшие встроенные (id вне BUILTIN_IDS, без файлов — напр. corporate/minimal)
+    удаляются, зависимые тесты транзакционно переводятся на default;
+  \- загруженные с пропавшими файлами или непрошедшие валидацию деактивируются
+    (status=invalid, не удаляются — это данные автора).
+  
+  Оптимизация: неизменённые по source_fingerprint шаблоны пропускают повторную
+  валидацию (stat без чтения содержимого). server/index.ts вызывает reconcileTemplates.
+
+- **feat**(schema): добавить templates.source_fingerprint для стартовой реконсиляции (2026-06-07) [`c3f0a64927bde4fdcb1ddb84f6d3ef335e2f7a92`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c3f0a64927bde4fdcb1ddb84f6d3ef335e2f7a92)
+  Дешёвый отпечаток источника шаблона (хеш путь/размер/mtime файлов) — ключ
+  пропуска повторной валидации при старте, когда файлы не менялись. Колонка
+  nullable; миграция 015 идемпотентна (в деплое схема применяется drizzle-kit push).
+
+- **feat**(prd-3): админ-UI реестра шаблонов — список, загрузка, предпросмотр+проверка, жизненный цикл (2026-06-07) [`3ee4926203401bb1601f329d596edfc5e4ef8107`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3ee4926203401bb1601f329d596edfc5e4ef8107)
+  Видимая часть Фазы 2/3 по утверждённому эскизу, на компонентах @universityrt/ui-kit.
+  
+  \- Страница /author/templates: карточный список с реальным превью, бейджами
+    статуса/комплектности/работоспособности (Tag+tone) и меню действий.
+  \- Модалки: загрузка (FileUploader), детали, предпросмотр+проверка
+    (3-уровневый рельс Раздел→Тип→Вариант; живой рендер тем же общим
+    renderScreenInto, что и оба рантайма — паритет PRD-12; запуск runSmokeChecks
+    в браузере → отчёт на сервер → разблокировка активации NFR-01),
+    обновление, подтверждения деактивации/удаления с подгрузкой usageCount.
+  \- Хелперы статусов и группировщик рельса; роут, пункт навигации «Шаблоны»,
+    i18n; CSS-слой tb-templates-admin.css на токенах DS.
+
+- **feat**(prd-3): эндпоинты smoke-bundle и preview-image для клиентской проверки (2026-06-07) [`19f394987e6b5aaba4aeb8d3d7f198b41e3feb5a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/19f394987e6b5aaba4aeb8d3d7f198b41e3feb5a)
+  Браузеру для предпросмотра и проверки работоспособности (NFR-03) нужны
+  файлы шаблона, которых read-API не отдаёт (preview-page — только встроенные).
+  
+  \- GET /:id/smoke-bundle: manifest + demo + layouts (без shell) + css +
+    template.js/rules из пакета; сервер только читает, не исполняет (NFR-02);
+    422 при повреждённых demo-данных.
+  \- GET /:id/preview-image: стрим assets.preview для карточек реестра, путь
+    строго внутри корня шаблона (защита от обхода).
+
+- **feat**(prd-3): фаза 2 — движок проверки работоспособности + серверный гейт (2026-06-07) [`5ace313024e04b19596efcaa616ea120f8660cc2`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5ace313024e04b19596efcaa616ea120f8660cc2)
+  Клиентская «проверка работоспособности» шаблона (NFR-03) и гейт активации (NFR-01).
+  
+  \- shared/template/preview-context.ts: мост PreviewDemoDataset → render-входы по
+    каждому экрану из manifest.preview.routes; резолв layout с fallback (§5.3),
+    контекст через общие builders (start-state/result-context/transition-context),
+    слоты вопроса (интеракция по типу) и скелет content-страниц
+  \- shared/template/smoke-runner.ts: обход экранов, рендер каждого через общий
+    renderScreenInto в изолированном контейнере, сбор SmokeReport (throw/пустой
+    обяз. слот/console-error/пустой рендер = блок; console.warn = предупреждение);
+    опц. синтакс-проверка template.js (compile-only, NFR-02) и парс rules JSON.
+    Среда-агностичен (browser iframe / jsdom)
+  \- сервер: POST /:id/smoke-test принимает клиентский SmokeReport и пишет
+    smoke_test_json (заменил заглушку-501); activate ужесточён — для uploaded
+    нужно validation.ok И smoke.ok
+  \- тесты: движок (guard «default проходит свою проверку» + битые фикстуры);
+    обновлён admin API (гейт активации, intake отчёта)
+  
+  tsc 0; vitest 2089/2089 (+13). Сервер smoke не исполняет (NFR-02).
+
+- **feat**(prd-3): фаза 1 — backend-фундамент жизненного цикла шаблонов (2026-06-06) [`5468a4d2682366bdd054a13decc370a8ef35d4aa`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5468a4d2682366bdd054a13decc370a8ef35d4aa)
+  Админ-реестр внешних шаблонных ZIP поверх платформы PRD-12 (Фаза 1: без UI и
+  без smoke-проверки — она клиентская, Фаза 2).
+  
+  \- схема `templates` +6 колонок (status/source_type/source_path/validation_json/
+    smoke_test_json/installed_at) + zod-енумы; миграция 011 (идемпотентная,
+    backfill встроенных, CHECK на status/source_type)
+  \- сервис ZIP: распаковка in-memory (jszip) с защитой от zip-slip, strip единого
+    корня, хранилище uploads/templates/&lt;id&gt;, упаковка для экспорта
+  \- структурная валидация (§4.1/§4.2): манифест, referenced-файлы, запрет
+    внешних URL/CDN, лимит размера, контракт слотов по РЕАЛЬНОМУ движку
+    renderScreenInto (data-slot="page"; question-text/question-interaction),
+    а не по аспирационным маркерам §7 — иначе штатный default не прошёл бы
+  \- Admin API /api/admin/templates: list/upload/details/activate/deactivate
+    (транзакционный каскад тестов на default)/delete/update/export/validate;
+    smoke-test — заглушка 501 (Фаза 2). Гейт author-роли
+  \- реестр: новые поля при sync, удалены мёртвые corporate/minimal, реконсиляция
+    uploaded на старте (помечает invalid при пропаже файлов)
+  \- хелпер версий API перенесён в @shared/schema (валидатор без импорта db)
+  \- тесты: валидатор (+ guard «default проходит свой валидатор»), package
+    (zip-slip/strip/round-trip), lifecycle API; правка syncBuiltinTemplates
+  
+  tsc 0 ошибок; vitest 2076/2076 (+37). Миграция к dev-БД ещё не применена.
+
+- **feat**(prd-6): авторский пейн «Повторное прохождение» + маппер retakePolicy (2026-06-04) [`381882f892d5b304482d9ef85fc13911fc8e37e0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/381882f892d5b304482d9ef85fc13911fc8e37e0)
+  Новый rail-пункт во вкладке «Настройки» (по согласованному эскизу
+  prd6-retake-policy.html): Switch enabled → (если вкл) период охлаждения,
+  Select плагина из активного реестра, SegmentedControl failPolicy и
+  best-effort warning для suspend_data. Маппер связывает форму с
+  tests.retake_policy_json в обе стороны.
+  
+  \- TestEditorModel.retakePolicy + TestSettingsPayload.retakePolicyJson
+  \- мапперы: apiToEditorModel читает (нормализуя legacy cooldownDays + кламп
+    1–3650), editorModelToPayload пишет объект при вкл / null при выкл (FR-02);
+    defaultRetakePolicy() экспортирован
+  \- dirty-tracking retake → вкладка «Настройки»
+  \- RetakePane: Switch/NumberInput/Select/SegmentedControl/Banner из @universityrt/ui-kit;
+    Select плагинов грузится с /api/tests/:id/available-eligibility-plugins
+  \- тесты: 4 round-trip маппера + 5 UI пейна; фикстуры модели дополнены retakePolicy
+  
+  Проверено вживую: off/webtutor/suspend совпадают с эскизом, реальные имена
+  плагинов из реестра, dirty-точка и save-round-trip (PUT→БД→reload) работают.
+
+- **feat**(prd-6): убрать completionReportMode — тест всегда отдаёт статус (2026-06-04) [`c643f64d051aaf0ded4a1efcb5d725ce1138ca23`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c643f64d051aaf0ded4a1efcb5d725ce1138ca23)
+  Это конструктор тестов: тест обязан оставлять вердикт passed/failed. Режим
+  completed_neutral относится к информационным модулям без оценки, не к
+  ретейк-гейту, в рантайме не реализован и к тому же обнуляет cooldown (WebTutor не
+  ставит отметку «Пройден», по которой работает гейт). Не бизнес-требование —
+  просочился из спеки PRD-6; удалён целиком.
+  
+  \- schema: убрано поле completionReportMode из retakePolicySchema
+  \- export: test-json больше не кладёт его в TEST_DATA.retakePolicy
+  \- tests: schema-prd6-retake / scorm-retake-acceptance без completionReportMode
+  \- эскиз: снят SegmentedControl «Завершение попытки в LMS» + строки таблиц
+  \- спека §4.1: режим завершения удалён; зафиксировано «тест всегда scored»;
+    заодно убран устаревший пункт про превью даты (нет «последней попытки» в авторинге)
+
+- **feat**(prd-6): блок-экран retake — системная страница шаблона (system.blocked) (2026-06-04) [`2ed460698721546fa3948e85df2af670a08105f3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2ed460698721546fa3948e85df2af670a08105f3)
+  Страница блокировки рендерится из layout system.blocked шаблона оформления,
+  а не из встроенного HTML: гейт грузит шаблон (ensureTemplate, без обращения
+  к SCORM — NFR-01/02 сохраняются), заполняет retake.* через path-DSL и
+  переключает ветки cooldown/error/default. Встроенная стена осталась только
+  как фолбэк (нет белого экрана, если у шаблона нет system.blocked).
+  
+  \- layouts system.blocked (default/corporate/minimal): ветки data-retake-branch
+    \+ слоты data-path="retake.cooldownPeriodDays|availableDateHuman"
+  \- jsdom-тест: рендер из шаблона, ветки, фолбэк, отсутствие Initialize
+  \- эскиз: заметки про источник блок-экрана (шаблон, не встроенный)
+
+- **feat**(prd-6): scorm-player мок под боевой ClientBridge-флоу (2026-06-04) [`17ea57e4085f3b9b0d1f30b1165fece9e36d28c0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/17ea57e4085f3b9b0d1f30b1165fece9e36d28c0)
+  /view_doc.html отдаёт SECID, /services/ClientBridgeService — SOAP get_metadata с датой
+  прохождения (или без блока «пройден» =&gt; допуск); object_id подсовывается в launch-URL
+
+- **feat**(prd-6): боевой источник webtutor_cooldown — WebTutor ClientBridge get_metadata (2026-06-04) [`012dbf90308ceb60f5698998959293d0b67ca886`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/012dbf90308ceb60f5698998959293d0b67ca886)
+  Вскрыто и подтверждено на живом портале РТ (DevTools в работающем SCORM, ≥2 модуля):
+  дата прохождения отдаётся НЕ через SCORM и НЕ в HTML, а SOAP-вызовом get_metadata
+  карточки курса. Гейт (same-origin, на сессии учащегося):
+  \- resolveObjectId из location/referrer/top/parent (object_id виден из вложенного SCO-фрейма)
+  \- GET /view_doc.html?object_id=&lt;oid&gt; → выскрести SECID [A-F0-9]{32} (сессионный)
+  \- POST /services/ClientBridgeService (SOAP get_metadata, form_url + wsparams) → XAML
+  \- парс «Курс был пройден ДД.ММ.ГГГГ» → cooldown-решение
+  Подтверждено: same-origin (HTTP 200, не CORS), object_id+form_url общие, дата сходится
+  с «Пройти до» самого WebTutor. Реестр-конфиг webtutor_clientbridge_rt; endpoint/marker/
+  form_url — админ-тюнинг (NFR-03). Юниты parse + parity TS↔JS-порт.
+  Оговорка: маркер — тема РТ (admin-config); «пройден»=passed (completed-not-passed не ловит)
+
+- **feat**(prd-6): WebTutor-мок в scorm-player для локальной проверки retake-гейта (2026-06-04) [`00a1be6754512a4401fb7863fe4ebd978bae161d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/00a1be6754512a4401fb7863fe4ebd978bae161d)
+  \- /api/mock-webtutor (GET/POST) + перехват /pp/Ext5/extjs_json_collection_data.html:
+    возвращает синтетическую запись по заданной дате последнего прохождения (или пусто =&gt; allowed)
+  \- мок-бар в UI: дата/статус/прогресс + «Применить + перезапустить» (перезагружает iframe →
+    гейт переоценивается) и «Очистить» (нет прошлой попытки)
+
+- **feat**(prd-6): рантайм-гейт в SCORM-пакете (до Initialize) + блок-экран (2026-06-04) [`f85551b5a2db9330172ffbc0ae560486e688fae1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f85551b5a2db9330172ffbc0ae560486e688fae1)
+  \- JS-порты engine.js/plugins.js (parity с shared/eligibility/*); gate.js — рантайм:
+    isGated, context, адаптеры webtutor(fetch)/suspend(best-effort), failPolicy+timeout(5s),
+    рендер блок-экрана и старт-оболочки «Начать курс»
+  \- boot: тело вынесено в runCourse(); gated-тесты сначала проходят гейт ДО SCORM.Initialize
+    (NFR-01/02 — blocked =&gt; блок-экран без init/cmi; allowed =&gt; «Начать курс» -&gt; runCourse)
+  \- экспорт test.retakePolicy + test.retakePlugin (runtimeEntry+config из реестра) условно (FR-02)
+  \- бандлер index.ts подключает eligibility-файлы; стили блок-экрана в styles.css
+  \- golden-parity eligibility-engine-port
+
+- **feat**(prd-6): проброс retake_policy_json в API + read-only реестр плагинов (2026-06-04) [`4f944fff47b5c4fc625185005ef04a03e01c0594`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4f944fff47b5c4fc625185005ef04a03e01c0594)
+  \- POST/PUT /api/tests принимают и сохраняют retakePolicyJson (валидация retakePolicySchema);
+    GET отдаёт поле через loadFullTest; save сохраняет настройку (omitted =&gt; без изменений)
+  \- GET /api/tests/:id/available-eligibility-plugins — активные плагины+конфиги для пикера автора
+
+- **feat**(prd-6): ядро retake gate — схема, eligibility-движок, плагины, реестр (2026-06-04) [`0cb7750e3d8640bbe943d3504b724ede185b2469`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0cb7750e3d8640bbe943d3504b724ede185b2469)
+  \- tests.retake_policy_json (jsonb) + zod retakePolicySchema (алиас cooldownDays, 1-3650,
+    failPolicy/completionReportMode/gateMode); миграция 013 (применена)
+  \- shared/eligibility: контракт EligibilityPlugin/Context/Result, движок (календарный
+    cooldown, нормализация вердикта, failPolicy, retake-state, оркестрация evaluate)
+  \- чистая логика плагинов: webtutor_cooldown (фильтр записей + выбор последней попытки)
+    и suspend_data_cooldown (best-effort); сидированный реестр плагинов/конфигов
+  \- юниты: eligibility-engine (25), eligibility-plugins, schema-prd6-retake
+
+- **feat**(prd-11): UI квот выдачи в строке темы (вкладка «Состав») (2026-06-04) [`aa06e53762b8c5d70f82c711511b06a9e951557e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/aa06e53762b8c5d70f82c711511b06a9e951557e)
+  \- QuotaEditor в tb-topic-row: свич «Квоты по подтемам» + инлайн-таблица страт
+    (Select реальных тегов темы, count, режим Ровно/Не менее на тег, удаление/добавление)
+  \- Σ-валидация (FR-05): превышение drawCount → error-баннер + блок сохранения (validation.ts)
+  \- нехватка по тегу (FR-06): колонка «Доступно» + warning-теги; свич disabled если у темы нет тегов
+  \- маппер: (де)сериализация drawBlueprintJson (пустые страты → null = равномерная выдача)
+  \- tb-components.css: tb-quota-toggle/block/sum; тесты маппера и валидации
+  \- верифицировано вживую: round-trip save/reload, error/warning/off-состояния
+
+- **feat**(prd-11): UI тегирования — chip-инпут тегов в редакторе вопроса (2026-06-04) [`28dd5d19e0c9fd7b1ca8a593ab2b40b31dd765d3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/28dd5d19e0c9fd7b1ca8a593ab2b40b31dd765d3)
+  \- TagsInput (shadcn): чипы-removable, ввод+Enter, автодополнение из тегов банка, «Создать тег»
+  \- встроен в questions.tsx (state/reset/populate/submit + suggestions); i18n-ключи tags*
+
+- **feat**(prd-11): API тегирования вопросов — приём и нормализация tags (2026-06-04) [`82f25f3e96f81a07a6b5cd319d12aae111fe2ed0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/82f25f3e96f81a07a6b5cd319d12aae111fe2ed0)
+  \- POST/PUT /api/questions принимают tags; нормализация через normalizeTags (PUT: omitted =&gt; без изменений)
+  \- storage.createQuestion/duplicateQuestion/duplicateTopicWithQuestions сохраняют tags (дубликат больше не теряет теги)
+
+- **feat**(prd-11): упрощение блюпринта квот + нормализация тегов (2026-06-04) [`f01277f0b4db9b303fdc107fa4b74b6e752dc24b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f01277f0b4db9b303fdc107fa4b74b6e752dc24b)
+  \- strata:[{tag,count,mode}] без modeGranularity/топик-mode; режим — на тег (effMode = s.mode ?? exact)
+  \- shared/tags.ts: normalizeTag/tagKey/normalizeTags (свободные метки, trim+collapse, дедуп регистронезависимо, cap 50)
+  \- движок blueprint.ts + JS-порт: сопоставление по нормализованному tagKey (регистронезависимо)
+  \- миграция 012 заменяет stale CHECK (валидирует только strata-массив)
+  \- тесты: draw-blueprint(+port), schema-prd11, tags; обновлён scorm-builders
+
+- **feat**(prd-11): Стадии 2-3 — стратифицированная выдача (движок + порт) + экспорт (2026-06-04) [`8dcad2f1b3431ebbc2bd3aa265cd4c183d06fd6a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8dcad2f1b3431ebbc2bd3aa265cd4c183d06fd6a)
+  Стадия 2: авторитетный shared/draw/blueprint.ts drawSection (страты по порядку, общий used для дедупа FR-04, остаток без exact-тегов FR-03a, warning при нехватке FR-06, shuffle инъектируется). JS-порт в server/scorm/assets/app.js (drawSection, в generateVariant с логом warnings). Сервер routes/attempts.ts использует авторитетный TS напрямую. Без блюпринта = равномерная выдача (FR-02).
+  
+  Стадия 3: buildTestJson переносит drawBlueprint в рантайм-секцию УСЛОВНО (пакеты без квот бит-идентичны). Тесты: draw-blueprint (unit) + draw-blueprint-port (golden-parity TS&lt;-&gt;порт) + export в scorm-builders. check/build зелёные, vitest 1837.
+
+- **feat**(prd-11): Стадия 1 — схема квот выдачи (draw_blueprint_json) + миграция 011 (2026-06-04) [`3b3db0d7d281d0b44ac932a13d21e9bb1e3d16c1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3b3db0d7d281d0b44ac932a13d21e9bb1e3d16c1)
+  Квоты выдачи по тегам (стратифицированная выдача, ось ДОСТАВКИ). Опциональная колонка test_sections.draw_blueprint_json; отсутствие = равномерная выдача, старые тесты не затронуты (FR-02).
+  
+  migrations/011: колонка + CHECK на modeGranularity/mode (идемпотентно, применена к dev). shared/schema.ts: drawBlueprintSchema/drawStratumSchema (modeGranularity uniform|per_tag, mode exact|min, strata&gt;=1) + колонка drawBlueprintJson + insert-схема. storage (_insertSections test-settings + legacy createTest/updateTest) + SectionPayload: проброс. routes/tests.ts sectionBodySchema: валидация Σ count &lt;= drawCount (FR-05). tests/schema-prd11-blueprint.test.ts. check/build зелёные, vitest 1813.
+
+- **feat**(prd-10): Стадия 6 — golden против эталона РТК (PRD-10 завершён) (2026-06-04) [`f8349413000e0d2cadc3aa9ce8667adf31833f53`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f8349413000e0d2cadc3aa9ce8667adf31833f53)
+  Движок shared/scoring/engine с РТК-стандартными конфигами воспроизводит ВСЕ 63 балла внешнего pandas-обработчика (key_NEW_15-08-25.xlsx + report_processed_pandas_*), 0 расхождений, по всем 4 типам (веса/exact/множ./сопост.). Правила взяты из docs/references/main/main.py.
+  
+  tests/rtk-golden.test.ts: прогон 63 реальных ответов через scoreAnswer, сверка score+sMax. tests/fixtures/rtk-golden.json: фикстура (генератор rtk-golden.gen.py, самовалидируется правилом РТК = 63 балла отчёта, воспроизводима).
+  
+  PRD-10 ЗАВЕРШЁН (Стадии 0-6): градуированная оценка end-to-end (UI-&gt;экспорт-&gt;рантайм-&gt;Σs-&gt;порог раздела-&gt;сертификация), подтверждено golden. vitest 1803, check/build зелёные.
+
+- **feat**(prd-10): Стадия 5 — порог раздела на Σs + сертификация (2026-06-04) [`84fbca2d55d58ef1ecc893a2680b68d74be32127`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/84fbca2d55d58ef1ecc893a2680b68d74be32127)
+  FR-10 (Вариант А): count-правило прохождения раздела/теста переведено на Σ s (earnedPoints) в рантайме checkPassRuleWithPartial — 3 call-site (per-section/per-topic/overall). percent-правило уже считало на Σ s. Для exact+1 балл/вопрос Σ s = число верных → старые тесты не затронуты. Тест tests/scoring-pass-rule.test.ts.
+  
+  FR-11 (сертификация) уже работала инфраструктурой PRD-2: result-variable controls_status (success/completion) переопределяет cmi.success_status/completion_status; автор задаёт countPassed()==countTopics() (DSL) — кода не потребовалось. check/build зелёные, vitest 1738.
+
+- **feat**(prd-10): Стадия 4 — UI редактора цены ответа (ScoringBuilder) (2026-06-04) [`da0b61e7dca888d92b73a69729bc8afef6b5338c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/da0b61e7dca888d92b73a69729bc8afef6b5338c)
+  Секция «Цена ответа» в редакторе вопроса: client/src/pages/author/scoring-builder.tsx (ScoringBuilder + buildScoringJson) + интеграция в questions.tsx (state/init/reset/save). Режимы: single -&gt; exact/weighted (таблица весов); multiple/matching/ranking -&gt; exact/tiered (конструктор ступеней: условия c/x op число|T/P/N, И-условие, балл, Иначе-&gt;0); реактивный sMax. На shadcn — консистентно с формой (которая не на ui-kit); эскиз = спека раскладки/поведения.
+  
+  Playwright: рендер всех режимов + end-to-end save/round-trip (scoring_json пишется и читается, токен T сохраняется). npm run check/build зелёные, vitest 1733. Отложено: preview-модалка балла, drag-reorder ступеней, серверный check-answer.ts (веб-попытки) остаётся бинарным.
+
+- **feat**(prd-10): Стадия 3 — экспорт цены ответа в SCORM-пакет (2026-06-04) [`b383b3ccc25408db70f53c632916ed21748e9163`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b383b3ccc25408db70f53c632916ed21748e9163)
+  buildTestJson (test-json.ts) переносит scoring в рантайм-вопрос — оба блока (секции + адаптив), УСЛОВНО (только когда задано → пакеты без цены ответа бит-идентичны, FR-02). Так q.scoring доходит до checkAnswer в resultsPage.js и градуированный путь активен end-to-end. Тесты в scorm-builders.test.ts (присутствует когда задан / отсутствует когда нет). npm run check чист, vitest 1733 зелёных, build ок.
+
+- **feat**(prd-10): Стадия 2 — рантайм градуированной оценки (движок + порт) (2026-06-04) [`e085d1c605e1c1c527d4c1577b5164bc45b74edf`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e085d1c605e1c1c527d4c1577b5164bc45b74edf)
+  Авторитетный shared/scoring/engine.ts: scoreAnswer -&gt; {score, sMax, ratio} (exact/weighted/tiered, счётчики c/x/T/P/N, неаддитивная ступенчатая таблица, пол max(0,·), clamp). Рукописный JS-порт server/scorm/template/app/scoring/engine.js, вшит в index.ts перед resultsPage.js. checkAnswer в resultsPage.js делегирует ScoringEngine.scoreAnswer(...).ratio (guard typeof + fallback на старое 0/1). Агрегация Σ s уже готова (earnedPoints += points × ratio).
+  
+  Тесты: scoring-engine.test.ts (юниты, РТК-неаддитивность А,Б,В-&gt;1) + scoring-engine-port.test.ts (golden-parity TS&lt;-&gt;порт, 29 сценариев). npm run check чист, vitest 1731 зелёный, build ок. Серверный check-answer.ts (веб-попытки) оставлен бинарным — отдельный шаг, не на пути РТК.
+
+- **feat**(prd-10): Стадия 1 — схема цены ответа (scoring_json) + миграция 010 (2026-06-04) [`108e443dced0841a63a960b7563e5f390b872203`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/108e443dced0841a63a960b7563e5f390b872203)
+  Градуированная оценка ответа (scoring-model §11). Отдельная nullable-колонка questions.scoring_json (ось правильности); отсутствие = exact, sMax=1 — старые тесты бит-идентичны (FR-02).
+  
+  migrations/010: колонка scoring_json + CHECK на kind (идемпотентно). shared/schema.ts: questionScoringSchema (union exact/weighted/tiered) + под-схемы condition/predicate/tier; колонка scoringJson; строгая валидация в insertQuestionSchema. storage.ts + routes/questions.ts: проброс + валидация scoringJson (FR-13). tests/schema-prd10-scoring.test.ts: unit-тесты. docs: PRD-10 §4/§10/§12 + статус, HANDOFF — OQ-1/OQ-2/OQ-3 закрыты (OQ-1 отдельная колонка; OQ-3 без durable-id, индексно как PRD-5).
+
+- **feat**(tooling): scorm-player inspector — live scale.*/result.* + LMS traffic (2026-06-03) [`6a6aa773e7773a3d342304dac34ca966b8a58ec2`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6a6aa773e7773a3d342304dac34ca966b8a58ec2)
+  Extend the local SCORM acceptance player (scripts/scorm-player.mjs) with a
+  real-time inspector so a reviewer can watch, during a played attempt:
+  
+  \- «Шкалы» / «Показатели»: live recompute of scale.* and result.* as the learner
+    answers — the parent player reads the same-origin iframe globals (TEST_DATA,
+    computeTestScales, computeTestResultVariables, calculateResults, state) and
+    calls the package's OWN functions, so values match the runtime exactly; a
+    «→ LMS» column shows what was actually published (from cmi.interactions).
+  \- «SCORM ↔ LMS»: structured RTE call log (method, args, → LMS response, error
+    code) replacing the flat log, plus a cmi.interactions.* table (id /
+    learner_response / description) and the latest suspend_data.custom snapshot
+    (scale.*/result.* + errors). The RTE shim now records a structured traffic
+    log and exposes window.__scorm (getCmi/getTraffic/subscribe/restore/reset).
+  
+  generate-sample-scorm.ts gains a compact PRD-5/PRD-2 scoring fixture (2 scales
+  sym/asym with bands, 24 option measurements, 3 result variables incl. a
+  countScales/scaleById formula) so `npm run scorm:sample` exercises the inspector.
+  
+  Verified end-to-end in the browser: live scales climb on answer, formulas
+  resolve live, and at finish the scale_*/scale_*_level/var_* pseudo-interactions
+  \+ suspend_data.custom appear with values matching the live recompute. tsc green.
+
+- **feat**(prd-5): B4b — «Вклады вопросов» contribution matrix (2026-06-03) [`a9bbc9a6a85c00352fd5c6f726649d3da257c38f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a9bbc9a6a85c00352fd5c6f726649d3da257c38f)
+  Complete the «Шкалы» tab with the per-question contribution matrix (PRD-5 B4b):
+  
+  \- model/mappers: QuestionMeasurementModel + measurements in the editor model;
+    buildMeasurementsFromApi resolves each row's scaleId to the stable scale key
+    (the editor references scales by key, never the uuid) and drops orphans.
+  \- data layer (scales-api): loadContributionQuestions enumerates each test
+    question's answer units with correctness — options (single/multiple), directed
+    pairs (matching, "l:r") and item@position placements (ranking, "item:pos");
+    saveMeasurements diffs per question and PUTs only the changed ones, resolving
+    scaleKey→scaleId from the persisted scales (skips rows whose scale is unsaved).
+  \- use-test-editor: measurements reconcile runs after scales on save (re-reading
+    scale ids when a scale was just created) and marks the «Шкалы» tab dirty.
+  \- UI (scales-section): ContributionsPane — coverage banner, per-question cards
+    (status dot ok/warn, type + contributed-scale chips), and the unit×scale grid
+    with numeric cells (empty=no row, 0/negatives valid), correct-unit marker and
+    per-type hints. Deleting a scale cascades its contributions out of the draft.
+    The «Список шкал» card subtitle now shows coverage («N вопросов») + warn dot.
+  \- tests: 11 unit tests for the measurements mapper, saveMeasurements diff and
+    loadContributionQuestions unit/correctness enumeration.
+  
+  Verified against docs/wireframes/approved/prd2-prd5-scoring-tabs.html
+  (s-contributions) at 1440px: single/multiple/matching grids, live coverage
+  (banner/dots/chips/list subtitle), create→save (PUT /measurements with key→id)
+  → reload round-trip, and scale-delete cascade — all exercised end-to-end. npm run
+  check and npm run build green; full vitest run 1608 passed.
+
+- **feat**(prd-5): B4a — «Шкалы» tab, scale list + bands + preview (2026-06-02) [`4044eb0e40440ad5d9958d841d9db077cd57af43`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4044eb0e40440ad5d9958d841d9db077cd57af43)
+  Add the «Шкалы» editor tab (PRD-5 B4a, scale-definitions side):
+  
+  \- model/mappers: ScaleModel + ScaleBandModel in the editor model;
+    buildScalesFromApi lifts bands from config_json; emptyEditorModel seeds [].
+  \- validation: scale key grammar/uniqueness + bands numeric/ascending/non-overlap
+    (validateScales), routed to the «Шкалы» tab.
+  \- data layer: scales-api.ts — saveScales diff-on-save orchestrator (delete-first,
+    POST/PUT by index, bands → config_json with empty-label fallback), previewScales
+    client and loadScalePreviewContext (demo-answer units derived from measurements).
+  \- use-test-editor: «scales» tab key, dirty-diff, tab statuses, and save reconcile
+    alongside result variables.
+  \- UI: sections/scales-section.tsx — rail (Список шкал / Вклады вопросов), scale
+    cards (key/label/aggregation/source/recalc/LMS target), bands editor, show-to-
+    learner switch, empty/error states, and the calculation-preview modal wired to
+    the shared engine. Source «Другие шкалы» is disabled (composite deferred); the
+    contributions matrix is a placeholder pending B4b.
+  \- tests: 21 unit tests for the mapper/validation/save/preview logic; existing
+    section fixtures get scales: [].
+  
+  Verified against docs/wireframes/approved/prd2-prd5-scoring-tabs.html (s-scales,
+  s-scales-empty, s-preview-calc, s-scale-error) at 1440px in light and dark via
+  Playwright; create→reload→delete round-trip exercised end-to-end. npm run check
+  and npm run build green; full vitest run 1597 passed.
+
+- **feat**(prd-5): B5 wiring + export + preview — scale.* in runtime/LMS (2026-06-02) [`fbb496a8eb4a7f94ecffef669cce750dd64aa1d6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fbb496a8eb4a7f94ecffef669cce750dd64aa1d6)
+  Complete the PRD-5 scale track's runtime/export side:
+  
+  \- export: test.scales[] (bands lifted from config_json) + flattened
+    test.measurements[] with scaleId resolved to the stable key; loadFullTest
+    and the SCORM export now load scales + measurements via storage.
+  \- runtime (resultsPage.js): compute scale.* once per attempt BEFORE result.*
+    so result-variable formulas can read scaleById()/countScales(); fill the
+    DSL context.scales; emit scale_{key} (+ scale_{key}_level for banded scales)
+    pseudo-interactions in all three finish paths for scorm_target interaction/both.
+  \- suspend_data: persist scaleValues + scaleErrors per attempt (deterministic
+    recompute on recovery, NFR-04).
+  \- preview: POST /api/tests/:id/scales/preview runs the shared engine over demo
+    answers and returns { values, errors }.
+  \- tests: export scales/measurements assertions, preview endpoint cases, and
+    getScales/getQuestionMeasurements added to the loadFullTest/export route mocks.
+
+- **feat**(prd-5): B5 — scale engine runtime port + golden parity + assembly (2026-06-02) [`923db2b48ee30abc189a9a156be64383bbb9f58f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/923db2b48ee30abc189a9a156be64383bbb9f58f)
+  Plain-JS twin of shared/scales/engine (server/scorm/template/app/scales/engine.js), joined before resultsPage.js so scale.* is available to the result-variable step. 5-scenario golden parity test (TS ≡ port) covering sum/percent±direction/bands/multiple/matching/ranking/weighted_avg. tsc + build green; the engine is bundled but not yet invoked (wiring into resultsPage.js follows, mirroring the A3→A7 split).
+
+- **feat**(prd-5): B5 core — scale computation engine + fixture tests (2026-06-02) [`cfa436ad329a068f3c5c45453cc3e85dce7d2686`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/cfa436ad329a068f3c5c45453cc3e85dce7d2686)
+  Pure scale engine (shared/scales/engine.ts): select active contributions per the learner's answer (index-based source_key — option index, matching left:right, ranking item:pos, or whole-question), aggregate (sum/avg/weighted_avg/max/min) into raw, normalize (none/percent with positive|inverse direction over the computed raw range), and apply interpretation bands to the raw value for level/label. Authoritative TS implementation; a runtime JS port follows. 13 fixture tests including the MBI EE (percent) / AD (inverse) / banded scenarios and all four answer types.
+
+- **feat**(prd-5): B3 — scales + measurements API routes (2026-06-02) [`cd94af94f93a18d9d47c55c55478a23faa43a3c1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/cd94af94f93a18d9d47c55c55478a23faa43a3c1)
+  server/routes/scales.ts (mounted at /api/tests): scales GET/POST/PUT/DELETE/reorder with key-uniqueness (422), and measurements GET (whole-test matrix) + PUT /:questionId (replace one question's rows, test/question id from the path). 16 route integration tests (auth, 404, zod 422, key conflict, CRUD/reorder/upsert lifecycle).
+
+- **feat**(prd-5): B2 — scales + measurements storage + real scale keys in validator (2026-06-02) [`538b595e81c563d3fa6e3c93345fa644ee086db3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/538b595e81c563d3fa6e3c93345fa644ee086db3)
+  Storage CRUD/reorder for scales (mirrors result-variable methods) plus getQuestionMeasurements (matrix), getQuestionMeasurementsByQuestion (per-card) and upsertQuestionMeasurements (transactional delete-then-insert replacing one question's contributions). validateResultVariableFormula now resolves scaleById/countScales against the test's real scale keys (was an empty set in Этап A). Refined the measurement zod: valueJson is a number and condition_json stays plain jsonb (reserved) to keep the insert type aligned with the table.
+
+- **feat**(prd-5): B1 — scales + question_measurements schema (migration 009) (2026-06-02) [`29282abc831c6fa36c87cd8ebb52a360c3bbb16a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/29282abc831c6fa36c87cd8ebb52a360c3bbb16a)
+  Add the two PRD-5 §9 tables. scales: test-scoped named aggregate (key/label/type/aggregation/normalization/direction/config_json/show_to_learner/scorm_target), UNIQUE(test_id,key). question_measurements: explicit per-unit contribution of a question into a scale (source_type question/option/matching_pair/ranking_position + source_key, value_json scalar, weight, reserved condition_json). FKs are varchar(36) to match the actual tests.id/questions.id primary keys (PRD-5 §9 said uuid — same correction as PRD-2 §8.1). Drizzle tables + zod insert schemas (key regex, label ≤120). Migration applied to the dev DB.
+
+- **feat**(prd-2): A8 UI — Показатели editor tab (2026-06-02) [`3a4b8f418e5d394f8e189b95bb3ca27564fe2176`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3a4b8f418e5d394f8e189b95bb3ca27564fe2176)
+  Register the metrics tab (EditorTabKey/TAB_ORDER/TAB_LABELS, tab routing, per-tab dirty diff) and persist result variables in the save mutation (PUT test, reconcile variables, refetch for ids). New result-variables-section.tsx per the approved wireframe: reorderable accordion cards (@dnd-kit), name/label/type/controls_status form, Конструктор/DSL formula editor with a visual builder and debounced live validation, LMS publication + show-to-learner, empty state. Section test fixtures updated for the new required model field.
+
+- **feat**(prd-2): A8 data layer — result variables in the editor model (2026-06-02) [`5af1d4c478839077dd7049289fb3d938dcb74cca`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5af1d4c478839077dd7049289fb3d938dcb74cca)
+  Add ResultVariableModel + resultVariables to TestEditorModel; map them in apiToEditorModel/emptyEditorModel; synchronous validation (name grammar/uniqueness, required label/formula, controls_status boolean-only + single controller); and result-variables-api with the diff-on-save orchestrator (deletes, then create/update in display order with index as sortOrder) and the live validate-formula wrapper.
+
+- **feat**(prd-2): A8 — include result variables in GET /api/tests/:id (2026-06-02) [`26153e25da2355b4a1c621f773d42d318d2966c8`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/26153e25da2355b4a1c621f773d42d318d2966c8)
+  The editor loads result variables into its draft and reconciles them on save against this snapshot, so loadFullTest now returns them alongside sections and adaptive settings.
+
+- **feat**(prd-2): A7 runtime — compute result.*, emit var_ interactions, controls_status (2026-06-02) [`ca7d8cc0915791c728c9aa73b2d5b40536205fc3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ca7d8cc0915791c728c9aa73b2d5b40536205fc3)
+  Wire the tested computeResultVariables core into the SCORM runtime finish flow. After scoring, resultsPage.js builds the formula context (percent + per-topic results; tags/scales/sections resolve to neutral defaults for Этап A) and computes result.* once per attempt. A boolean controls_status=success variable overrides cmi.success_status; completion overrides cmi.completion_status after SCORM.finish. All three finish paths (adaptive/standard/lms-only) append var_{name} pseudo-interactions for variables published to the LMS (scorm_target interaction/both). suspendAttempts.js persists resultValues + formulaErrors per attempt so a recovered session restores the same values (NFR-04).
+
+- **feat**(prd-2): A6 — export result variables into the SCORM package (2026-06-02) [`e0465131afdd4bcb9395044df821b9c19c7e9fb4`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e0465131afdd4bcb9395044df821b9c19c7e9fb4)
+  Load result variables at export and carry them into TEST_DATA: ExportData.resultVariables, a mapped test.resultVariables[] block in buildTestJson (id/name/label/type/formula/show_to_learner/scorm_target/controls_status/sort_order, ordered by sort_order), and the storage load + pass-through in the export route. The runtime (A7) consumes test.resultVariables to compute result.* via FormulaDSL. npm run check clean.
+
+- **feat**(prd-2): A5 — result-variable API routes (2026-06-02) [`a64167d37dfc9f66553fbb160299f4f1c269ef9b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a64167d37dfc9f66553fbb160299f4f1c269ef9b)
+  REST CRUD + reorder + live formula validation under /api/tests/:id/result-variables (PRD-2 §9): GET (auth), POST/PUT/DELETE/reorder/validate-formula (author). reorder and validate-formula are registered before /:varId so their literal segments aren't captured as ids. POST/PUT validate the body via insertResultVariableSchema, run the shared DSL validator (422 + validation payload on failure), and reject a second success/completion controller per test. Mounted in routes/index. npm run check clean.
+
+- **feat**(prd-2): A4 — result-variable storage CRUD + reorder + formula validation (2026-06-02) [`208cbfdcfce92ac0a5a49b615dc0b35b0f9dd3a9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/208cbfdcfce92ac0a5a49b615dc0b35b0f9dd3a9)
+  Add getResultVariables / create / update / delete / reorderResultVariables to IStorage + DatabaseStorage, modelled on the content_pages methods (test-scoped, uuid id, transactional reorder). validateResultVariableFormula builds the test's reference sets (topicIds from test_sections; priorVarNames = result vars with a smaller sort_order for the DAG rule) and delegates to the shared DSL validator; scaleById resolves to warnings while scales are unimplemented (Этап A). npm run check clean.
+
+- **feat**(prd-2): A3 — runtime DSL port + golden parity (2026-06-02) [`3aced09ce67ddef41c61abcf1299d9c613839bbf`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3aced09ce67ddef41c61abcf1299d9c613839bbf)
+  Plain-JS twin of shared/formula for the un-bundled SCORM runtime (app/dsl/formula.js, exposes global FormulaDSL.evaluate), wired into joinJsParts before resultsPage.js. A golden corpus (tests/fixtures/formula-cases.json, 27 cases) runs both the authoritative TS evaluator and the port and asserts they agree, so the two cannot silently diverge (PRD-2 §12). 54 tests green, npm run check clean.
+
+- **feat**(prd-2): A2 — result-variable formula DSL (parser/evaluator/validator) (2026-06-02) [`e67ae1f3d93a6da7a49674f62a705a9ddd24385b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e67ae1f3d93a6da7a49674f62a705a9ddd24385b)
+  Shared DSL for result-variable formulas (PRD-2 §4.2-4.3), no eval/Function: tokenizer -&gt; recursive-descent parser (precedence OR&lt;AND&lt;comparison&lt;+-&lt;*/&lt;unary&lt;primary) -&gt; tree-walking evaluator (neutral defaults for missing keys, division-by-zero -&gt; 0) -&gt; static validator (return-type inference vs declared type; topic/section ref errors; scaleById warnings while scales are unavailable in Этап A; var() forward-only sort_order for DAG, §10.9; countScales band-level warnings). 27 unit tests green, npm run check clean.
+
+- **feat**(prd-2): A1 — result_variables schema + migration 008 (2026-06-02) [`a6e3e32f644c945dede768f8209f2a6a53975d3e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a6e3e32f644c945dede768f8209f2a6a53975d3e)
+  Этап A foundation. Add the test-scoped result_variables table (uuid id, varchar(36) test_id FK to tests — note PRD-2 §8.1 said uuid for test_id, corrected to match tests.id) with name-regex CHECK, type/scorm_target/controls_status enums, and two partial unique indexes (one success / one completion controller per test). Add questions.tags jsonb for aggregate formulas. Drizzle table + insertResultVariableSchema (name regex, label length) + types. npm run check clean.
+
+- **feat**(scorm-templates): expose variant kind in preview manifests (2026-05-30) [`e01af6e037cc683b85c4fc892c16955e494e517a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e01af6e037cc683b85c4fc892c16955e494e517a)
+  Tag built-in template variants with their `kind` (intro/info/summary) so the
+  editor's variant.kind linking logic recognizes them. Add a `router.menu`
+  card-menu variant to the default template for router_by_topics flow and bump
+  its manifest version to 1.1.0.
+
+- **feat**(prd-8): close — router lifecycle events (FR-18) + cross-PRD closure (2026-05-29) [`5ba2eb6510825b8e0594c2d5a2d9b20031f9a0d0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5ba2eb6510825b8e0594c2d5a2d9b20031f9a0d0)
+  PRD-8 is closed by composition. Most of its acceptance criteria were
+  delivered as PRD-7 (UI) and PRD-4 (runtime) sub-phases — see audit
+  below. The remaining delta is FR-18 router lifecycle events; this
+  commit lands them and marks PRD-8 done in ROADMAP + spec.
+  
+  Cross-PRD coverage (audit):
+    \- FR-01/02/03/04/05/05a/06/06a/b/c — UI in PRD-7 (router_by_topics
+      in basic-settings-section, Structure tab tree-branches G45,
+      page-row-expand for router params, Settings→Сценарий fields).
+    \- FR-07/8/9/10/11/12 — router runtime in PRD-4 phase 4c (router
+      state machine, selectRouterTopic, returnFromTopic, completionPolicy
+      \+ sectionUnlockRules in routerFlow.js).
+    \- FR-13/14 — recovery + SCORM score on final result already covered
+      by PRD-4 phase 4f + existing scoring path.
+    \- FR-15/16/17 — template router-layout: default ships router.menu
+      variant from PRD-7 G48; fallback when template lacks one.
+  
+  PRD-8 FR-18 (this commit) — router lifecycle events:
+    \- router:shown — emitted from renderRouterPage with the current
+      sections snapshot (topicId, name, required, status, unlocked) +
+      a readyToFinish boolean.
+    \- router:sectionSelected — emitted from selectRouterTopic.
+    \- router:finalResultUnlocked — first time readyToFinish flips true
+      during a render (idempotent via state._routerFinalUnlockedFired).
+    \- router:finalResultOpened — emitted when finishRouter is invoked
+      by the learner.
+    \- Plumbing: thin emitRouterEvent helper around
+      TestBuilder.template.emit (existing event bus from templateCore).
+      Templates subscribe via TestBuilder.template.on(name, handler).
+  
+  Tests (tests/prd-4-acceptance.test.ts): +1 covering all four events
+  present in the bundled app.js for the router_by_topics combo.
+  
+  ROADMAP.md:
+    \- PRD-8 row in §0 main table → Закрыта 2026-05-29 with cross-PRD
+      summary.
+    \- PRD-8 row in §0.1 critical path → Закрыта.
+    \- Header date kept at 2026-05-29; subtitle updated to «PRD-4 +
+      PRD-8 закрыты — Storyline-MVP shippable».
+  
+  PRD-8 spec (section-router-flow.md):
+    \- Status line → **Закрыт 2026-05-29** with cross-PRD pointer and
+      acceptance test link.
+  
+  Verification: type-check clean; full vitest 1423 / 1424 (1 pre-existing
+  DB-connectivity failure in tests/migration-prd7.test.ts, unchanged).
+  
+  Storyline-MVP is now shippable on the code level. Remaining work
+  documented for follow-up: live-browser acceptance pass (Playwright +
+  axe + LMS smoke) is a separate gate.
+
+- **feat**(prd-4): phase 5 — golden acceptance tests + PRD-4 closure (2026-05-29) [`4d9d03842c70e7c5e2cb718e3e55d5f6849b65e5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4d9d03842c70e7c5e2cb718e3e55d5f6849b65e5)
+  Phase 5 closes PRD-4 v1.1 in full. The new acceptance file exercises
+  all 5 valid (mode × flowMode) combinations end-to-end through
+  generateScormPackage; ROADMAP + PRD-4 spec marked Закрыт 2026-05-29.
+  
+  Acceptance (tests/prd-4-acceptance.test.ts, 18 tests):
+    \- (standard, linear_flat)     — flowPolicy export, content-flow bundle
+    \- (standard, linear_by_topics) — section.required default, content
+                                      pages with kind
+    \- (standard, router_by_topics) — router page export, RouterFlow bundle
+    \- (adaptive, linear_by_topics) — adaptiveTopics levels strict gating,
+                                      AdaptiveSession + adaptive-session
+                                      marker bundle
+    \- (adaptive, router_by_topics) — both router + adaptive bundles
+    \- Cross-cutting: startSectionTimer / stopSectionTimer (Phase 4e),
+                     restoreRouterSession / restore_router (Phase 4f)
+                     bundled.
+  
+    Each combo packs a 2-topic / 2-question / level fixture via the
+    REAL generateScormPackage pipeline, reads TEST_DATA out of the
+    resulting zip, and asserts the expected runtime surface. Router
+    packs include a kind=router content page; adaptive packs include
+    per-topic levels with non-empty fields (PRD-4 v1.1 §3.1.2 strict
+    gating). The fixture builder handles permutations of router page
+    \+ adaptive settings so a single parameterised function covers all
+    branches.
+  
+  ROADMAP.md:
+    \- PRD-4 row in §0 main table → Закрыта 2026-05-29 with phase
+      summary and cross-link to spec v1.1.
+    \- PRD-4 row in §0.1 critical path → Закрыта; PRD-8 still depends.
+    \- Header date bumped to 2026-05-29.
+  
+  PRD-4 spec (course-flow-sections.md):
+    \- Status line updated to **Закрыт 2026-05-29** with phase summary
+      and cross-link to the acceptance test file.
+  
+  Verification: type-check clean; full vitest 1422 / 1423 — 18 new
+  PRD-4 acceptance tests + 1 pre-existing migration DB-connectivity
+  failure unrelated to this change (tests/migration-prd7.test.ts
+  needs a local PG).
+  
+  PRD-4 v1.1 ЗАКРЫТ. Next on the MVP critical path: PRD-8 (router-flow
+  extension — extended router UI in editor's «Структура» tab; runtime
+  is already in place).
+
+- **feat**(prd-4): phase 4f — sectional state recovery for router_by_topics (2026-05-29) [`4b5438c7038362e1533041ef729767af597a6f52`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4b5438c7038362e1533041ef729767af597a6f52)
+  PRD-4 v1.1 §3.2: a learner who closes the SCO mid-test in router mode
+  can resume with all previously-completed topics still marked as
+  «Пройдена». In-progress section work is dropped (the topic re-enters
+  state 'notStarted' so the learner reruns it from scratch).
+  
+  Persistence contract (utils/scorm/sessionRecovery.js):
+    \- saveCurrentSession now persists in router mode regardless of
+      timer / adaptive guards (which previously short-circuited save).
+      New fields on the stored session blob: flowMode,
+      routerTopicStates, sectionResults, routerFinished.
+    \- Section timer is intentionally NOT persisted — time passing while
+      the SCO was closed is unrecoverable; re-entry to a timed section
+      starts the timer fresh.
+    \- Adaptive engine in-flight state still skipped (single-topic
+      sessions inside router mode are dropped on save; the topic
+      re-runs cleanly from the AdaptiveSession entry).
+  
+  determineRecovery (sessionRecovery.js):
+    \- New action: 'restore_router' fires when the active flowPolicy.mode
+      is router_by_topics AND a non-stale session exists for that mode.
+    \- Non-router modes keep the existing 'restore' / 'show_last_attempt'
+      / 'start_fresh' branches unchanged.
+  
+  restoreRouterSession (sessionRecovery.js, new):
+    \- Re-applies routerTopicStates + sectionResults + routerFinished
+      from the saved session onto state.
+    \- Demotes any 'inProgress' topic back to 'notStarted' — the
+      learner enters the router with completed topics marked
+      «Пройдена» and the unfinished section ready to re-run.
+  
+  Bootstrap dispatch (bootstrap/main.js):
+    \- New restore_router branch: restoreRouterSession → generateVariant
+      → rebuildPageSequence → goToPageSequenceIndex(routerIdx). The
+      router page becomes the active item, so render() routes to
+      RouterFlow.renderRouterPage with the restored topic-state map.
+    \- beforeunload save trigger broadened: any router-mode session
+      (regardless of phase) gets saved, not just 'question' phase. This
+      captures the routerTopicStates snapshot even when the learner
+      closes the SCO while staring at the router page.
+  
+  Checkpoint on returnFromTopic (routerFlow.js):
+    \- Each section completion explicitly invokes saveCurrentSession,
+      so a SCO kill that escapes beforeunload (browser crash, process
+      termination) still leaves the completed topic in the persistent
+      store.
+  
+  What this does NOT cover:
+    \- Linear (linear_by_topics) mid-section recovery — the section's
+      answered questions can already be restored via the legacy
+      no-timer path; only sectional checkpoints (per-topic completion
+      markers) aren't tracked separately for linear mode. Linear
+      flows complete linearly anyway — no point letting the learner
+      skip topics on resume.
+    \- Adaptive session in-flight state inside a topic chunk — the
+      AdaptiveSession state is too engine-specific to rehydrate
+      cleanly. Re-entering the topic restarts the adaptive session
+      from the top.
+  
+  Verification: type-check clean; full vitest 1404 / 1405 (1 pre-existing
+  DB-connectivity failure in tests/migration-prd7.test.ts, unrelated to
+  this change — needs PG running locally).
+  
+  PRD-4 v1.1 Phase 4 complete: 4a-4f all landed. Next is Phase 5
+  (golden tests for all 5 valid combos + manifest validation E2E).
+
+- **feat**(prd-4): phase 4e — per-section time limits enforcement (2026-05-29) [`318ad208b789753044be3a4b62fa38ef37209737`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/318ad208b789753044be3a4b62fa38ef37209737)
+  PRD-4 v1.1 §3.2: a section can carry its own time limit in addition to
+  the test-wide one. Both timers run independently — section expiry
+  truncates the current section; test expiry submits the whole attempt
+  (legacy behaviour, unchanged).
+  
+  Exporter (server/scorm/builders/test-json.ts):
+    \- sections[].timeLimitMinutes now in TEST_DATA, null when absent
+      (= inherit_test: section uses the test timer, no extra timer).
+    \- 2 new tests cover the export presence/default.
+  
+  Runtime — state (state.js):
+    \- state.sectionTimer: {topicId, limitMinutes, remainingSeconds, expired,
+      onExpire, intervalId} | null. Set by startSectionTimer, cleared by
+      stopSectionTimer (or autonomously on expiry).
+  
+  Runtime — timer (timer/timer.js):
+    \- New startSectionTimer(topicId, limitMinutes, onExpire) and
+      stopSectionTimer(). Lives next to the existing initTimer/updateTimer
+      (test-wide). updateTimerDisplay now also refreshes #section-timer-display
+      when present, AND syncs onto TEST_DATA.section.current.timer.{remainingSeconds,
+      displayText} so templates using data-path bindings see live values.
+    \- Sub-60s threshold flips to the same red/bold style as the main timer.
+  
+  Runtime — linear flows (contentFlow.js):
+    \- syncPhaseToCurrentPage now calls maybeUpdateSectionTimer(item) on
+      every navigation step. Detects topic transitions by reading topicId
+      from the current item (content.page.topicId, adaptive-session.topicId,
+      or flatQuestions[questionIndex].topicId). Stops the current section
+      timer when the topic changes, starts a new one when the new section
+      has timeLimitMinutes set, no-op when the section inherits the test
+      timer or carries no limit.
+    \- On expiry, skipSectionFromCurrent(topicId) walks pageSequence past
+      every item belonging to the expired topic and re-enters the next
+      one via syncPhaseToCurrentPage. If the section was the last in the
+      sequence the attempt submits normally.
+  
+  Runtime — router (routerFlow.js):
+    \- selectRouterTopic now starts the section timer when the picked
+      topic has timeLimitMinutes. On expiry the handler calls
+      returnFromTopic (matches the router's "section is done" semantics —
+      learner returns to the hub even if time ran out).
+    \- returnFromTopic always calls stopSectionTimer first (safe when no
+      timer is active).
+  
+  Adaptive interaction:
+    \- When (adaptive, linear_by_topics) or (adaptive, router_by_topics)
+      runs, the section timer wraps the adaptive session lifecycle the
+      same way it wraps content+questions in standard mode. The adaptive
+      engine itself does not need to know about the timer — it ticks on
+      its own interval.
+  
+  Verification: type-check clean; full vitest 1405/1405 (+2 nets new for
+  the section.timeLimitMinutes export tests). Runtime behaviour observable
+  only at SCORM playback time — Phase 5 golden tests will exercise the
+  timer paths end-to-end.
+  
+  Remaining: Phase 4f (recovery — persist section timer + currentRouterTopic
+  across SCO reload) + Phase 5 (golden tests for all 5 valid combinations).
+
+- **feat**(prd-4): phase 4d-iii — (adaptive, linear_by_topics) integration (2026-05-29) [`ecfaa042c95b188276c308b1bb556f84ef19c28b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ecfaa042c95b188276c308b1bb556f84ef19c28b)
+  Closes the last combo of PRD-4 v1.1 §4.6. In adaptive + linear_by_topics
+  mode the linear traversal now wraps each topic's adaptive session
+  between its before_topic and after_topic content pages, matching the
+  spec's «контент → вопросы (adaptive) → результат → контент» chain.
+  
+  contentFlow.rebuildPageSequence:
+    \- New branch for `(adaptive, linear_by_topics)`. For each section in
+      TEST_DATA.sections, emits:
+        [before_topic content..., {kind: "adaptive-session", topicId},
+         after_topic content...]
+      Test-scope «after» content (with summary-boundary split into
+      pre/post-results) follows the existing logic.
+  
+  contentFlow.syncPhaseToCurrentPage:
+    \- Handles `kind === "adaptive-session"`: sets phase to
+      "adaptive-session" and invokes maybeLaunchAdaptiveSession.
+  
+  contentFlow.maybeLaunchAdaptiveSession (new helper):
+    \- Idempotent — re-renders during a running session don't restart it
+      (state.adaptiveState non-null guard).
+    \- Calls AdaptiveSession.runAdaptiveSession(topicId, onComplete). The
+      callback freezes the topic's normalised result in
+      state.sectionResults[topicId] (consistent with Phase 4b), then
+      advancePageSequence to walk past the marker into after_topic.
+    \- Defensive fallback when AdaptiveSession isn't loaded or returns
+      false (Phase 1 L2/L3 strict gating should prevent this in
+      production): logs a warning and advancePageSequence to skip.
+  
+  Result normalisation (adaptiveSession.js):
+    \- New normalizeAdaptiveTopicResult: maps adaptive topicResults shape
+      (achievedLevelIndex, levelsAttempted, levelPercent...) onto the
+      standard section-result shape (topicId, percent, correct, total,
+      passed) consumed by computeSectionResult / templates bound to
+      section.current.result.*. Adaptive-specific fields preserved with
+      an `isAdaptive: true` discriminator for templates that branch.
+    \- maybeFinishSingleTopic now passes the normalised result to the
+      caller's onComplete, ensuring both router and linear adaptive
+      flows freeze the same shape into sectionResults.
+  
+  PRD-4 v1.1 §4.6 «passed» semantics:
+    \- Adaptive section is considered «passed» when achievedLevelIndex
+      is non-null (i.e. minimum level was confirmed). The «top level»
+      variant lives in the preserved achievedLevelIndex/Name field for
+      templates that want the stricter signal.
+  
+  What this closes:
+    \- Phase 4d is now complete (i / ii / iii). All five valid (mode,
+      flowMode) combinations have runtime support:
+        (standard, linear_flat)        legacy, unchanged
+        (standard, linear_by_topics)   linear topic chunks (4a/4b)
+        (standard, router_by_topics)   router state machine (4c)
+        (adaptive, linear_by_topics)   per-topic adaptive in linear flow  ←
+        (adaptive, router_by_topics)   per-topic adaptive in router flow
+  
+  Verification: type-check clean; full vitest 1403/1403 (runtime changes
+  observable only at SCORM-package playback time — covered E2E in Phase 5
+  golden tests).
+  
+  Remaining PRD-4 phases: 4e (per-section time limits) + 4f (recovery)
+  \+ 5 (golden tests).
+
+- **feat**(prd-4): phase 4d-i/ii — single-topic adaptive + router integration (2026-05-29) [`36faab755dbfe06b5e2bb2028ea213478feba433`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/36faab755dbfe06b5e2bb2028ea213478feba433)
+  Closes the (adaptive, router_by_topics) combo end-to-end. The router
+  now launches a per-topic adaptive session when a card is clicked, and
+  returns to the router page when the topic's adaptive flow signals
+  completion (with achievedLevel frozen in sectionResults).
+  
+  New module (adaptiveSession.js):
+    \- runAdaptiveSession(topicId, onComplete): thin wrapper that filters
+      TEST_DATA.adaptiveTopics to one topic, calls the existing
+      initAdaptiveTest with that single-topic input, and tags
+      state.adaptiveState with `_scope: "single-topic"` + `_onComplete`.
+      Reuses all level / threshold / transition logic from
+      adaptive/adaptive.js.
+    \- maybeFinishSingleTopic(): invoked from the adaptive engine when
+      the multi-topic loop hits «all topics completed» (which in
+      single-topic scope means OUR topic is done). Clears
+      state.adaptiveState, extracts the topic result, fires the
+      onComplete callback. Returns true to signal the caller (in
+      adaptive/adaptive.js) to suppress legacy auto-submit.
+  
+  Engine hook (adaptive/adaptive.js · submitAdaptiveAnswer):
+    \- On «all topics completed», calls AdaptiveSession.maybeFinishSingleTopic
+      before falling back to legacy multi-topic finalization.
+    \- When handled, sets `result.singleTopicHandled = true` so the caller
+      (adaptiveRender) skips renderAdaptiveResults.
+  
+  Render guard (adaptiveRender.js):
+    \- Both `submitAdaptiveAnswerAndShowFeedback` and
+      `submitAdaptiveAnswerAndContinue` early-return when
+      `result.singleTopicHandled` — state.adaptiveState is null by now
+      and the caller's onComplete has already advanced the next phase.
+  
+  Bootstrap gate (bootstrap/main.js):
+    \- Auto-init of the multi-topic adaptive engine now only fires for
+      (adaptive, linear_flat) — the legacy mode kept for backward compat
+      with packages saved before PRD-4 v1.1 validation. In sectional
+      modes (linear_by_topics / router_by_topics) the engine waits for
+      per-topic launches from routerFlow / contentFlow.
+  
+  Router integration (routerFlow.js · selectRouterTopic):
+    \- When TEST_DATA.mode === 'adaptive' AND AdaptiveSession is loaded:
+      runs the per-topic adaptive session via runAdaptiveSession.
+      onComplete callback freezes the topic's adaptive result in
+      state.sectionResults (mirrors Phase 4b for templates bound to
+      section.current.result.*) and calls returnFromTopic to re-enter
+      the router page.
+    \- Failure-mode fallback: if runAdaptiveSession returns false
+      (strict gating should prevent this — Phase 1 L2/L3 — but defends
+      in depth), falls back to the standard topic chunk traversal with a
+      console warning.
+  
+  Bundling (server/scorm/index.ts):
+    \- adaptiveSession.js included in the runtime bundle right after
+      adaptiveJs / adaptiveRenderJs.
+  
+  What's NOT in this commit:
+    \- Phase 4d-iii: (adaptive, linear_by_topics) integration — needs
+      contentFlow.rebuildPageSequence to replace per-topic question
+      stretches with adaptive-session markers and advancePageSequence
+      to launch the session on entry. Deferred follow-up.
+    \- Per-section time limits (Phase 4e).
+    \- Recovery for adaptive sessions (Phase 4f).
+    \- Golden tests for all 5 valid (mode, flowMode) combos (Phase 5).
+  
+  Verification: type-check clean; full vitest 1403/1403 (runtime
+  changes observable only at SCORM-package playback time).
+
+- **feat**(prd-4): phase 4c-iv — routerCompletionPolicy + sectionUnlockRules (2026-05-29) [`bc94fb49078a82231011b5e7ffec3f5570f39dbf`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/bc94fb49078a82231011b5e7ffec3f5570f39dbf)
+  Closes Phase 4c (router runtime). The router now enforces
+  completion-policy and unlock-rules per PRD-4 v1.1 §4.7.
+  
+  Exporter (server/scorm/builders/test-json.ts):
+    \- flowPolicy.routerCompletionPolicy exported when mode=router_by_topics,
+      defaults to 'all_required_completed' (softer rule: any achievedLevel
+      counts as «pass» for navigation). Explicit
+      'all_required_passed' propagates through.
+    \- flowPolicy.sectionUnlockRules propagates when set (router mode only).
+      Non-router modes drop these fields to keep TEST_DATA shape predictable.
+    \- section.required is now exported (defaults to true when absent on the
+      DB row). Optional sections never block the routerCompletionPolicy
+      «all_required_*» calculation.
+  
+  Runtime (server/scorm/template/app/routerFlow.js):
+    \- isSectionUnlocked(section): evaluates per-section unlock rule. Modes:
+      'always' (default), 'after_sections_completed', 'after_sections_passed'.
+      Unknown rules fail-open (don't block the learner).
+    \- isRouterReadyToFinish(): evaluates routerCompletionPolicy. Optional
+      sections (required=false) never block. Strict 'all_required_passed'
+      requires sectionResults[id].passed === true; soft
+      'all_required_completed' just requires state=='completed'.
+    \- renderRouterPage: locked cards get a router-topic-card--locked
+      modifier + 'Недоступна' status label + disabled state. Optional
+      sections show a small '(необязательная)' hint. «Завершить» button
+      now appears only when isRouterReadyToFinish() returns true.
+  
+  Styles (server/scorm/assets/styles.css):
+    \- .router-topic-card--locked (opacity .5, not-allowed cursor)
+    \- .router-topic-card__optional (small grey hint)
+  
+  Tests (tests/scorm-builders.test.ts): 6 new
+    \- Default routerCompletionPolicy when not set
+    \- Explicit 'all_required_passed' propagation
+    \- sectionUnlockRules propagation in router mode
+    \- Non-router modes don't carry router-specific fields
+    \- section.required defaults true when absent
+    \- section.required=false preserved
+  
+  Verification: type-check clean; full vitest 1403/1403 (+6 nets new).
+  
+  Phase 4c is now complete (i + ii/iii + iv). Standard router_by_topics
+  flow works end-to-end: test-before → router → topic chunks (with
+  unlock gating) → router → «Завершить» (when completionPolicy met) →
+  test-after → results.
+
+- **feat**(prd-4): phase 4c-ii/iii — router state machine + topic cards UI (2026-05-29) [`6a8d18f1d926e77a04da1cf37a39f3a405ec133f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6a8d18f1d926e77a04da1cf37a39f3a405ec133f)
+  Implements the router_by_topics runtime state machine and minimum
+  viable topic-card UI. Together these turn the existing isRouter
+  pageSequence marker (4c-i) into a working learner flow:
+    test-before → router → topic A → router → topic B → router →
+    «Завершить» → test-after → results.
+  
+  State additions (state.js):
+    \- routerTopicStates: { [topicId]: 'notStarted' | 'inProgress' | 'completed' }
+    \- currentRouterTopic: topicId | null (null while router is on screen)
+    \- routerFinished: bool, set when the learner clicks «Завершить»
+  
+  New module (routerFlow.js, ~220 lines):
+    \- isRouterMode()              — flowPolicy.mode === 'router_by_topics'
+    \- buildTopicChunk(topicId)    — [before_topic content, questions, after_topic content]
+    \- buildPostRouterSequence()   — test-scope «after» content (summary boundary
+                                    splits pre/post-results as in existing logic)
+    \- renderRouterPage(page)      — overlays clickable topic cards on top of
+                                    the standard renderContentPage output.
+                                    Cards carry status class (notStarted/
+                                    inProgress/completed) and a disabled state
+                                    for completed topics. «Завершить» appears
+                                    when all sections are completed (4c-iv adds
+                                    proper completionPolicy gating).
+    \- selectRouterTopic(topicId)  — picks topic, swaps pageSequence to chunk
+    \- returnFromTopic()           — fires from advancePageSequence at chunk end;
+                                    marks topic completed; re-renders router
+    \- finishRouter()              — switches to the post-router test-end seq
+                                    (or submit if there is no test-after content)
+  
+  Integration:
+    \- contentFlow.rebuildPageSequence: when flowMode === 'router_by_topics',
+      sequence stops after test-before content (router page becomes the hub).
+      Topic chunks built on demand by RouterFlow.
+    \- contentFlow.advancePageSequence: at sequence end in router mode, calls
+      RouterFlow.returnFromTopic instead of submit() (when on a topic chunk).
+    \- contentFlow.syncPhaseToCurrentPage: sets state.phase = 'router' for
+      isRouter items so mainRender routes to RouterFlow.renderRouterPage.
+    \- mainRender.render: routes 'router' phase + isRouter items to
+      RouterFlow.renderRouterPage; falls back to renderContentPage otherwise.
+  
+  Packaging (server/scorm/index.ts):
+    \- routerFlow.js included in the runtime bundle (idempotent: it's a no-op
+      when flowPolicy.mode is anything but router_by_topics).
+  
+  Styles (server/scorm/assets/styles.css):
+    \- .router-topic-cards grid layout
+    \- .router-topic-card with hover state + completed/inProgress modifiers
+    \- .router-finish button hook for the «Завершить» CTA
+  
+  What's NOT in this commit (still on the Phase 4c-iv todo):
+    \- routerCompletionPolicy enforcement (currently «Завершить» requires
+      all sections completed; will be gated by all_required_passed vs
+      all_required_completed once 4c-iv lands).
+    \- sectionUnlockRules (topic-B locked until topic-A passed, etc).
+    \- Adaptive sessions inside topic chunks (Phase 4d).
+    \- Per-section time limits (Phase 4e).
+    \- Recovery / resume (Phase 4f).
+  
+  Verification: type-check clean; full vitest 1397/1397 (runtime
+  changes are observable only at SCORM-package playback time; will be
+  covered end-to-end by Phase 5 golden tests).
+
+- **feat**(prd-4): phase 4c-i — export page.kind + mark router items in pageSequence (2026-05-29) [`15be6648777df14371301295d4b812ec87650474`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/15be6648777df14371301295d4b812ec87650474)
+  Establishes the contract surface for the router-by-topics runtime work
+  that lands across phases 4c-ii / 4c-iii / 4c-iv. This commit does NOT
+  add router state-machine behavior — that requires the next slice.
+  
+  Exporter (server/scorm/builders/test-json.ts):
+    \- Each entry in TEST_DATA.contentPages now carries `kind`
+      (intro/info/summary/router/questions). Legacy `type` field stays
+      for backward compat. Runtime distinguishes router pages by
+      `page.kind === "router"`.
+  
+  Runtime (server/scorm/template/app/contentFlow.js):
+    \- rebuildPageSequence reads flowMode from TEST_DATA.flowPolicy.mode.
+    \- When mode === "router_by_topics", router content pages (kind ===
+      "router") get an `isRouter: true` marker on their pageSequence
+      item. Future router state-machine slices (4c-ii) attach to this
+      marker: detect, intercept navigation, render topic cards, handle
+      topic clicks, return to router after topic completion.
+  
+  Tests (tests/scorm-export.test.ts): 1 new
+    \- Two-page fixture: one router page, one intro page. Confirms the
+      exported `kind` field round-trips for both. Existing content-pages
+      test updated with a `kind: "intro"` field on its fixture.
+  
+  Verification: type-check clean; full vitest 1397/1397 (+1 net new).
+  
+  Next slice (4c-ii): router state machine — topicStates map,
+  click → traverse topic chunk, return → router. Estimate ~2-3h.
+
+- **feat**(prd-4): phase 4b — section result frozen before after_topic content (2026-05-29) [`e551d4de916aacff24c9df1363a10123266d3957`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e551d4de916aacff24c9df1363a10123266d3957)
+  PRD-4 v1.1 §4.4: «после вопросов раздела Core рассчитывает sectionResult;
+  после расчёта Core показывает контентные страницы after_topic, включая
+  content.summary». Templates can now bind `data-path="section.current.
+  result.percent"` (or `.passed`, `.correct`, etc.) on after_topic content
+  pages and see the freshly-computed section result.
+  
+  Runtime changes:
+  
+    state.js
+      \+ state.sectionResults = {}  // map topicId → result snapshot
+  
+    render/resultsPage.js
+      \+ computeSectionResult(topicId): pure function that scopes the
+        existing calculateResults() math to a single topic. Reuses
+        checkAnswer + checkPassRuleWithPartial, caches the result in
+        state.sectionResults[topicId] on first call, returns cached
+        thereafter.
+  
+    contentFlow.js (syncPhaseToCurrentPage):
+      \+ maybeExposeSectionResult(item): when the current pageSequence
+        item is a content page with position='after_topic' and a
+        topicId, calls computeSectionResult(topicId) and writes the
+        result onto TEST_DATA.section.current = {topicId, topicName,
+        result}. The renderPathOnlyDsl call inside renderContentPage
+        then picks it up via the existing data-path mechanism — no
+        template changes needed.
+  
+  The hook fires for every after_topic content page; computeSectionResult
+  short-circuits on the cached result, so re-renders (navigation back,
+  re-mount) are cheap.
+  
+  No unit tests yet — runtime JS isn't exercised under node/vitest;
+  will be covered end-to-end by Phase 5 golden SCORM tests for all 5
+  valid (mode, flowMode) combinations.
+  
+  Verification: type-check clean; full vitest 1396/1396 (no new
+  test code in this commit; runtime change is observable only at
+  SCORM-package playback time).
+
+- **feat**(prd-4): phase 4a — export flowPolicy to TEST_DATA + section-order shuffle (2026-05-29) [`0dca2f2890222b0862e248356c9b8e33840014ce`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0dca2f2890222b0862e248356c9b8e33840014ce)
+  First runtime slice. Adds the flowPolicy contract to the SCORM
+  package's TEST_DATA payload, and teaches generateVariant() to respect
+  the section boundary when flowMode is sectional.
+  
+  Exporter (server/scorm/builders/test-json.ts):
+    \- test.flowPolicy = { mode: 'linear_flat' | 'linear_by_topics' |
+      'router_by_topics' } added to TEST_DATA. Missing or unknown
+      flowPolicyJson.mode coerces to 'linear_flat' per FR-40, so legacy
+      tests without an explicit flowPolicy continue to behave as before.
+  
+  Runtime (server/scorm/assets/app.js · generateVariant):
+    \- Reads TEST_DATA.flowPolicy.mode. For 'linear_flat' (default) the
+      pre-existing global shuffle stays. For 'linear_by_topics' /
+      'router_by_topics' the global shuffle is skipped so questions stay
+      grouped by topic in author order; questions inside a section still
+      shuffle at selection time (unchanged).
+  
+  Tests (tests/scorm-builders.test.ts): 4 new
+    \- Default → linear_flat when flowPolicyJson missing.
+    \- Explicit linear_by_topics export.
+    \- Explicit router_by_topics export.
+    \- Unknown / future mode (section_graph) coerced to linear_flat.
+  
+  Verification: type-check clean; full vitest 1396/1396 (+4 nets new).
+  
+  Next slice (4b): compute sectionResult BEFORE the after_topic summary
+  content page so templates can bind to TEST_DATA.section.current.result.
+
+- **feat**(prd-4): phase 3 — L1 UI guard for adaptive+linear_flat (2026-05-29) [`57745748ea7f0bf2ddc938849e377b6ac215c897`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/57745748ea7f0bf2ddc938849e377b6ac215c897)
+  Disables the linear_flat option in the flowMode Select when the test
+  is in adaptive mode, and surfaces a warning Banner if the invalid
+  (adaptive, linear_flat) state ever slips through (mode-switch race,
+  direct model patch, etc).
+  
+  Changes (basic-settings-section.tsx):
+    \- SelectOption.disabled flag set on linear_flat entry when
+      model.mode === 'adaptive'. Label augmented with «— недоступно в
+      адаптивном режиме» so screen-reader users hear the constraint.
+    \- Below the Select, a Banner tone='warning' shows for the precise
+      (adaptive, linear_flat) state with a recovery hint pointing at the
+      two supported alternatives.
+  
+  Tests (basic-settings-section.test.tsx): 3 new
+    \- Opens the Select dropdown and asserts the augmented «недоступно»
+      label appears in the listbox.
+    \- Warning Banner renders for invalid (adaptive, linear_flat) combo.
+    \- Loops over all 5 valid combos and asserts the warning is absent.
+  
+  Verification: type-check clean; full vitest 1392/1392 (+3 nets new).
+
+- **feat**(prd-4): phase 2 — L4 mapper auto-fix for legacy (adaptive, linear_flat) (2026-05-29) [`a8039b36da5d70ac6d1ece9c1719c229bbd5eafe`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a8039b36da5d70ac6d1ece9c1719c229bbd5eafe)
+  The PRD-4 v1.1 validator (phase 1) blocks (adaptive, linear_flat) on
+  both client (L2) and server (L3). DB rows persisted before that
+  validation existed may still carry the now-invalid combo. The mapper
+  silently coerces flowMode to `linear_by_topics` when reading them so
+  the editor can open such tests without immediately failing on the
+  first save attempt.
+  
+  Changes:
+    \- apiToEditorModel detects `mode='adaptive' && flowMode='linear_flat'`
+      after readFlowModeFromApi and rewrites flowMode to
+      `linear_by_topics`. Comment notes the v1.1 rationale.
+    \- test-editor.mappers.test.ts: 4 new tests covering the auto-fix
+      branch and confirming the other three valid combos pass through
+      untouched.
+  
+  Verification: type-check clean; full vitest 1389/1389 (+4 nets new).
+
+- **feat**(prd-4): phase 1 — L2+L3 flow-policy validation (mode×flowMode) (2026-05-29) [`7fbcabefc0a412f589777d29fc37c91e50ded352`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7fbcabefc0a412f589777d29fc37c91e50ded352)
+  PRD-4 v1.1 §3.1.2 compatibility guards. Two contract rules enforced at
+  both client-side validation layer and server-side service layer.
+  
+  Rules:
+    1. (adaptive, linear_flat) is blocked — deferred to a future «Flat
+       adaptive» PRD. Validation issues 'adaptive_flat_unsupported' on
+       flowMode field.
+    2. Strict adaptive gating — every section in test.sections[] with
+       mode='adaptive' must have a matching adaptive topic with at least
+       one configured level. Mixed mode (some topics adaptive, some not)
+       is forbidden per PRD-4 v1.1 clarification 2026-05-28. Issues
+       'adaptive_section_no_levels'.
+  
+  Client (L2):
+    \- test-editor.validation.ts: rules added next to existing adaptive
+      FR-17 validations. The pre-existing FR-17b warning that fired only
+      for enabled topics with empty levels is replaced by the stricter
+      PRD-4 v1.1 error (every section regardless of enabled flag).
+      FR-17b kept as a soft 'recommend ≥2 levels' warning when levels=1.
+    \- test-editor.validation.test.ts: 2 existing tests updated to expect
+      new error (instead of warning); 2 new tests cover the (adaptive,
+      linear_flat) blocked branch and the 5 valid combinations.
+  
+  Server (L3):
+    \- New flow-policy-validator.ts: pure function mirroring client rules,
+      operates on TestPayload + sections + adaptiveSettings.
+    \- test-settings.ts: validateFlowPolicy() called from create() and
+      save() before DB write; FlowPolicyValidationError thrown on
+      violations.
+    \- routes/tests.ts: catches FlowPolicyValidationError → HTTP 422 with
+      {error: 'flow_policy_invalid', violations: [...]}. Mirrors the
+      existing 422 shape for required_fields_missing.
+    \- tests/services/flow-policy-validator.test.ts: 10 unit tests.
+    \- tests/services/test-settings.test.ts: 4 existing tests updated to
+      use a valid (adaptive, linear_by_topics) pair (those tests had
+      used the now-invalid linear_flat default).
+  
+  Verification: type-check clean; full vitest 1385/1385 (+12 nets new
+  from this phase). Adds 1 test file (flow-policy-validator.test.ts);
+  total 52 files. Next phase: L4 mapper auto-fix for legacy DB data.
+
+- **feat**(design): close S12-G4 — all param types (FR-31a) (2026-05-28) [`4ac3db02b1d31c9a9955004f13bdab56ecfcaeba`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4ac3db02b1d31c9a9955004f13bdab56ecfcaeba)
+  ParamRow now renders the full set of param types declared in
+  DesignParamType; the old «Тип "X" поддерживается в следующем шаге
+  (медиатека)» fallback only fires for genuinely-unknown types.
+  
+  Type system (use-design-settings):
+    \- DesignParamType extended: + multiselect, url, file, downloadLink
+      (image/asset/number were in the enum but unrendered).
+    \- TemplateParam gains optional `accept`/`maxSizeKb` (media validation)
+      and `min`/`max`/`step` (number bounds).
+    \- New MediaParamValue envelope { url, name, mime?, size?, mediaId?,
+      label? } — shared serialisation for the four media-typed kinds.
+  
+  Controls (design-section ParamRow):
+    \- number     → NumberInput with min/max/step pass-through.
+    \- url        → Input type="url" + suffix IconButton "Открыть" that
+                   launches the URL in a new tab when it parses as http(s).
+    \- multiselect → DS Combobox&lt;string&gt; in multiple mode, chips rendered
+                   by the component itself.
+    \- image/asset/file/downloadLink → shared MediaParamRow:
+        DS Button label per kind ("Загрузить изображение" / "Выбрать из
+        медиатеки" / "Загрузить файл" / "Добавить файл"),
+        hidden &lt;input type="file"&gt; with `accept` filter (image defaults to
+        png/jpeg/svg/webp), client-side size guard (image 512 KB, others
+        5 MB). Upload via POST /api/media/upload (existing multer disk
+        pipeline in server/routes.ts:91), response mapped to a
+        MediaParamValue. Chip shows the uploaded filename with a × remove
+        button. Errors surface inline as a small Banner.
+  
+  CSS: .design-media-row + .design-media-chip/__ico/__name added in
+  tb-components.css.
+  
+  Tests: 5 new in design-section.test.tsx (NumberInput row, url with
+  type="url", multiselect no-longer-unsupported, image upload-button
+  with accept filter, downloadLink descriptor). One existing test
+  updated: image params no longer render the «unsupported» banner —
+  now the media-row wrapper is asserted instead.
+  
+  Full suite 1373/1373 (51 files); type-check clean.
+  
+  S12 status after this slice: G1/G2/G3/G4/G5/G6 ALL CLOSED. S13.8
+  (cleanup + acceptance) is the only sub-phase left for PRD-7.
+
+- **feat**(design): close S12-G3 — template gallery modal (FR-33) (2026-05-28) [`fed035e42ca6744b7247504bae150c7d8082c6ac`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fed035e42ca6744b7247504bae150c7d8082c6ac)
+  «Заменить шаблон» now opens a real DS gallery modal instead of the
+  window.alert placeholder. Lists all active templates, supports search,
+  pre-selects the current one, and confirms a switch when the test has
+  dirty design params.
+  
+  Hook (use-design-settings):
+    \- New generic setTemplate(id) action: patches the draft to
+      { templateId: id, params: {} }. applyDefaultTemplate (S12-G6) is now
+      a thin wrapper over it.
+  
+  UI (template-gallery-modal.tsx, new file):
+    \- ModalDialog size=xl, fetches /api/templates lazily via React Query.
+    \- Search filter (case-insensitive, label+description). Empty-state.
+    \- Grid of cards: thumb sketch + name + description + Tag chips
+      (Встроенный, v{version}). Current template gets a tone=accent
+      «Текущий» chip with a dedicated data-testid.
+    \- Footer info line «Выбран: …» + Cancel + Apply (disabled when
+      selected === current).
+    \- Dirty-params confirm: when draft.params has entries, surfaces a
+      warning Banner and switches Apply to destructive variant labelled
+      «Заменить и сбросить параметры».
+  
+  Wiring (design-section):
+    \- «Заменить шаблон» button → setGalleryOpen(true).
+    \- TemplateIncompatibleBanner (S12-G6) «Выбрать шаблон» action also
+      opens the gallery, replacing the earlier alert placeholder.
+  
+  CSS: .tpl-gallery-search/-grid/-card/-foot/__* in tb-components.css.
+  
+  Tests: 3 new in design-section.test (cards render with current chip,
+  search filter narrows the list, apply disabled when same-as-current).
+  Full suite 1368/1368 (51 files); type-check clean.
+  
+  S12 status after this slice: G1/G2/G3/G5/G6 closed; G4 (param types
+  image/asset/file/...) remains open.
+
+- **feat**(editor): close S13.7 — drawer chrome polish (G1/G2/G5/G16/G30/G31) (2026-05-28) [`cea5bd9a8ed319fa26429a4de61b92b6af766744`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/cea5bd9a8ed319fa26429a4de61b92b6af766744)
+  Six drawer-level gaps closed inline; G3/G15 (adaptive banner, mode-change
+  banner) landed earlier in this PRD-7 cycle.
+  
+  G1 — Saving overlay:
+    \- .ou-drawer__body gets the .tb-saving-host hook unconditionally.
+    \- Inner content wrapped in &lt;div inert&gt; when combinedSaving (native attr).
+    \- .tb-saving-overlay renders only while saving — backdrop (88% opacity),
+      Loader2 spinner with .spin keyframe (new in tb-components.css), text.
+    \- role=status + aria-live=polite for screen readers.
+  
+  G2 — Per-field changes-popover diff:
+    \- useTestEditor exposes the previously-private `snapshot`.
+    \- ChangesPopover computes diff via collectChangesByTab over 9 top-level
+      Settings fields (title/description/mode/flowMode/runtime.*/webhook/
+      telemetry). Empty old/maxAttempts/etc rendered as human labels («не
+      задан», «без ограничения», «Да/Нет»).
+    \- Group title shows the count («N изменение/изменения/изменений»). Each
+      item renders «label · old → new». Fallback line when only structural
+      changes (sections etc) are dirty.
+    \- Total counter in popover header switches to total field-count when
+      diffs are computed; falls back to tab-count when no per-field info.
+  
+  G5 — Conflict diff-table:
+    \- New ConflictDiffTable sub-component lazy-fetches /api/tests/:id on
+      mount, parses via apiToEditorModel, and renders Поле / На сервере /
+      Ваши изменения as a &lt;table&gt; over 8 high-signal fields.
+    \- Loading/error states inside the table. ConflictDialog promoted to
+      size=l so the table + three actions fit without overflow.
+    \- .tb-conflict-diff CSS added in tb-components.css.
+  
+  G16 — Add-page modal search:
+    \- AddPageModal mirrors ReplaceVariantModal: case-insensitive filter
+      over label+description, empty-state «Ничего не найдено», hidden
+      when there are ≤3 options (small templates don't need filtering).
+  
+  G30 — Close-confirm chips:
+    \- CloseConfirmDialog now lists each dirty editor tab as a neutral
+      outline Tag chip below the modal body. Per-tab data-testid for tests.
+    \- .tb-close-confirm-chips flex layout added in tb-components.css.
+  
+  G31 — Close-confirm inline error banner:
+    \- When hasErrors && errorFieldCount &gt; 0, the close-confirm renders
+      a Banner tone=error with a count line and «Перейти к первой
+      ошибке» action that closes the confirm and calls goToError on
+      the first validation error. ru pluralisation in the count.
+  
+  Tests: 4 new (chips visible after dirty + close; error banner appears
+  when validation fails; saving overlay absent while idle; per-field diff
+  shows up in changes-popover). Full suite 1365/1365 (51 files). Type-
+  check clean. Spec S13.7 marked closed with sub-gap status.
+
+- **feat**(design): close S12-G6 — wf-template-incompatible banner + recovery (2026-05-28) [`18cf7a0192f30098c3fd0485a10c93ab2493af43`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/18cf7a0192f30098c3fd0485a10c93ab2493af43)
+  When the persisted templateId no longer resolves to an active template
+  (404 on /api/templates/:id), the design tab now shows the wireframe's
+  incompatible banner with two recovery actions, instead of falling into
+  the generic ErrorNotice.
+  
+  Hook changes (use-design-settings):
+    \- New derived flag `templateMissing` — true when the design query has
+      settled with data AND the template query has settled with no data
+      AND the persisted templateId is non-empty. Distinguishes "template
+      deleted" from "design fetch errored" (5xx, network), which still
+      surface via the existing `error` field.
+    \- New action `applyDefaultTemplate()` — patches the draft to
+      `{ templateId: "default", params: {} }`; the Drawer footer's primary
+      Save picks it up via the existing isDirty plumbing.
+  
+  UI changes (design-section):
+    \- `templateMissing` takes priority over `error` in the render switch.
+    \- When set, the active rail is forced to "template", and the other
+      rail buttons (branding/layout/progress) get `disabled` +
+      `aria-disabled` + onClick={undefined}. The "Шаблон" rail button
+      gets a `.status-dot.error` with aria-label.
+    \- New `TemplateIncompatibleBanner` component renders the DS Banner
+      tone="error" with two actions: "Выбрать шаблон" (placeholder alert
+      pending S12-G3 gallery) and "Применить «Стандартный»" → calls
+      `applyDefaultTemplate`. Title "Шаблон недоступен", description
+      quotes the failing templateId so the author sees what was missing.
+  
+  Tests: 3 new (incompatible banner with both actions; status-dot + disabled
+  rail; applyDefault click survives). Full suite 1361/1361 (51 files).
+  Type-check clean. S12-G6 marked CLOSED in the spec; status-dot at the
+  test-editor tab level deferred to S13.7 with a spec note.
+
+- **feat**(structure): close S13.6 — variant-replace search + diff-block (G28/G29) (2026-05-28) [`6fbc3482f3aea2578dc8a06adc09ec3e51ff35d1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6fbc3482f3aea2578dc8a06adc09ec3e51ff35d1)
+  ReplaceVariantModal now matches wireframe prd7-variant-replace.html: a
+  search input above the variant list, a current-variant chip with
+  disabled selection, and a warning diff-block listing the placeholder
+  values that will be lost on confirm.
+  
+  G28 — Variant search + diff-block:
+    \- New variant-search input wired to a case-insensitive filter over
+      label + description. Empty-state when no match. Hidden when there
+      is only one variant for the page kind (no point filtering).
+    \- VariantList extended with an optional isCurrent flag — current
+      variant gets the wireframe is-current class, aria-disabled,
+      tabIndex -1, no onClick, and a meta-tag «Текущий».
+    \- Lost-placeholders diff computed by comparing placeholder keys
+      (PRD-1 §4.3.3: name = contract between variants of same kind).
+      Only placeholders with non-empty current values are listed —
+      truly-empty fields don't warn the author about anything.
+    \- describePlaceholderValue: strips HTML tags from richText values,
+      JSON-stringifies objects/arrays, truncates to 60 chars.
+  
+  G29 — s-replace-no-fields:
+    When the selected variant declares zero placeholders AND it differs
+    from current, the diff-block uses the «Текущие настройки страницы
+    будут потеряны» heading + «У нового варианта нет редактируемых полей»
+    meta, per wireframe lines 263-317.
+  
+  CSS:
+    \- .variant-list__item.is-current + .variant-list__meta(__tag)
+    \- .variant-search + .variant-search__icon/__input/__empty
+    \- .diff-block + .diff-block__group/__title/__list/__item/__field-*
+    All in tb-components.css; ports from the wireframe inline styles.
+  
+  Tests: 5 new (search filter, current chip, lost-fields diff, no-fields
+  diff variant, no diff on initial open). Full suite 1358/1358 (51 files).
+  Type-check clean. Spec marks G28/G29 closed.
+
+- **feat**(settings): close S13.2 + S13.3 — feedback section + per-topic limits (G7/G8/G9/G10) (2026-05-28) [`ca4149bde1a20949272192c0f3b4697e4b2d3ec8`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ca4149bde1a20949272192c0f3b4697e4b2d3ec8)
+  All four critical Settings-tab gaps closed in one slice; both phases live in
+  the same file so it makes sense to ship them together.
+  
+  S13.2-G7 — «Общая обратная связь теста» card in Основное pane:
+    \- New TestFeedbackTrigger wraps FeedbackEditorModal with full rich-text +
+      links + PDF assets (no hideAssets like adaptive variants). Round-trips
+      model.basic.feedback / feedbackLinks / feedbackAssets.
+    \- Preview button shows snippet + meta line «N ссылок · M PDF».
+    \- Wrapped in DS Card variant=outlined per wireframe 710-839.
+  
+  S13.2-G8 — Move «Показывать правильные ответы» to Основное:
+    Switch relocated from LimitsPane to BasicPane, inside the new feedback
+    card after an &lt;hr&gt; separator. data-testid preserved so other call sites
+    keep working. The Limits-pane test was deleted; a new test in Основное-
+    pane covers the new location.
+  
+  S13.3-G9 — Per-topic time-limit table:
+    New PerTopicLimitsBlock at the bottom of LimitsPane. Derives switch state
+    from `sections.some(s =&gt; s.timeLimit.source !== "inherit_test")` — no
+    separate boolean in the model. Table renders one row per section with a
+    small NumberInput (suffix=минут, placeholder="Без ограничения"). Typing
+    N&gt;0 sets `{source:"custom", minutes:N}`, clearing/0 sets `{source:"none"}`
+    (per-topic unlimited). Turning the switch OFF mass-resets every section
+    to `{source:"inherit_test"}`.
+  
+  S13.3-G10 — No-topics state (linear_flat):
+    When `sections.length === 0` PerTopicLimitsBlock renders a small info
+    Banner instead of the switch/table — "Индивидуальные лимиты доступны
+    после добавления тем во вкладке Состав". Replaces the standalone
+    `s-limits-no-topics` wireframe state with a single conditional.
+  
+  Tests: 7 new (1 feedback-card + 1 switch + 5 per-topic), 1 deleted (old
+  showCorrectAnswers location). Full suite 1353/1353 (51 files), type-check
+  clean.
+
+- **feat**(structure): close S13.4 — page-preview iframe + sanitize-warning + row-menu (G17/G18) (2026-05-28) [`f33ea1c0bb07b3cee553779c40bf8ec32f46a7bf`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f33ea1c0bb07b3cee553779c40bf8ec32f46a7bf)
+  Completes the two remaining S13.4 items by composing existing primitives;
+  G17a (replace-variant in author row-menu) landed in e2201f4.
+  
+  G17b - Per-page preview iframe (FR-44):
+    \- New backend route: GET /api/tests/:id/content-pages/:pageId/preview-page.
+      Reads the content_page from the DB, loads the test's design-template
+      preview.html, and injects an override script that defers one frame past
+      the standalone bootstrap, then calls renderContentPage(page, contentTemplates)
+      directly with the page's saved values. Design.params from designSettingsJson
+      are applied on top of manifest.params[].default and re-init TestBuilder so
+      branding (colours/fonts) matches what the learner will see.
+    \- New helper: server/scorm/preview-embed.ts factors out the embed CSS and
+      encodeJsonForScript / injectIntoPreview mechanics. Both template-preview
+      (S12-G2) and the new page-preview consume it - no more duplicated CSS.
+    \- New PagePreviewModal mirrors TemplatePreviewModal: size='xl' ModalDialog
+      with a sandboxed iframe pointing at the new route. The modal title shows
+      the page title; description clarifies that progress is not persisted.
+    \- Row-menu now includes Preview on both author rows (next to Replace-Variant
+      and Delete) and system rows (next to Replace-Variant). New testIds:
+      structure-page-preview-${id} / ${testId}-preview.
+  
+  G18 - Sanitize-warning banner:
+    \- html-sanitizer.ts gains sanitizeHtmlWithDiagnostics and
+      sanitizeValuesWithDiagnostics that return both cleaned value and a list
+      of SanitizeRemoval records (kind: tag/attribute/uri, label, count).
+      on*-handlers reported per concrete attribute name (onclick, onmouseover, ...).
+    \- PUT /api/tests/:id/content-pages/:pageId returns sanitizeDiagnostics as a
+      sibling field on the response when at least one placeholder was stripped.
+    \- useContentPages tracks diagnostics keyed by pageId; a clean re-save with
+      no removals clears the entry, dismiss button clears it manually.
+    \- PageEditForm renders a .validation-banner--warning at the top of the
+      expand listing exactly which tag/attribute/URI was stripped from which
+      placeholder (label resolved via variant.placeholders), with a dismiss X.
+      CSS modifier --warning added in tb-components.css.
+  
+  Type-check clean; full vitest 1346/1346 (51 files). S13.4 closed (G17/G18/G23/G25).
+
+- **feat**(structure): partial S13.4 — close G23/G25/G17a (Structure-tab parity) (2026-05-28) [`e2201f44906330a420f5ddbc801c925621b58681`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e2201f44906330a420f5ddbc801c925621b58681)
+  Three contained S13.4 items landed; G17 page-preview modal (FR-44) and G18
+  sanitize-warning deferred — see spec for scope notes.
+  
+  G23 — Remove dead `mixed` FlowMode enum:
+    \- FlowMode union drops `mixed` (test-editor.types.ts)
+    \- FlowSettings drops `mixed` branch (test-editor.types.ts)
+    \- isFlowMode guard + buildFlowSettingsFromApi switch (test-editor.mappers.ts)
+    \- FLOW_LABEL.mixed removed (start-pages-section.tsx)
+    \- TestListFlowMode + isFlowMode guard (tests-list.types.ts, tests-list.tsx)
+    No test references "mixed" — clean removal, no test updates needed.
+  
+  G25 — Template marker for unedited intro/summary rows:
+    Heuristic: kind in {intro, summary} AND every valuesJson.values entry is
+    null/undefined/empty-string -&gt; render .page-row--template with inline
+    tpl-page-marker span instead of .page-row--system. Pure cosmetic — saving
+    any placeholder value flips back to system styling. Adds data-from-template
+    attr for regression tests. CSS already existed in tb-components.css.
+  
+  G17a — Replace-variant in author-row menu:
+    AuthorPageRow receives onReplaceVariant from ZoneHandlers; row-menu shows
+    the new item (above Delete) only when the active template offers more
+    than one variant for the page's kind. Reuses the existing
+    ReplaceVariantModal — no new modal code.
+  
+  Type-check clean; full vitest 1346/1346 (51 files). G17 preview split
+  to S13.4b: needs a scope decision between full iframe runtime (3-4h, touches
+  all 4 built-in preview.html) and a lightweight DS-styled stub (~1.5h).
+
+- **feat**(editor): close S13.1 quick wins — remove window.prompt / window.alert (G32/G39/G40) (2026-05-28) [`87c4858f2d510d28235f9a0ad50ac6164cf43044`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/87c4858f2d510d28235f9a0ad50ac6164cf43044)
+  Three production-visible UX violations replaced with DS-native components.
+  Business explicitly rejected window-level dialogs in PRD-7 review.
+  
+  G32 — Move-to-folder picker (tests-list row-menu):
+    Replace window.prompt('ID папки для перемещения') with MoveFolderPickModal:
+    size='s' ModalDialog, radio-list of folders + 'Корень (без папки)' option,
+    current folder pre-selected with Tag 'Текущая', 'Переместить' disabled
+    while selected === current (no-op guard).
+  
+  G39 — Link-insert sub-modal (RTE in FeedbackEditorModal):
+    Replace window.prompt('URL ссылки') with a nested size='s' ModalDialog
+    rendered alongside the outer modal (React.Fragment wrapper).
+      \- On open: captures the current Selection range from the contenteditable
+        so the modal can restore it after submit.
+      \- Inputs: URL (autofocus, type='url') + 'Текст ссылки' (prefilled with
+        selected text if any).
+      \- On submit: restores selection; if collapsed, inserts a fresh &lt;a&gt; at
+        cursor with the typed text (or URL as fallback); else execCommand
+        ('createLink', url) to wrap the existing selection.
+      \- 'Вставить' disabled until URL is non-empty.
+  
+  G40 — Oversize file banner (RTE PDF upload):
+    Replace window.alert('Файл(ы) превышают 5 MB…') with an in-modal
+    Banner tone='warning' that lists the rejected file names. Dismissible.
+  
+  Tests:
+    \- tests-list.test: new describe 'move-to-folder (S13.1-G32)' asserts
+      window.prompt is NOT called and the modal opens with the correct
+      pre-selection / disabled-submit state.
+    \- feedback-editor-modal.test: 'RTE createLink' describe rewritten as
+      'RTE link-insert modal' (3 tests covering open / submit-disabled /
+      cancel-no-insert) — old prompt-mocking tests removed. Oversize test
+      asserts no window.alert and that the banner contains the file name.
+  
+  Net diff: +1 test (28 -&gt; 30 in the two affected files; full suite 1346/1346).
+  Type-check clean. Spec S13.1 marked closed.
+
+- **feat**(editor): G19 drawer-level read-only footer — single <<Закрыть>> when published (2026-05-28) [`637fa6b512f847ec658981bd9394ba6072e2bf6d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/637fa6b512f847ec658981bd9394ba6072e2bf6d)
+  When test.status === 'published' the drawer footer renders a single ghost
+  &lt;&lt;Закрыть&gt;&gt; button per wireframe s-readonly (prd7-structure-linear-by-topics.html
+  lines 847-849). Save / Cancel / &lt;&lt;Показать изменения&gt;&gt; are hidden; close does
+  not require confirm in clean state. requestClose remains as a guard against
+  silent edit loss in case Composition/Settings/Design tabs (which do not yet
+  propagate readOnly) were dirtied — that broader propagation is a follow-up.
+  
+  Adds data-testid='test-editor-foot' with data-state in {readonly,dirty,default}
+  to anchor regression tests. Two new tests cover the readonly footer markup and
+  the no-confirm close path. Spec G19 marked closed.
+
+- **feat**(structure): G19 read-only — Structure-tab visual closeout (2026-05-28) [`dca9ba775b2ab229c054a1ba7cf936258d94ec33`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/dca9ba775b2ab229c054a1ba7cf936258d94ec33)
+  When test.status === "published" the Structure tab now renders without
+  authoring affordances per prd7-structure-linear-by-topics.html s-readonly:
+  
+    \* @dnd-kit useSortable hooks pass `disabled: true`, so grips become
+      no-op; CSS .page-row--readonly / .topic-block--readonly dim the grip
+      to opacity 0.2 with cursor:default + pointer-events:none.
+    \* AuthorPageGroup / AfterTestZone hide insert-rows entirely.
+    \* AuthorPageRow .page-actions menu (Удалить) is omitted.
+    \* SystemPageRow «Сменить вариант» becomes disabled (canSwitch flips
+      to false), since the active template is locked.
+    \* PageEditForm fields wrap in &lt;fieldset disabled&gt; and the action bar
+      collapses to a single «Закрыть» button (was Отмена + Сохранить).
+  
+  readOnly is plumbed from the drawer through StructureSection props
+  into ZoneHandlers so every nested row component reads from a single
+  source of truth. Drawer-level footer change (Save/Cancel → «Закрыть»)
+  is out of scope here — the wireframe puts it on the drawer itself,
+  which is a follow-up.
+
+- **feat**(structure): close PRD-7 S13.5 router-mode gaps (G20/G21/G27/G45/G46/G47/G48) (2026-05-28) [`4b5742b779b286934718c02ea4c8b3ea2dcff875`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4b5742b779b286934718c02ea4c8b3ea2dcff875)
+  7 of 9 router-mode gaps from S13.5 closed; G19 (read-only) and G22
+  (mapping-flow) remain as follow-ups.
+  
+  G48 — router content_page never materialized for router_by_topics tests
+    \* built-in default manifest now declares kind:router variant ("router.menu")
+    \* defaultTemplateManifestSchema superRefine now requires all 4 system
+      kinds (intro/summary/router/questions) instead of just questions
+    \* GET /api/tests/:id invokes idempotent testSettingsService.reconcileExisting()
+      on load, healing seed-data tests with missing system rows
+    \* migration 006: one-shot SQL backfill for existing tests (intro/summary
+      singletons; router for router_by_topics; questions per topic / flat)
+      — idempotent NOT EXISTS guards
+  
+  G47 — topic order in Structure was implementation-defined
+    \* test_sections.sort_order column (migration 007 + backfill via
+      ROW_NUMBER per test partition); getTestSections ORDER BY sort_order;
+      _insertSections writes sortOrder = array index
+    \* @dnd-kit topic-drag wired in StructureSection (linear-by-topics and
+      router_by_topics), using a dedicated `topic:` id prefix so the shared
+      DndContext routes topic vs page drags correctly
+    \* .topic-grip rendered when updateModel is plumbed; count format
+      «N вопросов» (was «N из M вопросов»)
+  
+  G45 / G20 — router-row + topics inside one dashed container with connectors
+    \* new InsideTestZone component wraps router-row and topics in
+      .inside-test (label «Внутри теста») + .tree-branches &gt; .tree-branch
+    \* CSS pseudo-elements draw the ├─/└─ tree-connectors via DS tokens
+  
+  G46 — flow-mode label
+    \* FLOW_LABEL.router_by_topics → «Через страницу-маршрутизатор»; basic
+      settings select option synced; prd7-editor-settings-tab.html wireframe
+      \+ matching test expectations
+  
+  G21 — fallback indicator on system rows
+    \* SystemPageRow shows yellow «Из стандартного шаблона» tag in
+      .page-row__meta when active template lacks variants of this kind
+  
+  G27 — inline validation on system rows
+    \* SystemPageRow becomes expandable when its variant has placeholders;
+      PageEditForm renders .validation-banner with missing-field labels;
+      row gets page-row--error (existing severity scheme); hasStructureErrors
+      now covers all kinds so the tab status-dot reflects system-row state
+
+- **feat**(design-tab): close S12-G2 — template preview modal (FR-30) (2026-05-28) [`d1ebe3140fb40d1680c8cda3971307f5ce97791c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d1ebe3140fb40d1680c8cda3971307f5ce97791c)
+  Replaces window.alert("Предпросмотр шаблона будет доступен в следующем шаге.")
+  on the «Предпросмотр» icon button with a real wireframe-driven ModalDialog
+  (prd7-design-tab.html state wf-template-preview, lines 657-730).
+  
+  Architecture:
+  \- Demo fixtures (template-preview-fixtures.ts): hard-coded Russian demo
+    content per kind (intro / info / summary) and per question type (single /
+    multiple / ranking / matching) + shared course chrome (sidebar topics,
+    progress %, page indicator)
+  \- CSS (tb-components.css): ported .tpl-preview-{modal,group,stage,shell,
+    caption} from wireframe; shell sub-elements (header/progress/body/sidebar/
+    content/hero/actions) + question variants (option/marker/matching-row) +
+    result block; shell consumes CSS custom properties --tpl-primary / --tpl-fg
+    / --tpl-card / --tpl-font for branding application
+  \- TemplatePreviewModal component: ModalDialog size="xl"
+    className="tpl-preview-modal". Rail derives groups + items from
+    template.manifest.contentTemplates (intro → info → 4 question subtypes →
+    summary; router kind skipped). Stage renders demo content per selected
+    rail item inside a mocked SCORM shell; CSS vars on the shell are built
+    from current draft.params via buildShellStyle() (HSL strings wrapped in
+    hsl(), hex/rgb/hsl pass-through)
+  \- DesignSection wiring: previewOpen state lifted in DesignSection;
+    TemplatePane receives onPreview; button onClick = setPreviewOpen(true),
+    disabled when template === null (pre-protection for upcoming G6
+    incompatible-state). Modal mounted in a React Fragment alongside the
+    split container
+  
+  Edge cases:
+  \- template === null → modal returns null (button is also disabled)
+  \- contentTemplates empty → modal returns null (no items to show)
+  
+  DS forwarding note: ModalDialog from @universityrt/ui-kit does NOT forward
+  arbitrary HTML attributes, so the data-testid for the modal sits on an
+  inner .ou-modal__split wrapper rather than on ModalDialog itself.
+  
+  Tests: 3 new in design-section.test.tsx (modal opens / closes via «Закрыть» /
+  rail items derived from contentTemplates). TEMPLATE fixture extended with a
+  minimal contentTemplates[] (intro / info / questions / summary).
+  
+  Verification:
+  \- npm run check — 0 errors
+  \- vitest run — 51 files / 1334 tests green (+3 for the new modal tests)
+  \- markdownlint-cli2 — s12 spec passes (line-length cleanup pass on
+    pre-existing long prose lines)
+
+- **feat**(design-tab): close S12-G1 — params grouped by rail-section (FR-31) (2026-05-28) [`83e2bd3a44e9f31a8dc9540bad2ad43db7249686`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/83e2bd3a44e9f31a8dc9540bad2ad43db7249686)
+  Replaces the «Макет» / «Прогресс и шапка» StubPane («реализуются отдельным
+  шагом PRD-7») with real param rendering filtered by `param.section`. Brings
+  the «Оформление» tab into compliance with FR-31 (acceptance row of
+  prd7-design-tab.html: «Параметры шаблона по секциям — Брендирование, Макет,
+  Прогресс и шапка. Набор определяется разработчиком шаблона.»).
+  
+  Contract change (UI-only, no API/DB migration):
+  \- TemplateParam.section?: ParamSection ("branding" | "layout" | "progress")
+  \- Default fallback "branding" for legacy params without explicit section
+  \- templateManifestSchema is .passthrough() so no zod change needed; the
+    server unknown-key validator (routes/tests.ts:393) treats `section` as a
+    transparent passthrough
+  
+  Manifests (section assigned per param):
+  \- default: 10b / 0l / 2p
+  \- corporate: 12b / 0l / 3p
+  \- minimal: 6b / 0l / 2p
+  \- rtk-storyline: 5b / 4l / 2p (only template with real layout params today)
+  
+  UI refactor (design-section.tsx):
+  \- BrandingPane + StubPane → generic SectionPane + paramsBySection helper
+  \- Three sub-rail entries (branding / layout / progress) render their own
+    params; empty sections show a tone="info" Banner with section-specific
+    copy («У выбранного шаблона …»)
+  \- New testids: design-layout-pane, design-layout-pane-empty,
+    design-progress-pane, design-progress-pane-empty
+  \- Removed: design-stub-layout, design-stub-progress
+  
+  Test update:
+  \- «shows the «следующий шаг» stub» → «renders empty-section info-banner»
+    (fixture params have no section → all fall back to branding → layout and
+    progress panes show empty-state banners)
+  
+  Verification:
+  \- npm run check — 0 errors
+  \- vitest run — 51 files / 1331 tests green (no delta — test count steady)
+
+- **feat**(editor): toast confirms «Структура» Save action (2026-05-28) [`613b15ba147c306087fece6c0cc3ca3bbd65823f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/613b15ba147c306087fece6c0cc3ca3bbd65823f)
+  After clicking «Сохранить» (or «Сохранить и закрыть») when content pages were
+  mutated, show a toast «Изменения структуры сохранены». Rows themselves were
+  persisted at mutation time — the toast tells the user that the Save action
+  acknowledged the structure edit cycle, closing the loop opened by the dirty
+  indicator.
+  
+  Skipped when only the test-settings / design draft is dirty (those already
+  have their own success path).
+
+- **feat**(structure): drop pages around «Итоги»; Save reflects Структура (2026-05-28) [`9f38b253086f56bbfb6166edd8c675ed7176189d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9f38b253086f56bbfb6166edd8c675ed7176189d)
+  «После теста» now renders a single combined list interleaving author after-
+  pages with the system summary («Итоги») by sortOrder. Inserts appear in every
+  gap, including before «Итоги», so authors can place pre-results pages.
+  
+  A drop on the «Итоги» row used to vanish: resolveTarget copied position/topicId
+  from the hovered page, and the system summary is stored with a best-fit
+  `position="after_topic"`+`topicId=null` (see server `positionForKind`). The
+  dragged page inherited that pair, which no zone renders — the row disappeared
+  from the UI. Now a drop on the summary row is recognised and rewritten to the
+  after-zone (`position="after"`, `topicId=null`).
+  
+  «Сохранить» now lights up after add/drag/reorder on the Структура tab:
+  content-page mutations write directly to the API (no draft), so a
+  `hasMutated` flag bridges them to the Drawer's combinedDirty signal and is
+  reset by `saveAll`/`handleExitWithoutSave`. The structure status split is now
+  explicit: required-empty in an author page is an error (red tag, blocks Save);
+  templateKeyMissing is a warning (yellow tag, status-dot only).
+
+- **feat**(structure): cross-zone page move between zones/topics + zone drop highlight (2026-05-28) [`18f7d0469abc9af056220b5203217b9d720fe450`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/18f7d0469abc9af056220b5203217b9d720fe450)
+  Each author-page group is now a droppable (zoneDroppableId encodes position+topic),
+  so a page can be dropped INTO another zone — including an empty one. A shared
+  resolveTarget() feeds both the indicator and the drop, deriving the target zone
+  from the hovered row or the bare zone droppable. Same-zone drops reorder
+  (reorderByDrop); cross-zone drops change the page's position/topicId via
+  cp.update then renumber the target zone (cp.reorder) so it lands at the chosen
+  index (insertIndexFor). Cross-zone side is rect-based (active not in target list);
+  empty/zone targets highlight via .is-zone-drop-target. Unit tests for
+  insertIndexFor; npm run check clean; section suite 20/20.
+
+- **feat**(structure): no-shift DnD with correct-side insertion indicator (2026-05-28) [`59a3359adbefd8b6386f05c51b937baa43e56161`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/59a3359adbefd8b6386f05c51b937baa43e56161)
+  Rows no longer shift while dragging (that confused the drop direction). The row
+  under the pointer shows an insertion line on the side the dragged row will land,
+  driven by DropContext. Side is computed by list index (sideByIndex) — the same
+  function feeds the indicator and reorderByDrop, so they can never disagree
+  (fixes the earlier mismatch where the line showed the wrong edge). DragOverlay
+  badge now uses the variant label. npm run check clean; section suite 18/18.
+
+- **feat**(structure): @dnd-kit within-zone page DnD (drag handle, drop indicator) (2026-05-27) [`062b4378afbb28c6ab8d22f4e560c122085ff581`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/062b4378afbb28c6ab8d22f4e560c122085ff581)
+  Replace the broken native HTML5 DnD (drag never started without dataTransfer)
+  with @dnd-kit: DndContext + per-zone SortableContext, rows are useSortable
+  (dragged by the grip handle), DragOverlay for a clean drag preview. Enables
+  arbitrary placement within a zone with the sortable insertion shift as the
+  drop indicator. Reorder math extracted to computeZoneReorder (unit-tested);
+  @dnd-kit drag itself needs real DOM measurements so it is verified in-browser.
+  
+  Stage A (within-zone) only; cross-zone move (between topics / across the
+  questions block) and topic reorder follow separately. npm run check clean;
+  editor suite 8 files / 165 green.
+
+- **feat**(scorm): retire legacy start_page_content read; close PRD-7 S10/S11 (2026-05-27) [`ae1bebd1206b563ce4ff67f94fc8f70bbae85304`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ae1bebd1206b563ce4ff67f94fc8f70bbae85304)
+  S10 remainder: stop exporting tests.start_page_content into TEST_DATA
+  (test-json.ts) and rendering it on the SCORM start overview (startPage.js).
+  The content is migrated to a content_pages 'intro' row (migration 003 §4.2)
+  and played by the content-flow runtime, so the start screen no longer
+  duplicates it. DB column and write-path kept for legacy clients (decisions §1,
+  S10 §3.3); in-app web player (take-test.tsx) untouched. Removed an orphaned
+  backup file in the template dir. Added a golden guard asserting startPageContent
+  is absent from TEST_DATA while an intro page is present.
+  
+  S11: acceptance pass recorded in docs/prd-7-acceptance-report.md (10/10 criterion
+  groups, 0 blockers). Full vitest suite 52 files / 1344 green; npm run check 0.
+  ROADMAP and PRD-7 S9-S11 statuses set to Closed. Archive-restore UI remains a
+  sanctioned post-MVP deferral (backend POST /restore done + tested).
+
+- **feat**(scripts): SCORM acceptance/debug tooling + golden test (2026-05-27) [`6aef93321bd66c6c6f3114cb44105b42e75e5f62`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6aef93321bd66c6c6f3114cb44105b42e75e5f62)
+  scorm:sample (fixed demo), scorm:template (template-aware mock for any id/folder/manifest, with temp staging), scorm:player (local SCORM 2004 player + RTE shim). tests/scorm-package-acceptance.test.ts validates the real export pipeline (manifest/launch/runtime/template/TEST_DATA + content-flow bundle). out/ gitignored.
+
+- **feat**(scorm/runtime): play test-scope content pages + post-results flow (2026-05-27) [`c93e088500912fc3ec53a186984c1bbcf061a64b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c93e088500912fc3ec53a186984c1bbcf061a64b)
+  rebuildPageSequence now sequences «До теста» intro/info and pre-results info around the topic stream; the first summary page marks the results boundary (built-in results screen), and pages after it render via a new postResults phase. Backward compatible (no test-scope pages → unchanged). Closes the editor↔runtime gap (PRD-1 §1.9).
+
+- **feat**(test-editor): content-page editor in «Структура» tab; retire ContentPagesDialog (2026-05-27) [`a94b4b7a21cb9c45cf5996603c8d505a6f4621ea`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a94b4b7a21cb9c45cf5996603c8d505a6f4621ea)
+  Kind-aware zoned editor: add/edit/reorder/delete author info pages; system rows (intro/summary/questions/router) read-only with «Сменить вариант» (replace-variant, disabled when single variant) and required-field warnings. Content-pages CRUD hook + drawer warning dot; structural classes in tb-components.css. Removes the orphaned legacy ContentPagesDialog (PRD-1 closeout).
+
+- **feat**(content-pages): accept test-scope before/after pages (nullable topicId) (2026-05-27) [`194a813d9d7dd1f2be7294438999050db62b90e7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/194a813d9d7dd1f2be7294438999050db62b90e7)
+  POST allows position before/after with topicId=null (zones «До/После теста»); before_topic/after_topic still require a valid topicId. Needed by the «Структура» editor.
+
+- **feat**(schema): add test-scope "after" position for content_pages (2026-05-27) [`4e8a518b8f9a1377430457a26536662a4c0a7b50`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4e8a518b8f9a1377430457a26536662a4c0a7b50)
+  Enables author pages in the linear_flat «После теста» zone (mirror of "before"). Widens the position enum and CHECK constraint (migration 005); existing rows untouched.
+
+- **feat**(test-editor): FR-20c error-summary banner + field anchor navigation (2026-05-27) [`78df1a60aebf373b1d6c9ffde0d315b7d0b8144e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/78df1a60aebf373b1d6c9ffde0d315b7d0b8144e)
+  Add a DS Banner (error tone) at the top of the drawer body with a field-error
+  count and a 'Перейти к ошибкам' action (per approved prd7-editor-drawer.html).
+  The action switches to the tab owning the first error (tabForField) and
+  focuses/scrolls the offending field via data-field anchors on section
+  formfields (basic.title, basic.webhookUrl, passRules.*, sections[i].drawCount,
+  sections). Closes the last open S4/4A item; covered by test-editor.test.tsx.
+
+- **feat**(server/utils): exceljs wrapper mimicking the SheetJS subset we used (2026-05-26) [`78b40ea1f02f39683d68ce391ac5040692f395e7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/78b40ea1f02f39683d68ce391ac5040692f395e7)
+  Routes previously called XLSX.utils.{json,aoa}_to_sheet / sheet_to_json
+  directly. Centralising the API surface here keeps route code terse and
+  limits the blast radius if the library is ever swapped again.
+
+- **feat**(prd-7): tests list — triangle-alert indicator for tests saved with warnings (2026-05-26) [`31f88478ffa875c20005e6f1028f03b9c919ee58`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/31f88478ffa875c20005e6f1028f03b9c919ee58)
+  After a successful save the editor stamps a boolean into the
+  react-query cache under ["test-warnings", testId]. TestRow subscribes
+  with enabled:false (queryFn never runs) and rerenders when the cache
+  flips. Result: a yellow TriangleAlert appears next to the test title
+  on the list when the last save produced any warnings — the visual
+  counterpart to the saveError banner added in the drawer.
+
+- **feat**(prd-7): move «Обязательная» to Состав; FR-17 adaptive guards; RTE feedback preview (2026-05-26) [`f7b73993168a5b127b63512de20e9ae30b19320d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f7b73993168a5b127b63512de20e9ae30b19320d)
+  «Обязательная» toggle previously lived only in the Settings → Pass-rules
+  table; per updated wireframe it belongs in the topic-row header on the
+  Состав tab (single point of control). Remove the column from the pass-
+  rules table and add a Switch to TopicRow. Pass-rules row signature
+  slims down accordingly.
+  
+  Adaptive mode guards (PRD-7 FR-17):
+  \- FR-17a — adaptive mode with no enabled topic is a stop-factor error;
+    surfaced via error dot on the rail and a Banner in the Adaptive pane.
+  \- FR-17b — every enabled section-topic should have ≥ 2 levels; surfaced
+    as a per-topic warning Banner + warning dot on the rail. Disabled
+    topics are excluded since they don't participate in test logic.
+  \- Switching mode → adaptive now seeds a default level for each section,
+    so the new test isn't born with a stop-factor.
+  \- Last-level removal is disabled with a tooltip — every topic must
+    always carry at least one level slot.
+  
+  FeedbackPreview rendered RTE content inside a `&lt;button&gt;`, which is
+  invalid HTML (block-level inside button). Render through
+  `div[role=button]` with keyboard handler so `&lt;p&gt;`/`&lt;ul&gt;` from the RTE
+  are valid children; new tb-feedback-preview__rich block clips to ~4
+  lines with a fade mask.
+
+- **feat**(prd-7): FeedbackEditorModal — real RTE, PDF assets and links per wireframe s-feedback-edit (2026-05-26) [`57d77c13e18a8c0e68f25c38eb61cf2f601addf4`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/57d77c13e18a8c0e68f25c38eb61cf2f601addf4)
+  Replaces Textarea + Banner stubs with the actual wireframe implementation:
+  \- tb-rte toolbar (Bold / Italic / Link via execCommand) with contenteditable area
+  \- PDF assets list with upload button, file-size guard (5 MB), and remove action
+  \- «Добавить ссылку» as secondary button (not stretched full-width)
+  \- Section headings use tb-feedback-editor__sec-title (uppercase DS class)
+  \- DraftAsset strips size/file fields before onSave emission
+  \- hideAssets prop to suppress PDF section in test-level feedback context
+  \- TopicRow wires FeedbackPreview click → FeedbackEditorModal open/save
+  \- basic-settings-section: add assets:[] to FeedbackEditTrigger initial value
+
+- **feat**(prd-7): unified FeedbackEditorModal — single editor for all feedback contexts (2026-05-25) [`0257b5bf84bec4a71b3d9022af8839f51dd89e3f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0257b5bf84bec4a71b3d9022af8839f51dd89e3f)
+  Per prd7-editor-drawer.html state s-feedback-edit (FR-36 / FR-37),
+  all feedback editing surfaces share one modal: format selector,
+  body editor, links list, PDF assets. Previously the editor was
+  inlined three different ways (test-level Textarea, topic-level
+  failureFeedback Textarea, level-level feedback Textarea +
+  AdaptiveLevelLinks composite).
+  
+  New shared component:
+  \- sections/feedback-editor-modal.tsx — ModalDialog composite with:
+    \* SegmentedControl format selector (plain / richText / html)
+    \* Textarea body editor; richText shows «full RTE — next step»
+      Banner stub
+    \* Links list (title + url + delete) + «Добавить ссылку»
+    \* PDF assets section with a deferred-uploader Banner (FR-37
+      integration ships separately); can be hidden via `hideAssets`
+  \- CSS: tb-feedback-editor + section helpers ported from wireframe
+    to tb-components.css.
+  
+  Wiring:
+  \- AdaptiveTopicAccordion: replace failureFeedback Textarea with
+    FailureFeedbackEditor → modal opens on preview-button click.
+  \- AdaptiveLevelCard: replace per-level feedback Textarea +
+    AdaptiveLevelLinks with LevelFeedbackEditor — single modal
+    manages both text and links atomically (onSave applies
+    text + links together).
+  \- AdaptiveLevelLinks helper deleted (its responsibility moved
+    into the modal).
+  
+  Tests updated: the «adds and removes per-level material links»
+  spec now exercises the full modal flow (open trigger → remove
+  link inside modal → click Save).
+  
+  133 vitest tests pass; tsc clean.
+
+- **feat**(prd-7): test editor Drawer + tests-list explorer + settings/design/structure panes (2026-05-24) [`afc5fe5578c10c3a7a784bc4ef8365e0fe40882d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/afc5fe5578c10c3a7a784bc4ef8365e0fe40882d)
+  Major PRD-7 landing across editor and tests list:
+  
+  \- Tests list (client/src/features/tests/list/): explorer-tree per
+    prd7-tests-list.html with folder hierarchy, search, more-menu,
+    delete confirms; FAB; DS-only `ou-*` / `tb-*` styling.
+  \- Editor Drawer (test-editor.tsx + use-test-editor.ts): wide Drawer
+    shell with 4 tabs, create/edit mode discriminated union,
+    optimistic version save (FR-25k), auto-close on createdId.
+  \- Settings tab (basic-settings-section): 5-rail layout with
+    Основное / Правила прохождения / Ограничения / Интеграция /
+    Адаптивный режим. Pass-rules pane drives decisionPolicy +
+    overall rule + per-topic source/required. Adaptive pane has
+    master toggle, per-topic accordion, level CRUD (name / min/max
+    difficulty / questions / threshold / feedback / links).
+  \- Composition tab (topics-structure-section): topic picker modal
+    with search, tb-topic-row list with draw-count clamp.
+  \- Design tab (design-section + use-design-settings): loads
+    current template via /api/templates/:id, renders template card
+    (Шаблон pane) and dynamic params form per manifest (Брендирование
+    pane) for text / color / boolean / select. Save bar persists via
+    PUT /api/tests/:id/design.
+  \- Structure tab (start-pages-section + use-content-pages): zoned
+    read-only render of content_pages keyed by flowMode (linear_flat
+    vs linear_by_topics/router_by_topics), templateKeyMissing
+    warning, delete-with-confirm via DELETE /api/tests/:id/content-pages/:pageId.
+  \- Backend: tests.ts gains folderId on create + GET /api/tests/:id;
+    test-folders.ts DELETE supports folder-only (moveTestsTo) and
+    folder-and-tests (confirmName); storage adds
+    deleteTestFolderCascade.
+  \- DS: vendored university-rt.css to bypass broken upstream
+    package exports; tb-components.css extended for topic rows /
+    picker modal / adaptive accordion / level cards / design
+    template card / structure zones / page rows.
+  \- Theme: ThemeProvider syncs Tailwind `.light/.dark` (html) +
+    DS `.ou--light/.ou--dark` (body).
+  \- Coverage: 134 vitest tests across 9 files
+    (editor + tests-list + tree-builder + sections);
+    check:wireframes:ds clean over 17 wireframes.
+  
+  Create/edit/reorder for content_pages, router-page picker,
+  gallery for "Заменить шаблон", and image/asset param types
+  remain as next-step banners.
+
+- **feat**(routes): migrate POST/PUT /api/tests to TestSettingsService (PRD-7 §1.10) (2026-05-24) [`f18fd1c3afd38a9d8c64b6dd7fb100a821df2f28`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f18fd1c3afd38a9d8c64b6dd7fb100a821df2f28)
+  Closes the route-gap: production save path now goes through the service
+  so reconciliation (PRD-7 §1.4) and required-fields validation (PRD-1
+  §4.3.6) actually fire in one transaction.
+  
+  \- POST /api/tests calls testSettingsService.create(). Adaptive levels
+    are passed through the payload instead of being inserted by the route.
+  \- PUT /api/tests/:id calls testSettingsService.save() with sections for
+    standard tests and adaptiveSettings for adaptive tests. expectedVersion
+    is forwarded from the body when provided.
+  \- Error mapping: VersionConflictError → 409 with currentVersion /
+    expectedVersion; RequiredFieldsMissingError → 422 with structured
+    fields ({ pageId, templateKey, fieldName }); status=404 on Test not
+    found errors thrown by the service.
+  \- routes.tests.test.ts: TestSettingsService is mocked at the route
+    boundary (real error classes preserved). Replaced storage-level
+    assertions with service-level ones; added new tests for 409 and 422
+    flows.
+
+- **feat**(test-settings): required-fields validation on publish transition (PRD-1 §4.3.6) (2026-05-24) [`d445861262c19e7d5f39e85706b3ca3659fcfa35`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d445861262c19e7d5f39e85706b3ca3659fcfa35)
+  New required-fields-validator module exports findMissingRequiredFields()
+  plus RequiredFieldsMissingError carrying per-page violations. Pure helper
+  treats undefined/null/whitespace/empty arrays as missing; 0/false/objects
+  count as filled.
+  
+  TestSettingsService.save() validates only when target status is
+  'published' — draft saves remain permissive so a freshly created test
+  (empty intro/summary) can be saved mid-edit. On violation the transaction
+  rolls back via thrown RequiredFieldsMissingError. Fail-soft when the
+  template manifest cannot be loaded, same as reconciliation.
+  
+  Findings surfaced in PRD-7 §1.10 todo: the production PUT /api/tests/:id
+  route in server/routes/tests.ts still calls storage.updateTest() directly
+  and does not yet route through testSettingsService.save(). Until that
+  migration lands, the new reconciliation + required-fields validation are
+  dormant on the live save path.
+
+- **feat**(api): replace-variant endpoint for content_pages (PRD-7 FR-46) (2026-05-24) [`5101d5c8c3a6cec21efba988c53a452af5185224`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5101d5c8c3a6cec21efba988c53a452af5185224)
+  POST /api/tests/:id/content-pages/:pageId/replace-variant switches a
+  content page to a different variant of the same kind. Implements the
+  'name = contract between variants of the same kind' rule (PRD-1 §4.3.3):
+  
+  \- Diff: preserved (shared placeholder keys), removed (only in old),
+    added (only in new). Returned to the caller.
+  \- Apply: filters valuesJson and placeholderStyles down to preserved
+    keys, then re-normalizes against the new placeholder set (path /
+    renderer revalidation for resultField).
+  \- Rejects with 422 on kind mismatch, same-key replacement, or missing
+    newTemplateKey. Rejects with 404 on missing test / page / variant.
+  
+  9 new API tests cover auth, all error paths, and the happy-path diff
+  with values preserved/dropped according to the placeholder names.
+
+- **feat**(test-settings): reconcile system content_pages on create/save (PRD-7 §1.4) (2026-05-24) [`efe47cb76146f72c3380177426865cf4902d150f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/efe47cb76146f72c3380177426865cf4902d150f)
+  TestSettingsService now keeps system content_pages rows in sync with the
+  test's (flowMode, topicIds, templateId) tuple inside the same transaction:
+  
+  \- create() always reconciles after sections insert.
+  \- save() reconciles only when sections, flowPolicyJson, or
+    designSettingsJson changed — basic-field saves stay cheap.
+  \- Helpers extract flowMode and templateId from their JSON columns with
+    documented defaults (linear_flat / 'default' template).
+  \- legacyTypeForKind / positionForKind keep the deprecated type column
+    and the existing position enum populated until a future migration
+    retires them.
+  
+  Reconciliation loads the test's template manifest plus the default
+  template in a single query, plans via planSystemPages(), and applies
+  deletes then inserts. Silent no-op if neither manifest is present —
+  higher layers handle that as a config error.
+  
+  9 new integration tests cover create() for all 3 flowModes, all 3
+  save() reconciliation triggers, both directions of flowMode change,
+  and the perf guard that skips reconciliation on basic-field saves.
+
+- **feat**(services): system content_pages lifecycle planner (PRD-7 §1.4) (2026-05-24) [`caeb4a93c01b550670ca4aa3dc3e179b2208b478`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/caeb4a93c01b550670ca4aa3dc3e179b2208b478)
+  Pure planner planSystemPages() reconciles existing system content_pages
+  rows (kind: intro/summary/router/questions) against the desired test
+  state (flowMode, topicIds, template, defaultTemplate). Computes a diff
+  plan with keep / create / delete lists; callers execute it inside a
+  transaction.
+  
+  Handles all four flowMode transitions plus topic add/remove within
+  per-topic modes. Carries valuesJson across questions row collapses
+  (N→1: takes first row's values) and expansions (1→N: copies flat row's
+  values to each new per-topic row), implementing the 'name = contract'
+  parameter-transfer rule. User info pages are out of scope and never
+  touched. Idempotent: re-running against a steady state produces no
+  creates or deletes.
+  
+  13 unit tests cover all transition directions plus edge cases
+  (duplicate cleanup, missing variant fallback).
+
+- **feat**(services): silent variant binding service (PRD-1 §4.3.2) (2026-05-24) [`d227900c0f2958fed8fb3712d8248c24c90157e2`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d227900c0f2958fed8fb3712d8248c24c90157e2)
+  Pure functions that pick a variant key for a given (template, kind) pair:
+  1 variant in template → silent bind; N → bind isDefault (or first) and
+  signal hasMultipleChoices for the UI hint; 0 → fall back to the default
+  template's variant of the same kind and signal fallbackUsed. Returns
+  null only when both template and default lack the kind (hard config
+  error — surfaced by caller).
+  
+  Consumed by upcoming TestSettingsService reconciliation logic.
+
+- **feat**(schema): variant.kind contract for templates and content_pages (PRD-1 §4.3) (2026-05-24) [`9e3606e5b969a95aec5e365e7dd6fc55cddaa04c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9e3606e5b969a95aec5e365e7dd6fc55cddaa04c)
+  Introduces the variant-binding contract that drives system-page lifecycle
+  across template versions and flowMode changes:
+  
+  \- VariantKind enum (questions/router/summary/intro/info) + zod schemas
+    for manifest entries, full manifest, and default-template refinement
+    (must declare at least one kind: questions variant — system fallback).
+  \- Migration 004 adds content_pages.kind column (5-value CHECK constraint),
+    backfilled from legacy type; type column kept and marked deprecated.
+  \- Built-in default/corporate/minimal manifests gain kind on every entry;
+    default also declares a question.standard variant for the questions kind.
+  \- syncBuiltinTemplates() validates manifests via zod and skips invalid ones;
+    default is held to the stricter refined schema.
+  \- content-pages route and storage safety-net derive kind on insert.
+
+- **feat**(wireframes): add s-default-adaptive state to editor-drawer (FR-36) (2026-05-21) [`08c244d621ac958f4f7488d852c67e779c9ab5db`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/08c244d621ac958f4f7488d852c67e779c9ab5db)
+  Adaptive-вариант вкладки «Состав». В draw-count row значение из input
+  заменяется на read-only тег «Адаптивный» + ссылка «Настроить уровни →»
+  на одноимённую секцию вкладки Настройки. Сверху body — info-banner
+  с пояснением, что количество вопросов на тему определяется уровнем
+  сложности учащегося.
+  
+  В header дополнительно ставится `ou-tag--accent` «Адаптивный» рядом со
+  статусом теста, чтобы режим был виден на любой вкладке Drawer без
+  открытия секции Адаптивность в Настройках. Кнопка состояния s-default-
+  adaptive добавлена в `.wf-nav` рядом с s-default. Иконка `i-info`
+  добавлена в sprite.
+  
+  Сама декорация `--adaptive` уже определена в tb-components.css
+  (`tb-draw-count-row--adaptive { flex-wrap: wrap; }`) — задаёт wrap
+  поскольку link-tail длиннее number-input.
+
+- **feat**(wireframes): replace s-mobile with s-feedback-edit in editor-drawer (2026-05-21) [`485614af141ee74be0967cc29dc6dff9d8e670ba`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/485614af141ee74be0967cc29dc6dff9d8e670ba)
+  Две связанные правки покрытия state'ов вкладки «Состав» editor-drawer:
+  
+  1. Удалён s-mobile state (343 строки HTML + ~50 строк CSS-блока mobile-*
+     \+ 3 строки notes-таблиц + DS-mapping fallback на .mobile-canvas) —
+     mobile-адаптивность явно вынесена за scope PRD-7, отдельный PRD
+     покроет mobile-эскизы сам.
+  
+  2. Добавлен s-feedback-edit state — модал `ou-modal--l` поверх drawer
+     Состав, покрывающий FR-36 / FR-37 (редактирование обратной связи
+     по теме с richtext, ссылками и PDF-assets). Drawer на бэке dimmed
+     (opacity 0.55), body aria-hidden, footer disabled.
+  
+     Структура модала:
+     — inline format-selector `ou-seg--s` (Простой / Форматированный / HTML);
+     — `tb-rte` rich-text editor с toolbar (B / I / link) и contenteditable
+       area с примером (жирный + список);
+     — section «Ссылки на материалы» (FR-37): single-row item title+url
+       \+ iconbtn-trash, кнопка «Добавить ссылку»;
+     — section «Прикреплённые файлы (PDF)» (FR-37): paperclip-row с
+       inline-rename, filename·size, iconbtn-trash, upload-button с
+       hint про SCORM-пакет.
+  
+     Дополнения: иконка `i-trash` в sprite, CSS-секция `tb-feedback-editor*`
+     / `tb-rte*` (gate-passing DS-токены), DS-mapping fallback для
+     feedback-editor / rich-text. FR-аннотации FR-36 / FR-37 на ключевых
+     элементах.
+
+- **feat**(tb-components): add topic-row + draw-count + feedback-preview + status-dot--dirty (2026-05-21) [`31cadd496a20d5948806039b5c009a3b828ac2ac`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/31cadd496a20d5948806039b5c009a3b828ac2ac)
+  Новые BEM-классы для вкладки «Состав» Drawer-а, экстрагированы из inline
+  CSS бывшего prd7-section-basic.html (удалён в следующем коммите как дубликат
+  prd7-editor-drawer.html). Остаются как готовая инвестиция для будущего
+  рефакторинга editor-drawer на DS + tb-* (см. чек-лист §2 «Gaps»):
+  
+  \- tb-topic-row + __header / __name / __count / __body — карточка темы
+    (название · бейдж · счётчик + body с draw-count input + feedback)
+  \- tb-draw-count-row + __label / __max + --adaptive modifier — строка
+    «Вопросов в тест [N] из M» (standard) или tag + link (adaptive, FR-36)
+  \- tb-feedback-preview + __text / __snippet / __meta / __sep + .is-empty —
+    read-only клик-карточка обратной связи по теме
+  \- tb-status-dot--dirty — accent variant для индикатора dirty-вкладки
+  
+  Синхронизировано в обе копии: client/src/styles/ (canonical, попадает
+  в prod-bundle через index.css) и docs/wireframes/ (для эскизов).
+
+- **feat**(wireframes): simplify variant-replace modal + relocate to approved/ (2026-05-21) [`e3af4daa8a148bfd36397fcd702fe1fc36bc7ab0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e3af4daa8a148bfd36397fcd702fe1fc36bc7ab0)
+  Дизайнер согласовал 2026-05-21 после серии упрощений:
+  \- Счётчики «N параметров» под не-текущими вариантами удалены (избыточны —
+    пользователь увидит поля при редактировании)
+  \- Зелёный блок «Будут сохранены N параметров» удалён во всех state'ах —
+    positive feedback не нужен, штатное поведение пользователь увидит позже
+    в page-row-expand
+  \- Технические термины schema / kind убраны из user-facing текста и заменены
+    на человеческие формулировки («У нового варианта таких полей нет»,
+    «Текущие настройки страницы будут потеряны»)
+  \- Иконка warning-блока заменена i-trash → i-warn (предупреждение, а не действие)
+  \- Заголовок модала обёрнут в ou-modal__head-text для корректной позиции
+    close-кнопки по DS-канону
+  \- s-replace-empty-diff теперь полностью спокойный (только список без блоков)
+  \- Final Sign-off pending снят, файл считается approved
+
+- **feat**(wireframes): add «Требует обновления» status tag on tests-list (2026-05-21) [`837b1e1605f0425457b172f1e9d1b90c4636be1e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/837b1e1605f0425457b172f1e9d1b90c4636be1e)
+  Закрывает §3.1 чек-листа: при дрейфе версии шаблона тест в общем списке
+  получает дополнительный ou-tag--warning рядом со стандартным статусом.
+  Реализовано на примере «Аудит логов SCORM» через flex-direction: column
+  в ячейке статуса (точечный inline-стиль с DS-токенами).
+
+- **feat**(wireframes): wrap «Внутри теста» under dashed contour in linear modes (2026-05-21) [`fa2ef8b693a4b64723d150671fd051cb3f5a6217`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fa2ef8b693a4b64723d150671fd051cb3f5a6217)
+  Extend the zone-unification pattern (router_by_topics already done) to
+  linear_flat and linear_by_topics so all three flowModes show the inner test
+  content inside the same dashed-border zone-block as «До теста» / «После теста».
+  
+  linear_flat (1 state — s-main): the system questions-row is now wrapped in a
+  `.zone-block` with «Внутри теста» header. Hand-edited because the state has a
+  single fixed structure.
+  
+  linear_by_topics (10+ states): runtime JS wrapper. A small `wrapTopicsInZone`
+  IIFE iterates every `.wf-state`, finds direct-child `.topic-block` siblings
+  inside the drawer body, and moves them into a freshly created
+  `.zone-block.zone-block--topics` titled «Внутри теста». This keeps the static
+  markup of all 13 states (s-main, s-empty-pages, s-readonly, s-mapping,
+  s-dirty-form, s-validation, s-sanitize, s-delete, s-dnd, s-dnd-topics,
+  s-mode-change, etc.) untouched while applying the same visual contour
+  everywhere. Idempotent via a `data-topics-wrapped` flag.
+  
+  The zone-block--topics modifier is reserved for potential per-zone tweaks
+  later (e.g. different spacing for nested topics).
+
+- **feat**(wireframes): unify «Внутри теста» under same dashed-zone contour as До/После (2026-05-21) [`0e55bee9596809b4dc5a27c8ab4e6c2cd12e8bfa`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0e55bee9596809b4dc5a27c8ab4e6c2cd12e8bfa)
+  Make the three structural zones (До теста / Внутри теста / После теста) visually
+  consistent in the router_by_topics wireframe. Previously «Внутри теста» was a
+  plain section with just a small label — now it's wrapped in the same dashed
+  border-radius contour as the other two zones, including a CAPS header with a
+  chevron icon.
+  
+  CSS changes:
+  \- .inside-test gets dashed border + border-radius (matching .zone-block);
+  \- .inside-test__label gets border-bottom dashed (matching .zone-header);
+  \- new .inside-test__body provides the internal padding for the router-row +
+    tree-branches content.
+  
+  Header icon switched from i-router (semantic-specific) to i-chevron-down so all
+  three zone labels look identical. The router visual marker remains on the
+  router page-row itself.
+  
+  Content of every state (s-main, s-main-multi-variant, s-main-fallback,
+  s-empty-topics, s-validation, s-row-menu-open) wrapped in .inside-test__body.
+  The tree-branches hierarchy now sits inside the same kind of contour as the
+  sibling zones.
+
+- **feat**(wireframes): finalize questions-row migration + demo row-menu dropdown (2026-05-21) [`1f9af95dcc095d4bc3db8e088348fe36634a104b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/1f9af95dcc095d4bc3db8e088348fe36634a104b)
+  Closes two outstanding debts from the variant.kind rewrite:
+  
+  1. Full markup re-render of every .questions-row in linear-by-topics
+     (9 occurrences across s-main, s-empty-pages, s-readonly, s-dirty-form,
+     s-validation, s-sanitize, s-mapping, s-dnd, s-dnd-topics). Each now
+     uses the unified page-row--system page-row--questions structure with
+     variant badge, page-icon, and `…` row-menu iconbtn — matching the
+     contract from the router wireframe and PRD-1 §4.3. Legacy
+     .questions-row / .questions-icon CSS rules dropped from both
+     linear-flat and linear-by-topics (and the deprecated insert-btn
+     selectors that referenced them).
+  
+  2. New s-row-menu-open state on prd7-structure-router.html demonstrates
+     the open `…` dropdown for two cases:
+     \- system kind (router): «Сменить вариант…» / «Предпросмотр» /
+       «Удалить» (disabled with tooltip — system page is non-removable);
+     \- user kind (info): destructive «Удалить» enabled in the row-menu.
+     CSS for .row-menu / .row-menu__item / .row-menu__sep added inline;
+     positioned absolute relative to .page-actions. JS wiring deferred to
+     frontend implementation.
+  
+  Checklist updated with new s-row-menu-open acceptance item under §11.
+
+- **feat**(wireframes): rewrite router structure under variant.kind + add variant-replace modal (2026-05-21) [`18b5669ab0cf443a56439556371337531808076f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/18b5669ab0cf443a56439556371337531808076f)
+  Aligns the Структура tab wireframes with the new variant.kind model
+  (PRD-1 §4.3) and the redefined router_by_topics architecture
+  (PRD-7 §2.3b).
+  
+  prd7-structure-router.html — rewritten end-to-end. The legacy «scenario map»
+  (router-block + section-card + connector-wrap + final-result-block) is
+  removed. New model:
+  \- linear_flat-style zones «До теста» / «После теста»;
+  \- system page-row with kind: router in the «Внутри теста» zone;
+  \- topics as branches under the router-row via tree-connectors
+    (thin DS lines, ├─ and └─).
+  States: s-main, s-main-multi-variant, s-main-fallback, s-empty-topics,
+  s-mode-change (now flagging «Маршрутизатор будет удалён»),
+  s-validation (required-params not filled — page-row--warn +
+  validation-banner + .status-dot--error on the tab + Save disabled).
+  
+  prd7-variant-replace.html — new wireframe for the «Сменить вариант» modal
+  (triggered from `…` row-menu, applicable to all kinds). Three states:
+  s-replace-modal (with diff of lost / kept params), s-replace-empty-diff
+  (symmetric schema, no losses), s-replace-no-fields (empty schema on the
+  new variant).
+  
+  linear_flat / linear_by_topics — `.questions-row` visually unified with
+  `page-row--system page-row--questions` (accent-border, page-row padding);
+  full markup re-render of all 9 instances is deferred to a follow-up
+  commit. Sprite `i-dots` and CSS classes `page-row--system`, `page-icon`
+  added in linear_flat.
+  
+  wireframes-acceptance-checklist.md — §11 rewritten under the new router
+  model, new §11a covers variant-replace modal, §8 / §9 extended with
+  variant.kind addendums (`…` row-menu, multi-variant hint, fallback
+  warning, required-params validation).
+
+- **feat**(wireframes): add FR-code annotation badges to all drawer states (2026-05-18) [`e130f6d6816d9ce2a864e4c87c895a2e1402bf77`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e130f6d6816d9ce2a864e4c87c895a2e1402bf77)
+  Added wf-annot-wrap / wf-annot badges to s-default, s-dirty, s-error,
+  s-saving, s-changes, s-settings. Toggle via «Аннотации» button — shows
+  FR-04, FR-05, FR-05a, FR-25a/b/c, NFR-19/20/21 codes on the actual
+  elements they describe, replacing the need to cross-reference the notes table.
+
+- **feat**(check-wireframes-ds): extend gate coverage (stage 2) (2026-05-17) [`d93bf58bda4e155438b850b27b26e5e770987a06`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d93bf58bda4e155438b850b27b26e5e770987a06)
+  Extend the wireframes DS lint gate per docs/wireframes-ds-fix-plan.md
+  stage 2: broader legacy-class list, more raw-color patterns, direct-unit
+  detection inside &lt;style&gt; blocks, CSS selector scanning, optional
+  --strict-inline flag, and legacy/ directory ignore (forward-looking).
+  
+  Categories detected by gate v2:
+  \- legacy class tokens in HTML class="..."
+  \- legacy class selectors in CSS files
+  \- raw color literals (#hex, hsl/hsla/rgb/rgba/oklch/lab/lch/hwb, white/black)
+    inside &lt;style&gt; blocks and CSS files
+  \- direct length units (px, rem, em, non-zero) inside &lt;style&gt; and CSS files
+  \- optional inline style="..." scanning under --strict-inline,
+    whitelist via data-wf-demo on the carrying element
+  
+  Gate result: 60 -&gt; 2611 violations. Run time: ~1.9s.
+  This becomes the roadmap for stages 3-4.
+  
+  Co-Authored-By: Claude Opus 4.7 &lt;noreply@anthropic.com&gt;
+
+- **feat**(client): PRD-7 test settings editor with drawer, sections and validation (2026-05-11) [`20e6bcbfce4e3d8a6e61d55299e31fdc9785d8f5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/20e6bcbfce4e3d8a6e61d55299e31fdc9785d8f5)
+  \- New test-editor feature module: mappers, validation, types, hook, section components
+  \- ContentPagesDialog and DesignSettingsDialog components with full test coverage
+  \- Updated page-header and tests list page to wire up the new editor drawer
+
+- **feat**(scorm): content pages, design settings and external template system (2026-05-11) [`f573f938b1229aadf5e01ac8122bd642b9303f14`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f573f938b1229aadf5e01ac8122bd642b9303f14)
+  Builders:
+  \- test-json.ts: include contentPages and designSettings in SCORM export JSON;
+    sanitize richText/html feedback fields via html-sanitizer before embedding
+  \- media-assets.ts: bundle feedback PDF assets into SCORM package
+  \- template-copy.ts: new builder that copies external template files into the
+    SCORM ZIP, resolving EJS layouts and partials
+  
+  Runtime (template/app/):
+  \- templateCore.js + templateLoader.js: engine for rendering external templates
+    using Mustache-style layout resolution
+  \- contentFlow.js: sequencing layer for intro/outro content_pages within a course
+  \- render/contentPage.js: renderer for content_page slides
+  \- render/renderers.js: dispatcher routing question types to typed render functions
+  \- main.js + mainRender.js + startPage.js + answers.js + state.js: adapt existing
+    runtime to carry designSettings and content-flow state
+  
+  Built-in templates (server/scorm/templates/):
+  \- default, corporate, minimal: three baseline themes with EJS shells, layout
+    partials, CSS and demo course.json for preview
+  \- rtk-storyline: Storyline-style theme with hero artwork, per-question-type layouts,
+    progress bar partial and adaptive review layout
+
+- **feat**(api): PRD-7 test settings endpoints, content pages and template registry routes (2026-05-11) [`7191d0f4850d04d924e9259995a81769ed8f4fc7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7191d0f4850d04d924e9259995a81769ed8f4fc7)
+  \- tests.ts: Zod validation for all PRD-7 body fields (status, feedbackJson,
+    flowPolicyJson, designSettingsJson, telemetryEnabled); PATCH /api/tests/:id/status
+    for status transitions without version bump; GET ?status=archived filter
+  \- content-pages.ts: full CRUD for /api/tests/:id/content-pages (PRD-1 §5);
+    sort_order auto-assignment, type/topic_id immutability guard
+  \- templates.ts: GET /api/templates registry endpoint with API version filtering
+  \- questions.ts: minor cleanup (unused import removal)
+  \- analytics/combined.ts: exclude archived tests from analytics aggregation
+  \- routes/index.ts + server/index.ts: mount new routers
+
+- **feat**(server): storage layer for PRD-7 settings, content pages and template registry (2026-05-11) [`0b269fd1b4f6142cdb8b5c879b5d27c9e08c7773`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0b269fd1b4f6142cdb8b5c879b5d27c9e08c7773)
+  \- storage.ts: contentPages CRUD, patchTestStatus (no version bump), getMigrationHealth,
+    mapLegacyTest() backward-compat helper (status derived from published for old rows)
+  \- services/test-settings.ts: business-logic service isolating PRD-7 field validation
+    (feedbackJson, flowPolicyJson, designSettingsJson) from route handlers
+  \- template-registry.ts: in-process registry for external SCORM templates;
+    isSupportedTemplateApiVersion guard
+  \- utils/html-sanitizer.ts: DOMPurify-based sanitizer for richText/html feedback fields
+  \- utils/crypto.ts: minor type-safety fix
+
+- **feat**(schema): add PRD-7 test settings fields and PRD-1 content pages schema (2026-05-11) [`be8fad9e608c7576683d9155894c6f43006e19a0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/be8fad9e608c7576683d9155894c6f43006e19a0)
+  \- tests table: status enum (draft/published/archived), feedbackJson, flowPolicyJson,
+    telemetryEnabled, designSettingsJson; mark published/startPageContent as @deprecated
+  \- testSections table: required, timeLimitMinutes, feedbackJson per-section fields
+  \- new contentPages table for intro/outro pages (PRD-1 §5)
+  \- new templates table for external template registry (PRD-3)
+  \- Zod schemas: feedbackContentSchema, feedbackLinkSchema, feedbackAssetSchema,
+    feedbackFormatSchema, flowPolicySchema, designSettingsSchema
+  \- migrations 002 (content_pages) and 003 (prd7 test settings columns)
+  \- drizzle.config.ts: point migrations dir to /migrations
+
+- **feat**: Мероприятия для тем, доработка назначений, первый вход, SCORM, переименование в СкилУм (2026-04-17) [`6f170539bfbb60dd7b57f995881ceb7b48a35da1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6f170539bfbb60dd7b57f995881ceb7b48a35da1)
+  ## Рекомендуемые мероприятия для тем
+  
+  \- shared/schema.ts: добавлена таблица `topic_events` (id, topicId, title — без URL, только название)
+  \- server/storage.ts: добавлены методы getTopicEvents, createTopicEvent, deleteTopicEvent
+  \- server/routes/topics.ts: добавлены POST /:topicId/events и DELETE /events/:id
+    \- DELETE /events/:id и DELETE /courses/:id перемещены выше /:id чтобы Express не перехватывал маршрут
+    \- GET /api/topics теперь возвращает поле events[] вместе с courses[]
+  \- server/routes/tests.ts: при SCORM-экспорте теперь загружаются events для каждой секции
+  \- server/scorm/builders/test-json.ts: добавлено поле recommendedEvents в JSON секций
+  \- server/scorm/assets/app.js: результаты SCORM — раздел "Рекомендуемые мероприятия" с иконкой
+    календаря, дедупликация курсов и мероприятий по title across проваленных тем
+  \- server/scorm/template/app/render/viewResults.js: аналогичная дедупликация и блок мероприятий
+  \- server/scorm/template/app/render/resultsPage.js: recommendedEvents добавлены в calculateResults
+  \- server/scorm/template/app/utils/pdfExport.js: блок мероприятий в PDF без URL, только текст
+  \- client/src/pages/author/topics.tsx: кнопка "Мероприятие" (CalendarDays) в карточке и в
+    строке списка, диалог с полем только "Название", отображение событий в карточке с удалением
+  
+  ## Группы и назначения — доработка UI
+  
+  \- client/src/components/assign-test-dialog.tsx: expandable строки для групп с участниками,
+    кнопки resend/revoke для каждого пользователя, фильтрация участников групп из вкладки Users,
+    исправлен баг testId is not defined в AssignmentRow
+  \- server/routes/assignments.ts: GET /api/assignments/:id/group-users,
+    POST resend-group, POST resend-user/:userId, PATCH revoke-user/:userId
+  \- server/routes/groups.ts: notifyNewGroupMember — при добавлении в группу автоматически
+    отправляется письмо со ссылкой на тест по всем активным назначениям группы
+  
+  ## Первый вход
+  
+  \- client/src/pages/first-login.tsx: убраны поле имени и чекбокс GDPR, gdprConsent=true хардкодом
+  \- server/email.ts: добавлена sendInviteEmail с текстом приглашения вместо сброса пароля,
+    инвайт-токен живёт 7 дней (был 30 минут)
+  \- server/routes/users.ts: bulk-import использует sendInviteEmail
+  
+  ## Продакшн-фиксы (cookie, сессия, Docker)
+  
+  \- server/index.ts: app.set("trust proxy", 1) для корректной работы за Keenetic/nginx
+  \- server/routes.ts: cookie.secure теперь управляется через COOKIE_SECURE env (не NODE_ENV)
+    чтобы избежать проблемы с esbuild инлайнингом process.env.NODE_ENV="production"
+  \- server/routes/auth.ts: явный session.save() перед ответом на логин
+  \- docker/scripts/deploy.sh: правильный порядок stop→rmi→build --no-cache, drizzle-kit push --force
+  \- docker/templates/.env.example: добавлены NODE_ENV, PORT, API_BASE_URL, COOKIE_SECURE
+  \- script/build.ts: копирование server/scorm/template/ в dist/scorm/template/ при сборке
+  
+  ## SCORM — дедупликация вопросов
+  
+  \- server/scorm/assets/app.js: исправлена выборка вопросов через usedIds чтобы один вопрос
+    не попадал в несколько секций одного теста
+  
+  ## Переименование приложения: СкилУм
+  
+  \- client/index.html: title и meta description
+  \- client/src/lib/i18n.ts: t.auth.appName = "СкилУм" (сайдбар, страница входа)
+  \- server/email.ts: fallback APP_NAME = "СкилУм" (все письма)
+  \- docker/templates/.env.example, .env.example: APP_NAME=СкилУм
+  \- package.json: name = "skilum"
+  
+  ## Тесты
+  
+  \- tests/routes.topics-folders-groups.test.ts: добавлены моки getTopicEvents/createTopicEvent/
+    deleteTopicEvent, новые тесты для POST /:topicId/events и DELETE /events/:id включая
+    проверку что deleteTopic не вызывается при удалении события
+  \- tests/scorm-builders.test.ts: dbSection дополнен events[], тесты на recommendedEvents
+    в JSON (наличие, отсутствие url, пустой массив)
+  
+  Co-Authored-By: Claude Sonnet 4.6 &lt;noreply@anthropic.com&gt;
+
+- **feat**(docker): add Docker deployment system (2026-02-07) [`5cbb2ecad0fdbc358c0fd268dfe0109b0818e348`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5cbb2ecad0fdbc358c0fd268dfe0109b0818e348)
+  \- Dockerfile for Node.js 20 Alpine
+  \- docker-compose template with healthcheck
+  \- prepare-deploy.bat: local build and archive creation
+  \- upload-deploy.bat: SCP upload to server
+  \- deploy.sh: server-side deployment script
+  \- rollback.sh: full rollback script
+  \- deploy.env configuration for server paths and Docker settings
+
+- **feat**(db): add database resilience and graceful shutdown (2026-02-07) [`a5ce57bf256c57dd1fc4bdb5fc1e1b6116043121`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a5ce57bf256c57dd1fc4bdb5fc1e1b6116043121)
+  \- Add connection pool error handling to prevent crashes
+  \- Add health check function and /api/health endpoint
+  \- Add withRetry wrapper for database operations
+  \- Add waitForDatabase for startup connection waiting
+  \- Add graceful shutdown on SIGTERM/SIGINT
+
+### Fixes
+
+- **fix**(templates): резолвить каталог шаблона через БД source_path (2026-06-09) [`36f33de772e98382a632401aa9626d39db23a2e3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/36f33de772e98382a632401aa9626d39db23a2e3)
+  Подключённый к тесту шаблон рендерился как `default`: резолверы искали файлы
+  по конвенции встроенных (server/scorm/templates/&lt;id&gt;), а загруженные (PRD-3)
+  лежат в uploads/templates/&lt;id&gt;. Новый resolveTemplateDir резолвит каталог по
+  templates.source_path — единому источнику и для встроенных, и для загруженных,
+  включая `default` (его __dirname-путь в собранном dist не существует, поэтому
+  тоже идёт через БД). Применён в веб-экранах ученика, экране результатов и
+  экспорте SCORM (ExportData.templateDir). Сервисы рендера остаются db-free —
+  каталог приходит готовым из роут-слоя.
+
+- **fix**(scripts): починить set-password/create-admin под модель ролей user_roles (PRD-13) (2026-06-08) [`706ad89ab2b319c8ff946f27b98560226ae44752`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/706ad89ab2b319c8ff946f27b98560226ae44752)
+  Обе тулзы обращались к удалённой колонке users.role и падали на мигрированной БД. set-password.mjs: убран role из RETURNING (он только меняет пароль). create-admin.ts: пользователь апсертится без role, роль administrator выдаётся отдельно через user_roles (idempotent ON CONFLICT) — иначе скрипт и падал, и не давал прав в новой модели.
+
+- **fix**(templates-ui): не предлагать активацию уже активного шаблона (2026-06-07) [`e7ffd1837a957a2aeab155edc0b60fe8ab6b2e85`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e7ffd1837a957a2aeab155edc0b60fe8ab6b2e85)
+  В окне предпросмотра для шаблона со status=active кнопка «Активировать»
+  становится неактивной с подписью «Активирован», вердикт — «Шаблон активен»
+  (canActivateNow=false при isAlreadyActive). Раньше для активного дефолта кнопка
+  оставалась доступной и повторная активация была бессмысленной.
+
+- **fix**(templates-ui): двухуровневый рейл предпросмотра (убрать лишний средний уровень) (2026-06-07) [`2014e8186acb94ae819c85c0da4b862a268df371`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2014e8186acb94ae819c85c0da4b862a268df371)
+  Тип с одним вариантом отрисовки рендерится как сам экран (Раздел → экран), без
+  сворачиваемого среднего уровня; группа типа показывается только при 2+ вариантах
+  отрисовки, где она оправдана. Для шаблонов с одним вариантом на тип (как default)
+  рейл становится плоским 2-уровневым. Заодно aria-expanded приведён к строковому
+  значению (lint).
+
+- **fix**(templates-ui): структура рейла предпросмотра по спеке + высота на всё окно (2026-06-07) [`134efa807e859197c4aae756f37527213335749d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/134efa807e859197c4aae756f37527213335749d)
+  \- preview-rail: разделы по видам страниц PRD-1 §4.3 (Введение раздела / Учебные
+    страницы / Вопросы / Итог раздела) + системные (Результаты теста §8.3, Системные
+    экраны §5.4); intro/summary подписаны симметрично как закладки раздела.
+  \- CSS: окно предпросмотра фиксированной высоты, рейл и сцена делят полную высоту
+    и скроллятся внутри — рейл больше не обрезается коротким.
+
+- **fix**(template-preview): реальная разметка интерактива + результат раздела для summary (2026-06-07) [`0b4b2590f8ebbf1956a383e3f7b1f6eafd3e4c16`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0b4b2590f8ebbf1956a383e3f7b1f6eafd3e4c16)
+  \- buildInteraction приведён к боевой разметке веб-хоста (.option / .ranking-board
+    с ручкой / .matching-board), которую стилизует CSS шаблона — в предпросмотре
+    ранжирование/сопоставление больше не голый список; пары сопоставления смещены,
+    чтобы не раскрывать ответ.
+  \- content.summary («Итог раздела») получает result.* из sectionResult (результат
+    РАЗДЕЛА, §8.2 платформы), а не из итога теста — runtime-safe, без правок манифеста.
+
+- **fix**(boot): не прерывать запуск при сбое синка реестра шаблонов (2026-06-07) [`8bba7ab6c2d24009c91fdb68f2222b69a72d5362`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8bba7ab6c2d24009c91fdb68f2222b69a72d5362)
+  syncBuiltinTemplates/reconcileUploadedTemplates были жёсткими await перед
+  httpServer.listen(), поэтому любой их сбой (например, ещё не накатанная схема)
+  ронял весь boot — приложение не слушало порт целиком из-за проблемы только в
+  реестре шаблонов. Оборачиваем оба вызова в try/catch: ошибка логируется, boot
+  продолжается, реестр пере-синкается на следующем рестарте. waitForDatabase и
+  seedDatabase остаются fail-fast.
+
+- **fix**(deploy): применять схему БД (drizzle-kit push) до старта приложения (2026-06-07) [`6474c396878bddeb901a710aa877091918c177d7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6474c396878bddeb901a710aa877091918c177d7)
+  Новый образ крашился на старте: server/index.ts делает await syncBuiltinTemplates()
+  до httpServer.listen(), поэтому на устаревшей схеме сервер не поднимается. Оба
+  скрипта запускали приложение раньше схемы — deploy-test.sh push не вызывал вовсе,
+  deploy.sh делал push после up -d.
+  
+  Теперь оба применяют схему ДО старта одноразовым контейнером с переопределённым
+  entrypoint (`docker compose run --rm --no-deps --entrypoint sh &lt;svc&gt; -c
+  "npx drizzle-kit push --force"`), затем поднимают приложение уже на актуальной схеме.
+
+- **fix**(prd-11): экспортировать q.tags в рантайм TEST_DATA — квоты не работали в пакете (2026-06-04) [`dbbc2aea70c7ed9a42f4727a629b768d5e8fe59d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/dbbc2aea70c7ed9a42f4727a629b768d5e8fe59d)
+  Маппинг рантайм-вопроса (test-json.ts) включал scoring (PRD-10), но не tags — в
+  выгруженном пакете у вопросов не было тегов, drawSection не находил совпадений и
+  квоты молча вырождались в равномерную выдачу. Теперь tags пробрасываются условно
+  (только при наличии, как scoring → пакеты без тегов бит-идентичны, FR-02).
+  
+  Проверка: новый scorm-quota-acceptance.test.ts собирает РЕАЛЬНЫЙ пакет и гоняет
+  его собственный drawSection над встроенным TEST_DATA (200 случайных выдач) —
+  инварианты квот соблюдены (exact=ровно, min=не менее, Σ=drawCount, без дублей).
+  Дополнительно верифицировано вживую в scorm-player (реальный браузер-рантайм
+  generateVariant, 100/100 выдач). Юнит-тест экспорта tags в scorm-builders.
+
+- **fix**(prd-5): weight as real + explicit optional measurement zod fields (2026-06-02) [`d8953a63d48b40f3246a863183bd8a811e14f899`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d8953a63d48b40f3246a863183bd8a811e14f899)
+  numeric mapped to a string in Drizzle and made weight required in the insert schema, breaking measurement payloads. Use real (a number multiplier) and mark weight/sourceKey/sortOrder/conditionJson optional in the zod schema so a contribution row only needs scaleId/sourceType/valueJson. Migration 009 column type updated (the dev DB column was altered in place).
+
+- **fix**(prd-2): mock getResultVariables in tests/attempts route mocks (2026-06-02) [`008b6294eb5cca72a0c9e66b9a81b156084e8a3d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/008b6294eb5cca72a0c9e66b9a81b156084e8a3d)
+  loadFullTest (GET/POST/PUT /api/tests) now loads result variables (A8), so the storage mocks in these route tests need getResultVariables or loadFullTest throws. Same regression class as the scorm-export mock fix; surfaced by the full-suite run during A9.
+
+- **fix**(prd-2): A8 visual — DS-native layout, leadingIcon, stable row key (2026-06-02) [`68495c1ba3743386bdfcbc8a7923951171486d24`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/68495c1ba3743386bdfcbc8a7923951171486d24)
+  Three issues caught by the Playwright pass against the approved wireframe: (1) wf-list-head/wf-grid-2 are wireframe-only classes absent from the app CSS — replaced the header and the 2-col form/builder grids with Tailwind utilities (flex/justify-between, grid grid-cols-2); (2) the add button stacked its icon above the text — moved Plus to the Button leadingIcon prop, matching sibling sections; (3) the per-row key included the editable name, so typing remounted the card and lost focus/expansion — added a stable clientKey assigned at creation (never sent to the API, not part of the save diff). Verified end-to-end: empty/list/expanded/builder states render, live validate-formula works, and the save orchestrator round-trips (PUT test → POST variable → reload).
+
+- **fix**(prd-2): mock getResultVariables in scorm-export test (2026-06-02) [`f2382a6d0a93d40c107b89eb5bc6873d14355d82`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f2382a6d0a93d40c107b89eb5bc6873d14355d82)
+  A6 added a storage.getResultVariables call to the SCORM export route but the export test's storage mock lacked it, so the route threw before generateScormPackage and three assertions failed. Add the mock (resolves []). Regression surfaced by the full-suite run while wiring A7.
+
+- **fix**(prd-7): name structure page drag handles for screen readers (2026-05-31) [`b7313af87ec04ae925417d0e861ea076e7490196`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b7313af87ec04ae925417d0e861ea076e7490196)
+  The content-page grip in the Structure tab carries @dnd-kit role=button but had no accessible name, so assistive tech announced a nameless button (axe aria-command-name, WCAG 4.1.2). Surfaced by the S11 live-browser acceptance pass. Mirror the existing topic-grip pattern: aria-label with the page title and aria-hidden on the decorative icon.
+
+- **fix**(wireframes): drawer body scroll contract for long tabs and split layouts (2026-05-30) [`a95018826b5621a1090f6b5979b239c80c339ef9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a95018826b5621a1090f6b5979b239c80c339ef9)
+  Long Drawer tabs expanded under the footer instead of becoming scrollable
+  because the flex-column body was not allowed to shrink below its content
+  height. Add `min-height: 0` to `.ou-drawer__body` and `.tb-settings-content`,
+  and introduce `.ou-drawer__body--flush` so split (rail + content) tabs use the
+  inner content panel as the single scroll container rather than a body-level
+  scroll wrapping both rail and content.
+
+- **fix**(editor): drawer body scroll regression — tabs without internal scroll container (2026-05-29) [`f4ebace8fe450aa94a63765f03541591e9357c8c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f4ebace8fe450aa94a63765f03541591e9357c8c)
+  Regression: commit cea5bd9 (S13.7-G1 saving overlay) wrapped the body
+  content in `&lt;div inert&gt;` and added the .tb-saving-host class to
+  .ou-drawer__body. Two layout bugs:
+  
+  1. .tb-saving-host carried `overflow: hidden`, killing the body's
+     own overflow-y:auto.
+  2. The unstyled inert wrapper div became a flex child of the body
+     (DS uses flex column for ou-drawer__body). Without `min-height: 0`
+     the flex item collapsed and the inner content overflowed the
+     visible area without producing a scrollbar.
+  
+  Result: Состав / Настройки / Оформление tabs were unscrollable —
+  parts of long content were unreachable. Структура appeared fine
+  because StructureSection carries its own internal scroll container.
+  
+  Fix:
+    \- .tb-saving-host loses `overflow: hidden` (kept only
+      `position: relative` for absolute-positioned overlay anchoring).
+    \- The inert wrapper now uses className "tb-saving-inert-wrap" with
+      `display: contents` so it is removed from the layout tree but the
+      `inert` attribute still propagates to its descendants. Direct
+      children (Section components) become flex children of the body
+      again, restoring scroll behaviour.
+  
+  CSS comments explain the constraint so future overlays don't re-break
+  this. Type-check clean; full vitest 1403/1403 (no test added — visual
+  fix, observable only in the browser).
+
+- **fix**(editor): close S13 parity quick-wins + reopen PRD-7 as S12+S13 (2026-05-28) [`4f589048e87b88981da930b93350e504c59df3e3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4f589048e87b88981da930b93350e504c59df3e3)
+  Audit 2026-05-28 against approved wireframes found 36 discrepancies between
+  the test editor and the wireframes signed off on 2026-05-21. PRD-7 reopened
+  as two parallel phases — S12 (Design tab) and S13 (Editor parity). This
+  commit closes the low-risk quick-wins from S13 and opens the docs for the
+  remainder.
+  
+  S13 closures (12 gaps):
+  \- G3 adaptive info-banner on «Состав» (composition-adaptive-banner)
+  \- G6 ou-drawer__body--flush — verified DS-canonical (no gap)
+  \- G11 webhook ou-formfield__desc «Оставьте пустым, если webhook не нужен»
+  \- G13 misleading «stubs for deferred work» section header removed
+  \- G14 stale «ships separately» JSDoc rewritten to current state
+  \- G15 mode-change info-banner on «Структура» (savedFlowMode plumbed
+    through useTestEditor); structure-mode-change-banner
+  \- G26 router empty-topics CTA «Перейти к Составу» — onGoToComposition
+    callback wired to setActiveTab("composition")
+  \- G36 sort widget: native &lt;select&gt; → DS Select&lt;SortKey&gt;
+  \- G38 delete-confirm name-block (extracted from label for copy-paste) +
+    hint «Регистр символов учитывается»
+  \- G41 orphan pass-rules-section.tsx removed
+  \- G42 orphan adaptive-settings-section.tsx removed
+  \- G44 DS Tabs hidePanel — verified equivalent (no gap)
+  \- S12-G5 orphan design-settings-dialog.tsx + test removed (S10 cleanup
+    was incomplete)
+  
+  Out of batch (require deeper work, prioritization table follows):
+  \- G8 showCorrectAnswers placement — touches tests
+  \- G21 router fallback tag — needs template manifest domain knowledge
+  \- G23 mixed in FLOW_LABEL — multi-file refactor (type + mappers + list)
+  \- G12, G24 — investigations still pending
+  
+  Verification:
+  \- npm run check — 0 errors
+  \- vitest run (full suite) — 51 files / 1331 tests green
+    (delta -13 tests matches exactly the deleted design-settings-dialog suite)
+  
+  Docs:
+  \- docs/specs/prd-7/s13-editor-parity.md — new phase spec (31 gaps, 8 sub-
+    phases, DoD); closed items marked with strikethrough + date
+  \- docs/ROADMAP.md — S13 added alongside S12 in §0 and §0.1 critical path
+  \- docs/prd-7-acceptance-report.md — STATUS UPDATE references both phases
+  \- docs/specs/prd-7/s12-design-closeout.md — G5 marked closed
+
+- **fix**(editor): generalize save toast — Save covers all three sources (2026-05-28) [`f3d8730ae8ef0a5e3f6f4e5410985b0a32ba6e46`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f3d8730ae8ef0a5e3f6f4e5410985b0a32ba6e46)
+  «Сохранить» persists the test-settings draft, the design draft AND
+  acknowledges content-page mutations in one click, so the toast must reflect
+  all three. Snapshot dirty flags before save, then show a single
+  «Изменения сохранены» if any of them was dirty.
+  
+  Previous wording «Изменения структуры сохранены» was misleading when the
+  user also edited Настройки / Оформление in the same session.
+
+- **fix**(structure): swallow cross-zone mutation rejection (surface via banner) (2026-05-28) [`9b9f525d25d2f5f639b87b6483f7d029ec312ab5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9b9f525d25d2f5f639b87b6483f7d029ec312ab5)
+
+- **fix**(structure): precise cross-zone drop (pointerWithin) + allow null topicId on PUT (2026-05-28) [`6ad267b2a8d51620eafa8417af7dca258d85be83`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6ad267b2a8d51620eafa8417af7dca258d85be83)
+  Two cross-zone bugs found in live testing:
+  1. closestCenter compared the dragged item's center to droppable centers, so a
+     drop could land in an adjacent topic. Switch to a pointer-based collision
+     (structureCollision): the zone/row actually under the cursor wins, preferring
+     a row hit over the wrapping zone.
+  2. The content-pages PUT route rejected topicId=null with 422 'topicId does not
+     belong to this test' (topicId !== undefined caught null too), so moving a page
+     OUT of a topic into a test-scope zone («До/После теста») failed. Validate
+     membership only for a non-null topicId, mirroring POST. Adds a route test.
+  
+  npm run check clean; content-pages routes 45/45.
+
+- **fix**(structure): sortable unit = row+insert; arbitrary placement + drop indicator (2026-05-28) [`d1a3150df327743d14e7f52d7cb8c74dff82d592`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d1a3150df327743d14e7f52d7cb8c74dff82d592)
+  Stage A reorder only swapped reliably: the InsertRow separators were interleaved
+  between sortable items and the measured @dnd-kit node was the inner .page-row,
+  so the reorder shift could not open a clean gap and 3+ row placement misbehaved.
+  
+  Make each sortable unit the whole wrapper (row + its trailing «+ Добавить» line)
+  via a SortablePageItem that owns useSortable; AuthorPageRow now takes
+  dragHandleProps + isDragging. Add a drop-target insertion line + dragging dim in
+  tb-components.css. Verified in-browser: moving the first of three rows to the end
+  reorders to [A,C,B] and persists via PUT /reorder; the insertion indicator shows.
+
+- **fix**(test-editor): widen close-confirm to size l so actions don't overflow (2026-05-28) [`8f220019c6b95e58ede9e0cd446e104dd8cee9a5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8f220019c6b95e58ede9e0cd446e104dd8cee9a5)
+  The «Продолжить редактирование» / «Выйти без сохранения» / «Сохранить» trio
+  overflowed the medium modal (the first button was clipped past the left edge).
+  Bump the dialog to size l; verified in-browser the buttons fit within the card.
+
+- **fix**(test-editor): footer «Отменить» discards and closes without a save prompt (2026-05-27) [`748e860f5d1762be7e5fbca5240ea28c38dba768`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/748e860f5d1762be7e5fbca5240ea28c38dba768)
+  Footer «Отменить» (dirty) routed to the same requestClose as the header «×»,
+  so an explicit cancel opened a 'save before closing?' dialog — contradictory.
+  Wire it to discard+close directly (handleExitWithoutSave); the save-confirm now
+  belongs only to the ambiguous «×»/backdrop. The confirm's stay button is renamed
+  «Отмена» → «Продолжить редактирование» to drop the «Отменить»→«Отмена» collision.
+  
+  Wireframes updated to match (re-approval 2026-05-27): «Отменить» = discard+close;
+  prd7-editor-close-confirm stay button label. Adds a regression test.
+
+- **fix**(test-editor): mark Drawer body as active tab's panel (a11y) (2026-05-27) [`c6750b272a9b36b0e5d07deb16efe59e33fe8b1c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c6750b272a9b36b0e5d07deb16efe59e33fe8b1c)
+  S11 live audit (Playwright + axe-core) found a critical aria-valid-attr-value
+  on the editor tablist: tabs carry aria-controls=panel-&lt;key&gt; (ui-kit Tabs with
+  hidePanel) but no matching panel existed. Mark the content container as
+  role=tabpanel + id=panel-&lt;key&gt; + aria-labelledby=tab-&lt;key&gt; so the active tab's
+  aria-controls resolves. axe re-run: 0 violations across all four tabs.
+  
+  Adds a regression test and records the full live-audit results (axe, NFR-17
+  108ms, dirty/close-confirm smoke) in docs/prd-7-acceptance-report.md §7.
+
+- **fix**(scorm/media): stop double-processing mediaUrl during asset extraction (2026-05-27) [`9a6632aa69d3ca2c7c988f1f9dd67bcfbfc9ec9c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9a6632aa69d3ca2c7c988f1f9dd67bcfbfc9ec9c)
+  mediaUrl was handled by the explicit block and again by the generic field
+  loop, so a missing/blocked file was reported twice in `missing`. Skip the
+  mediaUrl key in the loop. Other data:/uploads string fields are still embedded
+  (SCORM self-containment); update the stale 'non-mediaUrl' test accordingly.
+
+- **fix**(ds): border-box control heights + align level-grid threshold row (2026-05-27) [`7fec46cb17b60d380858a11df03eaf2b8fb2382c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7fec46cb17b60d380858a11df03eaf2b8fb2382c)
+  The «Тип порога» (select) and «Порог» (number) controls in the adaptive level
+  card rendered at different heights and the select dropdown overflowed into the
+  number field.
+  
+  vendor/university-rt.css: give .ou-field__box / .ou-number__box /
+  .ou-select__trigger `box-sizing: border-box` so their height matches the
+  --ou-size-control-* token (they were content-box, rendering 2px taller than the
+  token and than .ou-textarea). Mirrors the upstream DS source fix.
+  
+  tb-components.css (.tb-level-grid):
+  \- align-items end -&gt; start so label+control pairs line up across a row (the
+    select cell did not reach the row track bottom under `end`);
+  \- stretch .ou-select to its cell and let its trigger shrink (min-width:0) so the
+    180px-min-width dropdown no longer overflows the neighbouring field;
+  \- drop the now-redundant box-sizing workaround (handled by the DS).
+
+- **fix**(test-settings): gate required-fields validation on the publish transition only (2026-05-27) [`62ccafb1622ea6cdaee6fca9e680f6895fbb5356`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/62ccafb1622ea6cdaee6fca9e680f6895fbb5356)
+  PUT /api/tests/:id ran the required-fields validation whenever the resulting
+  status was "published", so editing an already-published test re-tripped the gate
+  on every save and rolled back the whole transaction (422). A published test left
+  in an incomplete state could never be saved or fixed.
+  
+  Read the pre-update status and run _validateAllRequiredFields only on an actual
+  draft/archived -&gt; published transition, matching the documented intent
+  (PRD-1 §4.3.6 "publish boundary"). Draft saves and re-saves of a published test
+  now succeed; the gate still fires when publishing.
+  
+  Adds a regression test covering the already-published re-save case.
+
+- **fix**(server/utils/excel): bypass exceljs Buffer/ArrayBuffer type clash (2026-05-26) [`c564fbcec902fae6c95b8a60d413ef1a66f73a56`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c564fbcec902fae6c95b8a60d413ef1a66f73a56)
+  exceljs/index.d.ts declares a global `interface Buffer extends ArrayBuffer`
+  that merges with Node's generic `Buffer&lt;TArrayBuffer&gt;`, making `load`'s
+  parameter unmatchable from a real Node Buffer under `@types/node` with
+  the resizable-ArrayBuffer shape. Cast to `any` at the call site so tsc
+  stops failing; runtime behaviour is unchanged.
+
+- **fix**(prd-7): drawer save — full adaptive payload, error surfacing, close on save (2026-05-26) [`c4daaabee0b4aab62560e707672c0da28e2c0578`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c4daaabee0b4aab62560e707672c0da28e2c0578)
+  Several latent issues meant a failed PUT looked successful while a
+  successful save left partial data behind:
+  
+  \- POST/PUT only sent test-level scalars + sections; adaptive settings
+    and showDifficultyLevel were dropped, so adaptive edits never
+    persisted. buildSavePayload() now attaches both via
+    mapEditorAdaptiveToPayload().
+  \- Server-side feedback column is string-typed; the structured payload
+    has to travel under feedbackJson, not feedback. Rename the typed
+    field accordingly.
+  \- save() swallowed unexpected HTTP errors (400/5xx). It now returns a
+    boolean and exposes saveError so the Drawer can show an inline
+    Banner instead of closing silently.
+  \- Drawer now closes on successful Save and stamps a warnings flag
+    into the react-query cache so the list view can show a triangle-
+    alert indicator (consumed in the next commit).
+  \- useDesignSettings dirty-check normalizes missing params to {} so a
+    freshly-loaded test no longer reports as dirty.
+
+- **fix**(prd-7): add tb-rte/feedback-editor CSS classes + --wf-border-w global fallback (2026-05-26) [`2e3b0bdd8198462e3fe6721832fc73d18e1d409e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2e3b0bdd8198462e3fe6721832fc73d18e1d409e)
+  tb-rte, tb-rte__toolbar, tb-rte__area, tb-rte__sep and tb-feedback-editor__*
+  classes were missing from tb-components.css, preventing RTE and PDF-asset
+  section from rendering. Also promotes --wf-border-w to :root so portal-rendered
+  modals (ModalDialog renders outside .tb-tests-list scope) inherit the border
+  width variable correctly.
+  
+  Mirrored to docs/wireframes/tb-components.css.
+
+- **fix**(prd-7): adaptive topic accordion — chev goes LAST inside trigger (after toggle) (2026-05-25) [`b68b0d3757b78439ed6a46832b15c66d55b505ce`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b68b0d3757b78439ed6a46832b15c66d55b505ce)
+  Per prd7-editor-settings-tab.html line 4757-4801, the
+  `.ou-acc__trigger` &lt;button&gt; contains, in DOM order:
+  
+    1. tb-status-dot (lead)
+    2. ou-acc__trigger-text (title + subtitle)
+    3. tb-adaptive-topics__toggle (Switch + «Включено» label)
+    4. ou-acc__chev (SVG, last)
+  
+  Previous impl placed the toggle as a SIBLING of the button (not
+  inside) so the chev — which was the last child of the button —
+  visually rendered BETWEEN text and toggle, not at the right edge.
+  
+  Fix: move the toggle inside the trigger button as per wireframe,
+  with `onClick={(e) =&gt; e.stopPropagation()}` so flipping the switch
+  doesn't expand/collapse the accordion. Chev now sits at the right
+  edge as the last element.
+  
+  Drop the now-unused `.tb-adaptive-topics__head` CSS rule.
+  
+  133 vitest tests pass; tsc clean.
+
+- **fix**(prd-7): Adaptive topic accordion — status-dot lead + chev + Включено/Выключено label (2026-05-25) [`2a77fd6a5fd9270f070032607d2aa62502160e32`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2a77fd6a5fd9270f070032607d2aa62502160e32)
+  Per prd7-editor-settings-tab.html (wf-adaptive state, lines 4756-4801)
+  the per-topic accordion row contains:
+  1. Leading `tb-status-dot` reflecting validity (FR-17: ≥ 1 level).
+  2. Trigger text with title + subtitle in DS wireframe format
+     («N вопросов · M уровней · валидно / невалидно»).
+  3. Toggle group: Switch + small «Включено» / «Выключено» label.
+  4. Trailing chev SVG that rotates when the item is `.is-open`
+     (DS .ou-acc__chev styles already provide the rotation).
+  
+  Before: accordion row only had title + a shorter «X уровней ·
+  включено» subtitle + Switch — no status indicator, no chev,
+  no label next to switch.
+  
+  AdaptivePane now passes `questionCount` (= section.maxQuestions)
+  to each accordion so the subtitle can show the total per-topic
+  question pool.
+  
+  133 vitest tests pass; tsc clean.
+
+- **fix**(prd-7): hide «Адаптивный режим» rail item when test mode is standard (2026-05-25) [`d5f3699a39bf529b226f18981ff099771251d25d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d5f3699a39bf529b226f18981ff099771251d25d)
+  Per requirements: the «Адаптивный режим» sub-section configures
+  behaviour that only runs when the test itself is in adaptive mode.
+  Showing it in standard mode is meaningless — the warning banner
+  that previously occupied that pane («Сейчас режим теста —
+  стандартный...») was a UX workaround, not the right design.
+  
+  Changes:
+  \- SettingsSection: filter «adaptive» out of the rail when
+    `model.mode === "standard"`. If it was the active pane (e.g.,
+    the user just toggled the mode in Основное), fall back to
+    «Основное» automatically.
+  \- AdaptivePane: drop the «warning when mode!=adaptive» Banner —
+    it's no longer reachable because the parent guards the render.
+  \- Tests: replace the 5-rail assertion with a 4-rail standard
+    assertion plus a 5-rail adaptive assertion; rewrite the
+    Адаптивный режим pane test block to render with `mode: "adaptive"`
+    (otherwise the pane no longer mounts). Drop the two banner tests.
+  
+  133 vitest tests pass; tsc clean.
+
+- **fix**(prd-7): Branding color params use ui-kit ColorPicker, not raw text input (2026-05-25) [`86ab7f0b06507cd56ad5bbe4da6345f27c458b5b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/86ab7f0b06507cd56ad5bbe4da6345f27c458b5b)
+  Per prd7-design-tab.html (wf-branding state, lines 446-456):
+  
+  ```
+  &lt;button class="ou-color-trigger" aria-expanded="false" ...&gt;
+    &lt;span class="ou-color-trigger__swatch" style="--swatch: #0066CC;"&gt;&lt;/span&gt;
+    &lt;span class="ou-color-trigger__value"&gt;#0066CC&lt;/span&gt;
+  &lt;/button&gt;
+  ```
+  
+  i.e. color params are a DS-styled trigger button (swatch + value
+  label) that opens a palette, NOT a plain text input. The
+  `@universityrt/ui-kit` `ColorPicker` component implements this.
+  
+  Migration:
+  \- design-section.tsx ParamRow color branch: replace `Input type=text`
+    with `ColorPicker` (HEX value, opens a palette on click).
+  \- Add color-format.ts utility for round-tripping between the
+    picker's HEX format and the template manifest's mixed formats:
+    most built-in templates store HSL `"H S% L%"` (default/corporate/
+    minimal); rtk-storyline stores HEX `"#rrggbb"`. Detect format on
+    read, convert to HEX for the picker, convert back on save —
+    preserving the template author's chosen serialization.
+  
+  134 vitest tests pass; tsc clean.
+
+- **fix**(prd-7): tab status dot — DS-styled 8×8 inline, not inside ou-tabs__badge pill (2026-05-25) [`40ed0b92f8b05f64b761378edcc4044024a7e56b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/40ed0b92f8b05f64b761378edcc4044024a7e56b)
+  Per prd7-editor-drawer.html / prd7-structure-*.html, the
+  dirty/warn/error indicator on an editor tab is a small inline dot
+  rendered NEXT to the tab text (8×8, var(--ou-space-2)), NOT inside
+  the `.ou-tabs__badge` pill (which is 18×18 with bg-page background
+  and is intended for counts/labels).
+  
+  Two issues fixed:
+  \- The `.status-dot` class wasn't defined in our app CSS — only in
+    wireframe-local &lt;style&gt;. Port the wireframe definition into
+    tb-components.css using DS tokens (--ou-accent-default for dirty,
+    --ou-warning-default for warn, --ou-error-default for error).
+  \- The ui-kit Tabs `badge` prop wraps its child in `.ou-tabs__badge`.
+    Switch to composing the dot directly into the tab `label` so it
+    renders inline next to the text without the pill background.
+  
+  134 vitest tests pass; tsc clean.
+
+- **fix**(prd-7): hide tab badge pill on clean tabs (2026-05-25) [`ae4221daaebe6b50434b766e1421abd19f32750e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ae4221daaebe6b50434b766e1421abd19f32750e)
+  ui-kit Tabs renders &lt;span class="ou-tabs__badge"&gt; whenever the
+  `badge` prop is non-null. The badge pill has min-width:18px /
+  height:18px / bg-page background, so it appears as a visible
+  circle even when its child node is null — which produced an
+  empty dot on every editor tab regardless of dirty state.
+  
+  Fix: only set the `badge` prop when the tab actually has
+  non-clean state (error / warning / dirty); pass `undefined` for
+  clean tabs so the pill is not rendered at all.
+  
+  134 vitest tests pass; tsc clean.
+
+- **fix**(prd-7): unify Design save into drawer footer (remove per-pane DesignSaveBar) (2026-05-25) [`6ddd2bf39a7881a17df73c16a0a2ebafa70ff9ad`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6ddd2bf39a7881a17df73c16a0a2ebafa70ff9ad)
+  Per wireframe prd7-design-tab.html — design tab footer shows the same
+  single «Сохранить» button as other tabs, NOT a separate per-pane
+  save bar. Refactor so the drawer footer drives both test-settings
+  and design-settings save:
+  
+  \- Hoist `useDesignSettings` from DesignSection up to TestEditorView.
+    DesignSection accepts an optional `design` prop; falls back to its
+    own hook call when used standalone (component tests, future
+    embeds).
+  \- Combine isDirty / isSaving across editor + design; drawer footer
+    «Сохранить» enables on either-dirty and persists both drafts
+    sequentially (test settings first for `expectedVersion` ordering,
+    design after via its independent endpoint).
+  \- Combined «Отменить»/«Закрыть» triggers also revert design draft.
+  \- DesignSaveBar removed; replaced with a minimal inline
+    `DesignSaveError` banner that only surfaces failures (action
+    controls now live in drawer footer).
+  
+  Tests adapted: per-pane `design-save` button assertions dropped;
+  draft mutation verified through input value / switch checked
+  state / select trigger label. The save-flow test wraps the
+  section in a small `Harness` component that mirrors the parent
+  pattern (hoisted hook + hidden test-only save trigger).
+  
+  134 vitest tests pass; tsc clean.
+
+- **fix**(prd-7): Design Template pane — tpl-block + preview-sketch thumb per wireframe (2026-05-25) [`88d3435ba3bf988cf5e9717b82743209e372fdc6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/88d3435ba3bf988cf5e9717b82743209e372fdc6)
+  Port wireframe-local CSS (tpl-block, tpl-thumb, tpl-info, tpl-name,
+  tpl-desc, tpl-actions, tpl-preview-btn + preview-sketch and its
+  ps-* schematic sub-classes) from prd7-design-tab.html to
+  tb-components.css; rewrite TemplatePane in design-section.tsx to
+  use the wireframe markup:
+  
+  \- Replace ui-kit Card with `.tpl-block` row layout (thumb left,
+    info right, preview-icon top-right).
+  \- Render a 160×90 schematic `preview-sketch` (header + progress +
+    sidebar + question + 3 options) with the template's first 3 chars
+    as a faux logo title.
+  \- Eye-icon preview button (lucide Eye) wired to a stub alert until
+    the full preview modal ships.
+  \- Tags (Встроенный / v…) now live in `.tpl-info__head` next to the
+    name instead of CardHeader's subtitle slot.
+  
+  134 vitest tests pass; tsc + check:wireframes:ds clean.
+  
+  Browser baseline note: `color-mix(in srgb, …)` requires Chrome ≥ 111
+  and Safari iOS ≥ 16.2 — identical to upstream wireframe CSS.
+
+- **fix**(prd-7): AdaptiveLevelCard — status-dot lead + collapse chev per wireframe (2026-05-25) [`9331adf14e2471cf7b525cd120c475d1c026ce2d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9331adf14e2471cf7b525cd120c475d1c026ce2d)
+  Per prd7-editor-settings-tab.html (wf-adaptive state) level card has:
+  1. Status-dot leading element (tb-status-dot--ok/err) reflecting
+     validity of the level configuration (min ≤ max, questions ≥ 1,
+     threshold in bounds; richer rules deferred to FR-17 follow-up).
+  2. Trail action group containing both the trash button AND a chev
+     button (tb-level-card__chev) that collapses the card body.
+  3. Subtitle ends with «валидно»/«невалидно» mirroring the dot state.
+  
+  Card adds is-collapsed modifier; CSS already in tb-components.css
+  (tb-status-dot, tb-level-card__chev, .is-collapsed → rotate -90°).
+  
+  134 vitest tests pass; tsc clean.
+
+- **fix**(prd-7): align Structure tab markup with wireframe (flow-mode-bar, zone-block, page-row) (2026-05-25) [`07d293bbca6090a1d78690738f0e116318095c03`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/07d293bbca6090a1d78690738f0e116318095c03)
+  Port wireframe-local CSS from prd7-structure-linear-flat.html to
+  tb-components.css as DS-extensions per wf-only-skeleton-frame rule,
+  and rewrite start-pages-section.tsx to use them:
+  
+  \- Replace heavyweight `Banner` flow-mode notice with a thin
+    `.flow-mode-bar` (label + hint + small Layout icon).
+  \- Replace custom `tb-structure-zone` with wireframe's `zone-block`
+    (dashed border + uppercase-caption zone-header).
+  \- Replace per-topic `tb-structure-zone--topic` with `topic-block`
+    (elevated card with topic-header showing name + question count).
+  \- Replace `tb-page-row` with `page-row`/`page-variant-badge`/
+    `page-title`/`page-actions`; per-row meta tags use `.page-row__meta`
+    with auto-derived severity stripe (info/warn/error).
+  \- Replace inline «Удалить» button with a dots-icon `MenuTrigger`
+    from ui-kit; «Удалить» moves into the menu, confirm prompt stays
+    inline. Menu portals so its popup escapes overflow:hidden zones.
+  \- Carry `page-row--questions` + page-icon (lucide HelpCircle) for
+    the system questions stream row.
+  
+  Tests adapted for dots-menu flow: open via
+  `structure-page-actions-{id}`, then click `structure-page-delete-{id}`.
+  
+  134 vitest tests pass; tsc + check:wireframes:ds clean.
+
+- **fix**(prd-7): wireframe-correspondence pass for editor — footer / required toggle / limits / level remove (2026-05-25) [`979d224ba9fb19da83ef0306201f9c3a2f219ad6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/979d224ba9fb19da83ef0306201f9c3a2f219ad6)
+  Per HARD wireframes-first rule, align editor markup with approved
+  wireframes (prd7-editor-drawer.html, prd7-editor-settings-tab.html,
+  prd7-design-tab.html):
+  
+  \- test-editor.tsx footer: clean state shows ghost «Закрыть» +
+    primary «Сохранить»; dirty state shows ghost «Показать изменения»
+    \+ secondary «Отменить» + primary «Сохранить» (was: always
+    secondary «Закрыть»).
+  \- basic-settings-section.tsx PassRules per-topic «Обязательная»
+    column: use Switch from ui-kit (per wireframe role="switch")
+    instead of bare checkbox.
+  \- basic-settings-section.tsx Limits pane: reorder per wireframe
+    (Максимум попыток before Лимит времени теста); rename time-limit
+    label to «Лимит времени теста» + suffix «минут».
+  \- basic-settings-section.tsx AdaptiveLevelCard remove button: use
+    Trash2 icon (per wireframe i-trash) instead of «×» literal.
+  \- design-section.tsx «Заменить шаблон» button: add Layout leading
+    icon (per wireframe i-layout).
+  
+  134 vitest tests pass; tsc clean.
+  
+  Deferred (functional/structural, not addressed in this pass):
+  \- Adaptive level «valid/invalid» status dot + per-level collapse
+    toggle (requires validation logic).
+  \- Adaptive topic distribution histogram (requires question-difficulty
+    data aggregation).
+  \- Structure tab full rewrite: flow-mode-bar, zone-block, page-row
+    with drag-handle/expand-toggle/dots-menu (large CSS+JSX port from
+    wireframe — separate ticket).
+  \- Design Template pane preview-sketch thumbnail (separate ticket).
+
+- **fix**(wireframes): close DS-gate violations across approved files (2026-05-21) [`c39ca43bc08a941c972777b34186d1a2ecb74ba3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c39ca43bc08a941c972777b34186d1a2ecb74ba3)
+  Зачищаем 21 direct-unit / named-color violation, найденную линтером
+  `check:wireframes:ds`. Источники нарушений — мостовые fallback'и
+  `var(--token, 360px)`, hardcoded `10px` font-size аннотаций, `8px`
+  status-dot размеры, литералы в комментариях и фиксированные ширины
+  формы в tb-components.
+  
+  Подход: ввели недостающие wireframe-токены `--wf-size-360` и
+  `--wf-border-w-2` в `prd7-shared.css`; добавили локальные `--tb-*`
+  токены (`--tb-input-w-md`, `--tb-input-w-sm`, `--tb-accent-rail-w`,
+  `--tb-space-half`) в обе копии `tb-components.css` под gate-skip
+  блоком; `@container (max-width: 720px)` обёрнут отдельным gate-skip
+  с пояснением, что var() в container-queries не работает в
+  production-браузерах.
+  
+  Линтер: 0 violations, 17 файлов passed.
+
+- **fix**(wireframes): extend severity rail over mapping-warn block + unify save button (2026-05-21) [`b9c551743363299659338b00b334b2c2bee2ceeb`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b9c551743363299659338b00b334b2c2bee2ceeb)
+  s-mapping in linear_by_topics had two issues visible in the latest review:
+  
+  1. The yellow severity stripe stopped at the page-row, leaving the
+     `.mapping-warn` block below it (with the variant-replacement select) with
+     no stripe. The mapping-warn block is the row's continuation — it asks the
+     user to choose a replacement for the missing variant — so the stripe must
+     cover both. Added `.page-row + .mapping-warn` rules mirroring the existing
+     `.page-row + .page-row-expand` ones. Also reset mapping-warn's own
+     horizontal margin when it follows a severity row, so the stripe sits flush
+     with the row above (single rail, no offset).
+  
+  2. The footer primary button read «Применить шаблон» — wireframe-specific
+     text that broke the convention used by every other Drawer state. Renamed
+     to «Сохранить» (matches FR-25a) and secondary «Отмена» → «Отменить» for
+     tense consistency with the rest of the file.
+  
+  Verified in Playwright: yellow rail now runs continuously from the page-row
+  through the mapping-warn block; footer shows «Отменить» / «Сохранить».
+
+- **fix**(wireframes): extend severity stripe over expanded page-row in linear modes (2026-05-21) [`ed4b81b1f0110ef3495941cd38c3ddd5c81a2840`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ed4b81b1f0110ef3495941cd38c3ddd5c81a2840)
+  The severity border-left was only painted on the page-row itself in linear_flat
+  and linear_by_topics — when the row was expanded, the .page-row-expand block
+  below it had no stripe, breaking the visual continuity of the signal. Worst
+  case: a validation row showed a red stripe at the top, then a wide colourless
+  expand body with red banners and error-fields inside it — the row looked
+  disconnected from the issue it was about.
+  
+  Add severity-stripe rules for .page-row + .page-row-expand combinations in
+  both linear files (router already had this). Cascade picks up the same colour
+  as the row itself: red for --error / ou-tag--error, yellow for --warn /
+  ou-tag--warning, blue for ou-tag--info. Without a severity trigger on the row
+  above, expand stays plain (no stripe).
+  
+  Verified in Playwright: s-validation in linear_by_topics now shows a
+  continuous red stripe from the page-row through the error banner, name field
+  and content field down to the «Содержимое не может быть пустым» error message.
+
+- **fix**(wireframes): hide «Удалить» from row-menu of system pages (not disabled) (2026-05-21) [`5d180a7e6e41d792f2664c45ecfd685f03641534`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5d180a7e6e41d792f2664c45ecfd685f03641534)
+  System page-rows (kind: router / summary / intro / questions) cannot be
+  removed manually — the previous «show as disabled» pattern was visual noise.
+  Drop the menu item (and its preceding separator) entirely for system kinds,
+  keep it only for user-created info-rows.
+  
+  s-row-menu-open router-row dropdown now shows just two items:
+    \- Сменить вариант…
+    \- Предпросмотр
+  The info-row in «После теста» still shows the full menu including a
+  destructive «Удалить» — that's the active demonstration of the contrast.
+  
+  Notes table + checklist §11 updated to match the new behaviour.
+
+- **fix**(wireframes): align severity-border colors with DS info/warning/error tokens (2026-05-21) [`d99c78da9f269c503d6a69600c056d518c13495a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d99c78da9f269c503d6a69600c056d518c13495a)
+  Three corrections to the severity-border system introduced in the previous
+  commit:
+  
+  1. Info border colour: switched from `--ou-accent-default` (purple, the brand
+     accent) to `--ou-info-default` (blue, matches the DS info palette and
+     `ou-tag--info` content colour). Border and tag now read as one signal.
+  
+  2. Page-row-expand continuity: the expand body now inherits its left-border
+     colour from the row above's severity, so an info row + its expand share a
+     blue stripe, a warning row gets yellow continuation, a validation row red.
+     Without a severity trigger the expand stays plain.
+  
+  3. Split `.page-row--warn` (yellow, warning — used for mapping prompts) from
+     `.page-row--error` (red, validation/blocking errors):
+     \- `s-mapping` row in linear_by_topics keeps `--warn` → yellow stripe;
+     \- `s-validation` row in router renamed `--warn` → `--error` → red stripe;
+     \- `s-validation` row in linear_by_topics now carries `--error` (was bare,
+       so the row above the validation banner had no signal — fixed).
+  
+  Verified across:
+  \- linear_flat s-main: questions-row → blue border + blue info tag ✓
+  \- linear_by_topics s-mapping: page-row → yellow border ✓
+  \- linear_by_topics s-validation: page-row → red border ✓
+  \- router s-main-multi-variant / s-main-fallback / s-validation: blue / yellow / red ✓
+  \- router default states: no borders (signal-only attention) ✓
+
+- **fix**(wireframes): replace «system» accent border with severity-based border (2026-05-21) [`fdd3c2b56874090b8a991984b1d68b41787da24d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fdd3c2b56874090b8a991984b1d68b41787da24d)
+  The accent (blue) border-left on every `.page-row--system` was visual noise:
+  it appeared on rows that didn't need attention (system pages in their default
+  state) just because they were attached by the system, not because there was
+  anything to draw the user to.
+  
+  New semantics — border-color reflects severity of the row's state, not its
+  ownership:
+  
+  | Border colour | Trigger                                                |
+  |---------------|--------------------------------------------------------|
+  | (none)        | normal — no meta tags, nothing to attend to            |
+  | Blue          | ou-tag--info in .page-row__meta (info available)       |
+  | Yellow        | ou-tag--warning in meta (fallback, conflict)           |
+  | Red           | ou-tag--error in meta OR .page-row--warn (validation)  |
+  
+  Implementation via CSS :has() — border colour is auto-derived from the
+  highest-severity meta tag present, with priority error &gt; warning &gt; info.
+  No per-row modifier needed; markup stays clean.
+  
+  Side changes:
+  \- `.page-row--system` becomes a documentation-only class (no CSS rule);
+    it stays in the markup as a semantic marker that the row is system-bound.
+  \- `.page-row--warn` keeps the name for back-compat with s-validation but now
+    produces a red border + error-on-soft title (matches «error» semantics).
+  \- The old per-row warning border-color rule in router (was using
+    --ou-warning-default) is dropped — severity rule handles it now.
+  
+  Verified in Playwright across all router states:
+  \- s-main / s-row-menu-open: no borders (default state) ✓
+  \- s-main-multi-variant: blue borders on rows with «Доступно N вариантов» ✓
+  \- s-main-fallback: yellow borders on rows with «Из стандартного шаблона» ✓
+  \- s-validation: red border on the router-row, red status-dot on the tab ✓
+  \- linear_flat / linear_by_topics: only questions-row with info tag in s-main
+    gets a blue border; default page-rows stay unmarked.
+
+- **fix**(wireframes): unify page-row actions to single «…» menu in linear modes (2026-05-21) [`342957f47ddb31a4f75d6612e9ebcf0040cdf567`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/342957f47ddb31a4f75d6612e9ebcf0040cdf567)
+  Bring linear_flat and linear_by_topics in line with the variant.kind row-menu
+  contract (PRD-1 §4.3): every editable page-row now exposes a single
+  `ou-iconbtn` with `i-dots` instead of separate Eye + Trash buttons. The
+  dropdown content (with «Сменить вариант» / «Предпросмотр» / «Удалить») is
+  demonstrated in `prd7-structure-router.html#s-row-menu-open`.
+  
+  Touched ~10 page-row instances across both linear files:
+  \- linear_flat: the «Правила прохождения теста» row in s-main;
+  \- linear_by_topics: «Что такое информационная безопасность», «Итоги раздела»
+    and equivalents across s-main / s-mapping / s-dirty-form / s-validation /
+    s-sanitize / s-delete / s-dnd / s-dnd-topics. Replace_all handled both
+    14-space and 16-space indent variants and the Trash-only variant.
+  
+  Intentionally left untouched:
+  \- s-readonly: keeps the single Eye iconbtn (read-only preview, no actions);
+  \- s-page-preview / -aa modal frame label icons;
+  \- delete-confirm modal danger icon.
+  
+  Checklist housekeeping:
+  \- §8 (linear_by_topics): 5 «variant.kind» dependencies marked [x];
+  \- §9 (linear_flat): 2 dependencies marked [x];
+  \- Final Sign-off: «mobile (&lt;960px)» moved out of scope — covered by a future
+    PRD; only desktop (1440px) acceptance applies to §8/§9/§11.
+  
+  Verified in Playwright at 1600×1100 for both linear files: editable rows show
+  a single `…` button, no Eye/Trash artefacts remain.
+
+- **fix**(wireframes): unify zone padding across all flowModes + allow insert after summary (2026-05-21) [`214ba8b00a590124d5acea08350d471724a216d0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/214ba8b00a590124d5acea08350d471724a216d0)
+  Two related visual fixes across linear_flat / linear_by_topics / router:
+  
+  1. Unified padding for «Внутри теста» between flowModes — router was using
+     var(--wf-space-14) (14px) while linear modes were on var(--ou-space-4)
+     (16px). Aligned router .inside-test__body to var(--ou-space-4); also
+     added the same .zone-block &gt; .topic-body rule that linear files use so
+     the «До теста» / «После теста» zones in router get the same inset.
+  
+  2. Added a trailing insert-row after the system summary page in every
+     editable «После теста» zone:
+     \- linear_flat / linear_by_topics: one «+ Добавить страницу» row right
+       after the «Итоговая страница» summary in s-main / s-empty-pages /
+       s-mode-change (all editable states; s-readonly intentionally skipped);
+     \- router: same after «Итоговая страница теста» in s-main and
+       s-row-menu-open.
+  
+  Visually verified in Playwright at 1600×1100:
+  \- All three modes show identical dashed zones with consistent inner card
+    widths (cards no longer touch the dashed border).
+  \- Authors can now add a custom page below the summary in every flowMode.
+
+- **fix**(wireframes): inset child cards from zone-block dashed border in linear modes (2026-05-21) [`d42a7793c25f70c5851fce319a11fb6d4333103a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d42a7793c25f70c5851fce319a11fb6d4333103a)
+  The page-row / topic-block cards inside .zone-block (До/Внутри/После теста)
+  had their borders touching the dashed border of the surrounding zone. With
+  the .topic-body wrapper having zero horizontal padding, child cards spanned
+  the full inner width of the zone — visually the two borders fused.
+  
+  Add `.zone-block &gt; .topic-body { padding: var(--ou-space-2) var(--ou-space-4); }`
+  to both linear_flat and linear_by_topics. The `&gt;` combinator only targets the
+  zone's direct body wrapper, so per-topic `.topic-body` (inside individual
+  `.topic-block` cards) keeps its existing padding.
+  
+  Also drop a previous over-engineered attempt that turned topics into borderless
+  "sections" inside .zone-block--topics — that changed too much. The simple
+  inset padding is enough; topic cards keep their normal card look but now sit
+  inside the zone with breathing room from the dashed border.
+  
+  Verified in Playwright: questions-row in linear_flat and topic-block cards in
+  linear_by_topics both show a clear visual gap to the zone border on left/right.
+
+- **fix**(wireframes): move multi-variant / fallback hints to dedicated meta row (2026-05-21) [`8fdefd4e5da7aed0cb39c38bcd9af6967ff0ff5e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8fdefd4e5da7aed0cb39c38bcd9af6967ff0ff5e)
+  The inline «Доступно N вариантов» and «Из стандартного шаблона» badges were
+  crammed into the same flex line as the variant badge + title + actions,
+  making the row visually noisy and pushing the title sideways.
+  
+  Restructure each row into a header line + an optional second line carrying
+  the meta hint as a proper DS ou-tag:
+  \- info-coloured tag for «Доступно N вариантов» (i-info icon);
+  \- warning-coloured tag for «Из стандартного шаблона» (i-warn icon).
+  
+  The new `.page-row__meta` block uses `flex-basis: 100%` so it wraps onto its
+  own line within the flex-wrap'd `.page-row`. Left margin aligns the tag with
+  the variant badge above; on `.page-row--system` the offset compensates for
+  the accent border.
+  
+  Removed the now-unused `.multi-variant-hint` / `.fallback-warn` custom
+  classes — DS tags replace them across all states (s-main-multi-variant,
+  s-main-fallback, s-row-menu-open).
+
+- **fix**(wireframes): wire up showState + toggles for router and variant-replace (2026-05-21) [`ac7902e39d78f4d3f950a1a16bf9b3bb4d72830c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ac7902e39d78f4d3f950a1a16bf9b3bb4d72830c)
+  The two wireframes added in this session referenced `showState`,
+  `toggleTheme`, `toggleDensity`, `toggleAnnots` from onclick handlers but
+  never defined them — the state-switcher buttons were inert. Every other
+  wireframe ships these helpers inline; the router rewrite (created from
+  scratch) and the new variant-replace modal both inherited the gap.
+  
+  Add the canonical inline `&lt;script&gt;` (mirroring approved/prd7-tests-list.html):
+  \- resolveState() + showState() with .wf-state / .shell class toggling
+  \- toggleTheme / toggleDensity / toggleAnnots
+  \- page-row expand chevron handler (router only — variant-replace has no rows)
+  \- updateWireframeNavOffset on resize/ResizeObserver
+  
+  Side cleanup in variant-replace: extract the three inline
+  `style="margin-bottom: var(--ou-space-3);"` modal intros into a
+  reusable .modal-intro class.
+
+- **fix**(wireframes): remove tag-group chips from mobile footer, sync with desktop (2026-05-18) [`cedb24ce8018aeba068a629a6dbc6e5a5117935b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/cedb24ce8018aeba068a629a6dbc6e5a5117935b)
+
+- **fix**(wireframes): add Изменено status tag before tab chip in mobile footer (2026-05-18) [`7d69e93668f3fcf54ba57998cb54e9f9c3bc7fc7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7d69e93668f3fcf54ba57998cb54e9f9c3bc7fc7)
+
+- **fix**(wireframes): raise ou-tabs z-index above saving-overlay to prevent tab strip clipping (2026-05-18) [`cc9e6235732c9ae85c620ffa5093e1df58b1659a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/cc9e6235732c9ae85c620ffa5093e1df58b1659a)
+
+- **fix**(wireframes): restore saving-overlay coverage broken by wf-annot-wrap--block position:relative (2026-05-18) [`52d57c6bcaa5cf02e4820ef1fd7ee021d89824b9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/52d57c6bcaa5cf02e4820ef1fd7ee021d89824b9)
+
+- **fix**(wireframes): apply bg-page template pattern and fix missing shared CSS links (2026-05-18) [`d68702736c3dd3f09a5ac60e0eb840b2f9f1d5ed`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d68702736c3dd3f09a5ac60e0eb840b2f9f1d5ed)
+  \- prd7-editor-conflict.html, prd7-editor-settings-tab.html: add missing
+    prd7-shared.css link (audit blocker)
+  \- prd7-editor-drawer.html: extract repeated bg-page HTML into &lt;template
+    id="tpl-bg-page"&gt; injected via injectBgPage() IIFE; add .wf-tpl-slot
+    CSS class to avoid inline display:contents; consistent with pattern
+    already used in prd7-design-tab.html and prd7-structure-linear-by-topics.html
+
+- **fix**(wireframes): resolve CSS/HTML linter warnings in prd7-editor-drawer (2026-05-18) [`2f7342deb2f490687832b7a1e9aace01459c3510`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2f7342deb2f490687832b7a1e9aace01459c3510)
+  \- Add standard line-clamp alongside -webkit-line-clamp (vendor prefix warning)
+  \- Replace style="display:none" on SVG sprite with .wf-svg-sprite class
+  \- Remove redundant style="position:relative" from .changes-anchor (already in CSS)
+
+- **fix**(wireframes): include FR/NFR codes table in Пояснения modal (2026-05-18) [`92071af765cb2b102d35f5432a016e0094140419`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/92071af765cb2b102d35f5432a016e0094140419)
+  openNotesModal() now appends a third section «Коды требований FR / NFR»
+  by cloning the first notes-box from #s-notes. Users can see an annotation
+  badge on an element (e.g. FR-25a) and immediately look up its meaning
+  without switching to the notes state.
+
+- **fix**(wireframes): switch all asset refs to root-relative paths (2026-05-18) [`dba7c234c027825e19aa932ac5c413c9464b0b77`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/dba7c234c027825e19aa932ac5c413c9464b0b77)
+  Wireframes previously used relative paths (ds/university-rt.css,
+  prd7-shared.css, wf-links.js) that broke when files were moved into
+  docs/wireframes/approved/. Changed to /docs/wireframes/… so any file
+  can be placed in any subdirectory and serve correctly without code edits.
+
+- **fix**(wireframes): remove duplicate Сохранение tag from s-saving footer (2026-05-17) [`814b4c9e0a5fcae008e92f7afb14803873c6d352`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/814b4c9e0a5fcae008e92f7afb14803873c6d352)
+
+- **fix**(wireframes): add horizontal padding to drawer tabs nav to align with head/body (2026-05-17) [`6d83c88527b7c6e830ad67d804e39a1c3d309406`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6d83c88527b7c6e830ad67d804e39a1c3d309406)
+
+- **fix**(wireframes): add missing feedback section to Сетевая безопасность in s-dirty, s-error, s-changes states (2026-05-17) [`1209a5de2ef3cb31188709c760db8acb4251e2cc`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/1209a5de2ef3cb31188709c760db8acb4251e2cc)
+
+- **fix**(wireframes): remove redundant changed-section tags from drawer footers (2026-05-17) [`85347302157143ea15de9cb7cf22399b210a23af`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/85347302157143ea15de9cb7cf22399b210a23af)
+
+- **fix**(wireframes): remove redundant form-hint from drawer topic section (2026-05-17) [`2a5dd1ca7d10c71e6c7b7daa856bc5dca6140356`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2a5dd1ca7d10c71e6c7b7daa856bc5dca6140356)
+
+- **fix**(wireframes): improve prd7-editor-drawer topic cards and header status tag (2026-05-17) [`92c05a2ce9ee0a39363204abd4187ca676bbdba4`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/92c05a2ce9ee0a39363204abd4187ca676bbdba4)
+  \- topic-row migrated to DS tokens (ou-border-default, ou-radius-l, ou-shadow-sm)
+    replacing wf-* variables; topics now visually separate as cards
+  \- remove 'Изменений нет' ou-tag from s-default footer — nothing shown when clean
+  \- Опубликован: add ou-tag--outline for visible green border vs barely-tinted soft bg
+
+- **fix**(wireframes): add missing prd7-shared.css link to 11 wireframe files (2026-05-17) [`b0b094990775436f68e2e66ab7f7b5e0231566a3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b0b094990775436f68e2e66ab7f7b5e0231566a3)
+  Without prd7-shared.css, --wf-space-* tokens were undefined causing
+  SVG icons (e.g. wf-feedback-meta) to render at natural unconstrained size.
+
+- **fix**(wireframes): adopt new DS ou-choice-card (4a-gap closed) (2026-05-17) [`057bee7e4db37c033b38ab8ee51ca16a9e6b0926`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/057bee7e4db37c033b38ab8ee51ca16a9e6b0926)
+  Pick up the new DS primitive ChoiceCard from ui-kit (handbook commit
+  adds .ou-choice-card to css/university-rt.css and React component
+  ChoiceCard / ChoiceCardGroup / ChoiceCardInset) and use it in place of
+  the previous wireframe-local modal-option-* / modal-inset pattern.
+  
+  Local DS copy:
+  \- docs/wireframes/ds/university-rt.css — sync .ou-choice-card-* rules.
+  
+  Wireframe migration (prd7-tests-list.html):
+  \- s-folder-delete-a / s-folder-delete-b modals replaced
+    &lt;div class="modal-option ..."&gt;…&lt;/div&gt; with the canonical
+    &lt;label class="ou-choice-card …"&gt;&lt;input … class="ou-choice-card__input"&gt;…
+    &lt;/label&gt; structure inside an &lt;fieldset class="ou-choice-card-group"&gt;.
+  \- Destructive variant uses ou-choice-card--destructive (red border / soft
+    background on selected); inset content (move-to select, confirmation
+    input) wrapped in &lt;span class="ou-choice-card__inset"&gt;.
+  
+  CSS cleanup:
+  \- Drop dead local rules .modal-option / -icon / -title / -sub / -danger
+    and .modal-inset / .modal-warn from &lt;style&gt; block.
+  
+  Gate:
+  \- modal-option-* and modal-inset re-added to legacyClassTokens as a
+    regression guard now that DS provides the replacement.
+  
+  Audit:
+  \- 4a-gap entry marked closed with the migration path recorded.
+  
+  Gate (base + strict-inline): still passes 0/22.
+
+- **fix**(wireframes): migrate wf-* product controls to ou-field / ou-textarea (stage 3.3d) (2026-05-17) [`c02291c5be7ee093f19234867b4ed82487c39405`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c02291c5be7ee093f19234867b4ed82487c39405)
+  The wf-* prefix is reserved for wireframe meta (state switcher, notes,
+  DS Mapping). Nine files used it to disguise product input/select/textarea
+  styling. Migrate all of them to the DS BEM structure and lock the gate
+  against regressions.
+  
+  Class migrations (input / select / textarea wrapped in ou-field/__box or
+  ou-textarea/__box; control gets ou-field__input or ou-textarea__input):
+  \- wf-text-input [--m / --error]   -&gt; ou-field--m/s [ou-field--error]
+  \- wf-textarea  [wf-code-textarea] -&gt; ou-textarea--m
+  \- wf-select   [wf-select--full]   -&gt; ou-field--m [ou-field--full]
+  \- wf-num-input [--error]           -&gt; ou-field--s [ou-field--error]
+  \- wf-level-name-input              -&gt; ou-field--m
+  \- wf-failure-input                 -&gt; ou-textarea--s
+  \- wf-json-textarea                 -&gt; ou-textarea--m
+  \- wf-link-input                    -&gt; ou-field--m
+  \- wf-format-select                 -&gt; ou-field--m
+  \- wf-flow-select                   -&gt; ou-field--m
+  \- wf-type-select                   -&gt; ou-field--s
+  \- wf-field-input [--wide/--narrow/--error]
+                                     -&gt; ou-field--m/s [ou-field--error]
+  \- wf-tbl-input-{s,m,l,num}         -&gt; ou-field--s/m
+  \- wf-tbl-textarea                  -&gt; ou-textarea--s
+  \- wf-tbl-select [--w]              -&gt; ou-field--s
+  \- wf-mob-input [--narrow]          -&gt; ou-field--m/s
+  \- wf-mob-settings-select           -&gt; ou-field--m
+  \- wf-mob-settings-selector         -&gt; ou-formfield (grouper wrapper)
+  \- wf-draw-count-input              -&gt; ou-field--s
+  \- draw-count-input                 -&gt; ou-field--s
+  
+  Files changed:
+  \- docs/wireframes/prd7-editor-drawer.html        (11 controls)
+  \- docs/wireframes/prd7-editor-mobile.html        (9)
+  \- docs/wireframes/prd7-editor-settings-tab.html  (38)
+  \- docs/wireframes/prd7-editor-status-indicators.html (3)
+  \- docs/wireframes/prd7-mode-switch-warning.html  (1)
+  \- docs/wireframes/prd7-section-adaptive.html     (33)
+  \- docs/wireframes/prd7-section-basic-feedback-editor.html (11)
+  \- docs/wireframes/prd7-section-basic-states.html (2)
+  \- docs/wireframes/prd7-section-basic.html        (3)
+  \- scripts/check-wireframes-ds.mjs (add wf-*-input/select/textarea names
+    to legacyClassTokens with explicit comment)
+  \- docs/wireframes-ds-audit.md (close 3.3c-deferred, add 3.3d entry)
+  
+  Note: local &lt;style&gt; rules for the migrated wf-* classes are now dead
+  code but remain in the files; deletion is a separate cosmetic cleanup
+  and does not affect the gate.
+  
+  Gate (base + strict-inline): still 0 violations on all 22 files.
+
+- **fix**(wireframes): finish inline + style-block raw values cleanup (stage 4b/4c/4d) (2026-05-17) [`13d95686710d54e25284542e5f90976a68482c06`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/13d95686710d54e25284542e5f90976a68482c06)
+  Bring the strict-inline gate down to 0 across all 22 wireframe files.
+  
+  Stage 4b — inline raw colors (98 -&gt; 0):
+  \- Tag color swatches, preview sketches, gallery previews, color preset
+    palettes and preview-flow steps with data-wf-demo.
+  \- Extend the gate to honour data-wf-demo as an ANCESTOR whitelist
+    (stream-scan tags into a stack, mark open-to-close intervals).
+  \- Replace recurring chrome hsl() values with --ou-* tokens.
+  
+  Stage 4c — spacing tokens (1842 style + 715 inline direct units -&gt; few):
+  \- Bulk rewrite the spacing scale 4/8/12/16/20/24/32/40/48/64/80/96 px
+    to var(--ou-space-N) inside both inline style="..." and &lt;style&gt; blocks
+    across every prd7-*.html, plus prd7-shared.css and ds/wf-utils.css.
+  
+  Stage 4d — residual values (~120 -&gt; 0):
+  \- Add a WIREFRAME-ONLY token layer in prd7-shared.css (--wf-border-w,
+    --wf-border-w-1-5, --wf-space-{half,1q,tiny,6,7,9-15}, --wf-size-{...}
+    and --wf-radius-pill) inside a /* gate-skip-start ... gate-skip-end */
+    pragma, then sweep every Npx in the source files to var(--wf-...).
+  \- Replace standalone `white`/`black` with var(--ou-neutral-0)/
+    var(--ou-neutral-950); fix the false-positive named-color regex
+    (was matching `white-space`).
+  \- Exclude `em` from the direct-unit scan (typographic only, no tokens).
+  \- Introduce /* gate-skip-start ... gate-skip-end */ pragma support in
+    the gate; let the strict-inline scan honour an opt-out region for
+    the token definitions themselves.
+  
+  Files changed:
+  \- docs/wireframes/prd7-*.html (16 files)
+  \- docs/wireframes/prd7-shared.css (+wireframe-token layer, pragma)
+  \- docs/wireframes/ds/wf-utils.css (px -&gt; --ou-space/--wf-* sweep)
+  \- scripts/check-wireframes-ds.mjs (demoRanges, skip-pragma, em removal,
+    improved named-color lookbehind)
+  \- docs/wireframes-ds-audit.md (mark 4b/4c/4d closed)
+  
+  Gate (base + strict-inline): 1929 -&gt; 0 violations on all 22 files.
+
+- **fix**(wireframes): replace spacing px with --ou-space tokens (stage 4c bulk) (2026-05-17) [`0d453910e86d4f7b5ced57fa820f8ab733c8dc97`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0d453910e86d4f7b5ced57fa820f8ab733c8dc97)
+  Bulk replace canonical spacing px values inside both inline style="..."
+  attributes and &lt;style&gt; blocks across all prd7-*.html files. Sed targets
+  exact word-boundary tokens, so non-spacing values (font-size: 13px,
+  custom max-width: 220px, 1px borders, etc.) are left untouched for the
+  follow-up pass.
+  
+  Token map:
+     4px -&gt; var(--ou-space-1)
+     8px -&gt; var(--ou-space-2)
+    12px -&gt; var(--ou-space-3)
+    16px -&gt; var(--ou-space-4)
+    20px -&gt; var(--ou-space-5)
+    24px -&gt; var(--ou-space-6)
+    32px -&gt; var(--ou-space-7)
+    40px -&gt; var(--ou-space-8)
+    48px -&gt; var(--ou-space-9)
+    64px -&gt; var(--ou-space-10)
+    80px -&gt; var(--ou-space-11)
+    96px -&gt; var(--ou-space-12)
+  
+  Files: 16 prd7-*.html
+  
+  Gate (strict-inline): 1830 -&gt; 1775 violations.
+  Inline direct units: 490 -&gt; 277. Style-block direct units: 1842 -&gt; 1411.
+  Inline raw colors: 0 (unchanged). Legacy class: 0 (unchanged).
+
+- **fix**(wireframes): clear inline raw colors via data-wf-demo + tokens (stage 4b) (2026-05-17) [`27d0822934149892559ea2aca64c54ee5d06fdc5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/27d0822934149892559ea2aca64c54ee5d06fdc5)
+  Mark demo subtrees (color swatches, template/gallery preview sketches,
+  mock SCORM preview drawers, color preset palette, preview flow steps)
+  with data-wf-demo and extend the gate to treat the attribute as an
+  ancestor-level whitelist (build interval map of demo ranges, skip any
+  inline style inside them).
+  
+  Replace recurring hsl() tokens used in product chrome with --ou-* tokens:
+  \- hsl(0 72% 97%)  -&gt; var(--ou-error-soft)        (delete-confirm tint)
+  \- hsl(0 72% 80%)  -&gt; var(--ou-error-default)     (delete-confirm border)
+  \- hsl(220 15% 90%) -&gt; var(--ou-bg-surface-3)     (disabled badge bg)
+  \- hsl(220 15% 45%) -&gt; var(--ou-fg-muted)          (disabled badge fg)
+  \- hsl(38 80% 45%)  -&gt; var(--ou-warning-default)  (folder icon color)
+  
+  Files changed:
+  \- docs/wireframes/prd7-design-tab.html        (data-wf-demo + token swaps)
+  \- docs/wireframes/prd7-structure-linear-flat.html
+  \- docs/wireframes/prd7-structure-linear-by-topics.html
+  \- docs/wireframes/prd7-structure-mixed.html
+  \- docs/wireframes/prd7-structure-router.html
+  \- docs/wireframes/prd7-tests-list.html
+  \- scripts/check-wireframes-ds.mjs (demoRanges/inDemoRange, ancestor scan
+    with simple HTML tag-stack honoring void elements)
+  
+  Gate: inline raw colors 98 -&gt; 0. Total: 1929 -&gt; 1830 (-99).
+
+- **fix**(wireframes): clean up legacy_class leftovers across 6 files (stage 4a) (2026-05-17) [`b782bc13fdf09e9ae78301e73ebe2a1df1f7eb19`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b782bc13fdf09e9ae78301e73ebe2a1df1f7eb19)
+  Apply the sidebar / topbar / nav / skel / empty / modal / toggle / btn-link
+  renames from stages 3.4, 3.9 and 3.3b to all product wireframes (not just
+  prd7-design-tab.html). Drop modal-option-* and modal-inset from the gate
+  legacy list — DS has no radio-card-in-modal primitive, tracked as a gap.
+  
+  Files changed:
+  \- docs/wireframes/prd7-design-tab.html (.tpl-thumb .skel -&gt; ou-skel)
+  \- docs/wireframes/prd7-structure-linear-flat.html (2 toggle blocks)
+  \- docs/wireframes/prd7-structure-linear-by-topics.html (4 toggle blocks)
+  \- docs/wireframes/prd7-structure-mixed.html (btn-link composite)
+  \- docs/wireframes/prd7-structure-router.html (btn-link composite)
+  \- docs/wireframes/prd7-tests-list.html (sidebar/nav/topbar/test-title/
+    modal-overlay/dialog/title/desc/actions/warn, btn-destructive composite)
+  \- scripts/check-wireframes-ds.mjs (drop modal-option-* / modal-inset
+    from legacyClassTokens with comment)
+  \- docs/wireframes-ds-audit.md (record 4a gap for modal-option pattern)
+  
+  Class replacements applied:
+  \- sidebar/-header/-nav/-footer/-title -&gt; ou-side[/__brand/__nav/__foot] +
+    brand-text
+  \- nav-item / nav-item active / nav-icon / nav-group-label -&gt;
+    ou-side__item [is-active] / ou-side__ico / ou-side__group-title
+  \- topbar -&gt; ou-shell__header; test-title -&gt; class dropped
+  \- skel / skel-block -&gt; ou-skel
+  \- empty-block / empty-title / empty-desc -&gt; ou-empty[/__title/__desc]
+  \- modal-overlay/dialog/title/desc/actions -&gt; ou-modal__backdrop / ou-modal
+    / ou-modal__title/__desc/__foot
+  \- modal-warn -&gt; ou-banner ou-banner--warning
+  \- btn-link (in ou-btn composite) -&gt; ou-btn--ghost
+  \- btn-destructive (in ou-btn composite) -&gt; ou-btn--destructive
+  \- toggle-row / toggle / toggle-thumb blocks -&gt; ou-formfield__inline +
+    ou-switch[.is-on] + __input/__track/__thumb
+  
+  Gate (base): 2177 -&gt; 1929 violations. legacy_class: 248 -&gt; 0.
+
+- **fix**(wireframes): wrap inputs/select/textarea in ou-field/ou-textarea (stage 3.3c) (2026-05-17) [`6ca6aa127853a3b327180f9ad78a24c7ed6ab8e6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6ca6aa127853a3b327180f9ad78a24c7ed6ab8e6)
+  Wrap raw &lt;input type="text|number|email|password|url|date|time"&gt;, &lt;select&gt;
+  and &lt;textarea&gt; elements in the DS BEM structure:
+  \- &lt;input&gt;    -&gt; &lt;div class="ou-field ou-field--m"&gt;&lt;div class="ou-field__box"&gt;&lt;input class="ou-field__input" ...&gt;&lt;/div&gt;&lt;/div&gt;
+  \- &lt;textarea&gt; -&gt; &lt;div class="ou-textarea ou-textarea--m"&gt;&lt;div class="ou-textarea__box"&gt;&lt;textarea class="ou-textarea__input" ...&gt;&lt;/textarea&gt;&lt;/div&gt;&lt;/div&gt;
+  \- &lt;select&gt;   -&gt; hybrid (native select inside ou-field__box with ou-field__input)
+  Error states use ou-field--error / ou-textarea--error and pair with
+  ou-formfield__msg ou-formfield__msg--error.
+  
+  Files changed:
+  \- docs/wireframes/prd7-design-tab.html (12 inputs + 2 selects)
+  \- docs/wireframes/prd7-structure-linear-flat.html (8 inputs + 2 selects + 7 textareas, plus form-error variant)
+  \- docs/wireframes/prd7-structure-linear-by-topics.html (~10 inputs + 2 selects + 8 textareas, plus form-error variants)
+  \- docs/wireframes/prd7-structure-mixed.html (5 inputs + 4 textareas + 4 toggle/checkbox blocks, plus form-error variant; toggle blocks rewritten to ou-switch + __input/__track/__thumb)
+  \- docs/wireframes/prd7-section-basic-states.html (1 input)
+  \- docs/wireframes/prd7-section-basic-feedback-editor.html (2 textareas)
+  \- docs/wireframes/prd7-section-start-pages.html (3 inputs + 1 select)
+  \- docs/wireframes/prd7-tests-list.html (1 input + 1 select)
+  \- docs/wireframes/prd7-shared.css (-20 lines, drop input/select/textarea scaffold)
+  \- docs/wireframes-ds-audit.md (mark 3.3b/3.3c closed, log wf-*-input gap)
+  
+  Class renames also applied in this pass:
+  \- form-control / form-control-sm -&gt; ou-field__input (in ou-field--m / --s)
+  \- form-input / form-input--error -&gt; ou-field__input (with ou-field--error)
+  \- form-textarea -&gt; ou-textarea__input
+  \- form-field -&gt; ou-formfield
+  \- form-error-msg -&gt; ou-formfield__msg ou-formfield__msg--error
+  \- toggle-row / toggle / toggle-slider / toggle-label -&gt; ou-formfield__inline + ou-switch.is-on + __input/__track/__thumb + plain text span
+  
+  Hybrid &lt;select&gt; approach (native select inside ou-field__box) documented
+  as a gap in audit; DS strict pattern uses ou-select__trigger/__menu/__opt
+  which is JS-driven and impractical for static wireframes.
+  
+  Wireframe-only controls (wf-text-input, wf-textarea, wf-num-input,
+  wf-tbl-*, wf-mob-*, wf-flow-select, wf-failure-input, wf-link-input,
+  wf-format-select, wf-type-select, wf-field-input, wf-draw-count-input,
+  draw-count-input) left untouched: they fall outside the gate's legacy
+  list and are tracked as a deferred gap in audit.
+  
+  Gate: 2194 -&gt; 2177 violations. prd7-shared.css: 191 -&gt; 171 lines.
+
+- **fix**(wireframes): migrate empty/skel/toast/dialog blocks (stage 3.9) (2026-05-17) [`ef9e9965d2c594aa28c663474d8b87cf11890621`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ef9e9965d2c594aa28c663474d8b87cf11890621)
+  Rename empty-block/empty-title/empty-desc/skel to ou-empty/__title/
+  __desc/ou-skel in prd7-design-tab.html. Drop Empty / Skeleton /
+  Dialog / overlay / Toast CSS blocks from prd7-shared.css (DS already
+  provides ou-empty/ou-skel/ou-modal/ou-toast via ds/university-rt.css).
+  
+  Files changed:
+  \- docs/wireframes/prd7-design-tab.html (17 violations cleared)
+  \- docs/wireframes/prd7-shared.css (-58 lines, Separator kept as
+    WIREFRAME-ONLY glue under .sep)
+  
+  Class replacements:
+  \- empty-block  -&gt; ou-empty
+  \- empty-title  -&gt; ou-empty__title
+  \- empty-desc   -&gt; ou-empty__desc
+  \- skel         -&gt; ou-skel
+  
+  Note: modal/dialog/overlay legacy classes were already absent from HTML.
+  
+  Gate: 2260 -&gt; 2221 violations.
+
+- **fix**(wireframes): migrate banner classes to ou-banner (stage 3.8) (2026-05-17) [`ab199def3c61e5b99ce5e0e9fc7f5e4e04eb2b95`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ab199def3c61e5b99ce5e0e9fc7f5e4e04eb2b95)
+  Replace legacy .banner.{warn,error,readonly} and .banner.banner-{warn,error}
+  markup with DS ou-banner/--warning/--error in 3 files; drop the matching
+  CSS block from prd7-shared.css.
+  
+  Files changed:
+  \- docs/wireframes/prd7-design-tab.html (4 banner blocks + banner-icon)
+  \- docs/wireframes/prd7-structure-linear-flat.html (5 banner blocks)
+  \- docs/wireframes/prd7-structure-linear-by-topics.html (7 banner blocks)
+  \- docs/wireframes/prd7-shared.css (-12 lines)
+  
+  Class replacements:
+  \- banner error               -&gt; ou-banner ou-banner--error
+  \- banner warn                -&gt; ou-banner ou-banner--warning
+  \- banner readonly            -&gt; ou-banner (neutral default)
+  \- banner-icon                -&gt; ou-banner__ico
+  \- banner banner-error        -&gt; ou-banner ou-banner--error
+  \- banner banner-warn         -&gt; ou-banner ou-banner--warning
+  
+  Gate: 2282 -&gt; 2260 violations.
+
+- **fix**(wireframes): drop legacy card CSS (stage 3.7) (2026-05-17) [`017ac0f986ea7fbaa179b1c286880290d12027b1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/017ac0f986ea7fbaa179b1c286880290d12027b1)
+  HTML already uses ou-card / ou-card__head / __body / __title. Remove
+  the .card / .card-row block from prd7-shared.css.
+  
+  Files changed:
+  \- docs/wireframes/prd7-shared.css (-6 lines)
+  
+  Gate: 2284 -&gt; 2282 violations.
+
+- **fix**(wireframes): drop legacy badge CSS (stage 3.6) (2026-05-17) [`62d4ec6ca804d73f6f53244ae4572311673257e3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/62d4ec6ca804d73f6f53244ae4572311673257e3)
+  HTML already uses ou-tag / ou-tag--success / ou-tag--neutral. Remove
+  the .badge / .badge-* block from prd7-shared.css.
+  
+  Files changed:
+  \- docs/wireframes/prd7-shared.css (-13 lines)
+  
+  Gate: 2297 -&gt; 2284 violations.
+
+- **fix**(wireframes): drop legacy editor-tabs CSS (stage 3.5) (2026-05-17) [`acd262b1b5e876abfe2fa16462211d0a15e8d7aa`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/acd262b1b5e876abfe2fa16462211d0a15e8d7aa)
+  HTML already uses ou-tabs / ou-tabs__list / ou-tabs__tab. Remove the
+  .editor-tabs / .etab block from prd7-shared.css.
+  
+  Files changed:
+  \- docs/wireframes/prd7-shared.css (-15 lines)
+  
+  Note: DS uses .ou-tabs__tab.is-active, not --active. Existing HTML
+  markup already follows the DS convention; no class changes needed.
+  
+  Gate: 2303 -&gt; 2297 violations.
+
+- **fix**(wireframes): migrate AppShell + Sidebar to ou-side / ou-shell (stage 3.4) (2026-05-17) [`98983c93e117274cbee47e0e0b1dd78c91dd1498`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/98983c93e117274cbee47e0e0b1dd78c91dd1498)
+  Rename sidebar/topbar/main/nav-* in prd7-design-tab.html background
+  template to DS BEM. Drop the matching Sidebar + Main blocks from
+  prd7-shared.css.
+  
+  Files changed:
+  \- docs/wireframes/prd7-design-tab.html (18 legacy class violations -&gt; 0)
+  \- docs/wireframes/prd7-shared.css (-59 lines)
+  
+  Class renames in HTML:
+  \- sidebar          -&gt; ou-side
+  \- sidebar-header   -&gt; ou-side__brand
+  \- sidebar-title    -&gt; brand-text (DS hides-on-collapse helper)
+  \- logo-box         -&gt; ou-shell__brand-mark
+  \- sidebar-nav      -&gt; ou-side__nav
+  \- nav-group-label  -&gt; ou-side__group-title
+  \- nav-item         -&gt; ou-side__item
+  \- nav-item active  -&gt; ou-side__item is-active (DS uses .is-active, not --active)
+  \- nav-icon         -&gt; ou-side__ico
+  \- sidebar-footer   -&gt; ou-side__foot
+  \- user-row/avatar/user-name/user-role
+    -&gt; ou-shell__user/__avatar/__user-meta/__user-name/__user-role
+  \- main             -&gt; ou-shell__main
+  \- topbar           -&gt; ou-shell__header (DS uses __header, not __top)
+  \- test-title       -&gt; class dropped (no DS equivalent for inline page title)
+  
+  CSS removed:
+  \- .sidebar/__header/__nav/__footer/.logo-box/.sidebar-title
+  \- .nav-group-label/.nav-item/.nav-item.active/.nav-icon
+  \- .user-row/.avatar/.user-name/.user-role
+  \- .main/.topbar/.back-btn/.test-title/.topbar-actions
+  
+  Gate: 2353 -&gt; 2303 violations.
+  
+  Co-Authored-By: Claude Opus 4.7 &lt;noreply@anthropic.com&gt;
+
+- **fix**(wireframes): migrate toggle/radio to ou-switch/ou-radio (stage 3.3b) (2026-05-17) [`730000db6d720271e8646a696cc5dd7c54514a15`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/730000db6d720271e8646a696cc5dd7c54514a15)
+  Rewrite legacy .radio-row/.radio-opt/.toggle/.toggle-row blocks in
+  prd7-design-tab.html to the DS BEM structure (ou-radio with __input/
+  __ring/__dot, ou-switch--m.is-on with __input/__track/__thumb). Drop
+  the matching CSS rules from prd7-shared.css.
+  
+  Files changed:
+  \- docs/wireframes/prd7-design-tab.html (1 radio-row + 2 toggle-row blocks)
+  \- docs/wireframes/prd7-shared.css (-16 lines)
+  
+  Structures:
+  \- radio-row/radio-opt -&gt; ou-formfield__inline &gt; label.ou-formfield__inline
+    &gt; span.ou-radio.ou-radio--m + __input/__ring/__dot + text
+  \- toggle/toggle-row -&gt; ou-formfield__inline &gt; label.ou-switch.ou-switch--m
+    .is-on + __input/__track/__thumb + label text
+  
+  Gate: 2377 -&gt; 2353 violations.
+  
+  Co-Authored-By: Claude Opus 4.7 &lt;noreply@anthropic.com&gt;
+
+- **fix**(wireframes): migrate form-* class names to ou-formfield (stage 3.3a) (2026-05-17) [`9f4acfaf09105971de85ee98cfe5e8331a417f14`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9f4acfaf09105971de85ee98cfe5e8331a417f14)
+  Rename product form classes to DS formfield BEM in 4 files; drop legacy
+  .form-* CSS rules from prd7-shared.css. Direct input/select/textarea/
+  radio/toggle CSS stays in place as WIREFRAME-INFRA glue until stages
+  3.3b (radio/toggle structural refactor) and 3.3c (input/select/textarea
+  ou-field wrap).
+  
+  Files changed:
+  \- docs/wireframes/prd7-design-tab.html (form-group/label/hint/error/req)
+  \- docs/wireframes/prd7-structure-linear-flat.html (form-group/label/hint)
+  \- docs/wireframes/prd7-structure-linear-by-topics.html (form-group/label/hint)
+  \- docs/wireframes/prd7-structure-mixed.html (form-label)
+  \- docs/wireframes/prd7-shared.css (-9 lines, drop .form-* rules)
+  \- docs/wireframes-ds-audit.md (status log + open gaps for 3.3b/3.3c)
+  
+  Class renames:
+  \- form-group  -&gt; ou-formfield
+  \- form-label  -&gt; ou-formfield__lbl
+  \- req         -&gt; ou-formfield__lbl-req
+  \- form-hint   -&gt; ou-formfield__desc
+  \- form-error  -&gt; ou-formfield__msg ou-formfield__msg--error
+  
+  Gate: 2558 -&gt; 2377 violations.
+  
+  Co-Authored-By: Claude Opus 4.7 &lt;noreply@anthropic.com&gt;
+
+- **fix**(wireframes): drop legacy drawer CSS (stage 3.2) (2026-05-17) [`582509647973cc700227a7f3da5ef7e692f9074b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/582509647973cc700227a7f3da5ef7e692f9074b)
+  HTML drawer markup already migrated to ou-drawer__*; remove
+  .drawer-* rules from prd7-shared.css and legacy positioning
+  selectors from wf-utils.css.
+  
+  Files changed:
+  \- docs/wireframes/prd7-shared.css (-72 lines)
+  \- docs/wireframes/ds/wf-utils.css (drop .drawer-overlay / .drawer / .overlay
+    from the wf-state positioning selectors)
+  
+  Removed selectors:
+  \- .drawer-overlay, .drawer, .drawer-header, .drawer-title, .drawer-close
+  \- .drawer-tabs, .drawer-tab, .drawer-tab.active, .drawer-body
+  \- .drawer-footer, .drawer-footer-meta, .drawer-footer-actions
+  \- legacy participants in .wf-state &gt; .{drawer-overlay,overlay,drawer}
+  
+  Gate: 2587 -&gt; 2558 violations. Legacy CSS drawer selectors: 4 -&gt; 0.
+  
+  Co-Authored-By: Claude Opus 4.7 &lt;noreply@anthropic.com&gt;
+
+- **fix**(wireframes): drop legacy buttons CSS block (stage 3.1) (2026-05-17) [`91097c6e0c36d804091c50bf5694a3e069d9e138`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/91097c6e0c36d804091c50bf5694a3e069d9e138)
+  HTML buttons already migrated to ou-btn/ou-iconbtn; remove orphaned
+  .btn/.btn-* rules from prd7-shared.css.
+  
+  Files changed:
+  \- docs/wireframes/prd7-shared.css (-20 lines)
+  
+  Buttons block removed: .btn, .btn-primary, .btn-secondary, .btn-outline,
+  .btn-ghost, .btn-danger, .btn-sm, .btn-xs, .btn-icon.
+  
+  Gate: 2611 -&gt; 2587 violations.
+  
+  Co-Authored-By: Claude Opus 4.7 &lt;noreply@anthropic.com&gt;
+
+- **fix**(wireframes): migrate drawer-footer to ou-drawer__foot (stage 1) (2026-05-17) [`cc5753d044f5191353f03bff1baf51c86c17f549`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/cc5753d044f5191353f03bff1baf51c86c17f549)
+  Replace legacy drawer-footer classes with DS BEM equivalents.
+  
+  Files changed:
+  \- docs/wireframes/prd7-structure-linear-by-topics.html
+  \- docs/wireframes/prd7-structure-linear-flat.html
+  \- docs/wireframes/prd7-design-tab.html
+  
+  Replacements:
+  \- drawer-footer-actions -&gt; ou-drawer__foot-actions
+  \- drawer-footer-meta -&gt; ou-drawer__foot-meta
+  \- drawer-footer -&gt; ou-drawer__foot
+  
+  Gate: 60 -&gt; 0 violations. DS check passed for 22 wireframe files.
+  
+  Co-Authored-By: Claude Opus 4.7 &lt;noreply@anthropic.com&gt;
+
+- **fix**: Правки по коду для отработки (2026-04-11) [`39c48dadca48bfc438309e77fb494e006519a564`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/39c48dadca48bfc438309e77fb494e006519a564)
+  1. поправили выгрузку скормо
+  2. Добавили уведомления для типов вопросов (мини инструкции как действовать)
+  3. Для скорма:
+  \- поправили кнопку завершитть теперь она всегда появляется в конце
+  \- результат можно скачать теперь после каждой попытки
+  \- Ссылка при переходе теперь открывается в другом окне
+  \- При повторном входе в курс и переходе мои результаты открывается полная страница с рекомендациями
+
+- **fix**(adaptive-test): исправить адаптивный тест и улучшить экспорт результатов в SCORM (2026-03-12) [`80599cd1e7423fd73a6eff8b6f27f6878c7c2a9d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/80599cd1e7423fd73a6eff8b6f27f6878c7c2a9d)
+  \- добавлено перемешивание вариантов ответов в адаптивном режиме
+  \- обновлен финальный экран результатов адаптивного теста
+  \- улучшена передача уровней и рекомендаций в SCORM
+  \- для архива SCORM используется название теста
+  \- добавлен поиск в админ панели блоков Вопрос, темы, тесты
+
+- **fix**(types): resolve TypeScript errors across client and server (2026-02-08) [`daddcaeb9d209dab8e13bd7e66ba9fca88c3de1e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/daddcaeb9d209dab8e13bd7e66ba9fca88c3de1e)
+  \- Fix type casting for matching question answers in analytics
+  \- Replace null with undefined for optional user fields
+  \- Use correct property name (name instead of username) in learner layout
+  \- Fix dataJson access and sections type in take-test page
+  \- Add null checks for testId in SCORM export routes
+  \- Add forceConsistentCasingInFileNames to tsconfig
+
+- **fix**(docker): use dynamic PORT and IPv4 address in healthcheck (2026-02-08) [`7d62cbe9a9c28d62f5a1d689bc682d2836feec6d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7d62cbe9a9c28d62f5a1d689bc682d2836feec6d)
+  Replace hardcoded port 5000 with ${PORT} environment variable and
+  use 127.0.0.1 instead of localhost to avoid IPv6 resolution issues
+  in Alpine containers.
+
+- **fix**(EMS/CJS): Some fixes with type of modules (2026-02-05) [`0bb4cd3ca3cc79c0a6acff781ad80256262c0c7e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0bb4cd3ca3cc79c0a6acff781ad80256262c0c7e)
+
+- **fix**(http server): Listen port of http server has been fixed (2026-02-05) [`d907b715a5adbe80841f2b042fe257cf71fc45ce`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d907b715a5adbe80841f2b042fe257cf71fc45ce)
+
+- **fix**(scripts): The start script has been fixed (2026-02-05) [`fd46c14951a0f107ce326a565c187e010304e392`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fd46c14951a0f107ce326a565c187e010304e392)
+  Calling of the cross-env has been added
+
+- **fix**(.env): .env has been removed (2026-02-05) [`c44ea215636c19ba644b0bc74c8d45e39d3242d1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c44ea215636c19ba644b0bc74c8d45e39d3242d1)
+
+- **fix**(dialog.tsx): Definition of the aria-describedby prop has been added (2026-02-05) [`400110eb25c4bb748a0e366bd8c159ee03847474`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/400110eb25c4bb748a0e366bd8c159ee03847474)
+  We explicitly indicate that the component description may be missing via definition of aria-describedby prop
+
+### Documentation
+
+- **docs**(access): спецификации и RUNBOOK PRD-13, эскизы в approved/ (2026-06-08) [`3d7f8f41725bd6cb14c763437c4af05d03d065f1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3d7f8f41725bd6cb14c763437c4af05d03d065f1)
+  BRD/PRD-13, role-model, implementation-plan, acceptance-matrix и RUNBOOK по RBAC. Эскизы prd13-test-access/user-editor добавлены; согласованные эскизы prd6/7/11 перенесены в wireframes/approved/. ROADMAP синхронизирован.
+
+- **docs**: синхронизировать предпросмотр и формат шаблона с реализацией (2026-06-07) [`908296519dffd7efe38380eaaf911b7411a10670`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/908296519dffd7efe38380eaaf911b7411a10670)
+  \- PRD-3 §3.4: адаптивный рейл (разделы по видам PRD-1 §4.3 + системные; тип с
+    одним вариантом = 2 уровня, сворачиваемый «тип→варианты» только при 2+);
+    content.summary показывает результат раздела (кольцо core.ringChart); активация
+    недоступна для уже активного шаблона.
+  \- guide: kind-таблица с симметрией intro↔summary (введение/итог раздела) и
+    результатом раздела; полный список рендереров resultField (+core.ringChart);
+    пример summary на кольце; sectionResult в демо-наборе.
+  \- approved wireframe: помечено расхождение рейла с эскизом (адаптивный 2-уровневый),
+    источник истины — PRD-3 §3.4.
+
+- **docs**: симметрия intro/summary, результат раздела и source_fingerprint (2026-06-07) [`0481bf2b694e9479a8a6046c0500548def3fb9db`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0481bf2b694e9479a8a6046c0500548def3fb9db)
+  \- PRD-1 §4.3: intro/summary приведены к двойной гранулярности (одна на тест в
+    linear_flat / по одной на тему в by_topics), как у questions; добавлена заметка
+    про симметричные закладки раздела (before_topic/after_topic) и что content.summary
+    показывает результат РАЗДЕЛА (итог теста — экран results); снято противоречие с PRD-4.
+  \- spec-template-platform §8.2: симметрия content.intro/content.summary + result.* у
+    summary = результат раздела.
+  \- PRD-3: §5.7 стартовая реконсиляция и source_fingerprint, §6 — колонка в схеме.
+
+- **docs**(prd-3): обновить ссылки на миграцию (014) и механизм применения схемы (2026-06-07) [`700ea4ca405f31353cc4f42f5a207d76f6c48721`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/700ea4ca405f31353cc4f42f5a207d76f6c48721)
+  Миграция переименована 011 -&gt; 014 (номер 011 был занят 011_prd11_draw_blueprint);
+  поправлены ссылки в §6 и описании Фазы 1. Добавлено примечание, что схему в деплое
+  приводит drizzle-kit push (нумерованные SQL — ручной/исторический след).
+
+- **docs**(spec-template-platform): сослаться на практическое руководство по шаблонам (2026-06-07) [`2c3569c69f8b3a34c0e6796754d796c5bf8245ff`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2c3569c69f8b3a34c0e6796754d796c5bf8245ff)
+  Делаем гайд обнаружимым из источника истины платформы: добавлена ссылка на
+  docs/guides/template-development.md в §1.
+
+- **docs**(guides): добавить руководство по разработке шаблонов оформления (2026-06-07) [`9a33d19a3e9f8dddaa1c73d2c8ba4ded432385d2`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9a33d19a3e9f8dddaa1c73d2c8ba4ded432385d2)
+  Пошаговый гайд для разработчика внешнего шаблона: структура ZIP, справочник
+  manifest.json, контракт макетов/слотов, синтаксис DSL, публичный контекст
+  рендера, контентные шаблоны/placeholders, темизация (HSL-токены), рантайм-API
+  template.js, демонстрационный набор данных, коды ошибок валидации и проверки
+  работоспособности, чек-лист и типичные ошибки. Все примеры выверены по
+  реальному коду движка/валидатора и эталонному шаблону default.
+
+- **docs**(spec-template-platform): сверить контракт оболочки/слотов с валидатором (2026-06-07) [`c3a0150dc631b04a3d9ba54003fb944cd8d20777`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c3a0150dc631b04a3d9ba54003fb944cd8d20777)
+  Закрываем давно помеченный разрыв §7/§8 между спекой и реализованным
+  валидатором/рантаймом (PRD-3/PRD-12).
+  
+  \- §7: валидатор требует от оболочки только data-slot="page"; маркеры
+    data-nav/data-action не обязательны (встроенный default их не объявляет,
+    действия Core навешивает делегированием) — жёсткая привязка отнесена к
+    будущей фазе расширенных интерактивов.
+  \- §8.1/§9: обязательный слот вопроса — question-text (не устаревшее
+    question-prompt), это имя проверяет валидатор и заполняет рендерер.
+
+- **docs**(prd-3): отметить трек реализованным, актуализировать спеку и ROADMAP (2026-06-07) [`e99ebc62d47ec2bf4609cb1051aaaf8c7b67192b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e99ebc62d47ec2bf4609cb1051aaaf8c7b67192b)
+  PRD-3 закрыт 2026-06-07 — приводим документы к реализованному коду.
+  
+  \- external-templates.md v2.0→v2.1: статус «реализовано» с разбивкой по фазам;
+    маршрут /author/templates (не /admin/); §3.4 — живой предпросмотр через общий
+    renderScreenInto + smoke-bundle; §4.3 — фактические проверки движенка
+    (исключение/пустой рендер/незаполненный слот/console.error; template.js только
+    компиляция; rules — JSON.parse); §6 SQL под реальную схему; §7 +smoke-bundle/
+    preview-image; §10 — статус приёмки с отметками о покрытии.
+  \- ROADMAP: PRD-3 в таблице статусов закрыт, обновлена дата шапки.
+
+- **docs**(prd-3): закрыть DS Mapping gate 3.5 эскиза админ-шаблонов (2026-06-07) [`b171318d9ca9c77a5ba8e67c5c5c1807d2185d92`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b171318d9ca9c77a5ba8e67c5c5c1807d2185d92)
+  Оба ранее открытых пункта таблицы DS Mapping разрешены готовыми
+  компонентами @universityrt/ui-kit (новых не создаём, custom-строк нет):
+  
+  \- зона загрузки файла -&gt; FileUploader (onFiles/accept=".zip"/maxSizeMb=20/
+    error/disabled) + строка принятого архива FileItem (status idle|uploading|
+    success|error);
+  \- индикатор статуса варианта -&gt; Tag с dot + tone (pass-&gt;success, warn-&gt;
+    warning, fail-&gt;error, не проверено-&gt;neutral).
+  
+  Подзаголовок таблицы помечен как пройденный gate; блокеров для старта
+  frontend нет.
+
+- **docs**(prd-3): согласованный эскиз админ-страницы шаблонов (Фаза 2/3 UI) (2026-06-07) [`529deeb695b484cb418d12f37471c00adb9f1057`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/529deeb695b484cb418d12f37471c00adb9f1057)
+  Полный набор состояний админ-интерфейса шаблонов: список карточек с реальным
+  превью, пусто, меню карточки, загрузка (выбор/обработка/принят/отклонён/
+  предупреждения), детали, предпросмотр+проверка работоспособности (трёхуровневый
+  сворачиваемый список Раздел→Тип→Вариант, статус на варианте), деактивация с
+  каскадом, удаление (+нельзя), обновление с отчётом миграции параметров, экспорт.
+  DS-компоненты ou-*, чип-счётчики, DS-шеврон фолда; фон модалок — реальный
+  список под scrim. Acceptance + wf-notes + DS Mapping.
+
+- **docs**: вычистить устаревшую документацию, актуализировать спеки, подключить markdownlint (2026-06-06) [`192d39c079f83f3feaa48cf402e63266fef09f67`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/192d39c079f83f3feaa48cf402e63266fef09f67)
+  \- удалены завершённые/устаревшие файлы (legacy, plans, фазовые отчёты и
+    todo PRD-1/PRD-7, reports, phase0-renderer-inventory) — история фаз в git
+  \- 21 живой документ ужат под фактический код (README, ROADMAP, спеки PRD-1..12,
+    архитектура, гайдлайны, wireframes-нотации)
+  \- добавлен docs/architecture/test-editor-contracts.md (контракты редактора PRD-7)
+  \- package.json: markdownlint-cli2 + скрипты lint:md / lint:md:fix; 26 md без ошибок
+
+- **docs**(prd-6): closeout Phase 1 — acceptance-чеклист, ROADMAP, HANDOFF (2026-06-04) [`71fffb22fbcd62e4761c882d36203af2f3a64124`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/71fffb22fbcd62e4761c882d36203af2f3a64124)
+  \- спека §10: пункты Phase 1 отмечены [x] (включение/период/плагин, FR-02,
+    NFR-01/02, блок-экран из шаблона, ClientBridge-источник, failPolicy);
+    отложенное вынесено в блок Phase 2 (админ-реестр, UI-выбор конфига,
+    диагностика плагина); убран obsolete-пункт превью даты
+  \- ROADMAP: статус PRD-6 → «Phase 1 закрыта 2026-06-04» с резюме
+  \- HANDOFF.md переписан под закрытый трек PRD-6 (предыдущий PRD-10/11 — в git)
+
+- **docs**(prd-6): эскиз retake — убран баннер «превью даты» (псевдо-данные в настройках) (2026-06-04) [`8182957b845216522d5cb43de71acf3eeb10303b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8182957b845216522d5cb43de71acf3eeb10303b)
+  «Последняя полноценная попытка» — рантайм-значение на учащегося (тянется из
+  WebTutor перед стартом), на этапе авторинга его не существует. Захардкоженная
+  дата в info-баннере читалась как реальные данные → удалена.
+  
+  \- холст: снят info-Banner с превью даты; подчищены осиротевшие .wf-calc CSS и
+    символ #i-clock
+  \- таблицы: убрана строка «Превью даты», DS Mapping → «Warning / ошибка»
+  \- заметка состояния s-on-webtutor без «+ превью даты»
+
+- **docs**(prd-6): эскиз retake — техкомментарии из холста в сопроводительные таблицы (2026-06-04) [`3ddca7e2dc5fa608e6331ac23415bf5151186385`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3ddca7e2dc5fa608e6331ac23415bf5151186385)
+  По канону wireframe (холст = только реальный продуктовый UI): из холста убраны
+  технические аннотации, продуктовая микрокопия де-жаргонизирована, а техника
+  перенесена в «Пояснения».
+  
+  \- холст: снят info-баннер «layout system.blocked / версия плагина», убран msg
+    про авто-подстановку конфига; подписи без «до SCORM Initialize»,
+    «fail-open/fail-closed», «passed/failed/completed/unknown»; warning suspend без
+    «suspend_data/SCORM-регистрация»
+  \- «Пояснения»: новая строка «Момент проверки» (до SCORM Initialize, NFR-01/02);
+    обогащены строки плагина (версия 1.0.0), завершения (маппинг статусов LMS),
+    warning suspend (технические детали)
+  \- скаффолд: убраны px-фолбэки var(--wf-size-*, Npx) → чистый DS-чек (0 нарушений)
+
+- **docs**(prd-6): убрать избыточное поле «Конфигурация» из пейна (Фаза 1 — один конфиг на плагин) (2026-06-04) [`615bf83f1e40233d8e198b20e82b2befd5d48796`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/615bf83f1e40233d8e198b20e82b2befd5d48796)
+  Автор выбирает только плагин; единственный активный конфиг подставляется неявно
+  (findEligibilityConfig fallback). Видимый Select конфига вернётся в Фазе 2 при &gt;1 конфиге.
+  Заодно убраны стейл-плейсхолдеры «Основной каталог/Сертификации»; синхронизированы Пояснения/Mapping.
+
+- **docs**(prd-6): фикс эскиза — двойная рамка Select (нейтрализован legacy .ou-select фолбэк wf-utils) (2026-06-04) [`d2f2d49b83060e0c22883d77e7ddcf16690933d7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d2f2d49b83060e0c22883d77e7ddcf16690933d7)
+
+- **docs**(prd-6): эскиз «Повторное прохождение» (настройки) + блок-экран (2026-06-04) [`149a274fdd936993720079221649ea84f6950cfc`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/149a274fdd936993720079221649ea84f6950cfc)
+  Состояния: выкл / вкл·WebTutor (превью даты) / вкл·suspend_data (warning) / ошибка периода;
+  учащийся: блок-экран (cooldown) + блок-экран при ошибке (failClosed). Канон wf-nav/wf-state +
+  wf-notes/wf-mapping; только DS ou-* (Card/Switch/NumberInput/Select/SegmentedControl/Banner) и
+  токены. DRAFT — не в approved/ до согласования.
+
+- **docs**: актуализация под закрытие PRD-10/11 (RTK-трек завершён) (2026-06-04) [`410acc9bfb79b612563b59f709f4d87821cd11d9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/410acc9bfb79b612563b59f709f4d87821cd11d9)
+  \- ROADMAP §0.2 + дата: PRD-10/11 → ЗАКРЫТ, трек завершён end-to-end
+  \- PRD-10/PRD-11 specs: статус «План» → «Реализован» (Стадии/закрытие, рантайм-фикс tags)
+  \- BRD: BR-09/BR-10 реализованы; BR-10-06 упрощён (режим квоты на тег, без гранулярности)
+  \- scoring-model §10.7: пререквизит «градуированный checkAnswer» отмечен реализованным
+  \- HANDOFF: верхний статус → оба трека завершены и запушены
+  \- README: возможности автора — «Цена ответа», «Квоты выдачи по тегам», теги (подтемы)
+
+- **docs**(handoff): PRD-11 завершён — упрощение A1-A3, тегирование (B), UI квот (A4) (2026-06-04) [`e4e7881925b55328c218e198f93421972754abe9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e4e7881925b55328c218e198f93421972754abe9)
+
+- **docs**(prd-11): эскиз тегирования + правила именования тега (§3a) + статус §10 (2026-06-04) [`b9ea0952b8225e49993c69e12cb662bdceba2f06`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b9ea0952b8225e49993c69e12cb662bdceba2f06)
+
+- **docs**(prd-11): редизайн квота-эскиза (свич+инлайн, режим на тег) + тегирование вопросов в охват (2026-06-04) [`b2dd1a8f30d237b86f20e9b9bf5d1df9e3762569`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b2dd1a8f30d237b86f20e9b9bf5d1df9e3762569)
+  Эскиз квота-редактора согласован: свич + инлайн-блок в реальной строке темы (tb-topic-row, ui-kit), режим Ровно/Не менее НА КАЖДЫЙ тег, реальные теги, выверен Playwright light/dark. Модель финализирована: strata:[{tag,count,mode}] без modeGranularity/топик-mode.
+  
+  Тегирование вопросов внесено в охват PRD-11 (§3a, под-трек B): поле questions.tags есть, но задать тег нельзя (нет UI/API) — пререквизит квот. Спека: §3a + FR-09 + стадии A/B + OQ-4; §4/§5/§7 под новую модель. HANDOFF обновлён.
+
+- **docs**(prd-11): эскиз квота-редактора выдачи по тегам (Стадия 0b, на согласовании) (2026-06-04) [`7c9c53b6db765463344d892f9585073b947912e6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7c9c53b6db765463344d892f9585073b947912e6)
+  docs/wireframes/prd11-draw-quotas.html — квота-редактор в настройках темы (вкладка «Структура»): 5 состояний (общий/по-тегам/нехватка/ошибка/не-задано) + Пояснения + DS Mapping. DS-компоненты ou-* (Card/SegmentedControl/Select/NumberInput/Table/Banner/Tag/EmptyState), выверен Playwright light/dark. DRAFT — не в approved/ до согласования (GATE для UI-стадии 4).
+
+- **docs**(prd-10): согласование эскиза цены ответа — стабильный фрейм модалки (2026-06-04) [`6732a3d788f69cb6d4f95adb632382f1d7fd1f2c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6732a3d788f69cb6d4f95adb632382f1d7fd1f2c)
+  Перенос в approved/ (согласовано 2026-06-04). Устранён скачок размера модалки при смене режима цены ответа: единая ширина ou-modal--xl + фиксированная высота, скролл только в body, прижатие к верху; empty поджат под рамку (ou-empty вместо --page).
+
+- **docs**(prd-10): эскиз цены ответа — убрать дубль заголовка и пояснительные баннеры (2026-06-04) [`3b5948819ba5fbabfbfcfde25f3c7dd91394c59c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3b5948819ba5fbabfbfcfde25f3c7dd91394c59c)
+  Один заголовок «Цена ответа» вместо дубля «Оценивание ответа» + «Цена ответа»;
+  seg идёт сразу под ним без отдельного лейбла. Пояснительные info-баннеры
+  вынесены из холста в wf-notes (правило «в холсте только реальный UI»); скрытые
+  wf-annot-бейджи убраны (FR-коды — в DS Mapping). Реальный UI (ошибка/пусто/
+  валидация) сохранён. Выверено Playwright.
+
+- **docs**: актуализация BRD (BR-09/BR-10) + ROADMAP §0.2 (PRD-10/PRD-11) (2026-06-04) [`4b35469b9d7a81c68dc8089c697486581e3ac066`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4b35469b9d7a81c68dc8089c697486581e3ac066)
+  BR-09 -&gt; «Цена ответа» (ступенчатая таблица); новый BR-10 «Квоты выдачи по
+  тегам» + модель draw_blueprint_json + Этап 11. ROADMAP §0.2: PRD-10/PRD-11
+  подняты перед релизом РТК; источник PRD-1...PRD-11.
+
+- **docs**(prd-11): «Квоты выдачи по тегам» — стратифицированная выдача (2026-06-04) [`3b3e5e08fa2eee743335ee372a372a84d0e63e84`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3b3e5e08fa2eee743335ee372a372a84d0e63e84)
+  Опциональная квота [тег -&gt; count, mode] на теме (test_sections.draw_blueprint_json):
+  exact/min, гранулярность uniform/per_tag (дефолт uniform). Гарантирует объём
+  подтемы внутри общей выборки drawCount; stateless. retry-different снят — на
+  WebTutor нет cross-attempt стора (adl.data 401, проверено).
+
+- **docs**(prd-10): «Цена ответа» — план реализации + эскиз редактора (2026-06-04) [`dcb2c34d50b63b8e4a64d6eb5fa6309b6a315237`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/dcb2c34d50b63b8e4a64d6eb5fa6309b6a315237)
+  PRD-10 (graded-answer-scoring): question.scoring (exact|weighted|tiered),
+  13 FR, 6 стадий, golden vs РТК key_NEW. Эскиз редактора цены ответа в форме
+  вопроса (9 состояний, только DS ou-*, выверен Playwright в light/dark).
+
+- **docs**(scoring-model): §11 «Цена ответа» — градуированный балл за ответ (2026-06-04) [`db7027c9ee47a466e66153250b2be34ff3ffeb62`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/db7027c9ee47a466e66153250b2be34ff3ffeb62)
+  Нормирует частичный балл за вопрос: single — веса опций; multiple/matching/
+  ranking — ступенчатая таблица «условие → балл» над счётчиками c/x/T; дефолт —
+  точное совпадение (старые тесты бит-идентичны). Терминология «рубрика» →
+  «Цена ответа»; согласованы ссылки §2.1/§5/§7.3/§10.7/§10.10. Эталон — РТК-2026.
+
+- **docs**(prd-10): scoring-model §11 (rubrics) + PRD-10 plan; actualize ROADMAP/HANDOFF/BRD (2026-06-03) [`04c2d6d82ebf8dab4e7a63e9818aeab400983e9d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/04c2d6d82ebf8dab4e7a63e9818aeab400983e9d)
+  scoring-model.md v1.9: new §11 graded answer scoring — tier-table rubrics for multiple/matching, weighted options for single, scoreRatio/partial; cross-refs §2.1/§7.3/§10.7/§10.10 aligned (were marked deferred).
+  
+  PRD-10 (new spec): graded-answer-scoring.md — implementation plan grounded in verified RTK-2026 data (key_NEW_15-08-25.xlsx + pandas result); 13 FR, question.rubric model, 6 stages, 4 open questions.
+  
+  ROADMAP §0.2: PRD-N -&gt; PRD-10, elevated to priority 2 (drives RTK certification = 2nd external postprocessor, pre-release). BRD BR-09 now links PRD-10. HANDOFF §9 = next-track handoff.
+
+- **docs**: actualize PRD-2/PRD-5 track status (plan done, HANDOFF acceptance-tooling + issues status) (2026-06-03) [`fdcdef11293416881b3650d8a5dd447d5adb06a3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fdcdef11293416881b3650d8a5dd447d5adb06a3)
+
+- **docs**: HANDOFF — PRD-5 Stage B complete (B4b done), Stage C next (2026-06-03) [`59a27b045434399cc136a6ea104c2b2f47d7bbfb`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/59a27b045434399cc136a6ea104c2b2f47d7bbfb)
+
+- **docs**: HANDOFF — B5 + B4a done, B4b remaining (2026-06-02) [`2450b79dba2260e7bafd0c9884761d12d71dceba`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2450b79dba2260e7bafd0c9884761d12d71dceba)
+
+- **docs**: HANDOFF for PRD-2/PRD-5 continuation (2026-06-02) [`5f2dc13dbfedb1dd01e38934ea5cbb206da59f39`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5f2dc13dbfedb1dd01e38934ea5cbb206da59f39)
+  Captures status (Этап A done; PRD-5 B0-B3 + B5 core/port done; B5 wiring/export/preview + B4 remaining), key decisions (index-based source_key, varchar(36) FKs, B5-before-B4, B0 wireframe reuse), the repeatable patterns (parity port, editor section diff-on-save, route-test harness), dev setup (DB container, admin@test.com/admin123) and the gotchas that bit during the work (loadFullTest mock breakage, drizzle-zod uuid/numeric/jsonb quirks, wf-* classes absent in app CSS).
+
+- **docs**(prd-5): scales transfer both value and band level to LMS (2026-06-02) [`9c4d79f69f2c6b47aedc112fc3d3f235bff67486`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9c4d79f69f2c6b47aedc112fc3d3f235bff67486)
+  Amendment per request: when a scale has bands, the LMS export must carry both the numeric value AND the band it falls into — not just the band label as before. §8.2 now emits two pseudo-interactions for a banded scale: scale_{key} (raw value) and scale_{key}_level (band.label); a band-less scale emits only scale_{key}. Updates the §8.3 id/recommendation tables, the MBI example (§4.1 dual emission per scale), the implementation plan (Этап B export), and scoring-model §2.2. PRD-5 1.6 -&gt; 1.7; example-mbi 1.1 -&gt; 1.2.
+
+- **docs**(wireframes): resolve DS-mapping custom rows (этап 3.5) (2026-06-02) [`746bde7dbfb3e4ea3cdd8277e3e7411d5d1fead1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/746bde7dbfb3e4ea3cdd8277e3e7411d5d1fead1)
+  Resolve the two custom DS-mapping blockers in the scoring wireframe. DnD ordering -&gt; DS Ranking (drag-to-reorder primitive: grip + up/down + numbering), reused for the indicators list (row = name + summary). Visual formula constructor -&gt; composition of DS primitives (Textarea/Combobox/Select/Tag/Button/Banner) with no own rendering; the composed widget is escalated as a DS candidate. No 'custom' remains in the DS-component column.
+
+- **docs**(prd-2,prd-5): design closeout — fix inconsistencies, approve specs + plan (2026-06-02) [`7120542e0846505ca41402633a3a8ae4e0b28e4f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7120542e0846505ca41402633a3a8ae4e0b28e4f)
+  Review pass found no core open questions (no «Открытые вопросы» sections). Fix the genuine inconsistencies it surfaced: unify the result-variable name pattern (DB CHECK aligned to ^[a-z][a-z0-9_]{0,63}$), add the missing source (questions/other-scales) and bands rows to the PRD-5 scale field table. Promote PRD-2 (2.1-&gt;2.2) and PRD-5 (1.5-&gt;1.6) from Backlog to Утверждено and the implementation plan from Черновик to Согласован. ROADMAP notes specs approved while implementation is still not started. Deferred items (condition_json, graded checkAnswer + durable-ID prerequisites) remain out of scope by design.
+
+- **docs**(wireframes): promote scoring-tabs to approved/ after sign-off (2026-06-02) [`60d148a8a1bc02addeecb29850929d27aab01500`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/60d148a8a1bc02addeecb29850929d27aab01500)
+  Wireframes approved. Move prd2-prd5-scoring-tabs.html into docs/wireframes/approved/ per the DS process; CSS links are absolute so they survive. Fix the internal back-link (sibling now) and update external references in the implementation plan and the UX note.
+
+- **docs**(wireframes): add matching/ranking contribution grids + composite cycle validation (2026-06-02) [`d11c004a3b609002ab24a93c7a2bc258cb1df858`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d11c004a3b609002ab24a93c7a2bc258cb1df858)
+  Close the wireframe gaps surfaced by the spec review: matching contribution grid (rows = directed pairs leftId-&gt;rightId), ranking grid (rows = item@position placements), and a composite cyclic-dependency validation error with the offending child scale flagged (scoring-model §10.9/§10.11, PRD-5 §11). All on DS ou-* components, cloned from existing card/table/banner patterns. Fix 2 pre-existing rem-unit violations in this file (now 0 DS violations). Update wf-notes (grid rows mention pairs/placements; new composite-acyclicity row). Visually verified at 1440px.
+
+- **docs**(prd-9): resolve open questions + scrypt ADR, approve (2026-06-02) [`02c553f98e7de910ca27cf4b6d0db53c9dd07b7a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/02c553f98e7de910ca27cf4b6d0db53c9dd07b7a)
+  Close the four §7 open questions with recorded decisions: top-level functions API (hashPassword/verifyPassword, no class); self-describing hash format (scrypt$... with an argon2id$ extension slot, scrypt only implemented); legacy bcrypt via dynamic import + deprecation warning (externalized transition dep, removed in cleanup) — also fixes the prod-bundle contradiction in §3.2; and a fixed OWASP scrypt profile (N=2^17, r=8, p=1, keyLength=32) with Appendix A as the ADR, including a no-migration resource-reduction lever. Status Backlog -&gt; Утверждено; version 1.0 -&gt; 1.1.
+
+- **docs**(brd,prd-3,prd-6): approve specs — status -> Утверждено (2026-06-02) [`9e21a3b528f1742f4a0504c6770b733cd14ad515`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9e21a3b528f1742f4a0504c6770b733cd14ad515)
+  Promote BRD (Черновик -&gt; Утверждено; core validated by shipped PRD-1/4/7/8, BR-09 confirmed as a business requirement with a note that its design is a separate future PRD) and PRD-3 / PRD-6 (Backlog -&gt; Утверждено after a review pass found no blockers: no open questions, dependencies fixed as contracts, refs valid). Also fix a pre-existing MD029 ordered-list error in PRD-6.
+
+- **docs**(brd): add BR-09 graded answer scoring (partial credit) (2026-06-02) [`6948e21cff7548aad92d18685e00b7c2149596d9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6948e21cff7548aad92d18685e00b7c2149596d9)
+  Register partial/graded credit for multiple/matching/ranking as a full business requirement: BR-09 section (problem + 5 requirements), data-model entry (questions.scoring_json rubric), Stage 10 in the roadmap table, Stage-10 acceptance criteria, and a risk row. Graded score is the correctness axis (scoreRatio in [0,1]), orthogonal to scale contributions; exact-match stays the default. Close traceability: ROADMAP §0.2 and scoring-model §10.10 now cite BR-09. BRD 2.1 -&gt; 2.2.
+
+- **docs**(prd-2,prd-5): align requirements with scoring-model — neutral style, topological order, DAG (2026-06-02) [`ea8ebaadddd5accd1053cee385838beb70ef2da7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ea8ebaadddd5accd1053cee385838beb70ef2da7)
+  PRD-5: rewrite formation-history language (z_score / per-edge reverse / answer_score / threshold-formula, header narrative) as plain model description to match the neutral scoring-model; add topological compute order for composite scales in §4.5 (children before parent, acyclic graph). PRD-2: note that sort_order monotonicity guarantees an acyclic indicator graph by construction (scoring-model §10.9). Versions: PRD-5 1.4 -&gt; 1.5.
+
+- **docs**(prd-5,roadmap): align with scoring-model — cycle detection, matching/ranking, graded-scoring PRD (2026-06-02) [`e681e638f48fce58709fe0b8d46c25b6e2ff4d40`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e681e638f48fce58709fe0b8d46c25b6e2ff4d40)
+  PRD-5 §11: specify cyclic-dependency detection (DFS over scale -&gt; child-scale graph; any cycle including self-reference blocks save) and topological compute order. PRD-5 §4.3: make matching/ranking contribution units concrete — directed pair (leftId, rightId) and placement (itemId, position), active by the FACT of the learner's response (correctness orthogonal) — replacing the vague «on pair correctness / depends on position»; add JSON examples. ROADMAP §0.2: register «PRD-N (Градуированная оценка ответа)» as the home for partial-credit scoring (scoring-model §10.10).
+
+- **docs**(scoring-model): neutral model — archetypes, acyclicity, partial-credit, matching/ranking (2026-06-02) [`e05f4a82cf8a125946a00e6e47ab4bb994cc03c8`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e05f4a82cf8a125946a00e6e47ab4bb994cc03c8)
+  Make the normative model case-agnostic and self-describing (no formation history). Replace the MBI / executive-cert concrete cases with abstract scoring archetypes in §6 (multi-scale questionnaire, competency certification, weighted exam, rubric grading, skill placement). Drop removal narrative (per-edge reverse, enum narrowing, dead options) and the changelog narrative — describe the model as it is. Add §10.9 (composition graph is acyclic: blocking validation + topological eval for scales, sort_order monotonicity for indicators, runtime re-entry guard), §10.10 (partial correctness for multiple-select: scale = sum rule, standard score = exact-match, graded credit deferred to a separate PRD), and §10.11 (contribution units: matching = directed pair, ranking = item@position). Versions 1.3 -&gt; 1.8.
+
+- **docs**: relabel RTK reference as executive certification test (2026-06-02) [`2a6df695348a96a2d1fc0faa6b3b13ff14c5f8ce`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2a6df695348a96a2d1fc0faa6b3b13ff14c5f8ce)
+  Replace the RTK shorthand with the descriptive «сертификационный тест для руководителей» in the scoring UX note (Сценарий B and surrounding prose) and the PRD-8 reference line. Also fix the PRD-8 reference path, stale after the earlier rename (RTK_..._v2.story -&gt; RTK_Test_commits_last.story); the filename itself stays literal.
+
+- **docs**(prd-2/prd-5): align plan and roadmap with grid model (2026-06-02) [`7ccfb22a84492496703307007e823a49f553d9bc`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7ccfb22a84492496703307007e823a49f553d9bc)
+  Update the Stage-B outline to grid terminology (Вклады вопросов / вариант×шкала instead of the «Измерения» matrix) and mark per-edge conditions (condition_json) deferred. Add an explicit prerequisites bullet (graduated checkAnswer + durable answer-unit IDs) ahead of the scale side, and drop a stray orphan code fence at EOF. ROADMAP §0.2 now links the implementation plan and the normative scoring model.
+
+- **docs**(prd-2/prd-5): actualize scoring specs to normative grid model (2026-06-02) [`90659ac5bed77e8ec5db15e529757a47d6dd2df5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/90659ac5bed77e8ec5db15e529757a47d6dd2df5)
+  Sync version headers with their own changelogs (scoring-model 1.2-&gt;1.3, PRD-5 1.3-&gt;1.4). Remove the dead "answer_score" source_type from PRD-5 §9.2 — it contradicted §10.3 (answer_score is the correctness axis, never inherited into scales) and was a selectable-but-dead option. Rewrite the MBI example (§2.4) from the removed answer_score-inheritance to the explicit variant×scale grid (source_type=option, explicit value_json 0..5); fix §2.3 variant count (5-&gt;6). Link the implementation plan from scoring-model related docs.
+
+- **docs**(wireframes): add scoring editor wireframe — Шкалы/Показатели tabs (2026-06-02) [`af59da5dcc6c83dd2c03be60b1e3a8f7cd6a126c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/af59da5dcc6c83dd2c03be60b1e3a8f7cd6a126c)
+  Skeleton wireframe plus UX note for the scoring editor tabs (Шкалы / Показатели), realizing the variant×scale contribution grid from scoring-model.md: list rail (Список шкал / Вклады вопросов), per-question expandable cards with the grid, correctness surfaced in Вопросы, totals in Предпросмотр. Wireframe stage — pending approval before React implementation.
+
+- **docs**(prd-2/prd-5): add paired-track implementation plan (A→B→C) (2026-06-02) [`956aad81e5431b1cc6c4b32573b2c5a03893aa29`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/956aad81e5431b1cc6c4b32573b2c5a03893aa29)
+  Draft plan for the PRD-2 + PRD-5 paired track per ROADMAP §0.2: staged delivery A (DSL extension: scaleById/countScales, controls_status) → B (scales + question_measurements tables, runtime, author UI) → C (MBI E2E acceptance replacing process_burnout_export.py). Test-scoped scales; each stage gated by green check + vitest. Pending plan approval — implementation not started.
+
+- **docs**(prd-2/prd-5): add cross-cutting scoring model — variant×scale grid (2026-06-02) [`c89bddca94af088c5bcfa9c9f758ad862d86aad2`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c89bddca94af088c5bcfa9c9f758ad862d86aad2)
+  Introduce normative scoring-model.md as the shared basis for PRD-2 and PRD-5, and align both specs to it. Question contributions move to an explicit "вариант × шкала" grid (empty = no edge; 0 and negatives allowed); per-edge reverse is dropped in favor of negative contributions. Records the two delivery prerequisites: graduated checkAnswer (currently strictly 0/1) and stable answer-unit IDs (currently array-index based).
+
+- **docs**(prd-7): record live-browser acceptance pass (S11 gate) (2026-05-31) [`275b5dc804f1e3e9021d5c055cbffb5f5f8b58ef`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/275b5dc804f1e3e9021d5c055cbffb5f5f8b58ef)
+  Add report section 9 and update the DoD: NFR-17 cold-cache 516ms, axe across all four Drawer tabs (one real aria-command-name fixed, rest known-minor/needs-review), full E2E smoke per section 4.4, and SCORM export plus scorm:player playthrough. Also documents a stale dev-seed finding (legacy question type single_choice vs schema enum single) normalized in the DB, not a code defect.
+
+- **docs**: reprioritize post-MVP — PRD-2 + PRD-5 paired track (2026-05-30) [`ce76b07187f29d8b9161e389ff4e11210288a435`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ce76b07187f29d8b9161e389ff4e11210288a435)
+  Lift PRD-2 (result variables) and PRD-5 (scales) to the top of the
+  post-MVP backlog per business request: ship scale results and final
+  category to the LMS without manual Excel postprocessing, replacing the
+  external report_build script. The two PRDs run as a paired track because
+  the result_variables DSL must expose scaleById()/countScales() before
+  PRD-5 can compute final categories. Add MBI worked example as the E2E
+  acceptance reference and extend the PRD-2/PRD-5 specs with the shared
+  DSL contract.
+
+- **docs**: sync MVP closeout — PRD-1/4/7/8 status sections + acceptance report (2026-05-29) [`5d2c57bcb22f5a066bdcdae7b3a707de36e7317d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5d2c57bcb22f5a066bdcdae7b3a707de36e7317d)
+  Sweep through the spec status sections and the PRD-7 acceptance report
+  after the 31-commit MVP push (2026-05-28 / 2026-05-29). No code changes
+  — pure doc sync.
+  
+  PRD-1 (templates-content-pages.md):
+    \- Status line → ЗАКРЫТ 2026-05-28 (Backend/Runtime/Frontend = 100%
+      MVP-scope). Header date bumped to 2026-05-29.
+    \- §«Статус реализации» rewritten: backend/runtime list kept,
+      frontend list re-mapped onto the PRD-7 S10/S12/S13 sub-phases
+      that actually delivered it. Deferred post-MVP item documented
+      (text-overflow preview/diagnostics §1.10).
+  
+  PRD-4 (course-flow-sections.md):
+    \- §«Статус реализации» rewritten as ЗАКРЫТ 2026-05-29 with the
+      full phase ladder (1 / 2 / 3 / 4a-4f / 5) and the 6-cell
+      compatibility-matrix mapping new pairs back to legacy
+      flowPolicy enum names. Cross-link to the 19-test acceptance
+      file.
+  
+  PRD-8 (section-router-flow.md):
+    \- §«Статус реализации» rewritten as ЗАКРЫТ 2026-05-29 with
+      cross-PRD attribution per FR (FR-01..18). Spotlights the
+      PRD-8-specific delta (FR-18 router events landed in 5ba2eb6).
+    \- §7 Acceptance Criteria checklist flipped to [x] with cross-refs
+      showing where each item was delivered (PRD-7 G45 / PRD-4 4c /
+      PRD-4 4f / etc).
+  
+  PRD-7 acceptance report (prd-7-acceptance-report.md):
+    \- Header phase line annotated «закрыта 2026-05-28 после S12 + S13».
+    \- New §8 «Итоговый closeout 2026-05-29»: cross-PRD timeline
+      (PRD-1 → PRD-7 → PRD-4 → PRD-8), current metrics
+      (1423/1424 vitest, type-check clean), deferred items list,
+      and a per-commit summary across the whole session for
+      traceability.
+  
+  ROADMAP.md:
+    \- §0.1 (Storyline-MVP critical path) annotated with a 🎉
+      SHIPPABLE 2026-05-29 banner pointing at PRD-7 acceptance §8.
+      The «ускоритель» note tense-shifted to past — work is done.
+  
+  Verification: type-check clean (no code touched); existing test
+  counts unchanged (1423/1424 — 1 pre-existing migration
+  DB-connectivity fail in tests/migration-prd7.test.ts).
+
+- **docs**(prd-4): v1.1 — orthogonal mode×flowMode model + adaptive+router (2026-05-28) [`52f956200bd8b222c37e3439532c3d5514e07fdf`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/52f956200bd8b222c37e3439532c3d5514e07fdf)
+  Pre-implementation amendment for PRD-4. The original spec described
+  flowPolicy.mode as a flat 5-value enum (legacy_flat / section_linear /
+  section_router / section_graph / adaptive_by_section) — that doesn't match
+  the actual code, which uses two orthogonal parameters: test.mode
+  (standard|adaptive) and test.flowPolicyJson.mode (linear_flat|
+  linear_by_topics|router_by_topics). PRD-4 v1.1 reshapes the spec to
+  match reality and explicitly documents the 2×3 compatibility matrix.
+  
+  Key changes in course-flow-sections.md:
+  
+    §3.1.0 (new) — Model «mode × flowMode»:
+      \- flowPolicy splits into mode + flowMode (2×3 = 6 combinations).
+      \- Aliasing table maps old plain-enum values to new (mode, flowMode)
+        pairs so existing references keep their meaning.
+      \- Allows adaptive+router (new combo), defers adaptive+linear_flat
+        to a future «Flat adaptive» PRD.
+  
+    §3.1.1 (new) — Full flowPolicy field list.
+  
+    §3.1.2 (new) — Compatibility matrix + 4-layer guards:
+      \- 6 combos enumerated; (adaptive, linear_flat) blocked.
+      \- Strict gating rule: in adaptive mode every section must have
+        a non-empty adaptive.topics[].levels[] entry (mixed mode rejected
+        per discussion 2026-05-28).
+      \- L1 UI / L2 Zod / L3 API / L4 mapper guards spelled out with
+        file references.
+  
+    §4.1 — Author mode selector reshaped:
+      \- Two independent selects (mode + flowMode) instead of a single
+        flowPolicy.mode dropdown.
+      \- Notes the 6 combos with (adaptive, linear_flat) UI-blocked.
+  
+    §4.6 — (adaptive, linear_by_topics) section_linear-adaptive alias:
+      \- Adaptive termination criterion: session continues while learner
+        moves up or down the difficulty scale; ends on stability.
+      \- Section completion: «passed» = minimum level confirmed
+        (any achievedLevel &gt;= 0 with its own passThreshold); else
+        passed=false but section still counts as completed for nav.
+      \- Strict gating callout.
+  
+    §4.7 (new) — (adaptive, router_by_topics):
+      \- Learner flow: router → topic adaptive session → topic result →
+        router again.
+      \- routerCompletionPolicy semantics for adaptive sections:
+        all_required_completed (any achievedLevel) vs all_required_passed
+        (achievedLevel &gt;= 0).
+      \- sectionUnlockRules unchanged from standard+router.
+      \- Router page itself is not adaptive — kind:router page renders
+        uniformly regardless of test mode.
+      \- Strict gating reiterated.
+  
+  ROADMAP.md:
+    \- Post-MVP backlog row added: «PRD-N (Flat adaptive)» for the
+      (adaptive, linear_flat) combo deferred from PRD-4 v1.1.
+    \- Footnote updated: text-overflow-diagnostics removed «предпросмотр
+      шаблона» mention (closed in PRD-7 S12-G2); added flat-adaptive note.
+  
+  Verification: type-check clean, vitest 1373/1373 (docs-only changes).
+  PRD-4 ready for implementation phase. Next: code-level changes start
+  with Zod schema (L2 guard) so the model is enforced before runtime
+  work begins.
+
+- **docs**(prd-1): close PRD-1 — manifest kinds + closeout doc updates (2026-05-28) [`fec75a1b723e67c753cd7c017000a496f562c1e1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fec75a1b723e67c753cd7c017000a496f562c1e1)
+  All MVP-blocking PRD-1 task'и closed; remaining substantial item
+  (text-overflow preview/diagnostics §1.10) explicitly deferred post-MVP.
+  
+  Code change:
+    \- rtk-storyline manifest gains `kind` field on all 4 variants:
+      start.hero / intro.briefing → intro; info.text → info;
+      summary.topicResult → summary. Templates default/corporate/minimal
+      already had kind annotations.
+  
+  Doc updates:
+    \- implementation-todo.md status header rewritten — PRD-1 CLOSED
+      2026-05-28. §1.10 «предпросмотр шаблона» / «галерея» / both marked
+      [x] with PRD-7 S12-G2/G3 cross-refs. §1.12 manifest-validation
+      items checked: covered by PRD-7 G48 (defaultTemplateManifestSchema
+      superRefine enforcing 4 system kinds) + kind fields now present
+      in all 4 built-in manifests.
+    \- ROADMAP.md PRD-1 row marked Закрыта 2026-05-28 with PRD-7 cross-ref;
+      table column count fixed (status/dependencies split).
+  
+  Verification: type-check clean; vitest 1373/1373 (51 files). No new
+  code changes besides the manifest — PRD-1 closeout is documentation
+  of work already completed in PRD-7 S12.
+  
+  Next MVP step: PRD-4 (Runtime flowPolicy, section.*).
+
+- **docs**(prd-7): close S13.8 — verify pass + PRD-7 closure (2026-05-28) [`0918984fb042dc239723199d665ceb6f8f7e883b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0918984fb042dc239723199d665ceb6f8f7e883b)
+  Final S13 sub-phase. Verify items resolved + PRD-7 marked closed.
+  
+  S13.8 verify outcomes:
+    \- G24 (page-row-expand fallback fields): OK. Default info-kind
+      manifests (default/corporate/minimal) declare title + body
+      placeholders with required:false; «Текст «Далее»» is a layout
+      navigation button, not a placeholder. No code change needed.
+    \- G12 (s-basic-warning / s-basic-validation): split.
+      \* wf-basic-validation: covered substantively by the existing
+        hasErrors drawer-banner + «Перейти к ошибкам» action
+        (test-editor.tsx:454-457). Visual deviation from wireframe
+        (single action vs anchor link-list) — not material.
+      \* wf-basic-warning («Несовместимые настройки сохранены и скрыты»,
+        FR-25d/f): NOT covered. Data is already preserved on mode-switch
+        (basic-settings-section.test.tsx:201-220) but the UX-notification
+        banner listing "hidden settings" is missing. Substantial new
+        feature; deferred to S13.8b.
+  
+  Spec updates:
+    \- s13-editor-parity.md: G12 → partial; G24 → ok; S13.8 row → closed;
+      Definition of Done filled with current state (1373/1373, no axe pass
+      here — acceptance is a separate live-browser run).
+    \- ROADMAP.md: S11/S12/S13 all marked Closed 2026-05-28; «Последняя
+      актуализация» header updated to «PRD-7 полностью закрыт».
+    \- prd-7-acceptance-report.md: header status block rewritten — REVOKED
+      then RE-CLOSED 2026-05-28 with before/after metric comparison
+      (1344 → 1373 tests). Deferred sub-phases enumerated.
+  
+  Deferred (don't block PRD-7 MVP):
+    \- S13.5b — G22 mapping-flow (cross-tab coupling Design draft ↔
+      Structure reader needs architectural decision).
+    \- S13.8b — G12 wf-basic-warning UX-notification banner.
+  
+  PRD-7 is now formally closed at the code level. Live-browser acceptance
+  (Playwright + axe) is a separate pass that does not block the code
+  closeout.
+
+- **docs**(prd-7): annotate S13.5 status — G22 deferred to S13.5b (2026-05-28) [`b96ff0f526e93160fbe6a4569da887f5e900a66a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b96ff0f526e93160fbe6a4569da887f5e900a66a)
+  \* G22 mapping-flow row updated with a deferral note: the cross-tab
+    coupling between Design draft template change and Structure-tab
+    mapping selections needs architectural design (where the pending
+    templateChange lives, how Structure reads the new manifest without
+    saving, how mapping-row selections are persisted) before any
+    wireframe-level UI can land. Punted to S13.5b.
+  \* S13.5 plan row rewritten to reflect actual state and effort.
+
+- **docs**(prd-7): reopen as S12 — Design closeout (2026-05-28) [`b7a1fa06872daa426078f65da0c8f323db51032e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b7a1fa06872daa426078f65da0c8f323db51032e)
+  S11 acceptance was issued prematurely on 2026-05-27: the «Оформление» tab still
+  contains four stubs that contradict wireframe prd7-design-tab.html.
+  
+  \- FR-31: sub-rail «Макет» / «Прогресс и шапка» render StubPane instead of
+    manifest.params grouped by section
+  \- FR-30: «Предпросмотр шаблона» button shows window.alert() instead of the
+    tpl-preview-modal
+  \- FR-33: template gallery lost when legacy DesignSettingsDialog was retired;
+    «Заменить шаблон» is a no-op placeholder
+  \- FR-31a: param types image/asset/file/downloadLink/url/multiselect/number
+    fall back to a stub banner
+  \- orphan client/src/components/design-settings-dialog.tsx still on disk (S10
+    cleanup incomplete)
+  
+  Acceptance report §2.6 mistakenly delegated FR-30 preview to PRD-1, but FR-31
+  and FR-33 are PRD-7 wireframe requirements and cannot be deferred. Stub copy in
+  design-section.tsx:402,407 itself names «PRD-7» as the deferred owner.
+  
+  Changes:
+  \- docs/specs/prd-7/s12-design-closeout.md — new phase spec (gaps, contract
+    change for param.section, DoD, implementation order, risks)
+  \- docs/ROADMAP.md — S11 marked partially closed and reopened as S12; critical
+    path of Storyline-MVP gains step 2a
+  \- docs/prd-7-acceptance-report.md — STATUS UPDATE block at the top: acceptance
+    revoked; PRD-7 closes after S12 acceptance passes
+  \- docs/specs/prd-1/implementation-todo.md §1.10 — «галерея шаблонов» and
+    «вкладка Оформление» checkboxes downgraded; preview note re-attributed to
+    PRD-7 S12
+
+- **docs**: actualize PRD-1/PRD-7 statuses + Storyline-MVP path (2026-05-27) [`e971732e1b5fe1c31cea19e3e1e0b0446c9169b1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e971732e1b5fe1c31cea19e3e1e0b0446c9169b1)
+  PRD-1 §4: Структура content-page editor + data model (after position) + runtime content-flow (§4.7); PRD-1 §1.12 row-menu/severity. PRD-7 S9 closed / S10 almost-closed statuses. ROADMAP MVP critical-path step 1 done.
+
+- **docs**: restructure roadmap around Storyline-MVP (fastest-MVP critical path) (2026-05-27) [`18058632cdc55d93d887d5ad8bb833b50b414935`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/18058632cdc55d93d887d5ad8bb833b50b414935)
+  Fix the MVP boundary (2026-05-27) and reorganize the plan for the fastest path to
+  a shippable Storyline-MVP. ROADMAP gains §0.1 (MVP scope + ordered critical path:
+  PRD-7 S10 ⊕ PRD-1 closeout -&gt; S11 -&gt; PRD-4 -&gt; PRD-8) and §0.2 (post-MVP backlog).
+  Status table + every not-started PRD spec tagged MVP (PRD-4/8, PRD-1 closeout) or
+  post-MVP (PRD-6/2/5/3/9). Execution order is now MVP-first (PRD-8 above PRD-6).
+
+- **docs**(prd-7): actualize statuses — S9 closed (2026-05-27), S10 next (2026-05-27) [`8228c46c21541619c0323a3226070b3e23a6af53`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8228c46c21541619c0323a3226070b3e23a6af53)
+  Mark PRD-7 S9 closed across ROADMAP, execution-strategy, implementation-todo and
+  s9-s11-in-progress: component + API + regression tests + FR-20c done; full suite
+  52 files / 1375 tests green; npm run check clean. Promote S10 (legacy removal) to
+  active/next; S11 now blocked only by S10. Record the one open item (Архив section
+  with restore — a feature gap, not a test) and the coverage-gate note. Dates → 2026-05-27.
+
+- **docs**(prd-1): add content-pages editor closeout phase (PRD-7 Structure) (2026-05-27) [`3bbc1bd5712698538a76dd61c788f2bc6b5378fc`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3bbc1bd5712698538a76dd61c788f2bc6b5378fc)
+  Define the deferred PRD-7&lt;-&gt;PRD-1 integration as an explicit, unnumbered
+  closeout phase (PRD-1 todo S4): wiring info-page CRUD (add/edit/reorder/template
+  select, rich-text) into the read-only Structure tab and retiring the orphaned
+  legacy ContentPagesDialog. Cross-reference from ROADMAP and PRD-7 S9-S11.
+
+- **docs**(prd-7): mark S9 part 2 checklist closed; record full-suite status (2026-05-27) [`aa7df9de609d5deb16a267071fd60729c3106778`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/aa7df9de609d5deb16a267071fd60729c3106778)
+  API + regression checklists (S2.3) closed with references to the new cases.
+  Note: full vitest run green (52 files, 1363 tests); coverage threshold (50%)
+  remains a separate pre-existing gate.
+
+- **docs**: reorganize tree into plans/legacy/references/reports; add guides and audit (2026-05-27) [`a2d401ea21bb5057bb485c38a2d6a70199058016`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a2d401ea21bb5057bb485c38a2d6a70199058016)
+  Sort loose top-level docs into purpose folders so the docs root stays navigable:
+  \- DOCKER_DEPLOY_PLAN.md, refactoring-plan.md -&gt; docs/plans/
+  \- dependency-analysis.md, SCORM_TestConstructor_Documentation.docx -&gt; docs/legacy/
+  \- scorm-lms-analysis.md -&gt; docs/reports/
+  \- the course-feedback spreadsheet -&gt; docs/references/
+  \- drop the duplicate root copy of the call-flow PDF (kept under docs/call-flow/)
+  
+  Adds docs/guides/LOGGING.md (structured-logging conventions),
+  docs/reports/deps-audit-2026-05.md, and a root CHANGELOG.md.
+
+- **docs**: restructure into specs/ and architecture/, fix all cross-links (2026-05-26) [`5fc7653eb0f39a009391cfb4beae5e697aeacfc6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5fc7653eb0f39a009391cfb4beae5e697aeacfc6)
+  Reorganize the flat docs/ root into a navigable hierarchy:
+  \- docs/specs/: BRD, template-platform spec, and PRD-1..9 (each PRD in its own
+    prd-N/ subfolder; prd-N- filename prefix dropped as redundant with the folder)
+  \- docs/architecture/: service-architecture, test-settings-parameter-structure,
+    object-model-refactoring
+  \- docs/issues/: wireframes-drawer-todo.md moved here next to the other issue/TODO files
+  \- removed docs/test-settings-review-todo.md (status "closed"; TODO is a pre-Issues
+    stage, deleted after merge)
+  
+  Cross-link integrity:
+  \- recomputed every relative markdown link affected by the depth change
+    (links to moved targets and to non-moved targets such as ROADMAP.md, issues/,
+    reports/) so all 161 in-repo relative links resolve
+  \- repointed service-architecture source references (server/*, shared/schema.ts)
+    to the real repo paths (were dangling at docs/server/* before the move)
+  \- remaining 9 broken links are pre-existing and out of scope (guide code examples,
+    the unrelated LOGGING.md, the never-created wireframes-prd1-design-pages.md)
+  
+  markdownlint: introduced zero new violations; pre-existing issues (deps-audit
+  line lengths, wireframes-acceptance underscore emphasis, prd-6 ol-prefix,
+  manual-acceptance long command) are deferred to the lint cleanup stage.
+
+- **docs**: remove archived Replit chats, README copies, and stale snapshot reports (2026-05-26) [`16831cf0bd99b2f40242a246c830ef522aab3e6a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/16831cf0bd99b2f40242a246c830ef522aab3e6a)
+  Cleanup leftover artifacts from the original Replit prototype and pre-npm-update snapshots:
+  \- call-flow/21-12.md, legacy/21-12.md: raw Replit chat logs with stack traces, no value
+  \- call-flow/replit.md: archived Replit-flavored README (ARCHIVED-marker)
+  \- call-flow/README (1).md, (2).md: archived copies of root README, filenames with spaces
+  \- reports/CODE_REVIEW.md: 2026-02-05 review snapshot, predates the 2026-05 dependency overhaul
+  \- reports/ANALYSIS_REPORT.md: ARCHIVED app-state snapshot, predates the 2026-05 dependency overhaul
+  
+  README.md: drop dead links to reports/ANALYSIS_REPORT.md and CODE_REVIEW.md from the docs tree,
+  collapse the dangling tree node to a one-line summary that matches the actual layout.
+
+- **docs**: remove call-flow duplicates of design_guidelines and ANALYSIS_REPORT (2026-05-26) [`0f61c6c7d37bd43f4f90f9c3d312b1bb06b66bb1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0f61c6c7d37bd43f4f90f9c3d312b1bb06b66bb1)
+  Both files were byte-identical copies of the canonical versions in docs/guides/
+  and docs/reports/ respectively (verified via diff). Removed to enforce
+  "single source of truth" principle from DOCUMENTATION-GUIDELINES.md.
+
+- **docs**: actualize guide and PRD/ROADMAP statuses; split PRD-7 by phase (2026-05-26) [`e3a51cdbcd7a5f0a345f9b9403297639014b693f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e3a51cdbcd7a5f0a345f9b9403297639014b693f)
+  Stage 0 (guide):
+  \- DOCUMENTATION-GUIDELINES.md: add project-type applicability matrix
+    (lib/backend/frontend/full-stack); add "Актуализация важнее удаления" principle;
+    add "ROADMAP.md когда допустим" and "TODO-файлы PRD" subsections; mark TypeDoc
+    as library-only with backend/frontend alternatives.
+  
+  Stage 1 (PRD/ROADMAP actualization):
+  \- ROADMAP v1.1 -&gt; v1.2: phase statuses S0-S8 closed, S9 active, S10-S11 pending;
+    add PRD-9 as step 8 (tech debt backlog).
+  \- PRD-7 split: extract closed phases into prd-7-s0-s8-closed.md (362 lines),
+    active phases into prd-7-s9-s11-in-progress.md (360 lines); trim
+    prd-7-execution-strategy.md (1217 -&gt; 324) and prd-7-implementation-todo.md
+    (807 -&gt; 231); delete prd-7-test-settings-editor-refactor.md.
+  \- PRD-1 v2.0 -&gt; v2.1: status "In Implementation (Backend 90%, Runtime 95%,
+    Frontend 65%)" with done/pending breakdown.
+  \- PRD-2..6, PRD-8, PRD-9: status "Backlog (queued)" with ROADMAP step and blockers.
+  \- prd-7-baseline: marked as "Archived snapshot (2026-05-10)".
+  \- prd-7-decisions, prd-8, wireframes-drawer-todo, test-settings-review-todo:
+    update cross-references after PRD-7 split.
+
+- **docs**: update README versions; mark legacy analysis docs as archived (2026-05-26) [`9f42e7029d0576a644ecd9fe5b4ebce6cef75002`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9f42e7029d0576a644ecd9fe5b4ebce6cef75002)
+  README dep tables were a full major behind (zod 3, tailwind 3, express
+  4, drizzle 0.39, nodemailer 7, multer 2.0, plus a stale recharts row
+  for an unused dep) — refresh to the current set and note that
+  html2canvas/jsPDF live in the SCORM runtime via CDN, not npm. Drop the
+  "use connect-pg-simple in production" hint, that package was removed.
+  
+  Old analysis snapshots (dependency-analysis.md, reports/ANALYSIS_REPORT,
+  call-flow/{ANALYSIS_REPORT,README (1),replit}) reference deps that no
+  longer exist. Rewriting them is out of scope — just slap an ARCHIVED
+  blockquote on top pointing readers at package.json / the live code.
+
+- **docs**(wireframes): sync prd-7 drawer — Обязательная moved to Состав; new DS classes (2026-05-26) [`0449bf0b28423dfdce3cd431ae7db1bef5d88fcd`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0449bf0b28423dfdce3cd431ae7db1bef5d88fcd)
+  Drawer wireframe (prd7-editor-drawer.html): every TopicRow now carries
+  a Switch in the header (tb-topic-row__required) — matches the React
+  implementation. Settings wireframe (prd7-editor-settings-tab.html):
+  drop the «Обязательная» column from every pass-rules table variant and
+  update the cross-reference table to point to «Состав» as the only
+  location of this control.
+  
+  Wireframe DS stylesheet (docs/wireframes/tb-components.css) gains the
+  classes that the new UI depends on: wf-sep, adaptive-topics level
+  banner, tb-feedback-preview as button-like block, and rich-text RTE
+  preview rules — keeps wireframe and DS:ou-kit in lockstep.
+
+- **docs**(prd-7): mark S4/4A as closed — all items implemented except FR-20c (2026-05-26) [`40fa152ef96f829026e0f19b06b316d64f8d2dbf`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/40fa152ef96f829026e0f19b06b316d64f8d2dbf)
+  After reading test-editor.tsx and use-test-editor.ts in full:
+  FR-05 (CloseConfirmDialog), FR-25c/c1/c2 (ChangesPopover visible when dirty),
+  FR-25k (ConflictDialog + 409 branch in SaveHttpError handler),
+  NFR-19 (focus first tab on open), NFR-20 (keydown focus trap on drawerRef),
+  NFR-21 (StatusBadge aria-label, Tag aria-label, IconButton aria-label)
+  are all implemented.
+  
+  FR-20c (anchor navigation from validation summary to the problematic field)
+  is the only genuinely pending item — carried to S9.
+  
+  ROADMAP and execution-strategy updated accordingly.
+
+- **docs**(prd-7): correct S4/4A status — Drawer scaffold is partial, not closed (2026-05-26) [`9813c6373155302db5ce98ec78624acc4869e99f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9813c6373155302db5ce98ec78624acc4869e99f)
+  §1.7 items FR-05 (close confirmation), FR-25c (changes summary),
+  FR-25k (conflict dialog), FR-20c (validation anchors), NFR-19/20/21
+  (focus/a11y) are still pending. Updated header of implementation-todo,
+  execution-strategy §0 and §3 tables, and ROADMAP S4-S8 row to reflect
+  "partial" rather than "closed" for 4A.
+
+- **docs**(prd-7): actualize execution strategy — S4-S8 closed, S9 is next (2026-05-26) [`56e948e85113b4dd053304bcfb0309e59e0bcfdc`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/56e948e85113b4dd053304bcfb0309e59e0bcfdc)
+  §0 status table: S4–S8 marked closed with commit refs and remaining
+  open items listed (FR-05 close confirmation, FR-25c changes summary,
+  FR-25k conflict dialog, FR-39 structure warning, NFR-19/20/21 a11y).
+  
+  §1.4 session table: S4–S8 marked ✓ 2026-05-25; S9 becomes "следующая".
+  
+  §3 summary table: S4–S8 rows flipped to ✓; footnote updated to
+  "Закрыто 12 сессий, осталось 3 (S9, S10, S11)".
+  
+  Version bump 1.1 → 1.2.
+
+- **docs**: actualize ROADMAP and PRD status as of 2026-05-25 (2026-05-26) [`c343e9d106475c27f4e49c0be4aca0ce6e5d9d10`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c343e9d106475c27f4e49c0be4aca0ce6e5d9d10)
+  ROADMAP: S4-S8 marked closed; PRD-1 row updated to reflect §4.3 partial completion.
+  
+  prd-7-implementation-todo: S0-S8 closed in header; §1.4 — VariantKind schema,
+  silent binding, lifecycle reconcile, replace-variant endpoint, required-fields
+  validation marked done with commit refs; §1.7 — Drawer/layout/footer items
+  checked, pending: optimistic conflict (FR-25k), close confirmation (FR-05),
+  "Показать изменения" (FR-25c), a11y labels; §1.8 — all six sections checked;
+  §1.9 and MVP-срез S4 items checked.
+  
+  prd-1-implementation-todo: §1.12 — VariantKind enum, silent binding,
+  server required-fields validation, replace-variant endpoint and auto-create
+  kind:questions marked done with commit refs.
+
+- **docs**(prd-7): align execution strategy with actual progress and DS stack (v1.1) (2026-05-24) [`58a214f7717c706c478e7ebdfed4186534fb4243`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/58a214f7717c706c478e7ebdfed4186534fb4243)
+  Brings the document back in sync with reality after 2026-05-21/22:
+  
+  \- New §0 'Текущий статус' table reflecting what actually happened
+    (S0+S1+S2+S2-extensions+S3 closed, 17 files × 435 tests passing).
+  \- §1.4 session table gains a Status column; S0-S3 marked closed.
+  \- §W.0 rewritten: shadcn/ui guidance replaced by UniversityRT DS
+    (ou-* / tb-* classes, ENGINERING_HANDBOOK design-system handbook).
+    Local wf-*/wf-dialog* classes explicitly forbidden. Mobile scope
+    pushed to a separate PRD.
+  \- §W.1 minimal set marked complete with links to approved/* files;
+    prd7-editor-mobile.html removed as out-of-scope; structure-router
+    description updated to the branch-hierarchy model (PRD-7 decisions
+    §2.3b) instead of the legacy scenario-map.
+  \- New §'Сессия S2-расширения' documents Block 1A-1E + route-gap
+    closure (variant.kind contract, silent binding, content_pages
+    lifecycle, replace-variant endpoint, required-fields validation,
+    POST/PUT migration to TestSettingsService). This phase did not
+    exist in the original strategy.
+  \- Фаза 4A prompt: shadcn Sheet/Drawer/Tabs swapped for ou-drawer /
+    ou-tabs / ou-btn; references the approved drawer wireframe as the
+    visual contract; adds RequiredFieldsMissingError (422) handling
+    and FR-25j localStorage ban.
+  \- §3 summary table gets a Status column and a new S2+ row; W.3C
+    marked snyat (states integrated into the single drawer wireframe).
+
+- **docs**(roadmap): add §0 current status snapshot (2026-05-22) (2026-05-24) [`22c31811469cd84ee480748a79b819647287b603`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/22c31811469cd84ee480748a79b819647287b603)
+
+- **docs**(prd-1): code-walk 2026-05-22; add §1.12 for variant.kind/row-menu/severity-rail contracts (2026-05-24) [`170a12046b848dfa4e2ed78fde9b8a66afd84d50`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/170a12046b848dfa4e2ed78fde9b8a66afd84d50)
+  \- Verified 14 implementation files + 254 tests still pass
+  \- Split preview/reset item: сброс [x], предпросмотр [ ]
+  \- New §1.12: 10 unchecked items for PRD-1 §4.3 contract additions
+    (VariantKind enum, manifest validation, silent variant binding, row-menu
+    composition, severity-rail, required-params validation, replace-variant API)
+  \- §3 rewritten with 2026-05-22 walk + commit refs for 2026-05-11 batch
+
+- **docs**(prd-7): close S1 in implementation-todo; wireframes 153/153 approved (2026-05-24) [`9d09381d7a4131bea06263784c8a056754e5d6b6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9d09381d7a4131bea06263784c8a056754e5d6b6)
+
+- **docs**(prd-7): align FR/NFR with approved wireframes; bump to v1.2 (2026-05-24) [`dd05c5028eac857fe55b68eaf48d237952311223`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/dd05c5028eac857fe55b68eaf48d237952311223)
+  \- FR-43 + §4.1: mobile (&lt; 960px) declared out-of-scope (separate PRD)
+  \- FR-36/37 + new FR-37a: feedback editor modal (3 formats, PDF inline-rename, external links)
+  \- New FR-46: variant-replace flow via row-menu + replace-variant endpoint
+  \- New FR-47: fixed list of 5 settings sub-tabs
+  \- FR-25f/25g: warning + callout reformulated as info-banner (FR-40 model)
+  \- Status: Черновик → Утверждено для реализации (S0 + S1 closed)
+
+- **docs**(brd): reformulate BR-08-04 to match FR-40 v2 (content preserved on mode change) (2026-05-24) [`3b29baf13dd66d46eea32fdfa50773e1202758ea`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3b29baf13dd66d46eea32fdfa50773e1202758ea)
+
+- **docs**(wireframes): sync acceptance-checklist with FR-40/FR-36 reformulation (2026-05-24) [`a340ee5f30fd3e790542bfa5f449aaab8520a576`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a340ee5f30fd3e790542bfa5f449aaab8520a576)
+
+- **docs**(prd-7): preserve content on flowMode change, keep router params in draft (FR-40) (2026-05-24) [`f1ad83239e75fbaf79472ef8851c4cbc50f6a44e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f1ad83239e75fbaf79472ef8851c4cbc50f6a44e)
+
+- **docs**(wireframes): close §2 adaptive variant item in acceptance checklist (2026-05-21) [`880c5266cd0cd0e836061678d5ba50903753496e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/880c5266cd0cd0e836061678d5ba50903753496e)
+  Закрыт последний открытый пункт §2 editor-drawer gaps — Adaptive-вариант
+  вкладки «Состав» (FR-36). Все 5 пунктов §2 теперь отмечены [x].
+
+- **docs**(wireframes): close 4 acceptance-checklist items with fact-checks (2026-05-21) [`64431f42698dc2c839c596697521130d78e3f605`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/64431f42698dc2c839c596697521130d78e3f605)
+  Отмечены 4 пункта чек-листа:
+  
+  — §Final Sign-off / DS-gate линтер: 21 violation пофикшены, добавлены
+    --wf-size-360, --wf-border-w-2, --tb-input-w-md, --tb-input-w-sm,
+    --tb-accent-rail-w, --tb-space-half токены, fallback'и var(--token,
+    Npx) заменены на var() без fallback.
+  
+  — §Final Sign-off / legacy-формат: переформулирован — `wf-state` и
+    `showState` исключены из списка legacy (это обязательная wireframe-
+    инфраструктура per feedback_wf_only_skeleton_frame). Остались как
+    legacy-маркеры только `ou-button` и `wf-page-wrap`; fact-check
+    показывает 0 occurrences в HTML-разметке.
+  
+  — §2 / Feedback edit form (FR-36/37): добавлен state s-feedback-edit
+    с модалом `ou-modal--l` поверх drawer Состав; описана структура
+    (ou-seg формат-селектор, tb-rte editor, single-row links, PDF-assets
+    с upload-кнопкой).
+  
+  — §2 / s-mobile state: удалён из editor-drawer (mobile вне scope
+    PRD-7); инвентарь удалённого (state-button, state-блок, CSS,
+    notes-таблицы, DS-mapping fallback).
+
+- **docs**(prd-7): wireframes-first hard rule for UI implementation (2026-05-21) [`5f0169d6ca51f9212faf116e3109e579d894e510`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5f0169d6ca51f9212faf116e3109e579d894e510)
+  Add §0.1a to the implementation guide making approved wireframes the
+  single source of truth for visual decisions. Two-layer contract is now
+  explicit:
+  
+  \- PRD-1 / PRD-7 / PRD-8 own business contracts + behavioural rules;
+  \- docs/wireframes/approved/* own visual details (DOM structure, DS tokens,
+    state coverage, meta tags, severity rail, row-menu composition, padding,
+    interactions).
+  
+  Diverging from either is a blocking defect.
+  
+  DoD for UI tasks gets six new checkpoints (all states covered, DOM match,
+  DS tokens only, severity rail per §4.3.7, row-menu per §4.3.3, screenshot
+  matches sketch). PR review must include a visual diff against the approved
+  file — code-only review does not satisfy DoD.
+  
+  If a deviation is discovered mid-implementation:
+    1. STOP — do not «finish to taste»;
+    2. revert local code that introduced the divergence;
+    3. take the gap back to wireframes — designer/PM updates the file;
+    4. re-approval, file moved into approved/;
+    5. resume implementation against the updated sketch.
+  
+  «PRD doesn't forbid X» / «the sketch doesn't cover this edge case» are
+  not accepted as justifications on review — both are signals that the
+  sketch needs to be extended and re-approved, not licence to improvise.
+
+- **docs**(prd-1): formalise row-menu composition + severity-rail convention (2026-05-21) [`147d2807cbfceb6a30894e3fb91799633cfb68e3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/147d2807cbfceb6a30894e3fb91799633cfb68e3)
+  Three gaps surfaced during the post-acceptance audit between approved Structure
+  wireframes and the PRD documentation. All closed inside PRD-1 §4.3 to keep the
+  variant.kind contract in one place.
+  
+  §4.3.3 — full row-menu composition
+  
+  Spell out the contents of the `…` row-menu, which previously documented only
+  the «Сменить вариант» trigger. The audit found the wireframes carry three
+  items with kind-dependent behaviour:
+  
+    | item            | info | system kinds |
+    |-----------------|------|--------------|
+    | Сменить вариант…| ✓    | ✓            |
+    | Предпросмотр    | ✓    | ✓            |
+    | Удалить         | ✓    | НЕ показывается (not disabled — hidden) |
+  
+  The hidden-not-disabled rule is the key bit: a disabled delete on system rows
+  was visual noise; the only way to «remove» a system page is to switch
+  flowMode (§4.3.5 already covers the auto-delete of router-row). If a row ends
+  up with zero applicable items the `…` button is hidden as well.
+  
+  §4.3.7 — page-row__meta + severity-rail visual convention
+  
+  New subsection covering the two related sketch features that had no PRD
+  anchor:
+  
+  \- `.page-row__meta` — second flex-wrap line under the row carrying DS tags
+    (`ou-tag--info` / `--warning` / `--error`) with size `--s`;
+  \- Severity-rail — colour of border-left auto-derived from the highest-severity
+    meta tag or state modifier, priority error &gt; warning &gt; info.
+  
+  DS token mapping:
+    red    → --ou-error-default   (page-row--error  OR ou-tag--error)
+    yellow → --ou-warning-default (page-row--warn   OR ou-tag--warning)
+    blue   → --ou-info-default    (ou-tag--info only)
+    none   → no border in default state ("не засоряем эфир")
+  
+  Rail continuity: stripe extends onto the next sibling block (`.page-row-expand`,
+  `.mapping-warn`) so a single visual channel covers the row header plus its
+  inline form / mapping-prompt below.
+  
+  These are the visual contracts already realised across the three approved
+  Structure wireframes (router, linear_flat, linear_by_topics). Frontend teams
+  can now derive the implementation directly from PRD-1 without round-trips to
+  the sketches.
+
+- **docs**(prd): introduce variant.kind model with per-topic questions + required-params validation (2026-05-21) [`f7910cd69cf7e8e84bd0f461a8be5aab4e2924a4`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f7910cd69cf7e8e84bd0f461a8be5aab4e2924a4)
+  Resolves architectural ambiguity in template variant semantics by introducing
+  a functional variant.kind in the template manifest with five values:
+  questions / router / summary / intro / info.
+  
+  Key decisions captured:
+  
+  \- All four system kinds (questions/router/summary/intro) are stored
+    uniformly in content_pages as regular records with special `kind`;
+    no separate `questionLayoutCombos[]` collection or
+    `design_settings_json.questionLayoutCombo` field. A single ejs variant
+    renders all four interactive types via conditional logic — combo
+    abstraction was an unnecessary indirection.
+  \- `kind: questions` has **per-topic locality**: in linear_flat there is
+    one record (topicId: null), in linear_by_topics / router_by_topics one
+    per topic. Different topics may use different variants.
+  \- Silent binding for system kinds (PRD-1 §4.3.2): 1 variant → silent, N &gt; 1
+    → default + hint "Available N variants", 0 → fallback to standard
+    template + warning.
+  \- Variant swap on existing page-row (PRD-1 §4.3.3): triggered from `…`
+    row-menu; field-name contract between variants of the same kind keeps
+    matching values, drops the rest with explicit warning (diff block).
+  \- Lifecycle of system content_pages records (PRD-1 §4.3.5): auto-create
+    on topic add, cascade delete on topic removal, silent rebuild on
+    flowMode swap (router record dropped silently when leaving
+    router_by_topics).
+  \- Required-params validation (PRD-1 §4.3.6): unfilled `required: true`
+    fields raise an inline alert in page-row-expand, mark the page-row
+    warn, surface an aggregated error-dot on the Структура tab and disable
+    Save. Server returns a structured error.
+  \- router_by_topics tab is rebuilt around a system page-row with kind: router
+    plus topics as branches via tree-connectors (PRD-7 §2.3b). completionPolicy
+    and sectionUnlockRules move to Настройки → Сценарий and are no longer
+    shown in Структура (PRD-8). Old «scenario map» wording is replaced.
+
+- **docs**(wireframes): add DS migration plan and audit prompt (2026-05-17) [`f33116c45680822f1bb190f865d61edc30a89f02`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f33116c45680822f1bb190f865d61edc30a89f02)
+
+- **docs**(wireframes): sync audit + checklist + drawer-todo with DS migration (stage 6) (2026-05-17) [`171eb7e22356efac1f2869a54d071ac9173f7e2e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/171eb7e22356efac1f2869a54d071ac9173f7e2e)
+  Update wireframes-acceptance-checklist.md (items 1, 2, 8, 10 and Final
+  Sign-off) and wireframes-drawer-todo.md to reference DS BEM classes
+  (ou-drawer__*, ou-btn--*, ou-iconbtn, ou-tabs__*) instead of legacy
+  drawer-*/btn-*/btn-icon names. Reflect the move of design-tab.html and
+  pages-tab.html into docs/wireframes/legacy/.
+  
+  Add a "Покрытие gate v2" section to docs/wireframes-ds-audit.md
+  documenting the five gate categories (legacy class tokens, CSS selectors,
+  raw colors, direct units, optional --strict-inline).
+  
+  Files changed:
+  \- docs/wireframes-acceptance-checklist.md (items 1, 2; iconbtn rename in 8,
+    10; gate check added to Final Sign-off)
+  \- docs/wireframes-drawer-todo.md (legacy/ paths; DS migration status header)
+  \- docs/wireframes-ds-audit.md (+ gate v2 coverage section)
+
+- **docs**(wireframes): clarify legacy/ README — refs not deprecated (2026-05-17) [`fa64cb5376bf76a851f28a11f4acc4c4f7fe4d31`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fa64cb5376bf76a851f28a11f4acc4c4f7fe4d31)
+  design-tab.html and pages-tab.html are isolated from the gate but
+  remain the content source-of-truth for the Drawer "Оформление" and
+  "Структура" tabs. Their deprecation only follows once approved Drawer
+  sketches cover the same content (see memory note).
+
+- **docs**: add PRD-1 through PRD-8 specifications, wireframes and project references (2026-05-11) [`0364e45a3abb85993b723145057750f8979f44be`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0364e45a3abb85993b723145057750f8979f44be)
+  \- PRD documents: PRD-1 templates/content-pages, PRD-2 result-variables, PRD-3 external
+    templates, PRD-4 course flow, PRD-5 scales, PRD-6 retake cooldown, PRD-7 test settings
+    editor, PRD-8 section router; BRD SCORM enhancements, spec-template-platform
+  \- Wireframes: 19 prd7-*.html files with acceptance tables, wf-links.js cross-link resolver,
+    updated prd7-shared.css; technical notes moved from canvas into acceptance table
+  \- References, issues log, ROADMAP and implementation/review todo lists
+
+- **docs**: add SCORM-LMS data exchange analysis and reliability recommendations (2026-02-08) [`fdc460ade098e5030e93dcb1ee94180215569d26`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fdc460ade098e5030e93dcb1ee94180215569d26)
+  Detailed analysis of SCORM runtime communication with LMS including
+  step-by-step data flow, 8 identified reliability issues, and 7 proposed
+  solutions prioritized by risk level.
+
+- **docs**: reorganize documentation structure (2026-02-07) [`407eac71118d8ed37f064c358b1e0e97bfe7a9fa`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/407eac71118d8ed37f064c358b1e0e97bfe7a9fa)
+  \- Move call-flow diagrams to docs/call-flow/
+  \- Move legacy READMEs to docs/legacy/
+  \- Move Excel report to docs/
+  \- Add Docker deploy plan
+  \- Update CODE_REVIEW.md
+
+- **docs**: Strucrure of docs has been refactored (2026-02-05) [`416cca30daa0f5c7dd7eb9a8669717f6c355f4e0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/416cca30daa0f5c7dd7eb9a8669717f6c355f4e0)
+
+## [v1.0.0](https://github.com/vvlad1973/Fullstack-MVP-testing/tree/v1.0.0)
 
 ### Initial
 
