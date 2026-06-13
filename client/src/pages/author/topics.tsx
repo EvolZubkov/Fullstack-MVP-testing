@@ -599,7 +599,7 @@ export default function TopicsPage() {
               {folderTopics.length > 0 && (
                 <Box padStart={8}>
                   {viewMode === "grid"
-                    ? <Grid minItem="sm" gap={4}>{folderTopics.map(renderTopicCard)}</Grid>
+                    ? <Grid minItem="sm" gap={1}>{folderTopics.map(renderTopicCard)}</Grid>
                     : renderTopicsTable(folderTopics)
                   }
                 </Box>
@@ -730,7 +730,7 @@ export default function TopicsPage() {
             searchedTopics.length === 0
               ? <Text tone="muted">Ничего не найдено</Text>
               : viewMode === "grid"
-                ? <Grid minItem="sm" gap={6}>{searchedTopics.map(renderTopicCard)}</Grid>
+                ? <Grid minItem="sm" gap={1}>{searchedTopics.map(renderTopicCard)}</Grid>
                 : renderTopicsTable(searchedTopics)
           ) : (
             <>
@@ -744,7 +744,7 @@ export default function TopicsPage() {
                     </Cluster>
                   )}
                   {viewMode === "grid"
-                    ? <Grid minItem="sm" gap={6}>{rootTopics.map(renderTopicCard)}</Grid>
+                    ? <Grid minItem="sm" gap={1}>{rootTopics.map(renderTopicCard)}</Grid>
                     : renderTopicsTable(rootTopics)
                   }
                 </Stack>
