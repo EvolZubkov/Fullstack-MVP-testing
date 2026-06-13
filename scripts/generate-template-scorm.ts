@@ -183,7 +183,6 @@ function makeQuestion(type: string, prompt: string, dataJson: unknown, correctJs
     prompt,
     dataJson,
     correctJson,
-    points: 1,
     difficulty: 50,
     mediaUrl: null,
     mediaType: null,

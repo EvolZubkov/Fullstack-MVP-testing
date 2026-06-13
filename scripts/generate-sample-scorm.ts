@@ -62,7 +62,6 @@ function q(
     prompt,
     dataJson,
     correctJson,
-    points: 1,
     difficulty,
     mediaUrl: null,
     mediaType: null,
