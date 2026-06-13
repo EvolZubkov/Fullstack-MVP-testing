@@ -511,7 +511,8 @@ function ScaleForm({
         <Input
           size="m"
           fullWidth
-          label="Ключ *"
+          label="Ключ"
+          required
           value={s.key}
           disabled={readOnly}
           error={keyError ?? undefined}

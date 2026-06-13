@@ -381,7 +381,8 @@ function VariableForm({ variable: v, index, topics, testId, readOnly, fieldError
         <Input
           size="m"
           fullWidth
-          label="Имя *"
+          label="Имя"
+          required
           value={v.name}
           disabled={readOnly}
           placeholder="напр. burnout_category"

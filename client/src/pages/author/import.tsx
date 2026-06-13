@@ -445,7 +445,8 @@ export default function ImportPage() {
                     {requiresTest && (
                       <div className="mt-3 flex flex-col gap-3">
                         <Combobox
-                          label={`${tr.targetTest} *`}
+                          label={tr.targetTest}
+                          required
                           placeholder={tr.targetTestPlaceholder}
                           options={testOptions}
                           value={targetTestId}
@@ -458,7 +459,8 @@ export default function ImportPage() {
                         {isNew && (
                           <Input
                             id="new-test-name"
-                            label={`${tr.newTestName} *`}
+                            label={tr.newTestName}
+                            required
                             value={newTestTitle}
                             placeholder={tr.newTestNamePlaceholder}
                             fullWidth

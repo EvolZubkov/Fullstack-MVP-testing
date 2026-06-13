@@ -5,6 +5,8 @@ type Tone = 'default' | 'error' | 'success';
 
 export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'prefix' | 'size'> {
   label?: string;
+  /** Renders the red required marker «*» next to the label (DS convention). */
+  required?: boolean;
   hint?: string;
   error?: string;
   size?: Size;
@@ -20,7 +22,7 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({
-    label, hint, error, size = 'm', tone, iconLeft, iconRight, prefix, suffix,
+    label, required, hint, error, size = 'm', tone, iconLeft, iconRight, prefix, suffix,
     clearable, onClear, fullWidth, id, className, disabled, readOnly, value, ...rest
   }, ref) => {
     const autoId = useId();
@@ -38,7 +40,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         readOnly && 'is-readonly',
         className,
       )}>
-        {label && <label htmlFor={fieldId} className="ou-field__lbl">{label}</label>}
+        {label && (
+          <label htmlFor={fieldId} className="ou-field__lbl">
+            {label}
+            {required && <span className="ou-field__lbl-req"> *</span>}
+          </label>
+        )}
         <div className="ou-field__box">
           {iconLeft && <span className="ou-field__ico">{iconLeft}</span>}
           {prefix && <span className="ou-field__affix">{prefix}</span>}

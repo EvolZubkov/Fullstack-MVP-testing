@@ -37,6 +37,8 @@ export interface ComboboxOption<T extends string = string> {
 export interface ComboboxProps<T extends string = string>
   extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange' | 'defaultValue'> {
   label?: React.ReactNode;
+  /** Renders the red required marker «*» next to the label (DS convention). */
+  required?: boolean;
   hint?: React.ReactNode;
   error?: React.ReactNode;
   size?: Size;
@@ -110,7 +112,7 @@ function highlight(text: string, q: string): React.ReactNode {
 
 function ComboboxInner<T extends string = string>(
   {
-    label, hint, error, size = 'm', tone, placeholder,
+    label, required, hint, error, size = 'm', tone, placeholder,
     options, multiple, value, values, onChange, onValuesChange,
     query: queryProp, onQueryChange,
     disabled, fullWidth,
@@ -265,7 +267,12 @@ function ComboboxInner<T extends string = string>(
       )}
       {...rest}
     >
-      {label && <label htmlFor={fieldId} className="ou-combo__lbl">{label}</label>}
+      {label && (
+        <label htmlFor={fieldId} className="ou-combo__lbl">
+          {label}
+          {required && <span className="ou-combo__lbl-req"> *</span>}
+        </label>
+      )}
       <div
         className="ou-combo__control"
         onClick={(e) => {

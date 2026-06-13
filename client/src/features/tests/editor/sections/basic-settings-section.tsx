@@ -211,7 +211,7 @@ function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: Set
           id="settings-title"
           size="m"
           fullWidth
-          label="Название *"
+          label="Название"
           value={model.basic.title}
           placeholder="Введите название теста"
           required
