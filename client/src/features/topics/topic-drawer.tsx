@@ -203,6 +203,13 @@ export function TopicDrawer({
     nameCheck?.sameOwner && debouncedName.trim() === name.trim() ? nameCheck.sameOwner : null;
   const nameDuplicates =
     !nameClash && debouncedName.trim() === name.trim() ? nameCheck?.duplicates ?? [] : [];
+  // Warn about other authors' same-name topics only when the name is *new* in
+  // this Drawer: always while creating, and while editing only if the author
+  // actually renamed the topic into the clash. Opening an existing topic
+  // without touching its name stays silent — there is nothing to warn about.
+  const originalName = (topic?.name ?? "").trim();
+  const showNameDuplicateWarning =
+    nameDuplicates.length > 0 && (!isEdit || name.trim() !== originalName);
 
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const grantedIds = useMemo(
@@ -357,10 +364,10 @@ export function TopicDrawer({
               error={nameClash ? `У вас уже есть тема «${nameClash.name}». Выберите другое название.` : undefined}
               data-testid="input-topic-name"
             />
-            {nameDuplicates.length > 0 && (
+            {showNameDuplicateWarning && (
               <Banner
                 tone="warning"
-                description="Тема с таким названием уже есть в доступной вам области (у других авторов). Создать можно — это не помешает."
+                description="Тема с таким названием уже есть в доступной вам области (у других авторов). Это допустимо — одноимённые темы у разных авторов разрешены."
                 data-testid="topic-name-warning"
               />
             )}
