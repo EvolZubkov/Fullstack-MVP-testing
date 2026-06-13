@@ -98,6 +98,16 @@ export type BoxRadius = 's' | 'm' | 'l';
 export interface BoxProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Padding on all sides (`--ou-space-{pad}`). */
   pad?: Space;
+  /** Inline (left+right) padding. */
+  padX?: Space;
+  /** Block (top+bottom) padding. */
+  padY?: Space;
+  padTop?: Space;
+  padBottom?: Space;
+  /** Inline-start (left in LTR) padding — e.g. tree indents. */
+  padStart?: Space;
+  /** Inline-end (right in LTR) padding. */
+  padEnd?: Space;
   surface?: BoxSurface;
   border?: boolean;
   radius?: BoxRadius;
@@ -107,12 +117,18 @@ export interface BoxProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export const Box = forwardRef<HTMLDivElement, BoxProps>(
-  ({ pad, surface, border, radius, grow, as: Tag = 'div', className, ...rest }, ref) => (
+  ({ pad, padX, padY, padTop, padBottom, padStart, padEnd, surface, border, radius, grow, as: Tag = 'div', className, ...rest }, ref) => (
     <Tag
       ref={ref}
       className={cn(
         'ou-box',
         pad != null && `ou-box--pad-${pad}`,
+        padX != null && `ou-box--padx-${padX}`,
+        padY != null && `ou-box--pady-${padY}`,
+        padTop != null && `ou-box--padt-${padTop}`,
+        padBottom != null && `ou-box--padb-${padBottom}`,
+        padStart != null && `ou-box--pads-${padStart}`,
+        padEnd != null && `ou-box--pade-${padEnd}`,
         surface && `ou-box--surface-${surface}`,
         border && 'ou-box--border',
         radius && `ou-box--radius-${radius}`,
