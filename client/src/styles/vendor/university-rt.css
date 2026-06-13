@@ -3505,6 +3505,9 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 }
 .ou-formfield__lbl-req { color: var(--ou-error-default); }
 .ou-formfield__lbl-opt { color: var(--ou-fg-muted); font-weight: 400; font-size: 12px; }
+/* Required marker for Input/Select (.ou-field__lbl) and Combobox (.ou-combo__lbl). */
+.ou-field__lbl-req,
+.ou-combo__lbl-req { color: var(--ou-error-default); }
 .ou-formfield__lbl-info {
   width: 16px; height: 16px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
