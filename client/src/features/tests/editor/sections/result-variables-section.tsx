@@ -23,7 +23,7 @@ import {
   Switch,
   Textarea,
 } from "@universityrt/ui-kit";
-import { ChevronDown, GripVertical, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, GripVertical, Info, Plus, Trash2 } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -183,6 +183,37 @@ export function ResultVariablesSection({
 
   const ids = useMemo(() => vars.map((v, i) => rowKey(v, i)), [vars]);
 
+  // Empty tab: a full-page DS empty state with the primary action inside (no
+  // header row), per docs/wireframes/approved/prd2-prd5-scoring-tabs.html
+  // (s-indicators-empty) — mirrors the «Список шкал» empty state.
+  if (vars.length === 0) {
+    return (
+      <div className="tb-settings-content" data-testid="metrics-section">
+        <EmptyState
+          layout="page"
+          well
+          art={<Info aria-hidden="true" />}
+          title="Пока нет показателей"
+          description="Показатель — это формула над результатами теста (категория, флаг, итоговый вердикт). Добавьте первый показатель."
+          actions={
+            !readOnly ? (
+              <Button
+                variant="primary"
+                size="s"
+                leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+                onClick={addVariable}
+                data-testid="metrics-empty-add"
+              >
+                Добавить показатель
+              </Button>
+            ) : undefined
+          }
+          data-testid="metrics-empty"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="tb-settings-content" data-testid="metrics-section">
       <div className="flex items-center justify-between mb-3">
@@ -202,39 +233,29 @@ export function ResultVariablesSection({
         )}
       </div>
 
-      {vars.length === 0 ? (
-        <EmptyState
-          layout="inline"
-          well
-          title="Пока нет показателей"
-          description="Показатель — это формула над результатами теста (категория, флаг, итоговый вердикт). Добавьте первый показатель."
-          data-testid="metrics-empty"
-        />
-      ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-            {vars.map((variable, index) => {
-              const key = rowKey(variable, index);
-              return (
-                <SortableVariableCard
-                  key={key}
-                  id={key}
-                  index={index}
-                  variable={variable}
-                  topics={topics}
-                  testId={testId}
-                  readOnly={readOnly}
-                  fieldErrors={fieldErrors}
-                  expanded={expandedKey === key}
-                  onToggle={() => setExpandedKey((cur) => (cur === key ? null : key))}
-                  onChange={(patch) => updateVar(index, patch)}
-                  onRemove={() => removeVariable(index)}
-                />
-              );
-            })}
-          </SortableContext>
-        </DndContext>
-      )}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          {vars.map((variable, index) => {
+            const key = rowKey(variable, index);
+            return (
+              <SortableVariableCard
+                key={key}
+                id={key}
+                index={index}
+                variable={variable}
+                topics={topics}
+                testId={testId}
+                readOnly={readOnly}
+                fieldErrors={fieldErrors}
+                expanded={expandedKey === key}
+                onToggle={() => setExpandedKey((cur) => (cur === key ? null : key))}
+                onChange={(patch) => updateVar(index, patch)}
+                onRemove={() => removeVariable(index)}
+              />
+            );
+          })}
+        </SortableContext>
+      </DndContext>
     </div>
   );
 }
