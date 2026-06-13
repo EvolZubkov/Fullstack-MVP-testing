@@ -528,7 +528,7 @@ export default function TopicsPage() {
     <Table columns={topicColumns} rows={topicList} rowKey={(topic) => topic.id} />
   );
 
-  const renderFolder = (folder: FolderType, depth: number = 0) => {
+  const renderFolder = (folder: FolderType) => {
     // FR-28: hide folders with no topics visible in the current filter (unless
     // the admin enabled «Показывать пустые папки»).
     if (!showEmptyFolders && !folderHasVisibleTopics(folder.id)) return null;
@@ -538,9 +538,7 @@ export default function TopicsPage() {
     const totalItems = folderTopics.length + childFolders.length;
 
     return (
-      // Tree indent has no DS depth-aware primitive; the left offset stays an
-      // inline style anchored to the --ou-space-4 token (see dsGaps).
-      <Box key={folder.id} style={{ marginLeft: `calc(${depth} * var(--ou-space-4))` }}>
+      <Box key={folder.id}>
         <Collapsible open={isExpanded} onOpenChange={() => toggleFolder(folder.id)}>
           <Box surface="muted" radius="l" pad={3} className="hover-elevate">
             <Cluster gap={2} wrap={false}>
@@ -591,11 +589,15 @@ export default function TopicsPage() {
           </Box>
           <CollapsibleContent>
             <Stack gap={2}>
-              {childFolders.map((childFolder) => renderFolder(childFolder, depth + 1))}
+              {childFolders.length > 0 && (
+                <Box padStart={4}>
+                  <Stack gap={2}>
+                    {childFolders.map((childFolder) => renderFolder(childFolder))}
+                  </Stack>
+                </Box>
+              )}
               {folderTopics.length > 0 && (
-                // Nested topics sit indented under the folder row; the left inset
-                // has no DS left-only padding primitive (see dsGaps).
-                <Box style={{ paddingInlineStart: "var(--ou-space-8)" }}>
+                <Box padStart={8}>
                   {viewMode === "grid"
                     ? <Grid minItem="sm" gap={4}>{folderTopics.map(renderTopicCard)}</Grid>
                     : renderTopicsTable(folderTopics)
