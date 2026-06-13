@@ -241,4 +241,47 @@ describe("<TopicDrawer />", () => {
     await waitFor(() => expect(calledWith("POST", "/api/topics")).toBe(true));
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  /** Re-stub fetch so the live name-check reports an other-author collision. */
+  function stubWithDuplicateName() {
+    fetchMock = vi.fn(async (url: string) => {
+      const u = String(url);
+      let body: unknown = {};
+      if (u.includes("/access")) body = { topicId: "t1", ownerId: null, visibility: "private", grants: [] };
+      else if (u.includes("/api/users")) body = [];
+      else if (u.includes("/name-check")) body = { normalized: "fttb", sameOwner: null, duplicates: [{ id: "d1", name: "FTTB" }] };
+      return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+  }
+
+  it("edit mode: the same-name warning stays hidden while the name is unchanged", async () => {
+    stubWithDuplicateName();
+    renderWithClient(
+      <TopicDrawer target={{ mode: "edit", topic: editTopic }} folders={[]} isAdmin={false} onClose={() => {}} />,
+    );
+    // Let the debounced name-check fire for the prefilled (unchanged) name.
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/name-check"))).toBe(true),
+    );
+    expect(screen.queryByTestId("topic-name-warning")).not.toBeInTheDocument();
+  });
+
+  it("edit mode: renaming into an other-author collision surfaces the warning", async () => {
+    stubWithDuplicateName();
+    renderWithClient(
+      <TopicDrawer target={{ mode: "edit", topic: editTopic }} folders={[]} isAdmin={false} onClose={() => {}} />,
+    );
+    fireEvent.change(screen.getByTestId("input-topic-name"), { target: { value: "FTTB" } });
+    expect(await screen.findByTestId("topic-name-warning")).toBeInTheDocument();
+  });
+
+  it("create mode: an other-author same-name topic surfaces the warning", async () => {
+    stubWithDuplicateName();
+    renderWithClient(
+      <TopicDrawer target={{ mode: "create", folderId: null }} folders={[]} isAdmin={false} onClose={() => {}} />,
+    );
+    fireEvent.change(screen.getByTestId("input-topic-name"), { target: { value: "FTTB" } });
+    expect(await screen.findByTestId("topic-name-warning")).toBeInTheDocument();
+  });
 });
