@@ -52,7 +52,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     scales: [],
     measurements: [],
     retakePolicy: defaultRetakePolicy(),
-    scoring: { defaultQuestionPoints: null },
+    scoring: { defaultQuestionPoints: null, questionOverrides: [] },
     ...overrides,
   };
 }

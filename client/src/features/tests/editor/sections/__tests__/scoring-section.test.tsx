@@ -6,18 +6,21 @@
  *   - Test-wide default input edits `model.scoring.defaultQuestionPoints`
  *     ("" = inherit, whole >= 0); per-section default edits the section row.
  *   - The questions table shows EFFECTIVE values via the shared resolver and
- *     marks overridden rows (accent bar class) and cells (fill class).
+ *     marks overridden rows (accent bar class) and cells (fill class); overrides
+ *     are read from the draft (`model.scoring.questionOverrides`).
  *   - A stale override (pinned hash diverged) carries «Настройка устарела».
- *   - The reset icon DELETEs the override; the edit icon opens the modal and
- *     «Применить» PUTs the override patch.
+ *   - The reset icon removes the override from the draft (no network); the edit
+ *     icon opens the modal and «Применить» writes the override into the draft,
+ *     re-pinning the question's current contentHash.
  *   - Create mode (no testId) shows the hint banner instead of tables.
  */
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ScoringSection } from "../scoring-section";
 import type { TestEditorModel, EditorSection } from "../../test-editor.types";
+import type { QuestionScoringOverride } from "../../scoring-api";
 import { defaultRetakePolicy } from "../../test-editor.mappers";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -53,7 +56,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
     scales: [],
     measurements: [],
     retakePolicy: defaultRetakePolicy(),
-    scoring: { defaultQuestionPoints: null },
+    scoring: { defaultQuestionPoints: null, questionOverrides: [] },
     ...overrides,
   };
 }
@@ -89,8 +92,9 @@ const dbQuestions = [
   },
 ];
 
-// q1: настроены балл/цена/сложность; пин устарел (h-old vs h-new).
-const dbOverrides = [
+// q1: настроены балл/цена/сложность; пин устарел (h-old vs h-new). Overrides are
+// now draft-managed — fed through the model, NOT fetched.
+const dbOverrides: QuestionScoringOverride[] = [
   {
     id: "ov1", testId: "test-1", questionId: "q1",
     points: 5,
@@ -105,8 +109,7 @@ beforeEach(() => {
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     let body: unknown = [];
-    if (method === "GET" && String(url).includes("/question-scoring")) body = dbOverrides;
-    else if (method === "GET" && String(url).includes("/api/questions")) body = dbQuestions;
+    if (method === "GET" && String(url).includes("/api/questions")) body = dbQuestions;
     else body = { ok: true };
     return {
       ok: true,
@@ -148,7 +151,7 @@ function runUpdater(
 
 describe("<ScoringSection />", () => {
   it("edits the test-wide default («» = наследование, целое >= 0)", () => {
-    const model = baseModel({ scoring: { defaultQuestionPoints: 2 } });
+    const model = baseModel({ scoring: { defaultQuestionPoints: 2, questionOverrides: [] } });
     const updateModel = vi.fn();
     renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={updateModel} />);
 
@@ -164,7 +167,7 @@ describe("<ScoringSection />", () => {
 
   it("edits the per-section default and shows the inherited placeholder", () => {
     const model = baseModel({
-      scoring: { defaultQuestionPoints: 4 },
+      scoring: { defaultQuestionPoints: 4, questionOverrides: [] },
       sections: [buildSection()],
     });
     const updateModel = vi.fn();
@@ -179,7 +182,10 @@ describe("<ScoringSection />", () => {
   });
 
   it("shows effective values, marks overridden cells and a stale override", async () => {
-    const model = baseModel({ sections: [buildSection()] });
+    const model = baseModel({
+      sections: [buildSection()],
+      scoring: { defaultQuestionPoints: null, questionOverrides: dbOverrides },
+    });
     renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={() => {}} />);
 
     const row1 = await screen.findByTestId("scoring-row-q1");
@@ -199,22 +205,31 @@ describe("<ScoringSection />", () => {
     expect(screen.queryByTestId("scoring-reset-q2")).toBeNull();
   });
 
-  it("reset icon DELETEs the override", async () => {
-    const model = baseModel({ sections: [buildSection()] });
-    renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={() => {}} />);
+  it("reset icon removes the override from the draft (no network)", async () => {
+    const model = baseModel({
+      sections: [buildSection()],
+      scoring: { defaultQuestionPoints: null, questionOverrides: dbOverrides },
+    });
+    const updateModel = vi.fn();
+    renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={updateModel} />);
 
     fireEvent.click(await screen.findByTestId("scoring-reset-q1"));
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/tests/test-1/question-scoring/q1",
-        expect.objectContaining({ method: "DELETE" }),
-      );
-    });
+    const next = runUpdater(updateModel, model);
+    expect(next.scoring.questionOverrides.some((o) => o.questionId === "q1")).toBe(false);
+    // Deferred: nothing is persisted until the drawer «Сохранить».
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/tests/test-1/question-scoring/q1",
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 
-  it("edit icon opens the modal; «Применить» PUTs the override patch", async () => {
-    const model = baseModel({ sections: [buildSection()] });
-    renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={() => {}} />);
+  it("edit icon opens the modal; «Применить» writes the override into the draft", async () => {
+    const model = baseModel({
+      sections: [buildSection()],
+      scoring: { defaultQuestionPoints: null, questionOverrides: dbOverrides },
+    });
+    const updateModel = vi.fn();
+    renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={updateModel} />);
 
     fireEvent.click(await screen.findByTestId("scoring-edit-q1"));
     // The modal renders in a portal; assert by its content. Stale override →
@@ -226,19 +241,18 @@ describe("<ScoringSection />", () => {
     fireEvent.change(points, { target: { value: "0" } });
 
     fireEvent.click(screen.getByTestId("qscoring-apply"));
-    await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(
-        "/api/tests/test-1/question-scoring/q1",
-        expect.objectContaining({ method: "PUT" }),
-      );
-    });
-    const putCall = fetchMock.mock.calls.find(
-      (c) => (c[1] as RequestInit | undefined)?.method === "PUT",
-    )!;
-    const sent = JSON.parse((putCall[1] as RequestInit).body as string);
-    expect(sent.points).toBe(0); // явный 0 — вопрос без баллов в этом тесте
-    expect(sent.difficulty).toBe(70);
-    expect(sent.scoringJson).toMatchObject({ kind: "tiered" });
+    const next = runUpdater(updateModel, model);
+    const ov = next.scoring.questionOverrides.find((o) => o.questionId === "q1")!;
+    expect(ov.points).toBe(0); // явный 0 — вопрос без баллов в этом тесте
+    expect(ov.difficulty).toBe(70);
+    expect(ov.scoringJson).toMatchObject({ kind: "tiered" });
+    // Re-pinned to the question's CURRENT content (clears the stale tag, FR-30).
+    expect(ov.pinnedContentHash).toBe("h-new");
+    // Deferred: no PUT on apply.
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/tests/test-1/question-scoring/q1",
+      expect.objectContaining({ method: "PUT" }),
+    );
   });
 
   it("create mode: hint banner instead of question tables", () => {

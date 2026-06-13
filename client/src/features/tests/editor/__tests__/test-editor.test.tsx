@@ -334,6 +334,81 @@ describe("useTestEditor — optimistic conflict and required-fields", () => {
   });
 });
 
+// ─── PRD-15 block D: per-question scoring overrides are draft-managed ───────────
+
+describe("useTestEditor — question scoring overrides (PRD-15 block D)", () => {
+  const withOverride = () =>
+    buildApiResponse({
+      questionScoring: [
+        {
+          id: "ov1", testId: "test-1", questionId: "q1",
+          points: 3, scoringJson: null, difficulty: null, pinnedContentHash: "h1",
+        },
+      ],
+    });
+
+  it("seeds overrides into the draft and reconciles a change with a PUT on save", async () => {
+    nextResponse(withOverride());          // initial GET seeds the draft
+    nextResponse(buildApiResponse());      // putTest PUT
+    nextResponse({ id: "ov1" });           // question-scoring upsert PUT
+    nextResponse(withOverride());          // fetchTest refresh (overrides changed)
+
+    const client = makeClient();
+    const { result } = renderHook(() => useTestEditor({ mode: "edit", testId: "test-1" }), {
+      wrapper: ({ children }) => withClient(client, <>{children}</>),
+    });
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+    expect(result.current.model?.scoring.questionOverrides).toHaveLength(1);
+
+    // Mirror what the «Оценка» tab does on «Применить» — mutate the draft only.
+    act(() => {
+      result.current.updateModel((m) => ({
+        ...m,
+        scoring: {
+          ...m.scoring,
+          questionOverrides: m.scoring.questionOverrides.map((o) =>
+            o.questionId === "q1" ? { ...o, points: 5 } : o,
+          ),
+        },
+      }));
+    });
+    expect(result.current.isDirty).toBe(true);
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/tests/test-1/question-scoring/q1",
+      expect.objectContaining({ method: "PUT" }),
+    );
+  });
+
+  it("does not touch the scoring endpoint when overrides are unchanged", async () => {
+    nextResponse(withOverride());          // initial GET
+    nextResponse(buildApiResponse());      // putTest PUT (only the title changed)
+
+    const client = makeClient();
+    const { result } = renderHook(() => useTestEditor({ mode: "edit", testId: "test-1" }), {
+      wrapper: ({ children }) => withClient(client, <>{children}</>),
+    });
+    await waitFor(() => expect(result.current.model).not.toBeNull());
+
+    act(() => {
+      result.current.updateModel((m) => ({ ...m, basic: { ...m.basic, title: m.basic.title + " edited" } }));
+    });
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    const touchedScoring = fetchMock.mock.calls.some((c) =>
+      String(c[0]).includes("/question-scoring/"),
+    );
+    expect(touchedScoring).toBe(false);
+  });
+});
+
 // ─── Create mode ──────────────────────────────────────────────────────────────
 
 describe("useTestEditor — create mode", () => {
