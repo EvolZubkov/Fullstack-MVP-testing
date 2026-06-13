@@ -320,6 +320,7 @@ export type ContributionUnit = {
 /** A measured-capable question: its prompt, type and enumerated answer units. */
 export type ContributionQuestion = {
   id: string;
+  topicId: string;
   prompt: string;
   type: QuestionType;
   units: ContributionUnit[];
@@ -417,6 +418,6 @@ export async function loadContributionQuestions(topicIds: string[]): Promise<Con
     .filter((q) => topicSet.has(q.topicId))
     .map((q) => {
       const type = (["single", "multiple", "matching", "ranking"].includes(q.type) ? q.type : "single") as QuestionType;
-      return { id: q.id, prompt: q.prompt ?? q.id, type, units: buildContributionUnits(q, type) };
+      return { id: q.id, topicId: q.topicId, prompt: q.prompt ?? q.id, type, units: buildContributionUnits(q, type) };
     });
 }

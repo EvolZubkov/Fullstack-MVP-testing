@@ -29,7 +29,9 @@ import {
   Select,
   Switch,
 } from "@universityrt/ui-kit";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
+
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 import type {
   QuestionMeasurementModel,
@@ -50,6 +52,7 @@ import {
   type ScalePreviewResult,
 } from "../scales-api";
 import type { FieldErrorIndex } from "../field-errors";
+import { FoldAllButtons, useSectionFold } from "./section-fold";
 
 export type ScalesSectionProps = {
   model: TestEditorModel;
@@ -199,28 +202,37 @@ function bandErrorOf(s: ScaleModel): string | null {
 export function ScalesSection({ model, testId, updateModel, readOnly = false }: ScalesSectionProps) {
   const [subTab, setSubTab] = useState<ScalesSubTab>("list");
 
+  // «Вклады вопросов» is meaningless without at least one scale (nothing to
+  // contribute to), so its rail item is disabled until a scale exists. If the
+  // last scale is removed while on it, fall back to «Список шкал».
+  const hasScales = useMemo(() => model.scales.some((s) => s.key.trim() !== ""), [model.scales]);
+  const effectiveTab: ScalesSubTab = subTab === "contributions" && hasScales ? "contributions" : "list";
+
   return (
     <div className="ou-drawer__split" data-testid="scales-split">
       <nav className="ou-drawer__rail" aria-label="Подразделы шкал">
         <button
           type="button"
-          className={"ou-drawer__rail-item" + (subTab === "list" ? " is-active" : "")}
-          aria-current={subTab === "list" ? "page" : undefined}
+          className={"ou-drawer__rail-item" + (effectiveTab === "list" ? " is-active" : "")}
+          aria-current={effectiveTab === "list" ? "page" : undefined}
           onClick={() => setSubTab("list")}
         >
           Список шкал
         </button>
         <button
           type="button"
-          className={"ou-drawer__rail-item" + (subTab === "contributions" ? " is-active" : "")}
-          aria-current={subTab === "contributions" ? "page" : undefined}
+          className={"ou-drawer__rail-item" + (effectiveTab === "contributions" ? " is-active" : "")}
+          aria-current={effectiveTab === "contributions" ? "page" : undefined}
+          disabled={!hasScales}
+          title={!hasScales ? "Сначала добавьте шкалу в разделе «Список шкал»" : undefined}
           onClick={() => setSubTab("contributions")}
+          data-testid="scales-rail-contributions"
         >
           Вклады вопросов
         </button>
       </nav>
-      <div className="tb-settings-content" data-testid={`scales-pane-${subTab}`}>
-        {subTab === "list" ? (
+      <div className="tb-settings-content" data-testid={`scales-pane-${effectiveTab}`}>
+        {effectiveTab === "list" ? (
           <ScalesListPane model={model} testId={testId} updateModel={updateModel} readOnly={readOnly} />
         ) : (
           <ContributionsPane model={model} updateModel={updateModel} readOnly={readOnly} />
@@ -303,6 +315,7 @@ function ScalesListPane({
       <EmptyState
         layout="page"
         well
+        art={<Info aria-hidden="true" />}
         title="Пока нет шкал"
         description="Шкала измеряет компетенцию или признак: суммирует вклады вопросов, нормализует и даёт уровень. Добавьте первую шкалу теста."
         actions={
@@ -941,6 +954,31 @@ function ContributionsPane({
     return map;
   }, [model.measurements]);
 
+  // Group the (flat) loaded questions by section, in section order, keeping a
+  // running global number for the card headings/testids. Empty sections are
+  // skipped. Folding mirrors the «Оценка» tab (shared `useSectionFold`).
+  const groups = useMemo(() => {
+    const byTopic = new Map<string, ContributionQuestion[]>();
+    for (const q of questions ?? []) {
+      const list = byTopic.get(q.topicId);
+      if (list) list.push(q);
+      else byTopic.set(q.topicId, [q]);
+    }
+    let counter = 0;
+    const out: { topicId: string; topicName: string; items: { q: ContributionQuestion; index: number }[] }[] = [];
+    for (const s of model.sections) {
+      const list = byTopic.get(s.topicId) ?? [];
+      if (list.length === 0) continue;
+      out.push({
+        topicId: s.topicId,
+        topicName: s.topicName,
+        items: list.map((q) => ({ q, index: counter++ })),
+      });
+    }
+    return out;
+  }, [questions, model.sections]);
+  const fold = useSectionFold(groups.map((g) => g.topicId));
+
   const setCell = useCallback(
     (questionId: string, unit: ContributionUnit, scaleKey: string, value: number | null) => {
       updateModel((m) => {
@@ -1008,20 +1046,65 @@ function ContributionsPane({
         )
       )}
 
-      {questions.map((q, index) => (
-        <QuestionContribCard
-          key={q.id}
-          index={index}
-          question={q}
-          scales={scales}
-          contributed={contributedByQ.get(q.id) ?? new Set()}
-          cellMap={cellMap}
-          readOnly={readOnly}
-          expanded={expandedId === q.id}
-          onToggle={() => setExpandedId((cur) => (cur === q.id ? null : q.id))}
-          onSetCell={setCell}
-        />
-      ))}
+      {groups.length > 0 && (
+        <div className="tb-fold-toolbar">
+          <FoldAllButtons fold={fold} testIdPrefix="contrib" />
+        </div>
+      )}
+
+      {groups.map((group) => {
+        const open = fold.isOpen(group.topicId);
+        // Coverage reflected at the section level (only meaningful with scales).
+        const sectionUncovered = group.items.filter(({ q }) => !contributedByQ.has(q.id)).length;
+        return (
+          <div className="tb-fold-sec" key={group.topicId} data-testid={`contrib-sec-${group.topicId}`}>
+            <Collapsible open={open} onOpenChange={() => fold.toggle(group.topicId)}>
+              <div className="tb-fold-sec-head">
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="tb-fold-trigger"
+                    aria-label={open ? `Свернуть секцию ${group.topicName}` : `Развернуть секцию ${group.topicName}`}
+                    data-testid={`contrib-sec-toggle-${group.topicId}`}
+                  >
+                    {open
+                      ? <ChevronDown className="tb-fold-chev" width={16} height={16} aria-hidden="true" />
+                      : <ChevronRight className="tb-fold-chev" width={16} height={16} aria-hidden="true" />}
+                    <span className="tb-fold-sec-name">{group.topicName}</span>
+                  </button>
+                </CollapsibleTrigger>
+                {scales.length > 0 && sectionUncovered > 0 && (
+                  <span
+                    className="ou-tag ou-tag--warning ou-tag--outline"
+                    data-testid={`contrib-sec-uncovered-${group.topicId}`}
+                  >
+                    {sectionUncovered} не привязано
+                  </span>
+                )}
+                <span className="ou-tag ou-tag--neutral ou-tag--outline">{pluralQuestions(group.items.length)}</span>
+              </div>
+              <CollapsibleContent>
+                <div className="tb-fold-sec__body">
+                  {group.items.map(({ q, index }) => (
+                    <QuestionContribCard
+                      key={q.id}
+                      index={index}
+                      question={q}
+                      scales={scales}
+                      contributed={contributedByQ.get(q.id) ?? new Set()}
+                      cellMap={cellMap}
+                      readOnly={readOnly}
+                      expanded={expandedId === q.id}
+                      onToggle={() => setExpandedId((cur) => (cur === q.id ? null : q.id))}
+                      onSetCell={setCell}
+                    />
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+        );
+      })}
     </>
   );
 }
@@ -1049,6 +1132,9 @@ function QuestionContribCard({
   onToggle: () => void;
   onSetCell: (questionId: string, unit: ContributionUnit, scaleKey: string, value: number | null) => void;
 }) {
+  // The pane is reached only when the test has at least one scale (the rail item
+  // is disabled otherwise), so «не привязан» here is always actionable: amber if
+  // the question contributes to no scale, green once it contributes to ≥1.
   const measured = contributed.size > 0;
   const dotClass = measured ? "tb-status-dot--ok" : "tb-status-dot--warn";
   const heading = `${index + 1}. ${q.prompt}`;
