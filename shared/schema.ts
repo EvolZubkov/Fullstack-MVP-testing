@@ -229,7 +229,10 @@ export const questions = pgTable("questions", {
   prompt: text("prompt").notNull(),
   dataJson: jsonb("data_json").notNull(),
   correctJson: jsonb("correct_json").notNull(),
-  points: integer("points").notNull().default(1),
+  // PRD-15 block D, T-40: `points` and `scoring_json` were dropped here (migration
+  // 028) — scoring is a property of the test, not the question. The price and the
+  // graded config now live on test_question_scoring (per-test override) + section/
+  // test defaults + the system default; see shared/scoring/effective-scoring.
   difficulty: integer("difficulty").notNull().default(50),
   mediaUrl: text("media_url"),
   mediaType: text("media_type", { enum: ["image", "audio", "video"] }),
@@ -241,8 +244,6 @@ export const questions = pgTable("questions", {
   contentHash: text("content_hash"),
   // PRD-2 §8.2: tags feed result-variable aggregate formulas; chip input in the question card.
   tags: jsonb("tags").$type<string[]>().notNull().default([]),
-  // PRD-10: graded answer scoring (correctness axis). Null = exact match (FR-02).
-  scoringJson: jsonb("scoring_json").$type<QuestionScoring>(),
   // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
   createdBy: varchar("created_by", { length: 36 }),
 });
@@ -517,10 +518,9 @@ export const insertFolderSchema = createInsertSchema(folders).omit({ id: true })
 export const insertTopicSchema = createInsertSchema(topics).omit({ id: true });
 export const insertQuestionSchema = createInsertSchema(questions)
   .omit({ id: true })
-  // drizzle-zod types jsonb loosely; validate the scoring config explicitly (FR-13)
-  // and normalize tags on save (PRD-11 §3a: trim/collapse, dedup, length cap).
+  // drizzle-zod types jsonb loosely; normalize tags on save (PRD-11 §3a:
+  // trim/collapse, dedup, length cap). Scoring left the question in T-40.
   .extend({
-    scoringJson: questionScoringSchema.nullish(),
     tags: z.array(z.string()).transform(normalizeTags).optional(),
   });
 export const insertTestSchema = createInsertSchema(tests)

@@ -18,11 +18,12 @@
  * Difficulty follows its own two-step chain (PRD-15 FR-34): per-test override
  * -> the question's base difficulty.
  *
- * Transitional note: until `questions.points` / `questions.scoring_json` are
- * dropped (implementation plan T-40), callers pass the question's own values
- * via `legacy` so pre-backfill behaviour stays bit-identical. After the drop
- * the `legacy` input simply disappears at the call sites; this module needs no
- * change.
+ * Note: `questions.points` / `questions.scoring_json` were dropped in T-40, so
+ * no caller feeds the optional `legacy` link any more (the chain resolves from
+ * the override and the section/test defaults). The `legacy` input is retained
+ * as a pure, side-effect-free seam — historically it carried the question's own
+ * values for bit-identical pre-backfill behaviour, and keeping it costs nothing
+ * while documenting the migration.
  *
  * The module is dependency-free (besides schema types) so the web runtime, the
  * server-side recompute, the SCORM builder and the publication snapshots
