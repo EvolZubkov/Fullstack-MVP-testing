@@ -17,7 +17,12 @@
  * The referenced SQL is expected to be idempotent (`IF NOT EXISTS`, column-
  * existence guards, "insert only when missing"), so re-running a deploy is safe.
  *
- * Usage: node script/run-sql.cjs <path-to-sql-file>
+ * Accepts ONE OR MORE files, applied in the given order in a single connection
+ * (each file is its own transaction via its own BEGIN/COMMIT). The deploy passes
+ * the ordered chain of data/destructive migrations that `drizzle-kit push`
+ * cannot perform (backfills before drops) so push runs only an additive no-op.
+ *
+ * Usage: node script/run-sql.cjs <path-to-sql-file> [<more-files> ...]
  */
 
 "use strict";
@@ -27,9 +32,9 @@ const fs = require("node:fs");
 const { Client } = require("pg");
 
 async function main() {
-  const file = process.argv[2];
-  if (!file) {
-    console.error("[run-sql] usage: node script/run-sql.cjs <path-to-sql-file>");
+  const files = process.argv.slice(2);
+  if (files.length === 0) {
+    console.error("[run-sql] usage: node script/run-sql.cjs <file.sql> [<file.sql> ...]");
     process.exit(1);
   }
 
@@ -39,14 +44,18 @@ async function main() {
     process.exit(1);
   }
 
-  const sql = fs.readFileSync(file, "utf8");
   const client = new Client({ connectionString });
   await client.connect();
   try {
-    // Simple-query protocol: runs the whole file (multiple statements, DO blocks,
-    // its own BEGIN/COMMIT) in one round-trip.
-    await client.query(sql);
-    console.log(`[run-sql] applied: ${file}`);
+    for (const file of files) {
+      const sql = fs.readFileSync(file, "utf8");
+      // Simple-query protocol: runs the whole file (multiple statements, DO
+      // blocks, its own BEGIN/COMMIT) in one round-trip. Files run in order;
+      // a failure aborts the run (non-zero exit) so a later DROP never executes
+      // after an earlier backfill failed.
+      await client.query(sql);
+      console.log(`[run-sql] applied: ${file}`);
+    }
   } finally {
     await client.end();
   }
