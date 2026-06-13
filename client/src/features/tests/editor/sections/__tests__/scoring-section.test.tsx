@@ -12,11 +12,13 @@
  *   - The reset icon removes the override from the draft (no network); the edit
  *     icon opens the modal and «Применить» writes the override into the draft,
  *     re-pinning the question's current contentHash.
+ *   - Folding: a section header toggle hides its questions; «Свернуть все» /
+ *     «Развернуть все» fold and unfold every section.
  *   - Create mode (no testId) shows the hint banner instead of tables.
  */
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ScoringSection } from "../scoring-section";
 import type { TestEditorModel, EditorSection } from "../../test-editor.types";
@@ -253,6 +255,33 @@ describe("<ScoringSection />", () => {
       "/api/tests/test-1/question-scoring/q1",
       expect.objectContaining({ method: "PUT" }),
     );
+  });
+
+  it("folds a section: the header toggle hides its question table", async () => {
+    const model = baseModel({
+      sections: [buildSection()],
+      scoring: { defaultQuestionPoints: null, questionOverrides: dbOverrides },
+    });
+    renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={() => {}} />);
+    expect(await screen.findByTestId("scoring-row-q1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("scoring-sec-toggle-top-1"));
+    await waitFor(() => expect(screen.queryByTestId("scoring-row-q1")).toBeNull());
+  });
+
+  it("«Свернуть все» / «Развернуть все» fold and unfold every section", async () => {
+    const model = baseModel({
+      sections: [buildSection()],
+      scoring: { defaultQuestionPoints: null, questionOverrides: dbOverrides },
+    });
+    renderWithClient(<ScoringSection model={model} testId="test-1" updateModel={() => {}} />);
+    expect(await screen.findByTestId("scoring-row-q1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("scoring-collapse-all"));
+    await waitFor(() => expect(screen.queryByTestId("scoring-row-q1")).toBeNull());
+
+    fireEvent.click(screen.getByTestId("scoring-expand-all"));
+    expect(await screen.findByTestId("scoring-row-q1")).toBeInTheDocument();
   });
 
   it("create mode: hint banner instead of question tables", () => {

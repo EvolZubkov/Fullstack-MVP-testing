@@ -1802,9 +1802,44 @@
   background: var(--ou-bg-surface);
 }
 .tb-qscoring__sec-head { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; margin-bottom: var(--ou-space-2); }
-.tb-qscoring__sec-name { font: var(--ou-text-body-m); font-weight: 700; flex: 1; }
+.tb-qscoring__sec-name { font: var(--ou-text-body-m); font-weight: 700; min-width: 0; }
 .tb-qscoring__sec-default { display: inline-flex; align-items: center; gap: var(--ou-space-2); }
 .tb-qscoring__sec-default-lbl { font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* ─── Сворачиваемые секции списков (Оценка / Вклады вопросов) ──────────────────
+   Общий примитив: триггер-заголовок (шеврон + название), глобальные
+   «Свернуть все / Развернуть все», и обёртка-секция для «Вкладов». */
+.tb-fold-actions { margin-left: auto; display: inline-flex; gap: var(--ou-space-2); }
+.tb-fold-trigger {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tb-fold-chev { flex: none; color: var(--ou-fg-muted); }
+.tb-fold-toolbar { display: flex; align-items: center; }
+.tb-fold-sec {
+  border: var(--wf-border-w) solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-m);
+  padding: var(--ou-space-4);
+  background: var(--ou-bg-surface);
+}
+.tb-fold-sec-head { display: flex; align-items: center; gap: var(--ou-space-3); flex-wrap: wrap; }
+.tb-fold-sec-name { font: var(--ou-text-body-m); font-weight: 700; min-width: 0; }
+.tb-fold-sec__body { display: flex; flex-direction: column; gap: var(--ou-space-3); margin-top: var(--ou-space-3); }
+
+/* Disabled state for a Drawer rail item (DS has none): e.g. «Вклады вопросов»
+   stays inert until a scale exists. */
+.ou-drawer__rail-item:disabled { opacity: 0.5; cursor: not-allowed; }
+.ou-drawer__rail-item:disabled:hover { background: transparent; }
+
 /* Прозрачная рамка у всех строк сохраняет выравнивание; у переопределённых
    она акцентная (быстрый скан «в этой строке что-то настроено»). */
 .tb-qscoring .tb-table tbody td:first-child { border-left: var(--ou-space-1) solid transparent; }

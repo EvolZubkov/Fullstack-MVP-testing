@@ -25,9 +25,10 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Pencil, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronRight, Pencil, RotateCcw } from "lucide-react";
 import { Banner, IconButton, Input, Tag } from "@universityrt/ui-kit";
 
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
 import type { Question } from "@shared/schema";
 import type { TestEditorModel } from "../test-editor.types";
@@ -36,6 +37,7 @@ import {
   type QuestionScoringOverride,
   type QuestionScoringPatch,
 } from "../scoring-api";
+import { FoldAllButtons, useSectionFold } from "./section-fold";
 import { QuestionScoringModal } from "./question-scoring-modal";
 
 export type ScoringSectionProps = {
@@ -145,6 +147,10 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
     }));
   };
 
+  // ── Per-section folding (ephemeral view state, all expanded on open) ──────────
+  const sectionIds = useMemo(() => model.sections.map((s) => s.topicId), [model.sections]);
+  const fold = useSectionFold(sectionIds);
+
   return (
     <div className="tb-qscoring" data-testid="scoring-section">
       <div className="tb-qscoring__default-row">
@@ -163,6 +169,9 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
         <span className="tb-qscoring__default-hint">
           Пусто — системное умолчание: 1 балл за полностью верный ответ.
         </span>
+        {testId && model.sections.length > 0 && (
+          <FoldAllButtons fold={fold} testIdPrefix="scoring" />
+        )}
       </div>
 
       {!testId && (
@@ -181,27 +190,43 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
           ? `вся тема (${poolSize})`
           : `выдача ${section.drawCount} из ${poolSize}`;
 
+        const open = fold.isOpen(section.topicId);
+
         return (
           <div className="tb-qscoring__sec" key={section.topicId} data-testid={`scoring-sec-${section.topicId}`}>
-            <div className="tb-qscoring__sec-head">
-              <span className="tb-qscoring__sec-name">{section.topicName}</span>
-              <Tag tone="neutral" variant="outline">{drawLabel}</Tag>
-              <span className="tb-qscoring__sec-default">
-                <span className="tb-qscoring__sec-default-lbl">Балл по умолчанию в секции</span>
-                <Input
-                  size="s"
-                  className="tb-qscoring__num"
-                  inputMode="numeric"
-                  value={section.defaultPoints?.toString() ?? ""}
-                  placeholder={(model.scoring.defaultQuestionPoints ?? 1).toString()}
-                  disabled={readOnly}
-                  aria-label={`Балл по умолчанию секции ${section.topicName}`}
-                  onChange={(e) => setSectionDefault(section.topicId, e.target.value)}
-                  data-testid={`scoring-sec-default-${section.topicId}`}
-                />
-              </span>
-            </div>
+            <Collapsible open={open} onOpenChange={() => fold.toggle(section.topicId)}>
+              <div className="tb-qscoring__sec-head">
+                <CollapsibleTrigger asChild>
+                  <button
+                    type="button"
+                    className="tb-fold-trigger"
+                    aria-label={open ? `Свернуть секцию ${section.topicName}` : `Развернуть секцию ${section.topicName}`}
+                    data-testid={`scoring-sec-toggle-${section.topicId}`}
+                  >
+                    {open
+                      ? <ChevronDown className="tb-fold-chev" width={16} height={16} aria-hidden="true" />
+                      : <ChevronRight className="tb-fold-chev" width={16} height={16} aria-hidden="true" />}
+                    <span className="tb-qscoring__sec-name">{section.topicName}</span>
+                  </button>
+                </CollapsibleTrigger>
+                <Tag tone="neutral" variant="outline">{drawLabel}</Tag>
+                <span className="tb-qscoring__sec-default">
+                  <span className="tb-qscoring__sec-default-lbl">Балл по умолчанию в секции</span>
+                  <Input
+                    size="s"
+                    className="tb-qscoring__num"
+                    inputMode="numeric"
+                    value={section.defaultPoints?.toString() ?? ""}
+                    placeholder={(model.scoring.defaultQuestionPoints ?? 1).toString()}
+                    disabled={readOnly}
+                    aria-label={`Балл по умолчанию секции ${section.topicName}`}
+                    onChange={(e) => setSectionDefault(section.topicId, e.target.value)}
+                    data-testid={`scoring-sec-default-${section.topicId}`}
+                  />
+                </span>
+              </div>
 
+              <CollapsibleContent>
             {testId && questions.length > 0 && (
               <table className="tb-table">
                 <thead>
@@ -311,6 +336,8 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                 </tbody>
               </table>
             )}
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         );
       })}
