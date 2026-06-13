@@ -53,6 +53,7 @@ import type {
   TestStatus,
   TopicPassRule,
 } from "./test-editor.types";
+import { makeQuestionOverride, type QuestionScoringOverride } from "./scoring-api";
 
 // ─── API response shape ───────────────────────────────────────────────────────
 
@@ -86,6 +87,8 @@ export type ApiTestResponse = {
   retakePolicyJson?: unknown;
   /** PRD-15 block D (FR-31): test-wide default price; null = system (1). */
   defaultQuestionPoints?: number | null;
+  /** PRD-15 block D (FR-30): per-(test, question) scoring overrides. */
+  questionScoring?: unknown;
 };
 
 // ─── Type guards ──────────────────────────────────────────────────────────────
@@ -540,6 +543,38 @@ function buildResultVariablesFromApi(src: ApiTestResponse): ResultVariableModel[
   return out.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+/**
+ * PRD-15 block D (FR-30): read the test's per-question scoring overrides from the
+ * embedded `questionScoring` array of the test detail response into the draft.
+ * Built via {@link makeQuestionOverride} so the objects compare stably against
+ * the snapshot in `JSON.stringify`-based dirty detection.
+ */
+function buildQuestionOverridesFromApi(src: ApiTestResponse): QuestionScoringOverride[] {
+  const raw = src.questionScoring;
+  if (!Array.isArray(raw)) return [];
+  const out: QuestionScoringOverride[] = [];
+  for (const item of raw) {
+    if (!isPlainObject(item)) continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.questionId !== "string") continue;
+    out.push(
+      makeQuestionOverride({
+        id: typeof r.id === "string" ? r.id : "",
+        testId: typeof r.testId === "string" ? r.testId : "",
+        questionId: r.questionId,
+        points: typeof r.points === "number" ? r.points : null,
+        scoringJson:
+          isPlainObject(r.scoringJson) || r.scoringJson === null
+            ? (r.scoringJson as QuestionScoringOverride["scoringJson"])
+            : null,
+        difficulty: typeof r.difficulty === "number" ? r.difficulty : null,
+        pinnedContentHash: typeof r.pinnedContentHash === "string" ? r.pinnedContentHash : null,
+      }),
+    );
+  }
+  return out;
+}
+
 const SCALE_TYPES = new Set(["number", "boolean", "category", "level"]);
 const SCALE_AGGREGATIONS = new Set(["sum", "avg", "weighted_avg", "max", "min"]);
 const SCALE_NORMALIZATIONS = new Set(["none", "percent", "custom"]);
@@ -726,7 +761,7 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
     scales: [],
     measurements: [],
     retakePolicy: defaultRetakePolicy(),
-    scoring: { defaultQuestionPoints: null },
+    scoring: { defaultQuestionPoints: null, questionOverrides: [] },
   };
 }
 
@@ -814,6 +849,7 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
     scoring: {
       defaultQuestionPoints:
         typeof src.defaultQuestionPoints === "number" ? src.defaultQuestionPoints : null,
+      questionOverrides: buildQuestionOverridesFromApi(src),
     },
   };
 }

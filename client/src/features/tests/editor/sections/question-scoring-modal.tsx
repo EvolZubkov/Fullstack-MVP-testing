@@ -6,12 +6,12 @@
  * and сложность — for THIS test only; the question's content stays in the bank.
  *
  * Semantics: an empty «Балл»/«Сложность» field inherits (placeholder shows the
- * inherited value); the constructor initialises from the override config or,
- * transitionally, the question's own `scoringJson`. «Применить» upserts the
- * override (the server pins the question's current contentHash — also the
- * «Подтвердить актуальность» action for a stale override); «Сбросить
- * настройку» deletes it. An all-empty apply equals a reset (the server clears
- * the row).
+ * inherited value); the constructor initialises from the override config.
+ * «Применить» writes the override into the editor DRAFT (`onApply`); «Сбросить
+ * настройку» drops it (`onReset`). An all-empty apply equals a reset. Nothing
+ * touches the server here — the editor persists the draft on the single
+ * «Сохранить», where the question's current contentHash is pinned (also the
+ * «Подтвердить актуальность» action for a stale override).
  *
  * Source of truth for the layout:
  * docs/wireframes/approved/prd15-test-scoring.html (s-override / s-stale).
@@ -22,11 +22,7 @@ import { RotateCcw } from "lucide-react";
 import { Banner, Button, Input, ModalDialog } from "@universityrt/ui-kit";
 
 import type { Question, QuestionScoring } from "@shared/schema";
-import {
-  useResetQuestionScoring,
-  useSaveQuestionScoring,
-  type QuestionScoringOverride,
-} from "../scoring-api";
+import type { QuestionScoringOverride, QuestionScoringPatch } from "../scoring-api";
 import {
   ScoringBuilder,
   buildScoringJson,
@@ -36,7 +32,6 @@ import {
 } from "./scoring-builder";
 
 export type QuestionScoringModalProps = {
-  testId: string;
   question: Question;
   /** Topic name shown in the modal subtitle. */
   sectionName: string;
@@ -44,6 +39,10 @@ export type QuestionScoringModalProps = {
   sectionDefaultPoints: number | null;
   testDefaultPoints: number | null;
   readOnly?: boolean;
+  /** «Применить»: write the override into the draft (persisted on «Сохранить»). */
+  onApply: (patch: QuestionScoringPatch) => void;
+  /** «Сбросить настройку»: drop the override from the draft. */
+  onReset: () => void;
   onClose: () => void;
 };
 
@@ -66,12 +65,9 @@ function parseOverrideNumber(raw: string, max?: number): number | null | undefin
 
 export function QuestionScoringModal(props: QuestionScoringModalProps) {
   const {
-    testId, question, sectionName, override,
-    sectionDefaultPoints, testDefaultPoints, readOnly, onClose,
+    question, sectionName, override,
+    sectionDefaultPoints, testDefaultPoints, readOnly, onApply, onReset, onClose,
   } = props;
-
-  const save = useSaveQuestionScoring(testId);
-  const reset = useResetQuestionScoring(testId);
 
   const type = question.type as BuilderQuestionType;
   const options = questionOptions(question);
@@ -93,7 +89,7 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
 
   const inheritedPoints = sectionDefaultPoints ?? testDefaultPoints ?? 1;
 
-  const apply = async () => {
+  const apply = () => {
     const parsedPoints = parseOverrideNumber(points);
     const parsedDifficulty = parseOverrideNumber(difficulty, 100);
     if (parsedPoints === undefined) {
@@ -108,28 +104,10 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
     // own graded config to shadow, so exact mode with no built config = null
     // (no scoring override; the chain falls through to the system exact default).
     const built = buildScoringJson(type, options, mode, weights, tiers) as QuestionScoring | null;
-    const scoringJson: QuestionScoring | null = built ?? null;
-    try {
-      await save.mutateAsync({
-        questionId: question.id,
-        patch: { points: parsedPoints, scoringJson, difficulty: parsedDifficulty },
-      });
-      onClose();
-    } catch (e) {
-      setError((e as Error).message || "Не удалось сохранить оценку вопроса.");
-    }
+    // Deferred: hand the patch to the editor draft. The section pins the
+    // question's current contentHash and persists on «Сохранить».
+    onApply({ points: parsedPoints, scoringJson: built ?? null, difficulty: parsedDifficulty });
   };
-
-  const resetToDefaults = async () => {
-    try {
-      if (override) await reset.mutateAsync({ questionId: question.id });
-      onClose();
-    } catch (e) {
-      setError((e as Error).message || "Не удалось сбросить настройку.");
-    }
-  };
-
-  const busy = save.isPending || reset.isPending;
 
   return (
     <ModalDialog
@@ -145,20 +123,19 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
             className="tb-qscoring__foot-left"
             variant="ghost"
             leadingIcon={<RotateCcw size={14} aria-hidden="true" />}
-            onClick={resetToDefaults}
-            disabled={readOnly || busy || !override}
+            onClick={onReset}
+            disabled={readOnly || !override}
             data-testid="qscoring-reset"
           >
             Сбросить настройку
           </Button>
-          <Button variant="ghost" onClick={onClose} disabled={busy} data-testid="qscoring-cancel">
+          <Button variant="ghost" onClick={onClose} data-testid="qscoring-cancel">
             Отмена
           </Button>
           <Button
             variant="primary"
             onClick={apply}
-            disabled={readOnly || busy}
-            loading={save.isPending}
+            disabled={readOnly}
             data-testid="qscoring-apply"
           >
             Применить

@@ -41,6 +41,7 @@ import {
 import { validateTestEditor } from "./test-editor.validation";
 import { saveResultVariables } from "./result-variables-api";
 import { saveScales, saveMeasurements } from "./scales-api";
+import { saveQuestionOverrides } from "./scoring-api";
 import type {
   ScaleModel,
   TestEditorModel,
@@ -507,6 +508,7 @@ export function useTestEditor(
       const snapVars = snapshot?.resultVariables ?? [];
       const snapScales = snapshot?.scales ?? [];
       const snapMeas = snapshot?.measurements ?? [];
+      const snapOverrides = snapshot?.scoring.questionOverrides ?? [];
       // PRD-2/PRD-5: result variables, scales and measurements are separate CRUD
       // resources. Persist the test first, then reconcile each. Measurements
       // reference scales by stable key, so they run AFTER scales and resolve
@@ -517,18 +519,27 @@ export function useTestEditor(
         const varsChanged = !shallowEqualJson(draft.resultVariables, snapVars);
         const scalesChanged = !shallowEqualJson(draft.scales, snapScales);
         const measChanged = !shallowEqualJson(draft.measurements, snapMeas);
+        const overridesChanged = !shallowEqualJson(draft.scoring.questionOverrides, snapOverrides);
         if (varsChanged) await saveResultVariables(editTestId, draft.resultVariables, snapVars);
         if (scalesChanged) await saveScales(editTestId, draft.scales, snapScales);
         if (measChanged) {
           const keyToId = await resolveScaleKeyToId(editTestId, draft.scales, scalesChanged);
           await saveMeasurements(editTestId, draft.measurements, snapMeas, keyToId);
         }
-        if (varsChanged || scalesChanged || measChanged) return fetchTest(editTestId);
+        // PRD-15 block D: per-question scoring overrides reconcile like the other
+        // draft-managed CRUD resources. Each PUT/DELETE bumps the test version.
+        if (overridesChanged) {
+          await saveQuestionOverrides(editTestId, draft.scoring.questionOverrides, snapOverrides);
+        }
+        if (varsChanged || scalesChanged || measChanged || overridesChanged) {
+          return fetchTest(editTestId);
+        }
         return {
           ...(saved as Record<string, unknown>),
           resultVariables: draft.resultVariables,
           scales: draft.scales,
           measurements: draft.measurements,
+          questionScoring: draft.scoring.questionOverrides,
         };
       }
       const created = await postTest(fullPayload);
@@ -549,6 +560,7 @@ export function useTestEditor(
         resultVariables: draft.resultVariables,
         scales: draft.scales,
         measurements: draft.measurements,
+        questionScoring: draft.scoring.questionOverrides,
       };
     },
     onSuccess: (data) => {

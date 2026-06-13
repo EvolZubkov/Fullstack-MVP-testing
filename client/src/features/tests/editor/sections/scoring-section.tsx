@@ -1,22 +1,23 @@
 /**
  * @module features/tests/editor/sections/scoring-section
  * @description «Оценка» editor tab (PRD-15 block D, FR-30/FR-31/FR-34/FR-35):
- * the test-side scoring. Two kinds of state live here:
+ * the test-side scoring. All state here is part of the editor DRAFT and persists
+ * with the single drawer «Сохранить» (FR-31); «Закрыть» discards:
  *
- *   - DEFAULTS (test-wide and per-section price) are part of the editor draft
- *     and persist with the single drawer «Сохранить» (FR-31). Transitional
- *     note: until T-40 drops `questions.points`, a question's own value takes
- *     precedence in the effective chain, so the defaults apply to questions
- *     whose price equals the system default.
- *   - PER-QUESTION OVERRIDES persist immediately through the dedicated
- *     endpoints (scoring-api): applying the modal writes the row, the reset
- *     icon deletes it. Every write bumps the test version (FR-12).
+ *   - DEFAULTS (test-wide and per-section price) live in `model.scoring`/section.
+ *   - PER-QUESTION OVERRIDES live in `model.scoring.questionOverrides`. The modal
+ *     «Применить» upserts a row (pinning the question's current contentHash) and
+ *     the row «Сбросить» drops it — both mutate the draft via `updateModel`,
+ *     nothing hits the server until save. On save the editor reconciles them
+ *     against the snapshot (scoring-api `saveQuestionOverrides`); each persisted
+ *     PUT/DELETE bumps the test version (FR-12).
  *
  * The questions table shows the EFFECTIVE values (shared resolver). The
- * «настроено в тесте» mark is permanent and distinct from the unsaved-changes
- * dot: an accent bar on the row + a soft accent fill on each overridden cell
- * (tooltip «Настроено в тесте»). A stale override (the question's variants
- * changed after it was authored, FR-30) carries the «Настройка устарела» tag.
+ * «настроено в тесте» mark — an accent bar on the row + a soft accent fill on
+ * each overridden cell (tooltip «Настроено в тесте») — flags a configured
+ * override; while unsaved it also contributes to the tab's unsaved-changes dot.
+ * A stale override (the question's variants changed after it was authored, FR-30)
+ * carries the «Настройка устарела» tag.
  *
  * Source of truth for the layout:
  * docs/wireframes/approved/prd15-test-scoring.html (s-tab).
@@ -31,9 +32,9 @@ import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
 import type { Question } from "@shared/schema";
 import type { TestEditorModel } from "../test-editor.types";
 import {
-  useQuestionScoring,
-  useResetQuestionScoring,
+  makeQuestionOverride,
   type QuestionScoringOverride,
+  type QuestionScoringPatch,
 } from "../scoring-api";
 import { QuestionScoringModal } from "./question-scoring-modal";
 
@@ -65,9 +66,9 @@ function parseDefaultPoints(raw: string): number | null | undefined {
 
 export function ScoringSection({ model, testId, updateModel, readOnly }: ScoringSectionProps) {
   const { data: allQuestions = [] } = useQuery<QuestionRow[]>({ queryKey: ["/api/questions"] });
-  const overridesQuery = useQuestionScoring(testId);
-  const overrides = overridesQuery.data ?? [];
-  const resetOverride = useResetQuestionScoring(testId);
+  // PRD-15 block D: overrides are draft-managed — read from the model, mutate via
+  // updateModel; nothing is persisted until the drawer «Сохранить».
+  const overrides = model.scoring.questionOverrides;
 
   const [modalState, setModalState] = useState<{
     question: QuestionRow;
@@ -104,6 +105,43 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
       sections: m.sections.map((s) =>
         s.topicId === topicId ? { ...s, defaultPoints: parsed } : s,
       ),
+    }));
+  };
+
+  /**
+   * Apply «Применить» to the draft. An all-inherit patch (no points, no graded
+   * config, no difficulty) drops the override entirely — parity with the server's
+   * clear path and with «Сбросить». Otherwise the row is upserted with the
+   * question's CURRENT contentHash pinned (FR-30), which also clears a stale tag.
+   */
+  const upsertOverride = (question: QuestionRow, patch: QuestionScoringPatch) => {
+    updateModel((m) => {
+      const others = m.scoring.questionOverrides.filter((o) => o.questionId !== question.id);
+      if (patch.points == null && patch.scoringJson == null && patch.difficulty == null) {
+        return { ...m, scoring: { ...m.scoring, questionOverrides: others } };
+      }
+      const prior = m.scoring.questionOverrides.find((o) => o.questionId === question.id);
+      const next = makeQuestionOverride({
+        id: prior?.id ?? "",
+        testId: testId ?? "",
+        questionId: question.id,
+        points: patch.points,
+        scoringJson: patch.scoringJson,
+        difficulty: patch.difficulty,
+        pinnedContentHash: question.contentHash ?? null,
+      });
+      return { ...m, scoring: { ...m.scoring, questionOverrides: [...others, next] } };
+    });
+  };
+
+  /** «Сбросить» — drop the override from the draft (no network until «Сохранить»). */
+  const removeOverride = (questionId: string) => {
+    updateModel((m) => ({
+      ...m,
+      scoring: {
+        ...m.scoring,
+        questionOverrides: m.scoring.questionOverrides.filter((o) => o.questionId !== questionId),
+      },
     }));
   };
 
@@ -260,8 +298,8 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                                 variant="ghost"
                                 size="s"
                                 aria-label="Сбросить настройку оценки"
-                                disabled={readOnly || resetOverride.isPending}
-                                onClick={() => resetOverride.mutate({ questionId: q.id })}
+                                disabled={readOnly}
+                                onClick={() => removeOverride(q.id)}
                                 data-testid={`scoring-reset-${q.id}`}
                               />
                             )}
@@ -279,13 +317,20 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
 
       {modalState && testId && (
         <QuestionScoringModal
-          testId={testId}
           question={modalState.question}
           sectionName={modalState.sectionName}
           override={overrideByQuestion.get(modalState.question.id) ?? null}
           sectionDefaultPoints={modalState.sectionDefaultPoints}
           testDefaultPoints={model.scoring.defaultQuestionPoints}
           readOnly={readOnly}
+          onApply={(patch) => {
+            upsertOverride(modalState.question, patch);
+            setModalState(null);
+          }}
+          onReset={() => {
+            removeOverride(modalState.question.id);
+            setModalState(null);
+          }}
           onClose={() => setModalState(null)}
         />
       )}

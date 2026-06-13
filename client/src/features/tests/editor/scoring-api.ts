@@ -1,14 +1,18 @@
 /**
  * @module features/tests/editor/scoring-api
  * @description Client helpers of the «Оценка» tab (PRD-15 block D, FR-30/FR-35):
- * the per-(test, question) scoring overrides. Unlike the draft-managed defaults
- * (saved with the single drawer «Сохранить»), overrides persist IMMEDIATELY
- * through dedicated endpoints — applying the modal writes the row, «Сбросить»
- * deletes it. Every write bumps the test version server-side, so a published
- * test flips to «Опубликован, есть изменения» (FR-12).
+ * the per-(test, question) scoring overrides. Like the test/section defaults,
+ * overrides are now part of the editor DRAFT — the modal «Применить» and the row
+ * «Сбросить» mutate `model.scoring.questionOverrides`, and nothing is persisted
+ * until the single drawer «Сохранить». «Закрыть» discards. This module provides
+ * the save orchestrator (`saveQuestionOverrides`) that diffs the edited overrides
+ * against the last saved snapshot and applies the minimal set of PUT/DELETE calls
+ * (mirroring `saveResultVariables` / `saveScales`), plus a normalizer used by both
+ * the load mapper and the editor so override objects compare stably. Each write
+ * bumps the test version server-side, so a published test flips to «Опубликован,
+ * есть изменения» (FR-12) on save.
  */
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QuestionScoring } from "@shared/schema";
 
 /** One override row as returned by GET /api/tests/:id/question-scoring. */
@@ -29,6 +33,43 @@ export type QuestionScoringPatch = {
   difficulty: number | null;
 };
 
+/**
+ * Build a draft override with a stable key order, so `JSON.stringify`-based
+ * dirty detection (`shallowEqualJson` over `model.scoring`) does not report a
+ * spurious change. Used by both the load mapper and the editor's apply path.
+ * `id` is irrelevant to persistence (the endpoint upserts by questionId) — it is
+ * carried only so an unchanged re-edit of a loaded override stays clean.
+ */
+export function makeQuestionOverride(input: {
+  id?: string;
+  testId: string;
+  questionId: string;
+  points: number | null;
+  scoringJson: QuestionScoring | null;
+  difficulty: number | null;
+  pinnedContentHash: string | null;
+}): QuestionScoringOverride {
+  return {
+    id: input.id ?? "",
+    testId: input.testId,
+    questionId: input.questionId,
+    points: input.points,
+    scoringJson: input.scoringJson,
+    difficulty: input.difficulty,
+    pinnedContentHash: input.pinnedContentHash,
+  };
+}
+
+/** True when two overrides match for every field the server persists/pins. */
+function sameOverride(a: QuestionScoringOverride, b: QuestionScoringOverride): boolean {
+  return (
+    a.points === b.points &&
+    a.difficulty === b.difficulty &&
+    a.pinnedContentHash === b.pinnedContentHash &&
+    JSON.stringify(a.scoringJson) === JSON.stringify(b.scoringJson)
+  );
+}
+
 async function mutate(method: string, url: string, body?: unknown): Promise<unknown> {
   const res = await fetch(url, {
     method,
@@ -48,45 +89,38 @@ async function mutate(method: string, url: string, body?: unknown): Promise<unkn
   return res.status === 204 ? undefined : res.json();
 }
 
-/** The test's override rows; disabled until the test exists (create mode). */
-export function useQuestionScoring(testId: string | undefined) {
-  return useQuery<QuestionScoringOverride[]>({
-    queryKey: [`/api/tests/${testId}/question-scoring`],
-    enabled: !!testId,
-  });
-}
-
-/** Invalidate the override rows and the test caches affected by the version bump. */
-function useInvalidateScoring(testId: string | undefined) {
-  const queryClient = useQueryClient();
-  return async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: [`/api/tests/${testId}/question-scoring`] }),
-      queryClient.invalidateQueries({ queryKey: ["/api/tests"] }),
-    ]);
-  };
-}
-
 /**
- * Upsert one question's override. The server pins the question's CURRENT
- * contentHash (FR-30), so re-sending unchanged values is exactly the
- * «Подтвердить актуальность» action for a stale override.
+ * Persist the edited override list against its last saved snapshot. Deletes run
+ * first (questions overridden in the snapshot but reset in the draft), then new
+ * and changed overrides are upserted. The PUT endpoint pins the question's
+ * CURRENT contentHash (FR-30), so a stale override whose `pinnedContentHash` was
+ * refreshed in the draft on «Применить» re-pins here — that is the
+ * «Подтвердить актуальность» action. `pinnedContentHash` is part of
+ * {@link sameOverride}, so such a re-pin is detected as a change.
  */
-export function useSaveQuestionScoring(testId: string | undefined) {
-  const invalidate = useInvalidateScoring(testId);
-  return useMutation({
-    mutationFn: ({ questionId, patch }: { questionId: string; patch: QuestionScoringPatch }) =>
-      mutate("PUT", `/api/tests/${testId}/question-scoring/${questionId}`, patch),
-    onSuccess: invalidate,
-  });
-}
+export async function saveQuestionOverrides(
+  testId: string,
+  draft: QuestionScoringOverride[],
+  snapshot: QuestionScoringOverride[],
+): Promise<void> {
+  const base = `/api/tests/${testId}/question-scoring`;
+  const draftByQuestion = new Set(draft.map((o) => o.questionId));
 
-/** Reset one question to the default chain («Сбросить настройку»). */
-export function useResetQuestionScoring(testId: string | undefined) {
-  const invalidate = useInvalidateScoring(testId);
-  return useMutation({
-    mutationFn: ({ questionId }: { questionId: string }) =>
-      mutate("DELETE", `/api/tests/${testId}/question-scoring/${questionId}`),
-    onSuccess: invalidate,
-  });
+  for (const s of snapshot) {
+    if (!draftByQuestion.has(s.questionId)) {
+      await mutate("DELETE", `${base}/${s.questionId}`);
+    }
+  }
+
+  const snapByQuestion = new Map(snapshot.map((s) => [s.questionId, s] as const));
+  for (const o of draft) {
+    const prev = snapByQuestion.get(o.questionId);
+    if (!prev || !sameOverride(prev, o)) {
+      await mutate("PUT", `${base}/${o.questionId}`, {
+        points: o.points,
+        scoringJson: o.scoringJson,
+        difficulty: o.difficulty,
+      });
+    }
+  }
 }

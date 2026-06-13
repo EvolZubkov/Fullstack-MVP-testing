@@ -8,6 +8,7 @@
  */
 
 import type { DrawBlueprint, RetakePolicy } from "@shared/schema";
+import type { QuestionScoringOverride } from "./scoring-api";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 // All enums are frozen by docs/prd-7-decisions.md section 2.
@@ -362,13 +363,16 @@ export type TestEditorModel = {
   /** PRD-6 retake gate. `enabled: false` = legacy behaviour (no cooldown). */
   retakePolicy: RetakePolicy;
   /**
-   * PRD-15 block D (FR-31): test-wide scoring defaults edited in the «Оценка»
-   * tab. `defaultQuestionPoints = null` = system default (1 point). Per-question
-   * overrides are NOT part of the draft — they persist immediately through
-   * dedicated endpoints (see scoring-api.ts).
+   * PRD-15 block D (FR-31): test-side scoring edited in the «Оценка» tab.
+   * `defaultQuestionPoints = null` = system default (1 point). `questionOverrides`
+   * are the per-(test, question) overrides; they are part of the draft and persist
+   * with the single drawer «Сохранить» (reconciled against the snapshot in the
+   * editor's save mutation, see scoring-api `saveQuestionOverrides`). «Закрыть»
+   * discards them.
    */
   scoring: {
     defaultQuestionPoints: number | null;
+    questionOverrides: QuestionScoringOverride[];
   };
 };
 
