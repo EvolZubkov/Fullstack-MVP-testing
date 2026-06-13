@@ -247,7 +247,7 @@ function AttemptDetailModal({
                 <ScrollArea maxH="xl">
                     <Stack gap={6}>
                         {/* Summary */}
-                        <Grid minItem="sm" gap={4}>
+                        <Grid minItem="sm" gap={1}>
                             <Box pad={3} surface="muted" radius="l">
                                 <Stack gap={1} align="center">
                                     <Text variant="display-s" weight="bold">{data.overallPercent.toFixed(1)}%</Text>
@@ -413,8 +413,8 @@ export default function TestAnalyticsPage() {
     const { summary, topicStats, questionStats, levelStats, scoreDistribution, dailyTrends } = analytics;
 
     const overviewPanel = (
-        <Stack gap={6}>
-            <Grid minItem="lg" gap={6}>
+        <Stack gap={1}>
+            <Grid minItem="lg" gap={1}>
                 {/* Score Distribution */}
                 <Card>
                     <CardHeader title="Распределение результатов" />
@@ -736,7 +736,7 @@ export default function TestAnalyticsPage() {
             </Cluster>
 
             {/* Summary Cards */}
-            <Grid minItem="sm" gap={4}>
+            <Grid minItem="sm" gap={1}>
                 <Card>
                     <CardHeader title="Попытки" trail={<Users size={16} color="var(--ou-fg-muted)" />} />
                     <CardBody>

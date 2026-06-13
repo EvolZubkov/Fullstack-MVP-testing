@@ -440,7 +440,7 @@ function FiltersBar({
 
 function SummaryCards({ summary, source }: { summary: CombinedSummary; source: "all" | "web" | "lms" }) {
   return (
-    <Grid minItem="sm" gap={4}>
+    <Grid minItem="sm" gap={1}>
       <Card>
         <CardHeader title="Всего попыток" trail={<Users size={16} color="var(--ou-fg-muted)" />} />
         <CardBody>
@@ -697,7 +697,7 @@ function AttemptDetailsDialog({
     <ScrollArea maxH="xl">
       <Stack gap={6}>
         {/* Основная информация */}
-        <Grid minItem="sm" gap={4}>
+        <Grid minItem="sm" gap={1}>
           <Card>
             <CardBody>
               <Stack gap={1}>
@@ -944,7 +944,7 @@ function TopicStatsSection({ topicStats }: { topicStats: TopicStat[] }) {
     .slice(0, 5);
 
   return (
-    <Grid minItem="lg" gap={6}>
+    <Grid minItem="lg" gap={1}>
       {/* Статистика по темам */}
       <Card>
         <CardHeader title="Статистика по темам" />
@@ -1547,9 +1547,9 @@ export default function AnalyticsPage() {
             id: "overview",
             label: "Обзор",
             content: (
-              <Stack gap={6}>
+              <Stack gap={1}>
                 {summaryLoading ? (
-                  <Grid minItem="sm" gap={4}>
+                  <Grid minItem="sm" gap={1}>
                     {[1, 2, 3, 4].map(i => <Card key={i}><CardBody><ProgressBar indeterminate hideHeader /></CardBody></Card>)}
                   </Grid>
                 ) : summaryData ? (
@@ -1577,7 +1577,7 @@ export default function AnalyticsPage() {
                   </Stack>
                 )}
 
-                <Grid minItem="lg" gap={6}>
+                <Grid minItem="lg" gap={1}>
                   <Card>
                     <CardHeader
                       title="Тренды (30 дней)"
