@@ -19,6 +19,7 @@ import {
   IconButton,
   Input,
   ModalDialog,
+  ScrollArea,
   Stack,
   Table,
   Tabs,
@@ -158,16 +159,16 @@ function GroupUsersPanel({ assignmentId }: { assignmentId: string }) {
 
   if (isLoading) {
     return (
-      <Cluster gap={2} wrap={false} padX={7} padY={3} className="text-sm text-muted-foreground bg-muted/30">
+      <Cluster gap={2} wrap={false} padX={7} padY={3} surface="subtle" className="text-sm text-muted-foreground">
         <Loader2 size={16} className="animate-spin" /> Загрузка участников...
       </Cluster>
     );
   }
   if (groupUsers.length === 0) {
-    return <Box padX={7} padY={3} className="text-sm text-muted-foreground bg-muted/30">Группа пуста</Box>;
+    return <Box padX={7} padY={3} surface="subtle" className="text-sm text-muted-foreground">Группа пуста</Box>;
   }
   return (
-    <Stack gap={1} padX={7} padY={2} className="bg-muted/30">
+    <Stack gap={1} padX={7} padY={2} surface="subtle">
       {groupUsers.map((u) => (
         <GroupUserRow key={u.id} user={u} assignmentId={assignmentId} />
       ))}
@@ -586,7 +587,7 @@ export function AssignTestDialog({
           <p>Все пользователи уже назначены</p>
         </Box>
       ) : (
-        <div className="max-h-[300px] overflow-y-auto">
+        <ScrollArea maxH="lg">
           <Table
             selectable
             selected={selectedUserIds}
@@ -595,7 +596,7 @@ export function AssignTestDialog({
             rows={availableUsers}
             rowKey={(u) => u.id}
           />
-        </div>
+        </ScrollArea>
       )}
     </Stack>
   );
@@ -619,7 +620,7 @@ export function AssignTestDialog({
           <p>Все группы уже назначены</p>
         </Box>
       ) : (
-        <div className="max-h-[300px] overflow-y-auto">
+        <ScrollArea maxH="lg">
           <Table
             selectable
             selected={selectedGroupIds}
@@ -628,7 +629,7 @@ export function AssignTestDialog({
             rows={availableGroups}
             rowKey={(g) => g.id}
           />
-        </div>
+        </ScrollArea>
       )}
     </Stack>
   );
