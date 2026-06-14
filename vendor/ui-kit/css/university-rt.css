@@ -7504,3 +7504,11 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-taginput__opt { display: flex; align-items: center; gap: var(--ou-space-2); width: 100%; padding: var(--ou-space-1) var(--ou-space-2); border: 0; background: none; border-radius: var(--ou-radius-s); text-align: left; font: var(--ou-text-body-s); color: var(--ou-fg-default); cursor: pointer; }
 .ou-taginput__opt:hover { background: var(--ou-bg-hover); }
 .ou-taginput__divider { height: 1px; background: var(--ou-border-soft); margin: var(--ou-space-1) 0; }
+
+/* ─── Box maxW: auto-center + wider content presets ────────────────── */
+.ou-box--maxw-xs, .ou-box--maxw-sm, .ou-box--maxw-md, .ou-box--maxw-lg, .ou-box--maxw-xl,
+.ou-box--maxw-2xl, .ou-box--maxw-3xl, .ou-box--maxw-4xl, .ou-box--maxw-5xl { margin-inline: auto; }
+.ou-box--maxw-2xl { max-width: 42rem; }
+.ou-box--maxw-3xl { max-width: 48rem; }
+.ou-box--maxw-4xl { max-width: 56rem; }
+.ou-box--maxw-5xl { max-width: 64rem; }

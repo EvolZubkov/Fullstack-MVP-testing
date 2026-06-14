@@ -97,8 +97,8 @@ Grid.displayName = 'Grid';
 
 export type BoxSurface = 'muted' | 'subtle' | 'elevated';
 export type BoxRadius = 's' | 'm' | 'l';
-/** Named max-width caps for content/cards (no arbitrary values). */
-export type BoxMaxW = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+/** Named max-width caps for content/cards (auto-centered; no arbitrary values). */
+export type BoxMaxW = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
 
 export interface BoxProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Padding on all sides (`--ou-space-{pad}`). */
