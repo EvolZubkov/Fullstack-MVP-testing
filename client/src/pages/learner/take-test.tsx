@@ -1,14 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { ChevronLeft, ChevronRight, CheckCircle, XCircle, ArrowUp, ArrowDown, Trophy, Target, GripVertical, Clock, BookOpen, RotateCcw, Play } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Banner, Box, Button, Card, CardBody, CardHeader, Center, Checkbox, Cluster, ProgressBar, Radio, Stack, Tag, Text } from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
@@ -1252,24 +1245,21 @@ export default function TakeTestPage() {
   // restart — reloading re-enters the start flow with a fresh attempt.
   if (attemptGone) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6">
-        <Card className="max-w-md w-full">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <RotateCcw className="h-5 w-5 text-primary" />
-              Тест обновлён
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Эта попытка прервана: тест переопубликован. Попытка не засчитана — начните прохождение заново.
-            </p>
-            <Button className="w-full" onClick={() => window.location.reload()}>
-              Начать заново
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+      <Center minH="screen" pad={6}>
+        <Box full maxW="md">
+          <Card>
+            <CardHeader title={<Cluster gap={2}><RotateCcw size={20} color="var(--ou-accent-default)" />Тест обновлён</Cluster>} />
+            <CardBody>
+              <Stack gap={4}>
+                <Text variant="body-s" tone="muted">
+                  Эта попытка прервана: тест переопубликован. Попытка не засчитана — начните прохождение заново.
+                </Text>
+                <Button fullWidth onClick={() => window.location.reload()}>Начать заново</Button>
+              </Stack>
+            </CardBody>
+          </Card>
+        </Box>
+      </Center>
     );
   }
 
@@ -1298,8 +1288,7 @@ export default function TakeTestPage() {
           context={{ retake: { cooldownPeriodDays: blockData.cooldownPeriodDays, availableDateHuman } }}
         />
         <div className="flex items-center justify-center pb-10">
-          <Button variant="outline" onClick={() => navigate("/learner")}>
-            <ChevronLeft className="h-4 w-4 mr-2" />
+          <Button variant="secondary" leadingIcon={<ChevronLeft size={16} />} onClick={() => navigate("/learner")}>
             К списку тестов
           </Button>
         </div>
@@ -1359,221 +1348,58 @@ export default function TakeTestPage() {
     );
   }
 
-  // Start page
-  if (phase === "start" && testInfo && testMetadata) {
-    const attemptsExhausted = testMetadata.maxAttempts !== null &&
-      testMetadata.completedAttempts >= testMetadata.maxAttempts;
-    const attemptsLeft = testMetadata.maxAttempts !== null
-      ? testMetadata.maxAttempts - testMetadata.completedAttempts
-      : null;
-
-    return (
-      <div className="min-h-screen bg-background select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
-        <div className="max-w-2xl mx-auto px-6 py-12">
-          {/* Header Card */}
-          <Card className="text-center mb-6">
-            <CardHeader>
-              <CardTitle className="text-2xl">{testInfo.title}</CardTitle>
-              {testInfo.description && (
-                <p className="text-muted-foreground mt-2">{testInfo.description}</p>
-              )}
-            </CardHeader>
-          </Card>
-
-          {/* Info Card */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="text-lg">Информация о тесте</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {/* Количество вопросов / тем */}
-              <div className="flex items-center gap-3 p-4 rounded-lg bg-muted">
-                <BookOpen className="h-6 w-6 text-indigo-500 shrink-0" />
-                <div>
-                  {testMode === "adaptive" ? (
-                    <>
-                      <div className="font-semibold">Количество тем</div>
-                      <div className="text-sm text-muted-foreground">{(testInfo as any).sections?.length || 0}</div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="font-semibold">Количество вопросов</div>
-                      <div className="text-sm text-muted-foreground">{testMetadata.totalQuestions}</div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Проходной балл */}
-              {testMetadata.passPercent !== null && (
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-muted">
-                  <Target className="h-6 w-6 text-green-500 shrink-0" />
-                  <div>
-                    <div className="font-semibold">Проходной балл</div>
-                    <div className="text-sm text-muted-foreground">{testMetadata.passPercent}%</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Ограничение времени */}
-              {testMetadata.timeLimitMinutes && (
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-muted">
-                  <Clock className="h-6 w-6 text-amber-500 shrink-0" />
-                  <div>
-                    <div className="font-semibold">Ограничение времени</div>
-                    <div className="text-sm text-muted-foreground">{testMetadata.timeLimitMinutes} минут</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Попытки */}
-              {testMetadata.maxAttempts !== null && (
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-muted">
-                  <RotateCcw className="h-6 w-6 text-violet-500 shrink-0" />
-                  <div>
-                    <div className="font-semibold">Попытки</div>
-                    <div className={`text-sm ${attemptsExhausted ? "text-red-500" : "text-muted-foreground"}`}>
-                      {attemptsExhausted
-                        ? "Попытки закончились"
-                        : `осталось ${attemptsLeft} из ${testMetadata.maxAttempts}`
-                      }
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Custom content */}
-              {testMetadata.startPageContent && (
-                <div className="p-4 rounded-lg bg-muted border-l-4 border-primary">
-                  <div className="text-sm whitespace-pre-wrap">{testMetadata.startPageContent}</div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Buttons */}
-          <div className="flex flex-col items-center gap-3">
-            {attemptsExhausted ? (
-              <>
-                <Button disabled className="w-full max-w-xs">
-                  Попытки закончились
-                </Button>
-                <Button variant="outline" onClick={() => navigate("/learner")} className="w-full max-w-xs">
-                  К списку тестов
-                </Button>
-              </>
-            ) : testMetadata.hasInProgress ? (
-              <>
-                <Button
-                  onClick={handleResumeTest}
-                  disabled={isStarting}
-                  className="w-full max-w-xs"
-                  size="lg"
-                >
-                  {isStarting ? "Загрузка..." : (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Продолжить тест
-                    </>
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleStartTest}
-                  disabled={isStarting}
-                  className="w-full max-w-xs"
-                >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Начать заново
-                </Button>
-                <Button variant="ghost" onClick={() => navigate("/learner")} className="w-full max-w-xs">
-                  Назад
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  onClick={handleStartTest}
-                  disabled={isStarting}
-                  className="w-full max-w-xs"
-                  size="lg"
-                >
-                  {isStarting ? (
-                    "Загрузка..."
-                  ) : testMetadata.completedAttempts > 0 ? (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Начать заново
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-4 w-4 mr-2" />
-                      Начать тестирование
-                    </>
-                  )}
-                </Button>
-                <Button variant="outline" onClick={() => navigate("/learner")} className="w-full max-w-xs">
-                  Назад
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Adaptive mode - finished
   if (testMode === "adaptive" && adaptiveState?.isFinished) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="max-w-3xl mx-auto px-6 py-12">
-          <Card>
-            <CardHeader className="text-center">
-              <Trophy className="h-16 w-16 mx-auto text-primary mb-4" />
-              <CardTitle className="text-2xl">Тест завершён!</CardTitle>
-              <p className="text-muted-foreground mt-1">{adaptiveState.testTitle}</p>
-            </CardHeader>
-            <CardContent className="space-y-6">
+      <Box maxW="3xl" padX={6} padY={8}>
+        <Card>
+          <CardBody>
+            <Stack gap={6}>
+              <Stack gap={2} align="center">
+                <Trophy size={48} color="var(--ou-accent-default)" />
+                <Text variant="display-s" weight="bold">Тест завершён!</Text>
+                <Text tone="muted">{adaptiveState.testTitle}</Text>
+              </Stack>
+
               {adaptiveState.result?.topicResults?.map((tr: any, idx: number) => (
-                <div key={idx} className="p-4 rounded-lg border space-y-3">
-                  <h3 className="font-semibold text-lg">{tr.topicName}</h3>
-                  {tr.achievedLevelName ? (
-                    <Badge variant="default" className="bg-green-600 text-base px-4 py-1">
-                      {tr.achievedLevelName}
-                    </Badge>
-                  ) : (
-                    <Badge variant="destructive" className="text-base px-4 py-1">
-                      {tr.feedback || "Уровень не достигнут"}
-                    </Badge>
-                  )}
-                  {tr.achievedLevelName && tr.feedback && (
-                    <p className="text-sm text-muted-foreground">{tr.feedback}</p>
-                  )}
-                  {tr.recommendedLinks?.length > 0 && (
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">Рекомендуемые материалы:</p>
-                      <ul className="space-y-1">
-                        {tr.recommendedLinks.map((link: any, i: number) => (
-                          <li key={i}>
-                            <a href={link.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
-                              {link.title}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
+                <Box key={idx} border radius="l" pad={4}>
+                  <Stack gap={3}>
+                    <Text variant="heading-s" weight="semibold">{tr.topicName}</Text>
+                    <Cluster>
+                      {tr.achievedLevelName ? (
+                        <Tag tone="success" variant="solid">{tr.achievedLevelName}</Tag>
+                      ) : (
+                        <Tag tone="error" variant="solid">{tr.feedback || "Уровень не достигнут"}</Tag>
+                      )}
+                    </Cluster>
+                    {tr.achievedLevelName && tr.feedback && (
+                      <Text variant="body-s" tone="muted">{tr.feedback}</Text>
+                    )}
+                    {tr.recommendedLinks?.length > 0 && (
+                      <Stack gap={1}>
+                        <Text variant="body-s" weight="medium">Рекомендуемые материалы:</Text>
+                        <Stack as="ul" gap={1}>
+                          {tr.recommendedLinks.map((link: any, i: number) => (
+                            <li key={i}>
+                              <a href={link.url} target="_blank" rel="noopener noreferrer">
+                                <Text variant="body-s" tone="accent">{link.title}</Text>
+                              </a>
+                            </li>
+                          ))}
+                        </Stack>
+                      </Stack>
+                    )}
+                  </Stack>
+                </Box>
               ))}
 
-              <Button className="w-full" onClick={() => navigate("/learner")}>
+              <Button fullWidth onClick={() => navigate("/learner")}>
                 Вернуться к списку тестов
               </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            </Stack>
+          </CardBody>
+        </Card>
+      </Box>
     );
   }
 
@@ -1582,38 +1408,40 @@ export default function TakeTestPage() {
     const { levelTransition, topicTransition, isCorrect } = adaptiveState.lastResult;
 
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="max-w-md w-full mx-4">
-          <CardContent className="pt-6 text-center space-y-4">
-            {isCorrect ? (
-              <CheckCircle className="h-16 w-16 mx-auto text-green-500" />
-            ) : (
-              <XCircle className="h-16 w-16 mx-auto text-red-500" />
-            )}
+      <Center minH="screen" pad={4}>
+        <Box full maxW="md">
+          <Card>
+            <CardBody>
+              <Stack gap={4} align="center">
+                {isCorrect ? (
+                  <CheckCircle size={48} color="var(--ou-success-600)" />
+                ) : (
+                  <XCircle size={48} color="var(--ou-error-600)" />
+                )}
 
-            <p className="text-lg font-medium">
-              {isCorrect ? "Правильно!" : "Неправильно"}
-            </p>
+                <Text variant="heading-s" weight="medium">
+                  {isCorrect ? "Правильно!" : "Неправильно"}
+                </Text>
 
-            {levelTransition && (
-              <Alert className={levelTransition.type === "up" ? "border-green-500" : levelTransition.type === "down" ? "border-red-500" : "border-primary"}>
-                <div className="flex items-center gap-2">
-                  {levelTransition.type === "up" && <ArrowUp className="h-5 w-5 text-green-500" />}
-                  {levelTransition.type === "down" && <ArrowDown className="h-5 w-5 text-red-500" />}
-                  {levelTransition.type === "complete" && <Target className="h-5 w-5 text-primary" />}
-                  <AlertDescription>{levelTransition.message}</AlertDescription>
-                </div>
-              </Alert>
-            )}
+                {levelTransition && (
+                  <Banner
+                    fullWidth
+                    tone={levelTransition.type === "up" ? "success" : levelTransition.type === "down" ? "error" : "info"}
+                  >
+                    {levelTransition.message}
+                  </Banner>
+                )}
 
-            {topicTransition && (
-              <p className="text-sm text-muted-foreground">
-                Переход к теме: <span className="font-medium">{topicTransition.toTopic}</span>
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                {topicTransition && (
+                  <Text variant="body-s" tone="muted">
+                    Переход к теме: <Text as="span" variant="body-s" weight="medium">{topicTransition.toTopic}</Text>
+                  </Text>
+                )}
+              </Stack>
+            </CardBody>
+          </Card>
+        </Box>
+      </Center>
     );
   }
 
@@ -1680,134 +1508,6 @@ export default function TakeTestPage() {
       );
     }
 
-    return (
-      <div className="min-h-screen bg-background select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
-        <div className="max-w-3xl mx-auto px-6 py-12">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-xl font-semibold">{testTitle}</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Вопрос {currentQuestion.questionNumber} из {currentQuestion.totalInLevel}
-                {showDifficultyLevel && (
-                  <span className="ml-2">• Уровень: <Badge variant="outline">{currentQuestion.levelName}</Badge></span>
-                )}
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              {remainingSeconds !== null && (
-                <TimerDisplay remainingSeconds={remainingSeconds} />
-              )}
-              {adaptiveSectionRemaining !== null && (
-                <SectionTimerDisplay remainingSeconds={adaptiveSectionRemaining} />
-              )}
-              <div className="text-sm text-muted-foreground">
-                Тема: <span className="font-medium text-foreground">{currentQuestion.topicName}</span>
-              </div>
-            </div>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-medium">
-                {currentQ.prompt}
-              </CardTitle>
-              {currentQ.mediaUrl && currentQ.mediaType && (
-                <div className="mt-4">
-                  {currentQ.mediaType === "image" && (
-                    <img
-                      src={currentQ.mediaUrl}
-                      alt="Изображение к вопросу"
-                      className="max-h-64 object-contain mx-auto rounded-md"
-                    />
-                  )}
-                  {currentQ.mediaType === "audio" && (
-                    <audio controls className="w-full">
-                      <source src={currentQ.mediaUrl} />
-                    </audio>
-                  )}
-                  {currentQ.mediaType === "video" && (
-                    <video controls className="max-h-64 w-full rounded-md">
-                      <source src={currentQ.mediaUrl} />
-                    </video>
-                  )}
-                </div>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <QuestionInput
-                question={currentQ}
-                answer={adaptiveState.answer}
-                onAnswer={feedbackShown ? () => { } : handleAdaptiveAnswer}
-                shuffleMapping={shuffleMappings[currentQ.id]}
-                disabled={feedbackShown}
-                showCorrectAnswer={feedbackShown}
-                correctAnswer={lastAnswerResult?.correctAnswer}
-              />
-
-              {/* Фидбек после ответа */}
-              {feedbackShown && lastAnswerResult && (
-                <div className={`p-4 rounded-lg border ${lastAnswerResult.isCorrect
-                  ? "bg-green-50 dark:bg-green-900/20 border-green-500"
-                  : "bg-red-50 dark:bg-red-900/20 border-red-500"
-                  }`}>
-                  <div className={`font-semibold mb-2 ${lastAnswerResult.isCorrect ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-                    }`}>
-                    {lastAnswerResult.isCorrect ? "Правильно!" : "Неправильно"}
-                  </div>
-
-                  {/* Показываем правильный ответ для single/multiple */}
-                  {!lastAnswerResult.isCorrect && lastAnswerResult.correctAnswer !== undefined && (
-                    <div className="text-sm mb-2">
-                      <span className="font-medium">Правильный ответ: </span>
-                      {currentQ.type === "single" && (currentQ.dataJson as any)?.options && (
-                        <span>{(currentQ.dataJson as any).options[lastAnswerResult.correctAnswer.correctIndex]}</span>
-                      )}
-                      {currentQ.type === "multiple" && (currentQ.dataJson as any)?.options && Array.isArray(lastAnswerResult.correctAnswer.correctIndices) && (
-                        <span>{lastAnswerResult.correctAnswer.correctIndices.map((idx: number) => (currentQ.dataJson as any)?.options?.[idx]).join(", ")}</span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Фидбек к вопросу */}
-                  {lastAnswerResult.feedback && (
-                    <div className="text-sm text-muted-foreground">
-                      {lastAnswerResult.feedback}
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-end mt-8">
-            {adaptiveState.showCorrectAnswers ? (
-              feedbackShown ? (
-                <Button onClick={handleAdaptiveContinue}>
-                  Далее
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleAdaptiveConfirm}
-                  disabled={isAnswering || adaptiveState.answer === null}
-                >
-                  {isAnswering ? "Отправка..." : "Принять"}
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-              )
-            ) : (
-              <Button
-                onClick={handleAdaptiveSubmit}
-                disabled={isAnswering || adaptiveState.answer === null}
-              >
-                {isAnswering ? "Отправка..." : "Далее"}
-                <ChevronRight className="h-4 w-4 ml-2" />
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
   }
 
   // Standard mode — question screen via the design template (PRD-12 #3): all question
@@ -1854,7 +1554,7 @@ export default function TakeTestPage() {
     );
   }
 
-  // Standard mode
+  // Standard mode — per-question feedback (showCorrectAnswers) / no-template fallback.
   if (testMode === "standard" && attempt && flatQuestions.length > 0) {
     const currentQ = flatQuestions[currentIndex];
     const progress = ((currentIndex + 1) / flatQuestions.length) * 100;
@@ -1864,141 +1564,106 @@ export default function TakeTestPage() {
     const prevIdx = prevAccessibleIndex(flatQuestions, currentIndex - 1, lockedTopics);
 
     return (
-      <div className="min-h-screen bg-background select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
-        <div className="fixed top-0 left-0 right-0 h-2 bg-muted z-50">
-          <Progress value={progress} className="h-2" />
+      <div className="min-h-screen select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
+        <div className="fixed top-0 left-0 right-0 z-50">
+          <ProgressBar value={progress} size="xs" hideHeader />
         </div>
 
-        <div className="max-w-3xl mx-auto px-6 py-12">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-xl font-semibold">{attempt.testTitle}</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Вопрос {currentIndex + 1} из {flatQuestions.length}
-              </p>
-            </div>
-            <div className="flex items-center gap-4">
-              {remainingSeconds !== null && (
-                <TimerDisplay remainingSeconds={remainingSeconds} />
-              )}
-              {sectionRemainingSeconds !== null && (
-                <SectionTimerDisplay remainingSeconds={sectionRemainingSeconds} />
-              )}
-              <div className="text-sm text-muted-foreground">
-                Тема: <span className="font-medium text-foreground">{currentQ.topicName}</span>
-              </div>
-            </div>
-          </div>
+        <Box maxW="3xl" padX={6} padY={8}>
+          <Stack gap={8}>
+            <Cluster justify="between" gap={4}>
+              <Stack gap={1}>
+                <Text variant="heading-s" weight="semibold">{attempt.testTitle}</Text>
+                <Text variant="body-s" tone="muted">Вопрос {currentIndex + 1} из {flatQuestions.length}</Text>
+              </Stack>
+              <Cluster gap={4}>
+                {remainingSeconds !== null && <TimerDisplay remainingSeconds={remainingSeconds} />}
+                {sectionRemainingSeconds !== null && <SectionTimerDisplay remainingSeconds={sectionRemainingSeconds} />}
+                <Text variant="body-s" tone="muted">
+                  Тема: <Text as="span" variant="body-s" weight="medium">{currentQ.topicName}</Text>
+                </Text>
+              </Cluster>
+            </Cluster>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-medium">{currentQ.question.prompt}</CardTitle>
-              {currentQ.question.mediaUrl && currentQ.question.mediaType && (
-                <div className="mt-4">
-                  {currentQ.question.mediaType === "image" && (
-                    <img
-                      src={currentQ.question.mediaUrl}
-                      alt="Изображение"
-                      className="max-h-64 object-contain mx-auto rounded-md"
-                    />
-                  )}
-                  {currentQ.question.mediaType === "audio" && (
-                    <audio controls className="w-full">
-                      <source src={currentQ.question.mediaUrl} />
-                    </audio>
-                  )}
-                  {currentQ.question.mediaType === "video" && (
-                    <video controls className="max-h-64 w-full rounded-md">
-                      <source src={currentQ.question.mediaUrl} />
-                    </video>
-                  )}
-                </div>
-              )}
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <QuestionInput
-                question={currentQ.question}
-                answer={answers[currentQ.question.id]}
-                onAnswer={standardFeedbackShown || currentTopicLocked ? () => { } : (answer) => handleAnswer(currentQ.question.id, answer)}
-                shuffleMapping={shuffleMappings[currentQ.question.id]}
-                disabled={standardFeedbackShown || currentTopicLocked}
-                showCorrectAnswer={standardFeedbackShown}
-                correctAnswer={standardAnswerResult?.correctAnswer}
-              />
-
-              {/* Фидбек после ответа */}
-              {standardFeedbackShown && standardAnswerResult && (
-                <div className={`p-4 rounded-lg border ${standardAnswerResult.isCorrect
-                  ? "bg-green-50 dark:bg-green-900/20 border-green-500"
-                  : "bg-red-50 dark:bg-red-900/20 border-red-500"
-                  }`}>
-                  <div className={`font-semibold mb-2 ${standardAnswerResult.isCorrect
-                    ? "text-green-600 dark:text-green-400"
-                    : "text-red-600 dark:text-red-400"
-                    }`}>
-                    {standardAnswerResult.isCorrect ? "Правильно!" : "Неправильно"}
-                  </div>
-
-                  {/* Фидбек к вопросу */}
-                  {standardAnswerResult.feedback && (
-                    <div className="text-sm text-muted-foreground">
-                      {standardAnswerResult.feedback}
+            <Card>
+              <CardBody>
+                <Stack gap={4}>
+                  <Text variant="heading-s" weight="medium">{currentQ.question.prompt}</Text>
+                  {currentQ.question.mediaUrl && currentQ.question.mediaType && (
+                    <div>
+                      {currentQ.question.mediaType === "image" && (
+                        <img src={currentQ.question.mediaUrl} alt="Изображение" className="max-h-64 object-contain mx-auto rounded-md" />
+                      )}
+                      {currentQ.question.mediaType === "audio" && (
+                        <audio controls className="w-full"><source src={currentQ.question.mediaUrl} /></audio>
+                      )}
+                      {currentQ.question.mediaType === "video" && (
+                        <video controls className="max-h-64 w-full rounded-md"><source src={currentQ.question.mediaUrl} /></video>
+                      )}
                     </div>
                   )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
-          <div className="flex items-center justify-between mt-8">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setStandardFeedbackShown(false);
-                setStandardAnswerResult(null);
-                // Skip back over any topic whose section timer already expired.
-                if (prevIdx !== null) setCurrentIndex(prevIdx);
-              }}
-              disabled={prevIdx === null}
-            >
-              <ChevronLeft className="h-4 w-4 mr-2" />
-              Назад
-            </Button>
+                  <QuestionInput
+                    question={currentQ.question}
+                    answer={answers[currentQ.question.id]}
+                    onAnswer={standardFeedbackShown || currentTopicLocked ? () => { } : (answer) => handleAnswer(currentQ.question.id, answer)}
+                    shuffleMapping={shuffleMappings[currentQ.question.id]}
+                    disabled={standardFeedbackShown || currentTopicLocked}
+                    showCorrectAnswer={standardFeedbackShown}
+                    correctAnswer={standardAnswerResult?.correctAnswer}
+                  />
 
-            {showCorrectAnswers ? (
-              standardFeedbackShown ? (
-                isLastQuestion ? (
-                  <Button onClick={handleSubmit} disabled={isSubmitting}>
-                    {isSubmitting ? "Отправка..." : "Завершить тест"}
-                    <CheckCircle className="h-4 w-4 ml-2" />
-                  </Button>
+                  {standardFeedbackShown && standardAnswerResult && (
+                    <Banner
+                      fullWidth
+                      tone={standardAnswerResult.isCorrect ? "success" : "error"}
+                      title={standardAnswerResult.isCorrect ? "Правильно!" : "Неправильно"}
+                    >
+                      {standardAnswerResult.feedback}
+                    </Banner>
+                  )}
+                </Stack>
+              </CardBody>
+            </Card>
+
+            <Cluster justify="between" gap={4}>
+              <Button
+                variant="secondary"
+                leadingIcon={<ChevronLeft size={16} />}
+                onClick={() => {
+                  setStandardFeedbackShown(false);
+                  setStandardAnswerResult(null);
+                  if (prevIdx !== null) setCurrentIndex(prevIdx);
+                }}
+                disabled={prevIdx === null}
+              >
+                Назад
+              </Button>
+
+              {showCorrectAnswers ? (
+                standardFeedbackShown ? (
+                  isLastQuestion ? (
+                    <Button onClick={handleSubmit} loading={isSubmitting} trailingIcon={<CheckCircle size={16} />}>
+                      Завершить тест
+                    </Button>
+                  ) : (
+                    <Button onClick={handleStandardContinue} trailingIcon={<ChevronRight size={16} />}>Далее</Button>
+                  )
                 ) : (
-                  <Button onClick={handleStandardContinue}>
-                    Далее
-                    <ChevronRight className="h-4 w-4 ml-2" />
-                  </Button>
+                  <Button onClick={handleStandardConfirm} trailingIcon={<ChevronRight size={16} />}>Принять</Button>
                 )
               ) : (
-                <Button onClick={handleStandardConfirm}>
-                  Принять
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-              )
-            ) : (
-              isLastQuestion ? (
-                <Button onClick={handleSubmit} disabled={isSubmitting}>
-                  {isSubmitting ? "Отправка..." : "Завершить тест"}
-                  <CheckCircle className="h-4 w-4 ml-2" />
-                </Button>
-              ) : (
-                <Button onClick={handleNext}>
-                  Далее
-                  <ChevronRight className="h-4 w-4 ml-2" />
-                </Button>
-              )
-            )}
-          </div>
-        </div>
+                isLastQuestion ? (
+                  <Button onClick={handleSubmit} loading={isSubmitting} trailingIcon={<CheckCircle size={16} />}>
+                    Завершить тест
+                  </Button>
+                ) : (
+                  <Button onClick={handleNext} trailingIcon={<ChevronRight size={16} />}>Далее</Button>
+                )
+              )}
+            </Cluster>
+          </Stack>
+        </Box>
       </div>
     );
   }
@@ -2036,14 +1701,8 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
     const correctIndex = correctAnswer?.correctIndex;
 
     return (
-      <>
-        {hint && <p className="text-sm text-muted-foreground -mt-1 mb-1">{hint}</p>}
-        <RadioGroup
-        value={answer !== undefined && answer !== null ? String(answer) : ""}
-        onValueChange={(val) => !disabled && onAnswer(Number(val))}
-        className="space-y-3"
-        disabled={disabled}
-      >
+      <Stack gap={3}>
+        {hint && <Text variant="body-s" tone="muted">{hint}</Text>}
         {displayOrder.map((originalIndex: number, displayIndex: number) => {
           const isSelected = answer === originalIndex;
           const isCorrect = showCorrectAnswer && correctIndex === originalIndex;
@@ -2072,10 +1731,8 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
                 } ${borderClass} ${bgClass}`}
               onClick={() => !disabled && onAnswer(originalIndex)}
             >
-              <RadioGroupItem value={String(originalIndex)} id={`opt-${question.id}-${displayIndex}`} disabled={disabled} />
-              <Label htmlFor={`opt-${question.id}-${displayIndex}`} className={`flex-1 ${disabled ? "cursor-default" : "cursor-pointer"}`}>
-                {options[originalIndex]}
-              </Label>
+              <Radio checked={isSelected} disabled={disabled} readOnly tabIndex={-1} className="pointer-events-none" />
+              <span className="flex-1">{options[originalIndex]}</span>
               {showCorrectAnswer && isCorrect && (
                 <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
               )}
@@ -2085,8 +1742,7 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
             </div>
           );
         })}
-      </RadioGroup>
-      </>
+      </Stack>
     );
   }
 
@@ -2107,9 +1763,8 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
     };
 
     return (
-      <>
-        {hint && <p className="text-sm text-muted-foreground -mt-1 mb-1">{hint}</p>}
-        <div className="space-y-3">
+      <Stack gap={3}>
+        {hint && <Text variant="body-s" tone="muted">{hint}</Text>}
         {displayOrder.map((originalIndex: number, displayIndex: number) => {
           const isSelected = selected.includes(originalIndex);
           const isCorrect = showCorrectAnswer && correctIndices.includes(originalIndex);
@@ -2139,11 +1794,7 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
                 } ${borderClass} ${bgClass}`}
               onClick={() => toggle(originalIndex)}
             >
-              <Checkbox
-                checked={isSelected}
-                className="pointer-events-none"
-                disabled={disabled}
-              />
+              <Checkbox checked={isSelected} disabled={disabled} readOnly tabIndex={-1} className="pointer-events-none" />
               <span className="flex-1">
                 {options[originalIndex]}
               </span>
@@ -2159,8 +1810,7 @@ function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = 
             </div>
           );
         })}
-        </div>
-      </>
+      </Stack>
     );
   }
 
