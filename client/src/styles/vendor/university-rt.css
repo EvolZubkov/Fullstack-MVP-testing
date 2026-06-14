@@ -7675,3 +7675,18 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-box--maxw-md { max-width: 28rem; }
 .ou-box--maxw-lg { max-width: 32rem; }
 .ou-box--maxw-xl { max-width: 36rem; }
+
+/* ─── tag-input.css (added: TagInput chip/token field) ─────────────── */
+.ou-taginput { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+.ou-taginput__wrap { position: relative; }
+.ou-taginput__field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ou-space-2); min-height: 40px; padding: var(--ou-space-1) var(--ou-space-2); border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-m); background: var(--ou-bg-input); cursor: text; }
+.ou-taginput__field:focus-within { border-color: var(--ou-accent-default); box-shadow: var(--ou-shadow-focus); }
+.ou-taginput__input { flex: 1; min-width: 8rem; border: 0; background: transparent; outline: none; padding: 0; color: var(--ou-fg-default); font: var(--ou-text-body-m); }
+.ou-taginput__input::placeholder { color: var(--ou-fg-muted); }
+.ou-taginput__remove { display: inline-flex; align-items: center; justify-content: center; border: 0; background: none; color: currentColor; opacity: 0.6; cursor: pointer; padding: 0; border-radius: var(--ou-radius-xs); }
+.ou-taginput__remove:hover { opacity: 1; }
+.ou-taginput__menu { position: absolute; left: 0; right: 0; top: 100%; z-index: 50; margin-top: var(--ou-space-1); border: 1px solid var(--ou-border-soft); border-radius: var(--ou-radius-m); background: var(--ou-bg-elevated); box-shadow: var(--ou-shadow-md); padding: var(--ou-space-1); }
+.ou-taginput__menu-label { padding: var(--ou-space-1) var(--ou-space-2); font: var(--ou-text-caption); text-transform: uppercase; letter-spacing: 0.04em; color: var(--ou-fg-muted); }
+.ou-taginput__opt { display: flex; align-items: center; gap: var(--ou-space-2); width: 100%; padding: var(--ou-space-1) var(--ou-space-2); border: 0; background: none; border-radius: var(--ou-radius-s); text-align: left; font: var(--ou-text-body-s); color: var(--ou-fg-default); cursor: pointer; }
+.ou-taginput__opt:hover { background: var(--ou-bg-hover); }
+.ou-taginput__divider { height: 1px; background: var(--ou-border-soft); margin: var(--ou-space-1) 0; }
