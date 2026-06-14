@@ -20,7 +20,40 @@ export type Space = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export type StackAlign = 'start' | 'center' | 'end' | 'stretch' | 'baseline';
 export type StackJustify = 'start' | 'center' | 'end' | 'between' | 'around';
 
-export interface StackProps extends React.HTMLAttributes<HTMLDivElement> {
+/**
+ * Token-driven padding props shared by `Box` and the flow primitives
+ * (`Stack`/`Cluster`). Each maps to an `ou-box--pad*` utility class so a flex
+ * container can carry its own padding without an extra wrapper element.
+ */
+export interface PaddingProps {
+  /** Padding on all sides (`--ou-space-{pad}`). */
+  pad?: Space;
+  /** Inline (left+right) padding. */
+  padX?: Space;
+  /** Block (top+bottom) padding. */
+  padY?: Space;
+  padTop?: Space;
+  padBottom?: Space;
+  /** Inline-start (left in LTR) padding — e.g. tree indents. */
+  padStart?: Space;
+  /** Inline-end (right in LTR) padding. */
+  padEnd?: Space;
+}
+
+/** Build the `ou-box--pad*` utility classes for the given padding props. */
+function padClasses(p: PaddingProps): Array<string | false> {
+  return [
+    p.pad != null && `ou-box--pad-${p.pad}`,
+    p.padX != null && `ou-box--padx-${p.padX}`,
+    p.padY != null && `ou-box--pady-${p.padY}`,
+    p.padTop != null && `ou-box--padt-${p.padTop}`,
+    p.padBottom != null && `ou-box--padb-${p.padBottom}`,
+    p.padStart != null && `ou-box--pads-${p.padStart}`,
+    p.padEnd != null && `ou-box--pade-${p.padEnd}`,
+  ];
+}
+
+export interface StackProps extends React.HTMLAttributes<HTMLDivElement>, PaddingProps {
   /** Main axis. Default `col`. */
   direction?: 'row' | 'col';
   /** Gap between children (`--ou-space-{gap}`). Default 4. */
@@ -38,7 +71,9 @@ export interface StackProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export const Stack = forwardRef<HTMLDivElement, StackProps>(
-  ({ direction = 'col', gap = 4, align, justify, wrap, full, grow, minH, as: Tag = 'div', className, ...rest }, ref) => (
+  ({ direction = 'col', gap = 4, align, justify, wrap, full, grow, minH,
+     pad, padX, padY, padTop, padBottom, padStart, padEnd,
+     as: Tag = 'div', className, ...rest }, ref) => (
     <Tag
       ref={ref}
       className={cn(
@@ -51,6 +86,7 @@ export const Stack = forwardRef<HTMLDivElement, StackProps>(
         full && 'ou-stack--full',
         grow && 'ou-grow',
         minH && `ou-stack--minh-${minH}`,
+        ...padClasses({ pad, padX, padY, padTop, padBottom, padStart, padEnd }),
         className,
       )}
       {...rest}
@@ -100,19 +136,7 @@ export type BoxRadius = 's' | 'm' | 'l';
 /** Named max-width caps for content/cards (auto-centered; no arbitrary values). */
 export type BoxMaxW = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl';
 
-export interface BoxProps extends React.HTMLAttributes<HTMLDivElement> {
-  /** Padding on all sides (`--ou-space-{pad}`). */
-  pad?: Space;
-  /** Inline (left+right) padding. */
-  padX?: Space;
-  /** Block (top+bottom) padding. */
-  padY?: Space;
-  padTop?: Space;
-  padBottom?: Space;
-  /** Inline-start (left in LTR) padding — e.g. tree indents. */
-  padStart?: Space;
-  /** Inline-end (right in LTR) padding. */
-  padEnd?: Space;
+export interface BoxProps extends React.HTMLAttributes<HTMLDivElement>, PaddingProps {
   surface?: BoxSurface;
   border?: boolean;
   radius?: BoxRadius;
@@ -131,13 +155,7 @@ export const Box = forwardRef<HTMLDivElement, BoxProps>(
       ref={ref}
       className={cn(
         'ou-box',
-        pad != null && `ou-box--pad-${pad}`,
-        padX != null && `ou-box--padx-${padX}`,
-        padY != null && `ou-box--pady-${padY}`,
-        padTop != null && `ou-box--padt-${padTop}`,
-        padBottom != null && `ou-box--padb-${padBottom}`,
-        padStart != null && `ou-box--pads-${padStart}`,
-        padEnd != null && `ou-box--pade-${padEnd}`,
+        ...padClasses({ pad, padX, padY, padTop, padBottom, padStart, padEnd }),
         surface && `ou-box--surface-${surface}`,
         border && 'ou-box--border',
         radius && `ou-box--radius-${radius}`,
