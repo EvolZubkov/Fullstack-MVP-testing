@@ -731,7 +731,7 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`menu-edit-${test.id}`}
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <Pencil size={14} />
           Редактировать
         </button>
         {canGrantAccessFor(test) && (
@@ -745,7 +745,7 @@ export function TestsListPage(): React.JSX.Element {
             }}
             data-testid={`menu-access-${test.id}`}
           >
-            <KeyRound className="h-3.5 w-3.5" />
+            <KeyRound size={14} />
             Общий доступ
           </button>
         )}
@@ -756,7 +756,7 @@ export function TestsListPage(): React.JSX.Element {
           onClick={() => setTestMenu(null)}
           data-testid={`menu-export-${test.id}`}
         >
-          <Download className="h-3.5 w-3.5" />
+          <Download size={14} />
           Экспорт SCORM
         </a>
         <a
@@ -766,7 +766,7 @@ export function TestsListPage(): React.JSX.Element {
           onClick={() => setTestMenu(null)}
           data-testid={`menu-export-excel-${test.id}`}
         >
-          <FileSpreadsheet className="h-3.5 w-3.5" />
+          <FileSpreadsheet size={14} />
           Экспорт в Excel
         </a>
         <hr className="dropdown-sep" />
@@ -783,7 +783,7 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`menu-toggle-publish-${test.id}`}
         >
-          <Globe className="h-3.5 w-3.5" />
+          <Globe size={14} />
           {test.status === "published" ? "Снять с публикации" : "Опубликовать"}
         </button>
         {/* PRD-15 FR-12: re-publish the working version (new snapshot); only
@@ -799,7 +799,7 @@ export function TestsListPage(): React.JSX.Element {
             }}
             data-testid={`menu-republish-${test.id}`}
           >
-            <Upload className="h-3.5 w-3.5" />
+            <Upload size={14} />
             Опубликовать изменения
           </button>
         )}
@@ -815,7 +815,7 @@ export function TestsListPage(): React.JSX.Element {
             }}
             data-testid={`menu-force-republish-${test.id}`}
           >
-            <RotateCw className="h-3.5 w-3.5" />
+            <RotateCw size={14} />
             Экстренная переопубликация...
           </button>
         )}
@@ -835,7 +835,7 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`menu-move-${test.id}`}
         >
-          <Folder className="h-3.5 w-3.5" />
+          <Folder size={14} />
           Переместить в папку
         </button>
         <button
@@ -848,7 +848,7 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`menu-archive-${test.id}`}
         >
-          <Archive className="h-3.5 w-3.5" />
+          <Archive size={14} />
           Архивировать
         </button>
         <hr className="dropdown-sep" />
@@ -862,7 +862,7 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`menu-delete-${test.id}`}
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 size={14} />
           Удалить тест...
         </button>
       </div>
@@ -887,7 +887,7 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`folder-menu-rename-${folder.id}`}
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <Pencil size={14} />
           Переименовать
         </button>
         <hr className="dropdown-sep" />
@@ -908,7 +908,7 @@ export function TestsListPage(): React.JSX.Element {
           }}
           data-testid={`folder-menu-delete-${folder.id}`}
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 size={14} />
           Удалить папку...
         </button>
       </div>

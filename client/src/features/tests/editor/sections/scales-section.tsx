@@ -324,7 +324,7 @@ function ScalesListPane({
             <Button
               variant="primary"
               size="s"
-              leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+              leadingIcon={<Plus size={16} aria-hidden="true" />}
               onClick={addScale}
               data-testid="scales-empty-add"
             >
@@ -355,7 +355,7 @@ function ScalesListPane({
             <Button
               variant="ghost"
               size="s"
-              leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+              leadingIcon={<Plus size={16} aria-hidden="true" />}
               onClick={addScale}
               data-testid="scales-add"
             >
@@ -702,7 +702,7 @@ function BandsEditor({
         <Button
           variant="ghost"
           size="s"
-          leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+          leadingIcon={<Plus size={16} aria-hidden="true" />}
           onClick={add}
           data-testid={`scales-band-add-${index}`}
         >

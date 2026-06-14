@@ -199,7 +199,7 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
         variant="secondary"
         size="m"
         fullWidth
-        leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+        leadingIcon={<Plus size={16} aria-hidden="true" />}
         onClick={() => setPickerOpen(true)}
         data-testid="composition-add-topic"
         data-field="sections"
@@ -282,7 +282,7 @@ function TopicRow(props: {
             <span className="tb-topic-row__required-lbl">Обязательная</span>
           </label>
           <IconButton
-            icon={<X className="h-3.5 w-3.5" aria-hidden="true" />}
+            icon={<X size={14} aria-hidden="true" />}
             aria-label={`Убрать тему «${section.topicName}»`}
             variant="ghost"
             size="s"
@@ -434,7 +434,7 @@ function QuotaEditor(props: {
           data-testid={`topic-quota-toggle-${topicId}`}
         />
         <span className="tb-section-label">
-          <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+          <Layers size={14} aria-hidden="true" />
           Квоты по подтемам (тегам)
         </span>
       </label>
@@ -536,7 +536,7 @@ function QuotaEditor(props: {
                     )}
                     <td>
                       <IconButton
-                        icon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                        icon={<Trash2 size={14} aria-hidden="true" />}
                         variant="ghost"
                         size="s"
                         aria-label={`Удалить квоту «${s.tag}»`}
@@ -554,7 +554,7 @@ function QuotaEditor(props: {
             <Button
               variant="ghost"
               size="s"
-              leadingIcon={<Plus className="h-4 w-4" aria-hidden="true" />}
+              leadingIcon={<Plus size={16} aria-hidden="true" />}
               disabled={unusedTags.length === 0}
               onClick={addStratum}
               data-testid={`quota-add-${topicId}`}

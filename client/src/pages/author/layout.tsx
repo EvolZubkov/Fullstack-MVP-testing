@@ -42,7 +42,7 @@ export function AuthorLayout({ children }: AuthorLayoutProps) {
             }
           >
             <MenuItem
-              icon={<LogOut className="h-4 w-4" />}
+              icon={<LogOut size={16} />}
               title={t.navigation.logout}
               danger
               data-testid="button-logout"

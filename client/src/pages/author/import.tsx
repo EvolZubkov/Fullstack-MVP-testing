@@ -356,7 +356,7 @@ export default function ImportPage() {
                     stays clickable (root opens the picker via bubbling). */}
                 <FileUploader accept=".xlsx" onFiles={handleFiles}>
                   <span className="ou-uploader__icon" aria-hidden="true">
-                    <Upload className="h-6 w-6" />
+                    <Upload size={24} />
                   </span>
                   <span className="ou-uploader__title">{tr.uploaderTitle}</span>
                   <span className="ou-uploader__sub">{tr.uploaderSub}</span>
@@ -368,7 +368,7 @@ export default function ImportPage() {
                   <Button
                     variant="ghost"
                     size="s"
-                    leadingIcon={<Download className="h-3.5 w-3.5" />}
+                    leadingIcon={<Download size={14} />}
                     onClick={() => {
                       window.location.href = "/api/workbook/template";
                     }}
@@ -385,7 +385,7 @@ export default function ImportPage() {
                   meta={preview ? "запись ещё не выполнена" : fileMeta}
                   kind="xls"
                   actions={[
-                    { icon: <X className="h-3.5 w-3.5" />, ariaLabel: tr.removeFile, danger: true, onClick: resetAll },
+                    { icon: <X size={14} />, ariaLabel: tr.removeFile, danger: true, onClick: resetAll },
                   ]}
                 />
 

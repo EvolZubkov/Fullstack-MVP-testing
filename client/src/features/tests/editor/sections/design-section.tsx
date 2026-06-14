@@ -319,7 +319,7 @@ function TemplatePane({
           onClick={onPreview}
           data-testid="design-template-preview"
         >
-          <Eye className="h-4 w-4" aria-hidden="true" />
+          <Eye size={16} aria-hidden="true" />
         </button>
         <div className="tpl-thumb">
           <div className="preview-sketch" data-wf-demo>
@@ -376,7 +376,7 @@ function TemplatePane({
             <Button
               variant="secondary"
               size="s"
-              leadingIcon={<Layout className="h-3 w-3" aria-hidden="true" />}
+              leadingIcon={<Layout size={12} aria-hidden="true" />}
               data-testid="design-template-replace"
               onClick={onOpenGallery}
             >

@@ -113,7 +113,7 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
   return (
     <div className="flex items-center justify-between py-1 text-sm border-b border-border/50 last:border-0">
       <div className="flex items-center gap-3">
-        <Users className="h-3 w-3 text-muted-foreground" />
+        <Users size={12} color="var(--ou-fg-muted)" />
         <span className="font-medium">{user.email}</span>
         {user.name && <span className="text-muted-foreground">{user.name}</span>}
       </div>
@@ -126,7 +126,7 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
           size="s"
           title="Обновить ссылку и отправить письмо"
           aria-label="Обновить ссылку"
-          icon={<RefreshCw className="h-3 w-3 text-blue-500" />}
+          icon={<RefreshCw size={12} color="var(--ou-info-600)" />}
           onClick={() => resendUser.mutate()}
           disabled={resendUser.isPending}
         />
@@ -136,7 +136,7 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
             size="s"
             title="Отозвать ссылку"
             aria-label="Отозвать ссылку"
-            icon={<Ban className="h-3 w-3 text-orange-500" />}
+            icon={<Ban size={12} color="var(--ou-warning-600)" />}
             onClick={() => revokeUser.mutate()}
             disabled={revokeUser.isPending}
           />
@@ -155,7 +155,7 @@ function GroupUsersPanel({ assignmentId }: { assignmentId: string }) {
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 px-8 py-3 text-sm text-muted-foreground bg-muted/30">
-        <Loader2 className="h-4 w-4 animate-spin" /> Загрузка участников...
+        <Loader2 size={16} className="animate-spin" /> Загрузка участников...
       </div>
     );
   }
@@ -411,9 +411,9 @@ export function AssignTestDialog({
         ) : a.group ? (
           <div className="flex items-center gap-2">
             {expandedGroupIds.has(a.id) ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+              <ChevronDown size={16} color="var(--ou-fg-muted)" />
             ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+              <ChevronRight size={16} color="var(--ou-fg-muted)" />
             )}
             <div>
               <p className="font-medium">{a.group.name}</p>
@@ -429,9 +429,9 @@ export function AssignTestDialog({
       header: "Тип",
       render: (a) =>
         a.user ? (
-          <Tag variant="outline" icon={<Users className="h-3 w-3" />}>Пользователь</Tag>
+          <Tag variant="outline" icon={<Users size={12} />}>Пользователь</Tag>
         ) : (
-          <Tag variant="outline" icon={<UsersRound className="h-3 w-3" />}>Группа</Tag>
+          <Tag variant="outline" icon={<UsersRound size={12} />}>Группа</Tag>
         ),
     },
     {
@@ -439,7 +439,7 @@ export function AssignTestDialog({
       header: t.assignments.dueDate,
       render: (a) =>
         a.dueDate ? (
-          <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{formatDate(a.dueDate)}</span>
+          <span className="flex items-center gap-1"><Calendar size={12} />{formatDate(a.dueDate)}</span>
         ) : (
           <span className="text-muted-foreground">{t.assignments.noDueDate}</span>
         ),
@@ -449,7 +449,7 @@ export function AssignTestDialog({
       header: "Ссылка до",
       render: (a) =>
         a.linkExpiresAt ? (
-          <span className="flex items-center gap-1 text-sm"><Link className="h-3 w-3" />{formatDate(a.linkExpiresAt)}</span>
+          <span className="flex items-center gap-1 text-sm"><Link size={12} />{formatDate(a.linkExpiresAt)}</span>
         ) : (
           <span className="text-muted-foreground text-sm">—</span>
         ),
@@ -459,7 +459,7 @@ export function AssignTestDialog({
       header: "Статус ссылки",
       render: (a) =>
         a.groupId ? (
-          <Tag variant="outline" icon={<UsersRound className="h-3 w-3" />}>{a.group?.userCount ?? 0} ссылок</Tag>
+          <Tag variant="outline" icon={<UsersRound size={12} />}>{a.group?.userCount ?? 0} ссылок</Tag>
         ) : (
           tokenStatusTag(a.tokenStatus)
         ),
@@ -476,7 +476,7 @@ export function AssignTestDialog({
               size="s"
               title="Отправить письмо повторно"
               aria-label="Отправить письмо повторно"
-              icon={<RefreshCw className="h-4 w-4 text-blue-500" />}
+              icon={<RefreshCw size={16} color="var(--ou-info-600)" />}
               onClick={() => resendMutation.mutate(a.id)}
               disabled={resendMutation.isPending}
             />
@@ -487,7 +487,7 @@ export function AssignTestDialog({
               size="s"
               title="Обновить ссылки для всей группы"
               aria-label="Обновить ссылки для всей группы"
-              icon={<RefreshCw className="h-4 w-4 text-blue-500" />}
+              icon={<RefreshCw size={16} color="var(--ou-info-600)" />}
               onClick={() => resendGroupMutation.mutate(a.id)}
               disabled={resendGroupMutation.isPending}
             />
@@ -498,7 +498,7 @@ export function AssignTestDialog({
               size="s"
               title="Отозвать ссылку"
               aria-label="Отозвать ссылку"
-              icon={<Ban className="h-4 w-4 text-orange-500" />}
+              icon={<Ban size={16} color="var(--ou-warning-600)" />}
               onClick={() => revokeTokenMutation.mutate(a.tokenId!)}
               disabled={revokeTokenMutation.isPending}
             />
@@ -508,7 +508,7 @@ export function AssignTestDialog({
             size="s"
             title="Удалить назначение"
             aria-label="Удалить назначение"
-            icon={<Trash2 className="h-4 w-4 text-destructive" />}
+            icon={<Trash2 size={16} color="var(--ou-error-600)" />}
             onClick={() => removeMutation.mutate(a.id)}
             disabled={removeMutation.isPending}
           />
@@ -544,11 +544,11 @@ export function AssignTestDialog({
   // ── Tab panels ──
   const currentPanel = assignmentsLoading ? (
     <div className="flex items-center justify-center py-8">
-      <Loader2 className="h-6 w-6 animate-spin" />
+      <Loader2 size={24} className="animate-spin" />
     </div>
   ) : assignments.length === 0 ? (
     <div className="text-center py-8 text-muted-foreground">
-      <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+      <Users size={48} className="mx-auto mb-4 opacity-50" />
       <p>{t.assignments.noAssignments}</p>
       <p className="text-sm">{t.assignments.noAssignmentsDescription}</p>
     </div>
@@ -649,8 +649,8 @@ export function AssignTestDialog({
         onChange={setActiveTab}
         items={[
           { id: "current", label: `${t.assignments.assignedTo} (${assignments.length})`, content: currentPanel },
-          { id: "users", label: t.assignments.users, icon: <Users className="h-4 w-4" />, content: usersPanel },
-          { id: "groups", label: t.assignments.groups, icon: <UsersRound className="h-4 w-4" />, content: groupsPanel },
+          { id: "users", label: t.assignments.users, icon: <Users size={16} />, content: usersPanel },
+          { id: "groups", label: t.assignments.groups, icon: <UsersRound size={16} />, content: groupsPanel },
         ]}
       />
     </ModalDialog>

@@ -96,7 +96,7 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
         style={{ color: onSurface }}
       >
         <Link href="/learner" className="inline-flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft size={16} />
           {t.result.backToTests}
         </Link>
         {attempt.attemptsInfo && (

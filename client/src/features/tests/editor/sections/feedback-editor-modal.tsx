@@ -407,7 +407,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
         {/* ── Courses section (data field `links`; UI label «Курсы») ────── */}
         <div className="tb-feedback-editor__section">
           <div className="tb-feedback-editor__sec-title">
-            <LinkIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            <LinkIcon size={14} aria-hidden="true" />
             Курсы
           </div>
           {/* No empty-state per wireframe — just the list (if any) + button. */}
@@ -451,7 +451,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
                     />
                   </div>
                   <IconButton
-                    icon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                    icon={<Trash2 size={14} aria-hidden="true" />}
                     aria-label={`Удалить курс ${idx + 1}`}
                     variant="ghost"
                     size="s"
@@ -473,7 +473,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
             <Button
               variant="secondary"
               size="s"
-              leadingIcon={<Plus className="h-3 w-3" aria-hidden="true" />}
+              leadingIcon={<Plus size={12} aria-hidden="true" />}
               onClick={() =>
                 setDraft((d) => ({ ...d, links: [...d.links, { title: "", url: "" }] }))
               }
@@ -488,7 +488,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
         {!props.hideEvents && (
         <div className="tb-feedback-editor__section">
           <div className="tb-feedback-editor__sec-title">
-            <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+            <CalendarDays size={14} aria-hidden="true" />
             Мероприятия
           </div>
           {draft.events.length > 0 && (
@@ -531,7 +531,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
                     />
                   </div>
                   <IconButton
-                    icon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                    icon={<Trash2 size={14} aria-hidden="true" />}
                     aria-label={`Удалить мероприятие ${idx + 1}`}
                     variant="ghost"
                     size="s"
@@ -552,7 +552,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
             <Button
               variant="secondary"
               size="s"
-              leadingIcon={<Plus className="h-3 w-3" aria-hidden="true" />}
+              leadingIcon={<Plus size={12} aria-hidden="true" />}
               onClick={() =>
                 setDraft((d) => ({ ...d, events: [...d.events, { title: "", url: "" }] }))
               }
@@ -568,7 +568,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
         {!props.hideAssets && (
           <div className="tb-feedback-editor__section">
             <div className="tb-feedback-editor__sec-title">
-              <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+              <Paperclip size={14} aria-hidden="true" />
               Прикреплённые файлы (PDF)
             </div>
             {draft.assets.length > 0 && (
@@ -605,7 +605,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
                       </div>
                     </div>
                     <IconButton
-                      icon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                      icon={<Trash2 size={14} aria-hidden="true" />}
                       aria-label={`Удалить файл ${i + 1}`}
                       variant="ghost"
                       size="s"
@@ -626,7 +626,7 @@ export function FeedbackEditorModal(props: FeedbackEditorModalProps) {
               <Button
                 variant="secondary"
                 size="s"
-                leadingIcon={<Plus className="h-3 w-3" aria-hidden="true" />}
+                leadingIcon={<Plus size={12} aria-hidden="true" />}
                 onClick={() => fileInputRef.current?.click()}
                 data-testid="feedback-editor-asset-upload"
               >

@@ -60,7 +60,7 @@ export function AppSidebar() {
   const items = allowed.map((n) => ({
     id: n.id,
     label: n.label,
-    icon: <n.icon className="h-4 w-4" />,
+    icon: <n.icon size={16} />,
   }));
 
   return (
@@ -81,7 +81,7 @@ export function AppSidebar() {
           className="flex items-center gap-2 text-inherit no-underline"
         >
           <span className="ou-shell__brand-mark">
-            <BookOpen className="h-4 w-4" />
+            <BookOpen size={16} />
           </span>
           <span className="font-semibold">{t.auth.appName}</span>
         </a>

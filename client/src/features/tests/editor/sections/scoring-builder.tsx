@@ -226,7 +226,7 @@ export function ScoringBuilder({
                         <IconButton
                           variant="ghost"
                           size="s"
-                          icon={<X className="h-4 w-4" />}
+                          icon={<X size={16} />}
                           onClick={() => removeCond(ti, ci)}
                           aria-label="Удалить условие"
                         />
@@ -237,7 +237,7 @@ export function ScoringBuilder({
                     type="button"
                     variant="ghost"
                     size="s"
-                    leadingIcon={<Plus className="h-4 w-4" />}
+                    leadingIcon={<Plus size={16} />}
                     onClick={() => addCond(ti)}
                     data-testid={`scoring-add-cond-${ti}`}
                   >
@@ -258,7 +258,7 @@ export function ScoringBuilder({
                   <IconButton
                     variant="ghost"
                     size="s"
-                    icon={<Trash2 className="h-4 w-4" />}
+                    icon={<Trash2 size={16} />}
                     onClick={() => removeTier(ti)}
                     aria-label="Удалить строку"
                   />
@@ -276,7 +276,7 @@ export function ScoringBuilder({
             type="button"
             variant="secondary"
             size="s"
-            leadingIcon={<Plus className="h-4 w-4" />}
+            leadingIcon={<Plus size={16} />}
             onClick={addTier}
             data-testid="scoring-add-tier"
           >

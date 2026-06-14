@@ -1376,7 +1376,7 @@ function AdaptiveLevelCard(props: {
             <Button
               variant="ghost"
               size="s"
-              leadingIcon={<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+              leadingIcon={<Trash2 size={14} aria-hidden="true" />}
               onClick={props.onRemove}
               disabled={!props.canRemove}
               aria-label={
@@ -1395,7 +1395,7 @@ function AdaptiveLevelCard(props: {
               onClick={() => setCollapsed((v) => !v)}
               data-testid={`${testIdBase}-toggle`}
             >
-              <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              <ChevronDown size={16} aria-hidden="true" />
             </button>
           </>
         }

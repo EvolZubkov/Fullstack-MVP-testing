@@ -124,7 +124,7 @@ export function FeedbackPreview(props: FeedbackPreviewProps) {
         )}
         {props.onEdit && (
           <IconButton
-            icon={<Pencil className="h-3.5 w-3.5" aria-hidden="true" />}
+            icon={<Pencil size={14} aria-hidden="true" />}
             aria-label={props.editAriaLabel ?? "Редактировать обратную связь"}
             variant="ghost"
             size="s"
@@ -136,7 +136,7 @@ export function FeedbackPreview(props: FeedbackPreviewProps) {
 
       <PreviewGroup
         title="Документы"
-        icon={<FileText className="h-3.5 w-3.5" />}
+        icon={<FileText size={14} />}
         items={props.assets.map((a) => ({
           label: a.title,
           href: a.scormHref,
@@ -145,12 +145,12 @@ export function FeedbackPreview(props: FeedbackPreviewProps) {
       />
       <PreviewGroup
         title="Курсы"
-        icon={<LinkIcon className="h-3.5 w-3.5" />}
+        icon={<LinkIcon size={14} />}
         items={props.links.map((l) => ({ label: l.title, href: l.url }))}
       />
       <PreviewGroup
         title="Мероприятия"
-        icon={<LinkIcon className="h-3.5 w-3.5" />}
+        icon={<LinkIcon size={14} />}
         items={props.events.map((ev) => ({ label: ev.title, href: ev.url || undefined }))}
       />
     </div>

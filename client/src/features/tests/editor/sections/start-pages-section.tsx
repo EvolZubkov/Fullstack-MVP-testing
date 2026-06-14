@@ -412,7 +412,7 @@ export const StartPagesSection = StructureSection;
 function FlowModeBar({ mode }: { mode: TestEditorModel["flowMode"] }) {
   return (
     <div className="flow-mode-bar" data-testid="structure-mode-banner">
-      <Layout className="h-3.5 w-3.5" aria-hidden="true" />
+      <Layout size={14} aria-hidden="true" />
       <span>Режим:</span>
       <span className="flow-mode-label">{FLOW_LABEL[mode]}</span>
       <span className="flow-mode-hint">
@@ -732,7 +732,7 @@ function ZonesBlock(props: {
         {activePage ? (
           <div className="page-row dragging" data-testid="structure-drag-overlay">
             <span className="drag-handle">
-              <GripVertical className="h-3.5 w-3.5" />
+              <GripVertical size={14} />
             </span>
             <span className="page-variant-badge">
               {handlers.cp.contentTemplates.find((v) => v.key === activePage.templateKey)?.label ??
@@ -759,7 +759,7 @@ function Zone(props: { title: string; testId: string; children: React.ReactNode 
   return (
     <section className="zone-block" data-testid={props.testId}>
       <div className="zone-header">
-        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+        <ChevronRight size={14} aria-hidden="true" />
         {props.title}
       </div>
       <div className="topic-body">{props.children}</div>
@@ -813,7 +813,7 @@ function TopicBlock(props: {
             {...(dragEnabled ? sortable.attributes : {})}
             {...(dragEnabled ? sortable.listeners : {})}
           >
-            <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+            <GripVertical size={14} aria-hidden="true" />
           </span>
         )}
         <span className="topic-name">
@@ -887,7 +887,7 @@ function InsideTestZone(props: {
   return (
     <section className="inside-test" data-testid="structure-inside-test">
       <div className="inside-test__label">
-        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+        <ChevronRight size={14} aria-hidden="true" />
         Внутри теста
       </div>
       <div className="inside-test__body">
@@ -942,7 +942,7 @@ function QuestionsRow(props: {
         data-testid={props.testId}
         data-kind="questions"
       >
-        <HelpCircle className="page-icon h-3.5 w-3.5" aria-hidden="true" />
+        <HelpCircle className="page-icon" size={14} aria-hidden="true" />
         <span className="page-variant-badge">Вопросы</span>
         <span className="page-title">{props.countLabel}</span>
       </div>
@@ -1020,10 +1020,10 @@ function SystemPageRow(props: {
           onClick={() => setExpandedId(expanded ? null : page.id)}
           data-testid={`${props.testId}-expand`}
         >
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          <ChevronRight size={14} aria-hidden="true" />
         </button>
       )}
-      <Icon className="page-icon h-3.5 w-3.5" aria-hidden="true" />
+      <Icon className="page-icon" size={14} aria-hidden="true" />
       <span className="page-variant-badge">{badge}</span>
       <span className="page-title">
         {props.title}
@@ -1046,7 +1046,7 @@ function SystemPageRow(props: {
               aria-label={`Действия для системной страницы «${badge}»`}
               data-testid={`${props.testId}-actions`}
             >
-              <MoreHorizontal className="h-3 w-3" aria-hidden="true" />
+              <MoreHorizontal size={12} aria-hidden="true" />
             </button>
           }
         >
@@ -1071,19 +1071,19 @@ function SystemPageRow(props: {
         <div className="page-row__meta">
           {hasErr && (
             <Tag tone="error" size="s" data-testid={`${props.testId}-required-tag`}>
-              <AlertCircle className="h-3 w-3" aria-hidden="true" />
+              <AlertCircle size={12} aria-hidden="true" />
               Не заполнено обязательных полей: {missing.length}
             </Tag>
           )}
           {usingFallback && (
             <Tag tone="warning" size="s" data-testid={`${props.testId}-fallback-tag`}>
-              <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+              <AlertTriangle size={12} aria-hidden="true" />
               Из стандартного шаблона
             </Tag>
           )}
           {canSwitch && (
             <Tag tone="info" size="s" data-testid={`${props.testId}-variant-hint`}>
-              <Info className="h-3 w-3" aria-hidden="true" />
+              <Info size={12} aria-hidden="true" />
               Доступно вариантов: {variants.length}
             </Tag>
           )}
@@ -1265,7 +1265,7 @@ function InsertRow(props: { onClick: () => void; testId: string }) {
     <div className="insert-row">
       <div className="insert-row-line" aria-hidden="true" />
       <button type="button" className="insert-btn" onClick={props.onClick} data-testid={props.testId}>
-        <Plus className="h-3 w-3" aria-hidden="true" /> Добавить страницу
+        <Plus size={12} aria-hidden="true" /> Добавить страницу
       </button>
       <div className="insert-row-line" aria-hidden="true" />
     </div>
@@ -1329,7 +1329,7 @@ function AuthorPageRow(props: {
           aria-label={`Переместить страницу «${title}»`}
           {...props.dragHandleProps}
         >
-          <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+          <GripVertical size={14} aria-hidden="true" />
         </span>
         <button
           type="button"
@@ -1339,7 +1339,7 @@ function AuthorPageRow(props: {
           onClick={props.onToggleExpand}
           data-testid={`structure-page-expand-${page.id}`}
         >
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          <ChevronRight size={14} aria-hidden="true" />
         </button>
         <span className="page-variant-badge">{badge}</span>
         <span className="page-title">{title}</span>
@@ -1354,7 +1354,7 @@ function AuthorPageRow(props: {
                   aria-label={`Действия для страницы ${title}`}
                   data-testid={`structure-page-actions-${page.id}`}
                 >
-                  <MoreHorizontal className="h-3 w-3" aria-hidden="true" />
+                  <MoreHorizontal size={12} aria-hidden="true" />
                 </button>
               }
             >
@@ -1414,13 +1414,13 @@ function AuthorPageRow(props: {
           <div className="page-row__meta">
             {page.templateKeyMissing && (
               <Tag tone="warning" size="s" data-testid={`structure-page-missing-${page.id}`}>
-                <Info className="h-3 w-3" aria-hidden="true" />
+                <Info size={12} aria-hidden="true" />
                 Шаблон страницы недоступен
               </Tag>
             )}
             {missing.length > 0 && (
               <Tag tone="error" size="s" data-testid={`structure-page-required-${page.id}`}>
-                <AlertCircle className="h-3 w-3" aria-hidden="true" />
+                <AlertCircle size={12} aria-hidden="true" />
                 Не заполнено обязательных полей: {missing.length}
               </Tag>
             )}
@@ -1428,7 +1428,7 @@ function AuthorPageRow(props: {
                 pages also surface that «Сменить вариант» (in the «...» menu) exists. */}
             {canReplaceVariant && (
               <Tag tone="info" size="s" data-testid={`structure-page-${page.id}-variant-hint`}>
-                <Info className="h-3 w-3" aria-hidden="true" />
+                <Info size={12} aria-hidden="true" />
                 Доступно вариантов: {variantsForKind.length}
               </Tag>
             )}
@@ -1517,7 +1517,7 @@ function PageEditForm(props: {
           data-testid={`structure-page-edit-sanitize-${page.id}`}
         >
           <span className="validation-banner__ico" aria-hidden="true">
-            <AlertTriangle className="h-3.5 w-3.5" />
+            <AlertTriangle size={14} />
           </span>
           <div className="validation-banner__body">
             <div className="validation-banner__title">HTML санитизирован</div>
@@ -1546,7 +1546,7 @@ function PageEditForm(props: {
             onClick={() => cp.dismissSanitizeDiagnostics(page.id)}
             data-testid={`structure-page-edit-sanitize-dismiss-${page.id}`}
           >
-            <X className="h-3 w-3" aria-hidden="true" />
+            <X size={12} aria-hidden="true" />
           </button>
         </div>
       )}
@@ -1557,7 +1557,7 @@ function PageEditForm(props: {
           data-testid={`structure-page-edit-validation-${page.id}`}
         >
           <span className="validation-banner__ico" aria-hidden="true">
-            <AlertCircle className="h-3.5 w-3.5" />
+            <AlertCircle size={14} />
           </span>
           <div className="validation-banner__body">
             <div className="validation-banner__title">Заполните обязательные поля</div>
