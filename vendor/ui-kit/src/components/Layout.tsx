@@ -32,11 +32,13 @@ export interface StackProps extends React.HTMLAttributes<HTMLDivElement> {
   full?: boolean;
   /** Grow to fill available space when nested in a flex parent (`flex: 1`). */
   grow?: boolean;
+  /** Minimum height: `screen` = 100dvh (full-height app/auth columns). */
+  minH?: 'screen' | 'full';
   as?: React.ElementType;
 }
 
 export const Stack = forwardRef<HTMLDivElement, StackProps>(
-  ({ direction = 'col', gap = 4, align, justify, wrap, full, grow, as: Tag = 'div', className, ...rest }, ref) => (
+  ({ direction = 'col', gap = 4, align, justify, wrap, full, grow, minH, as: Tag = 'div', className, ...rest }, ref) => (
     <Tag
       ref={ref}
       className={cn(
@@ -48,6 +50,7 @@ export const Stack = forwardRef<HTMLDivElement, StackProps>(
         wrap && 'ou-stack--wrap',
         full && 'ou-stack--full',
         grow && 'ou-grow',
+        minH && `ou-stack--minh-${minH}`,
         className,
       )}
       {...rest}
@@ -94,6 +97,8 @@ Grid.displayName = 'Grid';
 
 export type BoxSurface = 'muted' | 'subtle' | 'elevated';
 export type BoxRadius = 's' | 'm' | 'l';
+/** Named max-width caps for content/cards (no arbitrary values). */
+export type BoxMaxW = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 export interface BoxProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Padding on all sides (`--ou-space-{pad}`). */
@@ -111,13 +116,17 @@ export interface BoxProps extends React.HTMLAttributes<HTMLDivElement> {
   surface?: BoxSurface;
   border?: boolean;
   radius?: BoxRadius;
+  /** Cap content width to a named preset and center it horizontally. */
+  maxW?: BoxMaxW;
   /** Grow to fill available space when nested in a flex parent (`flex: 1`). */
   grow?: boolean;
+  /** Stretch to full width. */
+  full?: boolean;
   as?: React.ElementType;
 }
 
 export const Box = forwardRef<HTMLDivElement, BoxProps>(
-  ({ pad, padX, padY, padTop, padBottom, padStart, padEnd, surface, border, radius, grow, as: Tag = 'div', className, ...rest }, ref) => (
+  ({ pad, padX, padY, padTop, padBottom, padStart, padEnd, surface, border, radius, maxW, grow, full, as: Tag = 'div', className, ...rest }, ref) => (
     <Tag
       ref={ref}
       className={cn(
@@ -132,7 +141,9 @@ export const Box = forwardRef<HTMLDivElement, BoxProps>(
         surface && `ou-box--surface-${surface}`,
         border && 'ou-box--border',
         radius && `ou-box--radius-${radius}`,
+        maxW && `ou-box--maxw-${maxW}`,
         grow && 'ou-grow',
+        full && 'ou-box--full',
         className,
       )}
       {...rest}

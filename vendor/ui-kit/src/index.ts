@@ -8,6 +8,8 @@ import { Banner } from './components/Banner';
 import { Breadcrumbs } from './components/Breadcrumbs';
 import { Button } from './components/Button';
 import { Calendar } from './components/Calendar';
+import { Center } from './components/Center';
+import { IconBadge } from './components/IconBadge';
 import {
   Card, CardBody, CardDivider, CardFooter, CardHeader, CardKpi, CardMedia,
 } from './components/Card';
@@ -92,6 +94,8 @@ export {
   Breadcrumbs,
   Button,
   Calendar,
+  Center,
+  IconBadge,
   Card, CardBody, CardDivider, CardFooter, CardHeader, CardKpi, CardMedia,
   BarChart, Chart, LineChart, ProgressRing,
   Checkbox,
@@ -162,6 +166,8 @@ export type { AvatarProps, AvatarColor } from './components/Avatar';
 export type { BannerProps, BannerVariant, BannerTone, BannerAction } from './components/Banner';
 export type { BreadcrumbsProps, BreadcrumbItem, BreadcrumbsSeparator } from './components/Breadcrumbs';
 export type { ButtonProps } from './components/Button';
+export type { CenterProps, CenterMinH } from './components/Center';
+export type { IconBadgeProps, IconBadgeTone, IconBadgeSize } from './components/IconBadge';
 export type {
   CalendarProps, CalendarDate, CalendarMode, CalendarView, CalendarPreset,
 } from './components/Calendar';

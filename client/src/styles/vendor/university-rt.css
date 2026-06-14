@@ -7641,3 +7641,37 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-box--padb-8 { padding-block-end: var(--ou-space-8); }
 .ou-box--pads-8 { padding-inline-start: var(--ou-space-8); }
 .ou-box--pade-8 { padding-inline-end: var(--ou-space-8); }
+
+/* ─── center.css (added: Center primitive) ─────────────────────────── */
+.ou-center { display: flex; align-items: center; justify-content: center; }
+.ou-center--screen { min-height: 100dvh; }
+.ou-center--full { min-height: 100%; }
+
+/* ─── icon-badge.css (added: IconBadge primitive) ──────────────────── */
+.ou-iconbadge { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: var(--ou-radius-pill); flex-shrink: 0; }
+.ou-iconbadge svg { width: 24px; height: 24px; }
+.ou-iconbadge--s { width: 36px; height: 36px; }
+.ou-iconbadge--s svg { width: 18px; height: 18px; }
+.ou-iconbadge--l { width: 64px; height: 64px; }
+.ou-iconbadge--l svg { width: 32px; height: 32px; }
+.ou-iconbadge--neutral { background: var(--ou-bg-surface-3); color: var(--ou-fg-soft); }
+.ou-iconbadge--accent  { background: var(--ou-accent-container); color: var(--ou-accent-on-soft); }
+.ou-iconbadge--success { background: var(--ou-success-soft); color: var(--ou-success-on-soft); }
+.ou-iconbadge--warning { background: var(--ou-warning-soft); color: var(--ou-warning-on-soft); }
+.ou-iconbadge--error   { background: var(--ou-error-soft); color: var(--ou-error-on-soft); }
+.ou-iconbadge--info    { background: var(--ou-info-soft); color: var(--ou-info-on-soft); }
+
+/* ─── field reveal (added: Input revealToggle eye button) ──────────── */
+.ou-field__reveal { width: 24px; height: 24px; border: 0; background: none; color: var(--ou-fg-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--ou-radius-s); flex-shrink: 0; }
+.ou-field__reveal:hover { color: var(--ou-fg-default); }
+
+.ou-stack--minh-screen { min-height: 100dvh; }
+.ou-stack--minh-full { min-height: 100%; }
+
+/* ─── Box: full width + named max-width caps ───────────────────────── */
+.ou-box--full { width: 100%; }
+.ou-box--maxw-xs { max-width: 20rem; }
+.ou-box--maxw-sm { max-width: 24rem; }
+.ou-box--maxw-md { max-width: 28rem; }
+.ou-box--maxw-lg { max-width: 32rem; }
+.ou-box--maxw-xl { max-width: 36rem; }
