@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { Text } from "@universityrt/ui-kit";
+import { Stack, Text } from "@universityrt/ui-kit";
 
 interface LoadingStateProps {
   message?: string;
@@ -7,10 +7,10 @@ interface LoadingStateProps {
 
 export function LoadingState({ message = "Loading..." }: LoadingStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-6">
-      <Loader2 size={32} color="var(--ou-accent-default)" className="animate-spin mb-4" />
+    <Stack align="center" justify="center" padX={6} className="py-16">
+      <Loader2 size={32} color="var(--ou-accent-default)" className="animate-spin" />
       <Text as="p" tone="muted">{message}</Text>
-    </div>
+    </Stack>
   );
 }
 

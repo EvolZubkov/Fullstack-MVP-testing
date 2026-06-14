@@ -331,7 +331,7 @@ export function TopicDrawer({
         title={isEdit ? "Тема" : "Новая тема"}
         description={isEdit ? topic?.name : undefined}
         footer={
-          <div className="flex justify-end gap-2">
+          <Cluster justify="end" gap={2} wrap={false}>
             <Button variant="ghost" onClick={onClose}>Отмена</Button>
             <Button
               variant="primary"
@@ -342,7 +342,7 @@ export function TopicDrawer({
             >
               Сохранить
             </Button>
-          </div>
+          </Cluster>
         }
       >
         <Tabs<TopicTab>
@@ -355,7 +355,7 @@ export function TopicDrawer({
         />
 
         {tab === "props" && (
-          <div className="flex flex-col gap-6 pt-4">
+          <Stack gap={6} padTop={4}>
             <Input
               label="Название темы"
               fullWidth
@@ -406,13 +406,13 @@ export function TopicDrawer({
                 testId="topic-feedback"
               />
             </Stack>
-          </div>
+          </Stack>
         )}
 
         {tab === "access" && isEdit && (
-          <div className="flex flex-col gap-6 pt-4">
+          <Stack gap={6} padTop={4}>
             {/* Owner */}
-            <section className="flex flex-col gap-3">
+            <Stack as="section" gap={3}>
               <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">Владелец</Text>
               {changingOwner && isAdmin ? (
                 <Select
@@ -441,10 +441,10 @@ export function TopicDrawer({
                   )}
                 </Cluster>
               )}
-            </section>
+            </Stack>
 
             {/* Visibility */}
-            <section className="flex flex-col gap-3">
+            <Stack as="section" gap={3}>
               <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">Видимость</Text>
               <Switch
                 checked={shared}
@@ -456,12 +456,12 @@ export function TopicDrawer({
                     : "Сейчас приватная — видят только владелец, получатели грантов и администратор."
                 }
               />
-            </section>
+            </Stack>
 
             {/* Grants */}
-            <section className="flex flex-col gap-3">
+            <Stack as="section" gap={3}>
               <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">Гранты доступа</Text>
-              <div className="flex items-end gap-3 flex-wrap">
+              <Cluster align="end" gap={3}>
                 <Combobox
                   aria-label="Выбрать пользователя"
                   placeholder="Выберите пользователя…"
@@ -487,7 +487,7 @@ export function TopicDrawer({
                 >
                   Добавить
                 </Button>
-              </div>
+              </Cluster>
 
               {grants.length === 0 ? (
                 <EmptyState
@@ -505,10 +505,10 @@ export function TopicDrawer({
                       key: "user",
                       header: "Пользователь",
                       render: (g) => (
-                        <span className="flex items-center gap-2">
+                        <Cluster as="span" gap={2} wrap={false}>
                           <Avatar initials={initials(g.granteeName)} size="xs" />
                           <span>{g.granteeName ?? "—"}</span>
-                        </span>
+                        </Cluster>
                       ),
                     },
                     {
@@ -555,8 +555,8 @@ export function TopicDrawer({
                   ]}
                 />
               )}
-            </section>
-          </div>
+            </Stack>
+          </Stack>
         )}
       </Drawer>
 
@@ -593,7 +593,7 @@ export function TopicDrawer({
         title="Отозвать доступ"
         description={revokeTarget?.granteeName ?? undefined}
         footer={
-          <div className="flex justify-end gap-2">
+          <Cluster justify="end" gap={2} wrap={false}>
             <Button variant="ghost" onClick={() => { setRevokeTarget(null); setRevokeDeps(null); }}>Отмена</Button>
             {revokeDeps === null ? (
               <>
@@ -623,11 +623,11 @@ export function TopicDrawer({
                 Отозвать принудительно
               </Button>
             )}
-          </div>
+          </Cluster>
         }
       >
         {revokeDeps === null ? (
-          <div className="flex flex-col gap-2 text-sm">
+          <Stack gap={2} className="text-sm">
             <p>
               <strong>Мягкий отзыв</strong> (по умолчанию): тема уходит из банка получателя, но он
               сохраняет чтение её содержимого в контексте уже собранных тестов. Не блокируется.
@@ -638,7 +638,7 @@ export function TopicDrawer({
                 опубликованные тесты получателя.
               </p>
             )}
-          </div>
+          </Stack>
         ) : (
           <Stack gap={3}>
             <Banner

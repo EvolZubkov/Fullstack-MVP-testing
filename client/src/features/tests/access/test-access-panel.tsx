@@ -175,17 +175,17 @@ export function TestAccessPanel({
       title="Общий доступ"
       description={test?.title}
       footer={
-        <div className="flex justify-end gap-2">
+        <Cluster justify="end" gap={2} wrap={false}>
           <Button variant="ghost" onClick={onClose}>Отмена</Button>
           <Button variant="primary" loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
             Сохранить
           </Button>
-        </div>
+        </Cluster>
       }
     >
       <Stack gap={6}>
         {/* Owner */}
-        <section className="flex flex-col gap-3">
+        <Stack as="section" gap={3}>
           <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">Владелец</Text>
           {changingOwner ? (
             <Select
@@ -212,11 +212,11 @@ export function TestAccessPanel({
               </Button>
             </Cluster>
           )}
-        </section>
+        </Stack>
 
         {/* Grants */}
-        <section className="flex flex-col gap-3">
-          <div className="flex items-end gap-3 flex-wrap">
+        <Stack as="section" gap={3}>
+          <Cluster align="end" gap={3}>
             <Combobox
               aria-label="Выбрать пользователя"
               placeholder="Выберите пользователя…"
@@ -238,7 +238,7 @@ export function TestAccessPanel({
             <Button variant="primary" disabled={!addUserId} onClick={addGrant}>
               Добавить
             </Button>
-          </div>
+          </Cluster>
 
           {grants.length === 0 ? (
             <EmptyState
@@ -262,10 +262,10 @@ export function TestAccessPanel({
                   render: (g) => {
                     const u = usersById.get(g.userId);
                     return (
-                      <span className="flex items-center gap-2">
+                      <Cluster as="span" gap={2} wrap={false}>
                         <Avatar initials={initials(u)} size="xs" />
                         <span>{displayName(u)}</span>
-                      </span>
+                      </Cluster>
                     );
                   },
                 },
@@ -300,7 +300,7 @@ export function TestAccessPanel({
               ]}
             />
           )}
-        </section>
+        </Stack>
       </Stack>
     </Drawer>
   );

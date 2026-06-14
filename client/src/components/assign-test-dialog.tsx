@@ -13,6 +13,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import {
+  Box,
   Button,
   Cluster,
   IconButton,
@@ -114,7 +115,7 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
   });
 
   return (
-    <div className="flex items-center justify-between py-1 text-sm border-b border-border/50 last:border-0">
+    <Cluster justify="between" gap={0} wrap={false} padY={1} className="text-sm border-b border-border/50 last:border-0">
       <Cluster gap={3} wrap={false}>
         <Users size={12} color="var(--ou-fg-muted)" />
         <span className="font-medium">{user.email}</span>
@@ -145,7 +146,7 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
           />
         )}
       </Cluster>
-    </div>
+    </Cluster>
   );
 }
 
@@ -157,20 +158,20 @@ function GroupUsersPanel({ assignmentId }: { assignmentId: string }) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 px-8 py-3 text-sm text-muted-foreground bg-muted/30">
+      <Cluster gap={2} wrap={false} padX={7} padY={3} className="text-sm text-muted-foreground bg-muted/30">
         <Loader2 size={16} className="animate-spin" /> Загрузка участников...
-      </div>
+      </Cluster>
     );
   }
   if (groupUsers.length === 0) {
-    return <div className="px-8 py-3 text-sm text-muted-foreground bg-muted/30">Группа пуста</div>;
+    return <Box padX={7} padY={3} className="text-sm text-muted-foreground bg-muted/30">Группа пуста</Box>;
   }
   return (
-    <div className="px-8 py-2 space-y-1 bg-muted/30">
+    <Stack gap={1} padX={7} padY={2} className="bg-muted/30">
       {groupUsers.map((u) => (
         <GroupUserRow key={u.id} user={u} assignmentId={assignmentId} />
       ))}
-    </div>
+    </Stack>
   );
 }
 
@@ -377,8 +378,8 @@ export function AssignTestDialog({
     });
 
   const dateFields = (
-    <div className="flex gap-4">
-      <div className="flex-1">
+    <Stack direction="row" gap={4}>
+      <Box grow>
         <Input
           label={t.assignments.dueDate}
           type="date"
@@ -386,8 +387,8 @@ export function AssignTestDialog({
           value={dueDate}
           onChange={(e) => handleDueDateChange(e.target.value)}
         />
-      </div>
-      <div className="flex-1">
+      </Box>
+      <Box grow>
         <Input
           label="Ссылка активна до"
           type="date"
@@ -396,8 +397,8 @@ export function AssignTestDialog({
           onChange={(e) => setLinkExpiresAt(e.target.value)}
           placeholder="По умолчанию: +30 дней"
         />
-      </div>
-    </div>
+      </Box>
+    </Stack>
   );
 
   // ── Table columns ──
@@ -442,7 +443,7 @@ export function AssignTestDialog({
       header: t.assignments.dueDate,
       render: (a) =>
         a.dueDate ? (
-          <span className="flex items-center gap-1"><Calendar size={12} />{formatDate(a.dueDate)}</span>
+          <Cluster as="span" gap={1} wrap={false}><Calendar size={12} />{formatDate(a.dueDate)}</Cluster>
         ) : (
           <Text tone="muted">{t.assignments.noDueDate}</Text>
         ),
@@ -452,7 +453,7 @@ export function AssignTestDialog({
       header: "Ссылка до",
       render: (a) =>
         a.linkExpiresAt ? (
-          <span className="flex items-center gap-1 text-sm"><Link size={12} />{formatDate(a.linkExpiresAt)}</span>
+          <Cluster as="span" gap={1} wrap={false} className="text-sm"><Link size={12} />{formatDate(a.linkExpiresAt)}</Cluster>
         ) : (
           <Text tone="muted">—</Text>
         ),
@@ -546,15 +547,15 @@ export function AssignTestDialog({
 
   // ── Tab panels ──
   const currentPanel = assignmentsLoading ? (
-    <div className="flex items-center justify-center py-8">
+    <Cluster justify="center" wrap={false} padY={7}>
       <Loader2 size={24} className="animate-spin" />
-    </div>
+    </Cluster>
   ) : assignments.length === 0 ? (
-    <div className="text-center py-8 text-muted-foreground">
+    <Box padY={7} className="text-center text-muted-foreground">
       <Users size={48} className="mx-auto mb-4 opacity-50" />
       <p>{t.assignments.noAssignments}</p>
       <p className="text-sm">{t.assignments.noAssignmentsDescription}</p>
-    </div>
+    </Box>
   ) : (
     <Table
       columns={assignmentColumns}
@@ -570,7 +571,7 @@ export function AssignTestDialog({
     <Stack gap={4}>
       <Stack gap={3}>
         {dateFields}
-        <div className="flex justify-end">
+        <Cluster justify="end" gap={0} wrap={false}>
           <Button
             onClick={handleAssignUsers}
             disabled={selectedUserIds.length === 0}
@@ -578,12 +579,12 @@ export function AssignTestDialog({
           >
             {t.assignments.assign} ({selectedUserIds.length})
           </Button>
-        </div>
+        </Cluster>
       </Stack>
       {availableUsers.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
+        <Box padY={7} className="text-center text-muted-foreground">
           <p>Все пользователи уже назначены</p>
-        </div>
+        </Box>
       ) : (
         <div className="max-h-[300px] overflow-y-auto">
           <Table
@@ -603,7 +604,7 @@ export function AssignTestDialog({
     <Stack gap={4}>
       <Stack gap={3}>
         {dateFields}
-        <div className="flex justify-end">
+        <Cluster justify="end" gap={0} wrap={false}>
           <Button
             onClick={handleAssignGroups}
             disabled={selectedGroupIds.length === 0}
@@ -611,12 +612,12 @@ export function AssignTestDialog({
           >
             {t.assignments.assign} ({selectedGroupIds.length})
           </Button>
-        </div>
+        </Cluster>
       </Stack>
       {availableGroups.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
+        <Box padY={7} className="text-center text-muted-foreground">
           <p>Все группы уже назначены</p>
-        </div>
+        </Box>
       ) : (
         <div className="max-h-[300px] overflow-y-auto">
           <Table

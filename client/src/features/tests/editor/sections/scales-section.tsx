@@ -342,7 +342,7 @@ function ScalesListPane({
 
   return (
     <>
-      <div className="flex items-center justify-between mb-3">
+      <Cluster justify="between" gap={0} wrap={false} className="mb-3">
         <div className="tb-section-label">Шкалы теста</div>
         <Cluster gap={2} wrap={false}>
           <Button
@@ -366,7 +366,7 @@ function ScalesListPane({
             </Button>
           )}
         </Cluster>
-      </div>
+      </Cluster>
 
       {anyError && (
         <Banner

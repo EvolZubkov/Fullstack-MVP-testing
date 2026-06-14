@@ -19,14 +19,17 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Download, Upload, X } from "lucide-react";
 import {
   Banner,
+  Box,
   Button,
   Card,
   CardBody,
   CardHeader,
+  Cluster,
   Combobox,
   FileItem,
   FileUploader,
   Input,
+  Stack,
   Tag,
   Text,
   type ComboboxOption,
@@ -111,12 +114,12 @@ function PlanRow({
   extra?: string;
 }) {
   return (
-    <li className="flex items-center gap-3">
-      <span className="flex-1 font-semibold">
+    <Cluster as="li" gap={3} wrap={false}>
+      <Box as="span" grow className="font-semibold">
         {name}
         {suffix && <Text tone="muted"> {suffix}</Text>}
-      </span>
-      <span className="flex flex-wrap gap-2">
+      </Box>
+      <Cluster as="span" gap={2}>
         {!!created && (
           <Tag tone="success" variant="outline" size="s">{`+${created} ${tr.countCreate}`}</Tag>
         )}
@@ -127,8 +130,8 @@ function PlanRow({
           <Tag tone="neutral" variant="outline" size="s">{`${skipped} ${tr.countSkip}`}</Tag>
         )}
         {extra && <Tag tone="neutral" variant="outline" size="s">{extra}</Tag>}
-      </span>
-    </li>
+      </Cluster>
+    </Cluster>
   );
 }
 
@@ -277,13 +280,13 @@ export default function ImportPage() {
     if (plan.scope === "questions") {
       const q = plan.questions!;
       return (
-        <ul className="my-3 flex flex-col gap-2">
+        <Stack as="ul" gap={2} className="my-3">
           <PlanRow name={tr.planQuestions} suffix={tr.bankSuffix} created={q.created} updated={q.updated} skipped={q.skipped} />
-        </ul>
+        </Stack>
       );
     }
     return (
-      <ul className="my-3 flex flex-col gap-2">
+      <Stack as="ul" gap={2} className="my-3">
         {plan.questions && (
           <PlanRow
             name={tr.planQuestions}
@@ -315,7 +318,7 @@ export default function ImportPage() {
             extra={`${plan.structure.sections} ${tr.sectionsWord} · ${plan.structure.quotas} ${tr.quotasWord}`}
           />
         )}
-      </ul>
+      </Stack>
     );
   }
 
@@ -345,9 +348,9 @@ export default function ImportPage() {
                     </>
                   }
                 />
-                <div className="mt-4 flex justify-end gap-2">
+                <Cluster justify="end" gap={2} wrap={false} className="mt-4">
                   <Button variant="secondary" onClick={resetAll}>{tr.importMore}</Button>
-                </div>
+                </Cluster>
               </>
             ) : !file ? (
               /* ── Empty: uploader + template ──────────────────────────── */
@@ -365,7 +368,7 @@ export default function ImportPage() {
                     {tr.uploaderCta}
                   </Button>
                 </FileUploader>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Cluster gap={2} className="mt-3">
                   <Button
                     variant="ghost"
                     size="s"
@@ -376,7 +379,7 @@ export default function ImportPage() {
                   >
                     {tr.downloadTemplate}
                   </Button>
-                </div>
+                </Cluster>
               </>
             ) : (
               /* ── File chosen → inspect → action / preview ─────────────── */
@@ -420,7 +423,7 @@ export default function ImportPage() {
                         ))}
                       </ul>
                     )}
-                    <div className="mt-4 flex justify-end gap-2">
+                    <Cluster justify="end" gap={2} wrap={false} className="mt-4">
                       <Button variant="ghost" onClick={() => setPreview(null)}>{tr.back}</Button>
                       <Button
                         variant="primary"
@@ -429,7 +432,7 @@ export default function ImportPage() {
                       >
                         {preview.errors.length > 0 ? tr.importValid : tr.doImport}
                       </Button>
-                    </div>
+                    </Cluster>
                   </>
                 )}
 
@@ -444,7 +447,7 @@ export default function ImportPage() {
                     />
 
                     {requiresTest && (
-                      <div className="mt-3 flex flex-col gap-3">
+                      <Stack gap={3} className="mt-3">
                         <Combobox
                           label={tr.targetTest}
                           required
@@ -471,10 +474,10 @@ export default function ImportPage() {
                             }}
                           />
                         )}
-                      </div>
+                      </Stack>
                     )}
 
-                    <div className="mt-4 flex justify-end gap-2">
+                    <Cluster justify="end" gap={2} wrap={false} className="mt-4">
                       <Button
                         variant="secondary"
                         disabled={!targetReady || busy}
@@ -497,7 +500,7 @@ export default function ImportPage() {
                       >
                         {tr.doImport}
                       </Button>
-                    </div>
+                    </Cluster>
                   </>
                 )}
               </>

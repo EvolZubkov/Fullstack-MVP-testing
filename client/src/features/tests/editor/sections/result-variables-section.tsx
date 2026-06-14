@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Banner,
   Button,
+  Cluster,
   EmptyState,
   Grid,
   IconButton,
@@ -217,7 +218,7 @@ export function ResultVariablesSection({
 
   return (
     <div className="tb-settings-content" data-testid="metrics-section">
-      <div className="flex items-center justify-between mb-3">
+      <Cluster justify="between" gap={0} wrap={false} className="mb-3">
         <div className="tb-section-label">
           Показатели результата{vars.length > 1 ? " · порядок вычисления" : ""}
         </div>
@@ -232,7 +233,7 @@ export function ResultVariablesSection({
             Добавить показатель
           </Button>
         )}
-      </div>
+      </Cluster>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>

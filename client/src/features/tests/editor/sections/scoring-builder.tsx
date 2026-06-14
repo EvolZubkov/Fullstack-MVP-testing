@@ -138,12 +138,12 @@ export function ScoringBuilder({
 
   return (
     <Stack gap={4} data-testid="scoring-builder">
-      <div className="flex items-center justify-between gap-2">
+      <Cluster justify="between" gap={2} wrap={false}>
         <Label className="mb-0">Цена ответа</Label>
         <Tag variant="outline" data-testid="scoring-smax">
           Макс. балл sMax = {sMax}
         </Tag>
-      </div>
+      </Cluster>
 
       {/* Mode selector (segmented). */}
       <SegmentedControl
@@ -197,10 +197,10 @@ export function ScoringBuilder({
 
           {tiers.map((tier, ti) => (
             <div key={ti} className="rounded-md border p-3 space-y-2" data-testid={`scoring-tier-${ti}`}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 space-y-2">
+              <Cluster align="start" justify="between" gap={3} wrap={false}>
+                <Stack gap={2} grow>
                   {tier.conds.map((cond, ci) => (
-                    <div key={ci} className="flex flex-wrap items-center gap-2">
+                    <Cluster key={ci} gap={2}>
                       <Select
                         className="w-36"
                         value={cond.lhs}
@@ -234,7 +234,7 @@ export function ScoringBuilder({
                           aria-label="Удалить условие"
                         />
                       )}
-                    </div>
+                    </Cluster>
                   ))}
                   <Button
                     type="button"
@@ -246,7 +246,7 @@ export function ScoringBuilder({
                   >
                     И условие
                   </Button>
-                </div>
+                </Stack>
                 <Cluster gap={2} wrap={false}>
                   <Input
                     type="number"
@@ -266,7 +266,7 @@ export function ScoringBuilder({
                     aria-label="Удалить строку"
                   />
                 </Cluster>
-              </div>
+              </Cluster>
             </div>
           ))}
 
