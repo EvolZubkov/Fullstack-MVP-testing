@@ -67,11 +67,13 @@ export interface StackProps extends React.HTMLAttributes<HTMLDivElement>, Paddin
   grow?: boolean;
   /** Minimum height: `screen` = 100dvh (full-height app/auth columns). */
   minH?: 'screen' | 'full';
+  /** Background surface (reuses `ou-box--surface-*`) — a flex panel with its own fill. */
+  surface?: BoxSurface;
   as?: React.ElementType;
 }
 
 export const Stack = forwardRef<HTMLDivElement, StackProps>(
-  ({ direction = 'col', gap = 4, align, justify, wrap, full, grow, minH,
+  ({ direction = 'col', gap = 4, align, justify, wrap, full, grow, minH, surface,
      pad, padX, padY, padTop, padBottom, padStart, padEnd,
      as: Tag = 'div', className, ...rest }, ref) => (
     <Tag
@@ -86,6 +88,7 @@ export const Stack = forwardRef<HTMLDivElement, StackProps>(
         full && 'ou-stack--full',
         grow && 'ou-grow',
         minH && `ou-stack--minh-${minH}`,
+        surface && `ou-box--surface-${surface}`,
         ...padClasses({ pad, padX, padY, padTop, padBottom, padStart, padEnd }),
         className,
       )}
