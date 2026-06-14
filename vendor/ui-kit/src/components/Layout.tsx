@@ -138,7 +138,8 @@ export type BoxMaxW = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' |
 
 export interface BoxProps extends React.HTMLAttributes<HTMLDivElement>, PaddingProps {
   surface?: BoxSurface;
-  border?: boolean;
+  /** Border on all sides. `true`/`'solid'` → solid, `'dashed'` → dashed. */
+  border?: boolean | 'solid' | 'dashed';
   radius?: BoxRadius;
   /** Cap content width to a named preset and center it horizontally. */
   maxW?: BoxMaxW;
@@ -157,7 +158,7 @@ export const Box = forwardRef<HTMLDivElement, BoxProps>(
         'ou-box',
         ...padClasses({ pad, padX, padY, padTop, padBottom, padStart, padEnd }),
         surface && `ou-box--surface-${surface}`,
-        border && 'ou-box--border',
+        border && (border === 'dashed' ? 'ou-box--border-dashed' : 'ou-box--border'),
         radius && `ou-box--radius-${radius}`,
         maxW && `ou-box--maxw-${maxW}`,
         grow && 'ou-grow',
