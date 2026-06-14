@@ -1,3 +1,5 @@
+import { Text } from "@universityrt/ui-kit";
+
 interface PageHeaderProps {
   title: string;
   description?: string;
@@ -9,11 +11,11 @@ export function PageHeader({ title, description, actions, icon }: PageHeaderProp
   return (
     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between mb-6">
       <div className="flex items-start gap-3">
-        {icon && <div className="mt-1 text-muted-foreground">{icon}</div>}
+        {icon && <Text as="div" tone="muted" className="mt-1">{icon}</Text>}
         <div>
           <h1 className="text-2xl font-semibold">{title}</h1>
           {description && (
-            <p className="text-muted-foreground mt-1">{description}</p>
+            <Text as="p" tone="muted" className="mt-1">{description}</Text>
           )}
         </div>
       </div>

@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table, Stack, Cluster } from "@universityrt/ui-kit";
+import { Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table, Stack, Cluster, Text } from "@universityrt/ui-kit";
 import { Trash2, KeyRound } from "lucide-react";
 import { formatRoles } from "@/lib/roles";
 import type { Role } from "@shared/access";
@@ -186,7 +186,7 @@ export function TestAccessPanel({
       <Stack gap={6}>
         {/* Owner */}
         <section className="flex flex-col gap-3">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Владелец</span>
+          <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">Владелец</Text>
           {changingOwner ? (
             <Select
               aria-label="Владелец теста"
@@ -204,7 +204,7 @@ export function TestAccessPanel({
                   <span>{displayName(owner)}</span>
                 </>
               ) : (
-                <span className="text-muted-foreground">Владелец не назначен</span>
+                <Text tone="muted">Владелец не назначен</Text>
               )}
               <span className="flex-1" />
               <Button variant="secondary" size="s" onClick={() => setChangingOwner(true)}>

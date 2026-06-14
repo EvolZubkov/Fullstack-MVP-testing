@@ -28,6 +28,7 @@ import {
   Select,
   Stack,
   Tag,
+  Text,
 } from "@universityrt/ui-kit";
 
 export type ScoringMode = "exact" | "weighted" | "tiered";
@@ -182,17 +183,17 @@ export function ScoringBuilder({
               />
             </div>
           ))}
-          <p className="text-xs text-muted-foreground">Балл = вес выбранного варианта; sMax = наибольший вес.</p>
+          <Text as="p" variant="body-s" tone="muted">Балл = вес выбранного варианта; sMax = наибольший вес.</Text>
         </Stack>
       )}
 
       {/* tiered (multiple/matching/ranking) — step-table constructor. */}
       {mode === "tiered" && type !== "single" && (
         <Stack gap={3} data-testid="scoring-tiers">
-          <p className="text-xs text-muted-foreground">
+          <Text as="p" variant="body-s" tone="muted">
             Ступени проверяются сверху вниз, засчитывается первая подходящая. Счётчики: <b>c</b> — верных
             выбрано, <b>x</b> — лишних; <b>{token}</b> — всего {type === "matching" ? "пар" : type === "ranking" ? "элементов" : "верных"}.
-          </p>
+          </Text>
 
           {tiers.map((tier, ti) => (
             <div key={ti} className="rounded-md border p-3 space-y-2" data-testid={`scoring-tier-${ti}`}>

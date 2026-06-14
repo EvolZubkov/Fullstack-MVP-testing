@@ -28,6 +28,7 @@ import {
   FileUploader,
   Input,
   Tag,
+  Text,
   type ComboboxOption,
 } from "@universityrt/ui-kit";
 import { PageHeader } from "@/components/page-header";
@@ -113,7 +114,7 @@ function PlanRow({
     <li className="flex items-center gap-3">
       <span className="flex-1 font-semibold">
         {name}
-        {suffix && <span className="text-muted-foreground font-normal"> {suffix}</span>}
+        {suffix && <Text tone="muted"> {suffix}</Text>}
       </span>
       <span className="flex flex-wrap gap-2">
         {!!created && (
@@ -397,9 +398,9 @@ export default function ImportPage() {
                 {!inspecting && preview && (
                   <>
                     {requiresTest && targetTitle && (
-                      <p className="mt-3 text-sm text-muted-foreground">
+                      <Text as="p" tone="muted" className="mt-3">
                         {tr.targetLabel} <strong className="text-foreground">{targetTitle}</strong>
-                      </p>
+                      </Text>
                     )}
                     {preview.errors.length > 0 ? (
                       <Banner

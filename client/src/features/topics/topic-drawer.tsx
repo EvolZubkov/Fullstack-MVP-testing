@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table,
-  Switch, Tag, Banner, ModalDialog, Tabs, Input, Textarea, Cluster, Stack,
+  Switch, Tag, Banner, ModalDialog, Tabs, Input, Textarea, Cluster, Stack, Text,
 } from "@universityrt/ui-kit";
 import { Trash2, KeyRound, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -392,9 +392,9 @@ export function TopicDrawer({
               data-testid="input-topic-description"
             />
             <Stack gap={2}>
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">
                 Обратная связь по теме
-              </span>
+              </Text>
               <FeedbackPreview
                 format={feedback.format}
                 text={feedback.text}
@@ -413,7 +413,7 @@ export function TopicDrawer({
           <div className="flex flex-col gap-6 pt-4">
             {/* Owner */}
             <section className="flex flex-col gap-3">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Владелец</span>
+              <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">Владелец</Text>
               {changingOwner && isAdmin ? (
                 <Select
                   aria-label="Владелец темы"
@@ -431,7 +431,7 @@ export function TopicDrawer({
                       <span>{displayName(owner)}</span>
                     </>
                   ) : (
-                    <span className="text-muted-foreground">Владелец не назначен</span>
+                    <Text tone="muted">Владелец не назначен</Text>
                   )}
                   <span className="flex-1" />
                   {isAdmin && (
@@ -445,7 +445,7 @@ export function TopicDrawer({
 
             {/* Visibility */}
             <section className="flex flex-col gap-3">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Видимость</span>
+              <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">Видимость</Text>
               <Switch
                 checked={shared}
                 onChange={(e) => setShared(e.target.checked)}
@@ -460,7 +460,7 @@ export function TopicDrawer({
 
             {/* Grants */}
             <section className="flex flex-col gap-3">
-              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Гранты доступа</span>
+              <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">Гранты доступа</Text>
               <div className="flex items-end gap-3 flex-wrap">
                 <Combobox
                   aria-label="Выбрать пользователя"

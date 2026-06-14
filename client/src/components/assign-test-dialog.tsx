@@ -22,6 +22,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Text,
   type TableColumn,
 } from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
@@ -117,7 +118,7 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
       <Cluster gap={3} wrap={false}>
         <Users size={12} color="var(--ou-fg-muted)" />
         <span className="font-medium">{user.email}</span>
-        {user.name && <span className="text-muted-foreground">{user.name}</span>}
+        {user.name && <Text tone="muted">{user.name}</Text>}
       </Cluster>
       <Cluster gap={2} wrap={false}>
         <Tag size="s" tone={user.tokenStatus === "active" ? "success" : "neutral"}>
@@ -408,7 +409,7 @@ export function AssignTestDialog({
         a.user ? (
           <div>
             <p className="font-medium">{a.user.email}</p>
-            {a.user.name && <p className="text-sm text-muted-foreground">{a.user.name}</p>}
+            {a.user.name && <Text as="p" tone="muted">{a.user.name}</Text>}
           </div>
         ) : a.group ? (
           <Cluster gap={2} wrap={false}>
@@ -419,7 +420,7 @@ export function AssignTestDialog({
             )}
             <div>
               <p className="font-medium">{a.group.name}</p>
-              <p className="text-sm text-muted-foreground">{a.group.userCount} чел.</p>
+              <Text as="p" tone="muted">{a.group.userCount} чел.</Text>
             </div>
           </Cluster>
         ) : (
@@ -443,7 +444,7 @@ export function AssignTestDialog({
         a.dueDate ? (
           <span className="flex items-center gap-1"><Calendar size={12} />{formatDate(a.dueDate)}</span>
         ) : (
-          <span className="text-muted-foreground">{t.assignments.noDueDate}</span>
+          <Text tone="muted">{t.assignments.noDueDate}</Text>
         ),
     },
     {
@@ -453,7 +454,7 @@ export function AssignTestDialog({
         a.linkExpiresAt ? (
           <span className="flex items-center gap-1 text-sm"><Link size={12} />{formatDate(a.linkExpiresAt)}</span>
         ) : (
-          <span className="text-muted-foreground text-sm">—</span>
+          <Text tone="muted">—</Text>
         ),
     },
     {
@@ -538,7 +539,7 @@ export function AssignTestDialog({
     {
       key: "description",
       header: t.groups.groupDescription,
-      render: (g) => <span className="text-muted-foreground">{g.description || "—"}</span>,
+      render: (g) => <Text tone="muted">{g.description || "—"}</Text>,
     },
     { key: "members", header: t.groups.membersCount, render: (g) => <Tag>{g.userCount} чел.</Tag> },
   ];
