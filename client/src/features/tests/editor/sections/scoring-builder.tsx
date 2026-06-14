@@ -19,6 +19,7 @@
  */
 import { Plus, Trash2, X } from "lucide-react";
 import {
+  Box,
   Button,
   Cluster,
   IconButton,
@@ -156,10 +157,10 @@ export function ScoringBuilder({
 
       {/* exact — informational. */}
       {mode === "exact" && (
-        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground" data-testid="scoring-exact-hint">
+        <Box border="dashed" radius="m" pad={4} className="text-sm text-muted-foreground" data-testid="scoring-exact-hint">
           Вопрос оценивается точным совпадением (0/1) — как все существующие тесты. Чтобы дать
           частичный балл, переключите способ{type === "single" ? " на «Веса опций»" : " на «Ступенчато»"}.
-        </div>
+        </Box>
       )}
 
       {/* weighted (single) — option weights. */}
@@ -196,7 +197,7 @@ export function ScoringBuilder({
           </Text>
 
           {tiers.map((tier, ti) => (
-            <div key={ti} className="rounded-md border p-3 space-y-2" data-testid={`scoring-tier-${ti}`}>
+            <Box key={ti} border radius="m" pad={3} data-testid={`scoring-tier-${ti}`}>
               <Cluster align="start" justify="between" gap={3} wrap={false}>
                 <Stack gap={2} grow>
                   {tier.conds.map((cond, ci) => (
@@ -267,13 +268,15 @@ export function ScoringBuilder({
                   />
                 </Cluster>
               </Cluster>
-            </div>
+            </Box>
           ))}
 
-          <div className="flex items-center justify-between rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-            <em>Иначе — во всех остальных случаях</em>
-            <span>0</span>
-          </div>
+          <Box border="dashed" radius="m" pad={3} className="text-sm text-muted-foreground">
+            <Cluster justify="between" gap={0} wrap={false}>
+              <em>Иначе — во всех остальных случаях</em>
+              <span>0</span>
+            </Cluster>
+          </Box>
 
           <Button
             type="button"
