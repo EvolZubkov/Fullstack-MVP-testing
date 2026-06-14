@@ -2,12 +2,19 @@ import { useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { BookOpen, LogIn, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { PasswordInput } from "@/components/password-input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { BookOpen, LogIn } from "lucide-react";
+import {
+  Box,
+  Button,
+  Card,
+  CardBody,
+  Center,
+  Cluster,
+  Input,
+  Separator,
+  Stack,
+  Text,
+} from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -22,28 +29,17 @@ export default function LoginPage() {
 
   const form = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+    defaultValues: { email: "", password: "" },
   });
 
   const onSubmit = async (data: LoginData) => {
     if (isLoading) return;
-    console.log("=== LOGIN START ===");
     setIsLoading(true);
     try {
-      console.log("Calling login...");
       const success = await login(data.email, data.password);
-      console.log("Login result:", success);
       if (success) {
-        toast({
-          title: t.auth.welcomeBack,
-          description: t.auth.loginSuccess,
-        });
-        console.log("Navigating to /...");
+        toast({ title: t.auth.welcomeBack, description: t.auth.loginSuccess });
         navigate("/");
-        console.log("Navigate called");
       } else {
         toast({
           variant: "destructive",
@@ -52,7 +48,6 @@ export default function LoginPage() {
         });
       }
     } catch (err) {
-      console.error("Login error:", err);
       toast({
         variant: "destructive",
         title: t.common.error,
@@ -60,95 +55,76 @@ export default function LoginPage() {
       });
     } finally {
       setIsLoading(false);
-      console.log("=== LOGIN END ===");
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <header className="flex items-center justify-between p-4 border-b">
-        <div className="flex items-center gap-2">
-          <BookOpen className="h-6 w-6 text-primary" />
-          <span className="text-lg font-semibold">{t.auth.appName}</span>
-        </div>
-        <ThemeToggle />
-      </header>
+    <Stack minH="screen" gap={0}>
+      <Box as="header" padX={4} padY={3}>
+        <Cluster justify="between">
+          <Cluster gap={2}>
+            <BookOpen size={24} color="var(--ou-accent-default)" />
+            <Text variant="heading-s" weight="semibold">{t.auth.appName}</Text>
+          </Cluster>
+          <ThemeToggle />
+        </Cluster>
+      </Box>
+      <Separator />
 
-      <main className="flex-1 flex items-center justify-center p-6">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-semibold">{t.auth.signIn}</CardTitle>
-            <CardDescription>
-              {t.auth.signInDescription}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="email"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t.auth.email}</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          type="email"
-                          placeholder={t.auth.emailPlaceholder}
-                          data-testid="input-email"
-                          autoComplete="email"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="password"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t.auth.password}</FormLabel>
-                      <FormControl>
-                        <PasswordInput
-                          {...field}
-                          placeholder={t.auth.passwordPlaceholder}
-                          data-testid="input-password"
-                          autoComplete="current-password"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isLoading}
-                  data-testid="button-login"
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <LogIn className="h-4 w-4 mr-2" />
-                  )}
-                  {t.auth.signInButton}
-                </Button>
+      <Center grow pad={6}>
+        <Box full maxW="md">
+          <Card>
+            <CardBody>
+              <Stack gap={6}>
+                <Stack gap={1} align="center">
+                  <Text as="h1" variant="heading-m" weight="semibold">{t.auth.signIn}</Text>
+                  <Text variant="body-s" tone="muted" align="center">{t.auth.signInDescription}</Text>
+                </Stack>
 
-                <div className="text-center">
-                  <Link 
-                    href={`/forgot-password${form.getValues("email") ? `?email=${encodeURIComponent(form.getValues("email"))}` : ""}`} 
-                    className="text-sm text-primary hover:underline"
-                  >
-                    {t.auth.forgotPassword}
-                  </Link>
-                </div>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+                <form onSubmit={form.handleSubmit(onSubmit)}>
+                  <Stack gap={4}>
+                    <Input
+                      label={t.auth.email}
+                      type="email"
+                      placeholder={t.auth.emailPlaceholder}
+                      autoComplete="email"
+                      fullWidth
+                      error={form.formState.errors.email?.message}
+                      data-testid="input-email"
+                      {...form.register("email")}
+                    />
+                    <Input
+                      label={t.auth.password}
+                      revealToggle
+                      placeholder={t.auth.passwordPlaceholder}
+                      autoComplete="current-password"
+                      fullWidth
+                      error={form.formState.errors.password?.message}
+                      data-testid="input-password"
+                      {...form.register("password")}
+                    />
+                    <Button
+                      type="submit"
+                      fullWidth
+                      loading={isLoading}
+                      leadingIcon={<LogIn size={16} />}
+                      data-testid="button-login"
+                    >
+                      {t.auth.signInButton}
+                    </Button>
+
+                    <Cluster justify="center">
+                      <Link href={`/forgot-password${form.getValues("email") ? `?email=${encodeURIComponent(form.getValues("email"))}` : ""}`}>
+                        <Text variant="body-s" tone="accent">{t.auth.forgotPassword}</Text>
+                      </Link>
+                    </Cluster>
+                  </Stack>
+                </form>
+              </Stack>
+            </CardBody>
+          </Card>
+        </Box>
+      </Center>
+    </Stack>
   );
 }

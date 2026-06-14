@@ -3,25 +3,19 @@ import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { UserCheck, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { PasswordInput } from "@/components/password-input";
+import { UserCheck } from "lucide-react";
 import {
+  Box,
+  Button,
   Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Separator } from "@/components/ui/separator";
+  CardBody,
+  Center,
+  IconBadge,
+  Input,
+  Separator,
+  Stack,
+  Text,
+} from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
@@ -101,10 +95,10 @@ export default function FirstLoginPage({ mustChangePassword }: FirstLoginPagePro
         description: t.auth.registrationCompletedDescription,
       });
 
-      // Обновляем данные пользователя в контексте
+      // Refresh the user data in the context
       await refreshUser();
 
-      // Перенаправляем на главную
+      // Redirect to the home page
       navigate("/");
     } catch (error) {
       toast({
@@ -118,76 +112,66 @@ export default function FirstLoginPage({ mustChangePassword }: FirstLoginPagePro
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted p-4">
-      <Card className="w-full max-w-lg">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-            <UserCheck className="h-6 w-6 text-primary" />
-          </div>
-          <CardTitle>{t.auth.firstLogin}</CardTitle>
-          <CardDescription>
-            {t.auth.firstLoginDescription}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              {/* Смена пароля */}
-              {mustChangePassword && (
-                <>
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-sm font-medium">{t.auth.changePassword}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {t.auth.currentPasswordIsTemporary}
-                      </p>
-                    </div>
-                    <FormField
-                      control={form.control}
-                      name="newPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t.auth.newPassword}</FormLabel>
-                          <FormControl>
-                            <PasswordInput
-                              placeholder="Минимум 8 символов"
-                              autoComplete="new-password"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="confirmPassword"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>{t.auth.confirmNewPassword}</FormLabel>
-                          <FormControl>
-                            <PasswordInput
-                              placeholder="Повторите пароль"
-                              autoComplete="new-password"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </>
-              )}
+    <Center minH="screen" pad={4}>
+      <Box full maxW="lg">
+        <Card>
+          <CardBody>
+            <Stack gap={6}>
+              <Stack gap={3} align="center">
+                <IconBadge tone="accent" icon={<UserCheck />} />
+                <Text as="h1" variant="heading-m" weight="semibold">{t.auth.firstLogin}</Text>
+                <Text variant="body-s" tone="muted" align="center">
+                  {t.auth.firstLoginDescription}
+                </Text>
+              </Stack>
 
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {t.auth.completeRegistration}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-    </div>
+              <form onSubmit={form.handleSubmit(onSubmit)}>
+                <Stack gap={6}>
+                  {/* Password change */}
+                  {mustChangePassword && (
+                    <Stack gap={4}>
+                      <Stack gap={1}>
+                        <Text variant="body-s" weight="medium">{t.auth.changePassword}</Text>
+                        <Text variant="body-s" tone="muted">
+                          {t.auth.currentPasswordIsTemporary}
+                        </Text>
+                      </Stack>
+                      <Input
+                        label={t.auth.newPassword}
+                        revealToggle
+                        placeholder="Минимум 8 символов"
+                        autoComplete="new-password"
+                        fullWidth
+                        error={form.formState.errors.newPassword?.message}
+                        {...form.register("newPassword")}
+                      />
+                      <Input
+                        label={t.auth.confirmNewPassword}
+                        revealToggle
+                        placeholder="Повторите пароль"
+                        autoComplete="new-password"
+                        fullWidth
+                        error={form.formState.errors.confirmPassword?.message}
+                        {...form.register("confirmPassword")}
+                      />
+                      <Separator />
+                    </Stack>
+                  )}
+
+                  <Button
+                    type="submit"
+                    fullWidth
+                    loading={isSubmitting}
+                    leadingIcon={<UserCheck size={16} />}
+                  >
+                    {t.auth.completeRegistration}
+                  </Button>
+                </Stack>
+              </form>
+            </Stack>
+          </CardBody>
+        </Card>
+      </Box>
+    </Center>
   );
 }
