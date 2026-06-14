@@ -21,15 +21,18 @@ import {
   Banner,
   Button,
   Checkbox,
+  Cluster,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
   EmptyState,
+  Grid,
   IconButton,
   Input,
   ModalDialog,
   SegmentedControl,
   Select,
+  Stack,
   Switch,
 } from "@universityrt/ui-kit";
 import { ChevronDown, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
@@ -341,7 +344,7 @@ function ScalesListPane({
     <>
       <div className="flex items-center justify-between mb-3">
         <div className="tb-section-label">Шкалы теста</div>
-        <div className="flex items-center gap-2">
+        <Cluster gap={2} wrap={false}>
           <Button
             variant="ghost"
             size="s"
@@ -362,7 +365,7 @@ function ScalesListPane({
               Добавить шкалу
             </Button>
           )}
-        </div>
+        </Cluster>
       </div>
 
       {anyError && (
@@ -508,7 +511,7 @@ function ScaleForm({
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3">
+      <Grid cols={2} gap={3}>
         <Input
           size="m"
           fullWidth
@@ -575,7 +578,7 @@ function ScaleForm({
           onChange={(value) => onChange({ scormTarget: value })}
           data-testid={`scales-target-${index}`}
         />
-      </div>
+      </Grid>
 
       <hr className="wf-sep" />
       <div className="tb-section-label">Диапазоны (пороги) → уровень</div>
@@ -807,7 +810,7 @@ function ScalePreviewModal({ testId, onClose }: { testId: string; onClose: () =>
                   onChange={(value) => setSingle(q.id, value === "" ? null : Number(value))}
                 />
               ) : (
-                <div className="flex flex-col gap-1">
+                <Stack gap={1}>
                   {q.units.map((u) => {
                     const selected = Array.isArray(answers[q.id])
                       ? (answers[q.id] as number[]).includes(Number(u.sourceKey))
@@ -821,7 +824,7 @@ function ScalePreviewModal({ testId, onClose }: { testId: string; onClose: () =>
                       />
                     );
                   })}
-                </div>
+                </Stack>
               )}
             </div>
           ))}

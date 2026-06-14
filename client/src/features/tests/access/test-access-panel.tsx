@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table } from "@universityrt/ui-kit";
+import { Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table, Stack, Cluster } from "@universityrt/ui-kit";
 import { Trash2, KeyRound } from "lucide-react";
 import { formatRoles } from "@/lib/roles";
 import type { Role } from "@shared/access";
@@ -183,7 +183,7 @@ export function TestAccessPanel({
         </div>
       }
     >
-      <div className="flex flex-col gap-6">
+      <Stack gap={6}>
         {/* Owner */}
         <section className="flex flex-col gap-3">
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Владелец</span>
@@ -197,7 +197,7 @@ export function TestAccessPanel({
               onChange={(v) => setOwnerId(v || null)}
             />
           ) : (
-            <div className="flex items-center gap-3">
+            <Cluster gap={3} wrap={false}>
               {owner ? (
                 <>
                   <Avatar initials={initials(owner)} size="s" />
@@ -210,7 +210,7 @@ export function TestAccessPanel({
               <Button variant="secondary" size="s" onClick={() => setChangingOwner(true)}>
                 Сменить владельца
               </Button>
-            </div>
+            </Cluster>
           )}
         </section>
 
@@ -301,7 +301,7 @@ export function TestAccessPanel({
             />
           )}
         </section>
-      </div>
+      </Stack>
     </Drawer>
   );
 }

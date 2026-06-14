@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table,
-  Switch, Tag, Banner, ModalDialog, Tabs, Input, Textarea,
+  Switch, Tag, Banner, ModalDialog, Tabs, Input, Textarea, Cluster, Stack,
 } from "@universityrt/ui-kit";
 import { Trash2, KeyRound, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -391,7 +391,7 @@ export function TopicDrawer({
               placeholder="Необязательно"
               data-testid="input-topic-description"
             />
-            <div className="flex flex-col gap-2">
+            <Stack gap={2}>
               <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Обратная связь по теме
               </span>
@@ -405,7 +405,7 @@ export function TopicDrawer({
                 editAriaLabel="Редактировать обратную связь"
                 testId="topic-feedback"
               />
-            </div>
+            </Stack>
           </div>
         )}
 
@@ -424,7 +424,7 @@ export function TopicDrawer({
                   onChange={(v) => setOwnerId(v || null)}
                 />
               ) : (
-                <div className="flex items-center gap-3">
+                <Cluster gap={3} wrap={false}>
                   {owner ? (
                     <>
                       <Avatar initials={initials(owner.name, owner.email)} size="s" />
@@ -439,7 +439,7 @@ export function TopicDrawer({
                       Сменить владельца
                     </Button>
                   )}
-                </div>
+                </Cluster>
               )}
             </section>
 
@@ -640,7 +640,7 @@ export function TopicDrawer({
             )}
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <Stack gap={3}>
             <Banner
               tone="error"
               title="Отзыв затрагивает опубликованные тесты получателя"
@@ -651,7 +651,7 @@ export function TopicDrawer({
                 <li key={d.testId}>{d.title}</li>
               ))}
             </ul>
-          </div>
+          </Stack>
         )}
       </ModalDialog>
     </>

@@ -20,11 +20,13 @@
 import { Plus, Trash2, X } from "lucide-react";
 import {
   Button,
+  Cluster,
   IconButton,
   Input,
   Label,
   SegmentedControl,
   Select,
+  Stack,
   Tag,
 } from "@universityrt/ui-kit";
 
@@ -134,7 +136,7 @@ export function ScoringBuilder({
     );
 
   return (
-    <div className="space-y-4" data-testid="scoring-builder">
+    <Stack gap={4} data-testid="scoring-builder">
       <div className="flex items-center justify-between gap-2">
         <Label className="mb-0">Цена ответа</Label>
         <Tag variant="outline" data-testid="scoring-smax">
@@ -161,7 +163,7 @@ export function ScoringBuilder({
 
       {/* weighted (single) — option weights. */}
       {mode === "weighted" && type === "single" && (
-        <div className="space-y-2" data-testid="scoring-weights">
+        <Stack gap={2} data-testid="scoring-weights">
           <div className="grid grid-cols-[1fr_6rem] gap-2 text-xs font-medium text-muted-foreground">
             <div>Вариант ответа</div>
             <div>Балл</div>
@@ -181,12 +183,12 @@ export function ScoringBuilder({
             </div>
           ))}
           <p className="text-xs text-muted-foreground">Балл = вес выбранного варианта; sMax = наибольший вес.</p>
-        </div>
+        </Stack>
       )}
 
       {/* tiered (multiple/matching/ranking) — step-table constructor. */}
       {mode === "tiered" && type !== "single" && (
-        <div className="space-y-3" data-testid="scoring-tiers">
+        <Stack gap={3} data-testid="scoring-tiers">
           <p className="text-xs text-muted-foreground">
             Ступени проверяются сверху вниз, засчитывается первая подходящая. Счётчики: <b>c</b> — верных
             выбрано, <b>x</b> — лишних; <b>{token}</b> — всего {type === "matching" ? "пар" : type === "ranking" ? "элементов" : "верных"}.
@@ -244,7 +246,7 @@ export function ScoringBuilder({
                     И условие
                   </Button>
                 </div>
-                <div className="flex items-center gap-2">
+                <Cluster gap={2} wrap={false}>
                   <Input
                     type="number"
                     min={0}
@@ -262,7 +264,7 @@ export function ScoringBuilder({
                     onClick={() => removeTier(ti)}
                     aria-label="Удалить строку"
                   />
-                </div>
+                </Cluster>
               </div>
             </div>
           ))}
@@ -282,9 +284,9 @@ export function ScoringBuilder({
           >
             Добавить строку
           </Button>
-        </div>
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }
 

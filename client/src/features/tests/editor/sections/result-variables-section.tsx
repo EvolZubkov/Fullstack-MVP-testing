@@ -16,6 +16,7 @@ import {
   Banner,
   Button,
   EmptyState,
+  Grid,
   IconButton,
   Input,
   Select,
@@ -377,7 +378,7 @@ function VariableForm({ variable: v, index, topics, testId, readOnly, fieldError
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3">
+      <Grid cols={2} gap={3}>
         <Input
           size="m"
           fullWidth
@@ -420,7 +421,7 @@ function VariableForm({ variable: v, index, topics, testId, readOnly, fieldError
           onChange={(value) => onChange({ controlsStatus: value })}
           data-testid={`metrics-status-${index}`}
         />
-      </div>
+      </Grid>
       {statusTypeError && (
         <Banner
           tone="error"
@@ -562,7 +563,7 @@ function FormulaBuilder({
       />
 
       {showCondition && (
-        <div className="grid grid-cols-2 gap-3">
+        <Grid cols={2} gap={3}>
           {template === "topic_threshold" && (
             <Select<string>
               size="m"
@@ -587,7 +588,7 @@ function FormulaBuilder({
             options={OPERATOR_OPTIONS}
             onChange={(value) => apply(template, source, value, threshold)}
           />
-        </div>
+        </Grid>
       )}
 
       {showCondition && (

@@ -14,9 +14,11 @@ import {
 } from "lucide-react";
 import {
   Button,
+  Cluster,
   IconButton,
   Input,
   ModalDialog,
+  Stack,
   Table,
   Tabs,
   Tag,
@@ -112,12 +114,12 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
 
   return (
     <div className="flex items-center justify-between py-1 text-sm border-b border-border/50 last:border-0">
-      <div className="flex items-center gap-3">
+      <Cluster gap={3} wrap={false}>
         <Users size={12} color="var(--ou-fg-muted)" />
         <span className="font-medium">{user.email}</span>
         {user.name && <span className="text-muted-foreground">{user.name}</span>}
-      </div>
-      <div className="flex items-center gap-2">
+      </Cluster>
+      <Cluster gap={2} wrap={false}>
         <Tag size="s" tone={user.tokenStatus === "active" ? "success" : "neutral"}>
           {user.tokenStatus === "active" ? "Активна" : user.tokenStatus === "revoked" ? "Отозвана" : "Нет ссылки"}
         </Tag>
@@ -141,7 +143,7 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
             disabled={revokeUser.isPending}
           />
         )}
-      </div>
+      </Cluster>
     </div>
   );
 }
@@ -409,7 +411,7 @@ export function AssignTestDialog({
             {a.user.name && <p className="text-sm text-muted-foreground">{a.user.name}</p>}
           </div>
         ) : a.group ? (
-          <div className="flex items-center gap-2">
+          <Cluster gap={2} wrap={false}>
             {expandedGroupIds.has(a.id) ? (
               <ChevronDown size={16} color="var(--ou-fg-muted)" />
             ) : (
@@ -419,7 +421,7 @@ export function AssignTestDialog({
               <p className="font-medium">{a.group.name}</p>
               <p className="text-sm text-muted-foreground">{a.group.userCount} чел.</p>
             </div>
-          </div>
+          </Cluster>
         ) : (
           "—"
         ),
@@ -469,7 +471,7 @@ export function AssignTestDialog({
       header: "",
       width: "120px",
       render: (a) => (
-        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        <Cluster gap={1} wrap={false} onClick={(e) => e.stopPropagation()}>
           {a.userId && (
             <IconButton
               variant="ghost"
@@ -512,7 +514,7 @@ export function AssignTestDialog({
             onClick={() => removeMutation.mutate(a.id)}
             disabled={removeMutation.isPending}
           />
-        </div>
+        </Cluster>
       ),
     },
   ];
@@ -564,8 +566,8 @@ export function AssignTestDialog({
   );
 
   const usersPanel = (
-    <div className="space-y-4">
-      <div className="space-y-3">
+    <Stack gap={4}>
+      <Stack gap={3}>
         {dateFields}
         <div className="flex justify-end">
           <Button
@@ -576,7 +578,7 @@ export function AssignTestDialog({
             {t.assignments.assign} ({selectedUserIds.length})
           </Button>
         </div>
-      </div>
+      </Stack>
       {availableUsers.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <p>Все пользователи уже назначены</p>
@@ -593,12 +595,12 @@ export function AssignTestDialog({
           />
         </div>
       )}
-    </div>
+    </Stack>
   );
 
   const groupsPanel = (
-    <div className="space-y-4">
-      <div className="space-y-3">
+    <Stack gap={4}>
+      <Stack gap={3}>
         {dateFields}
         <div className="flex justify-end">
           <Button
@@ -609,7 +611,7 @@ export function AssignTestDialog({
             {t.assignments.assign} ({selectedGroupIds.length})
           </Button>
         </div>
-      </div>
+      </Stack>
       {availableGroups.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <p>Все группы уже назначены</p>
@@ -626,7 +628,7 @@ export function AssignTestDialog({
           />
         </div>
       )}
-    </div>
+    </Stack>
   );
 
   return (

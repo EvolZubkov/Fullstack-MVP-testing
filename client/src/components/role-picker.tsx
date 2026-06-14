@@ -7,6 +7,8 @@
  * CSS bundle), matching the approved wireframe.
  */
 
+import { Stack } from "@universityrt/ui-kit";
+
 import { ROLE_PRIORITY, STORED_ROLES, assignableRoles, type Role, type StoredRole } from "@shared/access";
 import { ROLE_LABELS, ROLE_DESCRIPTIONS } from "@/lib/roles";
 
@@ -37,7 +39,7 @@ export function RolePicker({ value, onChange, actorRoles, atCreation, disabled }
   };
 
   return (
-    <div className="flex flex-col gap-3" role="group" aria-label="Роли пользователя">
+    <Stack gap={3} role="group" aria-label="Роли пользователя">
       {ORDERED_ROLES.map((role) => {
         const checked = value.includes(role);
         const isDisabled = disabled || !allowed.has(role);
@@ -62,6 +64,6 @@ export function RolePicker({ value, onChange, actorRoles, atCreation, disabled }
           </label>
         );
       })}
-    </div>
+    </Stack>
   );
 }
