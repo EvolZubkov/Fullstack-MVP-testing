@@ -720,7 +720,7 @@ export default function QuestionsPage() {
           }
         />
       ) : (
-        <Stack gap={4}>
+        <Stack gap={1}>
           <Box pad={3} surface="muted" radius="m">
             <Cluster gap={4}>
               <Checkbox
