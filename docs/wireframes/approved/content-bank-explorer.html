@@ -1,0 +1,908 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe: Темы и вопросы — единое дерево Папка ⊃ Тема ⊃ Вопрос</title>
+  <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
+  <link rel="stylesheet" href="/docs/wireframes/prd7-shared.css" />
+  <script defer src="/docs/wireframes/prd7-shared.js"></script>
+  <link rel="stylesheet" href="/docs/wireframes/ds/wf-utils.css" />
+  <link rel="stylesheet" href="/docs/wireframes/tb-components.css" />
+  <style>
+    .wf-state.active { display: block; }
+    .wf-state > .ou-drawer-root { top: var(--wf-nav-offset, var(--wf-size-52)); bottom: 0; height: auto; }
+    .wf-state > .ou-drawer-root > .ou-drawer { height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); max-height: calc(100vh - var(--wf-nav-offset, var(--wf-size-52))); }
+
+    /* Page composition (DS tokens only; like prd7 .tree-*) */
+    .cb-wrap { max-width: 1080px; margin: 0 auto; padding: var(--ou-space-6); display: flex; flex-direction: column; gap: var(--ou-space-4); position: relative; }
+    .cb-title { font: var(--ou-text-heading-s); font-weight: 700; }
+    .cb-spacer { flex: 1; }
+    .cb-toolbar { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; }
+    .cb-search { position: relative; flex: 1; min-width: var(--wf-size-200, 200px); }
+    .cb-search .ou-field { width: 100%; }
+    .cb-filternote { font: var(--ou-text-body-s); color: var(--ou-fg-muted); padding: 0 var(--ou-space-2) var(--ou-space-1); }
+    .cb-chips { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; padding: 0 var(--ou-space-2); }
+
+    /* Table-tree (язык списка «Тесты»): колонки НАЗВАНИЕ | СЛОЖНОСТЬ | ВОПРОСОВ | ⋯ */
+    .cb-tree { display: flex; flex-direction: column; }
+    .cb-thead, .cb-row { display: grid; grid-template-columns: 1fr var(--wf-size-110, 116px) var(--wf-size-95, 96px) var(--wf-size-90, 88px); align-items: center; border-bottom: 1px solid var(--ou-border-default); }
+    .cb-thead { font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .05em; }
+    .cb-thead > div { padding: var(--ou-space-2); text-align: center; }
+    .cb-thead > div:first-child { text-align: left; padding-left: var(--ou-space-3); }
+    .cb-row { min-height: var(--wf-size-44, 44px); cursor: pointer; user-select: none; }
+    .cb-row:hover { background: var(--ou-bg-hover); }
+    .cb-name { display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0; padding: var(--ou-space-2) var(--ou-space-2) var(--ou-space-2) var(--ou-space-3); }
+    .cb-name__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cb-twist, .cb-ico, .cb-qtype { width: var(--ou-space-4); height: var(--ou-space-4); flex: none; display: inline-flex; color: var(--ou-fg-muted); }
+    .cb-ico--topic { color: var(--ou-accent-default); }
+    .cb-cell { font: var(--ou-text-body-s); color: var(--ou-fg-default); text-align: center; padding: 0 var(--ou-space-2); }
+    .cb-acts { display: flex; align-items: center; justify-content: flex-end; gap: var(--ou-space-1); padding-right: var(--ou-space-3); }
+    /* Корневой ярлык */
+    .cb-rootrow { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); border-bottom: 1px solid var(--ou-border-default); }
+    /* Папка */
+    .cb-row--folder .cb-name__label { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ou-fg-muted); }
+    .cb-foldercount { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    /* Тема */
+    .cb-row--topic .cb-name { padding-left: calc(var(--ou-space-3) + var(--ou-space-5)); }
+    .cb-row--topic .cb-name__label, .cb-row--topic-root .cb-name__label { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default); }
+    .cb-row--topic.is-open, .cb-row--topic.is-open:hover { background: var(--ou-accent-soft); box-shadow: inset 3px 0 0 var(--ou-accent-default); }
+    /* Вопрос — лист под направляющей (indent-line) */
+    .cb-row--q .cb-name { padding-left: calc(var(--ou-space-3) + var(--ou-space-5) + var(--ou-space-6)); position: relative; }
+    .cb-row--q .cb-name::before { content: ""; position: absolute; left: calc(var(--ou-space-3) + var(--ou-space-5) + var(--ou-space-2)); top: 0; bottom: 0; width: 1px; background: var(--ou-border-default); }
+    .cb-qmedia { color: var(--ou-fg-muted); width: var(--ou-space-4); height: var(--ou-space-4); display: inline-flex; flex: none; }
+    .cb-qcheck { opacity: 0; flex: none; }
+    .cb-row--q:hover .cb-qcheck, .is-select .cb-qcheck { opacity: 1; }
+    .cb-emptyrow { padding: var(--ou-space-6) var(--ou-space-3); }
+    /* Selection mode */
+    .cb-seltools { display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-2) var(--ou-space-3); background: var(--ou-accent-soft); border-bottom: 1px solid var(--ou-border-default); flex-wrap: wrap; }
+    .cb-selcount { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); }
+    .cb-seldiv { width: 1px; align-self: stretch; min-height: 1.2em; background: var(--ou-border-default); margin: 0 var(--ou-space-1); }
+    .cb-menu-pop { position: absolute; right: var(--ou-space-6); top: 200px; z-index: 30; }
+    .cb-menu-pop--q { top: 300px; }
+
+    /* Speed-dial FAB (canon prd7-tests-list) */
+    .fab-wrap { position: fixed; bottom: var(--ou-space-6); right: var(--ou-space-6); z-index: 30; width: var(--wf-size-56); height: var(--wf-size-56); }
+    .ou-fab { width: var(--wf-size-56); height: var(--wf-size-56); border-radius: var(--ou-radius-pill); background: var(--ou-accent-default); color: var(--ou-fg-on-accent); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: var(--ou-shadow-m); transition: transform .2s; }
+    .ou-fab:hover { filter: brightness(1.1); }
+    .ou-fab--open { transform: rotate(45deg); }
+    .fab-actions { position: absolute; bottom: calc(100% + var(--ou-space-3)); right: calc((var(--wf-size-56) - var(--wf-size-44)) / 2); display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-end; width: max-content; }
+    .fab-action { display: flex; align-items: center; gap: var(--ou-space-2); }
+    .fab-action-label { font: var(--ou-text-body-s); font-weight: 500; background: var(--ou-bg-elevated); color: var(--ou-fg-default); border: var(--wf-border-w) solid var(--ou-border-default); border-radius: var(--ou-radius-s); padding: var(--ou-space-1) var(--ou-space-3); box-shadow: var(--ou-shadow-xs); white-space: nowrap; }
+    .fab-action-btn { width: var(--wf-size-44); height: var(--wf-size-44); border-radius: var(--ou-radius-pill); background: var(--ou-bg-elevated); color: var(--ou-fg-default); border: var(--wf-border-w) solid var(--ou-border-default); display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--ou-shadow-s); flex-shrink: 0; }
+    .fab-action-btn:hover { background: var(--ou-bg-hover); }
+
+    /* Full filter: facet panel */
+    .cb-filterpop { position: absolute; z-index: 30; top: var(--wf-size-90, 84px); left: var(--wf-size-200, 230px); width: var(--wf-size-620, 620px); max-width: calc(100% - var(--ou-space-6) * 2); background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-l, var(--ou-shadow-m)); }
+    .cb-filterpop__body { padding: var(--ou-space-4); display: flex; flex-direction: column; gap: var(--ou-space-5); max-height: 70vh; overflow: auto; }
+    .cb-filterpop__foot { display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-3) var(--ou-space-4); border-top: 1px solid var(--ou-border-default); }
+    .cb-facet { display: flex; flex-direction: column; gap: var(--ou-space-2); min-width: 0; }
+    .cb-facet--wide { grid-column: 1 / -1; }
+    .cb-facet__lbl { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); }
+    .cb-facet__row { display: flex; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); }
+
+    /* Drawer / modal form local layout */
+    .qd-stack { display: flex; flex-direction: column; gap: var(--ou-space-6); }
+    .qd-opt { display: flex; align-items: center; gap: var(--ou-space-3); }
+    .qd-opt .ou-field { flex: 1; }
+    /* Token/tag input — композиция Field + Chip (канон prd11-question-tags) */
+    .ou-field__box.wf-tags-box { display: flex; flex-wrap: wrap; align-items: center; height: auto; gap: var(--ou-space-2); padding: var(--ou-space-2); min-height: var(--ou-size-control-m); }
+    .wf-tags-input { flex: 1; min-width: 10ch; border: 0; background: transparent; outline: none; font: var(--ou-text-body-m); color: var(--ou-fg-default); }
+    .wf-tags-input::placeholder { color: var(--ou-fg-muted); }
+    .qd-spacer { flex: 1; }
+    .mv-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-top: var(--ou-space-2); }
+    /* utilities (заменяют инлайн-стили) */
+    .qd-stack--tight { gap: var(--ou-space-2); }
+    .qd-addrow { margin-top: var(--ou-space-2); }
+    .cb-drawer-tabs { padding: 0 var(--ou-space-6); border-bottom: 1px solid var(--ou-border-default); }
+    .wf-sprite { display: none; }
+  </style>
+</head>
+<body class="ou ou--light ou--normal">
+
+<svg class="wf-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-folder-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></symbol>
+  <symbol id="i-topic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-chev-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></symbol>
+  <symbol id="i-expand-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></symbol>
+  <symbol id="i-collapse-all" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
+  <symbol id="i-q-single" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-q-multiple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><polyline points="8 12 11 15 16 9"/></symbol>
+  <symbol id="i-q-matching" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 5 3-3"/><path d="m2 22 3-3"/><path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z"/><path d="M7.5 13.5 10 11"/><path d="M10.5 16.5 13 14"/><path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z"/></symbol>
+  <symbol id="i-q-ranking" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" x2="21" y1="6" y2="6"/><line x1="10" x2="21" y1="12" y2="12"/><line x1="10" x2="21" y1="18" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></symbol>
+</svg>
+
+<nav class="wf-nav" aria-label="Wireframe state switcher">
+  <span class="wf-nav-title">Темы и вопросы:</span>
+  <button class="wf-btn active" type="button" onclick="showState(this,'s-default')">Тема раскрыта</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-collapsed')">Свернуть всё</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-filters')">Фильтр (панель)</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-filtered')">Фильтр применён</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-select')">Режим выбора</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-move')">Перенос вопросов</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-move-topic')">Перенос темы</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-empty')">Пустая тема</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-menu')">Меню темы</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-q-menu')">Меню вопроса</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-fab')">FAB</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-topic-drawer')">Drawer темы</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-q-drawer')">Drawer вопроса</button>
+  <div class="wf-nav-sep"></div>
+  <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
+  <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
+</nav>
+
+<!-- ════ s-default: единая анатомия строк; ⋯ всегда видим; тема раскрыта ════ -->
+<div class="wf-state active" id="s-default">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null,'s-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-rootrow"><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span>Все темы (312)</div>
+
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Личные финансы</span><span class="cb-foldercount">3 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+
+      <div class="cb-row cb-row--topic is-open">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Финансовая грамотность</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-cell">32</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы" onclick="showState(null,'s-menu')"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q" onclick="showState(null,'s-q-drawer')">
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Что такое НДФЛ и кто обязан его платить?</span></div>
+        <div class="cb-cell"><span class="ou-tag ou-tag--success ou-tag--outline ou-tag--s">легко</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса" onclick="event.stopPropagation()"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Множественный выбор"><svg width="16" height="16"><use href="#i-q-multiple"/></svg></span><span class="cb-name__label">Какие из перечисленных доходов облагаются налогом?</span></div>
+        <div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--outline ou-tag--s">средне</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Соответствие"><svg width="16" height="16"><use href="#i-q-matching"/></svg></span><span class="cb-name__label">Сопоставьте вид налога с его ставкой</span></div>
+        <div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--outline ou-tag--s">средне</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Порядок (ранжирование)"><svg width="16" height="16"><use href="#i-q-ranking"/></svg></span><span class="cb-name__label">Расставьте шаги оформления налогового вычета по порядку</span><span class="cb-qmedia" title="С изображением"><svg width="16" height="16"><use href="#i-image"/></svg></span></div>
+        <div class="cb-cell"><span class="ou-tag ou-tag--error ou-tag--outline ou-tag--s">сложно</span></div>
+        <div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Налоги физлиц</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">18</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Кредиты и вклады</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">24</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Экономика</span><span class="cb-foldercount">2 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic-root">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Охрана труда</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">9</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+    </div>
+  </div>
+  <div class="fab-wrap"><button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false" onclick="showState(null,'s-fab')"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+</div>
+
+<!-- ════ s-collapsed: Свернуть всё ════ -->
+<div class="wf-state" id="s-collapsed">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null,'s-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-rootrow"><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span>Все темы (312)</div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Личные финансы</span><span class="cb-foldercount">3 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Финансовая грамотность</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">32</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Налоги физлиц</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">18</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Кредиты и вклады</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">24</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Экономика</span><span class="cb-foldercount">2 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic-root">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Охрана труда</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">9</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+    </div>
+  </div>
+  <div class="fab-wrap"><button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false" onclick="showState(null,'s-fab')"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+</div>
+
+<!-- ════ s-filters: панель фасетов ════ -->
+<div class="wf-state" id="s-filters">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null,'s-default')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры <span class="ou-tag ou-tag--neutral ou-tag--s">3</span></button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-rootrow"><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span>Все темы (312)</div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Личные финансы</span><span class="cb-foldercount">3 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Финансовая грамотность</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">32</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Налоги физлиц</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">18</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+    </div>
+
+    <div class="ou-card ou-card--outlined cb-filterpop" role="dialog" aria-label="Фильтры">
+      <div class="cb-filterpop__body">
+        <div class="cb-facet">
+          <span class="cb-facet__lbl">Тип вопроса</span>
+          <div class="cb-facet__row">
+            <label class="ou-check"><input class="ou-check__input" type="checkbox" checked><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Одиночный</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Множественный</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Соответствие</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Порядок</span></span></label>
+          </div>
+        </div>
+        <div class="cb-facet">
+          <span class="cb-facet__lbl">Сложность</span>
+          <div class="cb-facet__row">
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Легко</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Средне</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox" checked><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Сложно</span></span></label>
+          </div>
+        </div>
+        <div class="cb-facet cb-facet--wide">
+          <span class="cb-facet__lbl">Теги (подтемы)</span>
+          <div class="ou-field ou-field--m">
+            <div class="ou-field__box wf-tags-box">
+              <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">вычеты</button><button type="button" class="ou-chip__close" aria-label="Удалить тег вычеты"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+              <input class="wf-tags-input" type="text" placeholder="Добавить тег…" aria-label="Добавить тег" />
+            </div>
+          </div>
+        </div>
+        <div class="cb-facet">
+          <span class="cb-facet__lbl">Медиа</span>
+          <div class="cb-facet__row">
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">С изображением</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">С аудио</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">С видео</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Без медиа</span></span></label>
+          </div>
+        </div>
+        <div class="cb-facet">
+          <span class="cb-facet__lbl">Автор</span>
+          <select class="ou-select ou-field--m" aria-label="Автор"><option selected>Любой</option><option>Иванов И.</option><option>Петрова А.</option></select>
+        </div>
+        <div class="cb-facet cb-facet--wide">
+          <span class="cb-facet__lbl">Область</span>
+          <div class="ou-seg ou-seg--m" role="group" aria-label="Область">
+            <button type="button" class="ou-seg__item is-active" aria-pressed="true">Все</button>
+            <button type="button" class="ou-seg__item" aria-pressed="false">Мои</button>
+            <button type="button" class="ou-seg__item" aria-pressed="false">Доступные</button>
+            <button type="button" class="ou-seg__item" aria-pressed="false">Общие</button>
+          </div>
+        </div>
+      </div>
+      <div class="cb-filterpop__foot">
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m">Сбросить всё</button>
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null,'s-filtered')">Применить</button>
+      </div>
+    </div>
+  </div>
+  <div class="fab-wrap"><button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false" onclick="showState(null,'s-fab')"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+</div>
+
+<!-- ════ s-filtered: фильтр применён + чипы ════ -->
+<div class="wf-state" id="s-filtered">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" value="вычет" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null,'s-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры <span class="ou-tag ou-tag--neutral ou-tag--s">2</span></button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-chips">
+      <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">Тип: одиночный</button><button type="button" class="ou-chip__close" aria-label="Убрать условие: Тип одиночный"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+      <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">Тег: вычеты</button><button type="button" class="ou-chip__close" aria-label="Убрать условие: Тег вычеты"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Очистить всё</button>
+    </div>
+    <div class="cb-filternote">Показано 2 совпадения в 2 темах · дерево автоматически раскрыто</div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Личные финансы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic is-open">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Финансовая грамотность</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">1 / 32</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><span class="cb-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Кто может получить налоговый <b>вычет</b> по ИИС?</span></div>
+        <div class="cb-cell"><span class="ou-tag ou-tag--success ou-tag--outline ou-tag--s">легко</span></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic is-open">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Налоги физлиц</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">1 / 18</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><span class="cb-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Какой документ нужен для социального <b>вычет</b>а?</span></div>
+        <div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--outline ou-tag--s">средне</span></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+    </div>
+  </div>
+  <div class="fab-wrap"><button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false" onclick="showState(null,'s-fab')"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+</div>
+
+<!-- ════ s-select: режим выбора ════ -->
+<div class="wf-state" id="s-select">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null,'s-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-tree is-select" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Личные финансы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div><div class="cb-acts"></div>
+      </div>
+      <div class="cb-row cb-row--topic is-open">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Финансовая грамотность</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">32</div><div class="cb-acts"></div>
+      </div>
+      <div class="cb-seltools">
+        <span class="cb-selcount">Выбрано 2</span>
+        <span class="cb-seldiv" aria-hidden="true"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Выделить все</button>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null,'s-default')">Снять выделение</button>
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null,'s-move')"><svg width="14" height="14"><use href="#i-move"/></svg> Переместить…</button>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-trash"/></svg> Удалить</button>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" checked aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Что такое НДФЛ и кто обязан его платить?</span></div>
+        <div class="cb-cell"><span class="ou-tag ou-tag--success ou-tag--outline ou-tag--s">легко</span></div><div class="cb-cell"></div><div class="cb-acts"></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" checked aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Множественный выбор"><svg width="16" height="16"><use href="#i-q-multiple"/></svg></span><span class="cb-name__label">Какие из перечисленных доходов облагаются налогом?</span></div>
+        <div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--outline ou-tag--s">средне</span></div><div class="cb-cell"></div><div class="cb-acts"></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Соответствие"><svg width="16" height="16"><use href="#i-q-matching"/></svg></span><span class="cb-name__label">Сопоставьте вид налога с его ставкой</span></div>
+        <div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--outline ou-tag--s">средне</span></div><div class="cb-cell"></div><div class="cb-acts"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-move: пикер «Переместить вопросы в тему» (модалка) ════ -->
+<div class="wf-state" id="s-move">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="mv-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="mv-title" class="ou-modal__title">Переместить 2 вопроса</h1>
+          <p class="ou-modal__desc">Из темы «Финансовая грамотность» — выберите тему-получатель</p>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null,'s-select')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="ou-formfield">
+          <label class="ou-formfield__lbl" for="mv-target">В тему</label>
+          <select class="ou-select ou-field--m" id="mv-target" aria-label="Тема-получатель">
+            <optgroup label="Личные финансы">
+              <option disabled>Финансовая грамотность — текущая</option>
+              <option>Налоги физлиц</option>
+              <option selected>Кредиты и вклады</option>
+            </optgroup>
+            <optgroup label="Экономика">
+              <option>Инвестиции</option>
+              <option disabled>Страхование — нет прав</option>
+            </optgroup>
+            <option>Охрана труда (без папки)</option>
+          </select>
+        </div>
+        <div class="mv-hint">Доступны темы с правом «управление». Вопросы переносятся вместе с тегами; целевая тема проверяется на выполнимость (теги/уровни).</div>
+      </div>
+      <footer class="ou-modal__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-select')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Переместить</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-move-topic: перенос темы в папку ════ -->
+<div class="wf-state" id="s-move-topic">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="mvt-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="mvt-title" class="ou-modal__title">Переместить тему в папку</h1>
+          <p class="ou-modal__desc">Тема «Финансовая грамотность»</p>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null,'s-default')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="ou-formfield">
+          <label class="ou-formfield__lbl" for="mvt-target">В папку</label>
+          <select class="ou-select ou-field--m" id="mvt-target" aria-label="Папка-получатель">
+            <option>Без папки (в корень)</option>
+            <option disabled>Личные финансы — текущая</option>
+            <option selected>Экономика</option>
+          </select>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-default')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Переместить</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-empty: тема без вопросов ════ -->
+<div class="wf-state" id="s-empty">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null,'s-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Личные финансы</span><span class="cb-foldercount">3 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Финансовая грамотность</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">32</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic is-open">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Цифровая безопасность</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">0</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-emptyrow">
+        <div class="ou-empty" role="status">
+          <div class="ou-empty__art"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></div>
+          <div class="ou-empty__content">
+            <div class="ou-empty__title">В теме пока нет вопросов</div>
+            <div class="ou-empty__desc">Вопрос всегда принадлежит теме. Добавьте первый — он сразу появится здесь и станет доступен тестам, которые тянут из этой темы.</div>
+            <div class="ou-empty__actions"><button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null,'s-q-drawer')"><svg width="16" height="16"><use href="#i-plus"/></svg> Создать вопрос</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Налоги физлиц</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">18</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+    </div>
+  </div>
+  <div class="fab-wrap"><button class="ou-fab" type="button" aria-label="Создать" aria-expanded="false" onclick="showState(null,'s-fab')"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button></div>
+</div>
+
+<!-- ════ s-menu: меню действий темы (⋯) ════ -->
+<div class="wf-state" id="s-menu">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null,'s-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Личные финансы</span><span class="cb-foldercount">3 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Финансовая грамотность</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">32</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы" aria-expanded="true"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Налоги физлиц</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">18</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+    </div>
+    <div class="ou-menu ou-menu--sm cb-menu-pop" role="menu" aria-label="Действия темы">
+      <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null,'s-q-drawer')"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg></span>Добавить вопрос</button>
+      <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null,'s-topic-drawer')"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></span>Настройки темы…</button>
+      <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null,'s-topic-drawer')"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-shield"/></svg></span>Доступ…</button>
+      <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null,'s-move-topic')"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-move"/></svg></span>Переместить в папку…</button>
+      <div class="ou-menu__divider"></div>
+      <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></span>Удалить тему</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-q-menu: меню действий вопроса (⋯ на строке вопроса) ════ -->
+<div class="wf-state" id="s-q-menu">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null,'s-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Личные финансы</span><span class="cb-foldercount">3 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic is-open">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Финансовая грамотность</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">32</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Что такое НДФЛ и кто обязан его платить?</span></div>
+        <div class="cb-cell"><span class="ou-tag ou-tag--success ou-tag--outline ou-tag--s">легко</span></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса" aria-expanded="true"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Множественный выбор"><svg width="16" height="16"><use href="#i-q-multiple"/></svg></span><span class="cb-name__label">Какие из перечисленных доходов облагаются налогом?</span></div>
+        <div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--outline ou-tag--s">средне</span></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+    </div>
+    <div class="ou-menu ou-menu--sm cb-menu-pop cb-menu-pop--q" role="menu" aria-label="Действия вопроса">
+      <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null,'s-q-drawer')"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></span>Редактировать…</button>
+      <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-copy"/></svg></span>Дублировать</button>
+      <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null,'s-move')"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-move"/></svg></span>Переместить в тему…</button>
+      <div class="ou-menu__divider"></div>
+      <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></span>Удалить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-fab: speed-dial раскрыт ════ -->
+<div class="wf-state" id="s-fab">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null,'s-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Личные финансы</span><span class="cb-foldercount">3 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Финансовая грамотность</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">32</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+    </div>
+  </div>
+  <div class="fab-wrap">
+    <div class="fab-actions">
+      <div class="fab-action"><span class="fab-action-label">Добавить папку</span><button class="fab-action-btn" type="button" aria-label="Добавить папку"><svg width="18" height="18"><use href="#i-folder-plus"/></svg></button></div>
+      <div class="fab-action"><span class="fab-action-label">Добавить тему</span><button class="fab-action-btn" type="button" aria-label="Добавить тему"><svg width="18" height="18"><use href="#i-topic"/></svg></button></div>
+      <div class="fab-action"><span class="fab-action-label">Добавить вопрос</span><button class="fab-action-btn" type="button" aria-label="Добавить вопрос" onclick="showState(null,'s-q-drawer')"><svg width="18" height="18"><use href="#i-q-single"/></svg></button></div>
+    </div>
+    <button class="ou-fab ou-fab--open" type="button" aria-label="Закрыть" aria-expanded="true" onclick="showState(null,'s-default')"><svg width="24" height="24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+  </div>
+</div>
+
+<!-- ════ s-topic-drawer: настройки темы ════ -->
+<div class="wf-state" id="s-topic-drawer">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="td-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="td-title" class="ou-drawer__title">Тема</h1><p class="ou-drawer__desc">Финансовая грамотность</p></div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть" onclick="showState(null,'s-default')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <nav class="ou-tabs ou-tabs--underline ou-tabs--m cb-drawer-tabs">
+        <div class="ou-tabs__list" role="tablist" aria-label="Разделы темы">
+          <button type="button" class="ou-tabs__tab is-active" role="tab" aria-selected="true">Свойства</button>
+          <button type="button" class="ou-tabs__tab" role="tab" aria-selected="false">Доступ</button>
+        </div>
+      </nav>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="qd-stack">
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="td-name">Название темы</label>
+            <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="td-name" type="text" value="Финансовая грамотность" /></div></div>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="td-folder">Папка</label>
+            <select class="ou-select ou-field--m" id="td-folder"><option selected>Личные финансы</option><option>Экономика</option><option>Без папки</option></select>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="td-desc">Описание</label>
+            <div class="ou-textarea ou-textarea--m ou-textarea--full"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="td-desc" rows="3" placeholder="Необязательно"></textarea></div></div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-default')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ════ s-q-drawer: редактирование вопроса ════ -->
+<div class="wf-state" id="s-q-drawer">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="qd-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="qd-title" class="ou-drawer__title">Вопрос</h1><p class="ou-drawer__desc">Тема: Финансовая грамотность</p></div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть" onclick="showState(null,'s-default')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="qd-stack">
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="qd-topic">Тема</label>
+            <select class="ou-select ou-field--m" id="qd-topic">
+              <optgroup label="Личные финансы">
+                <option selected>Финансовая грамотность</option>
+                <option>Налоги физлиц</option>
+                <option>Кредиты и вклады</option>
+              </optgroup>
+              <optgroup label="Экономика">
+                <option>Инвестиции</option>
+                <option>Страхование</option>
+              </optgroup>
+              <option>Охрана труда (без папки)</option>
+            </select>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Тип вопроса</span>
+            <div class="ou-seg ou-seg--m" role="group" aria-label="Тип вопроса">
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Одиночный</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Множественный</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Соответствие</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Порядок</button>
+            </div>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="qd-prompt">Текст вопроса</label>
+            <div class="ou-textarea ou-textarea--m ou-textarea--full"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="qd-prompt" rows="2">Что такое НДФЛ и кто обязан его платить?</textarea></div></div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Варианты ответа · отметьте правильный</span>
+            <div class="qd-stack qd-stack--tight">
+              <div class="qd-opt">
+                <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="qd-correct" class="ou-radio__input" checked aria-label="Правильный вариант 1" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span></label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Налог на доходы физических лиц" aria-label="Текст варианта 1" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить вариант"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+              <div class="qd-opt">
+                <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="qd-correct" class="ou-radio__input" aria-label="Правильный вариант 2" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span></label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Налог на добавленную стоимость" aria-label="Текст варианта 2" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить вариант"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+              <div class="qd-opt">
+                <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="qd-correct" class="ou-radio__input" aria-label="Правильный вариант 3" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span></label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Налог на имущество организаций" aria-label="Текст варианта 3" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить вариант"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+            <div class="qd-addrow"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus"/></svg> Добавить вариант</button></div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Сложность</span>
+            <div class="ou-seg ou-seg--m" role="group" aria-label="Сложность">
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Легко</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Средне</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Сложно</button>
+            </div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Медиа</span>
+            <div class="qd-opt">
+              <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="URL изображения / аудио / видео" aria-label="URL медиа" /></div></div>
+              <button type="button" class="ou-btn ou-btn--secondary ou-btn--m"><svg width="16" height="16"><use href="#i-upload"/></svg> Загрузить</button>
+            </div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Теги (подтемы)</span>
+            <div class="ou-field ou-field--m">
+              <div class="ou-field__box wf-tags-box">
+                <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">НДФЛ</button><button type="button" class="ou-chip__close" aria-label="Удалить тег НДФЛ"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+                <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">базовый</button><button type="button" class="ou-chip__close" aria-label="Удалить тег базовый"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+                <input class="wf-tags-input" type="text" placeholder="Добавить тег…" aria-label="Добавить тег" />
+              </div>
+            </div>
+          </div>
+          <label class="ou-switch-field">
+            <span class="ou-switch ou-switch--m"><input type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
+            <span class="ou-switch-field__text"><span class="ou-switch-field__label">Перемешивать варианты при показе</span></span>
+          </label>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-default')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- Пояснения -->
+<section class="wf-notes">
+  <h3 class="wf-notes-title">Пояснения</h3>
+  <table>
+    <thead><tr><th>Элемент</th><th>Поведение</th><th>Модель / находка</th></tr></thead>
+    <tbody>
+      <tr><td>Единая анатомия строки (как «Тесты»)</td><td>Каждая строка (папка/тема/вопрос) устроена одинаково: имя слева → счётчик справа → всегда видимое ⋯-меню. Никаких «особых» строк; активная/раскрытая просто подсвечена. Раздел стилево согласован со списком «Тесты» (explorer-дерево + per-row ⋯ + FAB)</td><td>UX-03; ответ на «разную анатомию»</td></tr>
+      <tr><td>⋯-меню всегда видимо</td><td>Кнопка действий видна на каждой строке (не только по hover) — отсюда и попадание в Drawer/меню. Рекомендация: сделать ⋯ всегда видимым и в списке «Тесты» (там сейчас hover-only) ради полной согласованности</td><td>дискаверабилити меню/Drawer</td></tr>
+      <tr><td>Счётчик справа</td><td>Это количество вопросов в теме (метрика), НЕ статус. У темы статуса публикации нет — он есть только у теста</td><td>ответ на «статус?»</td></tr>
+      <tr><td>Создание — через FAB</td><td>Единственный акцент создания — FAB (Добавить вопрос/тему/папку). Инлайн-«+ Вопрос» в строке убран, чтобы не было ряда конкурирующих акцентных кнопок; «Добавить вопрос» доступен в ⋯-меню темы. «Добавить вопрос» открывает Drawer вопроса с предзаполненной темой</td><td>ответ на «почему не акцентная»; вопрос всегда в теме</td></tr>
+      <tr><td>Фильтр НАД деревом</td><td>Поиск по тексту + кнопка «Фильтры (N)» → панель фасетов: Тип, Сложность, Теги (PRD-11), Медиа, Автор (PRD-15), Область. Активные условия — съёмные чипы + «Очистить всё». Дерево автораскрывается к совпадениям, счётчик показывает «найдено / всего»</td><td>полноценный фильтр</td></tr>
+      <tr><td>Развернуть всё / Свернуть всё</td><td>Подписанные кнопки в панели — раскрыть/свернуть дерево разом</td><td>запрос</td></tr>
+      <tr><td>Три различимых уровня</td><td>ПАПКА — тихий uppercase-заголовок. ТЕМА — полужирная, акцентная закладка. ВОПРОС — лёгкий лист: монохромная иконка типа (tooltip) + outline-тег сложности</td><td>визуальная иерархия</td></tr>
+      <tr><td>Тема в корне</td><td>Тема может лежать в корне дерева или в папке — папка необязательна; видно по уровню вложенности, отдельной метки нет</td><td>единая иерархия</td></tr>
+      <tr><td>Режим выбора и «Переместить»</td><td>Чекбоксы появляются на наведении ряда вопроса. Как только выбран ≥1 вопрос — появляется тулбар: «Выбрано N», «Выделить все», «Снять выделение», «Переместить…», «Удалить». Тулбар завязан на наличие выбора: «Снять выделение» обнуляет выбор → тулбар исчезает (отдельного «режима выбора» и кнопки выхода не нужно). «Переместить…» открывает выбор темы-получателя (требует «управление» на обе темы + проверку выполнимости)</td><td>ответ на «что такое Переместить/Готово»</td></tr>
+      <tr><td>Редактирование — Drawer</td><td>Тема: «Настройки темы…»/«Доступ…» → Drawer (полный — prd15-topic-access). Вопрос: клик по строке или «Добавить вопрос» → Drawer вопроса</td><td>UX-03; редактирование в Drawer</td></tr>
+      <tr><td>Меню вопроса (⋯)</td><td>⋯ на строке вопроса открывает действия: «Редактировать…» (= Drawer вопроса), «Дублировать», «Переместить в тему…» (тот же пикер выбора темы), «Удалить». Симметрично меню темы; меню рендерится вне карточки (портал)</td><td>действия над вопросом</td></tr>
+      <tr><td>Drawer темы</td><td>Вкладка «Свойства»: название, папка, описание. Поле «Папка» меняет папку темы (= перенос между папками; папка — визуальная организация, на вопросы не влияет). Вкладка «Доступ»: владелец, видимость, гранты — полный Drawer (отзыв, смена владельца) спроектирован в prd15-topic-access</td><td>UX-03; FR-18..20</td></tr>
+      <tr><td>Перенос темы в папку</td><td>«Переместить в папку…» в ⋯-меню темы открывает выбор папки-получателя (включая «Без папки / в корень»); текущая папка — disabled. То же доступно полем «Папка» в Drawer темы — дублирование оставлено намеренно. Папка только визуальная: на вопросы темы перенос не влияет</td><td>папка — визуальная организация</td></tr>
+      <tr><td>Drawer вопроса</td><td>Поля: тема, тип, текст, варианты (конструктор), сложность, медиа, теги, перемешивание. Смена типа перестраивает конструктор вариантов (с подтверждением, если данные уже введены). Теги питают квоты выдачи по подтемам (PRD-11). Балл/цена ответа здесь НЕ задаются — это свойство теста</td><td>UX-03/08; PRD-11; PRD-15 D</td></tr>
+      <tr><td>⋯-меню вне карточки</td><td>Выпадающее меню рендерится вне карточки (портал), чтобы не обрезалось её границей</td><td>фикс клиппинга</td></tr>
+      <tr><td>Оценка не в этом разделе</td><td>Балл/цена ответа в Drawer вопроса НЕ задаются — свойство теста</td><td>ортогональность; PRD-15 D</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- DS Mapping -->
+<section class="wf-mapping">
+  <h2 class="wf-mapping-title">DS Mapping — UniversityRT</h2>
+  <table>
+    <thead><tr><th>Класс</th><th>Где используется</th><th>DS компонент</th><th>React (ui-kit)</th></tr></thead>
+    <tbody>
+      <tr><td><code>.ou-card--outlined</code></td><td>Поверхность дерева</td><td>Card</td><td><code>Card</code></td></tr>
+      <tr><td><code>.ou-fab</code> + <code>.fab-*</code></td><td>Создание (speed-dial)</td><td>FAB / SpeedDial</td><td><code>Button</code> + <code>Menu</code></td></tr>
+      <tr><td><code>.ou-drawer</code> / <code>.ou-modal</code></td><td>Настройки темы и вопроса / пикер «Переместить»</td><td>Drawer / Modal</td><td><code>Drawer</code> / <code>ModalDialog</code></td></tr>
+      <tr><td><code>.ou-menu</code></td><td>⋯-меню строки (портал)</td><td>Menu</td><td><code>DropdownMenu</code></td></tr>
+      <tr><td><code>.ou-tabs</code> / <code>.ou-seg</code></td><td>Вкладки темы; тип/сложность</td><td>Tabs / SegmentedControl</td><td><code>Tabs</code> / <code>SegmentedControl</code></td></tr>
+      <tr><td><code>.ou-field</code> / <code>.ou-textarea</code> / <code>.ou-select</code></td><td>Поиск, поля, фильтры</td><td>Input / Textarea / Select</td><td><code>Input</code> / <code>Textarea</code> / <code>Select</code></td></tr>
+      <tr><td><code>.ou-radio</code> / <code>.ou-switch</code> / <code>.ou-check</code></td><td>Правильный вариант; перемешивание; фасеты и выбор</td><td>Radio / Switch / Checkbox</td><td><code>RadioGroup</code> / <code>Switch</code> / <code>Checkbox</code></td></tr>
+      <tr><td><code>.ou-tag</code></td><td>Счётчики тем (метрика), сложность вопроса, бейдж числа активных фильтров</td><td>Tag</td><td><code>Tag</code></td></tr>
+      <tr><td><code>.ou-chip--removable</code></td><td>Теги в поле (token-input: <code>ou-field__box.wf-tags-box</code> + чипы + инлайн-инпут) и съёмные чипы активных условий фильтра. Канон — prd11-question-tags</td><td>Chip / TagInput (композиция Field + Chip)</td><td><code>TagInput</code> / <code>Chip</code></td></tr>
+      <tr><td><code>.ou-empty</code></td><td>Пустая тема</td><td>EmptyState</td><td><code>EmptyState</code></td></tr>
+      <tr><td><code>.cb-*</code> / <code>.qd-*</code> / <code>.mv-*</code></td><td>Layout-композиция на DS-токенах (как <code>.tree-*</code> в prd7-tests-list)</td><td>—</td><td>Stack / Cluster / Box</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<script>
+  window.showState = function showState(btn, id) {
+    var target = document.getElementById('wf-' + id) || document.getElementById(id);
+    document.querySelectorAll('.wf-state').forEach(function (el) { el.classList.toggle('active', el === target); });
+    document.querySelectorAll('.wf-nav button[onclick*="showState"]').forEach(function (button) { button.classList.toggle('active', button === btn); });
+  };
+  window.toggleTheme = function toggleTheme(btn) {
+    var dark = document.body.classList.toggle('ou--dark');
+    document.body.classList.toggle('ou--light', !dark);
+    btn.textContent = dark ? 'Light' : 'Dark';
+    btn.classList.toggle('active', dark);
+  };
+  window.toggleDensity = function toggleDensity(btn) {
+    var compact = document.body.classList.toggle('ou--compact');
+    document.body.classList.toggle('ou--normal', !compact);
+    btn.textContent = compact ? 'Normal' : 'Compact';
+    btn.classList.toggle('active', compact);
+  };
+</script>
+
+</body>
+</html>
