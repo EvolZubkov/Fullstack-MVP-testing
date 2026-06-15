@@ -22,6 +22,7 @@ import {
   Box,
   Button,
   Cluster,
+  Grid,
   IconButton,
   Input,
   Label,
@@ -140,7 +141,7 @@ export function ScoringBuilder({
   return (
     <Stack gap={4} data-testid="scoring-builder">
       <Cluster justify="between" gap={2} wrap={false}>
-        <Label className="mb-0">Цена ответа</Label>
+        <Label>Цена ответа</Label>
         <Tag variant="outline" data-testid="scoring-smax">
           Макс. балл sMax = {sMax}
         </Tag>
@@ -166,12 +167,12 @@ export function ScoringBuilder({
       {/* weighted (single) — option weights. */}
       {mode === "weighted" && type === "single" && (
         <Stack gap={2} data-testid="scoring-weights">
-          <div className="grid grid-cols-[1fr_6rem] gap-2 text-xs font-medium text-muted-foreground">
+          <Grid template="label-control" gap={2} className="text-xs font-medium text-muted-foreground">
             <div>Вариант ответа</div>
             <div>Балл</div>
-          </div>
+          </Grid>
           {options.map((opt, i) => (
-            <div key={i} className="grid grid-cols-[1fr_6rem] items-center gap-2">
+            <Grid key={i} template="label-control" gap={2}>
               <div className="text-sm">{opt.trim() || `Вариант ${i + 1}`}</div>
               <Input
                 type="number"
@@ -182,7 +183,7 @@ export function ScoringBuilder({
                 placeholder="0"
                 data-testid={`scoring-weight-${i}`}
               />
-            </div>
+            </Grid>
           ))}
           <Text as="p" variant="body-s" tone="muted">Балл = вес выбранного варианта; sMax = наибольший вес.</Text>
         </Stack>

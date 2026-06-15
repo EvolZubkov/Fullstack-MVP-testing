@@ -326,7 +326,7 @@ export default function ImportPage() {
     <div>
       <PageHeader title={tr.title} description={tr.description} />
 
-      <div className="max-w-3xl">
+      <Box maxW="3xl">
         <Card variant="outlined">
           <CardHeader title={tr.cardTitle} />
           <CardBody>
@@ -417,9 +417,9 @@ export default function ImportPage() {
                     )}
                     {renderPlanRows(preview)}
                     {preview.errors.length > 0 && (
-                      <ul className="mt-2 flex list-disc flex-col gap-1 pl-5">
+                      <ul className="mt-2 ou-list--bulleted">
                         {preview.errors.slice(0, 12).map((e, i) => (
-                          <li key={i} className="text-sm text-muted-foreground">{e}</li>
+                          <Text as="li" key={i} tone="muted">{e}</Text>
                         ))}
                       </ul>
                     )}
@@ -507,7 +507,7 @@ export default function ImportPage() {
             )}
           </CardBody>
         </Card>
-      </div>
+      </Box>
     </div>
   );
 }

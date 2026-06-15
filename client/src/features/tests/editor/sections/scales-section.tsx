@@ -34,6 +34,7 @@ import {
   Select,
   Stack,
   Switch,
+  Tag,
 } from "@universityrt/ui-kit";
 import { ChevronDown, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
 
@@ -1159,9 +1160,9 @@ function QuestionContribCard({
             {scales
               .filter((s) => contributed.has(s.key))
               .map((s) => (
-                <span key={s.key} className="ou-tag ou-tag--neutral ou-tag--outline ml-2" title={s.label}>
+                <Tag key={s.key} tone="neutral" variant="outline" className="ml-2" title={s.label}>
                   {s.key.toUpperCase()}
-                </span>
+                </Tag>
               ))}
             {!measured && " · не привязан"}
           </p>
@@ -1201,7 +1202,7 @@ function QuestionContribCard({
                     <td>
                       {unit.label}
                       {unit.correct && (
-                        <span className="ou-tag ou-tag--success ou-tag--outline ml-2">✓ верный</span>
+                        <Tag tone="success" variant="outline" className="ml-2">✓ верный</Tag>
                       )}
                     </td>
                     {scales.map((s) => (

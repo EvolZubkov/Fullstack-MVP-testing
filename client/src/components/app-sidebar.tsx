@@ -24,7 +24,7 @@ import {
   Import,
   type LucideIcon,
 } from "lucide-react";
-import { Sidebar } from "@universityrt/ui-kit";
+import { Cluster, Sidebar, Text } from "@universityrt/ui-kit";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
 import type { Capability } from "@shared/access";
@@ -78,12 +78,14 @@ export function AppSidebar() {
             e.preventDefault();
             setLocation("/");
           }}
-          className="flex items-center gap-2 text-inherit no-underline"
+          className="ou-link-reset"
         >
-          <span className="ou-shell__brand-mark">
-            <BookOpen size={16} />
-          </span>
-          <span className="font-semibold">{t.auth.appName}</span>
+          <Cluster gap={2} wrap={false}>
+            <span className="ou-shell__brand-mark">
+              <BookOpen size={16} />
+            </span>
+            <Text weight="semibold">{t.auth.appName}</Text>
+          </Cluster>
         </a>
       }
     />

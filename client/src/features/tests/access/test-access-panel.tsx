@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table, Stack, Cluster, Text } from "@universityrt/ui-kit";
+import { Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table, Box, Stack, Cluster, Text } from "@universityrt/ui-kit";
 import { Trash2, KeyRound } from "lucide-react";
 import { formatRoles } from "@/lib/roles";
 import type { Role } from "@shared/access";
@@ -206,7 +206,7 @@ export function TestAccessPanel({
               ) : (
                 <Text tone="muted">Владелец не назначен</Text>
               )}
-              <span className="flex-1" />
+              <Box as="span" grow />
               <Button variant="secondary" size="s" onClick={() => setChangingOwner(true)}>
                 Сменить владельца
               </Button>

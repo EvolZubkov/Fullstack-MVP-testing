@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table,
-  Switch, Tag, Banner, ModalDialog, Tabs, Input, Textarea, Cluster, Stack, Text,
+  Switch, Tag, Banner, ModalDialog, Tabs, Input, Textarea, Box, Cluster, Stack, Text,
 } from "@universityrt/ui-kit";
 import { Trash2, KeyRound, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -433,7 +433,7 @@ export function TopicDrawer({
                   ) : (
                     <Text tone="muted">Владелец не назначен</Text>
                   )}
-                  <span className="flex-1" />
+                  <Box as="span" grow />
                   {isAdmin && (
                     <Button variant="secondary" size="s" onClick={() => setChangingOwner(true)}>
                       Сменить владельца
@@ -646,7 +646,7 @@ export function TopicDrawer({
               title="Отзыв затрагивает опубликованные тесты получателя"
               description="Жёсткий отзыв уберёт доступ полностью. Затронутые тесты получателя:"
             />
-            <ul className="list-disc pl-5 text-sm">
+            <ul className="ou-list--bulleted">
               {revokeDeps.map((d) => (
                 <li key={d.testId}>{d.title}</li>
               ))}
