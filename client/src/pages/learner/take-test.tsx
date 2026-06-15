@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
-import { ChevronLeft, ChevronRight, CheckCircle, XCircle, ArrowUp, ArrowDown, Trophy, Target, GripVertical, Clock, BookOpen, RotateCcw, Play } from "lucide-react";
-import { Banner, Box, Button, Card, CardBody, CardHeader, Center, Checkbox, Cluster, ProgressBar, Radio, Stack, Tag, Text } from "@universityrt/ui-kit";
+import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw } from "lucide-react";
+import { Banner, Box, Button, Card, CardBody, CardHeader, Center, Cluster, Stack, Tag, Text } from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
@@ -1502,6 +1502,8 @@ export default function TakeTestPage() {
           shuffleMapping={shuffleMappings[currentQ.id]}
           onAnswer={feedbackShown ? () => {} : handleAdaptiveAnswer}
           locked={feedbackShown}
+          reviewMode={feedbackShown && adaptiveState.showCorrectAnswers}
+          correctAnswer={lastAnswerResult?.correctAnswer}
           feedbackHtml={fbHtml}
           footer={footer}
         />
@@ -1517,17 +1519,47 @@ export default function TakeTestPage() {
     testMode === "standard" &&
     attempt &&
     flatQuestions.length > 0 &&
-    questionTpl &&
-    !showCorrectAnswers
+    questionTpl
   ) {
     const currentQ = flatQuestions[currentIndex];
     // PRD-4 v1.1 §3.2 — section-timer state for the templated standard screen.
     const currentTopicLocked = lockedTopics.has(currentQ.topicId);
     const prevIdx = prevAccessibleIndex(flatQuestions, currentIndex - 1, lockedTopics);
+    const isLastQuestion = currentIndex === flatQuestions.length - 1;
     const sectionClock =
       sectionRemainingSeconds !== null
         ? ` · Время темы ${Math.floor(sectionRemainingSeconds / 60)}:${String(sectionRemainingSeconds % 60).padStart(2, "0")}`
         : "";
+    const goBack = () => {
+      setStandardFeedbackShown(false);
+      setStandardAnswerResult(null);
+      // Skip back over any topic whose section timer already expired.
+      if (prevIdx !== null) setCurrentIndex(prevIdx);
+    };
+    // Per-question review (showCorrectAnswers) renders through the SAME template
+    // (parity with SCORM + adaptive): answer → «Принять» → correct/wrong highlight
+    // + feedback → «Далее». Custom footer replaces the default Назад/Далее nav.
+    const reviewFooter = showCorrectAnswers ? (
+      <>
+        <button
+          type="button"
+          onClick={goBack}
+          disabled={prevIdx === null}
+          className="inline-flex items-center gap-2 text-sm opacity-80 hover:opacity-100 disabled:opacity-30 transition-opacity"
+        >
+          ← Назад
+        </button>
+        <button
+          type="button"
+          onClick={!standardFeedbackShown ? handleStandardConfirm : isLastQuestion ? handleSubmit : handleStandardContinue}
+          disabled={isSubmitting}
+          className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+          style={{ background: "#2563eb" }}
+        >
+          {!standardFeedbackShown ? "Принять" : isLastQuestion ? (isSubmitting ? "Отправка..." : "Завершить тест") : "Далее →"}
+        </button>
+      </>
+    ) : undefined;
     return (
       <TemplateQuestionScreen
         tpl={questionTpl}
@@ -1538,15 +1570,18 @@ export default function TakeTestPage() {
         answer={answers[currentQ.question.id]}
         shuffleMapping={shuffleMappings[currentQ.question.id]}
         onAnswer={(a) => handleAnswer(currentQ.question.id, a)}
-        locked={currentTopicLocked}
+        locked={showCorrectAnswers ? standardFeedbackShown : currentTopicLocked}
+        reviewMode={showCorrectAnswers && standardFeedbackShown}
+        correctAnswer={standardAnswerResult?.correctAnswer}
+        feedbackHtml={
+          showCorrectAnswers && standardFeedbackShown && standardAnswerResult
+            ? adaptiveFeedbackHtml(currentQ.question, standardAnswerResult)
+            : undefined
+        }
+        footer={reviewFooter}
         canPrev={prevIdx !== null}
-        onPrev={() => {
-          setStandardFeedbackShown(false);
-          setStandardAnswerResult(null);
-          // Skip back over any topic whose section timer already expired.
-          if (prevIdx !== null) setCurrentIndex(prevIdx);
-        }}
-        isLast={currentIndex === flatQuestions.length - 1}
+        onPrev={goBack}
+        isLast={isLastQuestion}
         isSubmitting={isSubmitting}
         onNext={handleNext}
         onSubmit={handleSubmit}
@@ -1554,762 +1589,30 @@ export default function TakeTestPage() {
     );
   }
 
-  // Standard mode — per-question feedback (showCorrectAnswers) / no-template fallback.
-  if (testMode === "standard" && attempt && flatQuestions.length > 0) {
-    const currentQ = flatQuestions[currentIndex];
-    const progress = ((currentIndex + 1) / flatQuestions.length) * 100;
-    const isLastQuestion = currentIndex === flatQuestions.length - 1;
-    // Section-timer state for this view (PRD-4 v1.1 §3.2).
-    const currentTopicLocked = lockedTopics.has(currentQ.topicId);
-    const prevIdx = prevAccessibleIndex(flatQuestions, currentIndex - 1, lockedTopics);
-
+  // No design template available (rare: the screen-template fetch failed). Per the
+  // parity principle (PRD-12) BOTH hosts render learner screens from the shared
+  // template, so we do not ship a second React question renderer — surface a reload
+  // instead of a divergent in-app UI. The normal + review render is the templated
+  // branch above (questionTpl present), matching the SCORM runtime.
+  if (testMode === "standard" && attempt && flatQuestions.length > 0 && !questionTpl) {
     return (
-      <div className="min-h-screen select-none" onCopy={(e) => e.preventDefault()} onCut={(e) => e.preventDefault()} onContextMenu={(e) => e.preventDefault()}>
-        <div className="fixed top-0 left-0 right-0 z-50">
-          <ProgressBar value={progress} size="xs" hideHeader />
-        </div>
-
-        <Box maxW="3xl" padX={6} padY={8}>
-          <Stack gap={8}>
-            <Cluster justify="between" gap={4}>
-              <Stack gap={1}>
-                <Text variant="heading-s" weight="semibold">{attempt.testTitle}</Text>
-                <Text variant="body-s" tone="muted">Вопрос {currentIndex + 1} из {flatQuestions.length}</Text>
-              </Stack>
-              <Cluster gap={4}>
-                {remainingSeconds !== null && <TimerDisplay remainingSeconds={remainingSeconds} />}
-                {sectionRemainingSeconds !== null && <SectionTimerDisplay remainingSeconds={sectionRemainingSeconds} />}
+      <Center minH="screen" pad={6}>
+        <Box full maxW="md">
+          <Card>
+            <CardHeader title="Оформление недоступно" />
+            <CardBody>
+              <Stack gap={4}>
                 <Text variant="body-s" tone="muted">
-                  Тема: <Text as="span" variant="body-s" weight="medium">{currentQ.topicName}</Text>
+                  Не удалось загрузить оформление теста. Обновите страницу, чтобы продолжить прохождение.
                 </Text>
-              </Cluster>
-            </Cluster>
-
-            <Card>
-              <CardBody>
-                <Stack gap={4}>
-                  <Text variant="heading-s" weight="medium">{currentQ.question.prompt}</Text>
-                  {currentQ.question.mediaUrl && currentQ.question.mediaType && (
-                    <div>
-                      {currentQ.question.mediaType === "image" && (
-                        <img src={currentQ.question.mediaUrl} alt="Изображение" className="max-h-64 object-contain mx-auto rounded-md" />
-                      )}
-                      {currentQ.question.mediaType === "audio" && (
-                        <audio controls className="w-full"><source src={currentQ.question.mediaUrl} /></audio>
-                      )}
-                      {currentQ.question.mediaType === "video" && (
-                        <video controls className="max-h-64 w-full rounded-md"><source src={currentQ.question.mediaUrl} /></video>
-                      )}
-                    </div>
-                  )}
-
-                  <QuestionInput
-                    question={currentQ.question}
-                    answer={answers[currentQ.question.id]}
-                    onAnswer={standardFeedbackShown || currentTopicLocked ? () => { } : (answer) => handleAnswer(currentQ.question.id, answer)}
-                    shuffleMapping={shuffleMappings[currentQ.question.id]}
-                    disabled={standardFeedbackShown || currentTopicLocked}
-                    showCorrectAnswer={standardFeedbackShown}
-                    correctAnswer={standardAnswerResult?.correctAnswer}
-                  />
-
-                  {standardFeedbackShown && standardAnswerResult && (
-                    <Banner
-                      fullWidth
-                      tone={standardAnswerResult.isCorrect ? "success" : "error"}
-                      title={standardAnswerResult.isCorrect ? "Правильно!" : "Неправильно"}
-                    >
-                      {standardAnswerResult.feedback}
-                    </Banner>
-                  )}
-                </Stack>
-              </CardBody>
-            </Card>
-
-            <Cluster justify="between" gap={4}>
-              <Button
-                variant="secondary"
-                leadingIcon={<ChevronLeft size={16} />}
-                onClick={() => {
-                  setStandardFeedbackShown(false);
-                  setStandardAnswerResult(null);
-                  if (prevIdx !== null) setCurrentIndex(prevIdx);
-                }}
-                disabled={prevIdx === null}
-              >
-                Назад
-              </Button>
-
-              {showCorrectAnswers ? (
-                standardFeedbackShown ? (
-                  isLastQuestion ? (
-                    <Button onClick={handleSubmit} loading={isSubmitting} trailingIcon={<CheckCircle size={16} />}>
-                      Завершить тест
-                    </Button>
-                  ) : (
-                    <Button onClick={handleStandardContinue} trailingIcon={<ChevronRight size={16} />}>Далее</Button>
-                  )
-                ) : (
-                  <Button onClick={handleStandardConfirm} trailingIcon={<ChevronRight size={16} />}>Принять</Button>
-                )
-              ) : (
-                isLastQuestion ? (
-                  <Button onClick={handleSubmit} loading={isSubmitting} trailingIcon={<CheckCircle size={16} />}>
-                    Завершить тест
-                  </Button>
-                ) : (
-                  <Button onClick={handleNext} trailingIcon={<ChevronRight size={16} />}>Далее</Button>
-                )
-              )}
-            </Cluster>
-          </Stack>
+                <Button fullWidth onClick={() => window.location.reload()}>Обновить</Button>
+              </Stack>
+            </CardBody>
+          </Card>
         </Box>
-      </div>
+      </Center>
     );
   }
 
   return <LoadingState message={t.common.preparingTest} />;
-}
-
-// ==================== Question Input Component ====================
-
-interface QuestionInputProps {
-  question: Question;
-  answer: any;
-  onAnswer: (answer: any) => void;
-  shuffleMapping?: any;
-  disabled?: boolean;
-  showCorrectAnswer?: boolean;
-  correctAnswer?: any;
-}
-
-const QUESTION_HINTS: Record<string, string> = {
-  single: "Выберите только один правильный ответ.",
-  multiple: "Выберите один или несколько правильных ответов.",
-  ranking: "Расставьте элементы в правильной последовательности. Для этого зажмите нужный элемент и передвиньте.",
-  matching: "Расставьте элементы в правильной последовательности. Для этого зажмите нужный элемент и передвиньте.",
-};
-
-function QuestionInput({ question, answer, onAnswer, shuffleMapping, disabled = false, showCorrectAnswer = false, correctAnswer }: QuestionInputProps) {
-  const data = question.dataJson as any;
-  const hint = QUESTION_HINTS[question.type];
-
-  // Single choice
-  if (question.type === "single") {
-    const options = data.options || [];
-    const displayOrder = shuffleMapping || options.map((_: any, i: number) => i);
-    const correctIndex = correctAnswer?.correctIndex;
-
-    return (
-      <Stack gap={3}>
-        {hint && <Text variant="body-s" tone="muted">{hint}</Text>}
-        {displayOrder.map((originalIndex: number, displayIndex: number) => {
-          const isSelected = answer === originalIndex;
-          const isCorrect = showCorrectAnswer && correctIndex === originalIndex;
-          const isWrong = showCorrectAnswer && isSelected && correctIndex !== originalIndex;
-
-          let borderClass = "border-border hover:border-primary/50";
-          let bgClass = "";
-
-          if (showCorrectAnswer) {
-            if (isCorrect) {
-              borderClass = "border-green-500";
-              bgClass = "bg-green-50 dark:bg-green-900/20";
-            } else if (isWrong) {
-              borderClass = "border-red-500";
-              bgClass = "bg-red-50 dark:bg-red-900/20";
-            }
-          } else if (isSelected) {
-            borderClass = "border-primary";
-            bgClass = "bg-primary/5";
-          }
-
-          return (
-            <div
-              key={displayIndex}
-              className={`flex items-center space-x-3 p-4 rounded-lg border transition-colors ${disabled ? "cursor-default" : "cursor-pointer"
-                } ${borderClass} ${bgClass}`}
-              onClick={() => !disabled && onAnswer(originalIndex)}
-            >
-              <Radio checked={isSelected} disabled={disabled} readOnly tabIndex={-1} className="pointer-events-none" />
-              <span className="flex-1">{options[originalIndex]}</span>
-              {showCorrectAnswer && isCorrect && (
-                <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
-              )}
-              {showCorrectAnswer && isWrong && (
-                <XCircle className="h-5 w-5 text-red-500 shrink-0" />
-              )}
-            </div>
-          );
-        })}
-      </Stack>
-    );
-  }
-
-  // Multiple choice
-  if (question.type === "multiple") {
-    const options = data.options || [];
-    const displayOrder = shuffleMapping || options.map((_: any, i: number) => i);
-    const selected: number[] = answer || [];
-    const correctIndices: number[] = correctAnswer?.correctIndices || [];
-
-    const toggle = (originalIdx: number) => {
-      if (disabled) return;
-      if (selected.includes(originalIdx)) {
-        onAnswer(selected.filter((i) => i !== originalIdx));
-      } else {
-        onAnswer([...selected, originalIdx]);
-      }
-    };
-
-    return (
-      <Stack gap={3}>
-        {hint && <Text variant="body-s" tone="muted">{hint}</Text>}
-        {displayOrder.map((originalIndex: number, displayIndex: number) => {
-          const isSelected = selected.includes(originalIndex);
-          const isCorrect = showCorrectAnswer && correctIndices.includes(originalIndex);
-          const isWrong = showCorrectAnswer && isSelected && !correctIndices.includes(originalIndex);
-          const isMissed = showCorrectAnswer && !isSelected && correctIndices.includes(originalIndex);
-
-          let borderClass = "border-border hover:border-primary/50";
-          let bgClass = "";
-
-          if (showCorrectAnswer) {
-            if (isCorrect) {
-              borderClass = "border-green-500";
-              bgClass = "bg-green-50 dark:bg-green-900/20";
-            } else if (isWrong) {
-              borderClass = "border-red-500";
-              bgClass = "bg-red-50 dark:bg-red-900/20";
-            }
-          } else if (isSelected) {
-            borderClass = "border-primary";
-            bgClass = "bg-primary/5";
-          }
-
-          return (
-            <div
-              key={displayIndex}
-              className={`flex items-center space-x-3 p-4 rounded-lg border transition-colors select-none ${disabled ? "cursor-default" : "cursor-pointer"
-                } ${borderClass} ${bgClass}`}
-              onClick={() => toggle(originalIndex)}
-            >
-              <Checkbox checked={isSelected} disabled={disabled} readOnly tabIndex={-1} className="pointer-events-none" />
-              <span className="flex-1">
-                {options[originalIndex]}
-              </span>
-              {showCorrectAnswer && isCorrect && isSelected && (
-                <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
-              )}
-              {showCorrectAnswer && isMissed && (
-                <CheckCircle className="h-5 w-5 text-green-500 shrink-0 opacity-50" />
-              )}
-              {showCorrectAnswer && isWrong && (
-                <XCircle className="h-5 w-5 text-red-500 shrink-0" />
-              )}
-            </div>
-          );
-        })}
-      </Stack>
-    );
-  }
-
-  // Matching with DnD
-  if (question.type === "matching") {
-    return (
-      <>
-        {hint && <p className="text-sm text-muted-foreground -mt-1 mb-1">{hint}</p>}
-        <MatchingQuestion
-          question={question}
-          answer={answer}
-          onAnswer={disabled ? () => { } : onAnswer}
-          shuffleMapping={shuffleMapping}
-          disabled={disabled}
-          showCorrectAnswer={showCorrectAnswer}
-          correctAnswer={correctAnswer}
-        />
-      </>
-    );
-  }
-
-  // Ranking with DnD
-  if (question.type === "ranking") {
-    return (
-      <>
-        {hint && <p className="text-sm text-muted-foreground -mt-1 mb-1">{hint}</p>}
-        <RankingQuestion
-          question={question}
-          answer={answer}
-          onAnswer={disabled ? () => { } : onAnswer}
-          shuffleMapping={shuffleMapping}
-          disabled={disabled}
-          showCorrectAnswer={showCorrectAnswer}
-          correctAnswer={correctAnswer}
-        />
-      </>
-    );
-  }
-
-  return <div>Неизвестный тип вопроса</div>;
-}
-
-// ==================== Matching Question with DnD (SCORM style) ====================
-
-interface MatchingQuestionProps {
-  question: Question;
-  answer: any;
-  onAnswer: (answer: any) => void;
-  shuffleMapping?: any;
-  disabled?: boolean;
-  showCorrectAnswer?: boolean;
-  correctAnswer?: any;
-}
-
-function MatchingQuestion({ question, answer, onAnswer, shuffleMapping, disabled = false, showCorrectAnswer = false, correctAnswer }: MatchingQuestionProps) {
-  const data = question.dataJson as any;
-  const leftItems = data.left || [];
-  const rightItems = data.right || [];
-
-  const leftMapping = shuffleMapping?.left || leftItems.map((_: any, i: number) => i);
-  const rightMapping = shuffleMapping?.right || rightItems.map((_: any, i: number) => i);
-
-  const pairs: Record<number, number> = answer || {};
-
-  // Build correct pairs mapping for highlighting
-  const correctPairs: Array<{ left: number, right: number }> = correctAnswer?.pairs || [];
-  const correctLeftToRight: Record<number, number> = {};
-  correctPairs.forEach(p => {
-    correctLeftToRight[p.left] = p.right;
-  });
-
-  // Build rightToLeft mapping
-  const rightToLeft: Record<number, number> = {};
-  Object.keys(pairs).forEach(k => {
-    const leftIdx = parseInt(k);
-    const rightIdx = pairs[leftIdx];
-    if (typeof rightIdx === 'number') {
-      rightToLeft[rightIdx] = leftIdx;
-    }
-  });
-
-  // Build pool - left items not yet matched, in leftMapping order
-  const usedLeft = new Set(Object.keys(pairs).map(k => parseInt(k)));
-  const pool = leftMapping.filter((idx: number) => !usedLeft.has(idx));
-
-  const [draggedItem, setDraggedItem] = useState<{
-    leftIdx: number;
-    from: 'pool' | 'matched';
-    fromRightIdx?: number;
-    poolIndex?: number;
-  } | null>(null);
-  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
-
-  const handleDragStart = (
-    e: React.DragEvent,
-    leftIdx: number,
-    from: 'pool' | 'matched',
-    fromRightIdx?: number,
-    poolIndex?: number
-  ) => {
-    if (disabled) {
-      e.preventDefault();
-      return;
-    }
-    setDraggedItem({ leftIdx, from, fromRightIdx, poolIndex });
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragEnd = () => {
-    setDraggedItem(null);
-    setDragOverTarget(null);
-  };
-
-  const handleDragOver = (e: React.DragEvent, targetId: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverTarget(targetId);
-  };
-
-  const handleDragLeave = () => {
-    setDragOverTarget(null);
-  };
-
-  const handleDropOnRight = (e: React.DragEvent, targetRightIdx: number) => {
-    e.preventDefault();
-    if (!draggedItem) return;
-
-    const newPairs = { ...pairs };
-
-    // If target already has a match, it will be displaced
-    const existingLeftIdx = rightToLeft[targetRightIdx];
-
-    // Remove dragged item from its previous position
-    if (draggedItem.from === 'matched' && draggedItem.fromRightIdx !== undefined) {
-      delete newPairs[draggedItem.leftIdx];
-    }
-
-    // If there was something in target slot, remove it (it goes back to pool)
-    if (existingLeftIdx !== undefined && existingLeftIdx !== draggedItem.leftIdx) {
-      delete newPairs[existingLeftIdx];
-    }
-
-    // Add new match
-    newPairs[draggedItem.leftIdx] = targetRightIdx;
-
-    onAnswer(newPairs);
-    setDraggedItem(null);
-    setDragOverTarget(null);
-  };
-
-  const handleDropOnPool = (e: React.DragEvent, targetPoolSlot: number) => {
-    e.preventDefault();
-    if (!draggedItem || draggedItem.from !== 'matched') return;
-
-    // Remove from matched pairs - it will appear in pool automatically
-    const newPairs = { ...pairs };
-    delete newPairs[draggedItem.leftIdx];
-    onAnswer(newPairs);
-
-    setDraggedItem(null);
-    setDragOverTarget(null);
-  };
-
-  const handleDoubleClick = (leftIdx: number) => {
-    if (disabled) return;
-    // Return to pool on double click
-    const newPairs = { ...pairs };
-    delete newPairs[leftIdx];
-    onAnswer(newPairs);
-  };
-
-  // Track pool slot index
-  let poolSlot = 0;
-
-  return (
-    <div className="space-y-3">
-      {rightMapping.map((rightIdx: number, displayIdx: number) => {
-        const matchedLeftIdx = rightToLeft[rightIdx];
-        const isJoined = matchedLeftIdx !== undefined;
-        const currentPoolSlot = poolSlot;
-        const poolLeftIdx = !isJoined && poolSlot < pool.length ? pool[poolSlot] : null;
-
-        if (!isJoined) {
-          poolSlot++;
-        }
-
-        const leftTargetId = `left-${rightIdx}`;
-        const rightTargetId = `right-${rightIdx}`;
-
-        // When joined - render as single merged block
-        if (isJoined) {
-          // Check if this match is correct
-          const isCorrectMatch = showCorrectAnswer && correctLeftToRight[matchedLeftIdx] === rightIdx;
-          const isWrongMatch = showCorrectAnswer && correctLeftToRight[matchedLeftIdx] !== rightIdx;
-
-          let borderClass = "border-border";
-          let chipBgClass = "bg-primary text-primary-foreground";
-
-          if (showCorrectAnswer) {
-            if (isCorrectMatch) {
-              borderClass = "border-green-500";
-              chipBgClass = "bg-green-500 text-white";
-            } else if (isWrongMatch) {
-              borderClass = "border-red-500";
-              chipBgClass = "bg-red-500 text-white";
-            }
-          }
-
-          return (
-            <div
-              key={displayIdx}
-              className="flex items-stretch"
-            >
-              {/* MERGED BLOCK - Left chip + Right text */}
-              <div
-                className={`flex-1 min-h-[56px] rounded-lg border ${borderClass} bg-card flex items-stretch overflow-hidden`}
-                onDragOver={(e) => handleDragOver(e, rightTargetId)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDropOnRight(e, rightIdx)}
-              >
-                {/* Left part - draggable chip */}
-                <div
-                  draggable={!disabled}
-                  onDragStart={(e) => handleDragStart(e, matchedLeftIdx, 'matched', rightIdx)}
-                  onDragEnd={handleDragEnd}
-                  onDoubleClick={() => handleDoubleClick(matchedLeftIdx)}
-                  className={`min-w-[120px] px-4 py-3 ${chipBgClass} flex items-center justify-center gap-2 cursor-grab active:cursor-grabbing select-none font-medium`}
-                  title="Дважды щёлкните, чтобы вернуть"
-                >
-                  {leftItems[matchedLeftIdx]}
-                  {showCorrectAnswer && isCorrectMatch && <CheckCircle className="h-4 w-4" />}
-                  {showCorrectAnswer && isWrongMatch && <XCircle className="h-4 w-4" />}
-                </div>
-                {/* Right part - text */}
-                <div className="flex-1 px-4 py-3 flex items-center">
-                  <span className="text-sm">
-                    {rightItems[rightIdx]}
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        }
-
-        // Not joined - separate blocks
-        return (
-          <div
-            key={displayIdx}
-            className="flex items-stretch gap-3"
-          >
-            {/* LEFT SIDE - Slot with draggable chip */}
-            <div
-              className={`flex-1 min-h-[56px] rounded-lg border transition-all flex items-center px-3 ${dragOverTarget === leftTargetId
-                ? 'border-primary border-2 bg-primary/5'
-                : 'border-border bg-card'
-                }`}
-              onDragOver={(e) => handleDragOver(e, leftTargetId)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDropOnPool(e, currentPoolSlot)}
-            >
-              {poolLeftIdx !== null ? (
-                // Pool item - chip style
-                <div
-                  draggable={!disabled}
-                  onDragStart={(e) => handleDragStart(e, poolLeftIdx, 'pool', undefined, currentPoolSlot)}
-                  onDragEnd={handleDragEnd}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md cursor-grab active:cursor-grabbing select-none font-medium hover:bg-primary/90 transition-colors"
-                >
-                  {leftItems[poolLeftIdx]}
-                </div>
-              ) : (
-                // Empty slot placeholder
-                <span className="text-muted-foreground text-sm">Перетащите вариант</span>
-              )}
-            </div>
-
-            {/* ARROW */}
-            <div className="w-8 flex items-center justify-center text-muted-foreground">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M5 12h14M13 5l7 7-7 7" />
-              </svg>
-            </div>
-
-            {/* RIGHT SIDE - Drop target with text */}
-            <div
-              className={`flex-1 min-h-[56px] rounded-lg border transition-all flex items-center px-4 ${dragOverTarget === rightTargetId
-                ? 'border-primary border-2 bg-primary/5'
-                : 'border-border bg-muted/30'
-                }`}
-              onDragOver={(e) => handleDragOver(e, rightTargetId)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDropOnRight(e, rightIdx)}
-            >
-              <span className="text-sm">
-                {rightItems[rightIdx]}
-              </span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ==================== Ranking Question with DnD ====================
-
-interface RankingQuestionProps {
-  question: Question;
-  answer: any;
-  onAnswer: (answer: any) => void;
-  shuffleMapping?: any;
-  disabled?: boolean;
-  showCorrectAnswer?: boolean;
-  correctAnswer?: any;
-}
-
-function RankingQuestion({ question, answer, onAnswer, shuffleMapping, disabled = false, showCorrectAnswer = false, correctAnswer }: RankingQuestionProps) {
-  const data = question.dataJson as any;
-  const items = data.items || [];
-
-  // Initialize order from answer or shuffle mapping
-  const initialOrder = shuffleMapping || items.map((_: any, i: number) => i);
-  const order: number[] = answer || initialOrder;
-
-  // Correct order for highlighting
-  const correctOrder: number[] = correctAnswer?.correctOrder || [];
-
-  // Set initial answer if not set
-  useEffect(() => {
-    if (answer === undefined || answer === null) {
-      onAnswer(initialOrder);
-    }
-  }, []);
-
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    if (disabled) {
-      e.preventDefault();
-      return;
-    }
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverIndex(index);
-  };
-
-  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === targetIndex) return;
-
-    const newOrder = [...order];
-    const [draggedItem] = newOrder.splice(draggedIndex, 1);
-    newOrder.splice(targetIndex, 0, draggedItem);
-
-    onAnswer(newOrder);
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const moveItem = (fromIndex: number, toIndex: number) => {
-    if (disabled) return;
-    if (toIndex < 0 || toIndex >= order.length) return;
-
-    const newOrder = [...order];
-    const [item] = newOrder.splice(fromIndex, 1);
-    newOrder.splice(toIndex, 0, item);
-    onAnswer(newOrder);
-  };
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Расположите элементы в правильном порядке (перетаскивайте или используйте стрелки)
-      </p>
-
-      {order.map((itemIdx, position) => {
-        // Check if item is in correct position
-        const isCorrectPosition = showCorrectAnswer && correctOrder[position] === itemIdx;
-        const isWrongPosition = showCorrectAnswer && correctOrder.length > 0 && correctOrder[position] !== itemIdx;
-
-        let borderClass = "border-border hover:border-primary/50";
-        let bgClass = "bg-card";
-
-        if (showCorrectAnswer) {
-          if (isCorrectPosition) {
-            borderClass = "border-green-500";
-            bgClass = "bg-green-50 dark:bg-green-900/20";
-          } else if (isWrongPosition) {
-            borderClass = "border-red-500";
-            bgClass = "bg-red-50 dark:bg-red-900/20";
-          }
-        } else if (draggedIndex === position) {
-          borderClass = "opacity-50 border-primary";
-        } else if (dragOverIndex === position) {
-          borderClass = "border-primary";
-          bgClass = "bg-primary/5";
-        }
-
-        return (
-          <div
-            key={`${itemIdx}-${position}`}
-            draggable={!disabled}
-            onDragStart={(e) => handleDragStart(e, position)}
-            onDragEnd={handleDragEnd}
-            onDragOver={(e) => handleDragOver(e, position)}
-            onDrop={(e) => handleDrop(e, position)}
-            className={`flex items-center gap-3 p-4 rounded-lg border transition-all ${disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"
-              } ${borderClass} ${bgClass}`}
-          >
-            {/* Drag handle */}
-            <GripVertical className="h-5 w-5 text-muted-foreground shrink-0" />
-
-            {/* Position number */}
-            <span className="text-sm font-bold w-6 text-muted-foreground">{position + 1}.</span>
-
-            {/* Item text */}
-            <span className="flex-1">{items[itemIdx]}</span>
-
-            {/* Correct/Wrong indicator */}
-            {showCorrectAnswer && isCorrectPosition && (
-              <CheckCircle className="h-5 w-5 text-green-500 shrink-0" />
-            )}
-            {showCorrectAnswer && isWrongPosition && (
-              <XCircle className="h-5 w-5 text-red-500 shrink-0" />
-            )}
-
-            {/* Arrow buttons */}
-            {!showCorrectAnswer && (
-              <div className="flex flex-col gap-0.5">
-                <button
-                  type="button"
-                  onClick={() => moveItem(position, position - 1)}
-                  disabled={disabled || position === 0}
-                  className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Move up"
-                >
-                  <ArrowUp className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => moveItem(position, position + 1)}
-                  disabled={disabled || position === order.length - 1}
-                  className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
-                  aria-label="Move down"
-                >
-                  <ArrowDown className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ==================== Timer Display Component ====================
-
-function TimerDisplay({ remainingSeconds }: { remainingSeconds: number }) {
-  const minutes = Math.floor(remainingSeconds / 60);
-  const seconds = remainingSeconds % 60;
-  const isLowTime = remainingSeconds <= 60;
-
-  return (
-    <div className={`font-mono text-lg ${isLowTime ? "text-red-500 font-bold animate-pulse" : "text-muted-foreground"}`}>
-      {minutes}:{seconds < 10 ? "0" : ""}{seconds}
-    </div>
-  );
-}
-
-/**
- * Per-topic (section) countdown shown next to the test-wide timer (PRD-4 v1.1
- * §3.2). Mirrors {@link TimerDisplay} with a «Тема» label so the learner can
- * tell the two budgets apart.
- */
-function SectionTimerDisplay({ remainingSeconds }: { remainingSeconds: number }) {
-  const minutes = Math.floor(remainingSeconds / 60);
-  const seconds = remainingSeconds % 60;
-  const isLowTime = remainingSeconds <= 60;
-
-  return (
-    <div
-      className={`flex items-center gap-1 font-mono text-lg ${isLowTime ? "text-red-500 font-bold animate-pulse" : "text-muted-foreground"}`}
-      title="Время на текущую тему"
-      data-testid="section-timer-display"
-    >
-      <BookOpen className="h-4 w-4" aria-hidden="true" />
-      {minutes}:{seconds < 10 ? "0" : ""}{seconds}
-    </div>
-  );
 }
