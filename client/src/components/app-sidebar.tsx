@@ -14,6 +14,7 @@
 import { useLocation } from "wouter";
 import {
   BookOpen,
+  FolderTree,
   FolderOpen,
   FileQuestion,
   ClipboardList,
@@ -39,6 +40,7 @@ interface NavEntry {
 }
 
 const NAV: NavEntry[] = [
+  { id: "content", href: "/author/content", label: t.navigation.topicsAndQuestions, icon: FolderTree, perm: "topics.manage" },
   { id: "topics", href: "/author/topics", label: t.navigation.topics, icon: FolderOpen, perm: "topics.manage" },
   { id: "questions", href: "/author/questions", label: t.navigation.questions, icon: FileQuestion, perm: "questions.manage" },
   { id: "tests", href: "/author/tests", label: t.navigation.tests, icon: ClipboardList, perm: "tests.read" },

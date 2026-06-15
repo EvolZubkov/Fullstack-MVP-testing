@@ -15,6 +15,7 @@ import ResetPasswordPage from "@/pages/reset-password";
 import FirstLoginPage from "@/pages/first-login";
 import TopicsPage from "@/pages/author/topics";
 import QuestionsPage from "@/pages/author/questions";
+import ContentPage from "@/pages/author/content";
 import TestsPage from "@/pages/author/tests";
 import AuthorTemplatesPage from "@/pages/author/templates";
 import AnalyticsPage from "@/pages/author/analytics";
@@ -105,6 +106,14 @@ function Router() {
       <Route path="/login" component={LoginPage} />
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
+
+      <Route path="/author/content">
+        <ProtectedRoute requiredPermission="topics.manage">
+          <AuthorLayout>
+            <ContentPage />
+          </AuthorLayout>
+        </ProtectedRoute>
+      </Route>
 
       <Route path="/author/topics">
         <ProtectedRoute requiredPermission="topics.manage">

@@ -249,6 +249,7 @@ export const t = {
   navigation: {
     topics: "Темы",
     questions: "Вопросы",
+    topicsAndQuestions: "Темы и вопросы",
     tests: "Тесты",
     templates: "Шаблоны",
     analytics: "Аналитика",
@@ -259,6 +260,12 @@ export const t = {
     logs: "Логи",
     logout: "Выход",
     testCenter: "Центр тестирования",
+  },
+
+  content: {
+    title: "Темы и вопросы",
+    description: "Единое дерево: папки, темы и вопросы в них.",
+    wip: "Раздел в разработке. Этап 0 — каркас. Дерево, фильтры и редакторы появятся на следующих этапах.",
   },
 
   folders: {
