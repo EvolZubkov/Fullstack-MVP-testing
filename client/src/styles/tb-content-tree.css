@@ -1,0 +1,83 @@
+/**
+ * tb-content-tree.css
+ *
+ * Project DS-extension layer (tb-*) for the unified "Темы и вопросы" section:
+ * a table-tree (Folder ⊃ Topic ⊃ Question) sharing the visual language of the
+ * tests list (tb-tests-list.css) — column header, plain-number counts, indent
+ * guide, bottom-border rows, no card. Composition only, on DS tokens; all
+ * controls are DS components. Mirrors the approved wireframe
+ * docs/wireframes/approved/content-bank-explorer.html. Scoped under
+ * `.tb-content-tree` to avoid global leakage. Imported from client/src/index.css.
+ */
+
+.tb-content-tree { display: flex; flex-direction: column; }
+
+/* Toolbar above the tree */
+.tb-content-tree .ct-toolbar { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; margin-bottom: var(--ou-space-4); }
+.tb-content-tree .ct-search { flex: 1; min-width: var(--wf-size-200, 200px); }
+.tb-content-tree .ct-search .ou-field { width: 100%; }
+.tb-content-tree .ct-spacer { flex: 1; }
+
+/* Tree + columns: НАЗВАНИЕ | СЛОЖНОСТЬ | ВОПРОСОВ (actions column added in a later phase) */
+.tb-content-tree .ct-tree { display: flex; flex-direction: column; }
+
+/* Depth-based indentation (avoids inline styles; --ct-depth drives .ct-name padding) */
+.tb-content-tree .ct-d0 { --ct-depth: 0; }
+.tb-content-tree .ct-d1 { --ct-depth: 1; }
+.tb-content-tree .ct-d2 { --ct-depth: 2; }
+.tb-content-tree .ct-d3 { --ct-depth: 3; }
+.tb-content-tree .ct-d4 { --ct-depth: 4; }
+.tb-content-tree .ct-d5 { --ct-depth: 5; }
+.tb-content-tree .ct-d6 { --ct-depth: 6; }
+.tb-content-tree .ct-thead,
+.tb-content-tree .ct-row {
+  display: grid;
+  grid-template-columns: 1fr var(--wf-size-110, 116px) var(--wf-size-95, 96px);
+  align-items: center;
+  border-bottom: 1px solid var(--ou-border-default);
+}
+.tb-content-tree .ct-thead { font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .05em; }
+.tb-content-tree .ct-thead > div { padding: var(--ou-space-2); text-align: center; }
+.tb-content-tree .ct-thead > div:first-child { text-align: left; padding-left: var(--ou-space-3); }
+
+.tb-content-tree .ct-row { min-height: var(--wf-size-44, 44px); cursor: pointer; -webkit-user-select: none; user-select: none; }
+.tb-content-tree .ct-row:hover { background: var(--ou-bg-hover); }
+
+/* Name cell: depth-driven indentation via --ct-depth */
+.tb-content-tree .ct-name {
+  display: flex; align-items: center; gap: var(--ou-space-2); min-width: 0;
+  padding: var(--ou-space-2) var(--ou-space-2) var(--ou-space-2)
+           calc(var(--ou-space-3) + var(--ct-depth, 0) * var(--ou-space-5));
+}
+.tb-content-tree .ct-name__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-content-tree .ct-twist,
+.tb-content-tree .ct-ico,
+.tb-content-tree .ct-qtype { width: var(--ou-space-4); height: var(--ou-space-4); flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--ou-fg-muted); }
+.tb-content-tree .ct-twist--leaf { visibility: hidden; }
+.tb-content-tree .ct-ico--topic { color: var(--ou-accent-default); }
+.tb-content-tree .ct-cell { font: var(--ou-text-body-s); color: var(--ou-fg-default); text-align: center; padding: 0 var(--ou-space-2); }
+.tb-content-tree .ct-qmedia { color: var(--ou-fg-muted); width: var(--ou-space-4); height: var(--ou-space-4); display: inline-flex; flex: none; }
+
+/* Root label "Все темы (N)" */
+.tb-content-tree .ct-rootrow { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); border-bottom: 1px solid var(--ou-border-default); }
+
+/* Folder */
+.tb-content-tree .ct-row--folder .ct-name__label { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ou-fg-muted); }
+.tb-content-tree .ct-foldercount { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+
+/* Topic */
+.tb-content-tree .ct-row--topic .ct-name__label { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default); }
+.tb-content-tree .ct-row--topic.is-open,
+.tb-content-tree .ct-row--topic.is-open:hover { background: var(--ou-accent-soft); box-shadow: inset 3px 0 0 var(--ou-accent-default); }
+
+/* Question — leaf under an indent guide */
+.tb-content-tree .ct-row--q .ct-name { position: relative; }
+.tb-content-tree .ct-row--q .ct-name::before {
+  content: ""; position: absolute;
+  left: calc(var(--ou-space-3) + (var(--ct-depth, 0) - 1) * var(--ou-space-5) + var(--ou-space-2));
+  top: 0; bottom: 0; width: 1px; background: var(--ou-border-default);
+}
+
+/* States */
+.tb-content-tree .ct-empty { padding: var(--ou-space-7) var(--ou-space-3); }
+.tb-content-tree .ct-more { padding: var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
