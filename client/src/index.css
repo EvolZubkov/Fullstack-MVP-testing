@@ -6,6 +6,7 @@
       `styles/vendor/README.md`).
    2) Project DS-extensions (`tb-*` components, see styles/tb-components.css).
    3) Tailwind layers from the local utility-first stack. */
+@import './styles/preflight.css';
 @import './styles/vendor/university-rt.css';
 @import './styles/tb-components.css';
 @import './styles/tb-tests-list.css';
