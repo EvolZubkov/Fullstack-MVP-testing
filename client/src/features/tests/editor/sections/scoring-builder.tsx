@@ -158,7 +158,7 @@ export function ScoringBuilder({
 
       {/* exact — informational. */}
       {mode === "exact" && (
-        <Box border="dashed" radius="m" pad={4} className="text-sm text-muted-foreground" data-testid="scoring-exact-hint">
+        <Box border="dashed" radius="m" pad={4} style={{ color: "var(--ou-fg-muted)" }} data-testid="scoring-exact-hint">
           Вопрос оценивается точным совпадением (0/1) — как все существующие тесты. Чтобы дать
           частичный балл, переключите способ{type === "single" ? " на «Веса опций»" : " на «Ступенчато»"}.
         </Box>
@@ -167,13 +167,13 @@ export function ScoringBuilder({
       {/* weighted (single) — option weights. */}
       {mode === "weighted" && type === "single" && (
         <Stack gap={2} data-testid="scoring-weights">
-          <Grid template="label-control" gap={2} className="text-xs font-medium text-muted-foreground">
+          <Grid template="label-control" gap={2} style={{ fontSize: "12px", fontWeight: 500, color: "var(--ou-fg-muted)" }}>
             <div>Вариант ответа</div>
             <div>Балл</div>
           </Grid>
           {options.map((opt, i) => (
             <Grid key={i} template="label-control" gap={2}>
-              <div className="text-sm">{opt.trim() || `Вариант ${i + 1}`}</div>
+              <div>{opt.trim() || `Вариант ${i + 1}`}</div>
               <Input
                 type="number"
                 min={0}
@@ -204,7 +204,7 @@ export function ScoringBuilder({
                   {tier.conds.map((cond, ci) => (
                     <Cluster key={ci} gap={2}>
                       <Select
-                        className="w-36"
+                        className="tb-fw-lg"
                         value={cond.lhs}
                         onChange={(v) => setCond(ti, ci, { lhs: v as CondLhs })}
                         options={[
@@ -214,14 +214,14 @@ export function ScoringBuilder({
                         data-testid={`scoring-cond-lhs-${ti}-${ci}`}
                       />
                       <Select
-                        className="w-20"
+                        className="tb-fw-sm"
                         value={cond.op}
                         onChange={(v) => setCond(ti, ci, { op: v as CondOp })}
                         options={OPS.map((o) => ({ value: o.value, label: o.label }))}
                         data-testid={`scoring-cond-op-${ti}-${ci}`}
                       />
                       <Input
-                        className="w-24"
+                        className="tb-fw-md"
                         value={cond.rhs}
                         onChange={(e) => setCond(ti, ci, { rhs: e.target.value })}
                         placeholder={`число или ${token}`}
@@ -253,7 +253,7 @@ export function ScoringBuilder({
                   <Input
                     type="number"
                     min={0}
-                    className="w-20"
+                    className="tb-fw-sm"
                     value={tier.score}
                     onChange={(e) => setTierScore(ti, e.target.value)}
                     placeholder="0"
@@ -272,7 +272,7 @@ export function ScoringBuilder({
             </Box>
           ))}
 
-          <Box border="dashed" radius="m" pad={3} className="text-sm text-muted-foreground">
+          <Box border="dashed" radius="m" pad={3} style={{ color: "var(--ou-fg-muted)" }}>
             <Cluster justify="between" gap={0} wrap={false}>
               <em>Иначе — во всех остальных случаях</em>
               <span>0</span>

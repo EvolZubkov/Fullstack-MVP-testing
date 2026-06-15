@@ -1280,14 +1280,14 @@ export default function TakeTestPage() {
       blockedTpl.css +
       '\n[data-retake-branch="default"],[data-retake-branch="error"]{display:none}[data-retake-branch="cooldown"]{display:block}';
     return (
-      <div className="min-h-screen flex flex-col" style={{ background: blockedTpl.theme?.background }}>
+      <div className="tbh-minh-screen tbh-col" style={{ background: blockedTpl.theme?.background }}>
         <TemplateScreen
-          className="flex-1 w-full"
+          className="tbh-fill"
           layout={blockedTpl.layout}
           css={blockCss}
           context={{ retake: { cooldownPeriodDays: blockData.cooldownPeriodDays, availableDateHuman } }}
         />
-        <div className="flex items-center justify-center pb-10">
+        <div className="tbh-center-foot">
           <Button variant="secondary" leadingIcon={<ChevronLeft size={16} />} onClick={() => navigate("/learner")}>
             К списку тестов
           </Button>
@@ -1325,14 +1325,14 @@ export default function TakeTestPage() {
     });
     return (
       <div
-        className="min-h-screen select-none"
+        className="tbh-minh-screen tbh-noselect"
         style={{ background: startTpl.theme?.background }}
         onCopy={(e) => e.preventDefault()}
         onCut={(e) => e.preventDefault()}
         onContextMenu={(e) => e.preventDefault()}
       >
         <TemplateScreen
-          className="w-full"
+          className="tbh-wfull"
           layout={startTpl.layout}
           css={startTpl.css}
           context={startContext}
@@ -1545,7 +1545,7 @@ export default function TakeTestPage() {
           type="button"
           onClick={goBack}
           disabled={prevIdx === null}
-          className="inline-flex items-center gap-2 text-sm opacity-80 hover:opacity-100 disabled:opacity-30 transition-opacity"
+          className="tbh-navbtn"
         >
           ← Назад
         </button>
@@ -1553,7 +1553,7 @@ export default function TakeTestPage() {
           type="button"
           onClick={!standardFeedbackShown ? handleStandardConfirm : isLastQuestion ? handleSubmit : handleStandardContinue}
           disabled={isSubmitting}
-          className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+          className="tbh-primarybtn"
           style={{ background: "#2563eb" }}
         >
           {!standardFeedbackShown ? "Принять" : isLastQuestion ? (isSubmitting ? "Отправка..." : "Завершить тест") : "Далее →"}

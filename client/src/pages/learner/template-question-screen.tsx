@@ -357,14 +357,14 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
 
   return (
     <div
-      className="min-h-screen flex flex-col select-none"
+      className="tbh-minh-screen tbh-col tbh-noselect"
       style={{ background: tpl.theme?.background }}
       onCopy={(e) => e.preventDefault()}
       onCut={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
     >
       <TemplateScreen
-        className="flex-1 w-full"
+        className="tbh-fill"
         layout={tpl.layout}
         css={css}
         context={{ course: { title: testTitle }, state: { questionCounterLabel: counterLabel } }}
@@ -395,7 +395,7 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
       />
 
       <div
-        className="flex items-center justify-between gap-4 px-6 pb-10 mx-auto w-full max-w-3xl"
+        className="tbh-foot"
         style={{ color: tpl.theme?.foreground }}
       >
         {props.footer !== undefined ? (
@@ -406,7 +406,7 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
               type="button"
               onClick={props.onPrev}
               disabled={!props.canPrev}
-              className="inline-flex items-center gap-2 text-sm opacity-80 hover:opacity-100 disabled:opacity-30 transition-opacity"
+              className="tbh-navbtn"
             >
               ← Назад
             </button>
@@ -414,7 +414,7 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
               type="button"
               onClick={props.isLast ? props.onSubmit : props.onNext}
               disabled={props.isSubmitting}
-              className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              className="tbh-primarybtn"
               style={{ background: "#2563eb" }}
             >
               {props.isLast ? (props.isSubmitting ? "Отправка..." : "Завершить тест") : "Далее →"}

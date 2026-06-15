@@ -343,7 +343,7 @@ function ScalesListPane({
 
   return (
     <>
-      <Cluster justify="between" gap={0} wrap={false} className="mb-3">
+      <Cluster justify="between" gap={0} wrap={false} style={{ marginBottom: "var(--ou-space-3)" }}>
         <div className="tb-section-label">Шкалы теста</div>
         <Cluster gap={2} wrap={false}>
           <Button
@@ -1160,7 +1160,7 @@ function QuestionContribCard({
             {scales
               .filter((s) => contributed.has(s.key))
               .map((s) => (
-                <Tag key={s.key} tone="neutral" variant="outline" className="ml-2" title={s.label}>
+                <Tag key={s.key} tone="neutral" variant="outline" style={{ marginInlineStart: "var(--ou-space-2)" }} title={s.label}>
                   {s.key.toUpperCase()}
                 </Tag>
               ))}
@@ -1202,7 +1202,7 @@ function QuestionContribCard({
                     <td>
                       {unit.label}
                       {unit.correct && (
-                        <Tag tone="success" variant="outline" className="ml-2">✓ верный</Tag>
+                        <Tag tone="success" variant="outline" style={{ marginInlineStart: "var(--ou-space-2)" }}>✓ верный</Tag>
                       )}
                     </td>
                     {scales.map((s) => (

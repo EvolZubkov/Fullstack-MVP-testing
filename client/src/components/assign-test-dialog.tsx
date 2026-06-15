@@ -116,10 +116,10 @@ function GroupUserRow({ user, assignmentId }: { user: GroupUser; assignmentId: s
   });
 
   return (
-    <Cluster justify="between" gap={0} wrap={false} padY={1} className="text-sm border-b border-border/50 last:border-0">
+    <Cluster justify="between" gap={0} wrap={false} padY={1} className="tb-row-sep">
       <Cluster gap={3} wrap={false}>
         <Users size={12} color="var(--ou-fg-muted)" />
-        <span className="font-medium">{user.email}</span>
+        <Text weight="medium">{user.email}</Text>
         {user.name && <Text tone="muted">{user.name}</Text>}
       </Cluster>
       <Cluster gap={2} wrap={false}>
@@ -159,13 +159,13 @@ function GroupUsersPanel({ assignmentId }: { assignmentId: string }) {
 
   if (isLoading) {
     return (
-      <Cluster gap={2} wrap={false} padX={7} padY={3} surface="subtle" className="text-sm text-muted-foreground">
-        <Loader2 size={16} className="animate-spin" /> Загрузка участников...
+      <Cluster gap={2} wrap={false} padX={7} padY={3} surface="subtle" style={{ color: "var(--ou-fg-muted)" }}>
+        <Loader2 size={16} className="ou-spin" /> Загрузка участников...
       </Cluster>
     );
   }
   if (groupUsers.length === 0) {
-    return <Box padX={7} padY={3} surface="subtle" className="text-sm text-muted-foreground">Группа пуста</Box>;
+    return <Box padX={7} padY={3} surface="subtle" style={{ color: "var(--ou-fg-muted)" }}>Группа пуста</Box>;
   }
   return (
     <Stack gap={1} padX={7} padY={2} surface="subtle">
@@ -410,7 +410,7 @@ export function AssignTestDialog({
       render: (a) =>
         a.user ? (
           <div>
-            <p className="font-medium">{a.user.email}</p>
+            <Text as="p" weight="medium">{a.user.email}</Text>
             {a.user.name && <Text as="p" tone="muted">{a.user.name}</Text>}
           </div>
         ) : a.group ? (
@@ -421,7 +421,7 @@ export function AssignTestDialog({
               <ChevronRight size={16} color="var(--ou-fg-muted)" />
             )}
             <div>
-              <p className="font-medium">{a.group.name}</p>
+              <Text as="p" weight="medium">{a.group.name}</Text>
               <Text as="p" tone="muted">{a.group.userCount} чел.</Text>
             </div>
           </Cluster>
@@ -454,7 +454,7 @@ export function AssignTestDialog({
       header: "Ссылка до",
       render: (a) =>
         a.linkExpiresAt ? (
-          <Cluster as="span" gap={1} wrap={false} className="text-sm"><Link size={12} />{formatDate(a.linkExpiresAt)}</Cluster>
+          <Cluster as="span" gap={1} wrap={false}><Link size={12} />{formatDate(a.linkExpiresAt)}</Cluster>
         ) : (
           <Text tone="muted">—</Text>
         ),
@@ -537,7 +537,7 @@ export function AssignTestDialog({
   ];
 
   const groupColumns: TableColumn<Group>[] = [
-    { key: "name", header: t.groups.name, render: (g) => <span className="font-medium">{g.name}</span> },
+    { key: "name", header: t.groups.name, render: (g) => <Text weight="medium">{g.name}</Text> },
     {
       key: "description",
       header: t.groups.groupDescription,
@@ -549,13 +549,13 @@ export function AssignTestDialog({
   // ── Tab panels ──
   const currentPanel = assignmentsLoading ? (
     <Cluster justify="center" wrap={false} padY={7}>
-      <Loader2 size={24} className="animate-spin" />
+      <Loader2 size={24} className="ou-spin" />
     </Cluster>
   ) : assignments.length === 0 ? (
-    <Box padY={7} className="text-center text-muted-foreground">
-      <Users size={48} className="mx-auto mb-4 opacity-50" />
+    <Box padY={7} style={{ textAlign: "center", color: "var(--ou-fg-muted)" }}>
+      <Users size={48} style={{ marginInline: "auto", marginBottom: "var(--ou-space-4)", opacity: 0.5 }} />
       <p>{t.assignments.noAssignments}</p>
-      <p className="text-sm">{t.assignments.noAssignmentsDescription}</p>
+      <p>{t.assignments.noAssignmentsDescription}</p>
     </Box>
   ) : (
     <Table
@@ -583,7 +583,7 @@ export function AssignTestDialog({
         </Cluster>
       </Stack>
       {availableUsers.length === 0 ? (
-        <Box padY={7} className="text-center text-muted-foreground">
+        <Box padY={7} style={{ textAlign: "center", color: "var(--ou-fg-muted)" }}>
           <p>Все пользователи уже назначены</p>
         </Box>
       ) : (
@@ -616,7 +616,7 @@ export function AssignTestDialog({
         </Cluster>
       </Stack>
       {availableGroups.length === 0 ? (
-        <Box padY={7} className="text-center text-muted-foreground">
+        <Box padY={7} style={{ textAlign: "center", color: "var(--ou-fg-muted)" }}>
           <p>Все группы уже назначены</p>
         </Box>
       ) : (

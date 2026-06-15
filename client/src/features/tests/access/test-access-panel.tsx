@@ -186,7 +186,7 @@ export function TestAccessPanel({
       <Stack gap={6}>
         {/* Owner */}
         <Stack as="section" gap={3}>
-          <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">Владелец</Text>
+          <Text variant="body-s" weight="semibold" tone="muted" className="tb-caps">Владелец</Text>
           {changingOwner ? (
             <Select
               aria-label="Владелец теста"

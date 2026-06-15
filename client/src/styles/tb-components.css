@@ -1862,3 +1862,12 @@
 /* Футер модала переопределения: «Сбросить настройку» прижата влево
    (эскиз prd15-test-scoring, ou-modal__foot--between). */
 .ou-modal__foot .tb-qscoring__foot-left { margin-right: auto; }
+
+/* Tailwind-removal (stage 5) helpers: uppercase eyebrow label + row separator. */
+.tb-caps { text-transform: uppercase; letter-spacing: 0.025em; }
+.tb-row-sep { border-bottom: 1px solid hsl(var(--border) / 0.5); }
+.tb-row-sep:last-child { border-bottom: 0; }
+/* Fixed field widths for the scoring condition row (was Tailwind w-20/24/36). */
+.tb-fw-sm { width: 5rem; }
+.tb-fw-md { width: 6rem; }
+.tb-fw-lg { width: 9rem; }

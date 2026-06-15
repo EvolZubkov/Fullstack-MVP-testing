@@ -392,7 +392,7 @@ export function TopicDrawer({
               data-testid="input-topic-description"
             />
             <Stack gap={2}>
-              <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">
+              <Text variant="body-s" weight="semibold" tone="muted" className="tb-caps">
                 Обратная связь по теме
               </Text>
               <FeedbackPreview
@@ -413,7 +413,7 @@ export function TopicDrawer({
           <Stack gap={6} padTop={4}>
             {/* Owner */}
             <Stack as="section" gap={3}>
-              <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">Владелец</Text>
+              <Text variant="body-s" weight="semibold" tone="muted" className="tb-caps">Владелец</Text>
               {changingOwner && isAdmin ? (
                 <Select
                   aria-label="Владелец темы"
@@ -445,7 +445,7 @@ export function TopicDrawer({
 
             {/* Visibility */}
             <Stack as="section" gap={3}>
-              <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">Видимость</Text>
+              <Text variant="body-s" weight="semibold" tone="muted" className="tb-caps">Видимость</Text>
               <Switch
                 checked={shared}
                 onChange={(e) => setShared(e.target.checked)}
@@ -460,7 +460,7 @@ export function TopicDrawer({
 
             {/* Grants */}
             <Stack as="section" gap={3}>
-              <Text variant="body-s" weight="semibold" tone="muted" className="uppercase tracking-wide">Гранты доступа</Text>
+              <Text variant="body-s" weight="semibold" tone="muted" className="tb-caps">Гранты доступа</Text>
               <Cluster align="end" gap={3}>
                 <Combobox
                   aria-label="Выбрать пользователя"
@@ -627,7 +627,7 @@ export function TopicDrawer({
         }
       >
         {revokeDeps === null ? (
-          <Stack gap={2} className="text-sm">
+          <Stack gap={2}>
             <p>
               <strong>Мягкий отзыв</strong> (по умолчанию): тема уходит из банка получателя, но он
               сохраняет чтение её содержимого в контексте уже собранных тестов. Не блокируется.

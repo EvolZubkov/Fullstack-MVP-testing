@@ -78,9 +78,9 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
   const onSurface = render.theme?.foreground || cssVar(render.css, "foreground");
 
   return (
-    <div className="min-h-full flex flex-col" style={{ background: surface }}>
+    <div className="tbh-minh-full tbh-col" style={{ background: surface }}>
       <TemplateScreen
-        className="flex-1 w-full"
+        className="tbh-fill"
         layout={render.layout}
         css={render.css}
         context={render.context}
@@ -92,15 +92,15 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
       />
 
       <div
-        className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 px-6 pb-10 text-sm"
+        className="tbh-result-foot"
         style={{ color: onSurface }}
       >
-        <Link href="/learner" className="inline-flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
+        <Link href="/learner" className="tbh-link">
           <ArrowLeft size={16} />
           {t.result.backToTests}
         </Link>
         {attempt.attemptsInfo && (
-          <span className="opacity-70">
+          <span className="tbh-dim">
             Использовано попыток: {attempt.attemptsInfo.completed} / {attempt.attemptsInfo.max}
             {!attempt.canRetake && attempt.attemptsInfo.max !== null && " — попытки закончились"}
           </span>

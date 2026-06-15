@@ -34,6 +34,7 @@
   :host {
     line-height: 1.5;
     -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     tab-size: 4;
     font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
       "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
@@ -242,18 +243,13 @@
   }
 }
 
-/*
-  Spinner keyframe (replaces Tailwind `animate-spin`). Use class `ou-spin` on the
-  rotating element; keep `animate-spin` working too via the alias below so the
-  reset is safe even before the residual sweep renames usages.
-*/
+/* Spinner keyframe (replaces Tailwind `animate-spin`; class `ou-spin`). */
 @keyframes ou-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-.ou-spin,
-.animate-spin {
+.ou-spin {
   animation: ou-spin 1s linear infinite;
 }

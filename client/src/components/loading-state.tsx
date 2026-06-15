@@ -7,8 +7,8 @@ interface LoadingStateProps {
 
 export function LoadingState({ message = "Loading..." }: LoadingStateProps) {
   return (
-    <Stack align="center" justify="center" padX={6} className="py-16">
-      <Loader2 size={32} color="var(--ou-accent-default)" className="animate-spin" />
+    <Stack align="center" justify="center" padX={6} style={{ paddingBlock: "var(--ou-space-10, 64px)" }}>
+      <Loader2 size={32} color="var(--ou-accent-default)" className="ou-spin" />
       <Text as="p" tone="muted">{message}</Text>
     </Stack>
   );

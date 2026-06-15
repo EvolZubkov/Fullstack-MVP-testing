@@ -12,11 +12,11 @@ export function PageHeader({ title, description, actions, icon }: PageHeaderProp
     <Box padBottom={6}>
       <Cluster justify="between" align="center" gap={4} wrap={false}>
         <Cluster align="start" gap={3} wrap={false}>
-          {icon && <Text as="div" tone="muted" className="mt-1">{icon}</Text>}
+          {icon && <Text as="div" tone="muted" style={{ marginTop: "var(--ou-space-1)" }}>{icon}</Text>}
           <div>
-            <h1 className="text-2xl font-semibold">{title}</h1>
+            <Text as="h1" variant="heading-l">{title}</Text>
             {description && (
-              <Text as="p" tone="muted" className="mt-1">{description}</Text>
+              <Text as="p" tone="muted" style={{ marginTop: "var(--ou-space-1)" }}>{description}</Text>
             )}
           </div>
         </Cluster>

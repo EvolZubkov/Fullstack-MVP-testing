@@ -115,7 +115,7 @@ function PlanRow({
 }) {
   return (
     <Cluster as="li" gap={3} wrap={false}>
-      <Box as="span" grow className="font-semibold">
+      <Box as="span" grow style={{ fontWeight: 600 }}>
         {name}
         {suffix && <Text tone="muted"> {suffix}</Text>}
       </Box>
@@ -280,13 +280,13 @@ export default function ImportPage() {
     if (plan.scope === "questions") {
       const q = plan.questions!;
       return (
-        <Stack as="ul" gap={2} className="my-3">
+        <Stack as="ul" gap={2} style={{ marginBlock: "var(--ou-space-3)" }}>
           <PlanRow name={tr.planQuestions} suffix={tr.bankSuffix} created={q.created} updated={q.updated} skipped={q.skipped} />
         </Stack>
       );
     }
     return (
-      <Stack as="ul" gap={2} className="my-3">
+      <Stack as="ul" gap={2} style={{ marginBlock: "var(--ou-space-3)" }}>
         {plan.questions && (
           <PlanRow
             name={tr.planQuestions}
@@ -348,7 +348,7 @@ export default function ImportPage() {
                     </>
                   }
                 />
-                <Cluster justify="end" gap={2} wrap={false} className="mt-4">
+                <Cluster justify="end" gap={2} wrap={false} style={{ marginTop: "var(--ou-space-4)" }}>
                   <Button variant="secondary" onClick={resetAll}>{tr.importMore}</Button>
                 </Cluster>
               </>
@@ -364,11 +364,11 @@ export default function ImportPage() {
                   </span>
                   <span className="ou-uploader__title">{tr.uploaderTitle}</span>
                   <span className="ou-uploader__sub">{tr.uploaderSub}</span>
-                  <Button variant="secondary" size="s" type="button" tabIndex={-1} className="mt-2">
+                  <Button variant="secondary" size="s" type="button" tabIndex={-1} style={{ marginTop: "var(--ou-space-2)" }}>
                     {tr.uploaderCta}
                   </Button>
                 </FileUploader>
-                <Cluster gap={2} className="mt-3">
+                <Cluster gap={2} style={{ marginTop: "var(--ou-space-3)" }}>
                   <Button
                     variant="ghost"
                     size="s"
@@ -394,36 +394,36 @@ export default function ImportPage() {
                 />
 
                 {inspecting && (
-                  <Banner tone="info" className="mt-3" description={tr.inspecting} />
+                  <Banner tone="info" style={{ marginTop: "var(--ou-space-3)" }} description={tr.inspecting} />
                 )}
 
                 {/* Preview (dry-run) */}
                 {!inspecting && preview && (
                   <>
                     {requiresTest && targetTitle && (
-                      <Text as="p" tone="muted" className="mt-3">
-                        {tr.targetLabel} <strong className="text-foreground">{targetTitle}</strong>
+                      <Text as="p" tone="muted" style={{ marginTop: "var(--ou-space-3)" }}>
+                        {tr.targetLabel} <strong style={{ color: "var(--ou-fg-default)" }}>{targetTitle}</strong>
                       </Text>
                     )}
                     {preview.errors.length > 0 ? (
                       <Banner
                         tone="error"
-                        className="mt-3"
+                        style={{ marginTop: "var(--ou-space-3)" }}
                         title={`${preview.errors.length} ${tr.rowsSkippedTitle}`}
                         description={tr.rowsSkippedDesc}
                       />
                     ) : (
-                      <Banner tone="success" variant="subtle" className="mt-3" description={tr.noErrors} />
+                      <Banner tone="success" variant="subtle" style={{ marginTop: "var(--ou-space-3)" }} description={tr.noErrors} />
                     )}
                     {renderPlanRows(preview)}
                     {preview.errors.length > 0 && (
-                      <ul className="mt-2 ou-list--bulleted">
+                      <ul className="ou-list--bulleted" style={{ marginTop: "var(--ou-space-2)" }}>
                         {preview.errors.slice(0, 12).map((e, i) => (
                           <Text as="li" key={i} tone="muted">{e}</Text>
                         ))}
                       </ul>
                     )}
-                    <Cluster justify="end" gap={2} wrap={false} className="mt-4">
+                    <Cluster justify="end" gap={2} wrap={false} style={{ marginTop: "var(--ou-space-4)" }}>
                       <Button variant="ghost" onClick={() => setPreview(null)}>{tr.back}</Button>
                       <Button
                         variant="primary"
@@ -442,12 +442,12 @@ export default function ImportPage() {
                     <Banner
                       tone="info"
                       variant="subtle"
-                      className="mt-3"
+                      style={{ marginTop: "var(--ou-space-3)" }}
                       description={requiresTest ? tr.detectedWorkbook : tr.detectedQuestionsOnly}
                     />
 
                     {requiresTest && (
-                      <Stack gap={3} className="mt-3">
+                      <Stack gap={3} style={{ marginTop: "var(--ou-space-3)" }}>
                         <Combobox
                           label={tr.targetTest}
                           required
@@ -477,7 +477,7 @@ export default function ImportPage() {
                       </Stack>
                     )}
 
-                    <Cluster justify="end" gap={2} wrap={false} className="mt-4">
+                    <Cluster justify="end" gap={2} wrap={false} style={{ marginTop: "var(--ou-space-4)" }}>
                       <Button
                         variant="secondary"
                         disabled={!targetReady || busy}

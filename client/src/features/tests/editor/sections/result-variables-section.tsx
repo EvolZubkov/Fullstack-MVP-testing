@@ -218,7 +218,7 @@ export function ResultVariablesSection({
 
   return (
     <div className="tb-settings-content" data-testid="metrics-section">
-      <Cluster justify="between" gap={0} wrap={false} className="mb-3">
+      <Cluster justify="between" gap={0} wrap={false} style={{ marginBottom: "var(--ou-space-3)" }}>
         <div className="tb-section-label">
           Показатели результата{vars.length > 1 ? " · порядок вычисления" : ""}
         </div>
