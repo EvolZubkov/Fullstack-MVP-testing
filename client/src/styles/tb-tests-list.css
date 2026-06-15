@@ -142,7 +142,7 @@
   text-transform: uppercase; letter-spacing: .04em;
 }
 .tb-tests-list .tree-root-label .folder-icon {
-  margin-right: var(--wf-space-6); color: var(--ou-warning-default);
+  margin-right: var(--wf-space-6); color: var(--ou-fg-muted);
 }
 
 /* ─── Folder rows ────────────────────────────────────────────────────────── */
@@ -166,7 +166,7 @@
 }
 .tb-tests-list .chevron.open { transform: rotate(90deg); }
 .tb-tests-list .folder-icon {
-  flex-shrink: 0; color: var(--ou-warning-on-soft);
+  flex-shrink: 0; color: var(--ou-fg-muted);
   margin-right: var(--wf-space-6);
 }
 .tb-tests-list .folder-count {
@@ -415,7 +415,7 @@
 .tb-tests-list .fab-folder-item input[type="radio"] {
   margin: 0; flex-shrink: 0; accent-color: var(--ou-accent-default);
 }
-.tb-tests-list .fab-folder-item__ico { flex-shrink: 0; color: var(--ou-warning-on-soft); }
+.tb-tests-list .fab-folder-item__ico { flex-shrink: 0; color: var(--ou-fg-muted); }
 .tb-tests-list .fab-folder-note {
   display: flex; align-items: flex-start; gap: var(--ou-space-2);
   font: var(--ou-text-body-s); color: var(--ou-info-default);
