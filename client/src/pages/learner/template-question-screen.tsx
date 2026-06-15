@@ -38,10 +38,24 @@ function isChosen(answer: unknown, oi: number): boolean {
 }
 
 /**
+ * Answer key for review highlighting — mirrors the server `correctAnswer` payload
+ * and SCORM's `q.correct` shape (single/multiple/matching/ranking).
+ */
+type ReviewCorrect = {
+  correctIndex?: number;
+  correctIndices?: number[];
+  pairs?: { left: number; right: number }[];
+  correctOrder?: number[];
+};
+
+/**
  * Build choice options HTML (single → radio, multiple → checkbox). The template's
  * `.option` CSS styles both; clicks are delegated via `data-action="select:N"`.
+ * In review mode (`review` set) options get `.correct-answer`/`.incorrect-answer`
+ * classes — the SAME classes the SCORM runtime emits (server/scorm .../single.js,
+ * multiple.js), so both hosts highlight review identically.
  */
-function optionsHtml(question: Question, answer: unknown, shuffleMapping?: number[]): string {
+function optionsHtml(question: Question, answer: unknown, shuffleMapping?: number[], review?: ReviewCorrect): string {
   const data = (question.dataJson as { options?: unknown[] }) || {};
   const options = data.options || [];
   const order =
@@ -49,11 +63,25 @@ function optionsHtml(question: Question, answer: unknown, shuffleMapping?: numbe
       ? shuffleMapping
       : options.map((_, i) => i);
   const inputType = question.type === "multiple" ? "checkbox" : "radio";
+  const correctIndices =
+    question.type === "multiple" && Array.isArray(review?.correctIndices) ? review!.correctIndices : null;
+  const correctIndex =
+    question.type !== "multiple" && typeof review?.correctIndex === "number" ? review!.correctIndex : null;
   return order
     .map((oi) => {
       const chosen = isChosen(answer, oi);
+      let cls = `option${chosen ? " selected" : ""}`;
+      if (review) {
+        if (correctIndices) {
+          if (correctIndices.includes(oi)) cls += " correct-answer";
+          else if (chosen) cls += " incorrect-answer";
+        } else if (correctIndex !== null) {
+          if (oi === correctIndex) cls += " correct-answer";
+          else if (chosen) cls += " incorrect-answer";
+        }
+      }
       return (
-        `<div class="option${chosen ? " selected" : ""}" data-action="select:${oi}" role="button" tabindex="0">` +
+        `<div class="${cls}" data-action="select:${oi}" data-index="${oi}" role="button" tabindex="0">` +
         `<input type="${inputType}" ${chosen ? "checked" : ""} tabindex="-1" aria-hidden="true">` +
         `<span>${esc(options[oi])}</span></div>`
       );
@@ -91,18 +119,22 @@ const MATCH_GRIP =
   '<circle cx="7" cy="15" r="1.4"></circle><circle cx="13" cy="15" r="1.4"></circle></svg>';
 
 /** Build ranking HTML — draggable rows (HTML5 DnD via shadow delegation), mirrors SCORM. */
-function rankingHtml(question: Question, answer: unknown, shuffleMapping?: number[]): string {
+function rankingHtml(question: Question, answer: unknown, shuffleMapping?: number[], review?: ReviewCorrect): string {
   const items = (question.dataJson as { items?: unknown[] })?.items || [];
   const order = rankingOrder(question, answer, shuffleMapping);
+  const correctOrder = review && Array.isArray(review.correctOrder) ? review.correctOrder : null;
   return (
     '<div class="ranking-board">' +
     order
-      .map(
-        (oi, pos) =>
-          `<div class="rank-item rank-draggable" data-drag="${pos}" data-drop="${pos}">` +
+      .map((oi, pos) => {
+        let cls = "rank-item rank-draggable";
+        if (correctOrder) cls += oi === correctOrder[pos] ? " correct-answer" : " incorrect-answer";
+        return (
+          `<div class="${cls}" data-drag="${pos}" data-drop="${pos}">` +
           `<span class="rank-grip">${RANK_GRIP}</span>` +
-          `<span class="rank-text">${esc(items[oi])}</span></div>`,
-      )
+          `<span class="rank-text">${esc(items[oi])}</span></div>`
+        );
+      })
       .join("") +
     "</div>"
   );
@@ -146,6 +178,7 @@ function matchingHtml(
   answer: unknown,
   shuffleMapping: { left: number[]; right: number[] } | undefined,
   poolOrder: number[],
+  review?: ReviewCorrect,
 ): string {
   const data = (question.dataJson as { left?: unknown[]; right?: unknown[] }) || {};
   const left = data.left || [];
@@ -159,6 +192,14 @@ function matchingHtml(
   });
   const pool = normalizePool(poolOrder, pairs, leftMapping);
 
+  // Review: correct right→left pairs (mirrors SCORM feedback.js highlightMatching).
+  const correctRightToLeft: Record<number, number> = {};
+  if (review && Array.isArray(review.pairs)) {
+    review.pairs.forEach((p) => {
+      correctRightToLeft[p.right] = p.left;
+    });
+  }
+
   const chip = (li: number) =>
     `<div class="match-chip" data-drag="${li}"><span class="match-grip" aria-hidden="true">${MATCH_GRIP}</span>` +
     `<span class="match-chip-text">${esc(left[li])}</span></div>`;
@@ -168,7 +209,11 @@ function matchingHtml(
   for (const ri of rightMapping) {
     const matchedLeft = rightToLeft[ri];
     const isJoined = matchedLeft !== undefined;
-    html += `<div class="matching-line${isJoined ? " is-joined" : ""}">`;
+    let lineCls = `matching-line${isJoined ? " is-joined" : ""}`;
+    if (review && isJoined) {
+      lineCls += Number(matchedLeft) === Number(correctRightToLeft[ri]) ? " correct-answer" : " incorrect-answer";
+    }
+    html += `<div class="${lineCls}">`;
     // A matched row's left pairs to THIS right (drop another chip = displace); an
     // unmatched row's left is a pool slot. poolSlot advances ONLY on unmatched rows.
     if (isJoined) {
@@ -196,13 +241,14 @@ function interactionHtml(
   answer: unknown,
   shuffleMapping: ShuffleMapping | undefined,
   poolOrder: number[],
+  review?: ReviewCorrect,
 ): string {
   const arr = Array.isArray(shuffleMapping) ? shuffleMapping : undefined;
-  if (question.type === "ranking") return rankingHtml(question, answer, arr);
+  if (question.type === "ranking") return rankingHtml(question, answer, arr, review);
   if (question.type === "matching") {
-    return matchingHtml(question, answer, !Array.isArray(shuffleMapping) ? shuffleMapping : undefined, poolOrder);
+    return matchingHtml(question, answer, !Array.isArray(shuffleMapping) ? shuffleMapping : undefined, poolOrder, review);
   }
-  return optionsHtml(question, answer, arr);
+  return optionsHtml(question, answer, arr, review);
 }
 
 function mediaHtml(question: Question): string {
@@ -230,6 +276,10 @@ export interface TemplateQuestionScreenProps {
   feedbackHtml?: string;
   /** When true, the interaction is read-only (clicks/drags don't change the answer). */
   locked?: boolean;
+  /** When true, render answer-review highlighting (correct/wrong) from `correctAnswer`. */
+  reviewMode?: boolean;
+  /** Correct-answer key (correctIndex/correctIndices/pairs/correctOrder) for review. */
+  correctAnswer?: ReviewCorrect;
   /** Custom footer; when provided, replaces the default standard Назад/Далее nav. */
   footer?: ReactNode;
   // Standard-mode nav (used only when `footer` is not provided):
@@ -263,7 +313,13 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
   const slots = {
     "question-text": esc(question.prompt),
     "question-media": mediaHtml(question),
-    "question-interaction": interactionHtml(question, answer, shuffleMapping, poolOrder),
+    "question-interaction": interactionHtml(
+      question,
+      answer,
+      shuffleMapping,
+      poolOrder,
+      props.reviewMode ? props.correctAnswer : undefined,
+    ),
     "question-feedback": props.feedbackHtml ?? "",
   };
 
