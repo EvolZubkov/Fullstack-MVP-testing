@@ -111,21 +111,27 @@ Cluster.displayName = 'Cluster';
 export type GridMinItem = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 export interface GridProps extends React.HTMLAttributes<HTMLDivElement> {
-  /** Fixed column count (ignored when `minItem` is set). */
+  /** Fixed column count (ignored when `minItem`/`template` is set). */
   cols?: 1 | 2 | 3 | 4 | 5 | 6;
   /** Responsive auto-fit: each column is at least this preset min-width. */
   minItem?: GridMinItem;
+  /** Named column template: `label-control` = flexible label + fixed control column (center-aligned). */
+  template?: 'label-control';
   gap?: Space;
 }
 
 export const Grid = forwardRef<HTMLDivElement, GridProps>(
-  ({ cols, minItem, gap = 4, className, ...rest }, ref) => (
+  ({ cols, minItem, template, gap = 4, className, ...rest }, ref) => (
     <div
       ref={ref}
       className={cn(
         'ou-lgrid',
         `ou-lgrid--gap-${gap}`,
-        minItem ? `ou-lgrid--auto ou-lgrid--min-${minItem}` : cols && `ou-lgrid--cols-${cols}`,
+        template
+          ? `ou-lgrid--${template}`
+          : minItem
+            ? `ou-lgrid--auto ou-lgrid--min-${minItem}`
+            : cols && `ou-lgrid--cols-${cols}`,
         className,
       )}
       {...rest}

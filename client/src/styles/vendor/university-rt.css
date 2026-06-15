@@ -7530,6 +7530,7 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-lgrid--min-md { --ou-lgrid-min: 240px; }
 .ou-lgrid--min-lg { --ou-lgrid-min: 300px; }
 .ou-lgrid--min-xl { --ou-lgrid-min: 380px; }
+.ou-lgrid--label-control { grid-template-columns: 1fr var(--ou-lgrid-control, 6rem); align-items: center; }
 
 .ou-box--pad-1 { padding: var(--ou-space-1); }
 .ou-box--pad-2 { padding: var(--ou-space-2); }
@@ -7547,6 +7548,9 @@ button.ou-stepper__step:disabled { cursor: not-allowed; opacity: 0.6; }
 .ou-box--radius-s { border-radius: var(--ou-radius-s); }
 .ou-box--radius-m { border-radius: var(--ou-radius-m); }
 .ou-box--radius-l { border-radius: var(--ou-radius-l); }
+.ou-link-reset { color: inherit; text-decoration: none; }
+.ou-list--bulleted { list-style: disc; padding-inline-start: var(--ou-space-5); }
+.ou-list--bulleted > li + li { margin-block-start: var(--ou-space-1); }
 
 /* ─── text.css (added: Text typography primitive) ──────────────────── */
 .ou-text { margin: 0; }
