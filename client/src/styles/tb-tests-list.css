@@ -62,8 +62,7 @@
 /* ─── Toolbar (search + sort) ────────────────────────────────────────────── */
 .tb-tests-list .toolbar {
   display: flex; align-items: center; gap: var(--ou-space-2);
-  padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-2) var(--ou-space-6);
-  border-bottom: var(--wf-border-w) solid var(--ou-border-default);
+  margin-bottom: var(--ou-space-4);
   flex-shrink: 0;
 }
 .tb-tests-list .search-input-wrap {
@@ -93,6 +92,27 @@
   border-radius: var(--ou-radius-s); background: var(--ou-bg-elevated);
 }
 
+/* ─── Page title + filter (выравнивание со страницей «Темы и вопросы») ────── */
+.tb-tests-list .tl-header { flex-shrink: 0; }
+.tb-tests-list .toolbar { position: relative; flex-wrap: wrap; }
+.tb-tests-list .tl-search { flex: 1; min-width: var(--wf-size-200); }
+.tb-tests-list .tl-search .ou-field { width: 100%; }
+.tb-tests-list .tl-spacer { flex: 1; }
+.tb-tests-list .toolbar-sort { margin-left: 0; }
+
+.tb-tests-list .tl-filterpop {
+  position: absolute; top: calc(100% + var(--ou-space-1)); left: 0; z-index: 30;
+  width: var(--wf-size-340); max-width: calc(100% - var(--ou-space-6) * 2);
+  background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-lg);
+}
+.tb-tests-list .tl-filterpop__body { display: flex; flex-direction: column; gap: var(--ou-space-5); padding: var(--ou-space-4); max-height: 70vh; overflow: auto; }
+.tb-tests-list .tl-facet { display: flex; flex-direction: column; gap: var(--ou-space-2); min-width: 0; }
+.tb-tests-list .tl-facet__lbl { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); }
+.tb-tests-list .tl-facet__row { display: flex; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); }
+.tb-tests-list .tl-filterpop__foot { display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-3) var(--ou-space-4); border-top: 1px solid var(--ou-border-default); }
+.tb-tests-list .tl-chips { margin-bottom: var(--ou-space-3); }
+
 /* ─── Tree container + 9-column grid (PRD-13: + "Владелец") ──────────────── */
 .tb-tests-list .tree-area { flex: 1; min-height: 0; overflow-y: auto; }
 
@@ -118,9 +138,9 @@
   border-bottom: var(--wf-border-w) solid var(--ou-border-default);
   font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted);
   text-transform: uppercase; letter-spacing: .05em;
-  position: sticky; top: 0; background: var(--ou-bg-elevated); z-index: 1;
+  position: sticky; top: 0; background: var(--ou-bg-page); z-index: 1;
 }
-.tb-tests-list .tree-header > div:first-child { padding-left: var(--ou-space-6); }
+.tb-tests-list .tree-header > div:first-child { padding-left: var(--ou-space-3); }
 .tb-tests-list .tree-header > :nth-child(3),
 .tb-tests-list .tree-header > :nth-child(4),
 .tb-tests-list .tree-header > :nth-child(5),
@@ -131,13 +151,12 @@
 .tb-tests-list .tree-root {
   align-items: center;
   border-bottom: var(--wf-border-w) solid var(--ou-border-default);
-  background: var(--ou-bg-elevated); 
-  user-select: none;
+  -webkit-user-select: none; user-select: none;
 }
 .tb-tests-list .tree-root-label {
   grid-column: 1 / -1;
   display: flex; align-items: center;
-  padding: var(--wf-space-7) 0 var(--wf-space-7) var(--ou-space-6);
+  padding: var(--wf-space-7) 0 var(--wf-space-7) var(--ou-space-3);
   font: var(--ou-text-body-s); font-weight: 700; color: var(--ou-fg-muted);
   text-transform: uppercase; letter-spacing: .04em;
 }
@@ -155,7 +174,7 @@
 .tb-tests-list .tree-folder:hover { background: var(--ou-bg-hover); }
 .tb-tests-list .tree-folder-name {
   display: flex; align-items: center;
-  padding: var(--wf-space-9) 0 var(--wf-space-9) var(--ou-space-6);
+  padding: var(--wf-space-9) 0 var(--wf-space-9) var(--ou-space-3);
   font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default);
 }
 .tb-tests-list .chevron {
@@ -176,10 +195,8 @@
 .tb-tests-list .tree-folder-actions {
   display: flex; align-items: center; gap: var(--ou-space-1);
   justify-content: flex-end; padding-right: var(--ou-space-2);
-  opacity: 0;
+  opacity: 1; /* always visible (выравнивание с «Темы и вопросы») */
 }
-.tb-tests-list .tree-folder:hover .tree-folder-actions,
-.tb-tests-list .tree-folder-actions.is-open { opacity: 1; }
 
 /* ─── Test rows ──────────────────────────────────────────────────────────── */
 .tb-tests-list .tree-test {
@@ -191,9 +208,9 @@
 .tb-tests-list .tree-test.is-selected { background: var(--ou-accent-soft); }
 .tb-tests-list .tree-test-name {
   display: flex; align-items: flex-start;
-  padding: var(--wf-space-9) 0 var(--wf-space-9) var(--ou-space-6);
+  padding: var(--wf-space-9) 0 var(--wf-space-9) var(--ou-space-3);
 }
-.tb-tests-list .tree-test.indent-1 .tree-test-name { padding-left: var(--wf-size-43); }
+.tb-tests-list .tree-test.indent-1 .tree-test-name { padding-left: calc(var(--wf-size-43) - var(--ou-space-3)); }
 .tb-tests-list .indent-line {
   display: inline-block; width: var(--ou-space-3); flex-shrink: 0;
   border-left: var(--wf-border-w) solid var(--ou-border-soft);
@@ -238,11 +255,8 @@
 .tb-tests-list .tree-test-actions {
   display: flex; align-items: center; gap: var(--wf-space-1q);
   justify-content: flex-end; padding-right: var(--ou-space-2);
-  opacity: 0;
+  opacity: 1; /* always visible (выравнивание с «Темы и вопросы») */
 }
-.tb-tests-list .tree-test:hover .tree-test-actions,
-.tb-tests-list .tree-test.is-selected .tree-test-actions,
-.tb-tests-list .tree-test-actions.is-open { opacity: 1; }
 .tb-tests-list .tree-num { font: var(--ou-text-body-s); }
 
 /* ─── Action button (inline icons) ───────────────────────────────────────── */

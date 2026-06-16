@@ -31,8 +31,11 @@ import {
   Archive,
   BarChart3,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   ClipboardList,
   Download,
+  Filter,
   FileSpreadsheet,
   Folder,
   FolderOpen,
@@ -56,14 +59,33 @@ import {
 import {
   Banner,
   Button,
+  Chip,
+  Cluster,
   Input,
+  Label,
   ModalDialog,
   Select,
   Skeleton,
+  Stack,
   Tag,
+  Text,
 } from "@universityrt/ui-kit";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { PageHeader } from "@/components/page-header";
+import { FolderTreeSelect } from "@/components/folder-tree-select";
+import { t } from "@/lib/i18n";
+import {
+  EMPTY_TEST_FILTER,
+  MODE_OPTS,
+  SCENARIO_OPTS,
+  STATUS_OPTS,
+  TEST_SCOPE_OPTS,
+  TestFilters,
+  testFacetMatch,
+  testFilterCount,
+  type TestFilterValue,
+} from "./tests-filters";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import type { PublishCheckFinding, PublishInfeasibleError } from "@/features/content-protection/types";
 import { TestEditor } from "@/features/tests/editor/test-editor";
@@ -192,6 +214,42 @@ export function TestsListPage(): React.JSX.Element {
       return changed ? next : prev;
     });
   }, [folders]);
+
+  // ─── Filter (mirrors the content section «Темы и вопросы») ────────────────
+  const userId = user?.id ?? "";
+  const [testFilter, setTestFilter] = useState<TestFilterValue>(EMPTY_TEST_FILTER); // applied
+  const [testDraft, setTestDraft] = useState<TestFilterValue>(EMPTY_TEST_FILTER); // edited in the panel
+  const [filterOpen, setFilterOpen] = useState(false);
+
+  const authorOptions = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const e of entries) if (e.ownerId) names.set(e.ownerId, e.ownerName ?? e.ownerId);
+    return Array.from(names.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [entries]);
+
+  const filteredEntries = useMemo(
+    () =>
+      entries.filter(
+        (e) =>
+          testFacetMatch(e, testFilter) &&
+          (testFilter.scope === "all"
+            ? true
+            : testFilter.scope === "mine"
+              ? e.ownerId === userId
+              : e.ownerId !== userId),
+      ),
+    [entries, testFilter, userId],
+  );
+
+  const openFilters = () => { setTestDraft(testFilter); setFilterOpen(true); };
+  const applyFilters = () => { setTestFilter(testDraft); setFilterOpen(false); };
+  const resetFilters = () => { setTestDraft(EMPTY_TEST_FILTER); setTestFilter(EMPTY_TEST_FILTER); };
+  const commitFilter = (next: TestFilterValue) => { setTestFilter(next); setTestDraft(next); };
+
+  const expandAll = () => setExpandedFolderIds(new Set(folders.map((f) => f.id)));
+  const collapseAll = () => setExpandedFolderIds(new Set());
+
+  const filterActiveCount = testFilterCount(testFilter);
 
   const handleSortChange = (next: SortKey) => {
     setSortBy(next);
@@ -376,15 +434,15 @@ export function TestsListPage(): React.JSX.Element {
     () =>
       isSearchMode
         ? []
-        : buildTreeRows({ tests: entries, folders, expandedFolderIds, sort: sortBy }),
-    [isSearchMode, entries, folders, expandedFolderIds, sortBy],
+        : buildTreeRows({ tests: filteredEntries, folders, expandedFolderIds, sort: sortBy }),
+    [isSearchMode, filteredEntries, folders, expandedFolderIds, sortBy],
   );
   const searchRows = useMemo(
     () =>
       isSearchMode
-        ? buildSearchRows({ tests: entries, folders, query: searchQuery, sort: sortBy })
+        ? buildSearchRows({ tests: filteredEntries, folders, query: searchQuery, sort: sortBy })
         : [],
-    [isSearchMode, entries, folders, searchQuery, sortBy],
+    [isSearchMode, filteredEntries, folders, searchQuery, sortBy],
   );
 
   // ─── Close dropdowns on outside-click / Escape ───────────────────────────
@@ -405,16 +463,77 @@ export function TestsListPage(): React.JSX.Element {
     };
   }, [testMenu, folderMenu]);
 
+  // Active-condition chips (driven by the applied filter).
+  const filterChips: { key: string; label: string; remove: () => void }[] = [];
+  for (const s of testFilter.statuses) filterChips.push({ key: `st-${s}`, label: `Статус: ${STATUS_OPTS.find((o) => o.value === s)?.label}`, remove: () => commitFilter({ ...testFilter, statuses: testFilter.statuses.filter((x) => x !== s) }) });
+  for (const m of testFilter.modes) filterChips.push({ key: `md-${m}`, label: `Режим: ${MODE_OPTS.find((o) => o.value === m)?.label}`, remove: () => commitFilter({ ...testFilter, modes: testFilter.modes.filter((x) => x !== m) }) });
+  for (const sc of testFilter.scenarios) filterChips.push({ key: `sc-${sc}`, label: `Сценарий: ${SCENARIO_OPTS.find((o) => o.value === sc)?.label}`, remove: () => commitFilter({ ...testFilter, scenarios: testFilter.scenarios.filter((x) => x !== sc) }) });
+  if (testFilter.author) filterChips.push({ key: "au", label: `Владелец: ${authorOptions.find((o) => o.value === testFilter.author)?.label ?? testFilter.author}`, remove: () => commitFilter({ ...testFilter, author: "" }) });
+  if (testFilter.scope !== "all") filterChips.push({ key: "sp", label: `Область: ${TEST_SCOPE_OPTS.find((o) => o.value === testFilter.scope)?.label}`, remove: () => commitFilter({ ...testFilter, scope: "all" }) });
+
   // ─── Render ──────────────────────────────────────────────────────────────
   return (
     <div className="tb-tests-list" data-testid="tests-list-page">
-      <Toolbar
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        sortBy={sortBy}
-        onSortChange={handleSortChange}
-        showSort={!isSearchMode}
-      />
+      <div className="tl-header">
+        <PageHeader title={t.tests.title} description={t.tests.description} />
+      </div>
+      <div className="toolbar" role="search">
+        <div className="tl-search">
+          <Input
+            iconLeft={<Search size={16} />}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Поиск по названию…"
+            aria-label="Поиск теста по названию"
+            fullWidth
+            data-testid="tests-list-search-input"
+          />
+        </div>
+        <Button
+          variant={filterOpen || filterActiveCount > 0 ? "secondary" : "ghost"}
+          leadingIcon={<Filter size={16} />}
+          onClick={() => (filterOpen ? setFilterOpen(false) : openFilters())}
+          data-testid="tests-list-filter"
+        >
+          {t.content.filters}{filterActiveCount > 0 ? ` (${filterActiveCount})` : ""}
+        </Button>
+        {!isSearchMode && (
+          <div className="toolbar-sort">
+            <span className="toolbar-sort__label">Сортировка:</span>
+            <Select<SortKey>
+              size="s"
+              value={sortBy}
+              options={[
+                { value: "created_desc", label: "Новые сначала" },
+                { value: "updated_desc", label: "Недавно изменённые" },
+                { value: "title_asc", label: "По названию (А→Я)" },
+              ]}
+              onChange={(value) => handleSortChange(value)}
+              aria-label="Сортировка тестов"
+              data-testid="tests-list-sort"
+            />
+          </div>
+        )}
+        <span className="tl-spacer" />
+        {!isSearchMode && (
+          <Button variant="ghost" leadingIcon={<ChevronsUpDown size={16} />} onClick={expandAll}>{t.content.expandAll}</Button>
+        )}
+        {!isSearchMode && (
+          <Button variant="ghost" leadingIcon={<ChevronsDownUp size={16} />} onClick={collapseAll}>{t.content.collapseAll}</Button>
+        )}
+        {filterOpen && (
+          <TestFilters value={testDraft} onChange={setTestDraft} onApply={applyFilters} onReset={resetFilters} authorOptions={authorOptions} />
+        )}
+      </div>
+
+      {filterChips.length > 0 && (
+        <div className="tl-chips">
+          <Cluster gap={2} wrap>
+            {filterChips.map((c) => <Chip key={c.key} size="s" onRemove={c.remove}>{c.label}</Chip>)}
+            <Button variant="ghost" size="s" onClick={resetFilters}>Очистить всё</Button>
+          </Cluster>
+        </div>
+      )}
 
       {isError ? (
         <ErrorPane onRetry={() => refetch()} />
@@ -918,58 +1037,6 @@ export function TestsListPage(): React.JSX.Element {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function Toolbar(props: {
-  searchQuery: string;
-  onSearchChange: (v: string) => void;
-  sortBy: SortKey;
-  onSortChange: (v: SortKey) => void;
-  showSort: boolean;
-}) {
-  return (
-    <div className="toolbar">
-      <div className="search-input-wrap" role="search">
-        <Search className="search-icon" aria-hidden="true" />
-        <input
-          className="ou-field__input"
-          type="text"
-          placeholder="Поиск по названию..."
-          aria-label="Поиск теста по названию"
-          value={props.searchQuery}
-          onChange={(e) => props.onSearchChange(e.target.value)}
-          data-testid="tests-list-search-input"
-        />
-      </div>
-      {props.searchQuery && (
-        <button
-          type="button"
-          className="search-clear"
-          onClick={() => props.onSearchChange("")}
-          data-testid="tests-list-search-clear"
-        >
-          Сбросить
-        </button>
-      )}
-      {props.showSort && (
-        <div className="toolbar-sort">
-          <span className="toolbar-sort__label">Сортировка:</span>
-          <Select<SortKey>
-            size="s"
-            value={props.sortBy}
-            options={[
-              { value: "created_desc", label: "Новые сначала" },
-              { value: "updated_desc", label: "Недавно изменённые" },
-              { value: "title_asc", label: "По названию (А→Я)" },
-            ]}
-            onChange={(value) => props.onSortChange(value)}
-            aria-label="Сортировка тестов"
-            data-testid="tests-list-sort"
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
 function TreeHeader() {
   return (
     <div className="tree-header" aria-hidden="true">
@@ -1447,11 +1514,11 @@ function FabSpeedDial(props: {
       {props.open && (
         <div className="fab-actions">
           <div className="fab-action">
-            <span className="fab-action-label">Новая папка</span>
+            <span className="fab-action-label">Добавить папку</span>
             <button
               type="button"
               className="fab-action-btn"
-              aria-label="Новая папка"
+              aria-label="Добавить папку"
               onClick={props.onNewFolder}
               data-testid="fab-new-folder"
             >
@@ -1459,11 +1526,11 @@ function FabSpeedDial(props: {
             </button>
           </div>
           <div className="fab-action">
-            <span className="fab-action-label">Новый тест</span>
+            <span className="fab-action-label">Добавить тест</span>
             <button
               type="button"
               className="fab-action-btn"
-              aria-label="Новый тест"
+              aria-label="Добавить тест"
               onClick={props.onNewTest}
               data-testid="fab-new-test"
             >
@@ -1829,8 +1896,7 @@ function MoveFolderPickModal(props: {
       footer={
         <>
           <Button
-            variant="ghost"
-            size="s"
+            variant="secondary"
             onClick={props.onCancel}
             data-testid="move-folder-pick-cancel"
           >
@@ -1838,7 +1904,6 @@ function MoveFolderPickModal(props: {
           </Button>
           <Button
             variant="primary"
-            size="s"
             onClick={props.onMove}
             disabled={noChange}
             title={noChange ? "Тест уже в этой папке" : undefined}
@@ -1849,42 +1914,18 @@ function MoveFolderPickModal(props: {
         </>
       }
     >
-      <div className="fab-folder-list">
-        <label className="fab-folder-item">
-          <input
-            type="radio"
-            name="move-folder-pick"
-            checked={props.selected === null}
-            onChange={() => props.onSelect(null)}
-            data-testid="move-folder-pick-root"
-          />
-          <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
-          Корень (без папки)
-          {props.current === null && (
-            <Tag tone="neutral" variant="outline" size="s">
-              Текущая
-            </Tag>
-          )}
-        </label>
-        {props.folders.map((f) => (
-          <label key={f.id} className="fab-folder-item">
-            <input
-              type="radio"
-              name="move-folder-pick"
-              checked={props.selected === f.id}
-              onChange={() => props.onSelect(f.id)}
-              data-testid={`move-folder-pick-folder-${f.id}`}
-            />
-            <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
-            {f.name}
-            {props.current === f.id && (
-              <Tag tone="neutral" variant="outline" size="s">
-                Текущая
-              </Tag>
-            )}
-          </label>
-        ))}
-      </div>
+      <Stack gap={2}>
+        <Label>Папка назначения</Label>
+        <FolderTreeSelect
+          folders={props.folders}
+          value={props.selected}
+          onChange={props.onSelect}
+          rootLabel="Корень (без папки)"
+        />
+        <Text variant="body-xs" tone="muted">
+          Текущая: {props.current === null ? "Корень (без папки)" : (props.folders.find((f) => f.id === props.current)?.name ?? "—")}
+        </Text>
+      </Stack>
     </ModalDialog>
   );
 }
@@ -1905,12 +1946,11 @@ function FabFolderPickModal(props: {
       description="Выберите папку для размещения теста"
       footer={
         <>
-          <Button variant="ghost" size="s" onClick={props.onCancel}>
+          <Button variant="secondary" onClick={props.onCancel}>
             Отмена
           </Button>
           <Button
             variant="primary"
-            size="s"
             onClick={props.onCreate}
             data-testid="fab-pick-create"
           >
@@ -1919,32 +1959,15 @@ function FabFolderPickModal(props: {
         </>
       }
     >
-      <div className="fab-folder-list">
-        <label className="fab-folder-item">
-          <input
-            type="radio"
-            name="fab-pick"
-            checked={props.selected === null}
-            onChange={() => props.onSelect(null)}
-            data-testid="fab-pick-root"
-          />
-          <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
-          Корень (без папки)
-        </label>
-        {props.folders.map((f) => (
-          <label key={f.id} className="fab-folder-item">
-            <input
-              type="radio"
-              name="fab-pick"
-              checked={props.selected === f.id}
-              onChange={() => props.onSelect(f.id)}
-              data-testid={`fab-pick-folder-${f.id}`}
-            />
-            <Folder className="fab-folder-item__ico" width={14} height={14} aria-hidden="true" />
-            {f.name}
-          </label>
-        ))}
-      </div>
+      <Stack gap={2}>
+        <Label>Папка</Label>
+        <FolderTreeSelect
+          folders={props.folders}
+          value={props.selected}
+          onChange={props.onSelect}
+          rootLabel="Корень (без папки)"
+        />
+      </Stack>
     </ModalDialog>
   );
 }
