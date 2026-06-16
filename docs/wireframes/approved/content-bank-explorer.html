@@ -78,6 +78,38 @@
     .cb-filterpop__foot { display: flex; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-3) var(--ou-space-4); border-top: 1px solid var(--ou-border-default); }
     .cb-facet { display: flex; flex-direction: column; gap: var(--ou-space-2); min-width: 0; }
     .cb-facet--wide { grid-column: 1 / -1; }
+    /* Conditional sub-group inside «Сложность»: hidden when «Не задана» is on */
+    .cb-cond { display: flex; flex-direction: column; gap: var(--ou-space-3); padding-top: var(--ou-space-1); }
+    .cb-facet.is-na .cb-cond { display: none; }
+    .cb-cond .ou-slider { padding-bottom: var(--ou-space-5); }
+    /* Сложность: свитч «Не задана» слева, контрол интервала справа в одной строке */
+    .cb-diffrow { display: flex; align-items: center; gap: var(--ou-space-5); }
+    .cb-diffrow__ctrl { flex: 1; min-width: 0; padding-top: 0; }
+    .cb-diffrow__ctrl .ou-slider { width: 100%; max-width: none; }
+    /* Сабхэдер «Сложности» (Интервал) — приглушённый стиль, не топ-капс */
+    .cb-diffrow .ou-slider__lbl { font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted); }
+    /* Drawer вопроса: сложность = слайдер (тянется) + поле ввода числа */
+    .qd-diffrow { display: flex; align-items: center; gap: var(--ou-space-4); }
+    .qd-diffrow .ou-slider { flex: 1; min-width: 0; max-width: none; padding-bottom: var(--ou-space-5); }
+    .qd-diffrow__num { width: var(--wf-size-90, 88px); flex: none; }
+    .qd-diffrow__sw { flex: none; white-space: nowrap; }
+    /* «Не задавать» ВКЛ — прячем контролы установки уровня (как «Не задана» в фильтре) */
+    .ou-formfield.is-na .qd-diffrow .ou-slider,
+    .ou-formfield.is-na .qd-diffrow__num,
+    .ou-formfield.is-na .qd-hint { display: none; }
+    /* Конструкторы вариантов по типам + состояния валидации */
+    .qd-error { display: flex; align-items: center; gap: var(--ou-space-1); margin-top: var(--ou-space-2); font: var(--ou-text-caption); color: var(--ou-error-default); }
+    .qd-opt.is-err .ou-field__box { box-shadow: inset 0 0 0 1px var(--ou-error-default); }
+    .qd-pair { display: flex; align-items: center; gap: var(--ou-space-2); }
+    .qd-pair .ou-field { flex: 1; min-width: 0; }
+    .qd-pair__link { flex: none; color: var(--ou-fg-muted); }
+    .qd-rank { display: flex; align-items: center; gap: var(--ou-space-2); }
+    .qd-rank .ou-field { flex: 1; min-width: 0; }
+    .qd-rank__handle { flex: none; color: var(--ou-fg-muted); display: inline-flex; cursor: grab; }
+    .qd-rank__num { flex: none; width: var(--ou-space-5); text-align: center; font-weight: 700; color: var(--ou-fg-muted); }
+    .qd-grip { flex: none; color: var(--ou-fg-muted); display: inline-flex; cursor: grab; }
+    .qd-shuffle { margin-top: var(--ou-space-2); }
+    .qd-hint { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
     .cb-facet__lbl { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); }
     .cb-facet__row { display: flex; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); }
 
@@ -141,6 +173,11 @@
   <button class="wf-btn" type="button" onclick="showState(this,'s-fab')">FAB</button>
   <button class="wf-btn" type="button" onclick="showState(this,'s-topic-drawer')">Drawer темы</button>
   <button class="wf-btn" type="button" onclick="showState(this,'s-q-drawer')">Drawer вопроса</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-media-upload')">Загрузка медиа</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-q-multiple')">Несколько ответов + валидация</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-q-matching')">Соответствие</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-q-ranking')">Ранжирование</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-q-typechange')">Смена типа</button>
   <div class="wf-nav-sep"></div>
   <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
   <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
@@ -174,26 +211,26 @@
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы" onclick="showState(null,'s-menu')"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
       <div class="cb-row cb-row--q" onclick="showState(null,'s-q-drawer')">
-        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Что такое НДФЛ и кто обязан его платить?</span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--success ou-tag--outline ou-tag--s">легко</span></div>
+        <div class="cb-name"><label class="ou-check cb-qcheck" onclick="event.stopPropagation()"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Что такое НДФЛ и кто обязан его платить?</span></div>
+        <div class="cb-cell">18</div>
         <div class="cb-cell"></div>
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса" onclick="event.stopPropagation()"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
       <div class="cb-row cb-row--q">
-        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Множественный выбор"><svg width="16" height="16"><use href="#i-q-multiple"/></svg></span><span class="cb-name__label">Какие из перечисленных доходов облагаются налогом?</span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--outline ou-tag--s">средне</span></div>
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Несколько ответов"><svg width="16" height="16"><use href="#i-q-multiple"/></svg></span><span class="cb-name__label">Какие из перечисленных доходов облагаются налогом?</span></div>
+        <div class="cb-cell">54</div>
         <div class="cb-cell"></div>
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
       <div class="cb-row cb-row--q">
         <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Соответствие"><svg width="16" height="16"><use href="#i-q-matching"/></svg></span><span class="cb-name__label">Сопоставьте вид налога с его ставкой</span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--outline ou-tag--s">средне</span></div>
+        <div class="cb-cell">54</div>
         <div class="cb-cell"></div>
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
       <div class="cb-row cb-row--q">
-        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Порядок (ранжирование)"><svg width="16" height="16"><use href="#i-q-ranking"/></svg></span><span class="cb-name__label">Расставьте шаги оформления налогового вычета по порядку</span><span class="cb-qmedia" title="С изображением"><svg width="16" height="16"><use href="#i-image"/></svg></span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--error ou-tag--outline ou-tag--s">сложно</span></div>
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Ранжирование"><svg width="16" height="16"><use href="#i-q-ranking"/></svg></span><span class="cb-name__label">Расставьте шаги оформления налогового вычета по порядку</span><span class="cb-qmedia" title="С изображением"><svg width="16" height="16"><use href="#i-image"/></svg></span></div>
+        <div class="cb-cell">82</div>
         <div class="cb-cell"></div>
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
@@ -309,18 +346,31 @@
         <div class="cb-facet">
           <span class="cb-facet__lbl">Тип вопроса</span>
           <div class="cb-facet__row">
-            <label class="ou-check"><input class="ou-check__input" type="checkbox" checked><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Одиночный</span></span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Множественный</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox" checked><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Один ответ</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Несколько ответов</span></span></label>
             <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Соответствие</span></span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Порядок</span></span></label>
+            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Ранжирование</span></span></label>
           </div>
         </div>
-        <div class="cb-facet">
+        <div class="cb-facet cb-facet--wide">
           <span class="cb-facet__lbl">Сложность</span>
-          <div class="cb-facet__row">
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Легко</span></span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Средне</span></span></label>
-            <label class="ou-check"><input class="ou-check__input" type="checkbox" checked><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span class="ou-check__text"><span class="ou-check__lbl">Сложно</span></span></label>
+          <div class="cb-diffrow">
+            <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" onchange="this.closest('.cb-facet').classList.toggle('is-na', this.checked)" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Не задана</span></span></label>
+            <div class="cb-cond cb-diffrow__ctrl">
+              <div class="ou-slider ou-slider--h" aria-label="Интервал сложности">
+                <div class="ou-slider__header"><span class="ou-slider__lbl">Интервал</span><span class="ou-slider__val"><strong>31 — 75</strong></span></div>
+                <div class="ou-slider__rail">
+                  <div class="ou-slider__fill" style="left:31%;right:25%"></div>
+                  <div class="ou-slider__marks">
+                    <span class="ou-slider__mark" style="left:0%"></span><span class="ou-slider__mark-lbl" style="left:0%">0</span>
+                    <span class="ou-slider__mark" style="left:50%"></span><span class="ou-slider__mark-lbl" style="left:50%">50</span>
+                    <span class="ou-slider__mark" style="left:100%"></span><span class="ou-slider__mark-lbl" style="left:100%">100</span>
+                  </div>
+                  <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:31%" aria-valuemin="0" aria-valuemax="75" aria-valuenow="31" aria-label="Сложность — нижняя граница"></div>
+                  <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:75%" aria-valuemin="31" aria-valuemax="100" aria-valuenow="75" aria-label="Сложность — верхняя граница"></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="cb-facet cb-facet--wide">
@@ -377,7 +427,7 @@
       <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
     </div>
     <div class="cb-chips">
-      <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">Тип: одиночный</button><button type="button" class="ou-chip__close" aria-label="Убрать условие: Тип одиночный"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
+      <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">Тип: Один ответ</button><button type="button" class="ou-chip__close" aria-label="Убрать условие: Тип Один ответ"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
       <span class="ou-chip ou-chip--removable ou-chip--s"><button type="button" class="ou-chip__action">Тег: вычеты</button><button type="button" class="ou-chip__close" aria-label="Убрать условие: Тег вычеты"><svg width="10" height="10"><use href="#i-x"/></svg></button></span>
       <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Очистить всё</button>
     </div>
@@ -395,8 +445,8 @@
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
       <div class="cb-row cb-row--q">
-        <div class="cb-name"><span class="cb-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Кто может получить налоговый <b>вычет</b> по ИИС?</span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--success ou-tag--outline ou-tag--s">легко</span></div><div class="cb-cell"></div>
+        <div class="cb-name"><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Кто может получить налоговый <b>вычет</b> по ИИС?</span></div>
+        <div class="cb-cell">18</div><div class="cb-cell"></div>
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
       <div class="cb-row cb-row--topic is-open">
@@ -405,8 +455,8 @@
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
       <div class="cb-row cb-row--q">
-        <div class="cb-name"><span class="cb-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Какой документ нужен для социального <b>вычет</b>а?</span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--outline ou-tag--s">средне</span></div><div class="cb-cell"></div>
+        <div class="cb-name"><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Какой документ нужен для социального <b>вычет</b>а?</span></div>
+        <div class="cb-cell">54</div><div class="cb-cell"></div>
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
     </div>
@@ -445,16 +495,16 @@
         <button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-trash"/></svg> Удалить</button>
       </div>
       <div class="cb-row cb-row--q">
-        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" checked aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Что такое НДФЛ и кто обязан его платить?</span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--success ou-tag--outline ou-tag--s">легко</span></div><div class="cb-cell"></div><div class="cb-acts"></div>
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" checked aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Что такое НДФЛ и кто обязан его платить?</span></div>
+        <div class="cb-cell">18</div><div class="cb-cell"></div><div class="cb-acts"></div>
       </div>
       <div class="cb-row cb-row--q">
-        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" checked aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Множественный выбор"><svg width="16" height="16"><use href="#i-q-multiple"/></svg></span><span class="cb-name__label">Какие из перечисленных доходов облагаются налогом?</span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--outline ou-tag--s">средне</span></div><div class="cb-cell"></div><div class="cb-acts"></div>
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" checked aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Несколько ответов"><svg width="16" height="16"><use href="#i-q-multiple"/></svg></span><span class="cb-name__label">Какие из перечисленных доходов облагаются налогом?</span></div>
+        <div class="cb-cell">54</div><div class="cb-cell"></div><div class="cb-acts"></div>
       </div>
       <div class="cb-row cb-row--q">
         <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Соответствие"><svg width="16" height="16"><use href="#i-q-matching"/></svg></span><span class="cb-name__label">Сопоставьте вид налога с его ставкой</span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--outline ou-tag--s">средне</span></div><div class="cb-cell"></div><div class="cb-acts"></div>
+        <div class="cb-cell">54</div><div class="cb-cell"></div><div class="cb-acts"></div>
       </div>
     </div>
   </div>
@@ -494,6 +544,34 @@
         <span class="qd-spacer"></span>
         <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-select')">Отмена</button>
         <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Переместить</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-media-upload: загрузка медиа в вопрос (модалка, DS FileUploader) ════ -->
+<div class="wf-state" id="s-media-upload">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="mu-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="mu-title" class="ou-modal__title">Загрузка медиа</h1>
+          <p class="ou-modal__desc">Изображение, аудио или видео</p>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null,'s-q-drawer')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="ou-uploader" role="button" tabindex="0" aria-label="Загрузить медиафайл">
+          <span class="ou-uploader__icon"><svg width="24" height="24"><use href="#i-upload"/></svg></span>
+          <span class="ou-uploader__title">Перетащите файл сюда</span>
+          <span class="ou-uploader__sub">или нажмите, чтобы выбрать · изображение / аудио / видео · до 50 МБ</span>
+          <span class="ou-uploader__cta" aria-hidden="true">Выбрать файл</span>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-q-drawer')">Отмена</button>
       </footer>
     </div>
   </div>
@@ -642,13 +720,13 @@
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
       <div class="cb-row cb-row--q">
-        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Одиночный выбор"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Что такое НДФЛ и кто обязан его платить?</span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--success ou-tag--outline ou-tag--s">легко</span></div><div class="cb-cell"></div>
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Что такое НДФЛ и кто обязан его платить?</span></div>
+        <div class="cb-cell">18</div><div class="cb-cell"></div>
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса" aria-expanded="true"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
       <div class="cb-row cb-row--q">
-        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Множественный выбор"><svg width="16" height="16"><use href="#i-q-multiple"/></svg></span><span class="cb-name__label">Какие из перечисленных доходов облагаются налогом?</span></div>
-        <div class="cb-cell"><span class="ou-tag ou-tag--warning ou-tag--outline ou-tag--s">средне</span></div><div class="cb-cell"></div>
+        <div class="cb-name"><label class="ou-check cb-qcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать вопрос"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-qtype" title="Несколько ответов"><svg width="16" height="16"><use href="#i-q-multiple"/></svg></span><span class="cb-name__label">Какие из перечисленных доходов облагаются налогом?</span></div>
+        <div class="cb-cell">54</div><div class="cb-cell"></div>
         <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия вопроса"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
       </div>
     </div>
@@ -766,10 +844,10 @@
           <div class="ou-formfield">
             <span class="ou-formfield__lbl">Тип вопроса</span>
             <div class="ou-seg ou-seg--m" role="group" aria-label="Тип вопроса">
-              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Одиночный</button>
-              <button type="button" class="ou-seg__item" aria-pressed="false">Множественный</button>
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Один ответ</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Несколько ответов</button>
               <button type="button" class="ou-seg__item" aria-pressed="false">Соответствие</button>
-              <button type="button" class="ou-seg__item" aria-pressed="false">Порядок</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Ранжирование</button>
             </div>
           </div>
           <div class="ou-formfield">
@@ -780,36 +858,54 @@
             <span class="ou-formfield__lbl">Варианты ответа · отметьте правильный</span>
             <div class="qd-stack qd-stack--tight">
               <div class="qd-opt">
+                <span class="qd-grip" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
                 <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="qd-correct" class="ou-radio__input" checked aria-label="Правильный вариант 1" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span></label>
                 <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Налог на доходы физических лиц" aria-label="Текст варианта 1" /></div></div>
                 <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить вариант"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
               </div>
               <div class="qd-opt">
+                <span class="qd-grip" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
                 <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="qd-correct" class="ou-radio__input" aria-label="Правильный вариант 2" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span></label>
                 <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Налог на добавленную стоимость" aria-label="Текст варианта 2" /></div></div>
                 <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить вариант"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
               </div>
               <div class="qd-opt">
+                <span class="qd-grip" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
                 <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="qd-correct" class="ou-radio__input" aria-label="Правильный вариант 3" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span></label>
                 <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Налог на имущество организаций" aria-label="Текст варианта 3" /></div></div>
                 <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить вариант"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
               </div>
             </div>
             <div class="qd-addrow"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus"/></svg> Добавить вариант</button></div>
+            <label class="ou-switch-field qd-shuffle"><span class="ou-switch ou-switch--m"><input type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Случайный порядок вариантов</span></span></label>
           </div>
           <div class="ou-formfield">
             <span class="ou-formfield__lbl">Сложность</span>
-            <div class="ou-seg ou-seg--m" role="group" aria-label="Сложность">
-              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Легко</button>
-              <button type="button" class="ou-seg__item" aria-pressed="false">Средне</button>
-              <button type="button" class="ou-seg__item" aria-pressed="false">Сложно</button>
+            <div class="qd-diffrow">
+              <label class="ou-switch-field qd-diffrow__sw"><span class="ou-switch ou-switch--m"><input type="checkbox" onchange="this.closest('.ou-formfield').classList.toggle('is-na', this.checked)" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Не задано</span></span></label>
+              <div class="ou-slider ou-slider--h" aria-label="Сложность">
+                <div class="ou-slider__rail">
+                  <div class="ou-slider__fill" style="left:0%;right:82%"></div>
+                  <div class="ou-slider__marks"><span class="ou-slider__mark" style="left:0%"></span><span class="ou-slider__mark-lbl" style="left:0%">0</span><span class="ou-slider__mark" style="left:50%"></span><span class="ou-slider__mark-lbl" style="left:50%">50</span><span class="ou-slider__mark" style="left:100%"></span><span class="ou-slider__mark-lbl" style="left:100%">100</span></div>
+                  <div role="slider" tabindex="0" class="ou-slider__thumb" style="left:18%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="18" aria-label="Сложность"></div>
+                </div>
+              </div>
+              <div class="ou-field ou-field--m qd-diffrow__num"><div class="ou-field__box"><input class="ou-field__input" type="number" min="0" max="100" value="18" aria-label="Сложность (число)" /></div></div>
             </div>
+            <span class="qd-hint">0 — очень легко, 100 — очень сложно</span>
           </div>
           <div class="ou-formfield">
-            <span class="ou-formfield__lbl">Медиа</span>
-            <div class="qd-opt">
-              <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" placeholder="URL изображения / аудио / видео" aria-label="URL медиа" /></div></div>
-              <button type="button" class="ou-btn ou-btn--secondary ou-btn--m"><svg width="16" height="16"><use href="#i-upload"/></svg> Загрузить</button>
+            <span class="ou-formfield__lbl">Медиа (опционально)</span>
+            <div class="ou-file">
+              <div class="ou-file__thumb ou-file__thumb--img">IMG</div>
+              <div class="ou-file__main">
+                <div class="ou-file__name">scheme-vychet.png</div>
+                <div class="ou-file__meta">Изображение · 240 КБ</div>
+              </div>
+              <div class="ou-file__actions">
+                <button type="button" class="ou-file__btn" aria-label="Заменить файл" onclick="showState(null,'s-media-upload')"><svg width="16" height="16"><use href="#i-upload"/></svg></button>
+                <button type="button" class="ou-file__btn ou-file__btn--danger" aria-label="Удалить медиа"><svg width="16" height="16"><use href="#i-trash"/></svg></button>
+              </div>
             </div>
           </div>
           <div class="ou-formfield">
@@ -822,10 +918,6 @@
               </div>
             </div>
           </div>
-          <label class="ou-switch-field">
-            <span class="ou-switch ou-switch--m"><input type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span>
-            <span class="ou-switch-field__text"><span class="ou-switch-field__label">Перемешивать варианты при показе</span></span>
-          </label>
         </div>
       </div>
       <footer class="ou-drawer__foot">
@@ -834,6 +926,209 @@
         <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
       </footer>
     </aside>
+  </div>
+</div>
+
+<!-- ════ s-q-multiple: множественный выбор (чекбоксы) + валидация «нет правильного» ════ -->
+<div class="wf-state" id="s-q-multiple">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="qm-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="qm-title" class="ou-drawer__title">Вопрос</h1><p class="ou-drawer__desc">Тема: Финансовая грамотность</p></div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть" onclick="showState(null,'s-default')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="qd-stack">
+          <div role="alert" class="ou-banner ou-banner--subtle ou-banner--error">
+            <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+            <div class="ou-banner__body"><div class="ou-banner__desc">Отметьте хотя бы один правильный вариант</div></div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Тип вопроса</span>
+            <div class="ou-seg ou-seg--m" role="group" aria-label="Тип вопроса">
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Один ответ</button>
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Несколько ответов</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Соответствие</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Ранжирование</button>
+            </div>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="qm-prompt">Текст вопроса</label>
+            <div class="ou-textarea ou-textarea--m ou-textarea--full"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="qm-prompt" rows="2">Какие из перечисленных доходов облагаются налогом?</textarea></div></div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Варианты ответа · отметьте правильные</span>
+            <div class="qd-stack qd-stack--tight">
+              <div class="qd-opt">
+                <span class="qd-grip" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+                <label class="ou-check"><input class="ou-check__input" type="checkbox" aria-label="Правильный вариант 1"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Зарплата" aria-label="Текст варианта 1" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить вариант"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+              <div class="qd-opt">
+                <span class="qd-grip" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+                <label class="ou-check"><input class="ou-check__input" type="checkbox" aria-label="Правильный вариант 2"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Подарок от близкого родственника" aria-label="Текст варианта 2" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить вариант"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+              <div class="qd-opt">
+                <span class="qd-grip" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+                <label class="ou-check"><input class="ou-check__input" type="checkbox" aria-label="Правильный вариант 3"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Проценты по вкладу сверх лимита" aria-label="Текст варианта 3" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить вариант"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+            <div class="qd-addrow"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus"/></svg> Добавить вариант</button></div>
+            <label class="ou-switch-field qd-shuffle"><span class="ou-switch ou-switch--m"><input type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Случайный порядок вариантов</span></span></label>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-default')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m" disabled>Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ════ s-q-matching: соответствие (пары лево ↔ право) ════ -->
+<div class="wf-state" id="s-q-matching">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="qmt-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="qmt-title" class="ou-drawer__title">Вопрос</h1><p class="ou-drawer__desc">Тема: Финансовая грамотность</p></div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть" onclick="showState(null,'s-default')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="qd-stack">
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Тип вопроса</span>
+            <div class="ou-seg ou-seg--m" role="group" aria-label="Тип вопроса">
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Один ответ</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Несколько ответов</button>
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Соответствие</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Ранжирование</button>
+            </div>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="qmt-prompt">Текст вопроса</label>
+            <div class="ou-textarea ou-textarea--m ou-textarea--full"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="qmt-prompt" rows="2">Сопоставьте вид налога с его ставкой</textarea></div></div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Пары · левое ↔ правое</span>
+            <div class="qd-stack qd-stack--tight">
+              <div class="qd-pair">
+                <span class="qd-grip" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="НДФЛ" aria-label="Лево 1" /></div></div>
+                <span class="qd-pair__link" aria-hidden="true">↔</span>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="13%" aria-label="Право 1" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить пару"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+              <div class="qd-pair">
+                <span class="qd-grip" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="НДС" aria-label="Лево 2" /></div></div>
+                <span class="qd-pair__link" aria-hidden="true">↔</span>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="20%" aria-label="Право 2" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить пару"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+            <div class="qd-addrow"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus"/></svg> Добавить пару</button></div>
+            <label class="ou-switch-field qd-shuffle"><span class="ou-switch ou-switch--m"><input type="checkbox" checked /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Случайный порядок вариантов</span></span></label>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-default')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ════ s-q-ranking: порядок (ранжирование) ════ -->
+<div class="wf-state" id="s-q-ranking">
+  <div class="ou-drawer-root" role="dialog" aria-modal="true" aria-labelledby="qr-title">
+    <div class="ou-drawer__backdrop"></div>
+    <aside class="ou-drawer ou-drawer--wide ou-drawer--right">
+      <header class="ou-drawer__head">
+        <div class="ou-drawer__head-text"><h1 id="qr-title" class="ou-drawer__title">Вопрос</h1><p class="ou-drawer__desc">Тема: Финансовая грамотность</p></div>
+        <button type="button" class="ou-drawer__close" aria-label="Закрыть" onclick="showState(null,'s-default')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-drawer__body" tabindex="0">
+        <div class="qd-stack">
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Тип вопроса</span>
+            <div class="ou-seg ou-seg--m" role="group" aria-label="Тип вопроса">
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Один ответ</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Несколько ответов</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Соответствие</button>
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true">Ранжирование</button>
+            </div>
+          </div>
+          <div class="ou-formfield">
+            <label class="ou-formfield__lbl" for="qr-prompt">Текст вопроса</label>
+            <div class="ou-textarea ou-textarea--m ou-textarea--full"><div class="ou-textarea__box"><textarea class="ou-textarea__input" id="qr-prompt" rows="2">Расставьте шаги оформления налогового вычета по порядку</textarea></div></div>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Элементы для ранжирования · расположите в правильном порядке</span>
+            <div class="qd-stack qd-stack--tight">
+              <div class="qd-rank">
+                <span class="qd-rank__handle" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+                <span class="qd-rank__num">1</span>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Собрать документы о расходах" aria-label="Элемент 1" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить элемент"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+              <div class="qd-rank">
+                <span class="qd-rank__handle" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+                <span class="qd-rank__num">2</span>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Заполнить декларацию 3-НДФЛ" aria-label="Элемент 2" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить элемент"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+              <div class="qd-rank">
+                <span class="qd-rank__handle" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+                <span class="qd-rank__num">3</span>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" type="text" value="Подать в налоговую и дождаться возврата" aria-label="Элемент 3" /></div></div>
+                <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Удалить элемент"><svg width="14" height="14"><use href="#i-trash"/></svg></button>
+              </div>
+            </div>
+            <div class="qd-addrow"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s"><svg width="14" height="14"><use href="#i-plus"/></svg> Добавить элемент</button></div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-drawer__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-default')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Сохранить</button>
+      </footer>
+    </aside>
+  </div>
+</div>
+
+<!-- ════ s-q-typechange: подтверждение смены типа (потеря конструктора) ════ -->
+<div class="wf-state" id="s-q-typechange">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="tc-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="tc-title" class="ou-modal__title">Сменить тип вопроса?</h1>
+          <p class="ou-modal__desc">Конструктор перестроится под новый тип</p>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null,'s-q-drawer')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="mv-hint">Уже введённые варианты и отметки правильного ответа будут потеряны — у нового типа другой конструктор. Текст вопроса, сложность, медиа и теги сохранятся.</div>
+      </div>
+      <footer class="ou-modal__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-q-drawer')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null,'s-q-matching')">Сменить тип</button>
+      </footer>
+    </div>
   </div>
 </div>
 
@@ -849,14 +1144,20 @@
       <tr><td>Создание — через FAB</td><td>Единственный акцент создания — FAB (Добавить вопрос/тему/папку). Инлайн-«+ Вопрос» в строке убран, чтобы не было ряда конкурирующих акцентных кнопок; «Добавить вопрос» доступен в ⋯-меню темы. «Добавить вопрос» открывает Drawer вопроса с предзаполненной темой</td><td>ответ на «почему не акцентная»; вопрос всегда в теме</td></tr>
       <tr><td>Фильтр НАД деревом</td><td>Поиск по тексту + кнопка «Фильтры (N)» → панель фасетов: Тип, Сложность, Теги (PRD-11), Медиа, Автор (PRD-15), Область. Активные условия — съёмные чипы + «Очистить всё». Дерево автораскрывается к совпадениям, счётчик показывает «найдено / всего»</td><td>полноценный фильтр</td></tr>
       <tr><td>Развернуть всё / Свернуть всё</td><td>Подписанные кнопки в панели — раскрыть/свернуть дерево разом</td><td>запрос</td></tr>
-      <tr><td>Три различимых уровня</td><td>ПАПКА — тихий uppercase-заголовок. ТЕМА — полужирная, акцентная закладка. ВОПРОС — лёгкий лист: монохромная иконка типа (tooltip) + outline-тег сложности</td><td>визуальная иерархия</td></tr>
+      <tr><td>Три различимых уровня</td><td>ПАПКА — тихий uppercase-заголовок. ТЕМА — полужирная, акцентная закладка. ВОПРОС — лёгкий лист: монохромная иконка типа (tooltip) + число сложности (0–100) в колонке</td><td>визуальная иерархия</td></tr>
+      <tr><td>Сложность — число 0–100 (свойство вопроса)</td><td>Сложность вопроса — это ЧИСЛО 0–100, опциональное: пусто = «Не задана». Фиксированных «уровней» (легко/средне/сложно) НЕТ. В колонке показывается ЧИСЛО. В Drawer вопроса задаётся КОНКРЕТНОЕ значение: слайдер 0–100 + поле ввода числа (как в текущем редакторе) + свитч «Не задано» (скрывает контролы). Фильтр банка по сложности = интервал 0–100 (слайдер) + свитч «Не задана» (гейт: при включении интервал скрывается). МЕТКИ / уровни сложности — это свойство КОНКРЕТНОГО ТЕСТА (адаптивные уровни: имя + интервал, произвольное число), НЕ темы/вопроса; в банке их нет</td><td>исправление: метки — свойство теста, не банка; в Drawer — конкретное значение</td></tr>
       <tr><td>Тема в корне</td><td>Тема может лежать в корне дерева или в папке — папка необязательна; видно по уровню вложенности, отдельной метки нет</td><td>единая иерархия</td></tr>
       <tr><td>Режим выбора и «Переместить»</td><td>Чекбоксы появляются на наведении ряда вопроса. Как только выбран ≥1 вопрос — появляется тулбар: «Выбрано N», «Выделить все», «Снять выделение», «Переместить…», «Удалить». Тулбар завязан на наличие выбора: «Снять выделение» обнуляет выбор → тулбар исчезает (отдельного «режима выбора» и кнопки выхода не нужно). «Переместить…» открывает выбор темы-получателя (требует «управление» на обе темы + проверку выполнимости)</td><td>ответ на «что такое Переместить/Готово»</td></tr>
       <tr><td>Редактирование — Drawer</td><td>Тема: «Настройки темы…»/«Доступ…» → Drawer (полный — prd15-topic-access). Вопрос: клик по строке или «Добавить вопрос» → Drawer вопроса</td><td>UX-03; редактирование в Drawer</td></tr>
       <tr><td>Меню вопроса (⋯)</td><td>⋯ на строке вопроса открывает действия: «Редактировать…» (= Drawer вопроса), «Дублировать», «Переместить в тему…» (тот же пикер выбора темы), «Удалить». Симметрично меню темы; меню рендерится вне карточки (портал)</td><td>действия над вопросом</td></tr>
       <tr><td>Drawer темы</td><td>Вкладка «Свойства»: название, папка, описание. Поле «Папка» меняет папку темы (= перенос между папками; папка — визуальная организация, на вопросы не влияет). Вкладка «Доступ»: владелец, видимость, гранты — полный Drawer (отзыв, смена владельца) спроектирован в prd15-topic-access</td><td>UX-03; FR-18..20</td></tr>
       <tr><td>Перенос темы в папку</td><td>«Переместить в папку…» в ⋯-меню темы открывает выбор папки-получателя (включая «Без папки / в корень»); текущая папка — disabled. То же доступно полем «Папка» в Drawer темы — дублирование оставлено намеренно. Папка только визуальная: на вопросы темы перенос не влияет</td><td>папка — визуальная организация</td></tr>
-      <tr><td>Drawer вопроса</td><td>Поля: тема, тип, текст, варианты (конструктор), сложность, медиа, теги, перемешивание. Смена типа перестраивает конструктор вариантов (с подтверждением, если данные уже введены). Теги питают квоты выдачи по подтемам (PRD-11). Балл/цена ответа здесь НЕ задаются — это свойство теста</td><td>UX-03/08; PRD-11; PRD-15 D</td></tr>
+      <tr><td>Drawer вопроса</td><td>Поля: тема, тип, текст, варианты (конструктор), сложность (слайдер + поле числа, либо свитч «Не задано» — контролы скрываются), медиа, теги, случайный порядок вариантов (порядок опций задаётся вручную перетаскиванием). Смена типа перестраивает конструктор вариантов (с подтверждением, если данные уже введены). Теги питают квоты выдачи по подтемам (PRD-11). Балл/цена ответа здесь НЕ задаются — это свойство теста</td><td>UX-03/08; PRD-11; PRD-15 D</td></tr>
+      <tr><td>Медиа — только загрузка файла</td><td>Медиа вопроса — один опциональный файл (изображение/аудио/видео). Добавляется ТОЛЬКО загрузкой через DS FileUploader в модалке «Загрузка медиа»; тип определяется автоматически из файла. Свободного URL и ручного «Тип медиа» нет. Внешние ссылки не поддерживаются: в SCORM-пакет бандлятся лишь загруженные файлы (<code>/uploads/...</code>), внешний URL остался бы битым офлайн. В Drawer показывается вложением: превью + «Заменить»/«Удалить»</td><td>исправление модели медиа; надёжная SCORM-выгрузка</td></tr>
+      <tr><td>Конструктор вариантов по типам</td><td>Тип задаёт конструктор: ОДИНОЧНЫЙ — radio (ровно один правильный); МНОЖЕСТВЕННЫЙ — чекбоксы (≥1 правильный); СООТВЕТСТВИЕ — пары левое↔правое; РАНЖИРОВАНИЕ — список с ручкой переноса и эталонным порядком. У одиночного/множественного/соответствия порядок задаётся вручную перетаскиванием (ручка слева) + переключатель «Случайный порядок вариантов». У Ранжирования ручки тоже есть, но порядок = эталон ответа, а перемешивание при выдаче обязательно — тоггла нет. Состояния s-q-multiple / s-q-matching / s-q-ranking показывают только конструктор (остальные поля — как в основном Drawer вопроса)</td><td>edge case: разные типы вариантов</td></tr>
+      <tr><td>Валидация перед сохранением</td><td>Раньше валидировались только тема+текст — можно было сохранить вопрос без правильного ответа. Теперь гарды: тема выбрана; текст непустой; ≥2 непустых варианта; задан правильный ответ (single — выбран; multiple — отмечен ≥1; matching — все пары заполнены; ranking — ≥2 элемента). Ошибки показываются БАННЕРОМ вверху формы (<code>ou-banner--error</code>), «Сохранить» заблокирована (см. s-q-multiple: нет отмеченного правильного → баннер «Отметьте хотя бы один правильный вариант»)</td><td>edge case: «не задан корректный вариант ответа»</td></tr>
+      <tr><td>Смена типа вопроса</td><td>Смена типа в seg при введённых вариантах открывает подтверждение (s-q-typechange): конструктор перестроится, варианты и отметки правильного будут потеряны; текст/сложность/медиа/теги сохраняются</td><td>edge case: смена типа с потерей данных</td></tr>
+      <tr><td>Порядок вариантов и перемешивание</td><td>Для ВСЕХ типов, кроме Ранжирования (одиночный/множественный/соответствие): автор задаёт базовый порядок вручную — перетаскиванием за ручку слева; переключатель «Случайный порядок вариантов» (рядом с вариантами, по умолчанию вкл) рандомизирует показ ученику, выключен — показ в заданном порядке (для «Все/Ничего из перечисленного» и т. п.). Ранжирование — исключение: заданный порядок и есть эталон ответа, перемешивание при выдаче обязательно и без тоггла</td><td>уточнение: ручной порядок + «Случайный порядок» для всех типов, кроме ранжирования</td></tr>
       <tr><td>⋯-меню вне карточки</td><td>Выпадающее меню рендерится вне карточки (портал), чтобы не обрезалось её границей</td><td>фикс клиппинга</td></tr>
       <tr><td>Оценка не в этом разделе</td><td>Балл/цена ответа в Drawer вопроса НЕ задаются — свойство теста</td><td>ортогональность; PRD-15 D</td></tr>
     </tbody>
@@ -873,11 +1174,13 @@
       <tr><td><code>.ou-fab</code> + <code>.fab-*</code></td><td>Создание (speed-dial)</td><td>FAB / SpeedDial</td><td><code>Button</code> + <code>Menu</code></td></tr>
       <tr><td><code>.ou-drawer</code> / <code>.ou-modal</code></td><td>Настройки темы и вопроса / пикер «Переместить»</td><td>Drawer / Modal</td><td><code>Drawer</code> / <code>ModalDialog</code></td></tr>
       <tr><td><code>.ou-menu</code></td><td>⋯-меню строки (портал)</td><td>Menu</td><td><code>DropdownMenu</code></td></tr>
-      <tr><td><code>.ou-tabs</code> / <code>.ou-seg</code></td><td>Вкладки темы; тип/сложность</td><td>Tabs / SegmentedControl</td><td><code>Tabs</code> / <code>SegmentedControl</code></td></tr>
+      <tr><td><code>.ou-tabs</code> / <code>.ou-seg</code></td><td>Вкладки темы; тип вопроса</td><td>Tabs / SegmentedControl</td><td><code>Tabs</code> / <code>SegmentedControl</code></td></tr>
+      <tr><td><code>.ou-slider</code></td><td>Сложность вопроса (Drawer, 0–100, слайдер + поле числа) и интервал сложности в фильтре (range)</td><td>Slider / Input(number)</td><td><code>Slider</code></td></tr>
+      <tr><td><code>.ou-uploader</code> / <code>.ou-file</code></td><td>Загрузка медиа (dropzone в модалке «Загрузка медиа») и вложение-файл вопроса (превью + «Заменить»/«Удалить»)</td><td>FileUploader / FileItem</td><td><code>FileUploader</code> / <code>FileItem</code></td></tr>
       <tr><td><code>.ou-field</code> / <code>.ou-textarea</code> / <code>.ou-select</code></td><td>Поиск, поля, фильтры</td><td>Input / Textarea / Select</td><td><code>Input</code> / <code>Textarea</code> / <code>Select</code></td></tr>
-      <tr><td><code>.ou-radio</code> / <code>.ou-switch</code> / <code>.ou-check</code></td><td>Правильный вариант; перемешивание; фасеты и выбор</td><td>Radio / Switch / Checkbox</td><td><code>RadioGroup</code> / <code>Switch</code> / <code>Checkbox</code></td></tr>
-      <tr><td><code>.ou-tag</code></td><td>Счётчики тем (метрика), сложность вопроса, бейдж числа активных фильтров</td><td>Tag</td><td><code>Tag</code></td></tr>
-      <tr><td><code>.ou-chip--removable</code></td><td>Теги в поле (token-input: <code>ou-field__box.wf-tags-box</code> + чипы + инлайн-инпут) и съёмные чипы активных условий фильтра. Канон — prd11-question-tags</td><td>Chip / TagInput (композиция Field + Chip)</td><td><code>TagInput</code> / <code>Chip</code></td></tr>
+      <tr><td><code>.ou-radio</code> / <code>.ou-switch</code> / <code>.ou-check</code></td><td>Правильный вариант; перемешивание и «Не задана» / «Не задано» (свитчи); фасеты и выбор</td><td>Radio / Switch / Checkbox</td><td><code>RadioGroup</code> / <code>Switch</code> / <code>Checkbox</code></td></tr>
+      <tr><td><code>.ou-tag</code></td><td>Счётчики тем (метрика), бейдж числа активных фильтров</td><td>Tag</td><td><code>Tag</code></td></tr>
+      <tr><td><code>.ou-chip--removable</code></td><td>Теги подтем в поле (token-input: <code>ou-field__box.wf-tags-box</code> + чипы + инлайн-инпут) и съёмные чипы активных условий фильтра. Канон — prd11-question-tags</td><td>Chip / TagInput (композиция Field + Chip)</td><td><code>TagInput</code> / <code>Chip</code></td></tr>
       <tr><td><code>.ou-empty</code></td><td>Пустая тема</td><td>EmptyState</td><td><code>EmptyState</code></td></tr>
       <tr><td><code>.cb-*</code> / <code>.qd-*</code> / <code>.mv-*</code></td><td>Layout-композиция на DS-токенах (как <code>.tree-*</code> в prd7-tests-list)</td><td>—</td><td>Stack / Cluster / Box</td></tr>
     </tbody>
