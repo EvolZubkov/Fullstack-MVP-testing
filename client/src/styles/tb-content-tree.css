@@ -112,12 +112,23 @@
   top: 0; bottom: 0; width: 1px; background: var(--ou-border-default);
 }
 
-/* Inline read-only question preview (expanded question row) */
+/* Inline read-only question preview (expanded question row). Indented so the
+   option icons line up under the question's type pictogram and the option text
+   under the question label — i.e. shifted past the question's leading controls
+   (checkbox slot + twist + their gaps). The parent topic's guide line continues
+   through the card (same x as the question row's guide). */
 .tb-content-tree .ct-qpreview-row {
+  position: relative;
   border-bottom: 1px solid var(--ou-border-default);
   background: var(--ou-bg-subtle, var(--ou-bg-hover));
   padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-2)
-           calc(var(--ou-space-3) + var(--ct-depth, 0) * var(--ou-space-5) + var(--ou-space-6));
+           calc(var(--ou-space-3) + var(--ct-depth, 0) * var(--ou-space-5)
+                + var(--ou-space-5) + var(--ou-space-2) + var(--ou-space-4) + var(--ou-space-2));
+}
+.tb-content-tree .ct-qpreview-row::before {
+  content: ""; position: absolute;
+  left: calc(var(--ou-space-3) + var(--ct-depth, 0) * var(--ou-space-5) + var(--ou-space-4));
+  top: 0; bottom: 0; width: 1px; background: var(--ou-border-default);
 }
 .tb-content-tree .ct-qpreview { max-width: 40rem; }
 
