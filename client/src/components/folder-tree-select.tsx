@@ -9,15 +9,22 @@
  * tree rendering).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, Folder as FolderIcon } from "lucide-react";
 import { Tree, type TreeNodeData } from "@universityrt/ui-kit";
-import type { Folder } from "@shared/schema";
 
 /** Sentinel id for the synthetic root («без папки») node. */
 export const FOLDER_ROOT = "__root__";
 
+/** Minimal folder shape — works for both topic folders (PRD-15) and test folders. */
+export interface FolderNode {
+  id: string;
+  name: string;
+  parentId: string | null;
+}
+
 interface FolderTreeSelectProps {
-  folders: Folder[];
+  folders: FolderNode[];
   /** Selected folder id, or `null` for the root. */
   value: string | null;
   onChange: (folderId: string | null) => void;
@@ -28,8 +35,8 @@ interface FolderTreeSelectProps {
 }
 
 /** Build DS Tree nodes: the folder hierarchy under one synthetic root. */
-function buildNodes(folders: Folder[], rootLabel: string, excludeId?: string): TreeNodeData[] {
-  const byParent = new Map<string | null, Folder[]>();
+function buildNodes(folders: FolderNode[], rootLabel: string, excludeId?: string): TreeNodeData[] {
+  const byParent = new Map<string | null, FolderNode[]>();
   for (const f of folders) {
     if (excludeId && f.id === excludeId) continue;
     const key = f.parentId ?? null;
@@ -42,14 +49,31 @@ function buildNodes(folders: Folder[], rootLabel: string, excludeId?: string): T
 
 export function FolderTreeSelect({ folders, value, onChange, rootLabel = "Без папки (корень)", excludeId }: FolderTreeSelectProps) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  // Popover is portaled to <body> (fixed) so it is never clipped by a modal/drawer.
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  // Close the popover on an outside click.
   useEffect(() => {
     if (!open) return;
-    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const place = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (r) setPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    place();
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      setOpen(false);
+    };
     document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
   }, [open]);
 
   const nodes = useMemo(() => buildNodes(folders, rootLabel, excludeId), [folders, rootLabel, excludeId]);
@@ -57,8 +81,9 @@ export function FolderTreeSelect({ folders, value, onChange, rootLabel = "Без
   const triggerLabel = value === null ? rootLabel : (folders.find((f) => f.id === value)?.name ?? rootLabel);
 
   return (
-    <div className={"tb-foldercombo" + (open ? " is-open" : "")} ref={ref}>
+    <div className={"tb-foldercombo" + (open ? " is-open" : "")}>
       <button
+        ref={triggerRef}
         type="button"
         className="tb-foldercombo__trigger"
         aria-haspopup="tree"
@@ -69,8 +94,8 @@ export function FolderTreeSelect({ folders, value, onChange, rootLabel = "Без
         <span className="tb-foldercombo__label">{triggerLabel}</span>
         <ChevronDown size={16} className="tb-foldercombo__chev" aria-hidden="true" />
       </button>
-      {open && (
-        <div className="tb-foldercombo__pop">
+      {open && pos && createPortal(
+        <div ref={popRef} className="tb-foldercombo__pop" style={{ top: pos.top, left: pos.left, width: pos.width }}>
           <Tree
             className="tb-foldertree"
             nodes={nodes}
@@ -80,7 +105,8 @@ export function FolderTreeSelect({ folders, value, onChange, rootLabel = "Без
             selectedKey={value === null ? FOLDER_ROOT : value}
             onSelectChange={(key) => { onChange(key === null || key === FOLDER_ROOT ? null : key); setOpen(false); }}
           />
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

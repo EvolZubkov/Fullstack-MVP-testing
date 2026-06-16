@@ -1899,8 +1899,10 @@
 .tb-foldercombo__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tb-foldercombo__chev { flex: none; color: var(--ou-fg-muted); transition: transform .15s; }
 .tb-foldercombo.is-open .tb-foldercombo__chev { transform: rotate(180deg); }
+/* Portaled to <body> (top/left/width set inline) so it is never clipped by a
+   modal/drawer; z-index sits above the DS modal layer. */
 .tb-foldercombo__pop {
-  position: absolute; top: calc(100% + var(--ou-space-1)); left: 0; right: 0; z-index: 50;
+  position: fixed; z-index: 2000;
   background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default);
   border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-lg); padding: var(--ou-space-1);
 }
