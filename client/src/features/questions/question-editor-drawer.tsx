@@ -1,35 +1,41 @@
 /**
  * @module features/questions/question-editor-drawer
  * @description Reusable question editor mounted in a UniversityRT design-system
- * Drawer. Extracted verbatim (behaviour preserved 1:1) from the «Вопросы» page
- * so both the question bank and the future `/author/content` section can mount
- * the same editor. Holds all editor-local state: the react-hook-form bridge,
+ * Drawer, used by both the question bank and the `/author/content` section.
+ * The field layout follows the approved wireframe
+ * (docs/wireframes/approved/content-bank-explorer.html, state s-q-drawer):
+ * Тема -> Тип (SegmentedControl) -> Текст -> Варианты (per-type builder with
+ * drag-reorder handles) -> «Случайный порядок вариантов» -> Сложность
+ * (nullable, PRD-16) -> Медиа -> Теги, with the additive (non-wireframe)
+ * blocks — conditional feedback and the PRD-15 price-moved hint — appended
+ * after the tags. Holds all editor-local state: the react-hook-form bridge,
  * the active question type, the per-type answer builders
  * (single/multiple/matching/ranking), media attachment + upload, conditional
- * feedback, sub-topic tags (PRD-11), difficulty (nullable, PRD-15) and
- * shuffle. Create vs. edit is driven by the `question` prop. Edits run through
- * the PRD-15 content guard (T-12) and render the {@link ContentImpactDialog}
- * locally; creates go straight through the create mutation. The only visible
- * change vs. the previous ModalDialog host is the Drawer shell — fields,
- * layout, validation, uploads and toasts are unchanged.
+ * feedback, sub-topic tags (PRD-11), difficulty and per-question shuffle.
+ * Create vs. edit is driven by the `question` prop. Edits run through the
+ * PRD-15 content guard (T-12) and render the {@link ContentImpactDialog}
+ * locally; creates go straight through the create mutation.
  */
-import { useEffect, useId, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Plus, Trash2, Upload, GripVertical } from "lucide-react";
+import { Plus, Trash2, GripVertical } from "lucide-react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
+  Banner,
   Box,
   Button,
   Checkbox,
   Cluster,
   Drawer,
+  FileUploader,
   FormGroup,
   IconButton,
   Input,
   Label,
   Radio,
+  SegmentedControl,
   Select,
   Slider,
   Stack,
@@ -114,7 +120,8 @@ export function QuestionEditorDrawer({
   const [mediaFileName, setMediaFileName] = useState<string>("");
   const [isUploadingMedia, setIsUploadingMedia] = useState<boolean>(false);
   const [shuffleAnswers, setShuffleAnswers] = useState<boolean>(true);
-  const [difficulty, setDifficulty] = useState<number | null>(50);
+  // PRD-16: difficulty is unset («Не задано») by default for a new question.
+  const [difficulty, setDifficulty] = useState<number | null>(null);
   const [feedbackMode, setFeedbackMode] = useState<"general" | "conditional">("general");
   const [feedback, setFeedback] = useState<string>("");
   const [feedbackCorrect, setFeedbackCorrect] = useState<string>("");
@@ -122,7 +129,6 @@ export function QuestionEditorDrawer({
   // PRD-11 §3a: sub-topic tags (chip input). By these tags the author sets draw quotas.
   const [tags, setTags] = useState<string[]>([]);
 
-  const mediaFileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm({
     resolver: zodResolver(baseQuestionSchema),
@@ -159,16 +165,13 @@ export function QuestionEditorDrawer({
     setMediaUrl("");
     setMediaType("");
     setShuffleAnswers(true);
-    setDifficulty(50);
+    setDifficulty(null);
     setFeedbackMode("general");
     setFeedback("");
     setFeedbackCorrect("");
     setFeedbackIncorrect("");
     setTags([]);
     setMediaFileName("");
-    if (mediaFileInputRef.current) {
-      mediaFileInputRef.current.value = "";
-    }
   };
 
   // Initialize the draft when the Drawer opens: from `question` (edit) or as an
@@ -227,75 +230,39 @@ export function QuestionEditorDrawer({
     return "";
   };
   const isDataUrl = (v: string) => v.trim().startsWith("data:");
-  const handlePickMediaFile = () => {
-    mediaFileInputRef.current?.click();
-  };
-
   const clearMedia = () => {
     setMediaUrl("");
     setMediaType("");
     setMediaFileName("");
-    if (mediaFileInputRef.current) {
-      mediaFileInputRef.current.value = "";
-    }
   };
 
-  const handleMediaFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // защита от слишком больших файлов (можешь поменять лимит)
+  // PRD-16 FR-20/21: media is upload-only (no free URL); type is derived from MIME.
+  const uploadMediaFile = async (file: File) => {
     const MAX_MB = 200;
     if (file.size > MAX_MB * 1024 * 1024) {
-      toast({
-        variant: "destructive",
-        title: t.common.error,
-        description: `Файл слишком большой (>${MAX_MB}MB).`,
-      });
+      toast({ variant: "destructive", title: t.common.error, description: `Файл слишком большой (>${MAX_MB}MB).` });
       return;
     }
-
     const mt = guessMediaType(file.type);
     if (!mt) {
-      toast({
-        variant: "destructive",
-        title: t.common.error,
-        description: "Поддерживаются только image/audio/video.",
-      });
+      toast({ variant: "destructive", title: t.common.error, description: "Поддерживаются только image/audio/video." });
       return;
     }
-
     setIsUploadingMedia(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
-
-      const response = await fetch("/api/media/upload", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status}`);
-      }
-
+      const response = await fetch("/api/media/upload", { method: "POST", body: formData, credentials: "include" });
+      if (!response.ok) throw new Error(`Upload failed: ${response.status}`);
       const payload: { url: string; mime?: string } = await response.json();
-
-      setMediaUrl(payload.url); // короткий URL (без base64)
+      setMediaUrl(payload.url);
       setMediaType(guessMediaType(payload.mime || file.type) || mt);
       setMediaFileName(file.name);
     } catch (err) {
       console.error(err);
-      toast({
-        variant: "destructive",
-        title: t.common.error,
-        description: "Не удалось загрузить файл. Проверь права (author) и размер.",
-      });
+      toast({ variant: "destructive", title: t.common.error, description: "Не удалось загрузить файл. Проверь права (author) и размер." });
     } finally {
       setIsUploadingMedia(false);
-      // чтобы можно было выбрать тот же файл повторно
-      if (mediaFileInputRef.current) mediaFileInputRef.current.value = "";
     }
   };
 
@@ -393,6 +360,74 @@ export function QuestionEditorDrawer({
     }
   };
 
+  // PRD-16 FR-31: live validation — errors shown as a banner, save blocked.
+  const watchedTopicId = form.watch("topicId");
+  const watchedPrompt = form.watch("prompt");
+  const validationErrors = useMemo(() => {
+    const errs: string[] = [];
+    if (!watchedTopicId) errs.push(t.questions.topicRequired);
+    if (!watchedPrompt || !watchedPrompt.trim()) errs.push(t.questions.textRequired);
+    if (selectedType === "single") {
+      if (singleOptions.filter((o) => o.trim()).length < 2) errs.push("Добавьте не менее двух вариантов ответа");
+      else if (!singleOptions[singleCorrect]?.trim()) errs.push("Отметьте правильный вариант");
+    } else if (selectedType === "multiple") {
+      if (multipleOptions.filter((o) => o.trim()).length < 2) errs.push("Добавьте не менее двух вариантов ответа");
+      else if (multipleCorrect.length === 0) errs.push("Отметьте хотя бы один правильный вариант");
+    } else if (selectedType === "matching") {
+      const left = matchingLeft.filter((l) => l.trim()).length;
+      const right = matchingRight.filter((r) => r.trim()).length;
+      if (left < 1 || right < 1) errs.push("Заполните левую и правую колонки");
+      else if (matchingPairs.length < left) errs.push("Сопоставьте все пары");
+    } else if (selectedType === "ranking") {
+      if (rankingItems.filter((i) => i.trim()).length < 2) errs.push("Добавьте не менее двух элементов");
+    }
+    return errs;
+  }, [watchedTopicId, watchedPrompt, selectedType, singleOptions, singleCorrect, multipleOptions, multipleCorrect, matchingLeft, matchingRight, matchingPairs, rankingItems]);
+
+  /** Option/item texts of the active type — the list carried across type changes. */
+  const currentOptionTexts = (): string[] => {
+    switch (selectedType) {
+      case "single": return singleOptions;
+      case "multiple": return multipleOptions;
+      case "ranking": return rankingItems;
+      case "matching": return matchingLeft;
+      default: return [];
+    }
+  };
+
+  // PRD-16 FR-32: switching the question type KEEPS the entered options — only
+  // the answer structure (single correct / multiple correct / pairs / order) is
+  // re-derived. Per-type state arrays are left intact, so toggling back restores
+  // that type's specifics (e.g. the matching right column). The shared text list
+  // is the current type's options (the matching LEFT column when coming from it).
+  const applyTypeChange = (next: QuestionType) => {
+    if (next === selectedType) return;
+    const prev = selectedType;
+    const texts = currentOptionTexts();
+
+    if (next === "single") {
+      const opts = padTexts(texts, 2);
+      setSingleOptions(opts);
+      const carried = prev === "multiple" ? (multipleCorrect[0] ?? 0) : prev === "single" ? singleCorrect : 0;
+      setSingleCorrect(Math.max(0, Math.min(carried, opts.length - 1)));
+    } else if (next === "multiple") {
+      const opts = padTexts(texts, 2);
+      setMultipleOptions(opts);
+      const carried = prev === "single" ? [singleCorrect] : prev === "multiple" ? multipleCorrect : [];
+      setMultipleCorrect(carried.filter((i) => i >= 0 && i < opts.length));
+    } else if (next === "ranking") {
+      setRankingItems(padTexts(texts, 2));
+    } else if (next === "matching") {
+      const left = padTexts(texts, 2);
+      setMatchingLeft(left);
+      setMatchingRight((r) => padTexts(r, left.length));
+      setMatchingPairs([]);
+    }
+
+    form.setValue("type", next);
+    setSelectedType(next);
+  };
+
   return (
     <>
       {/* Question editor — ui-kit Drawer + react-hook-form bridge
@@ -408,7 +443,7 @@ export function QuestionEditorDrawer({
             <Button variant="secondary" onClick={onClose}>{t.common.cancel}</Button>
             <Button
               onClick={form.handleSubmit(onSubmit)}
-              disabled={isUploadingMedia}
+              disabled={isUploadingMedia || validationErrors.length > 0}
               loading={createMutation.isPending}
               data-testid="button-submit-question"
             >
@@ -418,44 +453,46 @@ export function QuestionEditorDrawer({
         }
       >
         <Stack gap={6}>
-          <FormGroup columns="two">
-            <Controller
-              control={form.control}
-              name="topicId"
-              render={({ field, fieldState }) => (
-                <Select
-                  label={t.questions.topic}
-                  value={field.value}
-                  onChange={field.onChange}
-                  placeholder={t.questions.selectTopic}
-                  error={fieldState.error?.message}
-                  fullWidth
-                  data-testid="select-question-topic"
-                  options={topics?.map((topic) => ({ value: topic.id, label: topic.name })) ?? []}
+          {validationErrors.length > 0 && (
+            <Banner tone="error" variant="subtle" title="Проверьте форму" data-testid="banner-question-validation">
+              {validationErrors.map((e, i) => (
+                <Text key={i} variant="body-s">{e}</Text>
+              ))}
+            </Banner>
+          )}
+          <Controller
+            control={form.control}
+            name="topicId"
+            render={({ field, fieldState }) => (
+              <Select
+                label={t.questions.topic}
+                value={field.value}
+                onChange={field.onChange}
+                placeholder={t.questions.selectTopic}
+                error={fieldState.error?.message}
+                fullWidth
+                data-testid="select-question-topic"
+                options={topics?.map((topic) => ({ value: topic.id, label: topic.name })) ?? []}
+              />
+            )}
+          />
+
+          {/* PRD-16: type is a SegmentedControl (matches the approved wireframe s-q-drawer). */}
+          <Controller
+            control={form.control}
+            name="type"
+            render={({ field }) => (
+              <Stack gap={2}>
+                <Label>{t.questions.questionType}</Label>
+                <SegmentedControl<QuestionType>
+                  value={field.value as QuestionType}
+                  onChange={(next) => applyTypeChange(next)}
+                  items={questionTypes.map((type) => ({ value: type.value, label: type.label }))}
+                  data-testid="seg-question-type"
                 />
-              )}
-            />
-            <Controller
-              control={form.control}
-              name="type"
-              render={({ field, fieldState }) => (
-                <Select
-                  label={t.questions.questionType}
-                  value={field.value}
-                  onChange={(val) => {
-                    field.onChange(val);
-                    setSelectedType(val as QuestionType);
-                    resetQuestionData();
-                  }}
-                  placeholder={t.questions.selectType}
-                  error={fieldState.error?.message}
-                  fullWidth
-                  data-testid="select-question-type"
-                  options={questionTypes.map((type) => ({ value: type.value, label: type.label }))}
-                />
-              )}
-            />
-          </FormGroup>
+              </Stack>
+            )}
+          />
 
           <Textarea
             label={t.questions.questionText}
@@ -466,6 +503,53 @@ export function QuestionEditorDrawer({
             data-testid="input-question-prompt"
             {...form.register("prompt")}
           />
+
+          {selectedType === "single" && (
+            <SingleChoiceBuilder
+              options={singleOptions}
+              setOptions={setSingleOptions}
+              correctIndex={singleCorrect}
+              setCorrectIndex={setSingleCorrect}
+            />
+          )}
+
+          {selectedType === "multiple" && (
+            <MultipleChoiceBuilder
+              options={multipleOptions}
+              setOptions={setMultipleOptions}
+              correctIndices={multipleCorrect}
+              setCorrectIndices={setMultipleCorrect}
+            />
+          )}
+
+          {selectedType === "matching" && (
+            <MatchingBuilder
+              left={matchingLeft}
+              setLeft={setMatchingLeft}
+              right={matchingRight}
+              setRight={setMatchingRight}
+              pairs={matchingPairs}
+              setPairs={setMatchingPairs}
+            />
+          )}
+
+          {selectedType === "ranking" && (
+            <RankingBuilder
+              items={rankingItems}
+              setItems={setRankingItems}
+            />
+          )}
+
+          {/* PRD-16 FR-41/42: per-question shuffle (ranking is always shuffled — no toggle).
+             Rendered as a Switch to match the approved wireframe (state s-q-drawer). */}
+          {selectedType !== "ranking" && (
+            <Switch
+              label={t.questions.shuffleAnswers}
+              checked={shuffleAnswers}
+              onChange={(e) => setShuffleAnswers(e.target.checked)}
+              data-testid="switch-shuffle-answers"
+            />
+          )}
 
           <Stack gap={2}>
             <Label>{t.questions.difficulty}</Label>
@@ -505,68 +589,16 @@ export function QuestionEditorDrawer({
 
           <Stack gap={4}>
             <Label>{t.questions.mediaOptional}</Label>
-            <FormGroup columns="two">
-              <Input
-                label={t.questions.mediaUrl}
-                placeholder={t.questions.mediaUrlPlaceholder}
-                value={mediaUrl}
-                onChange={(e) => setMediaUrl(e.target.value)}
-                fullWidth
-                data-testid="input-question-media-url"
-              />
-              <Select
-                label={t.questions.mediaType}
-                value={mediaType || "none"}
-                onChange={(val) => setMediaType(val === "none" ? "" : val as "image" | "audio" | "video")}
-                placeholder={t.questions.selectType}
-                fullWidth
-                data-testid="select-question-media-type"
-                options={[
-                  { value: "none", label: t.common.none },
-                  { value: "image", label: t.questions.image },
-                  { value: "audio", label: t.questions.audio },
-                  { value: "video", label: t.questions.video },
-                ]}
-              />
-            </FormGroup>
-            <Cluster gap={2}>
-              <Button
-                type="button"
-                variant="secondary"
-                size="s"
-                leadingIcon={isUploadingMedia ? undefined : <Upload size={16} />}
-                loading={isUploadingMedia}
-                onClick={handlePickMediaFile}
-                disabled={isUploadingMedia}
-                data-testid="button-upload-question-media"
-              >
-                {isUploadingMedia ? "Загрузка..." : "Загрузить файл"}
-              </Button>
-
-              <Button
-                type="button"
-                variant="ghost"
-                size="s"
-                onClick={clearMedia}
-                disabled={!mediaUrl || isUploadingMedia}
-                data-testid="button-clear-question-media"
-              >
-                Очистить
-              </Button>
-
-              {mediaFileName && (
-                <Text variant="body-xs" tone="muted">
-                  {mediaFileName}
-                </Text>
-              )}
-            </Cluster>
-
-            <input
-              ref={mediaFileInputRef}
-              type="file"
+            <FileUploader
+              compact
               accept="image/*,audio/*,video/*"
-              hidden
-              onChange={handleMediaFileChange}
+              maxSizeMb={200}
+              disabled={isUploadingMedia}
+              title={isUploadingMedia ? "Загрузка…" : mediaUrl ? "Заменить файл" : "Перетащите файл сюда"}
+              description={mediaUrl ? undefined : "или нажмите, чтобы выбрать · изображение, аудио, видео"}
+              cta={mediaUrl ? "Выбрать другой" : "Выбрать файл"}
+              onFiles={(files) => { if (files[0]) void uploadMediaFile(files[0]); }}
+              data-testid="uploader-question-media"
             />
             {mediaUrl && mediaType && (
               <Box border radius="m" pad={4}>
@@ -598,13 +630,7 @@ export function QuestionEditorDrawer({
             )}
           </Stack>
 
-          <Checkbox
-            label={t.questions.shuffleAnswers}
-            description={t.questions.shuffleAnswersHint}
-            checked={shuffleAnswers}
-            onChange={(e) => setShuffleAnswers(e.target.checked)}
-            data-testid="checkbox-shuffle-answers"
-          />
+          <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
 
           <Stack gap={3}>
             <Cluster justify="between">
@@ -655,42 +681,6 @@ export function QuestionEditorDrawer({
             )}
           </Stack>
 
-          {selectedType === "single" && (
-            <SingleChoiceBuilder
-              options={singleOptions}
-              setOptions={setSingleOptions}
-              correctIndex={singleCorrect}
-              setCorrectIndex={setSingleCorrect}
-            />
-          )}
-
-          {selectedType === "multiple" && (
-            <MultipleChoiceBuilder
-              options={multipleOptions}
-              setOptions={setMultipleOptions}
-              correctIndices={multipleCorrect}
-              setCorrectIndices={setMultipleCorrect}
-            />
-          )}
-
-          {selectedType === "matching" && (
-            <MatchingBuilder
-              left={matchingLeft}
-              setLeft={setMatchingLeft}
-              right={matchingRight}
-              setRight={setMatchingRight}
-              pairs={matchingPairs}
-              setPairs={setMatchingPairs}
-            />
-          )}
-
-          {selectedType === "ranking" && (
-            <RankingBuilder
-              items={rankingItems}
-              setItems={setRankingItems}
-            />
-          )}
-
           {/* PRD-15 block D (FR-35): балл и цена ответа переехали в тест. */}
           <Box border radius="m" pad={3} data-testid="question-scoring-moved-hint">
             <Text as="p" variant="body-s" tone="muted">
@@ -698,8 +688,6 @@ export function QuestionEditorDrawer({
               редактора теста. В банке вопрос хранит только содержание.
             </Text>
           </Box>
-
-          <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
         </Stack>
       </Drawer>
 
@@ -707,6 +695,29 @@ export function QuestionEditorDrawer({
       <ContentImpactDialog {...contentGuard.dialogProps} />
     </>
   );
+}
+
+/** Pad a text list up to `min` entries with empty strings (PRD-16 FR-32 type migration). */
+function padTexts(arr: string[], min: number): string[] {
+  const next = [...arr];
+  while (next.length < min) next.push("");
+  return next;
+}
+
+/** Move an array item from one index to another (immutable). PRD-16 FR-40. */
+function moveInArray<T>(arr: T[], from: number, to: number): T[] {
+  const next = [...arr];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+/** Remap a stored answer index after an option moved from→to (keeps the correct key on its option). */
+function remapIndexAfterMove(idx: number, from: number, to: number): number {
+  if (idx === from) return to;
+  if (from < idx && idx <= to) return idx - 1;
+  if (to <= idx && idx < from) return idx + 1;
+  return idx;
 }
 
 function SingleChoiceBuilder({
@@ -721,6 +732,14 @@ function SingleChoiceBuilder({
   setCorrectIndex: (idx: number) => void;
 }) {
   const groupName = useId();
+  const dragIndex = useRef<number | null>(null);
+  const moveOption = (to: number) => {
+    const from = dragIndex.current;
+    dragIndex.current = null;
+    if (from === null || from === to) return;
+    setOptions(moveInArray(options, from, to));
+    setCorrectIndex(remapIndexAfterMove(correctIndex, from, to));
+  };
   const updateOption = (idx: number, value: string) => {
     const newOpts = [...options];
     newOpts[idx] = value;
@@ -738,35 +757,40 @@ function SingleChoiceBuilder({
 
   return (
     <Stack gap={4}>
-      <Label>{t.questions.correctAnswer}</Label>
+      <Label>{t.questions.answerOptionsSingle}</Label>
       <Stack gap={2}>
         {options.map((opt, i) => (
-          <Cluster key={i} gap={2} wrap={false}>
-            <Radio
-              name={groupName}
-              checked={correctIndex === i}
-              onChange={() => setCorrectIndex(i)}
-              aria-label={`${t.questions.correctAnswer} ${i + 1}`}
-            />
-            <Box grow>
-              <Input
-                value={opt}
-                onChange={(e) => updateOption(i, e.target.value)}
-                placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
-                fullWidth
-                data-testid={`input-option-${i}`}
+          <div key={i} onDragOver={(e) => e.preventDefault()} onDrop={() => moveOption(i)}>
+            <Cluster gap={2} wrap={false}>
+              <span className="tb-drag-handle" draggable onDragStart={() => { dragIndex.current = i; }} aria-label="Перетащить вариант">
+                <GripVertical size={16} color="var(--ou-fg-muted)" />
+              </span>
+              <Radio
+                name={groupName}
+                checked={correctIndex === i}
+                onChange={() => setCorrectIndex(i)}
+                aria-label={`${t.questions.correctAnswer} ${i + 1}`}
               />
-            </Box>
-            {options.length > 2 && (
-              <IconButton
-                variant="ghost"
-                size="s"
-                aria-label="Удалить вариант"
-                icon={<Trash2 size={16} />}
-                onClick={() => removeOption(i)}
-              />
-            )}
-          </Cluster>
+              <Box grow>
+                <Input
+                  value={opt}
+                  onChange={(e) => updateOption(i, e.target.value)}
+                  placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
+                  fullWidth
+                  data-testid={`input-option-${i}`}
+                />
+              </Box>
+              {options.length > 2 && (
+                <IconButton
+                  variant="ghost"
+                  size="s"
+                  aria-label="Удалить вариант"
+                  icon={<Trash2 size={16} />}
+                  onClick={() => removeOption(i)}
+                />
+              )}
+            </Cluster>
+          </div>
         ))}
       </Stack>
       <Button type="button" variant="secondary" size="s" leadingIcon={<Plus size={16} />} onClick={addOption}>
@@ -787,6 +811,14 @@ function MultipleChoiceBuilder({
   correctIndices: number[];
   setCorrectIndices: (indices: number[]) => void;
 }) {
+  const dragIndex = useRef<number | null>(null);
+  const moveOption = (to: number) => {
+    const from = dragIndex.current;
+    dragIndex.current = null;
+    if (from === null || from === to) return;
+    setOptions(moveInArray(options, from, to));
+    setCorrectIndices(correctIndices.map((idx) => remapIndexAfterMove(idx, from, to)));
+  };
   const updateOption = (idx: number, value: string) => {
     const newOpts = [...options];
     newOpts[idx] = value;
@@ -811,34 +843,39 @@ function MultipleChoiceBuilder({
 
   return (
     <Stack gap={4}>
-      <Label>{t.questions.correctAnswers}</Label>
+      <Label>{t.questions.answerOptionsMultiple}</Label>
       <Stack gap={2}>
         {options.map((opt, i) => (
-          <Cluster key={i} gap={2} wrap={false}>
-            <Checkbox
-              checked={correctIndices.includes(i)}
-              onChange={() => toggleCorrect(i)}
-              aria-label={`${t.questions.optionPlaceholder} ${i + 1}`}
-            />
-            <Box grow>
-              <Input
-                value={opt}
-                onChange={(e) => updateOption(i, e.target.value)}
-                placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
-                fullWidth
-                data-testid={`input-multi-option-${i}`}
+          <div key={i} onDragOver={(e) => e.preventDefault()} onDrop={() => moveOption(i)}>
+            <Cluster gap={2} wrap={false}>
+              <span className="tb-drag-handle" draggable onDragStart={() => { dragIndex.current = i; }} aria-label="Перетащить вариант">
+                <GripVertical size={16} color="var(--ou-fg-muted)" />
+              </span>
+              <Checkbox
+                checked={correctIndices.includes(i)}
+                onChange={() => toggleCorrect(i)}
+                aria-label={`${t.questions.optionPlaceholder} ${i + 1}`}
               />
-            </Box>
-            {options.length > 2 && (
-              <IconButton
-                variant="ghost"
-                size="s"
-                aria-label="Удалить вариант"
-                icon={<Trash2 size={16} />}
-                onClick={() => removeOption(i)}
-              />
-            )}
-          </Cluster>
+              <Box grow>
+                <Input
+                  value={opt}
+                  onChange={(e) => updateOption(i, e.target.value)}
+                  placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
+                  fullWidth
+                  data-testid={`input-multi-option-${i}`}
+                />
+              </Box>
+              {options.length > 2 && (
+                <IconButton
+                  variant="ghost"
+                  size="s"
+                  aria-label="Удалить вариант"
+                  icon={<Trash2 size={16} />}
+                  onClick={() => removeOption(i)}
+                />
+              )}
+            </Cluster>
+          </div>
         ))}
       </Stack>
       <Button type="button" variant="secondary" size="s" leadingIcon={<Plus size={16} />} onClick={addOption}>
@@ -935,6 +972,13 @@ function RankingBuilder({
   items: string[];
   setItems: (items: string[]) => void;
 }) {
+  const dragIndex = useRef<number | null>(null);
+  const moveItem = (to: number) => {
+    const from = dragIndex.current;
+    dragIndex.current = null;
+    if (from === null || from === to) return;
+    setItems(moveInArray(items, from, to));
+  };
   const updateItem = (idx: number, value: string) => {
     const newItems = [...items];
     newItems[idx] = value;
@@ -953,28 +997,32 @@ function RankingBuilder({
       <Text as="p" variant="body-s" tone="muted">{t.questions.orderItems}</Text>
       <Stack gap={2}>
         {items.map((item, i) => (
-          <Cluster key={i} gap={2} wrap={false}>
-            <GripVertical size={16} color="var(--ou-fg-muted)" />
-            <Text variant="body-s" weight="medium">{i + 1}.</Text>
-            <Box grow>
-              <Input
-                value={item}
-                onChange={(e) => updateItem(i, e.target.value)}
-                placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
-                fullWidth
-                data-testid={`input-ranking-${i}`}
-              />
-            </Box>
-            {items.length > 2 && (
-              <IconButton
-                variant="ghost"
-                size="s"
-                aria-label="Удалить элемент"
-                icon={<Trash2 size={16} />}
-                onClick={() => removeItem(i)}
-              />
-            )}
-          </Cluster>
+          <div key={i} onDragOver={(e) => e.preventDefault()} onDrop={() => moveItem(i)}>
+            <Cluster gap={2} wrap={false}>
+              <span className="tb-drag-handle" draggable onDragStart={() => { dragIndex.current = i; }} aria-label="Перетащить элемент">
+                <GripVertical size={16} color="var(--ou-fg-muted)" />
+              </span>
+              <Text variant="body-s" weight="medium">{i + 1}.</Text>
+              <Box grow>
+                <Input
+                  value={item}
+                  onChange={(e) => updateItem(i, e.target.value)}
+                  placeholder={`${t.questions.optionPlaceholder} ${i + 1}`}
+                  fullWidth
+                  data-testid={`input-ranking-${i}`}
+                />
+              </Box>
+              {items.length > 2 && (
+                <IconButton
+                  variant="ghost"
+                  size="s"
+                  aria-label="Удалить элемент"
+                  icon={<Trash2 size={16} />}
+                  onClick={() => removeItem(i)}
+                />
+              )}
+            </Cluster>
+          </div>
         ))}
       </Stack>
       <Button type="button" variant="secondary" size="s" leadingIcon={<Plus size={16} />} onClick={addItem}>
