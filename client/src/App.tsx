@@ -13,8 +13,6 @@ import LoginPage from "@/pages/login";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import ResetPasswordPage from "@/pages/reset-password";
 import FirstLoginPage from "@/pages/first-login";
-import TopicsPage from "@/pages/author/topics";
-import QuestionsPage from "@/pages/author/questions";
 import ContentPage from "@/pages/author/content";
 import TestsPage from "@/pages/author/tests";
 import AuthorTemplatesPage from "@/pages/author/templates";
@@ -115,21 +113,10 @@ function Router() {
         </ProtectedRoute>
       </Route>
 
-      <Route path="/author/topics">
-        <ProtectedRoute requiredPermission="topics.manage">
-          <AuthorLayout>
-            <TopicsPage />
-          </AuthorLayout>
-        </ProtectedRoute>
-      </Route>
-
-      <Route path="/author/questions">
-        <ProtectedRoute requiredPermission="questions.manage">
-          <AuthorLayout>
-            <QuestionsPage />
-          </AuthorLayout>
-        </ProtectedRoute>
-      </Route>
+      {/* PRD-16: «Темы» и «Вопросы» объединены в единый раздел «Темы и вопросы».
+         Старые маршруты редиректят на /author/content (закладки/ссылки не падают). */}
+      <Route path="/author/topics"><Redirect to="/author/content" /></Route>
+      <Route path="/author/questions"><Redirect to="/author/content" /></Route>
 
       <Route path="/author/tests">
         <ProtectedRoute requiredPermission="tests.read">

@@ -15,8 +15,6 @@ import { useLocation } from "wouter";
 import {
   BookOpen,
   FolderTree,
-  FolderOpen,
-  FileQuestion,
   ClipboardList,
   LayoutTemplate,
   BarChart3,
@@ -40,9 +38,8 @@ interface NavEntry {
 }
 
 const NAV: NavEntry[] = [
+  // PRD-16: «Темы» и «Вопросы» объединены в единый раздел «Темы и вопросы».
   { id: "content", href: "/author/content", label: t.navigation.topicsAndQuestions, icon: FolderTree, perm: "topics.manage" },
-  { id: "topics", href: "/author/topics", label: t.navigation.topics, icon: FolderOpen, perm: "topics.manage" },
-  { id: "questions", href: "/author/questions", label: t.navigation.questions, icon: FileQuestion, perm: "questions.manage" },
   { id: "tests", href: "/author/tests", label: t.navigation.tests, icon: ClipboardList, perm: "tests.read" },
   { id: "templates", href: "/author/templates", label: t.navigation.templates, icon: LayoutTemplate, perm: "adminTemplates.manage" },
   { id: "analytics", href: "/author/analytics", label: t.navigation.analytics, icon: BarChart3, perm: "analytics.read" },
