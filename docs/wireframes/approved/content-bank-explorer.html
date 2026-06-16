@@ -177,7 +177,6 @@
   <button class="wf-btn" type="button" onclick="showState(this,'s-q-multiple')">Несколько ответов + валидация</button>
   <button class="wf-btn" type="button" onclick="showState(this,'s-q-matching')">Соответствие</button>
   <button class="wf-btn" type="button" onclick="showState(this,'s-q-ranking')">Ранжирование</button>
-  <button class="wf-btn" type="button" onclick="showState(this,'s-q-typechange')">Смена типа</button>
   <div class="wf-nav-sep"></div>
   <button class="wf-btn" type="button" onclick="toggleTheme(this)">Dark</button>
   <button class="wf-btn" type="button" onclick="toggleDensity(this)">Compact</button>
@@ -947,10 +946,10 @@
           <div class="ou-formfield">
             <span class="ou-formfield__lbl">Тип вопроса</span>
             <div class="ou-seg ou-seg--m" role="group" aria-label="Тип вопроса">
-              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Один ответ</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Один ответ</button>
               <button type="button" class="ou-seg__item is-active" aria-pressed="true">Несколько ответов</button>
-              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Соответствие</button>
-              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Ранжирование</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Соответствие</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Ранжирование</button>
             </div>
           </div>
           <div class="ou-formfield">
@@ -1007,10 +1006,10 @@
           <div class="ou-formfield">
             <span class="ou-formfield__lbl">Тип вопроса</span>
             <div class="ou-seg ou-seg--m" role="group" aria-label="Тип вопроса">
-              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Один ответ</button>
-              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Несколько ответов</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Один ответ</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Несколько ответов</button>
               <button type="button" class="ou-seg__item is-active" aria-pressed="true">Соответствие</button>
-              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Ранжирование</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Ранжирование</button>
             </div>
           </div>
           <div class="ou-formfield">
@@ -1063,9 +1062,9 @@
           <div class="ou-formfield">
             <span class="ou-formfield__lbl">Тип вопроса</span>
             <div class="ou-seg ou-seg--m" role="group" aria-label="Тип вопроса">
-              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Один ответ</button>
-              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Несколько ответов</button>
-              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="showState(null,'s-q-typechange')">Соответствие</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Один ответ</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Несколько ответов</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false">Соответствие</button>
               <button type="button" class="ou-seg__item is-active" aria-pressed="true">Ранжирование</button>
             </div>
           </div>
@@ -1108,30 +1107,6 @@
   </div>
 </div>
 
-<!-- ════ s-q-typechange: подтверждение смены типа (потеря конструктора) ════ -->
-<div class="wf-state" id="s-q-typechange">
-  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="tc-title">
-    <div class="ou-modal__backdrop"></div>
-    <div class="ou-modal ou-modal--m">
-      <header class="ou-modal__head">
-        <div class="ou-modal__head-text">
-          <h1 id="tc-title" class="ou-modal__title">Сменить тип вопроса?</h1>
-          <p class="ou-modal__desc">Конструктор перестроится под новый тип</p>
-        </div>
-        <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null,'s-q-drawer')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
-      </header>
-      <div class="ou-modal__body">
-        <div class="mv-hint">Уже введённые варианты и отметки правильного ответа будут потеряны — у нового типа другой конструктор. Текст вопроса, сложность, медиа и теги сохранятся.</div>
-      </div>
-      <footer class="ou-modal__foot">
-        <span class="qd-spacer"></span>
-        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-q-drawer')">Отмена</button>
-        <button type="button" class="ou-btn ou-btn--primary ou-btn--m" onclick="showState(null,'s-q-matching')">Сменить тип</button>
-      </footer>
-    </div>
-  </div>
-</div>
-
 <!-- Пояснения -->
 <section class="wf-notes">
   <h3 class="wf-notes-title">Пояснения</h3>
@@ -1156,7 +1131,7 @@
       <tr><td>Медиа — только загрузка файла</td><td>Медиа вопроса — один опциональный файл (изображение/аудио/видео). Добавляется ТОЛЬКО загрузкой через DS FileUploader в модалке «Загрузка медиа»; тип определяется автоматически из файла. Свободного URL и ручного «Тип медиа» нет. Внешние ссылки не поддерживаются: в SCORM-пакет бандлятся лишь загруженные файлы (<code>/uploads/...</code>), внешний URL остался бы битым офлайн. В Drawer показывается вложением: превью + «Заменить»/«Удалить»</td><td>исправление модели медиа; надёжная SCORM-выгрузка</td></tr>
       <tr><td>Конструктор вариантов по типам</td><td>Тип задаёт конструктор: ОДИНОЧНЫЙ — radio (ровно один правильный); МНОЖЕСТВЕННЫЙ — чекбоксы (≥1 правильный); СООТВЕТСТВИЕ — пары левое↔правое; РАНЖИРОВАНИЕ — список с ручкой переноса и эталонным порядком. У одиночного/множественного/соответствия порядок задаётся вручную перетаскиванием (ручка слева) + переключатель «Случайный порядок вариантов». У Ранжирования ручки тоже есть, но порядок = эталон ответа, а перемешивание при выдаче обязательно — тоггла нет. Состояния s-q-multiple / s-q-matching / s-q-ranking показывают только конструктор (остальные поля — как в основном Drawer вопроса)</td><td>edge case: разные типы вариантов</td></tr>
       <tr><td>Валидация перед сохранением</td><td>Раньше валидировались только тема+текст — можно было сохранить вопрос без правильного ответа. Теперь гарды: тема выбрана; текст непустой; ≥2 непустых варианта; задан правильный ответ (single — выбран; multiple — отмечен ≥1; matching — все пары заполнены; ranking — ≥2 элемента). Ошибки показываются БАННЕРОМ вверху формы (<code>ou-banner--error</code>), «Сохранить» заблокирована (см. s-q-multiple: нет отмеченного правильного → баннер «Отметьте хотя бы один правильный вариант»)</td><td>edge case: «не задан корректный вариант ответа»</td></tr>
-      <tr><td>Смена типа вопроса</td><td>Смена типа в seg при введённых вариантах открывает подтверждение (s-q-typechange): конструктор перестроится, варианты и отметки правильного будут потеряны; текст/сложность/медиа/теги сохраняются</td><td>edge case: смена типа с потерей данных</td></tr>
+      <tr><td>Смена типа вопроса</td><td>Смена типа в seg СОХРАНЯЕТ введённые варианты: тексты переносятся между типами без подтверждения (для Соответствия — в левую колонку), пересобирается только структура ответа (один правильный / несколько / пары / порядок). Состояние каждого типа в форме сохраняется — возврат восстанавливает специфику</td><td>решение 2026-06-16: без потери данных</td></tr>
       <tr><td>Порядок вариантов и перемешивание</td><td>Для ВСЕХ типов, кроме Ранжирования (одиночный/множественный/соответствие): автор задаёт базовый порядок вручную — перетаскиванием за ручку слева; переключатель «Случайный порядок вариантов» (рядом с вариантами, по умолчанию вкл) рандомизирует показ ученику, выключен — показ в заданном порядке (для «Все/Ничего из перечисленного» и т. п.). Ранжирование — исключение: заданный порядок и есть эталон ответа, перемешивание при выдаче обязательно и без тоггла</td><td>уточнение: ручной порядок + «Случайный порядок» для всех типов, кроме ранжирования</td></tr>
       <tr><td>⋯-меню вне карточки</td><td>Выпадающее меню рендерится вне карточки (портал), чтобы не обрезалось её границей</td><td>фикс клиппинга</td></tr>
       <tr><td>Оценка не в этом разделе</td><td>Балл/цена ответа в Drawer вопроса НЕ задаются — свойство теста</td><td>ортогональность; PRD-15 D</td></tr>
