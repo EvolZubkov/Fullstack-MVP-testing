@@ -43,7 +43,8 @@ import { drawSection } from "./blueprint";
 export interface FeasibilityQuestion {
   id: string;
   tags?: string[];
-  difficulty: number;
+  /** PRD-16: optional; null = «не задано» (doesn't fit any difficulty band). */
+  difficulty: number | null;
 }
 
 /** Draw requirement of one dependent test's section on the mutated topic. */
@@ -150,6 +151,8 @@ function checkAdaptive(
   for (const level of levels) {
     const available = pool.filter((q) => {
       const difficulty = overrides?.[q.id] ?? q.difficulty;
+      // PRD-16: «не задано» (null) doesn't fit any difficulty band.
+      if (difficulty == null) return false;
       return difficulty >= level.minDifficulty && difficulty <= level.maxDifficulty;
     }).length;
     if (available < level.questionsCount) {

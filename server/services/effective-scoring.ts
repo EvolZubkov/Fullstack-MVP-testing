@@ -40,8 +40,8 @@ export interface TestScoringSource {
 export interface TestScoringContext {
   /** Effective price + graded config of `question` inside this test. */
   resolve(question: Question): EffectiveScoring;
-  /** Effective difficulty (per-test override wins over the base, FR-34). */
-  difficultyOf(question: Question): number;
+  /** Effective difficulty (per-test override wins over the base, FR-34); null = «не задано» (PRD-16). */
+  difficultyOf(question: Question): number | null;
   /** The raw override row, if any (editor/staleness surfaces). */
   overrideFor(questionId: string): TestQuestionScoring | undefined;
 }
@@ -82,7 +82,7 @@ export function buildTestScoringContext(
       });
     },
 
-    difficultyOf(question: Question): number {
+    difficultyOf(question: Question): number | null {
       const override = overrideByQuestion.get(question.id);
       return resolveEffectiveDifficulty(override?.difficulty, question.difficulty);
     },

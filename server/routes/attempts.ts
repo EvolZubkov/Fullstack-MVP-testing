@@ -275,6 +275,8 @@ router.post("/tests/:testId/attempts/start-adaptive", requirePermission("attempt
       for (const level of topicLevels) {
         const levelQuestions = allQuestions.filter((q) => {
           const difficulty = scoring.difficultyOf(q);
+          // PRD-16: a question with no difficulty («не задано») can't be placed in a level band.
+          if (difficulty == null) return false;
           return difficulty >= level.minDifficulty && difficulty <= level.maxDifficulty;
         });
 

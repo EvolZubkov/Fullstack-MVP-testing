@@ -182,7 +182,7 @@ export function QuestionScoringModal(props: QuestionScoringModalProps) {
           label="Сложность в этом тесте"
           inputMode="numeric"
           value={difficulty}
-          placeholder={question.difficulty.toString()}
+          placeholder={question.difficulty != null ? question.difficulty.toString() : "не задано"}
           disabled={readOnly}
           hint="Используется адаптивной выдачей. Пусто — базовая сложность вопроса."
           onChange={(e) => setDifficulty(e.target.value)}

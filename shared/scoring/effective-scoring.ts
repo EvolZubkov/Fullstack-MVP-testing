@@ -144,7 +144,8 @@ export function resolveEffectiveScoring(input: ResolveScoringInput): EffectiveSc
  */
 export function resolveEffectiveDifficulty(
   override: number | null | undefined,
-  questionDifficulty: number,
-): number {
+  questionDifficulty: number | null,
+): number | null {
+  // PRD-16 FR-14: difficulty is optional; null = «не задано» (no substitution).
   return typeof override === "number" && Number.isFinite(override) ? override : questionDifficulty;
 }
