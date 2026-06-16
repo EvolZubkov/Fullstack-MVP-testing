@@ -233,7 +233,9 @@ export const questions = pgTable("questions", {
   // 028) — scoring is a property of the test, not the question. The price and the
   // graded config now live on test_question_scoring (per-test override) + section/
   // test defaults + the system default; see shared/scoring/effective-scoring.
-  difficulty: integer("difficulty").notNull().default(50),
+  // PRD-16 FR-10: difficulty is an OPTIONAL 0–100 number; NULL = «не задано».
+  // Default 50 kept for inserts that omit it; an explicit null clears it.
+  difficulty: integer("difficulty").default(50),
   mediaUrl: text("media_url"),
   mediaType: text("media_type", { enum: ["image", "audio", "video"] }),
   shuffleAnswers: boolean("shuffle_answers").notNull().default(true),
