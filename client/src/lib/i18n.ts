@@ -266,6 +266,7 @@ export const t = {
     title: "Темы и вопросы",
     description: "Единое дерево: папки, темы и вопросы в них.",
     searchPlaceholder: "Поиск по темам и вопросам…",
+    filters: "Фильтры",
     expandAll: "Развернуть всё",
     collapseAll: "Свернуть всё",
     allTopics: "Все темы",

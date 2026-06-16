@@ -1,19 +1,19 @@
 /**
  * @module features/content/content-tree
  *
- * Read-only table-tree for the unified "Темы и вопросы" section (Phase 1):
- * a single tree `Folder ⊃ Topic ⊃ Question` rendered in the visual language of
- * the tests list — column header (Название | Сложность | Вопросов), plain-number
- * counts, indent guide, bottom-border rows, no card. Question type is shown as a
- * monochrome pictogram; difficulty as an outline Tag. The tree is assembled on
- * the client from `/api/folders` + `/api/topics` + `/api/questions` (questions
- * grouped by topic). Expansion is local state; search filters by topic name and
- * question prompt and force-expands matches.
+ * Table-tree for the unified "Темы и вопросы" section: a single tree
+ * `Folder ⊃ Topic ⊃ Question` in the visual language of the tests list
+ * (column header Название | Сложность | Вопросов, plain-number counts, indent
+ * guide, no card). Question type is a monochrome pictogram; difficulty an
+ * outline Tag. The tree is assembled on the client from `/api/folders` +
+ * `/api/topics` + `/api/questions` (questions grouped by topic).
  *
- * Editing, the facet filter panel, moves, bulk operations and the FAB land in
- * later phases — see docs/PLAN_content_axis_implementation.md. Styling:
- * client/src/styles/tb-content-tree.css. Wireframe:
- * docs/wireframes/approved/content-bank-explorer.html.
+ * Phase 1: read-only tree, search, expand/collapse.
+ * Phase 2: facet filter (Тип/Сложность/Теги/Медиа/Автор/Область) + active-chip
+ * bar; filtering auto-expands the tree to matches and shows "найдено / всего"
+ * per topic. Editing, moves, bulk ops and the FAB land in later phases — see
+ * docs/PLAN_content_axis_implementation.md. Styling:
+ * client/src/styles/tb-content-tree.css.
  */
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -25,6 +25,7 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   CircleDot,
+  Filter,
   Folder as FolderIcon,
   Image as ImageIcon,
   ListOrdered,
@@ -34,8 +35,17 @@ import {
 } from "lucide-react";
 import { Button, Input, Tag, Text } from "@universityrt/ui-kit";
 import { LoadingState } from "@/components/loading-state";
+import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
 import type { Folder, Question, Topic } from "@shared/schema";
+import {
+  ContentFilters,
+  EMPTY_FILTER,
+  filterCount,
+  type ContentFilterValue,
+  type DiffBucket,
+  type MediaBucket,
+} from "@/features/content/content-filters";
 
 type QuestionType = "single" | "multiple" | "matching" | "ranking";
 
@@ -53,7 +63,9 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   ranking: "Порядок (ранжирование)",
 };
 
-/** Map a 0–100 difficulty to a Tag tone / label (easy / medium / hard). */
+function diffBucket(d: number): DiffBucket {
+  return d <= 33 ? "easy" : d <= 66 ? "medium" : "hard";
+}
 function difficultyTone(d: number): "success" | "warning" | "error" {
   return d <= 33 ? "success" : d <= 66 ? "warning" : "error";
 }
@@ -64,13 +76,26 @@ function difficultyLabel(d: number): string {
 /** Indentation class by tree depth (capped); sets --ct-depth via CSS. */
 const depthClass = (depth: number): string => `ct-d${Math.min(depth, 6)}`;
 
+interface UserLite {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+}
+
 export function ContentTree() {
+  const { user, can } = useAuth();
+  const userId = user?.id ?? "";
+
   const { data: folders = [], isLoading: loadingFolders } = useQuery<Folder[]>({ queryKey: ["/api/folders"] });
   const { data: topics = [], isLoading: loadingTopics } = useQuery<Topic[]>({ queryKey: ["/api/topics"] });
   const { data: questions = [], isLoading: loadingQuestions } = useQuery<Question[]>({ queryKey: ["/api/questions"] });
+  const { data: users = [] } = useQuery<UserLite[]>({ queryKey: ["/api/users"], enabled: can("users.read") });
 
   const [search, setSearch] = useState("");
-  // Folders are open by default (track only the collapsed ones); topics closed by default.
+  const [filter, setFilter] = useState<ContentFilterValue>(EMPTY_FILTER);
+  const [filterOpen, setFilterOpen] = useState(false);
+  // Folders open by default (track collapsed ones); topics closed by default.
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [expandedTopics, setExpandedTopics] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -106,9 +131,77 @@ export function ContentTree() {
     return map;
   }, [topics]);
 
+  const tagOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const q of questions) for (const tg of q.tags ?? []) set.add(tg);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [questions]);
+
+  const userName = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const u of users) {
+      const name = [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || u.id;
+      map.set(u.id, name);
+    }
+    return map;
+  }, [users]);
+
+  const authorOptions = useMemo(() => {
+    const ids = new Set<string>();
+    for (const q of questions) if (q.createdBy) ids.add(q.createdBy);
+    return Array.from(ids)
+      .map((id) => ({ value: id, label: userName.get(id) ?? id }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [questions, userName]);
+
   const query = search.trim().toLowerCase();
   const searching = query.length > 0;
-  const matches = (text: string) => text.toLowerCase().includes(query);
+  const facetsActive = filter.types.length > 0 || filter.diffs.length > 0 || filter.tags.length > 0 || filter.media.length > 0 || filter.author !== "";
+  const contentActive = facetsActive || searching;
+  const textMatches = (text: string) => text.toLowerCase().includes(query);
+
+  function facetMatch(q: Question): boolean {
+    if (filter.types.length && !filter.types.includes(q.type as QuestionType)) return false;
+    if (filter.diffs.length && !filter.diffs.includes(diffBucket(q.difficulty ?? 50))) return false;
+    if (filter.tags.length) {
+      const qt = q.tags ?? [];
+      if (!filter.tags.some((tg) => qt.includes(tg))) return false;
+    }
+    if (filter.media.length) {
+      const mb = (q.mediaType as MediaBucket | null) ?? "none";
+      if (!filter.media.includes(mb)) return false;
+    }
+    if (filter.author && q.createdBy !== filter.author) return false;
+    return true;
+  }
+
+  function topicInScope(topic: Topic): boolean {
+    switch (filter.scope) {
+      case "mine": return topic.ownerId === userId;
+      case "shared": return topic.visibility === "shared";
+      case "accessible": return topic.ownerId !== userId && topic.visibility !== "shared";
+      default: return true;
+    }
+  }
+
+  /** Questions of a topic to show given the current facets + search. */
+  function shownQuestions(topic: Topic): Question[] {
+    let qs = (questionsByTopic.get(topic.id) ?? []).filter(facetMatch);
+    if (searching && !textMatches(topic.name)) qs = qs.filter((q) => textMatches(q.prompt));
+    return qs;
+  }
+  function topicVisible(topic: Topic): boolean {
+    if (!topicInScope(topic)) return false;
+    if (!contentActive) return true;
+    if (shownQuestions(topic).length > 0) return true;
+    return searching && textMatches(topic.name);
+  }
+  function folderVisible(folderId: string): boolean {
+    if (!contentActive && filter.scope === "all") return true;
+    const direct = topicsByFolder.get(folderId) ?? [];
+    if (direct.some(topicVisible)) return true;
+    return (childFolders.get(folderId) ?? []).some((f) => folderVisible(f.id));
+  }
 
   function toggleFolder(id: string) {
     setCollapsedFolders((prev) => {
@@ -135,33 +228,13 @@ export function ContentTree() {
     setExpandedTopics(new Set());
   }
 
-  /** Questions of a topic to show given the current search. */
-  function shownQuestions(topic: Topic): Question[] {
-    const all = questionsByTopic.get(topic.id) ?? [];
-    if (!searching) return all;
-    if (matches(topic.name)) return all;
-    return all.filter((q) => matches(q.prompt));
-  }
-  /** Whether a topic is visible under the current search. */
-  function topicVisible(topic: Topic): boolean {
-    if (!searching) return true;
-    return matches(topic.name) || shownQuestions(topic).length > 0;
-  }
-  /** Whether a folder (or any descendant) has a visible topic. */
-  function folderVisible(folderId: string): boolean {
-    if (!searching) return true;
-    const directTopics = topicsByFolder.get(folderId) ?? [];
-    if (directTopics.some(topicVisible)) return true;
-    const subs = childFolders.get(folderId) ?? [];
-    return subs.some((f) => folderVisible(f.id));
-  }
-
   const rows: React.ReactNode[] = [];
 
   function pushTopic(topic: Topic, depth: number) {
     if (!topicVisible(topic)) return;
-    const count = (questionsByTopic.get(topic.id) ?? []).length;
-    const open = searching || expandedTopics.has(topic.id);
+    const total = (questionsByTopic.get(topic.id) ?? []).length;
+    const open = contentActive || expandedTopics.has(topic.id);
+    const countLabel = contentActive ? `${shownQuestions(topic).length} / ${total}` : `${total}`;
     rows.push(
       <div
         key={`t-${topic.id}`}
@@ -176,12 +249,10 @@ export function ContentTree() {
           <span className="ct-name__label">{topic.name}</span>
         </div>
         <div className="ct-cell" />
-        <div className="ct-cell">{count}</div>
+        <div className="ct-cell">{countLabel}</div>
       </div>,
     );
-    if (open) {
-      for (const q of shownQuestions(topic)) pushQuestion(q, depth + 1);
-    }
+    if (open) for (const q of shownQuestions(topic)) pushQuestion(q, depth + 1);
   }
 
   function pushQuestion(q: Question, depth: number) {
@@ -203,7 +274,7 @@ export function ContentTree() {
 
   function pushFolder(folder: Folder, depth: number) {
     if (!folderVisible(folder.id)) return;
-    const open = searching || !collapsedFolders.has(folder.id);
+    const open = contentActive || !collapsedFolders.has(folder.id);
     const topicCount = (topicsByFolder.get(folder.id) ?? []).length;
     rows.push(
       <div
@@ -233,6 +304,7 @@ export function ContentTree() {
   for (const tp of topicsByFolder.get(null) ?? []) pushTopic(tp, 0);
 
   const isLoading = loadingFolders || loadingTopics || loadingQuestions;
+  const activeCount = filterCount(filter);
 
   return (
     <div className="tb-content-tree">
@@ -244,12 +316,22 @@ export function ContentTree() {
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t.content.searchPlaceholder}
             aria-label={t.content.searchPlaceholder}
+            fullWidth
           />
         </div>
+        <Button
+          variant={filterOpen || activeCount > 0 ? "secondary" : "ghost"}
+          leadingIcon={<Filter size={16} />}
+          onClick={() => setFilterOpen((v) => !v)}
+        >
+          {t.content.filters}{activeCount > 0 ? ` (${activeCount})` : ""}
+        </Button>
         <span className="ct-spacer" />
         <Button variant="ghost" leadingIcon={<ChevronsUpDown size={16} />} onClick={expandAll}>{t.content.expandAll}</Button>
         <Button variant="ghost" leadingIcon={<ChevronsDownUp size={16} />} onClick={collapseAll}>{t.content.collapseAll}</Button>
       </div>
+
+      <ContentFilters value={filter} onChange={setFilter} open={filterOpen} tagOptions={tagOptions} authorOptions={authorOptions} />
 
       {isLoading ? (
         <LoadingState message={t.content.loading} />
