@@ -396,6 +396,8 @@ export const t = {
     orderItems: "Расположите в правильном порядке",
     difficulty: "Сложность",
     difficultyHint: "0 — очень легко, 100 — очень сложно",
+    difficultyUnset: "Не задано",
+    difficultyNotSet: "Не задано",
     allDifficulties: "Все уровни",
     difficultyEasy: "Лёгкие (0-33)",
     difficultyMedium: "Средние (34-66)",

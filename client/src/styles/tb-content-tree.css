@@ -12,11 +12,35 @@
 
 .tb-content-tree { display: flex; flex-direction: column; }
 
-/* Toolbar above the tree */
-.tb-content-tree .ct-toolbar { display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; margin-bottom: var(--ou-space-4); }
+/* Toolbar above the tree (anchor for the filter popover) */
+.tb-content-tree .ct-toolbar { position: relative; display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; margin-bottom: var(--ou-space-4); }
 .tb-content-tree .ct-search { flex: 1; min-width: var(--wf-size-200, 200px); }
 .tb-content-tree .ct-search .ou-field { width: 100%; }
 .tb-content-tree .ct-spacer { flex: 1; }
+
+/* Filter popover (floating over the tree, anchored under the toolbar) */
+.tb-content-tree .ct-filterpop {
+  position: absolute; top: calc(100% + var(--ou-space-1)); left: 0; z-index: 30;
+  width: var(--wf-size-620, 620px); max-width: calc(100% - var(--ou-space-6) * 2);
+  background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-lg);
+}
+.tb-content-tree .ct-filterpop__body {
+  display: flex; flex-direction: column; gap: var(--ou-space-5);
+  padding: var(--ou-space-4); max-height: 70vh; overflow: auto;
+}
+.tb-content-tree .ct-facet { display: flex; flex-direction: column; gap: var(--ou-space-2); min-width: 0; }
+.tb-content-tree .ct-facet__lbl { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); }
+.tb-content-tree .ct-facet__row { display: flex; flex-wrap: wrap; gap: var(--ou-space-2) var(--ou-space-4); }
+.tb-content-tree .ct-filterpop__foot {
+  display: flex; align-items: center; gap: var(--ou-space-3);
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border-top: 1px solid var(--ou-border-default);
+}
+
+/* Active-condition chips + result note */
+.tb-content-tree .ct-chips { margin-bottom: var(--ou-space-3); }
+.tb-content-tree .ct-filternote { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-3); }
 
 /* Tree + columns: НАЗВАНИЕ | СЛОЖНОСТЬ | ВОПРОСОВ (actions column added in a later phase) */
 .tb-content-tree .ct-tree { display: flex; flex-direction: column; }
@@ -56,6 +80,7 @@
 .tb-content-tree .ct-twist--leaf { visibility: hidden; }
 .tb-content-tree .ct-ico--topic { color: var(--ou-accent-default); }
 .tb-content-tree .ct-cell { font: var(--ou-text-body-s); color: var(--ou-fg-default); text-align: center; padding: 0 var(--ou-space-2); }
+.tb-content-tree .ct-na { color: var(--ou-fg-muted); }
 .tb-content-tree .ct-qmedia { color: var(--ou-fg-muted); width: var(--ou-space-4); height: var(--ou-space-4); display: inline-flex; flex: none; }
 
 /* Root label "Все темы (N)" */
