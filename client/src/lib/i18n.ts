@@ -271,6 +271,7 @@ export const t = {
     collapseAll: "Свернуть всё",
     allTopics: "Все темы",
     colName: "Название",
+    colOwner: "Владелец",
     colDifficulty: "Сложность",
     colQuestions: "Вопросов",
     loading: "Загрузка…",

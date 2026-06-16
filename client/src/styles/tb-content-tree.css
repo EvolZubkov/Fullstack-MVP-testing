@@ -10,10 +10,13 @@
  * `.tb-content-tree` to avoid global leakage. Imported from client/src/index.css.
  */
 
-.tb-content-tree { display: flex; flex-direction: column; }
+/* Page wrapper fills the shell main so the tree scrolls internally and the
+   title + toolbar + table header stay put (sticky region). */
+.tb-content-page { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tb-content-tree { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
 /* Toolbar above the tree (anchor for the filter popover) */
-.tb-content-tree .ct-toolbar { position: relative; display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; margin-bottom: var(--ou-space-4); }
+.tb-content-tree .ct-toolbar { position: relative; display: flex; align-items: center; gap: var(--ou-space-2); flex-wrap: wrap; margin-bottom: var(--ou-space-4); flex-shrink: 0; }
 .tb-content-tree .ct-search { flex: 1; min-width: var(--wf-size-200, 200px); }
 .tb-content-tree .ct-search .ou-field { width: 100%; }
 .tb-content-tree .ct-spacer { flex: 1; }
@@ -42,8 +45,9 @@
 .tb-content-tree .ct-chips { margin-bottom: var(--ou-space-3); }
 .tb-content-tree .ct-filternote { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-3); }
 
-/* Tree + columns: НАЗВАНИЕ | СЛОЖНОСТЬ | ВОПРОСОВ | ⋯ actions */
-.tb-content-tree .ct-tree { display: flex; flex-direction: column; }
+/* Tree + columns: НАЗВАНИЕ | ВЛАДЕЛЕЦ | СЛОЖНОСТЬ | ВОПРОСОВ | ⋯ actions.
+   The tree scrolls internally; the column header (.ct-thead) is sticky. */
+.tb-content-tree .ct-tree { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow-y: auto; }
 
 /* Depth-based indentation (avoids inline styles; --ct-depth drives .ct-name padding) */
 .tb-content-tree .ct-d0 { --ct-depth: 0; }
@@ -56,13 +60,15 @@
 .tb-content-tree .ct-thead,
 .tb-content-tree .ct-row {
   display: grid;
-  grid-template-columns: 1fr var(--wf-size-110, 116px) var(--wf-size-95, 96px) var(--wf-size-90, 88px);
+  grid-template-columns: 1fr var(--wf-size-150, 150px) var(--wf-size-110, 116px) var(--wf-size-95, 96px) var(--wf-size-90, 88px);
   align-items: center;
   border-bottom: 1px solid var(--ou-border-default);
 }
-.tb-content-tree .ct-thead { font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .05em; }
+.tb-content-tree .ct-thead { font: var(--ou-text-caption); font-weight: 600; color: var(--ou-fg-muted); text-transform: uppercase; letter-spacing: .05em; position: sticky; top: 0; z-index: 2; background: var(--ou-bg-page); }
 .tb-content-tree .ct-thead > div { padding: var(--ou-space-2); text-align: center; }
 .tb-content-tree .ct-thead > div:first-child { text-align: left; padding-left: var(--ou-space-3); }
+.tb-content-tree .ct-thead > div:nth-child(2) { text-align: left; }
+.tb-content-tree .ct-owner { font: var(--ou-text-body-s); color: var(--ou-fg-muted); padding: 0 var(--ou-space-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .tb-content-tree .ct-row { min-height: var(--wf-size-44, 44px); cursor: pointer; -webkit-user-select: none; user-select: none; }
 .tb-content-tree .ct-row:hover { background: var(--ou-bg-hover); }
@@ -84,7 +90,7 @@
 .tb-content-tree .ct-qmedia { color: var(--ou-fg-muted); width: var(--ou-space-4); height: var(--ou-space-4); display: inline-flex; flex: none; }
 
 /* Root label "Все темы (N)" */
-.tb-content-tree .ct-rootrow { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3); font: var(--ou-text-body-s); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); border-bottom: 1px solid var(--ou-border-default); }
+.tb-content-tree .ct-rootrow { display: flex; align-items: center; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3) var(--ou-space-2) calc(var(--ou-space-3) + var(--ou-space-5) + var(--ou-space-2)); font: var(--ou-text-body-s); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); border-bottom: 1px solid var(--ou-border-default); }
 
 /* Folder */
 .tb-content-tree .ct-row--folder .ct-name__label { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ou-fg-muted); }
@@ -95,13 +101,25 @@
 .tb-content-tree .ct-row--topic.is-open,
 .tb-content-tree .ct-row--topic.is-open:hover { background: var(--ou-accent-soft); box-shadow: inset 3px 0 0 var(--ou-accent-default); }
 
-/* Question — leaf under an indent guide */
+/* Question — leaf under an indent guide. The vertical guide aligns under the
+   parent topic's chevron: a question at --ct-depth nests under a topic at
+   --ct-depth - 1, whose twist centre is space-3 + ct-depth*space-5 + space-4
+   (one indent step + the leading checkbox slot + half the twist glyph). */
 .tb-content-tree .ct-row--q .ct-name { position: relative; }
 .tb-content-tree .ct-row--q .ct-name::before {
   content: ""; position: absolute;
-  left: calc(var(--ou-space-3) + (var(--ct-depth, 0) - 1) * var(--ou-space-5) + var(--ou-space-2));
+  left: calc(var(--ou-space-3) + var(--ct-depth, 0) * var(--ou-space-5) + var(--ou-space-4));
   top: 0; bottom: 0; width: 1px; background: var(--ou-border-default);
 }
+
+/* Inline read-only question preview (expanded question row) */
+.tb-content-tree .ct-qpreview-row {
+  border-bottom: 1px solid var(--ou-border-default);
+  background: var(--ou-bg-subtle, var(--ou-bg-hover));
+  padding: var(--ou-space-2) var(--ou-space-4) var(--ou-space-2)
+           calc(var(--ou-space-3) + var(--ct-depth, 0) * var(--ou-space-5) + var(--ou-space-6));
+}
+.tb-content-tree .ct-qpreview { max-width: 40rem; }
 
 /* States */
 .tb-content-tree .ct-empty { padding: var(--ou-space-7) var(--ou-space-3); }
@@ -136,8 +154,14 @@
 .tb-content-tree .ct-menu__item.is-danger:hover { background: var(--ou-error-soft); }
 .tb-content-tree .ct-menu__sep { height: 1px; background: var(--ou-border-default); margin: var(--ou-space-1) 0; border: none; }
 
-/* Select checkbox on question + topic rows (revealed on hover / when selected) */
-.tb-content-tree .ct-qcheck { flex: none; display: inline-flex; opacity: 0; transition: opacity .12s; }
+/* Selection checkbox — a fixed-width LEADING slot in the name cell, in normal
+   flow (so it is fully clickable). Folders render an empty slot of the same
+   width, so the chevron stays visible AND topics/questions align with folders at
+   the same depth. Revealed on hover / when selected. */
+.tb-content-tree .ct-qcheck {
+  flex: none; width: var(--ou-space-5); display: inline-flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .12s;
+}
 .tb-content-tree .ct-row--q:hover .ct-qcheck,
 .tb-content-tree .ct-row--q.is-selected .ct-qcheck,
 .tb-content-tree .ct-row--topic:hover .ct-qcheck,

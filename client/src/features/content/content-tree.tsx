@@ -61,6 +61,7 @@ import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
 import type { Folder, Question, Topic } from "@shared/schema";
 import { QuestionEditorDrawer } from "@/features/questions/question-editor-drawer";
+import { QuestionPreview } from "@/features/content/question-preview";
 import { TopicDrawer, type TopicDrawerTarget } from "@/features/topics/topic-drawer";
 import { useContentGuard } from "@/features/content-protection/use-content-guard";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
@@ -203,6 +204,8 @@ export function ContentTree() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [expandedTopics, setExpandedTopics] = useState<ReadonlySet<string>>(() => new Set());
+  // PRD-16: inline read-only preview of a question (expand a question row).
+  const [expandedQuestions, setExpandedQuestions] = useState<ReadonlySet<string>>(() => new Set());
 
   // ── Phase 3: interaction layer (⋯-menus, FAB, drawers, move pickers, bulk) ──
   const { toast } = useToast();
@@ -337,13 +340,24 @@ export function ContentTree() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [questions]);
 
+  const userNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const u of users) m.set(u.id, [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || u.id);
+    return m;
+  }, [users]);
+
   const authorOptions = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const u of users) names.set(u.id, [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || u.id);
     const ids = new Set<string>();
     for (const q of questions) if (q.createdBy) ids.add(q.createdBy);
-    return Array.from(ids).map((id) => ({ value: id, label: names.get(id) ?? id })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [users, questions]);
+    return Array.from(ids).map((id) => ({ value: id, label: userNameById.get(id) ?? id })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [questions, userNameById]);
+
+  /** Display name of a topic owner (PRD-15 block C). null owner = общий пул. */
+  const ownerLabel = (ownerId: string | null): string => {
+    if (!ownerId) return "—";
+    if (ownerId === userId) return user?.name || user?.email || "—";
+    return userNameById.get(ownerId) ?? "—";
+  };
 
   const query = debouncedSearch.trim().toLowerCase();
   const searching = query.length > 0;
@@ -387,6 +401,9 @@ export function ContentTree() {
   function toggleTopic(id: string) {
     setExpandedTopics((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
+  function toggleQuestion(id: string) {
+    setExpandedQuestions((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
   function expandAll() { setCollapsedFolders(new Set()); setExpandedTopics(new Set(topics.map((tp) => tp.id))); }
   function collapseAll() { setCollapsedFolders(new Set(folders.map((f) => f.id))); setExpandedTopics(new Set()); }
 
@@ -414,6 +431,7 @@ export function ContentTree() {
           <span className="ct-ico ct-ico--topic"><Bookmark size={16} /></span>
           <span className="ct-name__label">{topic.name}</span>
         </div>
+        <div className="ct-owner">{ownerLabel(topic.ownerId ?? null)}</div>
         <div className="ct-cell" />
         <div className="ct-cell">{contentActive ? `${shown.length} / ${total}` : `${total}`}</div>
         <RowActions open={menuOpen} label={t.content.actionsTopic} onToggle={() => setMenu(menuOpen ? null : { kind: "topic", id: topic.id })}>
@@ -434,16 +452,19 @@ export function ContentTree() {
     const Icon = TYPE_ICON[type] ?? CircleDot;
     const menuOpen = menu?.kind === "question" && menu.id === q.id;
     const isSel = selected.has(q.id);
+    const qOpen = expandedQuestions.has(q.id);
     rows.push(
-      <div key={`q-${q.id}`} className={`ct-row ct-row--q ${depthClass(depth)}${isSel ? " is-selected" : ""}`} onClick={() => setEditorTarget({ question: q })} role="button" tabIndex={0}>
+      <div key={`q-${q.id}`} className={`ct-row ct-row--q ${depthClass(depth)}${isSel ? " is-selected" : ""}${qOpen ? " is-open" : ""}`} onClick={() => toggleQuestion(q.id)} role="button" tabIndex={0}>
         <div className="ct-name">
           <span className="ct-qcheck" onClick={(e) => e.stopPropagation()}>
             <Checkbox checked={isSel} onChange={() => toggleSelected(q.id)} aria-label={t.content.selectQuestion} />
           </span>
+          <span className="ct-twist">{qOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
           <span className="ct-qtype" title={TYPE_LABEL[type]}><Icon size={16} /></span>
           <span className="ct-name__label">{q.prompt}</span>
           {q.mediaType ? <span className="ct-qmedia" title="С медиа"><ImageIcon size={16} /></span> : null}
         </div>
+        <div className="ct-owner" />
         <div className="ct-cell">{q.difficulty != null ? q.difficulty : <span className="ct-na">{t.questions.difficultyNotSet}</span>}</div>
         <div className="ct-cell" />
         <RowActions open={menuOpen} label={t.content.actionsQuestion} onToggle={() => setMenu(menuOpen ? null : { kind: "question", id: q.id })}>
@@ -454,6 +475,13 @@ export function ContentTree() {
         </RowActions>
       </div>,
     );
+    if (qOpen) {
+      rows.push(
+        <div key={`qp-${q.id}`} className={`ct-qpreview-row ${depthClass(depth)}`}>
+          <QuestionPreview question={q} />
+        </div>,
+      );
+    }
   }
 
   function pushFolder(folder: Folder, depth: number) {
@@ -464,11 +492,13 @@ export function ContentTree() {
     rows.push(
       <div key={`f-${folder.id}`} className={`ct-row ct-row--folder ${depthClass(depth)}`} onClick={() => toggleFolder(folder.id)} role="button" tabIndex={0}>
         <div className="ct-name">
+          <span className="ct-qcheck" aria-hidden="true" />
           <span className="ct-twist">{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
           <span className="ct-ico"><FolderIcon size={16} /></span>
           <span className="ct-name__label">{folder.name}</span>
           <span className="ct-foldercount">{topicCount} {t.navigation.topics.toLowerCase()}</span>
         </div>
+        <div className="ct-owner" />
         <div className="ct-cell" />
         <div className="ct-cell" />
         <RowActions open={menuOpen} label={t.content.actionsFolder} onToggle={() => setMenu(menuOpen ? null : { kind: "folder", id: folder.id })}>
@@ -570,6 +600,7 @@ export function ContentTree() {
         <div className="ct-tree" aria-label={t.content.title}>
           <div className="ct-thead">
             <div>{t.content.colName}</div>
+            <div>{t.content.colOwner}</div>
             <div>{t.content.colDifficulty}</div>
             <div>{t.content.colQuestions}</div>
             <div />

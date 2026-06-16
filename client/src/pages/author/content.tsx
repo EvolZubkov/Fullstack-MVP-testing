@@ -17,7 +17,7 @@ import { t } from "@/lib/i18n";
 
 export default function ContentPage() {
   return (
-    <div>
+    <div className="tb-content-page">
       <PageHeader title={t.content.title} description={t.content.description} />
       <ContentTree />
     </div>
