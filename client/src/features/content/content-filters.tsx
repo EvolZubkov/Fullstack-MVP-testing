@@ -12,6 +12,7 @@
  */
 import { Button, Checkbox, SegmentedControl, Select, Slider, Switch, TagInput } from "@universityrt/ui-kit";
 import { normalizeTag, tagKey, TAG_MAX_LENGTH } from "@shared/tags";
+import { t } from "@/lib/i18n";
 
 export type QuestionType = "single" | "multiple" | "matching" | "ranking";
 export type MediaBucket = "image" | "audio" | "video" | "none";
@@ -45,10 +46,10 @@ export function filterCount(f: ContentFilterValue): number {
 }
 
 export const TYPE_OPTS: { value: QuestionType; label: string }[] = [
-  { value: "single", label: "Одиночный" },
-  { value: "multiple", label: "Множественный" },
-  { value: "matching", label: "Соответствие" },
-  { value: "ranking", label: "Порядок" },
+  { value: "single", label: t.questions.singleChoice },
+  { value: "multiple", label: t.questions.multipleChoice },
+  { value: "matching", label: t.questions.matching },
+  { value: "ranking", label: t.questions.ranking },
 ];
 export const MEDIA_OPTS: { value: MediaBucket; label: string }[] = [
   { value: "image", label: "С изображением" },

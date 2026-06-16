@@ -42,7 +42,7 @@
 .tb-content-tree .ct-chips { margin-bottom: var(--ou-space-3); }
 .tb-content-tree .ct-filternote { font: var(--ou-text-caption); color: var(--ou-fg-muted); margin-bottom: var(--ou-space-3); }
 
-/* Tree + columns: НАЗВАНИЕ | СЛОЖНОСТЬ | ВОПРОСОВ (actions column added in a later phase) */
+/* Tree + columns: НАЗВАНИЕ | СЛОЖНОСТЬ | ВОПРОСОВ | ⋯ actions */
 .tb-content-tree .ct-tree { display: flex; flex-direction: column; }
 
 /* Depth-based indentation (avoids inline styles; --ct-depth drives .ct-name padding) */
@@ -56,7 +56,7 @@
 .tb-content-tree .ct-thead,
 .tb-content-tree .ct-row {
   display: grid;
-  grid-template-columns: 1fr var(--wf-size-110, 116px) var(--wf-size-95, 96px);
+  grid-template-columns: 1fr var(--wf-size-110, 116px) var(--wf-size-95, 96px) var(--wf-size-90, 88px);
   align-items: center;
   border-bottom: 1px solid var(--ou-border-default);
 }
@@ -106,3 +106,73 @@
 /* States */
 .tb-content-tree .ct-empty { padding: var(--ou-space-7) var(--ou-space-3); }
 .tb-content-tree .ct-more { padding: var(--ou-space-3); font: var(--ou-text-body-s); color: var(--ou-fg-muted); }
+
+/* ── Phase 3: per-row ⋯ actions (mirrors the tests-list dropdown pattern) ──── */
+.tb-content-tree .ct-acts { display: flex; align-items: center; justify-content: flex-end; padding-right: var(--ou-space-3); }
+.tb-content-tree .ct-more-wrap { position: relative; }
+.tb-content-tree .ct-actbtn {
+  width: var(--wf-size-28, 28px); height: var(--wf-size-28, 28px); border-radius: var(--ou-radius-s);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: none; cursor: pointer; color: var(--ou-fg-muted);
+}
+.tb-content-tree .ct-actbtn:hover { background: var(--ou-bg-active, var(--ou-bg-hover)); color: var(--ou-fg-default); }
+
+/* Dropdown menu (anchored to the ⋯ button) */
+.tb-content-tree .ct-menu {
+  position: absolute; top: calc(100% + var(--ou-space-1)); right: 0; z-index: 40;
+  min-width: var(--wf-size-200, 200px);
+  background: var(--ou-bg-elevated); border: 1px solid var(--ou-border-default);
+  border-radius: var(--ou-radius-m); box-shadow: var(--ou-shadow-lg);
+  padding: var(--ou-space-1); display: flex; flex-direction: column;
+}
+.tb-content-tree .ct-menu__item {
+  display: flex; align-items: center; gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-3); border-radius: var(--ou-radius-s);
+  background: transparent; border: none; cursor: pointer; text-align: left;
+  font: var(--ou-text-body-s); color: var(--ou-fg-default); white-space: nowrap;
+}
+.tb-content-tree .ct-menu__item:hover { background: var(--ou-bg-hover); }
+.tb-content-tree .ct-menu__item.is-danger { color: var(--ou-error-default); }
+.tb-content-tree .ct-menu__item.is-danger:hover { background: var(--ou-error-soft); }
+.tb-content-tree .ct-menu__sep { height: 1px; background: var(--ou-border-default); margin: var(--ou-space-1) 0; border: none; }
+
+/* Select checkbox on question + topic rows (revealed on hover / when selected) */
+.tb-content-tree .ct-qcheck { flex: none; display: inline-flex; opacity: 0; transition: opacity .12s; }
+.tb-content-tree .ct-row--q:hover .ct-qcheck,
+.tb-content-tree .ct-row--q.is-selected .ct-qcheck,
+.tb-content-tree .ct-row--topic:hover .ct-qcheck,
+.tb-content-tree .ct-row--topic.is-tselected .ct-qcheck { opacity: 1; }
+.tb-content-tree .ct-row--q.is-selected { background: var(--ou-accent-soft); }
+
+/* Speed-dial FAB (canon: tests-list). The wrap is a FIXED 56×56 box so the
+   toggle stays put; the actions float ABSOLUTELY above it (else, in flow, the
+   growing list would shove the toggle up over its own items). */
+.tb-content-tree .ct-fab-wrap { position: fixed; bottom: var(--ou-space-6); right: var(--ou-space-6); z-index: 30; width: var(--wf-size-56, 56px); height: var(--wf-size-56, 56px); }
+.tb-content-tree .ct-fab-actions {
+  position: absolute; bottom: calc(100% + var(--ou-space-3));
+  right: calc((var(--wf-size-56, 56px) - var(--wf-size-44, 44px)) / 2);
+  display: flex; flex-direction: column; gap: var(--ou-space-2); align-items: flex-end; width: max-content;
+}
+.tb-content-tree .ct-fab-action { display: flex; align-items: center; gap: var(--ou-space-2); }
+.tb-content-tree .ct-fab-action-label {
+  font: var(--ou-text-body-s); font-weight: 500; background: var(--ou-bg-elevated); color: var(--ou-fg-default);
+  border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-s);
+  padding: var(--ou-space-1) var(--ou-space-3); box-shadow: var(--ou-shadow-xs); white-space: nowrap;
+}
+.tb-content-tree .ct-fab-action-btn {
+  width: var(--wf-size-44, 44px); height: var(--wf-size-44, 44px); border-radius: var(--ou-radius-pill);
+  background: var(--ou-bg-elevated); color: var(--ou-fg-default); border: 1px solid var(--ou-border-default);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: var(--ou-shadow-s); flex-shrink: 0;
+}
+.tb-content-tree .ct-fab-action-btn:hover { background: var(--ou-bg-hover); }
+.tb-content-tree .ou-fab--open { transform: rotate(45deg); }
+
+/* Bulk-action bar (shown when questions are selected) */
+.tb-content-tree .ct-bulkbar {
+  display: flex; align-items: center; gap: var(--ou-space-3);
+  padding: var(--ou-space-2) var(--ou-space-3); margin-bottom: var(--ou-space-3);
+  background: var(--ou-accent-soft); border: 1px solid var(--ou-accent-default);
+  border-radius: var(--ou-radius-m);
+}
+.tb-content-tree .ct-bulkbar__count { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-default); }
+.tb-content-tree .ct-bulkbar__spacer { flex: 1; }

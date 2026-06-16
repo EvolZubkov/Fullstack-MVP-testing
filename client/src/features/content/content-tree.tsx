@@ -10,8 +10,14 @@
  * Phase 1: read-only tree, search, expand/collapse.
  * Phase 2: facet filter as a popover (Тип/Сложность/Теги/Медиа/Автор/Область)
  * with «Сбросить всё» / «Применить»; active-condition Chips; auto-expand to
- * matches with a "найдено / всего" count and a result note. Matches the approved
- * wireframe docs/wireframes/approved/content-bank-explorer.html.
+ * matches with a "найдено / всего" count and a result note.
+ * Phase 3: interaction layer matching the wireframe — an always-visible ⋯ menu
+ * on every row (folder/topic/question), a question select checkbox + bulk-action
+ * bar, a speed-dial FAB (create folder/topic/question), question-row click → the
+ * shared {@link QuestionEditorDrawer}, the {@link TopicDrawer} for topic
+ * settings/access, and move pickers (question→topic, topic→folder). Question
+ * deletes/moves pass the PRD-15 content guard. Matches the approved wireframe
+ * docs/wireframes/approved/content-bank-explorer.html.
  *
  * Performance: the per-topic filtered question lists are memoized (one pass per
  * data/filter change, not per render); free-text search is debounced; filters
@@ -20,7 +26,7 @@
  * docs/PLAN_content_axis_implementation.md.
  */
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bookmark,
   CheckSquare,
@@ -29,19 +35,35 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   CircleDot,
+  Copy,
+  Download,
   Filter,
   Folder as FolderIcon,
+  FolderPlus,
   Image as ImageIcon,
+  KeyRound,
   ListOrdered,
+  MoreHorizontal,
+  Move,
+  Pencil,
+  Plus,
   Search,
+  Trash2,
   Unplug,
   type LucideIcon,
 } from "lucide-react";
-import { Button, Chip, Cluster, Input, Text } from "@universityrt/ui-kit";
+import { Button, Checkbox, Chip, Cluster, Input, Label, ModalDialog, Select, Stack, Text } from "@universityrt/ui-kit";
 import { LoadingState } from "@/components/loading-state";
+import { FolderTreeSelect } from "@/components/folder-tree-select";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { t } from "@/lib/i18n";
 import type { Folder, Question, Topic } from "@shared/schema";
+import { QuestionEditorDrawer } from "@/features/questions/question-editor-drawer";
+import { TopicDrawer, type TopicDrawerTarget } from "@/features/topics/topic-drawer";
+import { useContentGuard } from "@/features/content-protection/use-content-guard";
+import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import {
   ContentFilters,
   diffActive,
@@ -54,14 +76,65 @@ import {
   type MediaBucket,
 } from "@/features/content/content-filters";
 
+/** Open ⋯-menu (one at a time across the whole tree). */
+type OpenMenu = { kind: "folder" | "topic" | "question"; id: string } | null;
+
+/** A small reusable ⋯ actions cell + anchored dropdown (mirrors the tests-list pattern). */
+function RowActions({ open, onToggle, label, children }: {
+  open: boolean;
+  onToggle: () => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="ct-acts">
+      <div className="ct-more-wrap">
+        <button
+          type="button"
+          className="ct-actbtn"
+          aria-label={label}
+          onClick={(e) => { e.stopPropagation(); onToggle(); }}
+        >
+          <MoreHorizontal size={16} />
+        </button>
+        {open && (
+          <div className="ct-menu" onClick={(e) => e.stopPropagation()}>
+            {children}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** One dropdown action. */
+function MenuItem({ icon, danger, onClick, children, testId }: {
+  icon: React.ReactNode;
+  danger?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  testId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      className={"ct-menu__item" + (danger ? " is-danger" : "")}
+      onClick={onClick}
+      data-testid={testId}
+    >
+      {icon}{children}
+    </button>
+  );
+}
+
 type QuestionType = "single" | "multiple" | "matching" | "ranking";
 
 const TYPE_ICON: Record<QuestionType, LucideIcon> = { single: CircleDot, multiple: CheckSquare, matching: Unplug, ranking: ListOrdered };
 const TYPE_LABEL: Record<QuestionType, string> = {
-  single: "Одиночный выбор",
-  multiple: "Множественный выбор",
-  matching: "Соответствие",
-  ranking: "Порядок (ранжирование)",
+  single: t.questions.singleChoice,
+  multiple: t.questions.multipleChoice,
+  matching: t.questions.matching,
+  ranking: t.questions.ranking,
 };
 
 const depthClass = (depth: number): string => `ct-d${Math.min(depth, 6)}`;
@@ -130,6 +203,105 @@ export function ContentTree() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [collapsedFolders, setCollapsedFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [expandedTopics, setExpandedTopics] = useState<ReadonlySet<string>>(() => new Set());
+
+  // ── Phase 3: interaction layer (⋯-menus, FAB, drawers, move pickers, bulk) ──
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const contentGuard = useContentGuard();
+  const isAdmin = can("topics.owner.change");
+
+  const [menu, setMenu] = useState<OpenMenu>(null);
+  const [fabOpen, setFabOpen] = useState(false);
+  const [editorTarget, setEditorTarget] = useState<{ question: Question | null; defaultTopicId?: string } | null>(null);
+  const [topicTarget, setTopicTarget] = useState<TopicDrawerTarget | null>(null);
+  const [topicTab, setTopicTab] = useState<"props" | "access">("props");
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const [selectedTopics, setSelectedTopics] = useState<ReadonlySet<string>>(() => new Set());
+  const [moveQ, setMoveQ] = useState<{ ids: string[]; topicId: string } | null>(null);
+  const [moveTopicTarget, setMoveTopicTarget] = useState<{ id: string; folderId: string } | null>(null);
+  const [newFolder, setNewFolder] = useState<{ parentId: string | null; name: string } | null>(null);
+  const [renameFolderTarget, setRenameFolderTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ kind: "topic" | "folder"; id: string; name: string } | null>(null);
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/topics"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/folders"] });
+  };
+  const onMutError = () => toast({ variant: "destructive", title: t.common.error });
+
+  const duplicateQuestionMut = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/questions/${id}/duplicate`),
+    onSuccess: () => { invalidateAll(); toast({ title: t.questions.duplicated }); },
+    onError: onMutError,
+  });
+  const deleteTopicMut = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/topics/${id}`),
+    onSuccess: () => { invalidateAll(); setDeleteConfirm(null); },
+    onError: onMutError,
+  });
+  const deleteFolderMut = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/folders/${id}`),
+    onSuccess: () => { invalidateAll(); setDeleteConfirm(null); },
+    onError: onMutError,
+  });
+  const createFolderMut = useMutation({
+    mutationFn: (body: { name: string; parentId: string | null }) => apiRequest("POST", "/api/folders", body),
+    onSuccess: () => { invalidateAll(); setNewFolder(null); },
+    onError: onMutError,
+  });
+  const renameFolderMut = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => apiRequest("PUT", `/api/folders/${id}`, { name }),
+    onSuccess: () => { invalidateAll(); setRenameFolderTarget(null); },
+    onError: onMutError,
+  });
+  const moveTopicMut = useMutation({
+    mutationFn: ({ id, folderId }: { id: string; folderId: string | null }) => apiRequest("PUT", `/api/topics/${id}`, { folderId }),
+    onSuccess: () => { invalidateAll(); setMoveTopicTarget(null); },
+    onError: onMutError,
+  });
+  const moveQuestionsMut = useMutation({
+    mutationFn: async ({ ids, topicId }: { ids: string[]; topicId: string }) => {
+      for (const id of ids) await apiRequest("PUT", `/api/questions/${id}`, { topicId });
+    },
+    onSuccess: () => { invalidateAll(); setMoveQ(null); setSelected(new Set()); },
+    onError: () => toast({ variant: "destructive", title: t.common.error, description: "Не удалось переместить (возможно, затронуты опубликованные тесты)." }),
+  });
+
+  // Delete a question through the PRD-15 content guard (dry-run -> warn/block 409).
+  function deleteQuestion(q: Question) {
+    contentGuard.guard({
+      url: `/api/questions/${q.id}`,
+      method: "DELETE",
+      blockTitle: "Вопрос нельзя удалить: он используется в опубликованных тестах",
+      blockDescription: "Удаление сломает выдачу или оценивание опубликованных тестов.",
+      warnTitle: "Удалить вопрос? Это затронет другие тесты",
+      warnDescription: "Опубликованные тесты не пострадают, но есть последствия, о которых стоит знать.",
+      confirmLabel: t.content.deleteSelected,
+      confirmVariant: "destructive",
+      onDone: () => invalidateAll(),
+    });
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  function toggleTopicSelected(id: string) {
+    setSelectedTopics((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+  /** Export the questions of the given topics to Excel (PRD-16 — replaces the old «Вопросы» export). */
+  function exportTopicsToExcel(ids: string[]) {
+    if (ids.length === 0) return;
+    window.location.href = `/api/questions/export?topicIds=${ids.join(",")}`;
+  }
+
+  // Close any open ⋯-menu / FAB on an outside click (menus stopPropagation on themselves).
+  useEffect(() => {
+    if (!menu && !fabOpen) return;
+    const close = () => { setMenu(null); setFabOpen(false); };
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [menu, fabOpen]);
 
   const questionsByTopic = useMemo(() => {
     const map = new Map<string, Question[]>();
@@ -230,15 +402,28 @@ export function ContentTree() {
     const total = (questionsByTopic.get(topic.id) ?? []).length;
     const shown = shownByTopic.get(topic.id) ?? [];
     const open = contentActive || expandedTopics.has(topic.id);
+    const menuOpen = menu?.kind === "topic" && menu.id === topic.id;
+    const topicSel = selectedTopics.has(topic.id);
     rows.push(
-      <div key={`t-${topic.id}`} className={`ct-row ct-row--topic ${depthClass(depth)}${open ? " is-open" : ""}`} onClick={() => toggleTopic(topic.id)} role="button" tabIndex={0}>
+      <div key={`t-${topic.id}`} className={`ct-row ct-row--topic ${depthClass(depth)}${open ? " is-open" : ""}${topicSel ? " is-tselected" : ""}`} onClick={() => toggleTopic(topic.id)} role="button" tabIndex={0}>
         <div className="ct-name">
+          <span className="ct-qcheck" onClick={(e) => e.stopPropagation()}>
+            <Checkbox checked={topicSel} onChange={() => toggleTopicSelected(topic.id)} aria-label={t.content.selectTopicForExport} />
+          </span>
           <span className="ct-twist">{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
           <span className="ct-ico ct-ico--topic"><Bookmark size={16} /></span>
           <span className="ct-name__label">{topic.name}</span>
         </div>
         <div className="ct-cell" />
         <div className="ct-cell">{contentActive ? `${shown.length} / ${total}` : `${total}`}</div>
+        <RowActions open={menuOpen} label={t.content.actionsTopic} onToggle={() => setMenu(menuOpen ? null : { kind: "topic", id: topic.id })}>
+          {can("questions.manage") && <MenuItem icon={<Plus size={16} />} onClick={() => { setMenu(null); setEditorTarget({ question: null, defaultTopicId: topic.id }); }} testId={`ct-topic-addq-${topic.id}`}>{t.content.addQuestion}</MenuItem>}
+          {can("questions.importExport") && <MenuItem icon={<Download size={16} />} onClick={() => { setMenu(null); exportTopicsToExcel([topic.id]); }} testId={`ct-topic-export-${topic.id}`}>{t.content.exportToExcel}</MenuItem>}
+          {can("topics.manage") && <MenuItem icon={<Pencil size={16} />} onClick={() => { setMenu(null); setTopicTab("props"); setTopicTarget({ mode: "edit", topic }); }}>{t.content.topicSettings}</MenuItem>}
+          {can("topics.access.grant") && <MenuItem icon={<KeyRound size={16} />} onClick={() => { setMenu(null); setTopicTab("access"); setTopicTarget({ mode: "edit", topic }); }}>{t.content.topicAccess}</MenuItem>}
+          {can("topics.manage") && <MenuItem icon={<Move size={16} />} onClick={() => { setMenu(null); setMoveTopicTarget({ id: topic.id, folderId: topic.folderId ?? "" }); }}>{t.content.moveTopicToFolder}</MenuItem>}
+          {can("topics.manage") && <MenuItem danger icon={<Trash2 size={16} />} onClick={() => { setMenu(null); setDeleteConfirm({ kind: "topic", id: topic.id, name: topic.name }); }}>{t.content.deleteTopic}</MenuItem>}
+        </RowActions>
       </div>,
     );
     if (open) for (const q of shown) pushQuestion(q, depth + 1);
@@ -247,15 +432,26 @@ export function ContentTree() {
   function pushQuestion(q: Question, depth: number) {
     const type = q.type as QuestionType;
     const Icon = TYPE_ICON[type] ?? CircleDot;
+    const menuOpen = menu?.kind === "question" && menu.id === q.id;
+    const isSel = selected.has(q.id);
     rows.push(
-      <div key={`q-${q.id}`} className={`ct-row ct-row--q ${depthClass(depth)}`}>
+      <div key={`q-${q.id}`} className={`ct-row ct-row--q ${depthClass(depth)}${isSel ? " is-selected" : ""}`} onClick={() => setEditorTarget({ question: q })} role="button" tabIndex={0}>
         <div className="ct-name">
+          <span className="ct-qcheck" onClick={(e) => e.stopPropagation()}>
+            <Checkbox checked={isSel} onChange={() => toggleSelected(q.id)} aria-label={t.content.selectQuestion} />
+          </span>
           <span className="ct-qtype" title={TYPE_LABEL[type]}><Icon size={16} /></span>
           <span className="ct-name__label">{q.prompt}</span>
           {q.mediaType ? <span className="ct-qmedia" title="С медиа"><ImageIcon size={16} /></span> : null}
         </div>
         <div className="ct-cell">{q.difficulty != null ? q.difficulty : <span className="ct-na">{t.questions.difficultyNotSet}</span>}</div>
         <div className="ct-cell" />
+        <RowActions open={menuOpen} label={t.content.actionsQuestion} onToggle={() => setMenu(menuOpen ? null : { kind: "question", id: q.id })}>
+          <MenuItem icon={<Pencil size={16} />} onClick={() => { setMenu(null); setEditorTarget({ question: q }); }} testId={`ct-q-edit-${q.id}`}>{t.content.editQuestion}</MenuItem>
+          {can("questions.manage") && <MenuItem icon={<Copy size={16} />} onClick={() => { setMenu(null); duplicateQuestionMut.mutate(q.id); }}>{t.questions.duplicate}</MenuItem>}
+          {can("questions.manage") && <MenuItem icon={<Move size={16} />} onClick={() => { setMenu(null); setMoveQ({ ids: [q.id], topicId: q.topicId }); }}>{t.content.moveQuestionToTopic}</MenuItem>}
+          {can("questions.manage") && <MenuItem danger icon={<Trash2 size={16} />} onClick={() => { setMenu(null); deleteQuestion(q); }}>{t.content.deleteSelected}</MenuItem>}
+        </RowActions>
       </div>,
     );
   }
@@ -264,6 +460,7 @@ export function ContentTree() {
     if (!folderVisible(folder.id)) return;
     const open = contentActive || !collapsedFolders.has(folder.id);
     const topicCount = (topicsByFolder.get(folder.id) ?? []).length;
+    const menuOpen = menu?.kind === "folder" && menu.id === folder.id;
     rows.push(
       <div key={`f-${folder.id}`} className={`ct-row ct-row--folder ${depthClass(depth)}`} onClick={() => toggleFolder(folder.id)} role="button" tabIndex={0}>
         <div className="ct-name">
@@ -274,6 +471,12 @@ export function ContentTree() {
         </div>
         <div className="ct-cell" />
         <div className="ct-cell" />
+        <RowActions open={menuOpen} label={t.content.actionsFolder} onToggle={() => setMenu(menuOpen ? null : { kind: "folder", id: folder.id })}>
+          {can("topics.manage") && <MenuItem icon={<Plus size={16} />} onClick={() => { setMenu(null); setTopicTab("props"); setTopicTarget({ mode: "create", folderId: folder.id }); }}>{t.content.addTopicHere}</MenuItem>}
+          {can("folders.manage") && <MenuItem icon={<FolderPlus size={16} />} onClick={() => { setMenu(null); setNewFolder({ parentId: folder.id, name: "" }); }}>{t.content.addSubfolder}</MenuItem>}
+          {can("folders.manage") && <MenuItem icon={<Pencil size={16} />} onClick={() => { setMenu(null); setRenameFolderTarget({ id: folder.id, name: folder.name }); }}>{t.content.renameFolder}</MenuItem>}
+          {can("folders.manage") && <MenuItem danger icon={<Trash2 size={16} />} onClick={() => { setMenu(null); setDeleteConfirm({ kind: "folder", id: folder.id, name: folder.name }); }}>{t.content.deleteFolder}</MenuItem>}
+        </RowActions>
       </div>,
     );
     if (open) {
@@ -336,6 +539,29 @@ export function ContentTree() {
         <div className="ct-filternote">Показано {foundQ} {plural(foundQ, "совпадение", "совпадения", "совпадений")} в {foundTopics} {plural(foundTopics, "теме", "темах", "темах")} · дерево автоматически раскрыто</div>
       )}
 
+      {selected.size > 0 && (
+        <div className="ct-bulkbar">
+          <span className="ct-bulkbar__count">{t.content.selectedCount} {selected.size}</span>
+          <span className="ct-bulkbar__spacer" />
+          {can("questions.manage") && (
+            <Button variant="secondary" size="s" leadingIcon={<Move size={16} />} onClick={() => setMoveQ({ ids: Array.from(selected), topicId: "" })}>{t.content.moveSelected}</Button>
+          )}
+          <Button variant="ghost" size="s" onClick={() => setSelected(new Set())}>{t.content.clearSelection}</Button>
+        </div>
+      )}
+
+      {/* PRD-16: selecting any topic(s) reveals the «Экспорт в Excel» action. */}
+      {selectedTopics.size > 0 && (
+        <div className="ct-bulkbar">
+          <span className="ct-bulkbar__count">{t.content.selectedTopicsCount} {selectedTopics.size}</span>
+          <span className="ct-bulkbar__spacer" />
+          {can("questions.importExport") && (
+            <Button variant="secondary" size="s" leadingIcon={<Download size={16} />} onClick={() => exportTopicsToExcel(Array.from(selectedTopics))} data-testid="ct-export-topics">{t.content.exportToExcel}</Button>
+          )}
+          <Button variant="ghost" size="s" onClick={() => setSelectedTopics(new Set())}>{t.content.clearSelection}</Button>
+        </div>
+      )}
+
       {isLoading ? (
         <LoadingState message={t.content.loading} />
       ) : topics.length === 0 ? (
@@ -346,6 +572,7 @@ export function ContentTree() {
             <div>{t.content.colName}</div>
             <div>{t.content.colDifficulty}</div>
             <div>{t.content.colQuestions}</div>
+            <div />
           </div>
           <div className="ct-rootrow">
             <span className="ct-ico"><FolderIcon size={16} /></span>
@@ -354,6 +581,217 @@ export function ContentTree() {
           {rows.length > 0 ? rows : <div className="ct-empty"><Text tone="muted">{t.content.nothingFound}</Text></div>}
         </div>
       )}
+
+      {/* Speed-dial FAB — create folder / topic / question (matches the wireframe). */}
+      <div className="ct-fab-wrap" onClick={(e) => e.stopPropagation()}>
+        {fabOpen && (
+          <div className="ct-fab-actions">
+            {can("folders.manage") && (
+              <div className="ct-fab-action">
+                <span className="ct-fab-action-label">{t.content.fabAddFolder}</span>
+                <button type="button" className="ct-fab-action-btn" aria-label={t.content.fabAddFolder} onClick={() => { setFabOpen(false); setNewFolder({ parentId: null, name: "" }); }} data-testid="ct-fab-folder"><FolderPlus size={18} /></button>
+              </div>
+            )}
+            {can("topics.manage") && (
+              <div className="ct-fab-action">
+                <span className="ct-fab-action-label">{t.content.fabAddTopic}</span>
+                <button type="button" className="ct-fab-action-btn" aria-label={t.content.fabAddTopic} onClick={() => { setFabOpen(false); setTopicTab("props"); setTopicTarget({ mode: "create" }); }} data-testid="ct-fab-topic"><Bookmark size={18} /></button>
+              </div>
+            )}
+            {can("questions.manage") && (
+              <div className="ct-fab-action">
+                <span className="ct-fab-action-label">{t.content.fabAddQuestion}</span>
+                <button type="button" className="ct-fab-action-btn" aria-label={t.content.fabAddQuestion} onClick={() => { setFabOpen(false); setEditorTarget({ question: null }); }} data-testid="ct-fab-question"><CircleDot size={18} /></button>
+              </div>
+            )}
+          </div>
+        )}
+        <button
+          type="button"
+          className={"ou-fab ou-fab--m" + (fabOpen ? " ou-fab--open" : "")}
+          aria-label={fabOpen ? t.common.cancel : t.content.createFab}
+          onClick={() => setFabOpen((v) => !v)}
+          data-testid="ct-fab-toggle"
+        >
+          <Plus size={24} />
+        </button>
+      </div>
+
+      {/* Question editor (create / edit) */}
+      <QuestionEditorDrawer
+        open={editorTarget !== null}
+        question={editorTarget?.question ?? null}
+        defaultTopicId={editorTarget?.defaultTopicId}
+        topics={topics}
+        tagSuggestions={tagOptions}
+        onClose={() => setEditorTarget(null)}
+        onSaved={invalidateAll}
+      />
+
+      {/* Topic settings / access (create / edit) */}
+      <TopicDrawer
+        target={topicTarget}
+        folders={folders}
+        isAdmin={isAdmin}
+        initialTab={topicTab}
+        onClose={() => setTopicTarget(null)}
+      />
+
+      {/* Move questions → topic */}
+      <ModalDialog
+        open={moveQ !== null}
+        onClose={() => setMoveQ(null)}
+        size="m"
+        title={t.content.moveQuestionsTitle}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setMoveQ(null)}>{t.common.cancel}</Button>
+            <Button
+              onClick={() => { if (moveQ?.topicId) moveQuestionsMut.mutate({ ids: moveQ.ids, topicId: moveQ.topicId }); }}
+              disabled={!moveQ?.topicId || moveQuestionsMut.isPending}
+              loading={moveQuestionsMut.isPending}
+              data-testid="ct-move-questions-confirm"
+            >
+              {t.content.move}
+            </Button>
+          </>
+        }
+      >
+        <Select
+          label={t.content.targetTopic}
+          value={moveQ?.topicId ?? ""}
+          onChange={(v) => setMoveQ((prev) => (prev ? { ...prev, topicId: v } : prev))}
+          placeholder={t.questions.selectTopic}
+          fullWidth
+          options={topics.map((tp) => ({ value: tp.id, label: tp.name }))}
+        />
+      </ModalDialog>
+
+      {/* Move topic → folder */}
+      <ModalDialog
+        open={moveTopicTarget !== null}
+        onClose={() => setMoveTopicTarget(null)}
+        size="m"
+        title={t.content.moveTopicTitle}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setMoveTopicTarget(null)}>{t.common.cancel}</Button>
+            <Button
+              onClick={() => { if (moveTopicTarget) moveTopicMut.mutate({ id: moveTopicTarget.id, folderId: moveTopicTarget.folderId || null }); }}
+              loading={moveTopicMut.isPending}
+              data-testid="ct-move-topic-confirm"
+            >
+              {t.content.move}
+            </Button>
+          </>
+        }
+      >
+        <Select
+          label={t.content.targetFolder}
+          value={moveTopicTarget?.folderId ?? ""}
+          onChange={(v) => setMoveTopicTarget((prev) => (prev ? { ...prev, folderId: v } : prev))}
+          fullWidth
+          options={[{ value: "", label: t.content.rootFolder }, ...folders.map((f) => ({ value: f.id, label: f.name }))]}
+        />
+      </ModalDialog>
+
+      {/* Create folder */}
+      <ModalDialog
+        open={newFolder !== null}
+        onClose={() => setNewFolder(null)}
+        size="m"
+        title={t.content.newFolderTitle}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setNewFolder(null)}>{t.common.cancel}</Button>
+            <Button
+              onClick={() => { if (newFolder?.name.trim()) createFolderMut.mutate({ name: newFolder.name.trim(), parentId: newFolder.parentId }); }}
+              disabled={!newFolder?.name.trim() || createFolderMut.isPending}
+              loading={createFolderMut.isPending}
+              data-testid="ct-new-folder-confirm"
+            >
+              {t.common.create}
+            </Button>
+          </>
+        }
+      >
+        <Stack gap={3}>
+          <Stack gap={2}>
+            <Label>{t.content.folderParent}</Label>
+            <FolderTreeSelect
+              folders={folders}
+              value={newFolder?.parentId ?? null}
+              onChange={(pid) => setNewFolder((prev) => (prev ? { ...prev, parentId: pid } : prev))}
+            />
+          </Stack>
+          <Input
+            label={t.content.folderName}
+            value={newFolder?.name ?? ""}
+            onChange={(e) => setNewFolder((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
+            fullWidth
+          />
+        </Stack>
+      </ModalDialog>
+
+      {/* Rename folder */}
+      <ModalDialog
+        open={renameFolderTarget !== null}
+        onClose={() => setRenameFolderTarget(null)}
+        size="m"
+        title={t.content.renameFolder}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRenameFolderTarget(null)}>{t.common.cancel}</Button>
+            <Button
+              onClick={() => { if (renameFolderTarget?.name.trim()) renameFolderMut.mutate({ id: renameFolderTarget.id, name: renameFolderTarget.name.trim() }); }}
+              disabled={!renameFolderTarget?.name.trim() || renameFolderMut.isPending}
+              loading={renameFolderMut.isPending}
+            >
+              {t.common.update}
+            </Button>
+          </>
+        }
+      >
+        <Input
+          label={t.content.folderName}
+          value={renameFolderTarget?.name ?? ""}
+          onChange={(e) => setRenameFolderTarget((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
+          fullWidth
+        />
+      </ModalDialog>
+
+      {/* Delete confirm (topic / folder) */}
+      <ModalDialog
+        open={deleteConfirm !== null}
+        onClose={() => setDeleteConfirm(null)}
+        size="m"
+        title={deleteConfirm?.kind === "topic" ? t.content.deleteTopic : t.content.deleteFolder}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>{t.common.cancel}</Button>
+            <Button
+              variant="destructive"
+              loading={deleteTopicMut.isPending || deleteFolderMut.isPending}
+              onClick={() => {
+                if (!deleteConfirm) return;
+                if (deleteConfirm.kind === "topic") deleteTopicMut.mutate(deleteConfirm.id);
+                else deleteFolderMut.mutate(deleteConfirm.id);
+              }}
+              data-testid="ct-delete-confirm"
+            >
+              {t.content.deleteSelected}
+            </Button>
+          </>
+        }
+      >
+        <Text>
+          {(deleteConfirm?.kind === "topic" ? t.content.confirmDeleteTopic : t.content.confirmDeleteFolder)}
+          {deleteConfirm ? ` («${deleteConfirm.name}»)` : ""}
+        </Text>
+      </ModalDialog>
+
+      {/* PRD-15 content guard for question deletes/moves affecting published tests */}
+      <ContentImpactDialog {...contentGuard.dialogProps} />
     </div>
   );
 }

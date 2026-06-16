@@ -18,12 +18,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Drawer, Button, IconButton, Avatar, Select, Combobox, EmptyState, Table,
+  Drawer, Button, IconButton, Avatar, Label, Select, Combobox, EmptyState, Table,
   Switch, Tag, Banner, ModalDialog, Tabs, Input, Textarea, Box, Cluster, Stack, Text,
 } from "@universityrt/ui-kit";
 import { Trash2, KeyRound, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { FolderTreeSelect } from "@/components/folder-tree-select";
 import { FeedbackEditorModal } from "@/features/tests/editor/sections/feedback-editor-modal";
 import { FeedbackPreview } from "@/features/tests/editor/sections/feedback-preview";
 import type { FeedbackContent, Folder as FolderType, Topic } from "@shared/schema";
@@ -64,7 +65,6 @@ const LEVEL_OPTIONS: { value: AccessLevel; label: string }[] = [
   { value: "manage", label: "Управление" },
 ];
 
-const NONE_FOLDER = "__none__";
 
 function displayName(u?: AccessUser): string {
   return u?.name?.trim() || u?.email || "—";
@@ -371,17 +371,10 @@ export function TopicDrawer({
                 data-testid="topic-name-warning"
               />
             )}
-            <Select
-              label="Папка"
-              fullWidth
-              value={folderId ?? NONE_FOLDER}
-              options={[
-                { value: NONE_FOLDER, label: "Без папки" },
-                ...folders.map((f) => ({ value: f.id, label: f.name })),
-              ]}
-              onChange={(v) => setFolderId(v === NONE_FOLDER ? null : v)}
-              data-testid="select-topic-folder"
-            />
+            <Stack gap={2} data-testid="select-topic-folder">
+              <Label>Папка</Label>
+              <FolderTreeSelect folders={folders} value={folderId} onChange={setFolderId} rootLabel="Без папки" />
+            </Stack>
             <Textarea
               label="Описание"
               fullWidth
