@@ -694,7 +694,7 @@
   grid-template-areas:
     "side header"
     "side main";
-  min-height: 100vh;
+  height: 100vh;
   background: var(--ou-bg-page);
   color: var(--ou-fg-default);
   font-family: var(--ou-font-family-base);
