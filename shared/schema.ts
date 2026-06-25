@@ -386,6 +386,31 @@ export const drawBlueprintSchema = z.object({
 export type DrawStratum = z.infer<typeof drawStratumSchema>;
 export type DrawBlueprint = z.infer<typeof drawBlueprintSchema>;
 
+/**
+ * PRD-17 (BR-12): a single fixed VARIANT of a section — a named, author-curated
+ * subset of the topic's question bank. `id` is a stable key (rotation history is
+ * matched on it, not on list position — PRD-17 R-3/D-8). `questionIds` is the
+ * variant's content; the whole variant is delivered, in random order (FR-04/15).
+ */
+export const formSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).max(100),
+  questionIds: z.array(z.string()).min(1),
+});
+
+/**
+ * PRD-17 (BR-12): the set of fixed variants on a section. Presence switches the
+ * section into "variants mode": one variant is picked at topic start and
+ * delivered whole; the section's draw_count/draw_all/draw_blueprint are NOT
+ * applied (FR-03). At least two variants. Absence = legacy draw (uniform/quotas).
+ */
+export const formSetSchema = z.object({
+  forms: z.array(formSchema).min(2),
+});
+
+export type Form = z.infer<typeof formSchema>;
+export type FormSet = z.infer<typeof formSetSchema>;
+
 export const testSections = pgTable("test_sections", {
   id: varchar("id", { length: 36 }).primaryKey(),
   testId: varchar("test_id", { length: 36 }).notNull(),
@@ -402,6 +427,11 @@ export const testSections = pgTable("test_sections", {
   feedbackJson: jsonb("feedback_json"),
   // PRD-11: optional stratified-draw blueprint. Null = uniform draw (FR-02).
   drawBlueprintJson: jsonb("draw_blueprint_json").$type<DrawBlueprint>(),
+  // PRD-17 (BR-12): optional fixed-variant set. Presence puts the section into
+  // "variants mode" (one variant picked at topic start, delivered whole — FR-04);
+  // draw_count/draw_all/draw_blueprint are then not applied (FR-03). Null = legacy
+  // draw (uniform / quotas), backward-compatible.
+  formSetJson: jsonb("form_set_json").$type<FormSet>(),
   // PRD-15 block D (FR-31): per-section default price of a question. Null = no
   // default — the chain falls through to the test default, then the system 1.
   defaultPoints: integer("default_points"),
@@ -531,8 +561,11 @@ export const insertTestSchema = createInsertSchema(tests)
   .extend({ retakePolicyJson: retakePolicySchema.nullish() });
 export const insertTestSectionSchema = createInsertSchema(testSections)
   .omit({ id: true })
-  // drizzle-zod types jsonb loosely; validate the draw blueprint explicitly.
-  .extend({ drawBlueprintJson: drawBlueprintSchema.nullish() });
+  // drizzle-zod types jsonb loosely; validate the draw blueprint + variant set explicitly.
+  .extend({
+    drawBlueprintJson: drawBlueprintSchema.nullish(),
+    formSetJson: formSetSchema.nullish(),
+  });
 export const insertAttemptSchema = createInsertSchema(attempts).omit({ id: true });
 
 export const insertAdaptiveTopicSettingsSchema = createInsertSchema(adaptiveTopicSettings).omit({ id: true });
@@ -718,6 +751,13 @@ export const testVariantSchema = z.object({
     topicId: z.string(),
     topicName: z.string(),
     questionIds: z.array(z.string()),
+    /**
+     * PRD-17 (BR-12): when this section ran in "variants mode", the stable id of
+     * the variant that was drawn for this attempt. Pins the delivered set and is
+     * the source of rotation history on the next retake (FR-07/FR-08). Absent for
+     * non-variant sections and pre-PRD-17 attempts (treat missing as "no variant").
+     */
+    formId: z.string().optional(),
     /**
      * PRD-4 v1.1 §3.2 — per-section (per-topic) time budget in minutes, or
      * `null` when the topic has no custom limit (inherit_test / none). Carried
