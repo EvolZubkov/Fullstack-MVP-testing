@@ -168,6 +168,13 @@ export function buildTestJson(data: ExportData): string {
       // PRD-11: stratified-draw blueprint. Included only when set so packages
       // without quotas stay byte-identical (FR-02); runtime reads section.drawBlueprint.
       ...(s.drawBlueprintJson ? { drawBlueprint: s.drawBlueprintJson } : {}),
+      // PRD-17 (BR-12): fixed-variant set. Included only when present so packages
+      // without variants stay byte-identical (FR-02); the runtime (selectForm in
+      // app.js) picks one variant and delivers it whole, overriding the uniform/
+      // stratified draw. SCORM has no cross-attempt store (NFR-17) so rotation
+      // degrades to a random pick (R-6). The whole bank ships (every variant's
+      // questions+keys, R-7) — selection happens client-side.
+      ...(s.formSetJson ? { formSet: s.formSetJson } : {}),
       topicFeedback: s.topic.feedback || null,
       recommendedCourses: s.courses.map((c) => ({ title: c.title, url: c.url })),
       recommendedEvents: s.events.map((e) => ({ title: e.title })),

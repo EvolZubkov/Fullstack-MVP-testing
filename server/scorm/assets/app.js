@@ -40,6 +40,27 @@ function drawSection(questions, drawCount, blueprint, shuffleFn) {
   return { selected: selected.slice(0, drawCount), warnings: warnings };
 }
 
+// PRD-17 (BR-12) variant selection — plain-JS port of shared/draw/forms.ts. When a
+// section runs in "variants mode" (formSet present) ONE author-curated variant is
+// picked and delivered WHOLE, in random order (FR-04/FR-15). The SCORM package has
+// no cross-attempt store (NFR-17), so previousFormIds is always empty here →
+// rotation degrades to a random pick (a known web/SCORM parity gap, R-6). Kept in
+// golden parity with the TS source by tests/forms-port.test.ts.
+function selectForm(forms, previousFormIds, availableIds, shuffleFn) {
+  var used = {};
+  (previousFormIds || []).forEach(function (id) { used[id] = true; });
+  // Rotation: prefer variants not seen before; when all seen, reset and cycle.
+  var candidates = forms.filter(function (f) { return !used[f.id]; });
+  if (candidates.length === 0) candidates = forms.slice();
+  var chosen = shuffleFn(candidates.slice())[0];
+  // Deliver the whole variant; drop questions no longer in the bank (FR-17), then
+  // randomise presentation order (FR-15).
+  var present = availableIds
+    ? chosen.questionIds.filter(function (id) { return availableIds[id]; })
+    : chosen.questionIds.slice();
+  return { formId: chosen.id, questionIds: shuffleFn(present.slice()) };
+}
+
 function generateVariant() {
   state.variant = { sections: [] };
   state.flatQuestions = [];
@@ -49,12 +70,25 @@ function generateVariant() {
 
   TEST_DATA.sections.forEach(function(section) {
     var available = section.questions.filter(function(q) { return !usedIds[q.id]; });
-    var drawn = drawSection(available, section.drawCount, section.drawBlueprint, shuffle);
-    var questions = drawn.selected;
-    if (drawn.warnings.length && typeof console !== 'undefined' && console.warn) {
-      drawn.warnings.forEach(function (w) {
-        console.warn('PRD-11 quota shortfall: tag "' + w.tag + '" requested ' + w.requested + ', available ' + w.available);
-      });
+    var questions;
+    if (section.formSet && section.formSet.forms && section.formSet.forms.length) {
+      // PRD-17 variants mode (BR-12): deliver ONE curated variant whole, in random
+      // order. No cross-attempt store in SCORM (NFR-17) → previousFormIds empty, so
+      // the pick is effectively random. Map the chosen variant's ids back to the
+      // live bank objects; a removed question is dropped (soft shortfall, FR-17).
+      var availIds = {};
+      var byId = {};
+      available.forEach(function (q) { availIds[q.id] = true; byId[q.id] = q; });
+      var picked = selectForm(section.formSet.forms, [], availIds, shuffle);
+      questions = picked.questionIds.map(function (id) { return byId[id]; }).filter(Boolean);
+    } else {
+      var drawn = drawSection(available, section.drawCount, section.drawBlueprint, shuffle);
+      questions = drawn.selected;
+      if (drawn.warnings.length && typeof console !== 'undefined' && console.warn) {
+        drawn.warnings.forEach(function (w) {
+          console.warn('PRD-11 quota shortfall: tag "' + w.tag + '" requested ' + w.requested + ', available ' + w.available);
+        });
+      }
     }
     questions.forEach(function(q) { usedIds[q.id] = true; });
     state.variant.sections.push({
