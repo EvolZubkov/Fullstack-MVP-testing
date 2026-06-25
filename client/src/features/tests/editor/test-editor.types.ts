@@ -7,7 +7,7 @@
  * 6.2 and 6.3. Any change here must be reflected in decisions.md first.
  */
 
-import type { DrawBlueprint, RetakePolicy } from "@shared/schema";
+import type { DrawBlueprint, FormSet, RetakePolicy } from "@shared/schema";
 import type { QuestionScoringOverride } from "./scoring-api";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
@@ -189,6 +189,13 @@ export type EditorSection = {
    * When present, `strata` lists per-sub-topic quotas (tag + count + per-tag mode).
    */
   drawBlueprint?: DrawBlueprint | null;
+  /**
+   * PRD-17 (BR-12): optional fixed-variant set. Present = the section runs in
+   * "variants mode" — one variant is delivered whole; the draw controls
+   * (drawAll/drawCount/drawBlueprint) are then not applied. `null`/absent =
+   * legacy draw.
+   */
+  formSet?: FormSet | null;
   /**
    * PRD-15 block D (FR-31): per-section default price of a question. `null` =
    * inherit the test default. Edited in the «Оценка» tab, persisted with the
@@ -438,6 +445,8 @@ export type TestSectionPayload = {
   feedbackJson: FeedbackPayload;
   /** PRD-11: per-tag draw quotas; `null` = uniform draw (FR-02). */
   drawBlueprintJson: DrawBlueprint | null;
+  /** PRD-17 (BR-12): fixed-variant set; `null` = legacy draw. */
+  formSetJson: FormSet | null;
   /** PRD-15 block D (FR-31): per-section default price; `null` = inherit test. */
   defaultPoints: number | null;
 };

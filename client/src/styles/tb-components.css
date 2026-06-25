@@ -603,6 +603,23 @@
 }
 .tb-quota-sum.is-error { color: var(--ou-error-default); font-weight: 600; }
 
+/* PRD-17 (BR-12): variants editor — modal toolbar (tabs + «Удалить вариант»),
+   footer (coverage + «Готово») and the question-type leading icon in the
+   TransferList rows (replaces the avatar initials via TransferItem.icon). */
+.tb-variants-modal__toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--ou-space-3); flex-wrap: wrap; margin-bottom: var(--ou-space-4);
+}
+.tb-variants-modal__foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--ou-space-4); width: 100%;
+}
+.tb-variant-qtype {
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--ou-fg-muted);
+}
+.tb-variant-qtype svg { display: block; }
+
 /* Feedback preview (read-only) — clickable card со snippet'ом и meta-row.
    Edit-форма — отдельный паттерн `.tb-feedback-block` (см. выше).
    `.is-empty` — placeholder-вариант («Не задано — нажмите для редактирования»).

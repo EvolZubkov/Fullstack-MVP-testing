@@ -1141,3 +1141,65 @@ describe("PRD-4 v1.1: adaptive + linear_flat blocked (deferred to future PRD)", 
     }
   });
 });
+
+// ─── PRD-17 (BR-12): variants validation ──────────────────────────────────────
+
+describe("PRD-17: variants mode validation", () => {
+  const baseSection = baseModel().sections[0];
+  const withForms = (forms: Array<{ id: string; label: string; questionIds: string[] }>) =>
+    baseModel({ sections: [{ ...baseSection, formSet: { forms } }] });
+  const variantErrors = (m: ReturnType<typeof baseModel>) =>
+    validateTestEditor(m).errors.filter((e) => e.field === "sections[0].formSetJson");
+
+  it("fewer than 2 variants → section error", () => {
+    expect(variantErrors(withForms([{ id: "v1", label: "Вариант 1", questionIds: ["q1"] }]))).toHaveLength(1);
+  });
+
+  it("a variant with no questions → section error", () => {
+    const errs = variantErrors(
+      withForms([
+        { id: "v1", label: "Вариант 1", questionIds: ["q1"] },
+        { id: "v2", label: "Вариант 2", questionIds: [] },
+      ]),
+    );
+    expect(errs).toHaveLength(1);
+  });
+
+  it("≥2 non-empty variants pass", () => {
+    expect(
+      variantErrors(
+        withForms([
+          { id: "v1", label: "Вариант 1", questionIds: ["q1"] },
+          { id: "v2", label: "Вариант 2", questionIds: ["q2"] },
+        ]),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it("variants mode skips the drawCount range check (control is hidden)", () => {
+    // drawCount 99 > maxQuestions 10 would normally error, but variants hide it.
+    const model = baseModel({
+      sections: [
+        {
+          ...baseSection,
+          drawCount: 99,
+          formSet: {
+            forms: [
+              { id: "v1", label: "Вариант 1", questionIds: ["q1"] },
+              { id: "v2", label: "Вариант 2", questionIds: ["q2"] },
+            ],
+          },
+        },
+      ],
+    });
+    expect(validateTestEditor(model).errors.filter((e) => e.field === "sections[0].drawCount")).toHaveLength(0);
+  });
+
+  it("adaptive ignores variants (not validated)", () => {
+    const model = baseModel({
+      mode: "adaptive",
+      sections: [{ ...baseSection, formSet: { forms: [{ id: "v1", label: "Вариант 1", questionIds: [] }] } }],
+    });
+    expect(validateTestEditor(model).errors.filter((e) => e.field === "sections[0].formSetJson")).toHaveLength(0);
+  });
+});

@@ -144,6 +144,9 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
   for (let i = 0; i < model.sections.length; i++) {
     const section = model.sections[i];
     if (sectionDrawsAll(section.drawAll, model.mode)) continue;
+    // PRD-17: variants mode hides the draw-count control (the variant is delivered
+    // whole), so drawCount is not validated for it.
+    if (model.mode !== "adaptive" && section.formSet != null) continue;
     if (section.drawCount < 1 || section.drawCount > section.maxQuestions) {
       errors.push({
         field: `sections[${i}].drawCount`,
@@ -160,6 +163,7 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
   for (let i = 0; i < model.sections.length; i++) {
     const section = model.sections[i];
     if (sectionDrawsAll(section.drawAll, model.mode)) continue; // quotas moot when drawing all
+    if (model.mode !== "adaptive" && section.formSet != null) continue; // variants mode hides quotas
     const bp = section.drawBlueprint;
     if (bp && bp.strata.length > 0) {
       const sum = bp.strata.reduce((acc, s) => acc + (s.count || 0), 0);
@@ -168,6 +172,33 @@ export function validateTestEditor(model: TestEditorModel): ValidationResult {
           field: `sections[${i}].drawBlueprintJson`,
           code: "range",
           message: `Сумма квот (${sum}) для темы «${section.topicName}» превышает «Вопросов в тест» (${section.drawCount}).`,
+          severity: "error",
+        });
+      }
+    }
+  }
+
+  // PRD-17 (BR-12): a section in variants mode needs >= 2 variants, each with at
+  // least one question (the variant is delivered whole). Adaptive ignores variants
+  // (the editor hides them), so they are not validated there.
+  for (let i = 0; i < model.sections.length; i++) {
+    const section = model.sections[i];
+    if (model.mode === "adaptive" || section.formSet == null) continue;
+    const forms = section.formSet.forms;
+    if (forms.length < 2) {
+      errors.push({
+        field: `sections[${i}].formSetJson`,
+        code: "range",
+        message: `Тема «${section.topicName}»: нужно не менее 2 вариантов теста.`,
+        severity: "error",
+      });
+    } else {
+      const empty = forms.filter((f) => f.questionIds.length === 0).length;
+      if (empty > 0) {
+        errors.push({
+          field: `sections[${i}].formSetJson`,
+          code: "range",
+          message: `Тема «${section.topicName}»: ${empty} вариант(а/ов) без вопросов — добавьте вопросы или удалите вариант.`,
           severity: "error",
         });
       }

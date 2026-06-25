@@ -18,7 +18,8 @@
  *   - §6.8  empty `description`/`webhookUrl` normalised to `null`
  *   - FR-25h adaptive payload excluded when `mode === "standard"`
  */
-import type { DrawBlueprint, EligibilityPluginRef, RetakePolicy } from "@shared/schema";
+import type { DrawBlueprint, EligibilityPluginRef, FormSet, RetakePolicy } from "@shared/schema";
+import { formSetSchema } from "@shared/schema";
 import type {
   AdaptiveLevelConfig,
   AdaptiveLinkConfig,
@@ -293,6 +294,17 @@ function readDrawBlueprintFromApi(raw: unknown): DrawBlueprint | null {
 }
 
 /**
+ * Read a fixed-variant set (PRD-17) from the API jsonb. Validated with
+ * `formSetSchema`; absence or any malformed shape degrades to `null` (legacy
+ * draw), so a bad blob never breaks the editor.
+ */
+function readFormSetFromApi(raw: unknown): FormSet | null {
+  if (raw == null) return null;
+  const parsed = formSetSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
  * Map editor `SectionTimeLimit` back to the DB integer.
  * Both `inherit_test` and `none` are encoded as `null`.
  */
@@ -352,6 +364,8 @@ function buildSectionsFromApi(src: ApiTestResponse): {
       feedbackAssets: fb.assets,
       feedbackEvents: fb.events,
       drawBlueprint: readDrawBlueprintFromApi(raw.drawBlueprintJson),
+      // PRD-17 (BR-12): fixed-variant set (validate; invalid/absent = null).
+      formSet: readFormSetFromApi(raw.formSetJson),
       // PRD-15 block D (FR-31): per-section default price (null = inherit test).
       defaultPoints: typeof raw.defaultPoints === "number" ? raw.defaultPoints : null,
     });
@@ -946,6 +960,8 @@ export function mapEditorSectionsToPayload(model: TestEditorModel): TestSectionP
       timeLimitMinutes: timeLimitToMinutes(section.timeLimit),
       feedbackJson,
       drawBlueprintJson,
+      // PRD-17 (BR-12): fixed-variant set (null = legacy draw).
+      formSetJson: section.formSet ?? null,
       // PRD-15 block D (FR-31): per-section default price.
       defaultPoints: section.defaultPoints ?? null,
     };

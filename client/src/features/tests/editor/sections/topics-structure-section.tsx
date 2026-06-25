@@ -22,7 +22,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Layers, Plus, Trash2, X } from "lucide-react";
-import type { DrawBlueprint, Topic } from "@shared/schema";
+import type { DrawBlueprint, FormSet, Topic } from "@shared/schema";
 import { tagKey } from "@shared/tags";
 import {
   Banner,
@@ -38,6 +38,7 @@ import {
   Tag,
 } from "@universityrt/ui-kit";
 import { FeedbackEditorModal } from "./feedback-editor-modal";
+import { VariantsEditor } from "./variants-editor";
 import { FeedbackPreview as SharedFeedbackPreview } from "./feedback-preview";
 import type {
   EditorSection,
@@ -174,6 +175,7 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
           adaptive={model.mode === "adaptive"}
           drawCountError={fieldErrors.get(`sections[${index}].drawCount`)}
           blueprintError={fieldErrors.get(`sections[${index}].drawBlueprintJson`)}
+          variantsError={fieldErrors.get(`sections[${index}].formSetJson`)}
           topicTags={tagsByTopic.get(section.topicId)?.tags ?? []}
           availByKey={tagsByTopic.get(section.topicId)?.availByKey ?? {}}
           onChangeDrawCount={(n) => updateSection(section.topicId, { drawCount: n })}
@@ -190,6 +192,7 @@ export function CompositionSection({ model, updateModel, fieldErrors = EMPTY_FIE
             updateSection(section.topicId, { required })
           }
           onChangeBlueprint={(bp) => updateSection(section.topicId, { drawBlueprint: bp })}
+          onChangeFormSet={(formSet) => updateSection(section.topicId, { formSet })}
           onRemove={() => removeSection(section.topicId)}
           onSaveFeedback={(patch) => updateSection(section.topicId, patch)}
         />
@@ -242,6 +245,10 @@ function TopicRow(props: {
   onToggleRequired: (required: boolean) => void;
   /** Replace this section's draw blueprint (`null` = uniform draw). */
   onChangeBlueprint: (bp: DrawBlueprint | null) => void;
+  /** PRD-17 (BR-12): replace this section's variant set (`null` = variants off). */
+  onChangeFormSet: (formSet: FormSet | null) => void;
+  /** FR-20c: validation message for this section's variants. */
+  variantsError?: string;
   onRemove: () => void;
   /** Called with a partial EditorSection patch when feedback is saved. */
   onSaveFeedback: (patch: Partial<EditorSection>) => void;
@@ -258,6 +265,9 @@ function TopicRow(props: {
   // governs how many are shown); the stored manual `drawAll` is preserved so
   // leaving adaptive restores it. The switch + count field lock while adaptive.
   const effectiveDrawAll = props.adaptive || section.drawAll;
+  // PRD-17: variants mode is for standard delivery only; in adaptive the section
+  // draws by difficulty levels, so the variant set is ignored and not edited.
+  const variantsOn = !props.adaptive && section.formSet != null;
 
   return (
     <>
@@ -291,55 +301,75 @@ function TopicRow(props: {
           />
         </div>
         <div className="tb-topic-row__body">
-          <label className="tb-draw-all-row">
-            <Switch
-              checked={effectiveDrawAll}
-              disabled={props.adaptive}
-              onChange={(e) => props.onToggleDrawAll(e.target.checked)}
-              aria-label={`Все вопросы темы: ${section.topicName}`}
-              data-testid={`topic-drawall-${section.topicId}`}
-            />
-            <span className="tb-draw-all-row__lbl">Все вопросы темы</span>
-            {props.adaptive && (
-              <span className="tb-draw-all-row__hint">включено адаптивным режимом</span>
-            )}
-          </label>
-          <div
-            className="tb-draw-count-row"
-            data-field={`sections[${props.index}].drawCount`}
-            data-invalid={!effectiveDrawAll && props.drawCountError ? "true" : undefined}
-          >
-            <span className="tb-draw-count-row__label">Вопросов в тест</span>
-            <NumberInput
-              size="s"
-              value={effectiveDrawAll ? maxQ : section.drawCount}
-              min={1}
-              max={maxQ}
-              disabled={effectiveDrawAll}
-              invalid={!effectiveDrawAll && Boolean(props.drawCountError)}
-              aria-label={`Количество вопросов из темы ${section.topicName}`}
-              data-testid={`topic-drawcount-${section.topicId}`}
-              onChange={(next) => props.onChangeDrawCount(next)}
-            />
-            <span className="tb-draw-count-row__max">из {section.maxQuestions}</span>
-          </div>
-          {!effectiveDrawAll && props.drawCountError && (
-            <p className="tb-field-error" role="alert" data-testid={`topic-drawcount-error-${section.topicId}`}>
-              {props.drawCountError}
-            </p>
+          {/* PRD-17: variants mode replaces the topic-draw controls. When a
+              section runs on fixed variants (standard mode), the whole-topic draw
+              controls (Все вопросы темы / Вопросов в тест / Квоты) are hidden — the
+              source is the drawn variant, delivered whole. */}
+          {!variantsOn && (
+            <>
+              <label className="tb-draw-all-row">
+                <Switch
+                  checked={effectiveDrawAll}
+                  disabled={props.adaptive}
+                  onChange={(e) => props.onToggleDrawAll(e.target.checked)}
+                  aria-label={`Все вопросы темы: ${section.topicName}`}
+                  data-testid={`topic-drawall-${section.topicId}`}
+                />
+                <span className="tb-draw-all-row__lbl">Все вопросы темы</span>
+                {props.adaptive && (
+                  <span className="tb-draw-all-row__hint">включено адаптивным режимом</span>
+                )}
+              </label>
+              <div
+                className="tb-draw-count-row"
+                data-field={`sections[${props.index}].drawCount`}
+                data-invalid={!effectiveDrawAll && props.drawCountError ? "true" : undefined}
+              >
+                <span className="tb-draw-count-row__label">Вопросов в тест</span>
+                <NumberInput
+                  size="s"
+                  value={effectiveDrawAll ? maxQ : section.drawCount}
+                  min={1}
+                  max={maxQ}
+                  disabled={effectiveDrawAll}
+                  invalid={!effectiveDrawAll && Boolean(props.drawCountError)}
+                  aria-label={`Количество вопросов из темы ${section.topicName}`}
+                  data-testid={`topic-drawcount-${section.topicId}`}
+                  onChange={(next) => props.onChangeDrawCount(next)}
+                />
+                <span className="tb-draw-count-row__max">из {section.maxQuestions}</span>
+              </div>
+              {!effectiveDrawAll && props.drawCountError && (
+                <p className="tb-field-error" role="alert" data-testid={`topic-drawcount-error-${section.topicId}`}>
+                  {props.drawCountError}
+                </p>
+              )}
+
+              {/* Quotas slice a partial draw — meaningless when the whole topic is
+                  drawn, so the quota editor is hidden while "draw all" is effective. */}
+              {!effectiveDrawAll && (
+                <QuotaEditor
+                  topicId={section.topicId}
+                  topicName={section.topicName}
+                  drawCount={section.drawCount}
+                  blueprint={section.drawBlueprint ?? null}
+                  topicTags={props.topicTags}
+                  availByKey={props.availByKey}
+                  onChange={props.onChangeBlueprint}
+                />
+              )}
+            </>
           )}
 
-          {/* Quotas slice a partial draw — meaningless when the whole topic is
-              drawn, so the quota editor is hidden while "draw all" is effective. */}
-          {!effectiveDrawAll && (
-            <QuotaEditor
+          {/* PRD-17 (BR-12): fixed variants. Hidden in adaptive mode (variants are
+              for standard delivery; adaptive draws by difficulty levels). */}
+          {!props.adaptive && (
+            <VariantsEditor
               topicId={section.topicId}
               topicName={section.topicName}
-              drawCount={section.drawCount}
-              blueprint={section.drawBlueprint ?? null}
-              topicTags={props.topicTags}
-              availByKey={props.availByKey}
-              onChange={props.onChangeBlueprint}
+              formSet={section.formSet ?? null}
+              onChange={props.onChangeFormSet}
+              error={props.variantsError}
             />
           )}
 
