@@ -226,6 +226,70 @@ describe("Attempts routes — start attempt", () => {
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("ATTEMPTS_EXHAUSTED");
   });
+
+  // ── PRD-17 (BR-12): variants mode ──
+  const FORM_SET = {
+    forms: [
+      { id: "v1", label: "Вариант 1", questionIds: ["q1", "q2"] },
+      { id: "v2", label: "Вариант 2", questionIds: ["q3", "q4"] },
+    ],
+  };
+  const bankQuestions = ["q1", "q2", "q3", "q4"].map((id) => ({ ...dbQuestion, id }));
+
+  it("POST .../start — variants mode: delivers ONE variant whole and pins its formId (PRD-17 FR-04/08)", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 2, formSetJson: FORM_SET }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue(bankQuestions);
+    storageMock.getQuestionsByIds.mockResolvedValue([]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    const section = storageMock.createAttempt.mock.calls[0][0].variantJson.sections[0];
+    const byForm: Record<string, string[]> = { v1: ["q1", "q2"], v2: ["q3", "q4"] };
+    expect(["v1", "v2"]).toContain(section.formId);
+    // whole variant delivered (presentation order is randomised → compare as a set)
+    expect([...section.questionIds].sort()).toEqual(byForm[section.formId]);
+  });
+
+  it("POST .../start — variants mode: rotates away from a variant seen in a prior completed attempt (PRD-17 FR-07)", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+      { ...finishedAttempt, variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: ["q1", "q2"], formId: "v1" }] } },
+    ]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 2, formSetJson: FORM_SET }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    storageMock.getQuestionsByTopic.mockResolvedValue(bankQuestions);
+    storageMock.getQuestionsByIds.mockResolvedValue([]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    const section = storageMock.createAttempt.mock.calls[0][0].variantJson.sections[0];
+    expect(section.formId).toBe("v2"); // v1 excluded by rotation → only v2 remains
+    expect([...section.questionIds].sort()).toEqual(["q3", "q4"]);
+  });
+
+  it("POST .../start — variants mode: drops a variant question no longer in the bank, no dup/pad (PRD-17 FR-17)", async () => {
+    storageMock.getTest.mockResolvedValue(dbTest);
+    // Exclude v2 via history so v1 is chosen deterministically.
+    storageMock.getAttemptsByUserAndTest.mockResolvedValue([
+      { ...finishedAttempt, variantJson: { sections: [{ topicId: "t1", topicName: "JS", questionIds: [], formId: "v2" }] } },
+    ]);
+    storageMock.getTestSections.mockResolvedValue([{ topicId: "t1", drawCount: 2, formSetJson: FORM_SET }]);
+    storageMock.getTopics.mockResolvedValue([{ id: "t1", name: "JS" }]);
+    // q2 removed from the topic bank.
+    storageMock.getQuestionsByTopic.mockResolvedValue([
+      { ...dbQuestion, id: "q1" }, { ...dbQuestion, id: "q3" }, { ...dbQuestion, id: "q4" },
+    ]);
+    storageMock.getQuestionsByIds.mockResolvedValue([]);
+    storageMock.createAttempt.mockResolvedValue(dbAttempt);
+
+    await asLearner(request(app).post("/api/tests/test1/attempts/start"));
+    const section = storageMock.createAttempt.mock.calls[0][0].variantJson.sections[0];
+    expect(section.formId).toBe("v1");
+    expect(section.questionIds).toEqual(["q1"]); // q2 dropped; no duplication, no padding
+  });
 });
 
 // PRD-4 v1.1 §3.2 — adaptive per-topic timer: topic exposure + force transition.
