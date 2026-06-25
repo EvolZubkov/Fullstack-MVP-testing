@@ -191,3 +191,41 @@ describe("checkDrawFeasibility — aggregation", () => {
     expect(out[0].status).toBe("published");
   });
 });
+
+describe("checkDrawFeasibility — variants (PRD-17 FR-10)", () => {
+  it("reports variant_incomplete when a variant question left the pool", () => {
+    const out = checkDrawFeasibility({
+      pool: [q("a"), q("c")], // "b" gone
+      removedQuestionIds: ["b"],
+      tests: [test({ variantQuestionIds: ["a", "b"] })],
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0].issues).toContainEqual({ kind: "variant_incomplete", questionIds: ["b"] });
+  });
+
+  it("stays silent when every variant question is still in the pool", () => {
+    const out = checkDrawFeasibility({
+      pool: [q("a"), q("b"), q("c")],
+      tests: [test({ variantQuestionIds: ["a", "b"] })],
+    });
+    expect(out).toHaveLength(0);
+  });
+
+  it("variants supersede the draw-count check — no pool_shortfall from drawCount", () => {
+    const out = checkDrawFeasibility({
+      pool: [q("a"), q("b")],
+      tests: [test({ variantQuestionIds: ["a", "b"], section: { drawCount: 99, drawAll: false } })],
+    });
+    expect(out).toHaveLength(0); // drawCount 99 ignored in variants mode
+  });
+
+  it("the variant_incomplete issue is non-advisory (so the service blocks published deps)", () => {
+    const out = checkDrawFeasibility({
+      pool: [],
+      tests: [test({ variantQuestionIds: ["a", "b"] })],
+    });
+    const issue = out[0].issues[0];
+    expect(issue.kind).toBe("variant_incomplete");
+    expect("advisory" in issue).toBe(false);
+  });
+});

@@ -30,7 +30,7 @@ import {
 } from "@shared/draw/feasibility";
 import { tagKey } from "@shared/tags";
 import { storage, type TestUsageRef } from "../storage";
-import type { Question } from "@shared/schema";
+import type { Question, TestSection } from "@shared/schema";
 
 /** Describes the proposed change for the formula-loss pass (E-6). */
 interface TagMutation {
@@ -119,6 +119,16 @@ export const EMPTY_ASSESSMENT: FeasibilityAssessment = { blocking: [], warnings:
 
 function toPoolQuestion(q: Question): FeasibilityQuestion {
   return { id: q.id, tags: q.tags ?? [], difficulty: q.difficulty };
+}
+
+/**
+ * PRD-17 (FR-10): the distinct question ids referenced by any fixed variant of a
+ * section, or null when the section isn't in variants mode. Feeds the core's
+ * `variant_incomplete` check (a variant question gone from the pool).
+ */
+function variantQuestionIdsOf(section: TestSection | undefined): string[] | null {
+  if (!section?.formSetJson) return null;
+  return [...new Set(section.formSetJson.forms.flatMap((f) => f.questionIds))];
 }
 
 /** Published + non-advisory -> blocking; everything else -> warning. */
@@ -212,6 +222,8 @@ async function buildRequirements(
             blueprint: section.drawBlueprintJson ?? null,
           }
         : null,
+      // PRD-17 (FR-10): variants supersede the draw-count check in the core.
+      variantQuestionIds: variantQuestionIdsOf(section),
       adaptiveLevels: adaptive.map((level) => ({
         levelIndex: level.levelIndex,
         levelName: level.levelName,
@@ -326,6 +338,9 @@ export async function assessTestPublish(testId: string): Promise<PublishCheckFin
             drawAll: section.drawAll,
             blueprint: section.drawBlueprintJson ?? null,
           },
+          // PRD-17 (FR-10): a published variant whose questions left the bank
+          // blocks the publication (the variant can't be delivered whole).
+          variantQuestionIds: variantQuestionIdsOf(section),
           adaptiveLevels: adaptive.map((level) => ({
             levelIndex: level.levelIndex,
             levelName: level.levelName,

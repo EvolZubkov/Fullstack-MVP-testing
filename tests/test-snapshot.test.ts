@@ -55,6 +55,19 @@ describe("snapshotDataSource — frozen reads", () => {
     expect(await src.getTopics()).toEqual([{ id: "tp1", name: "Тема 1" }]);
   });
 
+  it("freezes a section's variant set (PRD-17 FR-11): form_set_json survives the snapshot", async () => {
+    const formSetJson = { forms: [
+      { id: "v1", label: "Вариант 1", questionIds: ["q1"] },
+      { id: "v2", label: "Вариант 2", questionIds: ["q2"] },
+    ] };
+    const content = makeContent({
+      sections: [{ id: "s1", testId: "t1", topicId: "tp1", drawCount: 1, formSetJson } as TestSnapshotContent["sections"][number]],
+    });
+    const [section] = await snapshotDataSource(content).getTestSections("t1");
+    // Published delivery reads the variants from the snapshot, not the live bank.
+    expect((section as { formSetJson?: typeof formSetJson }).formSetJson).toEqual(formSetJson);
+  });
+
   it("serves the topic question pool and resolves ids across all topics", async () => {
     const src = snapshotDataSource(makeContent());
     expect((await src.getQuestionsByTopic("tp1")).map((q) => q.id)).toEqual(["q1", "q2"]);

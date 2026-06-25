@@ -12,6 +12,9 @@
  * - `measurement_loss`      — removed questions carry scale contributions in
  *                             this test (E-5, the `question_measurements`
  *                             cascade);
+ * - `variant_incomplete`    — a fixed variant of the section references questions
+ *                             that left the pool, so it can no longer be delivered
+ *                             whole (PRD-17 FR-10/BR-12-06);
  * - `draw_all_shrink`       — a `drawAll` section silently gets shorter (E-9;
  *                             advisory even for published tests).
  *
@@ -71,6 +74,14 @@ export interface DependentTestRequirement {
   status?: string;
   ownerId?: string | null;
   section?: SectionRequirement | null;
+  /**
+   * PRD-17 (FR-10): when the section runs in "variants mode", the distinct
+   * question ids referenced by ANY of its fixed variants. Presence supersedes the
+   * draw-count/`section` check (variants deliver whole — draw_count/draw_all/
+   * blueprint are not applied); the core instead verifies every id is still in the
+   * pool. Null/absent = not a variants section.
+   */
+  variantQuestionIds?: string[] | null;
   adaptiveLevels?: AdaptiveLevelRequirement[] | null;
   /** Question ids of this topic contributing to this test's scales (PRD-5). */
   measurementQuestionIds?: string[] | null;
@@ -101,6 +112,7 @@ export type FeasibilityIssue =
       available: number;
     }
   | { kind: "measurement_loss"; questionIds: string[] }
+  | { kind: "variant_incomplete"; questionIds: string[] }
   | { kind: "content_pages_loss"; pageCount: number }
   | { kind: "formula_loss"; variableNames: string[] }
   | { kind: "draw_all_shrink"; removed: number; remaining: number; advisory: true };
@@ -179,7 +191,15 @@ export function checkDrawFeasibility(input: FeasibilityInput): TestFeasibility[]
   for (const test of input.tests) {
     const issues: FeasibilityIssue[] = [];
 
-    if (test.section) {
+    if (test.variantQuestionIds && test.variantQuestionIds.length > 0) {
+      // PRD-17 (FR-10): variants mode — the section's draw_count/draw_all/blueprint
+      // are not applied; instead every variant question must still be in the pool.
+      // One gone from the post-mutation (or current) pool leaves the variant
+      // unable to deliver whole.
+      const poolIds = new Set(input.pool.map((q) => q.id));
+      const missing = test.variantQuestionIds.filter((id) => !poolIds.has(id));
+      if (missing.length > 0) issues.push({ kind: "variant_incomplete", questionIds: missing });
+    } else if (test.section) {
       issues.push(...checkSection(input.pool, test.section));
       if (test.section.drawAll && removed.size > 0) {
         issues.push({

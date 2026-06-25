@@ -21,6 +21,8 @@ export function describeIssue(issue: FeasibilityIssue): string {
     }
     case "measurement_loss":
       return `Будут потеряны вклады ${issue.questionIds.length} вопрос(ов) в шкалы теста`;
+    case "variant_incomplete":
+      return `Вариант теста станет неполным: затронуто ${issue.questionIds.length} вопрос(ов)`;
     case "content_pages_loss":
       return `Будут удалены страницы контента, привязанные к теме: ${issue.pageCount}`;
     case "formula_loss":
