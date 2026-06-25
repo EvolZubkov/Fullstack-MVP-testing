@@ -1328,6 +1328,7 @@ export class DatabaseStorage implements IStorage {
           timeLimitMinutes: section.timeLimitMinutes ?? null,
           feedbackJson: section.feedbackJson ?? null,
           drawBlueprintJson: section.drawBlueprintJson ?? null,
+          formSetJson: section.formSetJson ?? null,
           defaultPoints: section.defaultPoints ?? null,
         });
       }

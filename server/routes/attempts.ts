@@ -4,6 +4,7 @@ import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { checkAnswer } from "../utils/check-answer";
 import { drawSection } from "@shared/draw/blueprint";
+import { selectForm } from "@shared/draw/forms";
 import { loadScoringConfig } from "../services/scoring-config";
 import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
@@ -150,20 +151,59 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
     const topics = await src.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t.name]));
 
+    // PRD-17 (FR-07): variants rotation needs the variant ids the learner already
+    // saw per topic, in prior COMPLETED attempts. Load once, only when a section
+    // uses variants (cheap second query, gated on variant tests).
+    const usesVariants = sections.some((s) => s.formSetJson);
+    const completedAttempts = usesVariants
+      ? (await storage.getAttemptsByUserAndTest(req.session.userId!, test.id)).filter(
+          (a) => a.finishedAt !== null,
+        )
+      : [];
+    const previousFormIdsForTopic = (topicId: string): string[] => {
+      const out: string[] = [];
+      for (const a of completedAttempts) {
+        const v = a.variantJson as TestVariant | null;
+        for (const s of v?.sections ?? []) {
+          if (s.topicId === topicId && s.formId) out.push(s.formId);
+        }
+      }
+      return out;
+    };
+
     const variant: TestVariant = { sections: [] };
     const allQuestionIds: string[] = [];
 
     for (const section of sections) {
       const questions = await src.getQuestionsByTopic(section.topicId);
-      // PRD-11: stratified draw by tag quotas when a blueprint is set; otherwise
-      // a uniform draw (FR-02). Shared with the SCORM runtime via shared/draw.
-      const { selected } = drawSection(questions, section.drawCount, section.drawBlueprintJson, shuffleInPlace);
-      const qIds = selected.map((q) => q.id);
+      let qIds: string[];
+      let formId: string | undefined;
+
+      if (section.formSetJson) {
+        // PRD-17 (BR-12): variants mode — pick one author-curated variant, deliver
+        // it WHOLE in random order, rotating away from variants seen in prior
+        // completed attempts. draw_count/draw_all/quotas are not applied here.
+        const picked = selectForm(section.formSetJson.forms, {
+          previousFormIds: previousFormIdsForTopic(section.topicId),
+          availableIds: new Set(questions.map((q) => q.id)),
+          shuffle: shuffleInPlace,
+        });
+        qIds = picked.questionIds;
+        formId = picked.formId;
+      } else {
+        // PRD-11: stratified draw by tag quotas when a blueprint is set; otherwise
+        // a uniform draw (FR-02). Shared with the SCORM runtime via shared/draw.
+        const { selected } = drawSection(questions, section.drawCount, section.drawBlueprintJson, shuffleInPlace);
+        qIds = selected.map((q) => q.id);
+      }
 
       variant.sections.push({
         topicId: section.topicId,
         topicName: topicMap.get(section.topicId) || "Unknown",
         questionIds: qIds,
+        // PRD-17 (FR-08): pin the chosen variant id for rotation history (omitted
+        // for non-variant sections).
+        ...(formId ? { formId } : {}),
         // PRD-4 v1.1 §3.2: carry the per-topic time budget so the web runtime
         // can run a per-topic timer (parity with the SCORM package).
         timeLimitMinutes: section.timeLimitMinutes ?? null,
