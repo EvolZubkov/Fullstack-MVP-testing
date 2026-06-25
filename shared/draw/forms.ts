@@ -22,7 +22,7 @@
  * deterministic permutation) so both selection and ordering are testable.
  */
 
-import type { Form } from "../schema";
+import type { Form, FormSet } from "../schema";
 import type { ShuffleFn } from "./blueprint";
 
 export interface SelectFormResult {
@@ -69,4 +69,60 @@ export function selectForm(forms: Form[], opts: SelectFormOptions): SelectFormRe
   const questionIds = shuffle(present.slice());
 
   return { formId: chosen.id, questionIds };
+}
+
+// ── Excel «Варианты» column (PRD-17 FR-13) ──────────────────────────────────────
+
+/**
+ * Parse a workbook «Варианты» cell into variant NUMBERS (1-based). Variants are
+ * positional (the editor auto-numbers them «Вариант 1/2/3»), so the cell carries
+ * numbers, not free-text labels. Delimiter `;` or `,` (like «Теги»); a token may
+ * be a bare number ("1") or "Вариант 1" — the first run of digits wins. Deduped;
+ * blanks and non-positive values dropped.
+ */
+export function parseVariantNumbers(cell: unknown): number[] {
+  const out: number[] = [];
+  const seen = new Set<number>();
+  for (const raw of String(cell ?? "").split(/[;,]/)) {
+    const m = raw.match(/\d+/);
+    if (!m) continue;
+    const n = parseInt(m[0], 10);
+    if (!Number.isFinite(n) || n < 1 || seen.has(n)) continue;
+    seen.add(n);
+    out.push(n);
+  }
+  return out;
+}
+
+/** One question and the variant numbers it was tagged with on the «Вопросы» sheet. */
+export interface VariantMembership {
+  questionId: string;
+  numbers: number[];
+}
+
+/**
+ * Build a section's {@link FormSet} from per-question variant numbers (Excel
+ * import). Variants are taken in ascending number order and labelled positionally
+ * «Вариант 1…N» (so non-contiguous input like 1,3 normalises to 1,2); each form's
+ * `questionIds` are the questions that listed its number (deduped, membership
+ * order). `makeId(index)` mints the stable form id. Returns null when no question
+ * carries any number. The caller enforces the ">= 2 variants" rule.
+ */
+export function buildFormSet(
+  memberships: VariantMembership[],
+  makeId: (index: number) => string,
+): FormSet | null {
+  const byNumber = new Map<number, string[]>();
+  for (const m of memberships) {
+    for (const n of m.numbers) {
+      const list = byNumber.get(n) ?? [];
+      if (!list.includes(m.questionId)) list.push(m.questionId);
+      byNumber.set(n, list);
+    }
+  }
+  if (byNumber.size === 0) return null;
+  const forms: Form[] = [...byNumber.keys()]
+    .sort((a, b) => a - b)
+    .map((n, i) => ({ id: makeId(i), label: `Вариант ${i + 1}`, questionIds: byNumber.get(n)! }));
+  return { forms };
 }

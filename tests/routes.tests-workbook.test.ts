@@ -307,6 +307,40 @@ describe("POST /:id/workbook/import — «Структура» + «Квоты» 
     expect(res.body.structure).toEqual({ sections: 1, quotas: 1 });
     expect(testSettingsMock.save).not.toHaveBeenCalled();
   });
+
+  // ── PRD-17 (FR-13): «Варианты» column → form_set_json ──
+  const vQuestion = (key: string, vars: string) => ({
+    "Ключ строки": key, "Тема": "JavaScript", "Тип вопроса": "multiple_choice",
+    "Текст вопроса": `${key}?`, "Тексты вариантов ответа": "3#4#5", "Номера правильных ответов": "2",
+    "Варианты": vars,
+  });
+
+  it("строит form_set_json из колонки «Варианты» (FR-13)", async () => {
+    let n = 0;
+    storageMock.createQuestion.mockImplementation(async () => ({ id: `nq${++n}` }));
+    const buf = await makeWorkbook({
+      "Вопросы": [vQuestion("q1", "1"), vQuestion("q2", "2"), vQuestion("q3", "1; 2")],
+      "Структура": [{ "Раздел": "JavaScript", "Порядок": "1", "Вопросов в выборке": "3", "Тип порога": "Сумма баллов", "Порог": "2" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    const fs = (testSettingsMock.save.mock.calls[0][1] as any).sections[0].formSetJson;
+    expect(fs.forms.map((f: any) => f.label)).toEqual(["Вариант 1", "Вариант 2"]);
+    expect(fs.forms[0].questionIds).toEqual(["nq1", "nq3"]); // вариант 1
+    expect(fs.forms[1].questionIds).toEqual(["nq2", "nq3"]); // вариант 2
+  });
+
+  it("один вариант на тему → ошибка «нужно ≥2», секция без form_set_json", async () => {
+    storageMock.createQuestion.mockImplementation(async () => ({ id: "nqx" }));
+    const buf = await makeWorkbook({
+      "Вопросы": [vQuestion("q1", "1")],
+      "Структура": [{ "Раздел": "JavaScript", "Вопросов в выборке": "3", "Тип порога": "Сумма баллов", "Порог": "2" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.errors.some((e: string) => /только один вариант/.test(e))).toBe(true);
+    expect((testSettingsMock.save.mock.calls[0][1] as any).sections[0].formSetJson).toBeNull();
+  });
 });
 
 // ─── «Оценка» (PRD-15 block D, FR-36) ─────────────────────────────────────────
@@ -470,6 +504,25 @@ describe("GET /:id/workbook/export", () => {
     expect(wb.worksheets.map((w) => w.name)).toContain("Оценка");
     const rows = sheetToObjects(wb.getWorksheet("Оценка")!);
     expect(rows[0]).toMatchObject({ "Вопрос": "q1", "Балл": 7, "Сложность": 90 });
+  });
+
+  // PRD-17 (FR-13): section variants round-trip via the «Варианты» column (numbers).
+  it("выгружает колонку «Варианты» номерами по позиции формы", async () => {
+    storageMock.getTestSections.mockResolvedValue([
+      {
+        topicId: "t1", drawCount: 5, sortOrder: 0, required: true, topicPassRuleJson: null, drawBlueprintJson: null,
+        formSetJson: { forms: [
+          { id: "f1", label: "Вариант 1", questionIds: ["q-1"] },
+          { id: "f2", label: "Вариант 2", questionIds: ["q-1", "q-2"] },
+        ] },
+      },
+    ]);
+    storageMock.getQuestions.mockResolvedValue([exportQuestion, { ...exportQuestion, id: "q-2", prompt: "3+3?" }]);
+    const res = await getExport();
+    const wb = await readWorkbookFromBuffer(res.body as Buffer);
+    const byId = new Map(sheetToObjects(wb.getWorksheet("Вопросы")!).map((r: any) => [r["ID"], String(r["Варианты"])]));
+    expect(byId.get("q-1")).toBe("1; 2"); // в обоих вариантах
+    expect(byId.get("q-2")).toBe("2");
   });
 });
 

@@ -40,7 +40,7 @@ import {
   SCORING_OVERRIDE_HEADERS,
   SCORING_OVERRIDE_WIDTHS,
 } from "../utils/workbook-sheets";
-import type { DrawBlueprint } from "@shared/schema";
+import type { DrawBlueprint, FormSet } from "@shared/schema";
 
 const router = Router();
 
@@ -107,12 +107,31 @@ router.get(
         .filter((q) => topicIds.has(q.topicId) || measuredIds.has(q.id))
         .sort((a, b) => (topicName.get(a.topicId) || "").localeCompare(topicName.get(b.topicId) || "", "ru"));
 
+      // PRD-17 (FR-13): variant NUMBERS per question (form position, ascending) —
+      // the «Варианты» column round-trips section variants through «Вопросы».
+      const variantNumbersByQuestion = new Map<string, number[]>();
+      for (const s of sections) {
+        const fs = s.formSetJson as FormSet | null;
+        if (!fs) continue;
+        fs.forms.forEach((form, idx) => {
+          for (const qid of form.questionIds) {
+            const list = variantNumbersByQuestion.get(qid) ?? [];
+            list.push(idx + 1);
+            variantNumbersByQuestion.set(qid, list);
+          }
+        });
+      }
+
       // Локальный «Ключ строки» (FR-15.9): q1, q2, … — на него ссылаются «Вклады вопросов».
       const aliasByQuestionId = new Map<string, string>();
       const questionRows = questions.map((q, i) => {
         const alias = `q${i + 1}`;
         aliasByQuestionId.set(q.id, alias);
-        return { "Ключ строки": alias, ...serializeQuestionRow(q, topicName.get(q.topicId) || "") };
+        return {
+          "Ключ строки": alias,
+          ...serializeQuestionRow(q, topicName.get(q.topicId) || ""),
+          "Варианты": (variantNumbersByQuestion.get(q.id) ?? []).join("; "),
+        };
       });
 
       const scaleRows = scales.map((s) => serializeScaleRow(s));
@@ -151,7 +170,7 @@ router.get(
         .map((o) => serializeScoringOverrideRow(o, aliasByQuestionId.get(o.questionId)!));
 
       const wb = new ExcelJS.Workbook();
-      addSheet(wb, "Вопросы", questionRows, ["Ключ строки", ...QUESTION_HEADERS], [12, ...QUESTION_WIDTHS]);
+      addSheet(wb, "Вопросы", questionRows, ["Ключ строки", ...QUESTION_HEADERS, "Варианты"], [12, ...QUESTION_WIDTHS, 25]);
       addSheet(wb, "Структура", structureRows, STRUCTURE_HEADERS, STRUCTURE_WIDTHS);
       addSheet(wb, "Квоты", quotaRows, QUOTA_HEADERS, QUOTA_WIDTHS);
       addSheet(wb, "Оценка", scoringRows, SCORING_OVERRIDE_HEADERS, SCORING_OVERRIDE_WIDTHS);

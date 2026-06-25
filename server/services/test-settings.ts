@@ -17,7 +17,7 @@ import {
   contentPages,
   templates,
 } from "@shared/schema";
-import type { Test, TemplateManifest, DrawBlueprint } from "@shared/schema";
+import type { Test, TemplateManifest, DrawBlueprint, FormSet } from "@shared/schema";
 import {
   planSystemPages,
   SYSTEM_KINDS,
@@ -115,6 +115,8 @@ export interface SectionPayload {
   feedbackJson?: unknown;
   /** PRD-11: optional stratified-draw blueprint; null/absent = uniform draw. */
   drawBlueprintJson?: DrawBlueprint | null;
+  /** PRD-17 (BR-12): optional fixed-variant set; null/absent = legacy draw. */
+  formSetJson?: FormSet | null;
   /** PRD-15 block D (FR-31): per-section default price; null = inherit test. */
   defaultPoints?: number | null;
 }
@@ -589,6 +591,7 @@ export class TestSettingsService {
         timeLimitMinutes: s.timeLimitMinutes ?? null,
         feedbackJson: s.feedbackJson ?? null,
         drawBlueprintJson: s.drawBlueprintJson ?? null,
+        formSetJson: s.formSetJson ?? null,
         defaultPoints: s.defaultPoints ?? null,
         sortOrder: i,
       });

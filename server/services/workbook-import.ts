@@ -31,7 +31,10 @@ import {
   type DrawStratum,
   type QuestionScoring,
   type InsertTestQuestionScoring,
+  type FormSet,
 } from "@shared/schema";
+import { buildFormSet, parseVariantNumbers, type VariantMembership } from "@shared/draw/forms";
+import { randomUUID } from "crypto";
 import type { ValueType } from "@shared/formula";
 import { importQuestionRows, type ResolvedQuestion } from "./questions-import";
 import { testSettingsService, type SectionPayload } from "./test-settings";
@@ -103,6 +106,9 @@ export async function importWorkbook(
   // Topic names seen on «Вопросы» — used to resolve «Структура» sections under
   // dryRun (topics are not persisted then, so storage can't be consulted).
   const questionTopicNames = new Set<string>();
+  // PRD-17 (FR-13): per-topic variant memberships from the «Варианты» column —
+  // each topic's distinct labels become its section's variants (built in Pass 6).
+  const membershipByTopic = new Map<string, VariantMembership[]>();
   const questionsSheet = findSheet(workbook, "Вопросы");
   if (questionsSheet) {
     const qrows = sheetToObjects(questionsSheet);
@@ -114,6 +120,21 @@ export async function importWorkbook(
     result.questions = { created: qres.created, updated: qres.updated, skipped: qres.skipped };
     for (const e of qres.errors) result.errors.push(`Лист «Вопросы», ${e}`);
     for (const [alias, q] of qres.aliasToQuestion) aliasToQuestion.set(alias, q);
+
+    // Variant memberships: resolve each row's question (row key alias, else ID)
+    // and group its labels under the question's topic.
+    for (const r of qrows) {
+      const numbers = parseVariantNumbers(r["Варианты"]);
+      if (numbers.length === 0) continue;
+      const topicKey = normalizeName(String(r["Тема"] ?? ""));
+      if (!topicKey) continue;
+      const aliasRef = String(r["Ключ строки"] ?? "").trim();
+      const questionId = aliasToQuestion.get(aliasRef)?.id || String(r["ID"] ?? "").trim();
+      if (!questionId) continue;
+      const list = membershipByTopic.get(topicKey) ?? [];
+      list.push({ questionId, numbers });
+      membershipByTopic.set(topicKey, list);
+    }
   }
 
   // ── Pass 2: «Шкалы» (upsert by key). Build key → scaleId for measurements. ──
@@ -426,6 +447,18 @@ export async function importWorkbook(
         continue;
       }
 
+      // PRD-17 (FR-13): variants from the «Варианты» column of this topic's
+      // questions. A topic with variant labels needs >= 2 distinct ones; a single
+      // label is an authoring error (the section is created without variants).
+      let formSetJson: FormSet | null = buildFormSet(
+        membershipByTopic.get(key) ?? [],
+        () => randomUUID(),
+      );
+      if (formSetJson && formSetJson.forms.length < 2) {
+        result.errors.push(`${where}: у вопросов темы задан только один вариант — нужно ≥2`);
+        formSetJson = null;
+      }
+
       pending.push({
         order: sec.sortOrder,
         payload: {
@@ -434,6 +467,7 @@ export async function importWorkbook(
           topicPassRuleJson: sec.passRule,
           required: sec.required,
           drawBlueprintJson: strata.length ? { strata } : null,
+          formSetJson,
         },
       });
       result.structure.quotas += strata.length;

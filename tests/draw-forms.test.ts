@@ -6,7 +6,7 @@
  * (`shuffle(questionIds)`) exactly assertable (PRD-17 §5; FR-04/07/15/17).
  */
 import { describe, it, expect } from "vitest";
-import { selectForm } from "../shared/draw/forms";
+import { selectForm, parseVariantNumbers, buildFormSet } from "../shared/draw/forms";
 import type { Form } from "../shared/schema";
 
 const identity = <T,>(a: T[]): T[] => a;
@@ -80,5 +80,70 @@ describe("selectForm — purity", () => {
     const snapshot = JSON.parse(JSON.stringify(FORMS));
     selectForm(FORMS, { previousFormIds: [], shuffle: reverse });
     expect(FORMS).toEqual(snapshot);
+  });
+});
+
+describe("parseVariantNumbers — Excel «Варианты» cell (PRD-17 FR-13)", () => {
+  it("parses delimited numbers", () => {
+    expect(parseVariantNumbers("1; 3")).toEqual([1, 3]);
+    expect(parseVariantNumbers("2,1")).toEqual([2, 1]);
+  });
+  it("accepts «Вариант N» tokens (first run of digits wins)", () => {
+    expect(parseVariantNumbers("Вариант 1; Вариант 2")).toEqual([1, 2]);
+  });
+  it("dedups and drops blanks / non-numeric / non-positive", () => {
+    expect(parseVariantNumbers("1; 1; 2")).toEqual([1, 2]);
+    expect(parseVariantNumbers(" ; abc, 0")).toEqual([]); // blank / non-numeric / zero dropped
+    expect(parseVariantNumbers("")).toEqual([]);
+    expect(parseVariantNumbers(null)).toEqual([]);
+  });
+});
+
+describe("buildFormSet — from per-question variant numbers (PRD-17 FR-13)", () => {
+  const id = (i: number) => `f${i}`;
+
+  it("groups questions by number, ascending, with positional labels", () => {
+    const fs = buildFormSet(
+      [
+        { questionId: "q1", numbers: [1] },
+        { questionId: "q2", numbers: [2] },
+        { questionId: "q3", numbers: [1, 2] }, // in both variants
+      ],
+      id,
+    );
+    expect(fs).toEqual({
+      forms: [
+        { id: "f0", label: "Вариант 1", questionIds: ["q1", "q3"] },
+        { id: "f1", label: "Вариант 2", questionIds: ["q2", "q3"] },
+      ],
+    });
+  });
+
+  it("normalises non-contiguous numbers (1,3) to positional 1,2", () => {
+    const fs = buildFormSet(
+      [
+        { questionId: "q1", numbers: [1] },
+        { questionId: "q2", numbers: [3] },
+      ],
+      id,
+    );
+    expect(fs!.forms.map((f) => f.label)).toEqual(["Вариант 1", "Вариант 2"]);
+    expect(fs!.forms[1].questionIds).toEqual(["q2"]); // the "3" question
+  });
+
+  it("returns null when no question carries a number", () => {
+    expect(buildFormSet([{ questionId: "q1", numbers: [] }], id)).toBeNull();
+    expect(buildFormSet([], id)).toBeNull();
+  });
+
+  it("does not duplicate a question id within one variant", () => {
+    const fs = buildFormSet(
+      [
+        { questionId: "q1", numbers: [1] },
+        { questionId: "q1", numbers: [1] },
+      ],
+      id,
+    );
+    expect(fs!.forms[0].questionIds).toEqual(["q1"]);
   });
 });
