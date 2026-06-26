@@ -620,6 +620,29 @@
 }
 .tb-variant-qtype svg { display: block; }
 
+/* Transfer inside the variants modal: make the dual-list fill the modal body
+   and scroll INTERNALLY instead of letting each pane balloon to its content
+   height (41+ question rows) and push the whole modal — and the move controls —
+   past the form edge. Ported from the approved wireframe (prd17-test-variants).
+   The body becomes a bounded flex column so `.ou-transfer { flex: 1 }` can take
+   the remaining height; `min-height: 0` on every level lets the list's
+   `overflow: auto` actually clip. Question prompts are long, so rows wrap and use
+   the smaller body-s font (WF), unlike the avatar-based single-line default. */
+.tb-variants-modal .ou-modal__body {
+  display: flex; flex-direction: column; min-height: 0;
+}
+.tb-variants-modal .ou-transfer {
+  flex: 1 1 auto; min-height: 0;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+.tb-variants-modal .ou-transfer__pane { min-height: 0; }
+.tb-variants-modal .ou-transfer__list { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.tb-variants-modal .ou-transfer__row { align-items: start; }
+.tb-variants-modal .ou-transfer__row-name {
+  white-space: normal; overflow: visible; font: var(--ou-text-body-s);
+}
+.tb-variants-modal .ou-transfer__row-meta { white-space: normal; overflow: visible; }
+
 /* Feedback preview (read-only) — clickable card со snippet'ом и meta-row.
    Edit-форма — отдельный паттерн `.tb-feedback-block` (см. выше).
    `.is-empty` — placeholder-вариант («Не задано — нажмите для редактирования»).

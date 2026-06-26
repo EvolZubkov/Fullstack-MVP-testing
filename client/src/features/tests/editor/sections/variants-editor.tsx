@@ -304,6 +304,7 @@ function VariantsModal(props: {
       open={open}
       onClose={onClose}
       size="xl"
+      className="tb-variants-modal"
       title={`Варианты теста — тема «${topicName}»`}
       description="Соберите каждый вариант из вопросов банка темы. Выпавший вариант выдаётся целиком, в случайном порядке."
       footer={
