@@ -17,16 +17,21 @@
     существующий контрол карточки (выключенный), НЕ разбираются.
     Интеграция: «Варианты теста» — режим. ВЫКЛ = карточка как сейчас. ВКЛ =
     источник = выпавший вариант (выдаётся целиком), контролы выдачи из всей
-    темы скрыты; показывается редактор вариантов + ПОКРЫТИЕ банка. Ротация на
-    повторе — поведение по умолчанию, без переключателя.
+    темы НЕ применяются; показывается редактор вариантов + ПОКРЫТИЕ банка.
+    Ротация на повторе — поведение по умолчанию, без переключателя.
+    UX-уточнение 1.2 (2026-06-26): взаимоисключающие контролы выдачи больше НЕ
+    скрываются, а показываются НЕАКТИВНЫМИ (disabled) с пояснением — карточка не
+    должна визуально «терять» настройки. Семантика выдачи (FR-03: контролы не
+    применяются) не изменилась. Состояния s-on/s-warning/s-error обновлены:
+    контролы выдачи присутствуют, но disabled.
     Состояния:
-      s-on       — Варианты ВКЛ (дефолт): фикс-наборы + покрытие банка
+      s-on       — Варианты ВКЛ (дефолт): контролы выдачи disabled + наборы + покрытие
       s-off      — Варианты ВЫКЛ: карточка как сейчас (реальные контролы)
       s-modal    — Редактор вариантов (модал: вкладки + transfer банк<->вариант)
       s-warning  — Неполный вариант (вопрос ушёл из банка) — НЕблокирующе
       s-error    — < 2 вариантов / пустой вариант — ошибка
       s-docs     — Пояснения + DS Mapping
-    СОГЛАСОВАН 2026-06-25.
+    СОГЛАСОВАН 2026-06-25; UX-уточнение 1.2 — 2026-06-26.
     -->
     <title>PRD-17 — Варианты теста (вкладка «Состав»)</title>
     <link rel="stylesheet" href="/docs/wireframes/ds/university-rt.css" />
@@ -189,7 +194,23 @@
                 <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «О компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
               </div>
               <div class="tb-topic-row__body">
-                <!-- Режим вариантов ВКЛ: контролы выдачи из всей темы скрыты (источник = вариант) -->
+                <!-- Режим вариантов ВКЛ: контролы выдачи из всей темы НЕ применяются —
+                     показаны НЕАКТИВНЫМИ (disabled), а не скрыты (UX-уточнение 1.2). -->
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Все вопросы темы: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                  <span class="tb-draw-all-row__hint">отключено в режиме вариантов</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split is-disabled"><div class="ou-number__box"><button type="button" class="ou-number__btn" disabled aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="16" disabled aria-label="Количество вопросов из темы О компании" /><button type="button" class="ou-number__btn" disabled aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 41</span>
+                </div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Квоты по подтемам: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+                <div class="tb-card-desc">Недоступно: активен режим «Варианты теста» — вопросы берутся из выпавшего варианта целиком.</div>
                 <label class="tb-quota-toggle">
                   <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Варианты теста: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
                   <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
@@ -268,6 +289,22 @@
                 <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «О компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
               </div>
               <div class="tb-topic-row__body">
+                <!-- Контролы выдачи disabled (режим вариантов, UX-уточнение 1.2). -->
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Все вопросы темы: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                  <span class="tb-draw-all-row__hint">отключено в режиме вариантов</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split is-disabled"><div class="ou-number__box"><button type="button" class="ou-number__btn" disabled aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="16" disabled aria-label="Количество вопросов из темы О компании" /><button type="button" class="ou-number__btn" disabled aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 40</span>
+                </div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Квоты по подтемам: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+                <div class="tb-card-desc">Недоступно: активен режим «Варианты теста» — вопросы берутся из выпавшего варианта целиком.</div>
                 <label class="tb-quota-toggle">
                   <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Варианты теста: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
                   <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
@@ -310,6 +347,22 @@
                 <button class="ou-iconbtn ou-iconbtn--ghost ou-iconbtn--s" aria-label="Убрать тему «О компании»"><span class="ou-iconbtn__ico"><svg width="14" height="14"><use href="#i-x" /></svg></span></button>
               </div>
               <div class="tb-topic-row__body">
+                <!-- Контролы выдачи disabled (режим вариантов, UX-уточнение 1.2). -->
+                <label class="tb-draw-all-row">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Все вопросы темы: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-draw-all-row__lbl">Все вопросы темы</span>
+                  <span class="tb-draw-all-row__hint">отключено в режиме вариантов</span>
+                </label>
+                <div class="tb-draw-count-row">
+                  <span class="tb-draw-count-row__label">Вопросов в тест</span>
+                  <div class="ou-number ou-number--s ou-number--split is-disabled"><div class="ou-number__box"><button type="button" class="ou-number__btn" disabled aria-label="Уменьшить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14" /></svg></button><input class="ou-number__input" inputmode="numeric" type="text" value="16" disabled aria-label="Количество вопросов из темы О компании" /><button type="button" class="ou-number__btn" disabled aria-label="Увеличить"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button></div></div>
+                  <span class="tb-draw-count-row__max">из 41</span>
+                </div>
+                <label class="tb-quota-toggle">
+                  <label class="ou-switch-field is-disabled"><span class="ou-switch ou-switch--m is-disabled"><input class="ou-switch__input" type="checkbox" disabled aria-label="Квоты по подтемам: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
+                  <span class="tb-section-label"><svg width="14" height="14"><use href="#i-layers" /></svg>Квоты по подтемам (тегам)</span>
+                </label>
+                <div class="tb-card-desc">Недоступно: активен режим «Варианты теста» — вопросы берутся из выпавшего варианта целиком.</div>
                 <label class="tb-quota-toggle">
                   <label class="ou-switch-field"><span class="ou-switch ou-switch--m is-on"><input class="ou-switch__input" type="checkbox" checked aria-label="Варианты теста: О компании" /><span class="ou-switch__track"><span class="ou-switch__thumb"></span></span></span></label>
                   <span class="tb-section-label"><svg width="14" height="14"><use href="#i-list" /></svg>Варианты теста</span>
@@ -428,14 +481,15 @@
             <tbody>
               <tr><td>ОСНОВА</td><td>реальная разметка <code>topics-structure-section.tsx</code></td><td>Карточка темы, степпер, свитчи, ОС — РЕАЛЬНЫЕ классы/компоненты, захвачены из приложения. Новое — только «Варианты теста»</td></tr>
               <tr><td>Поверхность</td><td>вкладка «СОСТАВ» редактора теста (drawer)</td><td>Не «Структура». «Структура» — другая вкладка (поток/роутер)</td></tr>
-              <tr><td>Свич «Варианты теста»</td><td>наличие <code>form_set_json</code></td><td>РЕЖИМ: ВЫКЛ = выдача из всего банка (Все вопросы темы / Вопросов в тест / Квоты — как сейчас). ВКЛ = источник = выпавший вариант, эти контролы скрыты</td></tr>
+              <tr><td>Свич «Варианты теста»</td><td>наличие <code>form_set_json</code></td><td>РЕЖИМ: ВЫКЛ = выдача из всего банка (Все вопросы темы / Вопросов в тест / Квоты — как сейчас). ВКЛ = источник = выпавший вариант, эти контролы становятся НЕАКТИВНЫМИ (disabled) с пояснением, а не скрываются (UX-уточнение 1.2)</td></tr>
+              <tr><td>Disabled вместо скрытия (UX-уточнение 1.2)</td><td>FR-03; 2026-06-26</td><td>Взаимоисключающие контролы не прячутся, а гасятся видимыми: режим вариантов гасит контролы выдачи всей темы; «Все вопросы темы» гасит квоты («…только к частичной выборке»); адаптивный режим гасит сам свич «Варианты теста» («Недоступно в адаптивном режиме…»). Семантика выдачи не изменилась — карточка не должна визуально «терять» настройки</td></tr>
               <tr><td>Вариант = набор</td><td><code>form_set_json.forms[].questionIds</code></td><td>Подмножество банка темы; выпадает один при старте темы, выдаётся целиком (FR-04). Привязан к ТЕМЕ, не к тесту</td></tr>
               <tr><td>Покрытие банка (FR-18)</td><td>уникальные вопросы во всех вариантах vs банк</td><td>«задействовано N из M · K не используются»: K — осиротевшие вопросы (ни в одном варианте, никогда не выдаются). НЕблокирующее предупреждение</td></tr>
               <tr><td>Редактор вариантов</td><td>модал</td><td>Наборы крупные → модал (как «Обратная связь»): вкладки вариантов + Transfer «банк ↔ вариант»</td></tr>
               <tr><td>Ротация на повторе</td><td>по умолчанию, без переключателя</td><td>На повторе — другой вариант (по <code>formId</code>, FR-07). Отключать бессмысленно; в SCORM не гарантируется (NFR-17) — только веб-хост</td></tr>
               <tr><td>Случайный порядок</td><td>FR-15</td><td>Вопросы выпавшего варианта — в случайном порядке, пиннятся в попытке</td></tr>
               <tr><td>Неполный / пустой вариант</td><td>вопрос ушёл из банка / 0 вопросов</td><td>Неполный — НЕблокирующий warning; пустой / &lt;2 вариантов — ошибка, блок сохранения (§6)</td></tr>
-              <tr><td>Тег-квоты</td><td>фича PRD-11</td><td>Свич «Квоты по подтемам» — существующий контрол карточки; в этом эскизе показан только в ВЫКЛ-состоянии, не разбирается</td></tr>
+              <tr><td>Тег-квоты</td><td>фича PRD-11</td><td>Свич «Квоты по подтемам» — существующий контрол карточки; в режиме вариантов и при «Все вопросы темы» показан disabled с пояснением (UX-уточнение 1.2), сама фича PRD-11 здесь не разбирается</td></tr>
               <tr><td>Excel-обмен</td><td>колонка «Варианты» на листе «Вопросы»</td><td>Массив вариантов вопроса через разделитель, как «Теги» (FR-13)</td></tr>
             </tbody>
           </table>
@@ -449,6 +503,7 @@
             <tbody>
               <tr><td>Строка темы / шапка / тело</td><td><code>tb-topic-row*</code> (tb-components)</td><td>существующее (реальная разметка)</td></tr>
               <tr><td>Свич «Все вопросы темы» / «Квоты» / «Варианты»</td><td><code>Switch</code> (<code>ou-switch-field</code> &gt; <code>ou-switch</code>)</td><td>существующий компонент</td></tr>
+              <tr><td>Неактивный контрол (disabled, UX-уточнение 1.2)</td><td><code>is-disabled</code> на <code>ou-switch</code>/<code>ou-switch-field</code>/<code>ou-number</code> + атрибут <code>disabled</code>; пояснение — <code>tb-card-desc</code> / <code>tb-draw-all-row__hint</code></td><td>DS-состояние (штатные классы), без локальных шимов</td></tr>
               <tr><td>«Вопросов в тест»</td><td><code>NumberInput</code> (<code>ou-number--split</code>, степпер −/+)</td><td>существующий компонент</td></tr>
               <tr><td>Кнопка-иконка (X / удалить)</td><td><code>IconButton</code> (<code>ou-iconbtn</code>)</td><td>существующий компонент</td></tr>
               <tr><td>Обратная связь по теме</td><td><code>tb-feedback-preview</code></td><td>существующее</td></tr>
