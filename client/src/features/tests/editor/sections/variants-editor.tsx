@@ -17,6 +17,7 @@ import { CircleDot, CheckSquare, Unplug, ListOrdered, List, Plus, Trash2, type L
 import { Button, ModalDialog, Switch, Tabs, Tag, TransferList, type TransferItem } from "@universityrt/ui-kit";
 import type { FormSet, Form } from "@shared/schema";
 import type { QuestionType } from "@shared/scales/engine";
+import { pluralize } from "@/lib/i18n";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -29,6 +30,8 @@ export type VariantsEditorProps = {
   onChange: (formSet: FormSet | null) => void;
   /** Validation message for this section's variants (red state). */
   error?: string;
+  /** Adaptive mode: variants don't apply — show the toggle disabled, not hidden. */
+  disabled?: boolean;
 };
 
 // ─── Question display helpers ───────────────────────────────────────────────────
@@ -55,7 +58,7 @@ function makeForm(index: number): Form {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function VariantsEditor({ topicId, topicName, formSet, onChange, error }: VariantsEditorProps) {
+export function VariantsEditor({ topicId, topicName, formSet, onChange, error, disabled = false }: VariantsEditorProps) {
   const [open, setOpen] = useState(false);
   const { data: allQuestions = [] } = useQuery<QuestionRow[]>({ queryKey: ["/api/questions"] });
   const topicQuestions = useMemo(
@@ -64,6 +67,9 @@ export function VariantsEditor({ topicId, topicName, formSet, onChange, error }:
   );
 
   const enabled = formSet != null;
+  // When force-disabled (adaptive) the toggle stays visible but greyed and the
+  // summary/modal collapse — the variant set, if any, is preserved but inactive.
+  const active = enabled && !disabled;
 
   const toggle = (on: boolean) => {
     if (!on) return onChange(null);
@@ -79,11 +85,20 @@ export function VariantsEditor({ topicId, topicName, formSet, onChange, error }:
   const present = topicQuestions.filter((q) => usedIds.has(q.id)).length;
   const orphan = topicQuestions.length - present;
 
+  // R-9: unequal variant sizes skew fairness (an absolute pass threshold loses
+  // meaning across differently sized variants) — surface a non-blocking warning.
+  // Only meaningful once every variant has questions; empty variants are flagged
+  // by their own «0» tag and a save-blocking validation error instead.
+  const sizes = formSet?.forms.map((f) => f.questionIds.length) ?? [];
+  const allFilled = sizes.length > 0 && sizes.every((n) => n > 0);
+  const balanced = allFilled && sizes.every((n) => n === sizes[0]);
+
   return (
     <>
       <label className="tb-quota-toggle">
         <Switch
           checked={enabled}
+          disabled={disabled}
           onChange={(e) => toggle(e.target.checked)}
           aria-label={`Варианты теста: ${topicName}`}
           data-testid={`topic-variants-toggle-${topicId}`}
@@ -94,14 +109,18 @@ export function VariantsEditor({ topicId, topicName, formSet, onChange, error }:
         </span>
       </label>
 
-      {!enabled && (
+      {disabled ? (
+        <div className="tb-card-desc" data-testid={`topic-variants-disabled-${topicId}`}>
+          Недоступно в адаптивном режиме — выборка идёт по уровням сложности.
+        </div>
+      ) : !enabled ? (
         <div className="tb-card-desc">
           Выключено — выдача из всего банка темы. Включите, чтобы раздавать заранее скурированные
           варианты и менять вариант на повторе.
         </div>
-      )}
+      ) : null}
 
-      {enabled && formSet && (
+      {active && formSet && (
         <div className="tb-quota-block" data-testid={`topic-variants-block-${topicId}`}>
           <table className="tb-table">
             <thead>
@@ -150,6 +169,25 @@ export function VariantsEditor({ topicId, topicName, formSet, onChange, error }:
             )}
           </div>
 
+          {allFilled && (
+            <div className="tb-quota-sum" data-testid={`topic-variants-balance-${topicId}`}>
+              {balanced ? (
+                <>
+                  <span>
+                    {sizes.length} {pluralize(sizes.length, "вариант", "варианта", "вариантов")} по{" "}
+                    {sizes[0]} · при старте темы выпадает один, выдаётся целиком; на повторе — другой
+                  </span>
+                  <Tag tone="success" size="s">сбалансировано</Tag>
+                </>
+              ) : (
+                <>
+                  <span>Варианты {sizes.join(" / ")} — неравные</span>
+                  <Tag tone="warning" size="s">неравные варианты</Tag>
+                </>
+              )}
+            </div>
+          )}
+
           {error && (
             <p className="tb-field-error" role="alert" data-testid={`topic-variants-error-${topicId}`}>
               {error}
@@ -158,7 +196,7 @@ export function VariantsEditor({ topicId, topicName, formSet, onChange, error }:
         </div>
       )}
 
-      {enabled && formSet && (
+      {active && formSet && (
         <VariantsModal
           open={open}
           onClose={() => setOpen(false)}

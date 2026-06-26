@@ -269,6 +269,21 @@ function TopicRow(props: {
   // draws by difficulty levels, so the variant set is ignored and not edited.
   const variantsOn = !props.adaptive && section.formSet != null;
 
+  // Author request (UX): never HIDE the mutually-exclusive controls — show them
+  // DISABLED instead, so the card never appears to silently "lose" settings.
+  // Variants mode overrides the whole-topic draw; "draw all" overrides the
+  // partial-draw quotas. `partialDrawLocked` covers both the count field and the
+  // quota editor (a partial draw is the only thing they apply to).
+  const drawAllDisabled = props.adaptive || variantsOn;
+  const partialDrawLocked = effectiveDrawAll || variantsOn;
+  const quotaReason = variantsOn
+    ? "Недоступно: активен режим «Варианты теста» — вопросы берутся из выпавшего варианта целиком."
+    : effectiveDrawAll
+      ? "Недоступно: выдаётся вся тема. Квоты применяются только к частичной выборке."
+      : undefined;
+  // The draw-count error only applies to an editable partial whole-topic draw.
+  const drawCountError = !partialDrawLocked ? props.drawCountError : undefined;
+
   return (
     <>
       <div className="tb-topic-row" data-testid={`topic-row-${section.topicId}`}>
@@ -301,77 +316,73 @@ function TopicRow(props: {
           />
         </div>
         <div className="tb-topic-row__body">
-          {/* PRD-17: variants mode replaces the topic-draw controls. When a
-              section runs on fixed variants (standard mode), the whole-topic draw
-              controls (Все вопросы темы / Вопросов в тест / Квоты) are hidden — the
-              source is the drawn variant, delivered whole. */}
-          {!variantsOn && (
-            <>
-              <label className="tb-draw-all-row">
-                <Switch
-                  checked={effectiveDrawAll}
-                  disabled={props.adaptive}
-                  onChange={(e) => props.onToggleDrawAll(e.target.checked)}
-                  aria-label={`Все вопросы темы: ${section.topicName}`}
-                  data-testid={`topic-drawall-${section.topicId}`}
-                />
-                <span className="tb-draw-all-row__lbl">Все вопросы темы</span>
-                {props.adaptive && (
-                  <span className="tb-draw-all-row__hint">включено адаптивным режимом</span>
-                )}
-              </label>
-              <div
-                className="tb-draw-count-row"
-                data-field={`sections[${props.index}].drawCount`}
-                data-invalid={!effectiveDrawAll && props.drawCountError ? "true" : undefined}
-              >
-                <span className="tb-draw-count-row__label">Вопросов в тест</span>
-                <NumberInput
-                  size="s"
-                  value={effectiveDrawAll ? maxQ : section.drawCount}
-                  min={1}
-                  max={maxQ}
-                  disabled={effectiveDrawAll}
-                  invalid={!effectiveDrawAll && Boolean(props.drawCountError)}
-                  aria-label={`Количество вопросов из темы ${section.topicName}`}
-                  data-testid={`topic-drawcount-${section.topicId}`}
-                  onChange={(next) => props.onChangeDrawCount(next)}
-                />
-                <span className="tb-draw-count-row__max">из {section.maxQuestions}</span>
-              </div>
-              {!effectiveDrawAll && props.drawCountError && (
-                <p className="tb-field-error" role="alert" data-testid={`topic-drawcount-error-${section.topicId}`}>
-                  {props.drawCountError}
-                </p>
-              )}
-
-              {/* Quotas slice a partial draw — meaningless when the whole topic is
-                  drawn, so the quota editor is hidden while "draw all" is effective. */}
-              {!effectiveDrawAll && (
-                <QuotaEditor
-                  topicId={section.topicId}
-                  topicName={section.topicName}
-                  drawCount={section.drawCount}
-                  blueprint={section.drawBlueprint ?? null}
-                  topicTags={props.topicTags}
-                  availByKey={props.availByKey}
-                  onChange={props.onChangeBlueprint}
-                />
-              )}
-            </>
-          )}
-
-          {/* PRD-17 (BR-12): fixed variants. Hidden in adaptive mode (variants are
-              for standard delivery; adaptive draws by difficulty levels). */}
-          {!props.adaptive && (
-            <VariantsEditor
-              topicId={section.topicId}
-              topicName={section.topicName}
-              formSet={section.formSet ?? null}
-              onChange={props.onChangeFormSet}
-              error={props.variantsError}
+          {/* PRD-17: variants mode overrides the whole-topic draw (the source
+              becomes the drawn variant, delivered whole), and "draw all" overrides
+              the partial-draw quotas. Per author request these controls are kept
+              VISIBLE but DISABLED in those cases instead of being hidden, so the
+              card never looks like it silently dropped settings. */}
+          <label className="tb-draw-all-row">
+            <Switch
+              checked={effectiveDrawAll}
+              disabled={drawAllDisabled}
+              onChange={(e) => props.onToggleDrawAll(e.target.checked)}
+              aria-label={`Все вопросы темы: ${section.topicName}`}
+              data-testid={`topic-drawall-${section.topicId}`}
             />
+            <span className="tb-draw-all-row__lbl">Все вопросы темы</span>
+            {props.adaptive ? (
+              <span className="tb-draw-all-row__hint">включено адаптивным режимом</span>
+            ) : variantsOn ? (
+              <span className="tb-draw-all-row__hint">отключено в режиме вариантов</span>
+            ) : null}
+          </label>
+          <div
+            className="tb-draw-count-row"
+            data-field={`sections[${props.index}].drawCount`}
+            data-invalid={drawCountError ? "true" : undefined}
+          >
+            <span className="tb-draw-count-row__label">Вопросов в тест</span>
+            <NumberInput
+              size="s"
+              value={effectiveDrawAll ? maxQ : section.drawCount}
+              min={1}
+              max={maxQ}
+              disabled={partialDrawLocked}
+              invalid={Boolean(drawCountError)}
+              aria-label={`Количество вопросов из темы ${section.topicName}`}
+              data-testid={`topic-drawcount-${section.topicId}`}
+              onChange={(next) => props.onChangeDrawCount(next)}
+            />
+            <span className="tb-draw-count-row__max">из {section.maxQuestions}</span>
+          </div>
+          {drawCountError && (
+            <p className="tb-field-error" role="alert" data-testid={`topic-drawcount-error-${section.topicId}`}>
+              {drawCountError}
+            </p>
           )}
+
+          <QuotaEditor
+            topicId={section.topicId}
+            topicName={section.topicName}
+            drawCount={section.drawCount}
+            blueprint={section.drawBlueprint ?? null}
+            topicTags={props.topicTags}
+            availByKey={props.availByKey}
+            onChange={props.onChangeBlueprint}
+            disabled={partialDrawLocked}
+            disabledReason={quotaReason}
+          />
+
+          {/* PRD-17 (BR-12): fixed variants. In adaptive mode the section draws by
+              difficulty levels, so the editor is shown DISABLED (not hidden). */}
+          <VariantsEditor
+            topicId={section.topicId}
+            topicName={section.topicName}
+            formSet={section.formSet ?? null}
+            onChange={props.onChangeFormSet}
+            error={props.variantsError}
+            disabled={props.adaptive}
+          />
 
           <div className="tb-card-desc">Обратная связь по теме</div>
           {/* Clicking the preview opens FeedbackEditorModal (FR-36 / FR-37). */}
@@ -425,10 +436,18 @@ function QuotaEditor(props: {
   topicTags: string[];
   availByKey: Record<string, number>;
   onChange: (bp: DrawBlueprint | null) => void;
+  /** Force the whole editor disabled (drawing the whole topic / variants mode). */
+  disabled?: boolean;
+  /** Why the editor is force-disabled — shown in place of the off-state hint. */
+  disabledReason?: string;
 }) {
   const { topicId, topicName, drawCount, blueprint, topicTags, availByKey, onChange } = props;
+  const forcedDisabled = props.disabled ?? false;
   const enabled = blueprint != null;
   const noTags = topicTags.length === 0;
+  // When force-disabled the toggle stays visible (greyed) but the editing table
+  // collapses — its config is preserved in the draft, just not applied here.
+  const expanded = enabled && !forcedDisabled;
   const strata = blueprint?.strata ?? [];
 
   const usedKeys = new Set(strata.map((s) => tagKey(s.tag)));
@@ -458,7 +477,7 @@ function QuotaEditor(props: {
       <label className="tb-quota-toggle">
         <Switch
           checked={enabled}
-          disabled={noTags}
+          disabled={noTags || forcedDisabled}
           onChange={(e) => toggle(e.target.checked)}
           aria-label={`Квоты по подтемам: ${topicName}`}
           data-testid={`topic-quota-toggle-${topicId}`}
@@ -469,18 +488,21 @@ function QuotaEditor(props: {
         </span>
       </label>
 
-      {noTags && (
+      {forcedDisabled ? (
+        <div className="tb-card-desc" data-testid={`topic-quota-locked-${topicId}`}>
+          {props.disabledReason}
+        </div>
+      ) : noTags ? (
         <div className="tb-card-desc" data-testid={`topic-quota-notags-${topicId}`}>
           У вопросов темы нет тегов — добавьте теги в разделе «Вопросы», чтобы задавать квоты по подтемам.
         </div>
-      )}
-      {!noTags && !enabled && (
+      ) : !enabled ? (
         <div className="tb-card-desc">
           Выключено — выдача равномерная (случайные вопросы из всей темы). Включите, чтобы гарантировать покрытие подтем.
         </div>
-      )}
+      ) : null}
 
-      {enabled && (
+      {expanded && (
         <div className="tb-quota-block" data-testid={`topic-quota-block-${topicId}`}>
           {overflow && (
             <Banner
