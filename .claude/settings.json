@@ -10,7 +10,10 @@
       "mcp__playwright__browser_snapshot",
       "mcp__playwright__browser_fill_form",
       "mcp__playwright__browser_evaluate",
-      "mcp__playwright__browser_console_messages"
+      "mcp__playwright__browser_console_messages",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "mcp__playwright__browser_type"
     ]
   }
 }
