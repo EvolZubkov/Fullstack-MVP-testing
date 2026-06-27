@@ -18,6 +18,7 @@ import TestsPage from "@/pages/author/tests";
 import AuthorTemplatesPage from "@/pages/author/templates";
 import AnalyticsPage from "@/pages/author/analytics";
 import TestAnalyticsPage from "@/pages/author/test-analytics";
+import DebugPlayerPage from "@/features/tests/debug-player/debug-player-page";
 import UsersPage from "@/pages/author/users";
 import GroupsPage from "@/pages/author/groups";
 import ImportPage from "@/pages/author/import";
@@ -147,6 +148,13 @@ function Router() {
           <AuthorLayout>
             <TestAnalyticsPage />
           </AuthorLayout>
+        </ProtectedRoute>
+      </Route>
+
+      {/* PRD-18: in-service debug player — full-screen, no AuthorLayout (like take-test). */}
+      <Route path="/author/tests/:testId/debug">
+        <ProtectedRoute requiredPermission="tests.export.scorm">
+          <DebugPlayerPage />
         </ProtectedRoute>
       </Route>
 

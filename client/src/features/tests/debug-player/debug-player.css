@@ -1,0 +1,148 @@
+/**
+ * PRD-18 Phase 4 — debug-player window layout. Full-screen tool chrome built from
+ * plain CSS over DS tokens (the DS layout primitives handle the inner content); no
+ * wireframe `wf-*` classes in production.
+ */
+
+.dbg {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--ou-bg);
+  color: var(--ou-fg);
+}
+
+.dbg__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ou-space-4);
+  padding: var(--ou-space-3) var(--ou-space-5);
+  border-bottom: 1px solid var(--ou-border);
+  background: var(--ou-bg-elevated);
+  flex: 0 0 auto;
+}
+
+.dbg__body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.dbg__stage {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dbg__status {
+  flex: 0 0 auto;
+  padding: var(--ou-space-3) var(--ou-space-5);
+  border-bottom: 1px solid var(--ou-border);
+  background: var(--ou-bg-elevated);
+}
+
+.dbg__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dbg__frame {
+  flex: 1 1 auto;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.dbg__inspector {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 42%;
+  max-width: 640px;
+  min-width: 360px;
+  min-height: 0;
+  border-left: 1px solid var(--ou-border);
+  background: var(--ou-bg-elevated);
+}
+
+.dbg__inspector-head {
+  display: flex;
+  align-items: center;
+  gap: var(--ou-space-2);
+  padding: var(--ou-space-2) var(--ou-space-3);
+  border-bottom: 1px solid var(--ou-border);
+}
+
+.dbg__inspector-head > .ou-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dbg__inspector-head .ou-tabs__list {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.dbg__inspector-head .ou-tabs__list::-webkit-scrollbar { display: none; }
+
+.dbg__inspector-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--ou-space-4);
+}
+
+.dbg__expand {
+  align-self: flex-start;
+  margin: var(--ou-space-3);
+}
+
+.dbg__center {
+  display: grid;
+  place-items: center;
+  height: 100vh;
+  padding: var(--ou-space-6);
+}
+
+.dbg__nowrap { white-space: nowrap; }
+
+.dbg__path {
+  font-family: var(--ou-font-mono, ui-monospace, monospace);
+  word-break: break-all;
+}
+
+.dbg__panel-empty {
+  padding: var(--ou-space-6);
+  text-align: center;
+}
+
+.dbg__score-hero,
+.dbg__draw-section {
+  padding: var(--ou-space-3) var(--ou-space-4);
+  border: 1px solid var(--ou-border);
+  border-radius: var(--ou-radius-m, 8px);
+  background: var(--ou-bg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--ou-space-2);
+}
+
+/* LMS narrative — kind tints the row's leading edge. */
+.dbg__lms {
+  padding: var(--ou-space-2) var(--ou-space-3);
+  border-left: 3px solid var(--ou-border);
+  background: var(--ou-bg);
+  border-radius: var(--ou-radius-s, 4px);
+}
+.dbg__lms--sess { border-left-color: var(--ou-fg-muted); }
+.dbg__lms--commit,
+.dbg__lms--finish { border-left-color: var(--ou-success-500, #2e7d32); }
+.dbg__lms--read { border-left-color: var(--ou-accent-400, #6aa9ff); }
+.dbg__lms--status,
+.dbg__lms--suspend { border-left-color: var(--ou-accent-500, #3b82f6); }
+.dbg__lms--answer { border-left-color: var(--ou-accent-600, #2563eb); }
+.dbg__lms--warn { border-left-color: var(--ou-warning-500, #f59e0b); }

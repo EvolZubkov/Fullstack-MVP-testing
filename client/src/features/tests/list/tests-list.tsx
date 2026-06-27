@@ -37,6 +37,7 @@ import {
   Download,
   Filter,
   FileSpreadsheet,
+  FlaskConical,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -868,6 +869,20 @@ export function TestsListPage(): React.JSX.Element {
             Общий доступ
           </button>
         )}
+        <button
+          type="button"
+          className="dropdown-item"
+          role="menuitem"
+          onClick={() => {
+            setTestMenu(null);
+            // PRD-18: open the in-service debug player in a separate window.
+            window.open(`/author/tests/${test.id}/debug`, "_blank", "noopener");
+          }}
+          data-testid={`menu-debug-${test.id}`}
+        >
+          <FlaskConical size={14} />
+          Тестовый прогон
+        </button>
         <a
           className="dropdown-item"
           role="menuitem"
