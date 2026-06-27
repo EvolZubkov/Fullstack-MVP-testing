@@ -13,7 +13,9 @@
       "mcp__playwright__browser_console_messages",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "mcp__playwright__browser_type"
+      "mcp__playwright__browser_type",
+      "mcp__playwright__browser_resize",
+      "Bash(node_modules/.bin/markdownlint-cli2 \"docs/specs/prd-18/debug-test-player.md\")"
     ]
   }
 }
