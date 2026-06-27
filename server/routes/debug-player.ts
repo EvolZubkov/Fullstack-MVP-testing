@@ -77,7 +77,13 @@ router.post("/:id/debug/session", ...gate, async (req, res) => {
     logger.info(`Debug session opened: test=${req.params.id} token=${token} by user=${req.session.userId}`, "debug-player");
     // playUrl points straight at the launch file so the iframe requests a concrete
     // path (matches the CLI player); the empty-splat fallback below still serves it.
-    res.json({ token, launch, playUrl: `/api/tests/${req.params.id}/debug/play/${token}/${launch}` });
+    res.json({
+      token,
+      launch,
+      playUrl: `/api/tests/${req.params.id}/debug/play/${token}/${launch}`,
+      title: data.test.title,
+      template: data.designSettings?.templateId,
+    });
   } catch (error) {
     if (error instanceof ScormBuildError) {
       return res

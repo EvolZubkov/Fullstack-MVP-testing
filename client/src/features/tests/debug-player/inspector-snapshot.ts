@@ -32,6 +32,8 @@ export interface ProtocolRow {
   ratioPct: number;
   score: number | null;
   sMax: number | null;
+  /** Pre-built «цена» note describing the pricing method + tallies (PRD-18). */
+  priceNote: string | null;
   earned: number;
   points: number;
   difficulty: number | string | null;
@@ -50,7 +52,11 @@ export interface ScaleRow {
 
 export interface ResultRow { name: string; live: string | null; pub: string | null }
 export interface LmsEvent { kind: string; text: string; sub: string }
+/** One structured RTE-call row for the «LMS» table (Вызов · Ключ · Значение). */
+export interface LmsRow { idx: number; call: string; key: string; value: string; marker: boolean }
 export interface WatchRow { path: string; disp: string }
+/** One node of the «Состояние» tree (DS ou-tree). `meta` is the leaf value / child count. */
+export interface WatchNode { id: string; label: string; meta: string; leaf: boolean; children?: WatchNode[] }
 
 export interface AdaptiveBar {
   visible: boolean;
@@ -89,7 +95,10 @@ export interface TBInspectorApi {
   /** Remove all «Эталон» markers from the iframe. */
   clearReference(iframeWin: Window | null): void;
   humanizeTraffic(traffic: unknown[]): LmsEvent[];
+  buildLmsTable(traffic: unknown[]): LmsRow[];
+  buildLmsRawLog(traffic: unknown[]): string;
   flattenLimited(obj: unknown): WatchRow[];
+  buildStateTree(obj: unknown): WatchNode[];
   safeJson(obj: unknown): string;
   getSuspendAttempts(cmi: Record<string, string>): { attemptNumber?: number; percent: number }[];
 }
@@ -128,6 +137,12 @@ export interface DrawSectionVM {
   formId: string | null;
   formIndex: number | null;
   formCount: number | null;
+  /** Size of the topic's full question bank (the «из банка M» denominator). */
+  bankSize: number;
+  /** Composition of the drawn set by sub-topic tag (empty for untagged banks). */
+  byTag: { tag: string; count: number }[];
+  /** Composition of the drawn set by question type. */
+  byType: { type: string; typeLabel: string; count: number }[];
   quotas: { tag: string; planned: number; actual: number; mode: string; short: boolean }[] | null;
 }
 
@@ -147,7 +162,9 @@ export interface InspectorSnapshot {
   scales: ScaleRow[];
   results: ResultRow[];
   lms: LmsEvent[];
-  watch: { rows: WatchRow[]; json: string; count: number };
+  lmsRows: LmsRow[];
+  lmsRawLog: string;
+  watch: { rows: WatchRow[]; json: string; count: number; tree: WatchNode[] };
   adaptive: AdaptiveBar;
   status: StatusVM;
   attempts: { value: string; label: string }[];
@@ -186,8 +203,8 @@ export function buildSnapshot(
     score: { available: false, adaptive: false },
     protocol: { rows: [], note: "" },
     draw: { available: false, adaptive: false },
-    scales: [], results: [], lms: [],
-    watch: { rows: [], json: "—", count: 0 },
+    scales: [], results: [], lms: [], lmsRows: [], lmsRawLog: "—",
+    watch: { rows: [], json: "—", count: 0, tree: [] },
     adaptive: { visible: false },
     status: { drawn: 0, answered: 0, percentDone: 0, score: null, verdict: null, alarm: null },
     attempts: [{ value: "live", label: "Текущая (live)" }],
@@ -203,10 +220,13 @@ export function buildSnapshot(
   const scales = TB.buildScaleRows(pkg, ints);
   const results = TB.buildResultRows(pkg, ints);
   const lms = TB.humanizeTraffic(traffic);
+  const lmsRows = TB.buildLmsTable(traffic);
+  const lmsRawLog = TB.buildLmsRawLog(traffic);
   const adaptive = TB.buildAdaptiveBar(pkg);
 
   const wObj = watchObject(pkg, cmi, opts.watchSource);
   const watchRows = wObj ? TB.flattenLimited(wObj) : [];
+  const watchTree = wObj ? TB.buildStateTree(wObj) : [];
   const watchJson = wObj ? TB.safeJson(wObj) : "—";
 
   const drawn = protocol.rows.length;
@@ -233,7 +253,9 @@ export function buildSnapshot(
     scales,
     results,
     lms,
-    watch: { rows: watchRows, json: watchJson, count: watchRows.length },
+    lmsRows,
+    lmsRawLog,
+    watch: { rows: watchRows, json: watchJson, count: watchRows.length, tree: watchTree },
     adaptive,
     status: { drawn, answered, percentDone: drawn ? Math.round((answered / drawn) * 100) : 0, score, verdict, alarm },
     attempts,

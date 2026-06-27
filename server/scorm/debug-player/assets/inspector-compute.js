@@ -30,6 +30,10 @@
       }
     } catch (e) {}
     try { live.state = w.state || null; } catch (e) {}
+    // Has the learner actually STARTED the run? Before «Начать тестирование» the
+    // phase is 'start' (the package pre-generates the variant at bootstrap, so a
+    // verdict/protocol must NOT be shown yet — 0% would read as «Не пройден»).
+    live.started = !!(live.state && live.state.phase && live.state.phase !== "start");
     try {
       if (typeof w.computeTestScales === "function") {
         var sc = w.computeTestScales();
@@ -128,10 +132,33 @@
   function priceFor(pkg, q, ans) {
     var SE = null;
     try { SE = pkg.w.ScoringEngine; } catch (e) {}
+    var input = { type: q.type, correct: q.correct || {}, answer: ans, scoring: q.scoring };
+    // explainAnswer is a superset of scoreAnswer (adds kind/c/x/answered) — prefer
+    // it so the «цена» note can be built without re-deriving any scoring logic.
+    if (SE && typeof SE.explainAnswer === "function") {
+      try { return SE.explainAnswer(input); } catch (e) {}
+    }
     if (SE && typeof SE.scoreAnswer === "function") {
-      try { return SE.scoreAnswer({ type: q.type, correct: q.correct || {}, answer: ans, scoring: q.scoring }); } catch (e) {}
+      try { return SE.scoreAnswer(input); } catch (e) {}
     }
     return null;
+  }
+
+  // ── «цена» note for the Протокол tab: the method that priced the answer plus
+  // its tallies (PRD-18). `pr` is an explainAnswer result; older scoreAnswer-only
+  // results (no `kind`) fall back to the raw score/sMax pair. ──
+  function priceNum(n) {
+    if (typeof n !== "number" || !isFinite(n)) return "0";
+    return String(Math.round(n * 100) / 100);
+  }
+  function priceNote(pr) {
+    if (!pr) return null;
+    if (!pr.kind) return pr.score != null ? "цена: " + priceNum(pr.score) + " / " + priceNum(pr.sMax) : null;
+    var method = pr.kind === "weighted" ? "веса опций" : pr.kind === "tiered" ? "тиры" : "точное совпадение";
+    if (!pr.answered) return "цена: " + method + " · нет ответа → 0";
+    if (pr.kind === "weighted") return "цена: " + method + " · вес выбранного = " + priceNum(pr.score);
+    if (pr.kind === "tiered") return "цена: " + method + " · c=" + pr.c + ", x=" + pr.x + " → " + priceNum(pr.ratio);
+    return "цена: " + method + " · " + (pr.ratio >= 1 ? "верно → 1" : "неверно → 0");
   }
 
   // Drawn questions for the live attempt — flat order (standard) or adaptive
@@ -184,6 +211,9 @@
   function buildProtocolRows(pkg, cmi, mode) {
     mode = mode || "live";
     var rows, note = "";
+    if (mode === "live" && (!pkg || !pkg.started)) {
+      return { rows: [], note: "Тест ещё не начат — протокол появится после старта." };
+    }
     if (mode === "live") {
       rows = pkg ? buildLiveRows(pkg) : [];
     } else {
@@ -206,6 +236,7 @@
         answerStr: humanAnswer(q, ans), answered: answered, verdict: verdict,
         ratio: Math.round(ratio * 100) / 100, ratioPct: Math.round(ratio * 100),
         score: pr ? pr.score : null, sMax: pr ? pr.sMax : null,
+        priceNote: priceNote(pr),
         earned: Math.round(earned * 100) / 100, points: points,
         difficulty: (showDiff && q.difficulty != null) ? q.difficulty : null,
         levelName: row.levelName || null,
@@ -269,6 +300,31 @@
     walk(o, "", 0);
     return out;
   }
+  // Build a TREE (DS ou-tree shape) from a state-ish object: top-level keys become
+  // root nodes, nested objects/arrays expand into children, leaves carry their value
+  // in `meta`. Depth + node count capped so a huge live state can't hang the panel.
+  function buildStateTree(obj) {
+    var CAP = 2000, MAXD = 16, count = { n: 0 };
+    function node(val, path, name, depth) {
+      count.n++;
+      if (typeof val === "function") return { id: path, label: name, meta: "ƒ()", leaf: true };
+      if (val === null || typeof val !== "object") return { id: path, label: name, meta: dispVal(val), leaf: true };
+      if (depth >= MAXD) return { id: path, label: name, meta: Array.isArray(val) ? "[…]" : "{…}", leaf: true };
+      var isArr = Array.isArray(val), keys = Object.keys(val);
+      if (!keys.length) return { id: path, label: name, meta: isArr ? "[]" : "{}", leaf: true };
+      var children = [];
+      for (var i = 0; i < keys.length && count.n < CAP; i++) {
+        var k = keys[i];
+        children.push(node(val[k], path ? path + "." + k : k, isArr ? "[" + k + "]" : k, depth + 1));
+      }
+      return { id: path, label: name, meta: isArr ? keys.length + " эл." : keys.length + " кл.", leaf: false, children: children };
+    }
+    if (obj === null || typeof obj !== "object") return [node(obj, "value", "value", 0)];
+    var roots = [], keys = Object.keys(obj);
+    for (var i = 0; i < keys.length && count.n < CAP; i++) roots.push(node(obj[keys[i]], keys[i], keys[i], 1));
+    return roots;
+  }
+
   function safeJson(obj) {
     try {
       var seen = new WeakSet();
@@ -405,6 +461,32 @@
     return ev;
   }
 
+  // ── LMS-журнал as a structured RTE-call table (wireframe «Вызов · Ключ ·
+  // Значение»): SetValue rows + session markers (Initialize/Terminate/Commit);
+  // GetValue noise goes to the raw log below, not the main table. ──
+  function buildLmsTable(traffic) {
+    var rows = [];
+    (traffic || []).forEach(function (e, i) {
+      if (e.fn === "GetValue") return;
+      if (e.fn === "SetValue") {
+        rows.push({ idx: i, call: "Set", key: (e.key || "").replace(/^cmi\./, ""), value: String(e.value), marker: false });
+      } else {
+        rows.push({ idx: i, call: e.fn, key: "", value: e.fn + '("") → ' + (e.ret != null ? '"' + e.ret + '"' : '""'), marker: true });
+      }
+    });
+    return rows;
+  }
+  /** The full raw RTE traffic (GetValue/SetValue/…) for the «Сырые вызовы» disclosure. */
+  function buildLmsRawLog(traffic) {
+    return (traffic || []).map(function (e) {
+      var t = e.fn + "(" + (e.key || "");
+      if (e.fn === "SetValue") t += ", " + String(e.value).slice(0, 200);
+      t += ")";
+      if (e.ret != null) t += ' → "' + String(e.ret).slice(0, 200) + '"';
+      return t;
+    }).join("\n");
+  }
+
   // ── Адаптив: current topic/level + confirmed (passed) level pairs. ──
   function buildAdaptiveBar(pkg) {
     var st = pkg && pkg.state;
@@ -436,10 +518,35 @@
   function round2(n) { return (typeof n === "number" && isFinite(n)) ? Math.round(n * 100) / 100 : 0; }
   function tagKeyJs(raw) { return String(raw == null ? "" : raw).replace(/\s+/g, " ").trim().toLowerCase(); }
 
+  // ── Composition of a drawn question set, by sub-topic tag and by question type
+  // (PRD-18 «Выдача» tab). First-seen original label is preserved per key; order
+  // is insertion order so the table reads as authored. ──
+  function composeByTag(drawn) {
+    var order = [], by = {};
+    (drawn || []).forEach(function (q) {
+      var tags = Array.isArray(q.tags) ? q.tags : [];
+      tags.forEach(function (t) {
+        var k = tagKeyJs(t);
+        if (!by[k]) { by[k] = { tag: t, count: 0 }; order.push(k); }
+        by[k].count += 1;
+      });
+    });
+    return order.map(function (k) { return by[k]; });
+  }
+  function composeByType(drawn) {
+    var order = [], by = {};
+    (drawn || []).forEach(function (q) {
+      var t = q.type || "?";
+      if (!by[t]) { by[t] = { type: t, typeLabel: typeLabel(t), count: 0 }; order.push(t); }
+      by[t].count += 1;
+    });
+    return order.map(function (k) { return by[k]; });
+  }
+
   // ── Результаты: the package's OWN aggregate (calculateResults) + the pass rule.
   // Adaptive tests have no points aggregate — show confirmed levels instead. ──
   function buildScore(pkg) {
-    if (!pkg || !pkg.w) return { available: false, adaptive: false };
+    if (!pkg || !pkg.w || !pkg.started) return { available: false, adaptive: false };
     if (pkg.mode === "adaptive") return { available: true, adaptive: true, bar: buildAdaptiveBar(pkg) };
     var r = null;
     try { if (typeof pkg.w.calculateResults === "function") r = pkg.w.calculateResults(); } catch (e) {}
@@ -475,7 +582,13 @@
     var sections = variant.sections.map(function (vs) {
       var def = secDefs.filter(function (s) { return s.topicId === vs.topicId; })[0] || {};
       var drawnIds = vs.questionIds || [];
-      var out = { topicName: vs.topicName, count: drawnIds.length, mode: "all", formId: null, formIndex: null, formCount: null, quotas: null };
+      var drawn = drawnByTopic[vs.topicId] || [];
+      var out = {
+        topicName: vs.topicName, count: drawnIds.length, mode: "all",
+        formId: null, formIndex: null, formCount: null, quotas: null,
+        bankSize: (def.questions && def.questions.length) || drawnIds.length,
+        byTag: composeByTag(drawn), byType: composeByType(drawn),
+      };
       if (def.formSet && def.formSet.forms && def.formSet.forms.length) {
         out.mode = "variants";
         out.formCount = def.formSet.forms.length;
@@ -490,7 +603,7 @@
       } else if (def.drawBlueprint && def.drawBlueprint.strata && def.drawBlueprint.strata.length) {
         out.mode = "quota";
         var counts = {};
-        (drawnByTopic[vs.topicId] || []).forEach(function (q) {
+        drawn.forEach(function (q) {
           (Array.isArray(q.tags) ? q.tags : []).forEach(function (t) { var k = tagKeyJs(t); counts[k] = (counts[k] || 0) + 1; });
         });
         out.quotas = def.drawBlueprint.strata.map(function (s) {
@@ -514,10 +627,20 @@
     var b = doc.createElement("span");
     b.setAttribute("data-tb-ref", "1");
     b.textContent = text;
-    var bg = kind === "ok" ? "#15803d" : kind === "num" ? "#1d4ed8" : "#6d28d9";
-    b.style.cssText = "display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;" +
-      "padding:0 5px;margin:0 6px;border-radius:9px;background:" + bg + ";color:#fff;" +
-      "font:600 11px/1 system-ui,sans-serif;vertical-align:middle;flex:0 0 auto;";
+    if (kind === "key") {
+      // matching pair letter — small accent key badge sitting on the tile.
+      b.style.cssText = "display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:18px;" +
+        "margin-left:8px;padding:0 5px;border-radius:4px;background:#ede9fe;color:#6d28d9;" +
+        "font:700 11px/1 system-ui,sans-serif;vertical-align:middle;flex:0 0 auto;";
+      return b;
+    }
+    // single/multiple/ranking — marker in a LEFT GUTTER OUTSIDE the variant (absolute,
+    // anchored to the option which we set position:relative): doesn't touch the variant
+    // content or its layout, and never affects scoring (§5.4).
+    b.style.cssText = "position:absolute;left:-24px;top:50%;transform:translateY(-50%);" +
+      "display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;" +
+      "color:" + (kind === "ok" ? "#15803d" : "#1d4ed8") + ";" +
+      "font:700 13px/1 system-ui,sans-serif;font-variant-numeric:tabular-nums;";
     return b;
   }
   function clearReference(iframeWin) {
@@ -555,7 +678,10 @@
         : (Array.isArray(c.correctIndices) ? c.correctIndices : []);
       groups[qid].opts.forEach(function (opt) {
         var idx = parseInt(opt.getAttribute("data-index"), 10);
-        if (correctSet.indexOf(idx) !== -1) opt.appendChild(tbRefBadge(doc, "✓", "ok"));
+        if (correctSet.indexOf(idx) !== -1) {
+          opt.style.position = "relative";
+          opt.appendChild(tbRefBadge(doc, "✓", "ok"));
+        }
       });
     });
 
@@ -568,7 +694,10 @@
       var items = boards[b].querySelectorAll(".rank-item[data-item]");
       for (var j = 0; j < items.length; j++) {
         var pos = co.indexOf(parseInt(items[j].getAttribute("data-item"), 10));
-        if (pos !== -1) items[j].insertBefore(tbRefBadge(doc, String(pos + 1), "num"), items[j].firstChild);
+        if (pos !== -1) {
+          items[j].style.position = "relative";
+          items[j].appendChild(tbRefBadge(doc, String(pos + 1), "num"));
+        }
       }
     }
 
@@ -582,9 +711,9 @@
         var letter = String.fromCharCode(65 + idx);
         var line = mboards[mb].querySelector('.matching-line[data-right="' + p.right + '"]');
         var rt = line ? line.querySelector(".match-right-tile") : null;
-        if (rt) rt.appendChild(tbRefBadge(doc, letter, "pair"));
+        if (rt) rt.appendChild(tbRefBadge(doc, letter, "key"));
         var chip = mboards[mb].querySelector('.match-chip[data-drag="' + p.left + '"]');
-        if (chip) chip.appendChild(tbRefBadge(doc, letter, "pair"));
+        if (chip) chip.appendChild(tbRefBadge(doc, letter, "key"));
       });
     }
   }
@@ -598,7 +727,8 @@
     contributionsFor: contributionsFor, priceFor: priceFor,
     buildLiveRows: buildLiveRows, buildAttemptRows: buildAttemptRows, getSuspendAttempts: getSuspendAttempts,
     buildProtocolRows: buildProtocolRows, buildScaleRows: buildScaleRows, buildResultRows: buildResultRows,
-    flattenLimited: flattenLimited, dispVal: dispVal, safeJson: safeJson,
-    humanizeTraffic: humanizeTraffic, buildAdaptiveBar: buildAdaptiveBar,
+    flattenLimited: flattenLimited, buildStateTree: buildStateTree, dispVal: dispVal, safeJson: safeJson,
+    humanizeTraffic: humanizeTraffic, buildLmsTable: buildLmsTable, buildLmsRawLog: buildLmsRawLog,
+    buildAdaptiveBar: buildAdaptiveBar,
   };
 })();

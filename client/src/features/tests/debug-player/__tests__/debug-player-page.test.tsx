@@ -29,8 +29,8 @@ import DebugPlayerPage from "../debug-player-page";
 function row(over: Partial<ProtocolRow>): ProtocolRow {
   return {
     idx: 1, topicName: "Алгебра", prompt: "2+2?", type: "single", typeLabel: "Один ответ", answerStr: "4",
-    answered: true, verdict: "correct", ratio: 1, ratioPct: 100, score: 1, sMax: 1, earned: 1, points: 1,
-    difficulty: null, levelName: null, contribs: [], ...over,
+    answered: true, verdict: "correct", ratio: 1, ratioPct: 100, score: 1, sMax: 1, priceNote: "цена: точное совпадение · верно → 1",
+    earned: 1, points: 1, difficulty: null, levelName: null, contribs: [], ...over,
   };
 }
 
@@ -49,12 +49,21 @@ function installTB(over: Partial<TBInspectorApi> = {}) {
     })),
     buildDraw: vi.fn(() => ({
       available: true, adaptive: false,
-      sections: [{ topicName: "Алгебра", count: 2, mode: "quota" as const, formId: null, formIndex: null, formCount: null, quotas: [{ tag: "Дроби", planned: 2, actual: 1, mode: "exact", short: true }] }],
+      sections: [{
+        topicName: "Алгебра", count: 2, mode: "quota" as const, formId: null, formIndex: null, formCount: null,
+        bankSize: 5, byTag: [{ tag: "Дроби", count: 1 }], byType: [{ type: "single", typeLabel: "Один ответ", count: 2 }],
+        quotas: [{ tag: "Дроби", planned: 2, actual: 1, mode: "exact", short: true }],
+      }],
     })),
     applyReference: vi.fn(),
     clearReference: vi.fn(),
     humanizeTraffic: vi.fn(() => [{ kind: "sess", text: "Сеанс открыт", sub: "" }]),
+    buildLmsTable: vi.fn(() => [{ idx: 0, call: "Set", key: "completion_status", value: "completed", marker: false }]),
+    buildLmsRawLog: vi.fn(() => 'Initialize("") → "true"'),
     flattenLimited: vi.fn(() => [{ path: "answers.q1", disp: "0" }]),
+    buildStateTree: vi.fn(() => [
+      { id: "answers", label: "answers", meta: "1 кл.", leaf: false, children: [{ id: "answers.q1", label: "q1", meta: "0", leaf: true }] },
+    ]),
     safeJson: vi.fn(() => "{}"),
     getSuspendAttempts: vi.fn(() => []),
     ...over,
@@ -73,7 +82,7 @@ describe("DebugPlayerPage — states", () => {
   it("shows the loading state while the session is built", () => {
     sessionState.current = { status: "loading" };
     render(<DebugPlayerPage />);
-    expect(screen.getByText(/Готовим тестовый прогон/)).toBeInTheDocument();
+    expect(screen.getByText(/Готовим прогон отладки/)).toBeInTheDocument();
   });
 
   it("shows the «нет доступа» screen on a forbidden session (no edit scope)", () => {
@@ -93,15 +102,19 @@ describe("DebugPlayerPage — states", () => {
 describe("DebugPlayerPage — ready", () => {
   it("renders the stage iframe and the status panel from the live snapshot", () => {
     render(<DebugPlayerPage />);
-    expect(screen.getByTitle("Тестовый прогон")).toHaveAttribute("src", "/play/x");
+    expect(screen.getByTitle("Прогон отладки")).toHaveAttribute("src", "/play/x");
     expect(screen.getByText("Прогресс")).toBeInTheDocument();
-    expect(screen.getByText("1 из 2")).toBeInTheDocument(); // 1 answered of 2 drawn
+    expect(screen.getByText("Оценка")).toBeInTheDocument();
+    // Progress «1 / 2» (1 answered of 2 drawn) — split across text nodes, match on the cell.
+    expect(
+      screen.getByText((_, el) => el?.className === "dbg__stat-num" && el.textContent?.replace(/\s+/g, " ").trim() === "1 / 2"),
+    ).toBeInTheDocument();
   });
 
   it("shows the score aggregate on the default «Результаты» tab", () => {
     render(<DebugPlayerPage />);
-    expect(screen.getByText("Не пройден")).toBeInTheDocument();
-    expect(screen.getByText("порог 70%")).toBeInTheDocument();
+    expect(screen.getAllByText("Не пройден").length).toBeGreaterThan(0);
+    expect(screen.getByText("порог 70%")).toBeInTheDocument(); // status threshold tag
   });
 
   it("renders the protocol table and exports CSV", () => {
@@ -113,14 +126,14 @@ describe("DebugPlayerPage — ready", () => {
     render(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("tab", { name: "Протокол" }));
     expect(screen.getByText("2+2?")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Экспорт CSV/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Протокол в CSV/ }));
     expect(createUrl).toHaveBeenCalled();
   });
 
   it("shows the per-section quota plan-vs-actual on the «Выдача» tab", () => {
     render(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("tab", { name: "Выдача" }));
-    expect(screen.getByText("квоты по тегам")).toBeInTheDocument();
+    expect(screen.getByText(/тег-квоты/)).toBeInTheDocument();
     expect(screen.getByText("Дроби")).toBeInTheDocument();
   });
 
@@ -131,24 +144,27 @@ describe("DebugPlayerPage — ready", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Показатели" }));
     expect(screen.getByText("V")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Состояние" }));
-    expect(screen.getByText("answers.q1")).toBeInTheDocument();
+    expect(screen.getByText("answers")).toBeInTheDocument(); // state tree root node
     fireEvent.click(screen.getByRole("tab", { name: "LMS" }));
-    expect(screen.getByText("Сеанс открыт")).toBeInTheDocument();
+    expect(screen.getByText("completion_status")).toBeInTheDocument(); // structured LMS table
   });
 
   it("filters the state table by path", () => {
     render(<DebugPlayerPage />);
     fireEvent.click(screen.getByRole("tab", { name: "Состояние" }));
-    fireEvent.change(screen.getByPlaceholderText(/Фильтр по пути/), { target: { value: "zzz" } });
-    expect(screen.queryByText("answers.q1")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText(/фильтр по дереву/i), { target: { value: "zzz" } });
+    expect(screen.queryByText("answers")).not.toBeInTheDocument();
   });
 
-  it("collapses and re-expands the inspector", () => {
-    render(<DebugPlayerPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Свернуть инспектор" }));
-    expect(screen.queryByRole("tab", { name: "Протокол" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Развернуть инспектор" }));
-    expect(screen.getByRole("tab", { name: "Протокол" })).toBeInTheDocument();
+  it("collapses and re-expands the inspector via the edge toggle", () => {
+    const { container } = render(<DebugPlayerPage />);
+    const root = container.querySelector(".dbg") as HTMLElement;
+    const toggle = screen.getByRole("button", { name: "Свернуть или развернуть инспектор" });
+    expect(root.className).not.toContain("is-collapsed");
+    fireEvent.click(toggle);
+    expect(root.className).toContain("is-collapsed");
+    fireEvent.click(toggle);
+    expect(root.className).not.toContain("is-collapsed");
   });
 
   it("paints the «Эталон» overlay when the toggle is enabled, and clears it when off", () => {
@@ -159,9 +175,9 @@ describe("DebugPlayerPage — ready", () => {
     expect(window.TBInspector!.applyReference).toHaveBeenCalled();
   });
 
-  it("restarts the run via «Сбросить прогон»", () => {
+  it("resets the run via «Сброс»", () => {
     render(<DebugPlayerPage />);
-    fireEvent.click(screen.getByRole("button", { name: /Сбросить прогон/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Сброс" }));
     expect(resetMock).toHaveBeenCalled();
   });
 

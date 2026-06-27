@@ -118,7 +118,7 @@ describe("POST /api/tests/:id/debug/session", () => {
   });
 
   it("builds a throwaway run from LIVE state with telemetry OFF and returns the token", async () => {
-    buildScormExportDataMock.mockResolvedValue({ test: baseTest });
+    buildScormExportDataMock.mockResolvedValue({ test: baseTest, designSettings: { templateId: "default" } });
     generateScormPackageMock.mockResolvedValue(Buffer.from("zip-bytes"));
     createDebugSessionMock.mockResolvedValue({ token: "tok-1", launch: "index.html" });
 
@@ -129,6 +129,8 @@ describe("POST /api/tests/:id/debug/session", () => {
       token: "tok-1",
       launch: "index.html",
       playUrl: "/api/tests/test-1/debug/play/tok-1/index.html",
+      title: "Test",
+      template: "default",
     });
     // Isolation invariants: LIVE source + no telemetry baked in.
     expect(buildScormExportDataMock).toHaveBeenCalledWith("test-1", { source: "debug" });

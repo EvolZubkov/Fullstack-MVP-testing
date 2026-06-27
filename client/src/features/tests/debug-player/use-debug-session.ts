@@ -19,6 +19,10 @@ export interface DebugSessionState {
   token?: string;
   launch?: string;
   playUrl?: string;
+  /** Test title, for the toolbar subtitle. */
+  title?: string;
+  /** Applied design-template id, for the stage ribbon. */
+  template?: string;
 }
 
 /** Inject a server-served script into the player window and resolve once it ran. */
@@ -35,21 +39,29 @@ function loadScript(src: string): Promise<void> {
 
 export function useDebugSession(testId: string) {
   const [state, setState] = useState<DebugSessionState>({ status: "loading" });
-  // Bumping `runKey` reloads the stage iframe for a fresh run (Сбросить прогон).
+  // Bumping `runKey` reloads the stage iframe for a fresh run (Сброс).
   const [runKey, setRunKey] = useState(0);
+  // Bumping `buildKey` re-runs the whole build: a new package from LIVE state (Пересобрать).
+  const [buildKey, setBuildKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setState({ status: "loading" });
     (async () => {
       try {
         await loadScript(`/api/tests/${testId}/debug/shim.js`);
         await loadScript(`/api/tests/${testId}/debug/inspector-compute.js`);
         const res = await apiRequest("POST", `/api/tests/${testId}/debug/session`);
-        const data = (await res.json()) as { token: string; launch: string; playUrl: string };
+        const data = (await res.json()) as {
+          token: string; launch: string; playUrl: string; title?: string; template?: string;
+        };
         if (cancelled) return;
         // Key the throwaway run's localStorage by token so reruns don't collide.
         window.__scorm?.restore(`debug:${data.token}`);
-        setState({ status: "ready", token: data.token, launch: data.launch, playUrl: data.playUrl });
+        setState({
+          status: "ready", token: data.token, launch: data.launch, playUrl: data.playUrl,
+          title: data.title, template: data.template,
+        });
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
@@ -57,13 +69,18 @@ export function useDebugSession(testId: string) {
       }
     })();
     return () => { cancelled = true; };
-  }, [testId]);
+  }, [testId, buildKey]);
 
-  /** Restart the run: clear the RTE store and reload the stage iframe. */
+  /** Reset the current run: clear the RTE store and reload the stage iframe. */
   function reset() {
     window.__scorm?.reset();
     setRunKey((k) => k + 1);
   }
 
-  return { state, runKey, reset };
+  /** Rebuild: assemble a fresh package from the current LIVE test state. */
+  function rebuild() {
+    setBuildKey((k) => k + 1);
+  }
+
+  return { state, runKey, reset, rebuild };
 }

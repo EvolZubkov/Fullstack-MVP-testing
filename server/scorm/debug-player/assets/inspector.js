@@ -109,9 +109,12 @@
         : r.verdict === "correct" ? '<span class="tag ok">верно</span>'
         : r.verdict === "partial" ? '<span class="tag part">частично ' + r.ratioPct + "%</span>"
         : '<span class="tag no">неверно</span>';
-      var priceTag = r.score != null
-        ? '<span class="tag price">цена ' + fmtNum(r.score) + "/" + fmtNum(r.sMax) + " · балл " + fmtNum(r.earned) + "/" + fmtNum(r.points) + "</span>"
-        : "";
+      var balStr = " · балл " + fmtNum(r.earned) + "/" + fmtNum(r.points);
+      var priceTag = r.priceNote
+        ? '<span class="tag price">' + esc(r.priceNote) + balStr + "</span>"
+        : r.score != null
+          ? '<span class="tag price">цена ' + fmtNum(r.score) + "/" + fmtNum(r.sMax) + balStr + "</span>"
+          : "";
       var diffTag = r.difficulty != null ? '<span class="tag diff">сложность ' + esc(r.difficulty) + "</span>" : "";
       var lvlTag = r.levelName ? '<span class="tag lvl2">' + esc(r.levelName) + "</span>" : "";
       var contribStr = r.contribs.map(function (c) {

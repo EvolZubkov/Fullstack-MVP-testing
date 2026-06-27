@@ -18,7 +18,7 @@ import {
 function row(over: Partial<ProtocolRow>): ProtocolRow {
   return {
     idx: 1, topicName: "", prompt: "", type: "single", typeLabel: "Один ответ", answerStr: "",
-    answered: false, verdict: "none", ratio: 0, ratioPct: 0, score: null, sMax: null,
+    answered: false, verdict: "none", ratio: 0, ratioPct: 0, score: null, sMax: null, priceNote: null,
     earned: 0, points: 1, difficulty: null, levelName: null, contribs: [], ...over,
   };
 }
@@ -38,7 +38,10 @@ function mockTB(over: Partial<TBInspectorApi> = {}): TBInspectorApi {
     applyReference: vi.fn(),
     clearReference: vi.fn(),
     humanizeTraffic: vi.fn(() => []),
+    buildLmsTable: vi.fn(() => []),
+    buildLmsRawLog: vi.fn(() => "—"),
     flattenLimited: vi.fn((o: unknown) => Object.keys(o as object).map((k) => ({ path: k, disp: "x" }))),
+    buildStateTree: vi.fn(() => []),
     safeJson: vi.fn(() => "{}"),
     getSuspendAttempts: vi.fn(() => []),
     ...over,
