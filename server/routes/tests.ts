@@ -13,8 +13,9 @@ import { requireTestScope } from "../middleware/test-scope";
 import { readableTestScope, canGrantAccess } from "../services/test-access";
 import { visibleTopic } from "../services/topic-access";
 import { assessTestPublish } from "../services/draw-feasibility";
-import { createTestSnapshot, getPublicationState, exportSourceForTest } from "../services/test-snapshot";
+import { createTestSnapshot, getPublicationState } from "../services/test-snapshot";
 import { generateScormPackage } from "../scorm-exporter";
+import { buildScormExportData, ScormBuildError } from "../scorm/build-export-data";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { logger } from "../logger";
 import {
@@ -917,88 +918,14 @@ router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delet
 // GET /api/tests/:id/export/scorm - Экспорт SCORM
 router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), requireTestScope("edit"), async (req, res) => {
   try {
-    // PRD-15 FR-16: a published test exports from its active snapshot, so the
-    // package matches what the web delivers; a draft exports from live storage.
-    const src = await exportSourceForTest(req.params.id);
-    const test = await src.getTest(req.params.id);
-    if (!test) {
-      return res.status(404).json({ error: "Test not found" });
-    }
+    // Assemble the deliverable via the shared builder (NFR-18: the debug player
+    // builds the SAME data the same way). Export uses the snapshot-aware source
+    // (published → active snapshot, draft → live).
+    const data = await buildScormExportData(req.params.id, { source: "export" });
+    const test = data.test;
 
-    const sections = await src.getTestSections(test.id);
-    const exportSections = await Promise.all(
-      sections.map(async (s) => {
-        const topic = await src.getTopic(s.topicId);
-        const questions = await src.getQuestionsByTopic(s.topicId);
-        const courses = await src.getTopicCourses(s.topicId);
-        const events = await src.getTopicEvents(s.topicId);
-        return {
-          ...s,
-          topic: topic!,
-          questions,
-          courses,
-          events,
-        };
-      })
-    );
-
-    // Validate design template before packaging
-    const rawDesignSettings = test.designSettingsJson as Record<string, unknown> | null;
-    const designTemplateId = (rawDesignSettings?.templateId as string | undefined) || "default";
-    const designTemplateApiVersion = rawDesignSettings?.templateApiVersion as string | undefined;
-
-    if (designTemplateApiVersion && !isSupportedTemplateApiVersion(designTemplateApiVersion)) {
-      return res.status(422).json({
-        error: `Unsupported templateApiVersion in design settings: ${designTemplateApiVersion}`,
-        field: "templateApiVersion",
-      });
-    }
-
-    const designSettings = rawDesignSettings && Object.keys(rawDesignSettings).length > 0
-      ? {
-          templateId: designTemplateId,
-          templateVersion: rawDesignSettings.templateVersion as string | undefined,
-          templateApiVersion: rawDesignSettings.templateApiVersion as string | undefined,
-          params: (rawDesignSettings.params as Record<string, unknown>) ?? {},
-        }
-      : { templateId: "default", params: {} };
-
-    // Load content pages for this test
-    const contentPages = await src.getContentPages(test.id);
-
-    // Load result variables (PRD-2) for this test
-    const resultVariables = await src.getResultVariables(test.id);
-
-    // Load scales + measurements (PRD-5) for this test
-    const scales = await src.getScales(test.id);
-    const measurements = await src.getQuestionMeasurements(test.id);
-
-    // PRD-15 block D (FR-32): per-test scoring overrides — the bake resolves
-    // effective points/scoring/difficulty into TEST_DATA. Snapshot exports read
-    // the frozen rows; drafts read live.
-    const questionScoring = await src.getTestQuestionScoring(test.id);
-
-    // Load adaptive settings if test is adaptive
-    let adaptiveSettings = null;
-    if (test.mode === "adaptive") {
-      const topicSettings = await src.getAdaptiveTopicSettingsByTest(test.id);
-      const levels = await src.getAdaptiveLevelsByTest(test.id);
-
-      // Load links for each level
-      const levelsWithLinks = await Promise.all(
-        levels.map(async (level) => {
-          const links = await src.getAdaptiveLevelLinks(level.id);
-          return { ...level, links };
-        })
-      );
-
-      adaptiveSettings = {
-        topicSettings,
-        levels: levelsWithLinks,
-      };
-    }
-
-    // Telemetry configuration
+    // Telemetry configuration (request-specific): an opt-in flag creates a
+    // scorm_package record so the in-LMS package can post back telemetry.
     let telemetryConfig = null;
     const enableTelemetry = req.query.telemetry === "true";
 
@@ -1030,26 +957,7 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
       logger.info(`SCORM telemetry package created: ${packageId} test="${test.title}" (${test.id}) by user=${req.session.userId}`, "scorm-export");
     }
 
-    // Resolve the actual on-disk directory of the selected template (built-in or
-    // uploaded PRD-3) so the exporter copies the right files instead of falling
-    // back to `default` for uploaded ids (whose files live under uploads/templates).
-    // The exported package is a learner-facing artifact: a non-active template
-    // must not ship — fall back to `default`.
-    const templateDir = await resolveTemplateDir(designTemplateId, { activeOnly: true });
-
-    const buffer = await generateScormPackage({
-      test,
-      sections: exportSections,
-      questionScoring,
-      adaptiveSettings,
-      contentPages,
-      resultVariables,
-      scales,
-      measurements,
-      designSettings,
-      templateDir,
-      telemetry: telemetryConfig,
-    });
+    const buffer = await generateScormPackage({ ...data, telemetry: telemetryConfig });
 
     res.setHeader("Content-Type", "application/zip");
     const safeTitle = test.title.replace(/[^a-zA-Zа-яА-ЯёЁ0-9]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "") || "scorm_export";
@@ -1059,6 +967,11 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
     logger.info(`SCORM exported: test="${test.title}" (${test.id}) telemetry=${enableTelemetry} by user=${req.session.userId}`, "scorm-export");
     res.send(buffer);
   } catch (error) {
+    if (error instanceof ScormBuildError) {
+      return res
+        .status(error.status)
+        .json(error.field ? { error: error.message, field: error.field } : { error: error.message });
+    }
     logger.error("SCORM export error: " + (error as Error).message, "scorm-export");
     res.status(500).json({ error: "Failed to export SCORM package" });
   }
