@@ -1,0 +1,604 @@
+// ─── Debug-player inspector COMPUTE layer (framework-free, no DOM) ───────────────
+// PRD-18 (FR-13, R-1): the single source of the inspector's correctness-critical
+// logic — reading the live package window, pricing answers (PRD-10), scale
+// contributions (PRD-5), humanising LMS traffic, flattening runtime state. It
+// returns DATA only (no HTML). BOTH hosts consume it: the CLI player's
+// `inspector.js` renders this data as its own HTML; the in-service player (React)
+// renders the SAME data as DS components. Exposed on `window.TBInspector`.
+(function () {
+  // ── Formatters (data, not markup) ──
+  function fmtNum(n) { return (typeof n === "number" && isFinite(n)) ? Math.round(n * 100) / 100 : null; }
+  function trunc(s, n) { s = String(s == null ? "" : s); return s.length > n ? s.slice(0, n) + "…" : s; }
+  function byteLen(s) { try { return new Blob([String(s)]).size; } catch (e) { return String(s).length; } }
+  function fmtBytes(n) { return n < 1024 ? n + " Б" : (n / 1024).toFixed(1) + " КБ"; }
+
+  // ── Read live globals straight off the package window (same-origin) ──
+  // The package concatenates its app modules into one non-module script, so
+  // state, TEST_DATA, ScoringEngine, computeTestScales, … live on the iframe
+  // window. Same-origin (served from /play/:token) lets us read them directly.
+  function readPkg(stageWindow) {
+    var w = stageWindow;
+    if (!w) return null;
+    var live = { w: w, hasData: false, hasEngine: false, mode: "standard", TEST_DATA: null, state: null,
+      scaleDefs: [], varDefs: [], measurements: [], scales: {}, results: {}, scaleErrors: [], resultErrors: [] };
+    try {
+      var TD = w.TEST_DATA;
+      if (TD && typeof TD === "object") {
+        live.hasData = true; live.TEST_DATA = TD;
+        live.scaleDefs = TD.scales || []; live.varDefs = TD.resultVariables || [];
+        live.measurements = TD.measurements || []; live.mode = TD.mode || "standard";
+      }
+    } catch (e) {}
+    try { live.state = w.state || null; } catch (e) {}
+    try {
+      if (typeof w.computeTestScales === "function") {
+        var sc = w.computeTestScales();
+        if (sc) { live.hasEngine = true; live.scales = sc.values || {}; live.scaleErrors = sc.errors || []; }
+        var results = {};
+        try { if (typeof w.calculateResults === "function") results = w.calculateResults() || {}; } catch (e) {}
+        if (typeof w.computeTestResultVariables === "function") {
+          var rc = w.computeTestResultVariables(results, sc || { values: {}, errors: [] });
+          if (rc) { live.results = rc.values || {}; live.resultErrors = rc.errors || []; }
+        }
+      }
+    } catch (e) { live.engineError = String(e && e.message ? e.message : e); }
+    return live;
+  }
+
+  // ── Parse what actually went to the LMS from the cmi store ──
+  function parseInteractions(cmi) {
+    var byIdx = {};
+    for (var k in cmi) {
+      var m = /^cmi\.interactions\.(\d+)\.(.+)$/.exec(k);
+      if (!m) continue;
+      (byIdx[m[1]] = byIdx[m[1]] || {})[m[2]] = cmi[k];
+    }
+    return Object.keys(byIdx).sort(function (a, b) { return a - b; }).map(function (i) { return byIdx[i]; });
+  }
+  function interactionById(ints, id) {
+    for (var i = 0; i < ints.length; i++) if (ints[i].id === id) return ints[i];
+    return null;
+  }
+
+  function typeLabel(t) {
+    return t === "single" ? "Один ответ" : t === "multiple" ? "Несколько" :
+      t === "matching" ? "Соответствие" : t === "ranking" ? "Ранжирование" : (t || "?");
+  }
+
+  // Human-readable answer using the package's own option/left/right/items text.
+  function humanAnswer(q, ans) {
+    if (ans === null || ans === undefined) return "(нет ответа)";
+    var d = q.data || {};
+    if (q.type === "single") {
+      var o = d.options || [];
+      return (typeof ans === "number" && o[ans] != null) ? o[ans] : "#" + ans;
+    }
+    if (q.type === "multiple") {
+      var o2 = d.options || [], arr = Array.isArray(ans) ? ans : [];
+      if (!arr.length) return "(нет ответа)";
+      return arr.map(function (ix) { return o2[ix] != null ? o2[ix] : "#" + ix; }).join("; ");
+    }
+    if (q.type === "matching") {
+      var L = d.left || [], R = d.right || [], keys = Object.keys(ans || {});
+      if (!keys.length) return "(нет ответа)";
+      return keys.map(function (k) {
+        var r = ans[k];
+        return (L[k] != null ? L[k] : "#" + k) + " → " + (R[r] != null ? R[r] : "#" + r);
+      }).join("; ");
+    }
+    if (q.type === "ranking") {
+      var it = d.items || [], order = Array.isArray(ans) ? ans : [];
+      return order.map(function (ix, pos) { return (pos + 1) + ". " + (it[ix] != null ? it[ix] : "#" + ix); }).join("   ");
+    }
+    return String(ans);
+  }
+
+  // Replica of ScaleEngine.isActive (private in the engine) — measurement firing
+  // test, kept tiny on purpose; mirrors server/scorm/template/app/scales/engine.js.
+  function isActiveMeasure(m, answer, qType) {
+    if (m.sourceType === "question") return answer !== null && answer !== undefined;
+    if (answer === null || answer === undefined) return false;
+    if (m.sourceType === "option") {
+      var i = Number(m.sourceKey);
+      if (isNaN(i)) return false;
+      if (qType === "single") return answer === i;
+      if (qType === "multiple") return Array.isArray(answer) && answer.indexOf(i) !== -1;
+      return false;
+    }
+    if (m.sourceType === "matching_pair") {
+      var lr = String(m.sourceKey).split(":"), left = Number(lr[0]), right = Number(lr[1]);
+      return typeof answer === "object" && !Array.isArray(answer) && answer[left] === right;
+    }
+    if (m.sourceType === "ranking_position") {
+      var ip = String(m.sourceKey).split(":"), item = Number(ip[0]), pos = Number(ip[1]);
+      return Array.isArray(answer) && answer[pos] === item;
+    }
+    return false;
+  }
+
+  function contributionsFor(pkg, q, ans) {
+    var out = [];
+    (pkg.measurements || []).forEach(function (m) {
+      if (m.questionId !== q.id) return;
+      if (isActiveMeasure(m, ans, q.type)) out.push({ scaleKey: m.scaleKey, delta: m.value * m.weight });
+    });
+    return out;
+  }
+
+  function priceFor(pkg, q, ans) {
+    var SE = null;
+    try { SE = pkg.w.ScoringEngine; } catch (e) {}
+    if (SE && typeof SE.scoreAnswer === "function") {
+      try { return SE.scoreAnswer({ type: q.type, correct: q.correct || {}, answer: ans, scoring: q.scoring }); } catch (e) {}
+    }
+    return null;
+  }
+
+  // Drawn questions for the live attempt — flat order (standard) or adaptive
+  // walk (topics → levels → answeredQuestionIds), carrying the level label.
+  function buildLiveRows(pkg) {
+    var rows = [], st = pkg.state;
+    if (!st) return rows;
+    var isAdaptive = pkg.mode === "adaptive" && st.adaptiveState;
+    if (isAdaptive) {
+      var TA = (pkg.TEST_DATA && pkg.TEST_DATA.adaptiveTopics) || [];
+      var byId = {};
+      (st.adaptiveState.topics || []).forEach(function (topic) {
+        var td = TA.filter(function (t) { return t.topicId === topic.topicId; })[0];
+        if (!td) return;
+        (topic.levelsState || []).forEach(function (level) {
+          (level.answeredQuestionIds || []).forEach(function (qid) {
+            var q = (td.questions || []).filter(function (x) { return x.id === qid; })[0];
+            if (!q) return;
+            byId[qid] = { q: q, topicName: td.topicName, answer: st.answers[qid], levelName: level.levelName };
+          });
+        });
+      });
+      // Emit in true delivery order: state.answers preserves answer-insertion
+      // order, which equals delivery order.
+      var seen = {};
+      Object.keys(st.answers || {}).forEach(function (qid) {
+        if (byId[qid]) { rows.push(byId[qid]); seen[qid] = 1; }
+      });
+      Object.keys(byId).forEach(function (qid) { if (!seen[qid]) rows.push(byId[qid]); });
+    } else {
+      (st.flatQuestions || []).forEach(function (fq) {
+        rows.push({ q: fq.question, topicName: fq.topicName, answer: st.answers[fq.question.id], levelName: null });
+      });
+    }
+    return rows;
+  }
+
+  function buildAttemptRows(att) {
+    return (att.flatQuestions || []).map(function (fq) {
+      return { q: fq.question, topicName: fq.topicName, answer: (att.answers || {})[fq.question.id], levelName: null };
+    });
+  }
+
+  function getSuspendAttempts(cmi) {
+    try { var s = JSON.parse((cmi && cmi["cmi.suspend_data"]) || "null"); return (s && s.attempts) || []; } catch (e) { return []; }
+  }
+
+  // ── Протокол: per-question structured records (drawn question, answer,
+  // correctness, price PRD-10, scale contributions PRD-5). HTML/JSX is the host's. ──
+  function buildProtocolRows(pkg, cmi, mode) {
+    mode = mode || "live";
+    var rows, note = "";
+    if (mode === "live") {
+      rows = pkg ? buildLiveRows(pkg) : [];
+    } else {
+      var att = getSuspendAttempts(cmi)[parseInt(mode.slice(4), 10)];
+      rows = att ? buildAttemptRows(att) : [];
+      if (att && (!att.flatQuestions || !att.flatQuestions.length)) note = "Для этой попытки детальный состав не сохранён (адаптивный режим).";
+    }
+    var showDiff = pkg && pkg.mode === "adaptive";
+    var out = rows.map(function (row, i) {
+      var q = row.q, ans = row.answer;
+      var pr = pkg ? priceFor(pkg, q, ans) : null;
+      var ratio = pr ? pr.ratio : 0;
+      var answered = !(ans == null || (Array.isArray(ans) && ans.length === 0) ||
+        (q.type === "matching" && (!ans || !Object.keys(ans).length)));
+      var verdict = !answered ? "none" : ratio >= 1 ? "correct" : ratio > 0 ? "partial" : "wrong";
+      var points = q.points || 1;
+      var earned = pr ? points * pr.ratio : 0;
+      return {
+        idx: i + 1, topicName: row.topicName || "", prompt: q.prompt || "", type: q.type, typeLabel: typeLabel(q.type),
+        answerStr: humanAnswer(q, ans), answered: answered, verdict: verdict,
+        ratio: Math.round(ratio * 100) / 100, ratioPct: Math.round(ratio * 100),
+        score: pr ? pr.score : null, sMax: pr ? pr.sMax : null,
+        earned: Math.round(earned * 100) / 100, points: points,
+        difficulty: (showDiff && q.difficulty != null) ? q.difficulty : null,
+        levelName: row.levelName || null,
+        contribs: pkg ? contributionsFor(pkg, q, ans) : [],
+      };
+    });
+    return { rows: out, note: note };
+  }
+
+  // ── Шкалы / Показатели: structured rows (live value + what was published). ──
+  function buildScaleRows(pkg, ints) {
+    var defs = (pkg && pkg.scaleDefs) || [];
+    return defs.map(function (d) {
+      var v = (pkg.scales && pkg.scales[d.key]) || null;
+      var pubVal = interactionById(ints, "scale_" + d.key);
+      var pubLvl = interactionById(ints, "scale_" + d.key + "_level");
+      return {
+        key: d.key,
+        raw: v ? v.raw : null,
+        percent: (v && v.hasValue && v.percent) ? v.percent : null,
+        level: v && v.level ? v.level : null,
+        levelLabel: v && v.level ? (v.label || v.level) : null,
+        pub: pubVal ? (pubVal.learner_response + (pubLvl ? " · " + pubLvl.learner_response : "")) : null,
+      };
+    });
+  }
+
+  function buildResultRows(pkg, ints) {
+    var defs = (pkg && pkg.varDefs) || [];
+    return defs.map(function (d) {
+      var val = (pkg.results && d.name in pkg.results) ? pkg.results[d.name] : undefined;
+      var pub = interactionById(ints, "var_" + d.name);
+      return { name: d.name, live: (val === undefined || val === null) ? null : String(val), pub: pub ? pub.learner_response : null };
+    });
+  }
+
+  // ═══ Состояние (watch) — flatten any object to a debugger-style path→value table.
+  function dispVal(v) {
+    if (v === null) return "null";
+    if (typeof v === "string") return v.length > 140 ? v.slice(0, 140) + "…" : v;
+    return String(v);
+  }
+  // Depth + node capped so a live state (large flatQuestions / adaptiveState,
+  // shared refs, timer handles) can never hang the inspector; functions → ƒ().
+  function flattenLimited(o) {
+    var out = [], CAP = 4000, MAXD = 16;
+    function walk(val, path, depth) {
+      if (out.length >= CAP) return;
+      if (typeof val === "function") { out.push({ path: path || "(root)", disp: "ƒ()" }); return; }
+      if (val === null || typeof val !== "object") { out.push({ path: path || "(root)", disp: dispVal(val) }); return; }
+      if (depth >= MAXD) { out.push({ path: path, disp: Array.isArray(val) ? "[…]" : "{…}" }); return; }
+      if (Array.isArray(val)) {
+        if (!val.length) { out.push({ path: path, disp: "[]" }); return; }
+        for (var i = 0; i < val.length && out.length < CAP; i++) walk(val[i], path + "[" + i + "]", depth + 1);
+        return;
+      }
+      var keys = Object.keys(val);
+      if (!keys.length) { out.push({ path: path, disp: "{}" }); return; }
+      for (var j = 0; j < keys.length && out.length < CAP; j++) walk(val[keys[j]], path ? path + "." + keys[j] : keys[j], depth + 1);
+    }
+    walk(o, "", 0);
+    return out;
+  }
+  function safeJson(obj) {
+    try {
+      var seen = new WeakSet();
+      var s = JSON.stringify(obj, function (k, v) {
+        if (typeof v === "function") return "[Function]";
+        if (v && typeof v === "object") { if (seen.has(v)) return "[Circular]"; seen.add(v); }
+        return v;
+      }, 2);
+      return (s && s.length > 20000) ? s.slice(0, 20000) + "\n…" : s;
+    } catch (e) { return "[не сериализуется]"; }
+  }
+
+  // ═══ LMS-журнал — turn raw RTE traffic into a narrative of what the module tells
+  // the LMS. Returns RAW text events ({kind,text,sub}); the host escapes for display.
+  var GET_LABELS = {
+    "cmi.suspend_data": "сохранённый прогресс", "cmi.location": "позиция",
+    "cmi.learner_id": "идентификатор учащегося", "cmi.learner_name": "имя учащегося",
+    "cmi.core.student_id": "идентификатор учащегося", "cmi.core.student_name": "имя учащегося",
+    "cmi.completion_status": "статус прохождения", "cmi.success_status": "итог",
+    "cmi.entry": "режим входа", "cmi.mode": "режим", "cmi.credit": "зачётность",
+    "cmi.score.scaled": "балл", "cmi.student_email": "email", "cmi.student_org": "организация",
+  };
+  function humanGetSummary(keys) {
+    var seen = {}, parts = [];
+    keys.forEach(function (kv) {
+      var label = GET_LABELS[kv.k] || kv.k.replace(/^cmi\./, "");
+      if (kv.k === "cmi.entry") label = "режим входа: " + (kv.v === "resume" ? "продолжение" : (kv.v || "первый запуск"));
+      if (!seen[label]) { seen[label] = 1; parts.push(label); }
+    });
+    return parts.slice(0, 6).join("; ") + (parts.length > 6 ? " …" : "");
+  }
+  function humanCompletion(v) { return v === "completed" ? "завершено" : v === "incomplete" ? "не завершено" : String(v); }
+  function humanSuccess(v) { return v === "passed" ? "зачёт ✓" : v === "failed" ? "незачёт ✗" : v === "unknown" ? "не определён" : String(v); }
+  function collectByIndex(traffic, start, prefix) {
+    var map = {}, order = [], i = start;
+    while (i < traffic.length && traffic[i].fn === "SetValue" && traffic[i].key.indexOf(prefix) === 0) {
+      var rest = traffic[i].key.slice(prefix.length);
+      var dot = rest.indexOf(".");
+      var idx = dot === -1 ? rest : rest.slice(0, dot);
+      var field = dot === -1 ? "" : rest.slice(dot + 1);
+      if (!map[idx]) { map[idx] = {}; order.push(idx); }
+      map[idx][field] = traffic[i].value;
+      i++;
+    }
+    return { list: order.map(function (x) { return map[x]; }), next: i };
+  }
+  function describeScore(sc) {
+    var pct = (sc.scaled !== undefined && sc.scaled !== "") ? Math.round(Number(sc.scaled) * 100) + "%" : "";
+    return sc.raw + " из " + sc.max + (pct ? " (" + pct + ")" : "");
+  }
+  function describeInteraction(it) {
+    var id = it["id"] || "", resp = it["learner_response"] || "", desc = it["description"] || "", res = it["result"] || "";
+    if (id.indexOf("q_") === 0) {
+      return { kind: "answer", text: "📝 Ответ в отчёте LMS — " + (desc ? "«" + trunc(desc, 70) + "»" : id) + ": " +
+        (res === "correct" ? "верно" : res === "incorrect" ? "неверно" : res), sub: "ответ учащегося: " + resp };
+    }
+    if (id.indexOf("scale_") === 0) {
+      var isLvl = /_level$/.test(id);
+      var key = id.replace(/^scale_/, "").replace(/_level$/, "");
+      return { kind: "scale", text: "📊 Шкала " + key + (isLvl ? " — уровень" : "") + " → " + resp, sub: desc };
+    }
+    if (id.indexOf("var_") === 0) return { kind: "scale", text: "∑ Показатель " + id.replace(/^var_/, "") + " → " + resp, sub: desc };
+    if (id.indexOf("_course_") !== -1) return { kind: "status", text: "🔗 Рекомендованный курс (object_id " + resp + ")", sub: desc };
+    return { kind: "muted", text: "• " + id + " → " + resp, sub: "" };
+  }
+  function describeSuspendWrite(value, prevRaw) {
+    var sizeStr = fmtBytes(byteLen(value));
+    var cur = null, prev = null;
+    try { cur = JSON.parse(value || "null"); } catch (e) {}
+    try { prev = JSON.parse(prevRaw || "null"); } catch (e) {}
+    var pa = (prev && prev.attempts) ? prev.attempts.length : 0;
+    var ca = (cur && cur.attempts) ? cur.attempts.length : 0;
+    var pu = (prev && prev.attemptsUsed) || 0, cu = (cur && cur.attemptsUsed) || 0;
+    if (cur && ca > pa) {
+      var a = cur.attempts[ca - 1];
+      return { kind: "suspend", text: "💾 Результат попытки #" + a.attemptNumber + " сохранён: " + Math.round(a.percent) + "% — " + (a.passed ? "зачёт" : "незачёт"), sub: "suspend_data: " + sizeStr };
+    }
+    if (cur && cu > pu) return { kind: "suspend", text: "▶ Старт попытки " + cu + " зарегистрирован", sub: "suspend_data: " + sizeStr };
+    if (cur && cur.currentSession) {
+      var cs = cur.currentSession;
+      var n = cs.answers ? Object.keys(cs.answers).length : 0;
+      return { kind: "suspend", text: "💾 Прогресс сохранён: вопрос " + ((cs.currentIndex || 0) + 1) + " (ответов: " + n + ")", sub: "suspend_data: " + sizeStr };
+    }
+    return { kind: "suspend", text: "💾 suspend_data записан", sub: "размер: " + sizeStr };
+  }
+  function humanizeTraffic(traffic) {
+    var ev = [], i = 0, prevSuspend = null;
+    function add(kind, text, sub) { ev.push({ kind: kind, text: text, sub: sub || "" }); }
+    while (i < traffic.length) {
+      var e = traffic[i];
+      if (e.fn === "Initialize") { add("sess", "▶ Сеанс открыт — модуль связался с LMS (Initialize)"); i++; continue; }
+      if (e.fn === "Terminate") { add("sess", "■ Сеанс закрыт (Terminate)"); i++; continue; }
+      if (e.fn === "Commit") {
+        if (ev.length && ev[ev.length - 1].kind === "commit") { i++; continue; }
+        add("commit", "✓ Данные отправлены в LMS (Commit)"); i++; continue;
+      }
+      if (e.fn === "GetValue") {
+        var keys = [];
+        while (i < traffic.length && traffic[i].fn === "GetValue") { keys.push({ k: traffic[i].key, v: traffic[i].ret }); i++; }
+        add("read", "↩ Модуль читает из LMS: " + humanGetSummary(keys));
+        continue;
+      }
+      if (e.fn === "SetValue") {
+        var k = e.key;
+        if (k === "cmi.suspend_data") { var d = describeSuspendWrite(e.value, prevSuspend); add(d.kind, d.text, d.sub); prevSuspend = e.value; i++; continue; }
+        if (k.indexOf("cmi.score.") === 0) {
+          var sc = {};
+          while (i < traffic.length && traffic[i].fn === "SetValue" && traffic[i].key.indexOf("cmi.score.") === 0) { sc[traffic[i].key.slice(10)] = traffic[i].value; i++; }
+          add("finish", "🏁 Итоговый балл отправлен в LMS: " + describeScore(sc)); continue;
+        }
+        if (k.indexOf("cmi.objectives.") === 0) {
+          var go = collectByIndex(traffic, i, "cmi.objectives."); i = go.next;
+          go.list.forEach(function (o) {
+            var oid = (o["id"] || "").replace(/^topic_/, "");
+            add("status", "🎯 Тема " + oid + " → " + (o["success_status"] || "?") + ", балл " + (o["score.raw"] !== undefined ? o["score.raw"] : "?"));
+          });
+          continue;
+        }
+        if (k.indexOf("cmi.interactions.") === 0) {
+          var gi = collectByIndex(traffic, i, "cmi.interactions."); i = gi.next;
+          gi.list.forEach(function (it) { var di = describeInteraction(it); add(di.kind, di.text, di.sub); });
+          continue;
+        }
+        if (k === "cmi.completion_status") { add("status", "📌 Статус прохождения → " + humanCompletion(e.value)); i++; continue; }
+        if (k === "cmi.success_status") { add("status", "📌 Итог → " + humanSuccess(e.value)); i++; continue; }
+        if (k === "cmi.progress_measure") { add("status", "📈 Прогресс → " + Math.round(Number(e.value) * 100) + "%"); i++; continue; }
+        if (k === "cmi.exit") { add("muted", "↪ Тип выхода → " + e.value); i++; continue; }
+        if (k === "cmi.location") { add("muted", "📍 Позиция → " + (e.value ? e.value : "(очищена)")); i++; continue; }
+        if (k === "cmi.comments_from_learner") { add("warn", "💬 Комментарий учащегося → " + e.value); i++; continue; }
+        add("muted", "• " + k.replace(/^cmi\./, "") + " → " + trunc(e.value, 80)); i++; continue;
+      }
+      i++;
+    }
+    return ev;
+  }
+
+  // ── Адаптив: current topic/level + confirmed (passed) level pairs. ──
+  function buildAdaptiveBar(pkg) {
+    var st = pkg && pkg.state;
+    var as = st && st.adaptiveState;
+    if (!pkg || pkg.mode !== "adaptive" || !as) return { visible: false };
+    var topics = as.topics || [];
+    var finished = !!as.isFinished, now = null;
+    if (!finished) {
+      var topic = topics[as.currentTopicIndex];
+      var lvl = topic && topic.levelsState[topic.currentLevelIndex];
+      if (topic && lvl) {
+        now = { topicIndex: as.currentTopicIndex + 1, topicCount: topics.length, topicName: topic.topicName,
+          levelName: lvl.levelName, minDifficulty: lvl.minDifficulty, maxDifficulty: lvl.maxDifficulty };
+      }
+    }
+    var confirmed = [];
+    topics.forEach(function (t) {
+      (t.levelsState || []).forEach(function (lv) {
+        if (lv.status === "passed") {
+          confirmed.push({ kind: "ok", topicName: t.topicName, levelName: lv.levelName,
+            correctCount: lv.correctCount, total: (lv.answeredQuestionIds || []).length });
+        }
+      });
+      if (t.status === "completed" && t.finalLevelIndex === null) confirmed.push({ kind: "no", topicName: t.topicName });
+    });
+    return { visible: true, finished: finished, now: now, confirmed: confirmed };
+  }
+
+  function round2(n) { return (typeof n === "number" && isFinite(n)) ? Math.round(n * 100) / 100 : 0; }
+  function tagKeyJs(raw) { return String(raw == null ? "" : raw).replace(/\s+/g, " ").trim().toLowerCase(); }
+
+  // ── Результаты: the package's OWN aggregate (calculateResults) + the pass rule.
+  // Adaptive tests have no points aggregate — show confirmed levels instead. ──
+  function buildScore(pkg) {
+    if (!pkg || !pkg.w) return { available: false, adaptive: false };
+    if (pkg.mode === "adaptive") return { available: true, adaptive: true, bar: buildAdaptiveBar(pkg) };
+    var r = null;
+    try { if (typeof pkg.w.calculateResults === "function") r = pkg.w.calculateResults(); } catch (e) {}
+    if (!r) return { available: false, adaptive: false };
+    return {
+      available: true, adaptive: false,
+      earnedPoints: round2(r.earnedPoints), possiblePoints: round2(r.possiblePoints),
+      correct: r.correct, totalQuestions: r.totalQuestions,
+      percent: Math.round(r.percent || 0), passed: !!r.passed,
+      rule: (pkg.TEST_DATA && pkg.TEST_DATA.overallPassRule) || null,
+      sections: (r.topicResults || []).map(function (td) {
+        return {
+          topicName: td.topicName, earnedPoints: round2(td.earnedPoints), possiblePoints: round2(td.possiblePoints),
+          percent: Math.round(td.percent || 0), passed: td.passed, correct: td.correct, total: td.total,
+        };
+      }),
+    };
+  }
+
+  // ── Выдача: what THIS run delivered per section — variant (PRD-17, formId
+  // inferred from the drawn id-set, not stored in state) or per-tag quota
+  // plan-vs-actual (PRD-11), or a plain/whole-topic draw. Adaptive → level path. ──
+  function buildDraw(pkg) {
+    if (!pkg || !pkg.state) return { available: false, adaptive: false };
+    if (pkg.mode === "adaptive") return { available: true, adaptive: true, bar: buildAdaptiveBar(pkg) };
+    var variant = pkg.state.variant;
+    if (!variant || !variant.sections) return { available: false, adaptive: false };
+    var secDefs = (pkg.TEST_DATA && pkg.TEST_DATA.sections) || [];
+    var drawnByTopic = {};
+    (pkg.state.flatQuestions || []).forEach(function (fq) {
+      (drawnByTopic[fq.topicId] = drawnByTopic[fq.topicId] || []).push(fq.question);
+    });
+    var sections = variant.sections.map(function (vs) {
+      var def = secDefs.filter(function (s) { return s.topicId === vs.topicId; })[0] || {};
+      var drawnIds = vs.questionIds || [];
+      var out = { topicName: vs.topicName, count: drawnIds.length, mode: "all", formId: null, formIndex: null, formCount: null, quotas: null };
+      if (def.formSet && def.formSet.forms && def.formSet.forms.length) {
+        out.mode = "variants";
+        out.formCount = def.formSet.forms.length;
+        var set = {};
+        drawnIds.forEach(function (id) { set[id] = 1; });
+        for (var i = 0; i < def.formSet.forms.length; i++) {
+          var fids = def.formSet.forms[i].questionIds || [];
+          if (fids.length === drawnIds.length && fids.every(function (id) { return set[id]; })) {
+            out.formId = def.formSet.forms[i].id; out.formIndex = i + 1; break;
+          }
+        }
+      } else if (def.drawBlueprint && def.drawBlueprint.strata && def.drawBlueprint.strata.length) {
+        out.mode = "quota";
+        var counts = {};
+        (drawnByTopic[vs.topicId] || []).forEach(function (q) {
+          (Array.isArray(q.tags) ? q.tags : []).forEach(function (t) { var k = tagKeyJs(t); counts[k] = (counts[k] || 0) + 1; });
+        });
+        out.quotas = def.drawBlueprint.strata.map(function (s) {
+          var actual = counts[tagKeyJs(s.tag)] || 0;
+          return { tag: s.tag, planned: s.count, actual: actual, mode: s.mode || "exact", short: actual < s.count };
+        });
+      } else if (typeof def.drawCount === "number" && def.drawCount > 0) {
+        out.mode = "draw";
+      }
+      return out;
+    });
+    return { available: true, adaptive: false, sections: sections };
+  }
+
+  // ═══ «Эталон» — highlight the correct answers ON the real question render in the
+  // iframe (PRD-18 §5.4). Markers are tiny inline-styled badges (the package CSS
+  // doesn't know our classes): ✓ on correct options (single/multiple), the correct
+  // ordinal (ranking), paired letters A/B/C on the chip + right tile (matching).
+  // Idempotent: clears its own marks first, so it can run every tick. ──
+  function tbRefBadge(doc, text, kind) {
+    var b = doc.createElement("span");
+    b.setAttribute("data-tb-ref", "1");
+    b.textContent = text;
+    var bg = kind === "ok" ? "#15803d" : kind === "num" ? "#1d4ed8" : "#6d28d9";
+    b.style.cssText = "display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;" +
+      "padding:0 5px;margin:0 6px;border-radius:9px;background:" + bg + ";color:#fff;" +
+      "font:600 11px/1 system-ui,sans-serif;vertical-align:middle;flex:0 0 auto;";
+    return b;
+  }
+  function clearReference(iframeWin) {
+    var doc = iframeWin && iframeWin.document;
+    if (!doc) return;
+    var marks = doc.querySelectorAll('[data-tb-ref="1"]');
+    for (var i = 0; i < marks.length; i++) {
+      if (marks[i].parentNode) marks[i].parentNode.removeChild(marks[i]);
+    }
+  }
+  function applyReference(iframeWin) {
+    var doc = iframeWin && iframeWin.document;
+    var st = null;
+    try { st = iframeWin.state; } catch (e) {}
+    if (!doc || !st || !st.flatQuestions) return;
+    clearReference(iframeWin);
+    var byId = {};
+    st.flatQuestions.forEach(function (fq) { byId[fq.question.id] = fq.question; });
+
+    // single / multiple — ✓ on the correct option(s). qid is parsed from the
+    // option's onclick (selectSingle/toggleMultiple), present while answering.
+    var groups = {};
+    var opts = doc.querySelectorAll(".option[data-index]");
+    for (var i = 0; i < opts.length; i++) {
+      var oc = opts[i].getAttribute("onclick") || "";
+      var m = /\(\s*['"]([^'"]+)['"]/.exec(oc);
+      var qid = m ? m[1] : null;
+      if (!qid || !byId[qid]) continue;
+      (groups[qid] = groups[qid] || { q: byId[qid], opts: [] }).opts.push(opts[i]);
+    }
+    Object.keys(groups).forEach(function (qid) {
+      var q = groups[qid].q, c = q.correct || {};
+      var correctSet = q.type === "single"
+        ? (typeof c.correctIndex === "number" ? [c.correctIndex] : [])
+        : (Array.isArray(c.correctIndices) ? c.correctIndices : []);
+      groups[qid].opts.forEach(function (opt) {
+        var idx = parseInt(opt.getAttribute("data-index"), 10);
+        if (correctSet.indexOf(idx) !== -1) opt.appendChild(tbRefBadge(doc, "✓", "ok"));
+      });
+    });
+
+    // ranking — the correct 1-based position of each item.
+    var boards = doc.querySelectorAll(".ranking-board[data-qid]");
+    for (var b = 0; b < boards.length; b++) {
+      var rq = byId[boards[b].getAttribute("data-qid")];
+      if (!rq) continue;
+      var co = (rq.correct && Array.isArray(rq.correct.correctOrder)) ? rq.correct.correctOrder : [];
+      var items = boards[b].querySelectorAll(".rank-item[data-item]");
+      for (var j = 0; j < items.length; j++) {
+        var pos = co.indexOf(parseInt(items[j].getAttribute("data-item"), 10));
+        if (pos !== -1) items[j].insertBefore(tbRefBadge(doc, String(pos + 1), "num"), items[j].firstChild);
+      }
+    }
+
+    // matching — paired letters A/B/C on the chip (data-drag=left) and the right tile.
+    var mboards = doc.querySelectorAll(".matching-board[data-qid]");
+    for (var mb = 0; mb < mboards.length; mb++) {
+      var mq = byId[mboards[mb].getAttribute("data-qid")];
+      if (!mq) continue;
+      var pairs = (mq.correct && Array.isArray(mq.correct.pairs)) ? mq.correct.pairs : [];
+      pairs.forEach(function (p, idx) {
+        var letter = String.fromCharCode(65 + idx);
+        var line = mboards[mb].querySelector('.matching-line[data-right="' + p.right + '"]');
+        var rt = line ? line.querySelector(".match-right-tile") : null;
+        if (rt) rt.appendChild(tbRefBadge(doc, letter, "pair"));
+        var chip = mboards[mb].querySelector('.match-chip[data-drag="' + p.left + '"]');
+        if (chip) chip.appendChild(tbRefBadge(doc, letter, "pair"));
+      });
+    }
+  }
+
+  window.TBInspector = {
+    fmtNum: fmtNum, trunc: trunc, byteLen: byteLen, fmtBytes: fmtBytes,
+    buildScore: buildScore, buildDraw: buildDraw,
+    applyReference: applyReference, clearReference: clearReference,
+    readPkg: readPkg, parseInteractions: parseInteractions, interactionById: interactionById,
+    typeLabel: typeLabel, humanAnswer: humanAnswer, isActiveMeasure: isActiveMeasure,
+    contributionsFor: contributionsFor, priceFor: priceFor,
+    buildLiveRows: buildLiveRows, buildAttemptRows: buildAttemptRows, getSuspendAttempts: getSuspendAttempts,
+    buildProtocolRows: buildProtocolRows, buildScaleRows: buildScaleRows, buildResultRows: buildResultRows,
+    flattenLimited: flattenLimited, dispVal: dispVal, safeJson: safeJson,
+    humanizeTraffic: humanizeTraffic, buildAdaptiveBar: buildAdaptiveBar,
+  };
+})();
