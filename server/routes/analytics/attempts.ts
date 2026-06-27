@@ -161,7 +161,11 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
       if (!question) continue;
 
       const effective = scoring.resolve(question);
-      const isCorrect = checkAnswer(question, userAnswer, effective.scoring) === 1;
+      // PRD-18: use the GRADED ratio (not a binary === 1 collapse) so weighted/tiered
+      // partial answers earn partial points and the per-row totals reconcile with the
+      // stored attempt aggregate. `isCorrect` stays boolean only for the UI verdict label.
+      const ratio = checkAnswer(question, userAnswer, effective.scoring);
+      const isCorrect = ratio === 1;
 
       let levelName: string | undefined;
       let levelIndex: number | undefined;
@@ -218,7 +222,7 @@ router.get("/attempts/:attemptId", requirePermission("analytics.read"), async (r
         correctAnswer: formattedCorrectAnswer,
         correctAnswerRaw: correctJson,
         isCorrect,
-        earnedPoints: isCorrect ? effective.points : 0,
+        earnedPoints: ratio * effective.points,
         possiblePoints: effective.points,
         difficulty: scoring.difficultyOf(question) || 50,
         levelName,

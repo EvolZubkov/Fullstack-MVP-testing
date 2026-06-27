@@ -101,9 +101,13 @@ router.get("/scorm-attempts/:attemptId", requirePermission("analytics.read"), as
         };
         existing.total++;
         existing.possiblePoints += a.maxPoints || 1;
+        // PRD-18: accrue the BAKED partial points unconditionally — a tiered/weighted
+        // row can be isCorrect=false with points>0 (points = scoreRatio*q.points,
+        // baked at delivery). Gating earnedPoints behind isCorrect dropped that partial
+        // credit, so the topic rollup under-counted vs the stored attempt total.
+        existing.earnedPoints += a.points || 0;
         if (a.isCorrect) {
           existing.correct++;
-          existing.earnedPoints += a.points || 0;
         }
         topicResultsMap.set(a.topicId, existing);
       }
