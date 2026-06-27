@@ -19,6 +19,7 @@ import resultVariablesRouter from "./result-variables";
 import scalesRouter from "./scales";
 import testsWorkbookRouter from "./tests-workbook";
 import workbookRouter from "./workbook";
+import debugPlayerRouter from "./debug-player";
 
 export {
   foldersRouter,
@@ -42,6 +43,7 @@ export {
   scalesRouter,
   testsWorkbookRouter,
   workbookRouter,
+  debugPlayerRouter,
 };
 
 // Конфигурация монтирования роутеров
@@ -53,6 +55,7 @@ export const routerConfig = [
   { path: "/api/tests", router: resultVariablesRouter },
   { path: "/api/tests", router: scalesRouter },
   { path: "/api/tests", router: testsWorkbookRouter },
+  { path: "/api/tests", router: debugPlayerRouter }, // PRD-18 debug player (session/play/delete)
   { path: "/api/workbook", router: workbookRouter },
   { path: "/api/folders", router: foldersRouter },
   { path: "/api/test-folders", router: testFoldersRouter },
