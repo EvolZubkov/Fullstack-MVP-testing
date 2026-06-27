@@ -3,6 +3,8 @@ import { logger } from "../logger";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { checkAnswer } from "../utils/check-answer";
+import { aggregateStandardResult, aggregateAdaptiveResult, type AggregateSection } from "@shared/scoring/aggregate";
+import type { CorrectData, Answer } from "@shared/scoring/engine";
 import { drawSection } from "@shared/draw/blueprint";
 import { selectForm } from "@shared/draw/forms";
 import { loadScoringConfig } from "../services/scoring-config";
@@ -801,87 +803,65 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
     // against the SAME source as delivery (snapshot or live).
     const scoring = await loadTestScoringContext(test.id, src);
 
-    let totalCorrect = 0;
-    let totalQuestions = 0;
-    let totalEarnedPoints = 0;
-    let totalPossiblePoints = 0;
-    const topicResults: TopicResult[] = [];
-    // PRD-12: question types for the scale engine's percent-normalization.
+    // PRD-12 §3.5: question types for the scale engine's percent-normalization.
     const questionTypes: Record<string, QuestionType> = {};
 
+    // PRD-18: result aggregation + pass-rule evaluation run through the SINGLE
+    // shared engine (`aggregateStandardResult`, the SAME one the SCORM runtime
+    // runs). Effective price / graded config (block D) is resolved here; the engine
+    // owns per-answer scoring, per-topic/overall percent and pass-rule resolution
+    // (inherit_overall -> overall, none -> no gate, count basis = Σ earned points).
+    const aggSections: AggregateSection<{
+      recommendedCourses: { title: string; url: string }[];
+      recommendedEvents: { title: string }[];
+    }>[] = [];
     for (const variantSection of variant.sections) {
       const section = sectionMap.get(variantSection.topicId);
       const questions = await src.getQuestionsByIds(variantSection.questionIds);
       const courses = await src.getTopicCourses(variantSection.topicId);
       const events = await src.getTopicEvents(variantSection.topicId);
-
-      let sectionCorrect = 0;
-      let sectionEarnedPoints = 0;
-      let sectionPossiblePoints = 0;
-      const sectionTotal = questions.length;
-
-      for (const q of questions) {
-        questionTypes[q.id] = q.type as QuestionType;
-        const answer = answers?.[q.id];
-        const effective = scoring.resolve(q);
-        const scoreRatio = checkAnswer(q, answer, effective.scoring);
-        const qPoints = effective.points;
-        sectionPossiblePoints += qPoints;
-
-        if (scoreRatio === 1) {
-          sectionCorrect++;
-        }
-        sectionEarnedPoints += qPoints * scoreRatio;
-      }
-
-      totalCorrect += sectionCorrect;
-      totalQuestions += sectionTotal;
-      totalEarnedPoints += sectionEarnedPoints;
-      totalPossiblePoints += sectionPossiblePoints;
-
-      const sectionPercent = sectionPossiblePoints > 0 ? (sectionEarnedPoints / sectionPossiblePoints) * 100 : 0;
-      const passRule = section?.topicPassRuleJson as PassRule | null;
-      let passed: boolean | null = null;
-
-      if (passRule) {
-        if (passRule.type === "percent") {
-          passed = sectionPercent >= passRule.value;
-        } else {
-          passed = sectionCorrect >= passRule.value;
-        }
-      }
-
-      topicResults.push({
+      aggSections.push({
         topicId: variantSection.topicId,
         topicName: variantSection.topicName,
-        correct: sectionCorrect,
-        total: sectionTotal,
-        percent: sectionPercent,
-        earnedPoints: sectionEarnedPoints,
-        possiblePoints: sectionPossiblePoints,
-        passed,
-        passRule,
-        recommendedCourses: courses.map((c) => ({ title: c.title, url: c.url })),
-        recommendedEvents: events.map((e) => ({ title: e.title })),
+        topicPassRule: section?.topicPassRuleJson ?? null,
+        questions: questions.map((q) => {
+          questionTypes[q.id] = q.type as QuestionType;
+          const effective = scoring.resolve(q);
+          return {
+            type: q.type as QuestionType,
+            correct: (q.correctJson ?? {}) as CorrectData,
+            scoring: effective.scoring,
+            points: effective.points,
+            answer: answers?.[q.id] as Answer,
+          };
+        }),
+        extra: {
+          recommendedCourses: courses.map((c) => ({ title: c.title, url: c.url })),
+          recommendedEvents: events.map((e) => ({ title: e.title })),
+        },
       });
     }
 
-    const overallPercent = totalPossiblePoints > 0 ? (totalEarnedPoints / totalPossiblePoints) * 100 : 0;
-    const overallPassRule = test.overallPassRuleJson as PassRule;
-    let overallPassed = true;
-
-    if (overallPassRule.type === "percent") {
-      overallPassed = overallPercent >= overallPassRule.value;
-    } else {
-      overallPassed = totalCorrect >= overallPassRule.value;
-    }
-
-    for (const tr of topicResults) {
-      if (tr.passed === false) {
-        overallPassed = false;
-        break;
-      }
-    }
+    const agg = aggregateStandardResult({ sections: aggSections, overallPassRule: test.overallPassRuleJson });
+    const totalCorrect = agg.correct;
+    const totalQuestions = agg.totalQuestions;
+    const totalEarnedPoints = agg.earnedPoints;
+    const totalPossiblePoints = agg.possiblePoints;
+    const overallPercent = agg.percent;
+    let overallPassed = agg.passed;
+    const topicResults: TopicResult[] = agg.topicResults.map((t) => ({
+      topicId: t.topicId,
+      topicName: t.topicName,
+      correct: t.correct,
+      total: t.total,
+      percent: t.percent,
+      earnedPoints: t.earnedPoints,
+      possiblePoints: t.possiblePoints,
+      passed: t.passed,
+      passRule: t.passRule as PassRule | null,
+      recommendedCourses: t.extra!.recommendedCourses,
+      recommendedEvents: t.extra!.recommendedEvents,
+    }));
 
     // PRD-12: graded namespaces (scales PRD-5 + result variables PRD-2) via the
     // shared engines, mirroring the SCORM runtime. No-op when the test has none.
@@ -1143,77 +1123,52 @@ async function moveToNextTopicOrFinish(variant: any, currentTopic: any, currentL
   return { levelTransition, topicTransition: null, nextQuestionData: null, isFinished: true };
 }
 
+// PRD-18 «ВСЕ РАСЧЕТЫ ПО ЕДИНОМУ АЛГОРИТМУ»: thin host adapter over the shared
+// `aggregateAdaptiveResult`. This side's only job is to normalize DB-backed data
+// (per-level feedback + links from separate tables, topic failure feedback) into
+// the engine's input. `levels` is sorted by `levelIndex` ascending — the SAME order
+// `levelsState` was built in — so the engine's POSITIONAL `finalLevelIndex` lookup
+// aligns. `failureLinks` mirrors the SCORM failure branch (lowest level's links).
 async function buildAdaptiveResult(variant: any, testId: string, storage: any) {
   const adaptiveSettings = await storage.getAdaptiveTopicSettingsByTest(testId);
   const adaptiveLevels = await storage.getAdaptiveLevelsByTest(testId);
 
-  const topicResults: any[] = [];
-  let overallPassed = true;
+  const topics = await Promise.all(
+    variant.topics.map(async (topic: any) => {
+      const topicSettings = adaptiveSettings.find((s: any) => s.topicId === topic.topicId);
+      const topicLevels = adaptiveLevels
+        .filter((l: any) => l.topicId === topic.topicId)
+        .sort((a: any, b: any) => a.levelIndex - b.levelIndex);
 
-  for (const topic of variant.topics) {
-    const topicSettings = adaptiveSettings.find((s: any) => s.topicId === topic.topicId);
-    const topicLevels = adaptiveLevels.filter((l: any) => l.topicId === topic.topicId);
+      const levels = await Promise.all(
+        topicLevels.map(async (l: any) => ({
+          levelName: l.levelName,
+          feedback: l.feedback ?? null,
+          links: ((await storage.getAdaptiveLevelLinks(l.id)) || []).map((x: any) => ({ title: x.title, url: x.url })),
+        })),
+      );
 
-    let totalQuestionsAnswered = 0;
-    let totalCorrect = 0;
-    const levelsAttempted: any[] = [];
+      const levelsState = (topic.levelsState as any[]).map((ls) => ({
+        levelIndex: ls.levelIndex,
+        levelName: ls.levelName,
+        status: ls.status,
+        answeredCount: ls.answeredQuestionIds.length,
+        correctCount: ls.correctCount,
+      }));
 
-    for (const levelState of topic.levelsState) {
-      if (levelState.status === "passed" || levelState.status === "failed") {
-        totalQuestionsAnswered += levelState.answeredQuestionIds.length;
-        totalCorrect += levelState.correctCount;
-        levelsAttempted.push({
-          levelIndex: levelState.levelIndex,
-          levelName: levelState.levelName,
-          questionsAnswered: levelState.answeredQuestionIds.length,
-          correctCount: levelState.correctCount,
-          status: levelState.status,
-        });
-      }
-    }
+      return {
+        topicId: topic.topicId,
+        topicName: topic.topicName,
+        finalLevelIndex: topic.finalLevelIndex,
+        levelsState,
+        levels,
+        failureFeedback: topicSettings?.failureFeedback || null,
+        failureLinks: levels[0]?.links ?? [],
+      };
+    }),
+  );
 
-    let achievedLevelName: string | null = null;
-    let levelPercent = 0;
-    let feedback: string | null = null;
-    let recommendedLinks: any[] = [];
-
-    if (topic.finalLevelIndex !== null) {
-      const achievedLevel = topicLevels.find((l: any) => l.levelIndex === topic.finalLevelIndex);
-      if (achievedLevel) {
-        achievedLevelName = achievedLevel.levelName;
-        const levelState = topic.levelsState.find((ls: any) => ls.levelIndex === topic.finalLevelIndex);
-        if (levelState && levelState.answeredQuestionIds.length > 0) {
-          levelPercent = (levelState.correctCount / levelState.answeredQuestionIds.length) * 100;
-        }
-        feedback = achievedLevel.feedback;
-
-        const links = await storage.getAdaptiveLevelLinks(achievedLevel.id);
-        recommendedLinks = links.map((l: any) => ({ title: l.title, url: l.url }));
-      }
-    } else {
-      overallPassed = false;
-      feedback = topicSettings?.failureFeedback || null;
-    }
-
-    topicResults.push({
-      topicId: topic.topicId,
-      topicName: topic.topicName,
-      achievedLevelIndex: topic.finalLevelIndex,
-      achievedLevelName,
-      levelPercent,
-      totalQuestionsAnswered,
-      totalCorrect,
-      levelsAttempted,
-      feedback,
-      recommendedLinks,
-    });
-  }
-
-  return {
-    mode: "adaptive",
-    overallPassed,
-    topicResults,
-  };
+  return aggregateAdaptiveResult({ topics });
 }
 
 export default router;
