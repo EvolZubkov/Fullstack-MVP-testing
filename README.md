@@ -113,6 +113,22 @@
 - Передача score, completion, success status в LMS
 - Детальные interactions по темам
 
+#### Тестирование и отладка (PRD-18)
+
+- **Тестовый прогон** -- встроенный плеер отладки прямо в сервисе: пункт меню «Тестовый прогон»
+  открывает отдельное окно, где тест собирается ТЕМ ЖЕ пайплайном, что и production-экспорт, и
+  проигрывается с SCORM 2004 RTE-шимом -- без скачивания ZIP и без CLI
+- Прогон идёт из ЖИВОГО состояния теста на применённом шаблоне оформления; прогоны одноразовые --
+  не создают попыток и не пишут телеметрию, не влияют на аналитику
+- **Инспектор реального времени** -- статусная панель над стейджем (прогресс, оценка, алярм ошибки
+  расчёта) + сворачивающийся сайдбар с 7 вкладками: Результаты, Протокол, Выдача, Шкалы, Показатели,
+  Состояние (cmi / suspend_data / runtime state), LMS-журнал
+- **Эталон** -- тоггл подсветки правильных ответов на реальном рендере вопроса (галочка для выбора,
+  верный номер для ранжирования, буквы пар для сопоставления); на баллы не влияет
+- Экспорт протокола прогона в CSV; сброс и пересборка прогона
+- Доступ = право на редактирование теста (как у экспорта SCORM); локальный CLI-плеер
+  (`npm run scorm:player`) сохраняется как dev-инструмент и делит с сервисом один источник логики
+
 ### Для учащихся
 
 #### Прохождение тестов
@@ -163,8 +179,7 @@
 | TanStack React Query | 5.100 | Управление серверным состоянием |
 | React Hook Form | 7.76 | Формы |
 | Zod | 4.4 | Валидация |
-| shadcn/ui (Radix UI) | -- | Компоненты UI |
-| Tailwind CSS | 4.3 | Стилизация (новый движок, `@tailwindcss/postcss`) |
+| @universityrt/ui-kit | -- | Дизайн-система (компоненты `ou-*` + слой `tb-*`/plain CSS); вендорится в `vendor/ui-kit/` |
 | Lucide React | -- | Иконки |
 | html2canvas + jsPDF | 1.4.1 / 2.5.1 | PDF-экспорт в SCORM-runtime; вендорятся в пакет из `assets/vendor/` (devDep-пин, без CDN) |
 
@@ -283,8 +298,7 @@ npm run dev
 test-builder/
 |-- client/                          # Frontend (React SPA)
 |   |-- src/
-|   |   |-- components/              # Общие React-компоненты
-|   |   |   |-- ui/                  # shadcn/ui компоненты-обёртки (Radix UI)
+|   |   |-- components/              # Общие React-компоненты (DS @universityrt/ui-kit)
 |   |   |   |-- questions/           # Компоненты вопросов (media-uploader)
 |   |   |   |-- app-sidebar.tsx      # Боковая навигация (DS AppShell + Sidebar)
 |   |   |   |-- assign-test-dialog.tsx # Диалог назначения тестов
@@ -294,6 +308,7 @@ test-builder/
 |   |   |   |-- password-input.tsx  theme-provider.tsx  theme-toggle.tsx
 |   |   |-- features/                # Фичевые модули
 |   |   |   |-- tests/editor/        # Редактор теста (Drawer, секции, мапперы, валидация; PRD-7/15)
+|   |   |   |-- tests/debug-player/  # Окно встроенного плеера тестирования и отладки (PRD-18)
 |   |   |   |-- topics/              # Drawer темы: «Свойства» + «Доступ» (PRD-15)
 |   |   |   |-- templates/           # Админ-реестр шаблонов: список, загрузка, превью (PRD-3)
 |   |   |   +-- content-protection/  # UI защиты контента (409 + dry-run, PRD-15)
@@ -323,7 +338,7 @@ test-builder/
 |   |   |-- attempts.ts  assignments.ts  folders.ts  test-folders.ts  access.ts
 |   |   |-- content-pages.ts  result-variables.ts  scales.ts
 |   |   |-- templates.ts  admin-templates.ts (PRD-3)  workbook.ts  tests-workbook.ts (PRD-14)
-|   |   |-- analytics/  scorm-telemetry.ts  logs.ts
+|   |   |-- analytics/  scorm-telemetry.ts  logs.ts  debug-player.ts (PRD-18)
 |   |-- services/                    # Доменные сервисы (вне route-хендлеров)
 |   |   |-- result-compute.ts  result-context.ts  scoring-config.ts  effective-scoring.ts
 |   |   |-- retake-gate.ts (PRD-6)  template-render.ts  flow-policy-validator.ts
@@ -338,6 +353,8 @@ test-builder/
 |   |   |-- template/app/            # JS-логика пакета (adaptive, dnd, render, timer, telemetry)
 |   |   |-- templates/<id>/          # Дизайн-шаблоны: layouts + styles + manifest (PRD-7/12)
 |   |   |-- index.ts                # generateScormPackage
+|   |   |-- build-export-data.ts    # Общий сборщик ExportData: экспорт + отладка (PRD-18)
+|   |   |-- debug-player/           # Ассеты плеера отладки: shim + TBInspector compute + стор (PRD-18)
 |   |   +-- zip.ts                  # ZIP-упаковка
 |   |-- middleware/                  # auth.ts, test-scope.ts, upload.ts (Multer)
 |   |-- utils/                       # crypto.ts (email AES), excel.ts, mask-email.ts
@@ -366,7 +383,7 @@ test-builder/
 |                                    #   generate-sample/template-scorm.ts, превью, check-wireframes-ds)
 |
 |-- docs/                            # Документация
-|   |-- specs/                       # BRD + PRD-1..15 + scoring-model + спецификации
+|   |-- specs/                       # BRD + PRD-1..18 + scoring-model + спецификации
 |   |-- architecture/                # service-architecture, test-editor-contracts, ...
 |   |-- guides/                      # design_guidelines, import-template-guide, template-development
 |   |-- wireframes/                  # HTML-эскизы
@@ -380,8 +397,7 @@ test-builder/
 |
 |-- .env.example                     # Шаблон переменных окружения
 |-- drizzle.config.ts               # Конфиг Drizzle Kit
-|-- package.json  tsconfig.json  vite.config.ts  tailwind.config.ts  postcss.config.js
-+-- components.json                  # Конфиг shadcn/ui
++-- package.json  tsconfig.json  vite.config.ts  postcss.config.js
 ```
 
 ---
@@ -393,7 +409,7 @@ test-builder/
 ```text
 +----------------------------------------------------------+
 |                     Browser (React SPA)                    |
-|   Wouter routing, TanStack Query, shadcn/ui, Tailwind     |
+|   Wouter routing, TanStack Query, @universityrt/ui-kit    |
 +----------------------------+-----------------------------+
                              |  HTTP/REST API
                              |  /api/*
@@ -811,6 +827,7 @@ tests                              # owner_id + status + snapshots
 | POST | `/api/tests/:id/restore` | Восстановить из архива |
 | PUT | `/api/tests/:id/design` | Параметры дизайн-шаблона |
 | GET | `/api/tests/:id/export/scorm` | Экспорт SCORM |
+| POST/GET/DELETE | `/api/tests/:id/debug/...` | Встроенный плеер отладки: сборка / проигрывание / сброс прогона (PRD-18) |
 | GET/POST/DELETE | `/api/tests/:id/access` | Гранты доступа к тесту (PRD-13) |
 | PATCH | `/api/tests/:id/owner` | Сменить владельца теста |
 
@@ -850,9 +867,10 @@ API разнесён по модульным роутерам (`server/routes/`)
 группы: `/api/folders` и `/api/test-folders` (иерархия), `/api/tests/:id/content-pages`
 (PRD-1), `/api/tests/:id/result-variables` (PRD-2), `/api/tests/:id/scales` (PRD-5),
 `/api/tests/:id/workbook/import|export` + `/api/workbook/*` (PRD-14 Excel), `/api/templates`
-(PRD-7) и `/api/admin/templates` (PRD-3 админ-реестр), `/api/groups`, `/api/analytics`,
-`/access/*` (magic-link, до session guard), телеметрия SCORM и `/api/logs`. Полный список
-маршрутов -- `routerConfig` в [server/routes/index.ts](server/routes/index.ts).
+(PRD-7) и `/api/admin/templates` (PRD-3 админ-реестр), `/api/tests/:id/debug/*` (PRD-18
+встроенный плеер отладки), `/api/groups`, `/api/analytics`, `/access/*` (magic-link, до
+session guard), телеметрия SCORM и `/api/logs`. Полный список маршрутов -- `routerConfig`
+в [server/routes/index.ts](server/routes/index.ts).
 
 ---
 
