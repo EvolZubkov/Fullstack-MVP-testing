@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { scoreAnswer as tsScore, type ScoreInput } from "../shared/scoring/engine";
+import { scoreAnswer as tsScore, explainAnswer as tsExplain, type ScoreInput } from "../shared/scoring/engine";
 import type { QuestionScoring } from "../shared/schema";
 
 const portSrc = readFileSync(
@@ -19,6 +19,7 @@ const portSrc = readFileSync(
 // eslint-disable-next-line @typescript-eslint/no-implied-eval
 const ScoringEnginePort = new Function(`${portSrc}\n;return ScoringEngine;`)() as {
   scoreAnswer: (input: unknown) => { score: number; sMax: number; ratio: number };
+  explainAnswer: (input: unknown) => Record<string, unknown>;
 };
 
 const TIERED_MULTIPLE: QuestionScoring = {
@@ -91,6 +92,13 @@ describe("scoring engine — TS ↔ JS port parity", () => {
   it.each(scenarios)("$name", ({ input }) => {
     const ts = tsScore(input);
     const port = ScoringEnginePort.scoreAnswer(input);
+    expect(port).toEqual(ts);
+  });
+
+  // explainAnswer (PRD-18 «цена» breakdown) must also stay bit-identical.
+  it.each(scenarios)("explain · $name", ({ input }) => {
+    const ts = tsExplain(input);
+    const port = ScoringEnginePort.explainAnswer(input);
     expect(port).toEqual(ts);
   });
 });

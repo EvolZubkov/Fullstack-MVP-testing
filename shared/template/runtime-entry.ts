@@ -20,6 +20,10 @@ export {
 } from "./dnd/matching-model";
 export { attachPointerDnd } from "./dnd/pointer-dnd";
 export { buildResultContext, buildAdaptiveResultContext } from "./result-context";
+// PRD-18: the SINGLE standard result-aggregation + pass-rule engine shared by the
+// SCORM runtime (resultsPage.js) and the web grader (attempts.ts).
+export { aggregateStandardResult, aggregateAdaptiveResult } from "../scoring/aggregate";
+export { resolveOverallRule, resolveTopicRule, checkPassRule } from "../scoring/pass-rule";
 export { buildStartState } from "./start-state";
 export { buildTransitionContext } from "./transition-context";
 export { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS } from "./params-css";

@@ -152,5 +152,24 @@ var ScoringEngine = (function () {
     return { score: score, sMax: 1, ratio: score };
   }
 
-  return { scoreAnswer: scoreAnswer };
+  // True when `answer` carries a real selection (empty answer → 0).
+  function isAnswered(type, answer) {
+    if (answer === null || answer === undefined) return false;
+    if (Array.isArray(answer)) return answer.length > 0;
+    if (type === 'matching') return typeof answer === 'object' && Object.keys(answer).length > 0;
+    return true;
+  }
+
+  // Score + the method/tallies behind it (PRD-18 «цена» note). Pure wrapper.
+  function explainAnswer(input) {
+    var kind = (input.scoring && input.scoring.kind) || 'exact';
+    var res = scoreAnswer(input);
+    var t = countTallies(input.type, input.correct || {}, input.answer);
+    return {
+      score: res.score, sMax: res.sMax, ratio: res.ratio, kind: kind,
+      answered: isAnswered(input.type, input.answer), c: t.c, x: t.x, total: t.total,
+    };
+  }
+
+  return { scoreAnswer: scoreAnswer, explainAnswer: explainAnswer, isAnswered: isAnswered };
 })();

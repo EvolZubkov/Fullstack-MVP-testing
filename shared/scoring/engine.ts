@@ -52,6 +52,24 @@ export interface ScoreResult {
   ratio: number;
 }
 
+/**
+ * {@link ScoreResult} plus the method + tallies that produced it. Drives the
+ * debug player's «цена» explanation (PRD-18); the human wording lives in the
+ * inspector, the breakdown stays single-sourced here.
+ */
+export interface ScoreExplain extends ScoreResult {
+  /** The scoring method that was applied. */
+  kind: "exact" | "weighted" | "tiered";
+  /** Whether the learner gave a non-empty answer (an empty answer always scores 0). */
+  answered: boolean;
+  /** Correctly-selected units (`c`). */
+  c: number;
+  /** Wrongly-selected units (`x`). */
+  x: number;
+  /** Per-type total (`T` options / `P` pairs / `N` items). */
+  total: number;
+}
+
 /** Answer tallies; `total` is the per-type T (options) / P (pairs) / N (items). */
 interface Counters {
   c: number;
@@ -192,4 +210,26 @@ export function scoreAnswer(input: ScoreInput): ScoreResult {
   // exact / absent.
   const score = exactCorrect(type, correct, answer);
   return { score, sMax: 1, ratio: score };
+}
+
+/** True when `answer` carries a real selection (an empty answer always scores 0). */
+export function isAnswered(type: QuestionType, answer: Answer): boolean {
+  if (answer === null || answer === undefined) return false;
+  if (Array.isArray(answer)) return answer.length > 0;
+  if (type === "matching") return typeof answer === "object" && Object.keys(answer).length > 0;
+  return true;
+}
+
+/**
+ * Score one answer AND report how the score was reached: the applied method, the
+ * `(c, x, total)` tallies, and whether anything was answered. Pure wrapper over
+ * {@link scoreAnswer} + {@link countTallies}; the debug inspector turns this into
+ * the «цена» note without re-implementing any scoring logic (PRD-18, R-1).
+ */
+export function explainAnswer(input: ScoreInput): ScoreExplain {
+  const { type, correct, answer, scoring } = input;
+  const kind = scoring?.kind ?? "exact";
+  const res = scoreAnswer(input);
+  const t = countTallies(type, correct, answer);
+  return { ...res, kind, answered: isAnswered(type, answer), c: t.c, x: t.x, total: t.total };
 }
