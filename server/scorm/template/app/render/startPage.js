@@ -29,6 +29,10 @@ function buildScormStartContext() {
   var hasLimit = !!TEST_DATA.maxAttempts;
   var hasCompleted = !!getAllAttempts() && getAllAttempts().length > 0;
   var canStartNew = hasAttemptsLeft();
+  // PRD-19 FR-19 «повтор: можно»: prior-attempt summary + downloadable report from
+  // the best saved attempt. Runs post-Initialize (suspend_data available); the
+  // pre-Initialize cooldown gate builds its own minimal context without this.
+  var best = (typeof getBestAttempt === 'function') ? getBestAttempt() : null;
 
   var suspendObj = readSuspendObj();
   var pendingSession = suspendObj.currentSession;
@@ -57,6 +61,13 @@ function buildScormStartContext() {
     resume: canResume ? { index: (pendingSession.currentIndex || 0), total: pendingSession.flatQuestions.length } : null,
     hasCompletedResults: hasCompleted,
     canStartNew: canStartNew,
+    priorResult: best ? {
+      percent: best.percent,
+      passed: best.passed,
+      attemptNumber: best.attemptNumber != null ? best.attemptNumber : null,
+      maxAttempts: hasLimit ? TEST_DATA.maxAttempts : null
+    } : null,
+    canDownloadReport: !!best,
     showBack: false
   });
 }
@@ -99,6 +110,11 @@ function renderStartPageTemplated() {
   wireStartAction(wrap, 'resume', continueSession);
   wireStartAction(wrap, 'restart', startTest);
   wireStartAction(wrap, 'view-results', viewSavedResults);
+  // PRD-19 FR-19 «повтор: можно»: «Скачать отчёт» exports the BEST saved attempt
+  // (not the empty in-progress one) — the same PDF as the results view.
+  wireStartAction(wrap, 'download-report', function () {
+    if (typeof downloadPDF === 'function') downloadPDF(true);
+  });
 }
 
 function renderStartPageFallback() {

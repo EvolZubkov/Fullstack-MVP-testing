@@ -370,7 +370,9 @@ function renderResults() {
 }
 
 
-function downloadPDF() {
+function downloadPDF(preferBest) {
+  // PRD-19 FR-19: `preferBest` forces the BEST saved attempt (the start screen's
+  // «Скачать отчёт» — there is no current attempt yet), else the usual rules apply.
   var noAttempts = TEST_DATA.maxAttempts && !hasAttemptsLeft();
 
   // ФИО из LMS (SCORM 2004: cmi.learner_name, часто "Фамилия, Имя")
@@ -408,8 +410,8 @@ function downloadPDF() {
     timestamp = new Date().toISOString();
   } else {
     // Стандартный режим
-    if (noAttempts) {
-      // Попытки кончились — лучшая попытка
+    if (noAttempts || preferBest) {
+      // Попытки кончились ИЛИ запрошен отчёт со старта — лучшая попытка
       var bestAttempt = getBestAttempt();
       resultsToExport = bestAttempt || calculateResults();
       timestamp = bestAttempt ? bestAttempt.completedAt : new Date().toISOString();
