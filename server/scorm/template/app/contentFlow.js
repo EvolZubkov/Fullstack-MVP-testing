@@ -334,6 +334,14 @@
 
   function advancePageSequence() {
     if (!state.pageSequence || state.pageSequence.length === 0) rebuildPageSequence();
+
+    // PRD-19 D5 (FR-05): in flexible sectional flows, intercept the section
+    // boundary with the section обзор (section-finish) instead of crossing into
+    // the next section. goToReview() opens the обзор scoped to the current
+    // section; «Завершить раздел» commits + (optionally) shows section-results,
+    // then resumes via skipSectionFromCurrent. Strict / router / flat skip this.
+    if (stageSectionFinishIfBoundary()) return;
+
     if (state.currentPageIndex < state.pageSequence.length - 1) {
       state.currentPageIndex += 1;
       syncPhaseToCurrentPage();
@@ -350,10 +358,73 @@
       RouterFlow.isRouterMode() &&
       state.currentRouterTopic
     ) {
+      // PRD-19 D5 (FR-05b): in flexible mode, stage the section обзор («Завершить
+      // раздел») before returning to the router hub. finishSection → section-results
+      // → advanceAfterSection() calls returnFromTopic. Strict mode returns directly.
+      if (
+        TEST_DATA.allowReturnToUnanswered &&
+        !(state.sectionCommitted && state.sectionCommitted[state.currentRouterTopic]) &&
+        typeof goToReview === "function"
+      ) {
+        goToReview();
+        return;
+      }
       RouterFlow.returnFromTopic();
       return;
     }
+    // PRD-19 D5 (FR-05 flat): flexible flat tests finish through the single
+    // end-of-test обзор («Завершить тест») rather than submitting directly.
+    // Strict flat submits directly (unchanged behaviour).
+    if (
+      TEST_DATA.allowReturnToUnanswered &&
+      TEST_DATA.answerCommitScope !== "section" &&
+      state.phase !== "review" &&
+      typeof goToReview === "function"
+    ) {
+      goToReview();
+      return;
+    }
     submit(true);
+  }
+
+  /**
+   * PRD-19 D5 (FR-05/05a): intercept a section boundary when advancing would leave
+   * the current section (sectional flows, non-router). Boundary detection mirrors
+   * the section timer/freeze — a change in the item's topicId (or the test end) —
+   * so it fires after any after_topic content, exactly at the section seam. A
+   * section already committed is not re-staged. Returns true when it intercepts:
+   *   - flexible (allowReturn): the section обзор («Завершить раздел», + modal);
+   *   - strict + showSectionResults: the COMPUTED section-results directly (no
+   *     обзор/modal — strict has no skips, every question is answered), EXCEPT the
+   *     last section, which flows to the test results (already per-topic).
+   */
+  function stageSectionFinishIfBoundary() {
+    if (!TEST_DATA) return false;
+    if (TEST_DATA.answerCommitScope !== "section") return false;
+    if (typeof RouterFlow !== "undefined" && RouterFlow.isRouterMode()) return false;
+    if (!state.pageSequence || !state.pageSequence.length) return false;
+    var curTopic = topicIdForItem(state.pageSequence[state.currentPageIndex]);
+    if (!curTopic) return false;
+    if (state.sectionCommitted && state.sectionCommitted[curTopic]) return false;
+    var hasNext = state.currentPageIndex < state.pageSequence.length - 1;
+    var nextTopic = hasNext
+      ? topicIdForItem(state.pageSequence[state.currentPageIndex + 1])
+      : null;
+    if (hasNext && nextTopic === curTopic) return false; // still inside the section
+
+    if (TEST_DATA.allowReturnToUnanswered) {
+      if (typeof goToReview === "function") { goToReview(); return true; } // flexible → обзор
+      return false;
+    }
+    // Strict (no return): no обзор/modal, but show the computed section-results
+    // between sections when enabled (FR-05a). The last section flows to the test
+    // results (which already carries the per-topic breakdown).
+    var isLast = typeof isLastSectionTopic === "function" && isLastSectionTopic(curTopic);
+    if (TEST_DATA.showSectionResults && !isLast && typeof finishSection === "function") {
+      finishSection(curTopic, false, 0, true); // freeze + section-results, no confirm
+      return true;
+    }
+    return false;
   }
 
   function pageProgressPercent() {
@@ -412,6 +483,9 @@
   root.syncPhaseToCurrentPage = syncPhaseToCurrentPage;
   root.goToPageSequenceIndex = goToPageSequenceIndex;
   root.advancePageSequence = advancePageSequence;
+  // PRD-19 D5: section-finish «Продолжить» advances past the committed section
+  // (submits the attempt on the last section) — reused as the resume step.
+  root.skipSectionFromCurrent = skipSectionFromCurrent;
   root.pageProgressPercent = pageProgressPercent;
   root.getProgressMode = getProgressMode;
 })(typeof window !== "undefined" ? window : global);

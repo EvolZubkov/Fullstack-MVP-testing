@@ -18,6 +18,7 @@
 import type {
   CtxCourse,
   CtxResult,
+  CtxSectionResult,
   CtxTopicResultView,
   CtxAdaptiveTopicView,
   CtxRecommendation,
@@ -125,6 +126,47 @@ export function buildResultContext(
     result.backLabel = opts.backLabel;
   }
   return { course: { title }, result };
+}
+
+/** Normalized input for the staged section-results screen (PRD-19 FR-05a). */
+export interface SectionResultInput {
+  /** Section/topic name (heading). */
+  topicName: string;
+  correct: number;
+  total: number;
+  percent: number;
+  /** null = the section has no pass rule (no verdict tag). */
+  passed: boolean | null;
+  /** Override the «Продолжить» label (e.g. the last section before test-finish). */
+  continueLabel?: string;
+}
+
+/**
+ * Build the COMPUTED section-results context (`{ course, sectionResult }`, PRD-19
+ * FR-05a). Reuses the same ring geometry as the test results screen; the verdict
+ * tag is gated by `hasVerdict` so a section without a pass rule (passed === null)
+ * shows the score without a pass/fail label. Pure — both hosts call it on their
+ * own normalized section result so the numbers/markup cannot drift.
+ */
+export function buildSectionResultContext(input: SectionResultInput): {
+  course: CtxCourse;
+  sectionResult: CtxSectionResult;
+} {
+  const percent = Math.round(input.percent || 0);
+  const hasVerdict = input.passed === true || input.passed === false;
+  const sectionResult: CtxSectionResult = {
+    topicName: input.topicName || "",
+    scorePercent: percent,
+    ringDashoffset: Math.round(RING_CIRCUMFERENCE * (1 - percent / 100)),
+    passClass: input.passed === true ? "is-pass" : input.passed === false ? "is-fail" : "",
+    statusLabel: input.passed === true ? "Раздел пройден" : input.passed === false ? "Раздел не пройден" : "",
+    hasVerdict,
+    correct: input.correct != null ? input.correct : 0,
+    total: input.total,
+    summaryLabel: (input.correct != null ? input.correct : 0) + " из " + input.total + " верно · " + percent + "%",
+    continueLabel: input.continueLabel || "Продолжить",
+  };
+  return { course: { title: input.topicName || "" }, sectionResult };
 }
 
 /** Normalized adaptive per-topic input. */

@@ -807,6 +807,69 @@ router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (r
   }
 });
 
+// POST /api/attempts/:attemptId/section-result - PRD-19 D5 (FR-05a): grade ONE
+// section's answers-so-far through the SAME shared engine the final results use
+// (`aggregateStandardResult` + the test-side effective scoring), so the web
+// section-results screen (итоги раздела) matches the SCORM-baked
+// `computeSectionResult` (parity, PRD-12). Read-only — it neither finishes nor
+// persists the attempt; the web host calls it when a section is committed.
+router.post("/attempts/:attemptId/section-result", requirePermission("attempts.take"), async (req, res) => {
+  try {
+    const attempt = await storage.getAttempt(req.params.attemptId);
+    if (!attempt) return res.status(404).json({ error: "Attempt not found" });
+    if (attempt.userId !== req.session.userId) return res.status(403).json({ error: "Forbidden" });
+
+    const { topicId, answers } = req.body as { topicId?: string; answers?: Record<string, unknown> };
+    if (!topicId) return res.status(400).json({ error: "topicId required" });
+
+    const variant = attempt.variantJson as TestVariant;
+    const variantSection = variant.sections.find((s) => s.topicId === topicId);
+    if (!variantSection) return res.status(404).json({ error: "Section not found in attempt" });
+
+    // PRD-15 block B: grade against the pinned snapshot, like /finish.
+    const src = await dataSourceForAttempt(attempt.snapshotId);
+    const test = await src.getTest(attempt.testId);
+    if (!test) return res.status(404).json({ error: "Test not found" });
+    const sections = await src.getTestSections(test.id);
+    const section = sections.find((s) => s.topicId === topicId);
+    const scoring = await loadTestScoringContext(test.id, src);
+    const questions = await src.getQuestionsByIds(variantSection.questionIds);
+
+    const aggSection: AggregateSection = {
+      topicId: variantSection.topicId,
+      topicName: variantSection.topicName,
+      topicPassRule: section?.topicPassRuleJson ?? null,
+      questions: questions.map((q) => {
+        const effective = scoring.resolve(q);
+        return {
+          type: q.type as QuestionType,
+          correct: (q.correctJson ?? {}) as CorrectData,
+          scoring: effective.scoring,
+          points: effective.points,
+          answer: (answers ?? {})[q.id] as Answer,
+        };
+      }),
+    };
+    // Same overall pass rule as /finish so a topic with an inherit/none rule
+    // resolves its verdict identically (resolveTopicRule -> overall).
+    const agg = aggregateStandardResult({ sections: [aggSection], overallPassRule: test.overallPassRuleJson });
+    const tr = agg.topicResults[0];
+    res.json({
+      topicId: tr.topicId,
+      topicName: tr.topicName,
+      correct: tr.correct,
+      total: tr.total,
+      percent: tr.percent,
+      passed: tr.passed,
+      earnedPoints: tr.earnedPoints,
+      possiblePoints: tr.possiblePoints,
+    });
+  } catch (error) {
+    logger.error("Section result error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to compute section result" });
+  }
+});
+
 // POST /api/attempts/:attemptId/finish - Завершить попытку
 router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), async (req, res) => {
   try {

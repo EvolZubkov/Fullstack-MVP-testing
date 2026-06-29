@@ -310,6 +310,7 @@
     "results": "layouts/results.html",
     "results.adaptive": "layouts/results.adaptive.html",
     "review": "layouts/review.html",
+    "section-results": "layouts/section-results.html",
     "system.blocked": "layouts/system.blocked.html",
     "system.transition": "layouts/system.transition.html"
   },

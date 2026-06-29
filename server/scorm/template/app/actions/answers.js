@@ -331,6 +331,11 @@ function submit(force) {
 
   state.currentIndex = state.flatQuestions.length;
   state.currentPageIndex = state.pageSequence ? state.pageSequence.length : state.currentPageIndex;
+  // PRD-19 D5: clear any review/sectionResults phase so render() falls through to
+  // the final results screen (the dispatcher checks those phases BEFORE the
+  // current>=total results path — finishing from the обзор / section-results
+  // would otherwise re-render that screen instead of the test results).
+  state.phase = 'question';
   render();
 }
 

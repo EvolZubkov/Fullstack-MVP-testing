@@ -9,6 +9,7 @@ import { TemplateQuestionScreen } from "./template-question-screen";
 import { buildStartState } from "@shared/template/start-state";
 import { buildQuestionProgress } from "@shared/template/question-progress-context";
 import { buildReviewContext } from "@shared/template/review-context";
+import { buildSectionResultContext } from "@shared/template/result-context";
 import {
   useSectionTimer,
   useAdaptiveSectionTimer,
@@ -71,6 +72,28 @@ interface AdaptiveState {
   isFinished: boolean;
   result: any;
   questionsAnswered: number;
+}
+
+/**
+ * PRD-19 Block E (FR-07/FR-13): the answers that COUNT for grading. In flexible
+ * mode (allowReturnToUnanswered) a question counts only if it was explicitly
+ * submitted ('answered'); a surviving draft (selected but never submitted, kept
+ * for resume per FR-03b), a skipped or an unanswered question is dropped so it
+ * scores 0 (incorrect). Strict mode grades the full answer map as-is (no navigable
+ * drafts). Parity with the SCORM runtime's `gradedAnswerFor`. Drafts still persist
+ * via save-progress (resume) — only the grading payload is filtered.
+ */
+function pickGradedAnswers(
+  answers: Record<string, any>,
+  questionStatus: Record<string, "unanswered" | "answered" | "skipped">,
+  flexible: boolean,
+): Record<string, any> {
+  if (!flexible) return answers;
+  const out: Record<string, any> = {};
+  for (const k of Object.keys(answers)) {
+    if (questionStatus[k] === "answered") out[k] = answers[k];
+  }
+  return out;
 }
 
 /** Escape text for safe injection into a template slot. */
@@ -160,7 +183,23 @@ export default function TakeTestPage() {
   } | null>(null);
   const [showReview, setShowReview] = useState(false);
   // PRD-19 Block D (FR-09): finish-confirm modal payload (null = hidden).
-  const [finishConfirm, setFinishConfirm] = useState<{ count: number; label: string } | null>(null);
+  // `onConfirm` runs the staged action (section finish or whole-test submit).
+  const [finishConfirm, setFinishConfirm] = useState<{ count: number; label: string; onConfirm: () => void } | null>(null);
+  // PRD-19 D5 (FR-05a): section-results (итоги раздела) screen layout + payload.
+  const [sectionResultsTpl, setSectionResultsTpl] = useState<{
+    layout: string;
+    css: string;
+    theme?: { background: string; foreground: string };
+    cssVars?: Record<string, string>;
+    design?: { logoUrl?: string };
+  } | null>(null);
+  // PRD-19 D5: per-section freeze map (web analogue of SCORM state.sectionCommitted).
+  const [sectionCommitted, setSectionCommitted] = useState<Record<string, boolean>>({});
+  // PRD-19 D5: the computed section-results screen payload (null = not shown). Built
+  // from the server /section-result grade (parity with SCORM computeSectionResult).
+  const [sectionResultView, setSectionResultView] = useState<
+    { topicId: string; topicName: string; correct: number; total: number; percent: number; passed: boolean | null; isLast: boolean } | null
+  >(null);
 
   // Standard mode state
   // Standard mode state
@@ -321,7 +360,8 @@ export default function TakeTestPage() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               credentials: "include",
-              body: JSON.stringify({ answers, timeExpired: true }),
+              // PRD-19 Block E (FR-15): timeout auto-finish — drafts don't count in flexible.
+              body: JSON.stringify({ answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered), timeExpired: true }),
             });
 
             if (!res.ok) throw new Error("Failed to submit");
@@ -406,6 +446,9 @@ export default function TakeTestPage() {
           // PRD-19 Block D: обзор (review) screen layout.
           const rvRes = await fetch(`/api/tests/${testId}/screen-template/review`, { credentials: "include" });
           if (rvRes.ok) setReviewTpl(await rvRes.json());
+          // PRD-19 D5: section-results (итоги раздела) screen layout.
+          const srRes = await fetch(`/api/tests/${testId}/screen-template/section-results`, { credentials: "include" });
+          if (srRes.ok) setSectionResultsTpl(await srRes.json());
         } catch {
           /* fall back to React markup */
         }
@@ -892,11 +935,9 @@ export default function TakeTestPage() {
 
     // Skip past any topic whose section timer has already expired.
     const nextIdx = nextAccessibleIndex(flatQuestions, currentIndex + 1, lockedTopics);
-    if (nextIdx !== null) {
-      setCurrentIndex(nextIdx);
-      // PRD-19 (Block B): persist the advance (status already set by confirm).
-      saveProgress(answers, nextIdx, questionStatus);
-    }
+    // PRD-19 D5: a section boundary (or test end) is intercepted by the staged
+    // finish обзор instead of crossing straight into the next section.
+    advanceOrStageFinish(nextIdx, answers, questionStatus);
   };
 
   const handleNext = () => {
@@ -944,12 +985,8 @@ export default function TakeTestPage() {
 
     // Skip past any topic whose section timer has already expired.
     const nextIdx = nextAccessibleIndex(flatQuestions, currentIndex + 1, lockedTopics);
-    if (nextIdx !== null) {
-      setCurrentIndex(nextIdx);
-      saveProgress(answers, nextIdx, nextStatus);
-    } else {
-      saveProgress(answers, currentIndex, nextStatus);
-    }
+    // PRD-19 D5: intercept a section boundary / test end with the staged обзор.
+    advanceOrStageFinish(nextIdx, answers, nextStatus);
   };
 
   // PRD-19 (Block B): «Пропустить» — flexible mode only. Marks the current
@@ -970,12 +1007,123 @@ export default function TakeTestPage() {
     delete nextAnswers[currentQ.question.id];
     setAnswers(nextAnswers);
     const nextIdx = nextAccessibleIndex(flatQuestions, currentIndex + 1, lockedTopics);
+    // PRD-19 D5: intercept a section boundary / test end with the staged обзор.
+    advanceOrStageFinish(nextIdx, nextAnswers, nextStatus);
+  };
+
+  // ─── PRD-19 D5: staged completion (section-finish → section-results → next) ────
+
+  /** Sectional flows commit answers per section; flat commits the whole test. */
+  const sectionScope = navSettings.answerCommitScope === "section";
+
+  /** True when `topicId` is the LAST section in delivery order (no later topic). */
+  const isLastSectionWeb = (topicId: string): boolean => {
+    const last = flatQuestions[flatQuestions.length - 1];
+    return !last || last.topicId === topicId;
+  };
+
+  /** First accessible question index AFTER the contiguous block of `topicId`. */
+  const firstIndexAfterSection = (topicId: string): number | null => {
+    let i = 0;
+    while (i < flatQuestions.length && flatQuestions[i].topicId !== topicId) i++;
+    while (i < flatQuestions.length && flatQuestions[i].topicId === topicId) i++;
+    if (i >= flatQuestions.length) return null;
+    return nextAccessibleIndex(flatQuestions, i, lockedTopics);
+  };
+
+  /**
+   * PRD-19 D5 (FR-05): advance after a commit/skip, but intercept a section
+   * boundary (flexible sectional) or the test end (flexible flat) with the staged
+   * обзор instead of crossing straight on. `nextIdx === null` = no further question
+   * (test end). Strict mode keeps the plain advance (no обзор, FR-02/FR-08a).
+   */
+  const advanceOrStageFinish = (
+    nextIdx: number | null,
+    nextAnswers: Record<string, any>,
+    nextStatus: Record<string, "unanswered" | "answered" | "skipped">,
+  ) => {
+    const curTopic = flatQuestions[currentIndex]?.topicId;
+    if (sectionScope) {
+      const crossing = !!curTopic && (nextIdx === null || flatQuestions[nextIdx].topicId !== curTopic);
+      if (crossing && !sectionCommitted[curTopic!]) {
+        if (navSettings.allowReturnToUnanswered) {
+          setShowReview(true); // flexible → section обзор («Завершить раздел»)
+          return;
+        }
+        // Strict (no return): show the computed section-results between sections
+        // (FR-05a) — no обзор/modal; the last section flows to the test results.
+        if (navSettings.showSectionResults && !isLastSectionWeb(curTopic!)) {
+          void finishSectionWeb(curTopic!, false);
+          return;
+        }
+      }
+    } else if (navSettings.allowReturnToUnanswered && nextIdx === null) {
+      setShowReview(true); // flat flexible → single end-of-test обзор
+      return;
+    }
     if (nextIdx !== null) {
       setCurrentIndex(nextIdx);
       saveProgress(nextAnswers, nextIdx, nextStatus);
     } else {
+      // Strict end (no обзор): submit is triggered by the «Завершить тест» button.
       saveProgress(nextAnswers, currentIndex, nextStatus);
     }
+  };
+
+  /**
+   * PRD-19 D5 (FR-05/06): commit a section (freeze it) from its обзор, then show
+   * the computed section-results (FR-05a, when `showSectionResults`) fetched via
+   * the shared server grader (parity with SCORM), or advance to the next section.
+   */
+  const finishSectionWeb = async (topicId: string, isLast: boolean) => {
+    setSectionCommitted((prev) => ({ ...prev, [topicId]: true })); // FR-06 freeze
+    setShowReview(false);
+    if (navSettings.showSectionResults && attempt && sectionResultsTpl) {
+      try {
+        const res = await fetch(`/api/attempts/${attempt.id}/section-result`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          // PRD-19 Block E: drafts/skipped don't count toward the section score in flexible.
+          body: JSON.stringify({ topicId, answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered) }),
+        });
+        if (res.ok) {
+          const d = await res.json();
+          setSectionResultView({
+            topicId,
+            topicName: d.topicName,
+            correct: d.correct,
+            total: d.total,
+            percent: d.percent,
+            passed: d.passed,
+            isLast,
+          });
+          return;
+        }
+      } catch {
+        /* fall through to advancing without the (optional) section-results screen */
+      }
+    }
+    continueAfterSection(topicId, isLast);
+  };
+
+  /** «Продолжить»/«Завершить тест» after a section: next section, or finish the test. */
+  const continueAfterSection = (topicId: string, isLast: boolean) => {
+    setSectionResultView(null);
+    setShowReview(false);
+    if (isLast) {
+      handleSubmit();
+      return;
+    }
+    const nextIdx = firstIndexAfterSection(topicId);
+    if (nextIdx === null) {
+      handleSubmit();
+      return;
+    }
+    setStandardFeedbackShown(false);
+    setStandardAnswerResult(null);
+    setCurrentIndex(nextIdx);
+    saveProgress(answers, nextIdx, questionStatus);
   };
 
   const handleSubmit = async () => {
@@ -1004,7 +1152,7 @@ export default function TakeTestPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({ answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered) }),
       });
 
       if (res.status === 404) { setAttemptGone(true); return; }
@@ -1032,7 +1180,7 @@ export default function TakeTestPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({ answers: pickGradedAnswers(answers, questionStatus, navSettings.allowReturnToUnanswered) }),
       });
       if (res.status === 404) { setAttemptGone(true); return; }
       if (!res.ok) throw new Error("Failed to submit");
@@ -1658,16 +1806,30 @@ export default function TakeTestPage() {
   // Оформление — через шаблон (parity with SCORM); finish здесь = завершить тест.
   if (testMode === "standard" && attempt && flatQuestions.length > 0 && showReview && reviewTpl) {
     const curQ = flatQuestions[currentIndex];
-    const sectionScope = navSettings.answerCommitScope === "section";
+    const curTopic = curQ.topicId;
+    // PRD-19 D5: the last section without a section-results screen merges into the
+    // «Завершить тест» step (no extra locked-review screen); otherwise «Завершить раздел».
+    const isLast = isLastSectionWeb(curTopic);
+    const finishLabel =
+      !sectionScope || (isLast && !navSettings.showSectionResults) ? "Завершить тест" : "Завершить раздел";
     const built = buildReviewContext({
       questions: flatQuestions.map((fq) => ({ id: fq.question.id, topicId: fq.topicId, prompt: fq.question.prompt })),
       statuses: questionStatus,
       commitScope: navSettings.answerCommitScope,
-      scopeTopicId: sectionScope ? curQ.topicId : null,
-      isTest: true,
+      scopeTopicId: sectionScope ? curTopic : null,
+      isTest: !sectionScope,
       scopeLabel: sectionScope ? `Раздел «${curQ.topicName}» · обзор` : "Обзор теста",
-      finishLabel: "Завершить тест",
+      finishLabel,
     });
+    // Sectional → finish the current section (freeze → section-results → next);
+    // flat → finish the whole test.
+    const doFinish = () => {
+      if (sectionScope) void finishSectionWeb(curTopic, isLast);
+      else {
+        setShowReview(false);
+        void handleSubmit();
+      }
+    };
     return (
       <div className="tbh-minh-screen tbh-col" style={{ background: reviewTpl.theme?.background }}>
         <TemplateScreen
@@ -1684,7 +1846,14 @@ export default function TakeTestPage() {
           onAction={(action) => {
             if (action.startsWith("goto:")) {
               const i = Number(action.slice("goto:".length));
-              if (!Number.isNaN(i) && i >= 0 && i < flatQuestions.length && !lockedTopics.has(flatQuestions[i].topicId)) {
+              // Frontier (FR-11): no jump into a timer-expired or frozen (committed) section.
+              if (
+                !Number.isNaN(i) &&
+                i >= 0 &&
+                i < flatQuestions.length &&
+                !lockedTopics.has(flatQuestions[i].topicId) &&
+                !sectionCommitted[flatQuestions[i].topicId]
+              ) {
                 setStandardFeedbackShown(false);
                 setStandardAnswerResult(null);
                 setCurrentIndex(i);
@@ -1694,10 +1863,9 @@ export default function TakeTestPage() {
             } else if (action === "finish-review") {
               // FR-09: confirm when finishing with unanswered questions.
               if (built.review.unansweredCount > 0) {
-                setFinishConfirm({ count: built.review.unansweredCount, label: built.review.finishLabel });
+                setFinishConfirm({ count: built.review.unansweredCount, label: built.review.finishLabel, onConfirm: doFinish });
               } else {
-                setShowReview(false);
-                handleSubmit();
+                doFinish();
               }
             }
           }}
@@ -1718,9 +1886,9 @@ export default function TakeTestPage() {
                   variant="primary"
                   size="m"
                   onClick={() => {
+                    const run = finishConfirm.onConfirm;
                     setFinishConfirm(null);
-                    setShowReview(false);
-                    handleSubmit();
+                    run();
                   }}
                 >
                   {finishConfirm.label}
@@ -1729,6 +1897,41 @@ export default function TakeTestPage() {
             }
           />
         )}
+      </div>
+    );
+  }
+
+  // PRD-19 D5 (FR-05a): computed section-results (итоги раздела) — score ring +
+  // summary + verdict + «Продолжить»/«Завершить тест». Built from the shared
+  // section grader (parity with the SCORM-baked computeSectionResult) + the shared
+  // buildSectionResultContext, rendered from the same section-results layout.
+  if (testMode === "standard" && attempt && sectionResultView && sectionResultsTpl) {
+    const built = buildSectionResultContext({
+      topicName: sectionResultView.topicName,
+      correct: sectionResultView.correct,
+      total: sectionResultView.total,
+      percent: sectionResultView.percent,
+      passed: sectionResultView.passed,
+      continueLabel: sectionResultView.isLast ? "Завершить тест" : "Продолжить",
+    });
+    const srTopic = sectionResultView.topicId;
+    const srIsLast = sectionResultView.isLast;
+    return (
+      <div className="tbh-minh-screen tbh-col" style={{ background: sectionResultsTpl.theme?.background }}>
+        <TemplateScreen
+          className="tbh-fill"
+          layout={sectionResultsTpl.layout}
+          css={sectionResultsTpl.css}
+          cssVars={sectionResultsTpl.cssVars}
+          context={{
+            course: built.course,
+            design: sectionResultsTpl.design,
+            sectionResult: built.sectionResult,
+          }}
+          onAction={(action) => {
+            if (action === "section-continue") continueAfterSection(srTopic, srIsLast);
+          }}
+        />
       </div>
     );
   }
@@ -1793,6 +1996,8 @@ export default function TakeTestPage() {
         statuses: questionStatus,
         currentIndex,
         commitScope: navSettings.answerCommitScope,
+        // PRD-19 D5: a committed (finished) section's pills are locked (FR-06/FR-11).
+        sectionCommitted,
         allowReturn: navSettings.allowReturnToUnanswered,
         scopeLabel:
           navSettings.answerCommitScope === "section"
@@ -1802,6 +2007,7 @@ export default function TakeTestPage() {
     const navigateToQuestion = (idx: number) => {
       if (idx < 0 || idx >= flatQuestions.length) return;
       if (lockedTopics.has(flatQuestions[idx].topicId)) return; // expired section
+      if (sectionCommitted[flatQuestions[idx].topicId]) return; // frozen section (FR-06)
       setStandardFeedbackShown(false);
       setStandardAnswerResult(null);
       setCurrentIndex(idx);
@@ -1833,12 +2039,30 @@ export default function TakeTestPage() {
         )}
         <button
           type="button"
-          onClick={!(standardFeedbackShown || committedCurrent) ? handleStandardConfirm : isLastQuestion ? handleSubmit : handleStandardContinue}
+          onClick={
+            !(standardFeedbackShown || committedCurrent)
+              ? handleStandardConfirm
+              : // PRD-19 D5 (FR-16): the question page has NO finish button in flexible
+                // mode — «Далее» on the last question reaches the обзор (section/test
+                // finish). Strict-feedback (showCorrectAnswers, no return) keeps the
+                // direct «Завершить тест» submit.
+                isLastQuestion && !navSettings.allowReturnToUnanswered
+                ? handleSubmit
+                : handleStandardContinue
+          }
           disabled={isSubmitting}
           className="tbh-primarybtn"
           style={{ background: "#2563eb" }}
         >
-          {!(standardFeedbackShown || committedCurrent) ? (navSettings.allowReturnToUnanswered ? "Отправить ответ" : "Принять") : isLastQuestion ? (isSubmitting ? "Отправка..." : "Завершить тест") : "Далее →"}
+          {!(standardFeedbackShown || committedCurrent)
+            ? navSettings.allowReturnToUnanswered
+              ? "Отправить ответ"
+              : "Принять"
+            : isLastQuestion && !navSettings.allowReturnToUnanswered
+              ? isSubmitting
+                ? "Отправка..."
+                : "Завершить тест"
+              : "Далее →"}
         </button>
       </>
     ) : undefined;

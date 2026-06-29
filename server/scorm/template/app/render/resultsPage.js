@@ -385,6 +385,23 @@ window.finishAndClose = finishAndClose;
  * templates can bind `data-path="section.current.result.percent"` etc.
  * The result is cached in `state.sectionResults[topicId]` and returned.
  */
+// PRD-19 Block E (FR-07/FR-13): the answer that COUNTS for grading. In flexible
+// mode (allowReturnToUnanswered) a question counts only if it was explicitly
+// submitted ('answered'); a surviving draft (selected but never «Отправить», kept
+// for resume per FR-03b), a skipped or an unreached question scores 0 (incorrect).
+// Strict mode grades as-is — it has no navigable drafts («Далее»/«Завершить» IS the
+// explicit submission), so leaving it untouched avoids any scoring regression.
+function gradedAnswerFor(q) {
+  if (
+    TEST_DATA.allowReturnToUnanswered &&
+    state.questionStatuses &&
+    state.questionStatuses[q.id] !== "answered"
+  ) {
+    return undefined;
+  }
+  return state.answers[q.id];
+}
+
 function computeSectionResult(topicId) {
   if (state.sectionResults && state.sectionResults[topicId]) {
     return state.sectionResults[topicId];
@@ -398,7 +415,7 @@ function computeSectionResult(topicId) {
   state.flatQuestions.forEach(function (fq) {
     if (fq.topicId !== topicId) return;
     var q = fq.question;
-    var answer = state.answers[q.id];
+    var answer = gradedAnswerFor(q);
     var scoreRatio = checkAnswer(q, answer);
     // PRD-18: preserve a legitimate 0-point price (don't coerce 0 -> 1); only an
     // ABSENT price falls back to the system default of 1, matching the web grader.
@@ -466,7 +483,8 @@ function calculateResults() {
       correct: q.correct || {},
       scoring: q.scoring,
       points: q.points != null ? q.points : 1,
-      answer: state.answers[q.id]
+      // PRD-19 Block E (FR-07/FR-13): drafts/skipped/unanswered score 0 in flexible mode.
+      answer: gradedAnswerFor(q)
     });
   });
 
@@ -672,7 +690,11 @@ function finishScorm(results, passedForLms, resultComputation, scaleComputation)
 
   state.flatQuestions.forEach(function (fq) {
     var q = fq.question;
-    var ans = state.answers[q.id];
+    // PRD-19 Block E (FR-14): the LMS interaction must reflect the GRADED answer
+    // (status-aware), so a surviving draft / skipped / unanswered question reports
+    // 'incorrect' with an empty response — consistent with the score (calculateResults
+    // uses the same gradedAnswerFor). Strict mode is unchanged (gradedAnswerFor → raw).
+    var ans = gradedAnswerFor(q);
     var fullCorrect = checkAnswer(q, ans) === 1;
 
     interactions.push({
@@ -787,7 +809,11 @@ function finishScormLmsOnly(results, passedForLms, resultComputation, scaleCompu
 
   state.flatQuestions.forEach(function (fq) {
     var q = fq.question;
-    var ans = state.answers[q.id];
+    // PRD-19 Block E (FR-14): the LMS interaction must reflect the GRADED answer
+    // (status-aware), so a surviving draft / skipped / unanswered question reports
+    // 'incorrect' with an empty response — consistent with the score (calculateResults
+    // uses the same gradedAnswerFor). Strict mode is unchanged (gradedAnswerFor → raw).
+    var ans = gradedAnswerFor(q);
     var fullCorrect = checkAnswer(q, ans) === 1;
 
     interactions.push({

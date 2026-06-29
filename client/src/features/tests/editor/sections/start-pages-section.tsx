@@ -33,6 +33,8 @@ import {
   Image as ImageIcon,
   Info,
   Layout,
+  List,
+  Lock,
   MoreHorizontal,
   Plus,
   Route,
@@ -665,6 +667,19 @@ function ZonesBlock(props: {
   const results = systemSingleton("results");
   const router = systemSingleton("router");
 
+  // PRD-19 FR-08a: the «Обзор» (section-finish / test-finish) system navigation
+  // slot. The обзор is a RUNTIME template screen (not a content_page), so its
+  // row is informational. Enabled when `allowReturnToUnanswered` is ON; otherwise
+  // DISABLED with a comment pointing to the setting. Hidden entirely for adaptive
+  // tests, where skip/return are impossible (FR-22). Independent of
+  // `showSectionResults` (which gates the «Итоги раздела» summary row).
+  const reviewSlot: "enabled" | "disabled" | null =
+    model.mode === "adaptive"
+      ? null
+      : model.runtime.allowReturnToUnanswered
+        ? "enabled"
+        : "disabled";
+
   return (
     <DndContext
       sensors={sensors}
@@ -701,6 +716,8 @@ function ZonesBlock(props: {
             handlers={handlers}
             testId="structure-flat-questions-row"
           />
+          {/* PRD-19 FR-08a: flat tests have a single test-level «Обзор теста». */}
+          <ReviewSlotRow state={reviewSlot} scope="test" testId="structure-review-slot" />
         </Zone>
       ) : (
         <SortableContext items={topicSortableIds} strategy={verticalListSortingStrategy}>
@@ -713,6 +730,7 @@ function ZonesBlock(props: {
               questionsForTopic={questionsForTopic}
               introForTopic={introForTopic}
               summaryForTopic={summaryForTopic}
+              reviewSlot={reviewSlot}
               dragEnabled={Boolean(updateModel) && !handlers.readOnly}
               dimGrip={handlers.readOnly}
             />
@@ -727,6 +745,7 @@ function ZonesBlock(props: {
                 before={infoIn("before_topic", section.topicId)}
                 after={infoIn("after_topic", section.topicId)}
                 questions={questionsForTopic(section.topicId)}
+                reviewSlot={reviewSlot}
                 handlers={handlers}
                 dragEnabled={Boolean(updateModel) && !handlers.readOnly}
                 dimGrip={handlers.readOnly}
@@ -789,6 +808,8 @@ function TopicBlock(props: {
   before: ContentPage[];
   after: ContentPage[];
   questions: ContentPage | null;
+  /** PRD-19 FR-08a: «Обзор раздела» slot state (`null` = hidden, e.g. adaptive). */
+  reviewSlot: "enabled" | "disabled" | null;
   handlers: ZoneHandlers;
   /** When false, no grip is rendered (read-only or test harness without updateModel). */
   dragEnabled?: boolean;
@@ -862,6 +883,12 @@ function TopicBlock(props: {
           zoneLabel={`«${section.topicName}» — после темы`}
           handlers={props.handlers}
         />
+        {/* PRD-19 FR-08a: section-level «Обзор раздела» (section-finish slot). */}
+        <ReviewSlotRow
+          state={props.reviewSlot}
+          scope="section"
+          testId={`structure-review-slot-${section.topicId}`}
+        />
         {props.summary && (
           <SystemPageRow
             page={props.summary}
@@ -872,6 +899,60 @@ function TopicBlock(props: {
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * PRD-19 FR-08a: virtual «Обзор» (section-finish / test-finish) system row in the
+ * structure tree. The обзор is a RUNTIME template screen (not a content_page), so
+ * the row is informational/read-only — there is no per-page variant to switch.
+ * `enabled` (when `allowReturnToUnanswered` is ON) accents the navigation slot;
+ * `disabled` (return OFF) dims it and adds a comment pointing to the setting;
+ * `null` hides the row entirely (adaptive — skip/return impossible, FR-22).
+ */
+function ReviewSlotRow(props: {
+  state: "enabled" | "disabled" | null;
+  scope: "section" | "test";
+  testId: string;
+}) {
+  if (props.state === null) return null;
+  const noun = props.scope === "section" ? "раздела" : "теста";
+  const finishLabel = props.scope === "section" ? "«Завершить раздел»" : "«Завершить тест»";
+  if (props.state === "enabled") {
+    return (
+      <div
+        className="page-row page-row--system page-row--obzor"
+        data-testid={props.testId}
+        data-kind="review-slot"
+      >
+        <List className="page-icon" size={14} aria-hidden="true" />
+        <span className="page-variant-badge">Обзор</span>
+        <span className="page-title">
+          Обзор {noun} — навигация по вопросам и {finishLabel}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <>
+      <div
+        className="page-row page-row--system page-row--obzor page-row--disabled"
+        data-testid={props.testId}
+        data-kind="review-slot"
+        data-disabled="true"
+      >
+        <Lock className="page-icon" size={14} aria-hidden="true" />
+        <span className="page-variant-badge">Обзор</span>
+        <span className="page-title">Обзор {noun} — недоступен</span>
+      </div>
+      <div className="page-comment" data-testid={`${props.testId}-comment`}>
+        <Info size={13} aria-hidden="true" />
+        <span>
+          Экран обзора доступен только при включённом возврате к неотвеченным. Включите
+          «Возврат к неотвеченным» в разделе «Настройки › Правила прохождения».
+        </span>
+      </div>
+    </>
   );
 }
 
@@ -891,11 +972,13 @@ function InsideTestZone(props: {
   questionsForTopic: (topicId: string) => ContentPage | null;
   introForTopic: (topicId: string) => ContentPage | null;
   summaryForTopic: (topicId: string) => ContentPage | null;
+  /** PRD-19 FR-08a: «Обзор раздела» slot state (`null` = hidden, e.g. adaptive). */
+  reviewSlot: "enabled" | "disabled" | null;
   dragEnabled: boolean;
   /** PRD-7 G19 read-only: dim topic grips without removing them. */
   dimGrip?: boolean;
 }) {
-  const { router, handlers, sections, infoIn, questionsForTopic, introForTopic, summaryForTopic, dragEnabled, dimGrip } = props;
+  const { router, handlers, sections, infoIn, questionsForTopic, introForTopic, summaryForTopic, reviewSlot, dragEnabled, dimGrip } = props;
   return (
     <section className="inside-test" data-testid="structure-inside-test">
       <div className="inside-test__label">
@@ -923,6 +1006,7 @@ function InsideTestZone(props: {
                 before={infoIn("before_topic", section.topicId)}
                 after={infoIn("after_topic", section.topicId)}
                 questions={questionsForTopic(section.topicId)}
+                reviewSlot={reviewSlot}
                 handlers={handlers}
                 dragEnabled={dragEnabled}
                 dimGrip={dimGrip}

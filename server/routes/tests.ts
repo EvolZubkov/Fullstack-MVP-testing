@@ -333,6 +333,9 @@ const SCREEN_LAYOUTS: Record<string, string> = {
   // PRD-19 Block D: обзор (section-finish / test-finish). No backing variant kind
   // (runtime template layout, like blocked) — resolved straight from the template dir.
   review: "review.html",
+  // PRD-19 D5 (FR-05a): computed итоги раздела (section-results). Runtime layout
+  // (no backing variant kind) — resolved straight from the template dir.
+  "section-results": "section-results.html",
 };
 // System variant kind backing each screen (for the default-fallback resolution).
 // `blocked` is a pure system layout with no contentTemplate kind — never falls back.

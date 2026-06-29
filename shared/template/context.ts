@@ -122,6 +122,50 @@ export interface CtxState {
   showBack?: boolean;
   /** PRD-19 Block C: clickable progress pills for the current scope (replaces the linear bar). */
   questionsProgress?: CtxQuestionsProgress;
+  /**
+   * PRD-19 Block F (FR-20): cooldown state ON the start screen. Present ONLY when a
+   * retake is blocked by the cooldown period; its presence ⇒ the start button is
+   * rendered DISABLED (not hidden) and the cooldown card is shown. Replaces the
+   * separate `system.blocked` wall — cooldown is now a state of the normal start.
+   */
+  cooldown?: CtxStartCooldown;
+  /**
+   * PRD-19 Block F (FR-20): prior-attempt summary on the start screen (eligible
+   * retake AND cooldown). Core-prepared (verdict label/class + attempts label).
+   * Set only where the host can supply prior-attempt data — absent on the SCORM
+   * cooldown path (rendered pre-Initialize, where suspend_data is unavailable).
+   */
+  priorResult?: CtxStartPriorResult;
+  /** PRD-19 Block F (FR-20): show «Скачать отчёт» — report for the prior attempt is downloadable. */
+  canDownloadReport?: boolean;
+}
+
+/**
+ * PRD-19 Block F (FR-20): cooldown state for the start screen ({@link CtxState.cooldown}).
+ * Passthrough — the host supplies the human date (ДД.ММ.ГГГГ, as the gate's
+ * `fmtDateHuman`) and optionally the derived days-until.
+ */
+export interface CtxStartCooldown {
+  /** Date the next attempt becomes available, formatted ДД.ММ.ГГГГ. */
+  availableDateHuman: string;
+  /** Days until the next attempt (availableDate − today), when computable. */
+  daysUntil?: number | null;
+}
+
+/**
+ * PRD-19 Block F (FR-20): prior-attempt summary ({@link CtxState.priorResult}).
+ * Core-prepared so the layout only interpolates: the builder computes the verdict
+ * label/class and the «попытка K из M» label from the raw facts.
+ */
+export interface CtxStartPriorResult {
+  /** Rounded percent score of the prior attempt. */
+  percent: number;
+  /** «пройдено» / «не пройдено» / "" (no resolved verdict). */
+  verdictLabel: string;
+  /** "" | "prior-fail" (verdict colour class for a failed attempt). */
+  verdictClass: string;
+  /** «попытка 2 из 3» when attempt counts are known, else "". */
+  attemptsLabel: string;
 }
 
 /**
@@ -192,6 +236,35 @@ export interface CtxReview {
   hint: string;
 }
 
+/**
+ * Computed section-results namespace (`sectionResult.*`, PRD-19 Block D / FR-05a).
+ * The optional staged screen shown after «Завершить раздел» when `showSectionResults`
+ * is on: the section's score ring + a one-line summary + an optional pass/fail verdict
+ * tag + «Продолжить». A COMPUTED screen (from the results engine), NOT an author
+ * `summary` content page. Both hosts build it from {@link
+ * module:shared/template/result-context}.buildSectionResultContext so the numbers
+ * never drift (SCORM computes the section offline; the web grades it on the server).
+ */
+export interface CtxSectionResult {
+  /** Section/topic name for the heading. */
+  topicName: string;
+  scorePercent: number;
+  /** Core-prepared SVG ring dash offset (precomputed; layout binds it directly). */
+  ringDashoffset: number;
+  /** Core-prepared class: `is-pass`/`is-fail`/`""` (empty when the section has no pass rule). */
+  passClass: string;
+  /** Verdict label: «Раздел пройден»/«Раздел не пройден»/`""`. */
+  statusLabel: string;
+  /** True when a pass/fail verdict applies — gates the verdict tag. */
+  hasVerdict: boolean;
+  correct: number;
+  total: number;
+  /** One-line summary, e.g. «6 из 8 верно · 75%». */
+  summaryLabel: string;
+  /** «Продолжить» action label. */
+  continueLabel: string;
+}
+
 /** Adaptive inter-level/topic transition interstitial (`transition.*`). */
 export interface CtxTransition {
   isCorrect: boolean;
@@ -250,4 +323,6 @@ export interface PublicRenderContext {
   design?: CtxDesign;
   /** PRD-19 Block D: review/finish (обзор) screen data. */
   review?: CtxReview;
+  /** PRD-19 Block D / FR-05a: computed section-results (итоги раздела) screen data. */
+  sectionResult?: CtxSectionResult;
 }

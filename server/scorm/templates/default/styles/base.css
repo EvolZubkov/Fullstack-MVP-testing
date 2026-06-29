@@ -772,6 +772,25 @@ h1 {
 .results-pill.is-pass{ background: hsl(var(--success)/.18); border-color: hsl(var(--success)/.35); color: hsl(var(--success)); }
 .results-pill.is-fail{ background: hsl(var(--destructive)/.18); border-color: hsl(var(--destructive)/.35); color: hsl(var(--destructive)); }
 
+/* PRD-19 FR-05a: computed section-results (итоги раздела) — a compact, centered
+   variant of the results card (ring + one-line summary + optional verdict tag +
+   «Продолжить»). Rendered from layouts/section-results.html on BOTH hosts. */
+.section-results{ max-width: 560px; }
+.section-results__card{
+  padding: 26px 22px 20px;
+  text-align:center;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap: 8px;
+}
+.section-results__eyebrow{ font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: hsl(var(--muted-foreground)); }
+.section-results__title{ font-size: 20px; font-weight: 800; margin: 0; }
+.section-results__summary{ font-size: 15px; color: hsl(var(--muted-foreground)); }
+.section-results .results-ring{ margin: 14px auto 6px; }
+.section-results .q-actions--center{ margin-top: 16px; }
+.q-actions--center{ justify-content:center; }
+
 .results-section-title{
   margin: 28px 0 14px;
   font-size: 22px;
@@ -1119,6 +1138,21 @@ a.results-rec-item:hover { text-decoration: underline; }
 .start-btn { padding: 14px 40px; font-size: 16px; font-weight: 600; height: auto; }
 .start-actions-note { color: hsl(var(--destructive)); font-weight: 600; font-size: 14px; }
 .start-note { padding: 16px 20px; margin-bottom: 24px; border-left: 4px solid hsl(var(--primary)); background: hsl(var(--muted)); border-radius: 8px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; text-align: left; }
+/* PRD-19 Block F (FR-20): prior-attempt summary + cooldown state ON the start screen. */
+.start-prior { padding: 20px 24px; text-align: left; display: flex; flex-direction: column; gap: 12px; }
+.start-prior-row { font-size: 15px; color: hsl(var(--foreground)); }
+.start-prior-row strong { font-weight: 700; }
+.prior-fail { color: hsl(var(--destructive)); font-weight: 700; }
+.prior-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.prior-actions .btn { padding: 9px 16px; font-size: 14px; gap: 8px; height: auto; }
+.prior-actions .btn svg { flex-shrink: 0; }
+.start-cooldown { padding: 24px; text-align: left; display: flex; flex-direction: column; gap: 14px; }
+.cooldown-head { display: flex; align-items: center; gap: 14px; }
+.cooldown-ico { width: 48px; height: 48px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: hsl(var(--muted)); color: #f59e0b; flex-shrink: 0; }
+.cooldown-title { font-size: 17px; font-weight: 700; color: hsl(var(--foreground)); }
+.cooldown-sub { font-size: 14px; color: hsl(var(--muted-foreground)); margin-top: 2px; }
+.cooldown-when { background: hsl(var(--muted)); border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 12px 16px; font-size: 14px; color: hsl(var(--foreground)); }
+.cooldown-when strong { font-weight: 700; }
 .layout-content-wrap { max-width: 680px; margin: 0 auto; padding: 36px 24px; }
 .layout-question-wrap { max-width: 680px; margin: 0 auto; padding: 36px 24px; }
 .layout-results-wrap { max-width: 600px; margin: 40px auto; padding: 0 18px; }

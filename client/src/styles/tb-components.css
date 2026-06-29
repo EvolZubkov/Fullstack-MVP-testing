@@ -1129,6 +1129,30 @@
 .page-actions { display: flex; gap: var(--ou-space-1); flex-shrink: 0; }
 .page-icon { color: var(--ou-fg-muted); flex-shrink: 0; }
 
+/* PRD-19 FR-08a: «Обзор раздела/теста» navigation slot (section-finish /
+   test-finish). Accent left-bar marks it as the navigation slot; the disabled
+   variant (return OFF) dims it and drops the accent, with a `.page-comment`
+   below explaining how to enable it. */
+.page-row--obzor {
+  border-left: var(--wf-space-1q, 3px) solid var(--ou-accent-default);
+  padding-left: var(--wf-space-11, 11px);
+}
+.page-row--obzor.page-row--disabled {
+  border-left-color: var(--ou-border-default);
+  opacity: 0.55;
+}
+.page-row--disabled .page-title { color: var(--ou-fg-muted); }
+.page-comment {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ou-space-2);
+  padding: var(--wf-space-6, 6px) var(--wf-space-10, 10px) var(--wf-space-6, 6px) var(--wf-space-14, 14px);
+  font: var(--ou-text-caption);
+  color: var(--ou-fg-muted);
+  background: var(--ou-bg-surface-2);
+}
+.page-comment svg { flex-shrink: 0; margin-top: 1px; color: var(--ou-fg-muted); }
+
 /* Severity indicator on page-row: derived from meta tag tones. */
 .page-row:has(> .page-row__meta .ou-tag--info):not(:has(> .page-row__meta .ou-tag--warning)):not(:has(> .page-row__meta .ou-tag--error)) {
   border-left: var(--wf-space-1q, 3px) solid var(--ou-info-default);
