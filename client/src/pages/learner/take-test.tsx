@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
+import { fmtIsoDateHuman, daysUntilIsoDate } from "./cooldown-format";
 import { buildStartState } from "@shared/template/start-state";
 import { buildQuestionProgress } from "@shared/template/question-progress-context";
 import { buildReviewContext } from "@shared/template/review-context";
@@ -147,6 +148,12 @@ export default function TakeTestPage() {
     resumeIndex: number | null;
     resumeTotal: number | null;
     lastCompletedAttemptId: string | null;
+    // PRD-19 Block F (FR-19/20): retake cooldown facts resolved server-side, so the
+    // start screen renders the cooldown state (date + disabled button + prior
+    // summary) on the SAME page — no separate block-wall. Null = eligible.
+    retakeGate: { cooldownPeriodDays: number | null; availableDate: string | null } | null;
+    // PRD-19 Block F (FR-19/20): prior-attempt summary («повтор: можно» + cooldown).
+    priorResult: { percent: number; passed: boolean | null; attemptNumber: number | null; maxAttempts: number | null } | null;
   } | null>(null);
   // PRD-12 web-host: start screen template assets (null -> legacy React markup).
   const [startTpl, setStartTpl] = useState<{
@@ -434,6 +441,8 @@ export default function TakeTestPage() {
           resumeIndex: test.resumeIndex ?? null,
           resumeTotal: test.resumeTotal ?? null,
           lastCompletedAttemptId: test.lastCompletedAttemptId ?? null,
+          retakeGate: test.retakeGate ?? null,
+          priorResult: test.priorResult ?? null,
         });
 
         // PRD-12 web-host: fetch the start screen template (best-effort; null ->
@@ -486,6 +495,27 @@ export default function TakeTestPage() {
     } catch (err) {
       const retake = (err as { retake?: { cooldownPeriodDays?: number; availableDate?: string | null } }).retake;
       if ((err as Error)?.message === "RETAKE_COOLDOWN") {
+        // PRD-19 Block F (FR-20): a cooldown that the up-front gate missed (a race —
+        // e.g. another tab consumed the last eligible window). Render the cooldown
+        // state ON the start page (parity with the resolved-at-load path), not a
+        // separate wall: fold the 403 facts into testMetadata.retakeGate and stay on
+        // start. Falls back to the legacy block-wall only when the start template is
+        // unavailable (no `startTpl`), so the learner never sees a blank screen.
+        if (startTpl) {
+          setTestMetadata((m) =>
+            m
+              ? {
+                  ...m,
+                  retakeGate: {
+                    cooldownPeriodDays: retake?.cooldownPeriodDays ?? null,
+                    availableDate: retake?.availableDate ?? null,
+                  },
+                }
+              : m,
+          );
+          setPhase("start");
+          return;
+        }
         try {
           const r = await fetch(`/api/tests/${testId}/screen-template/blocked`, { credentials: "include" });
           if (r.ok) setBlockedTpl(await r.json());
@@ -1588,6 +1618,12 @@ export default function TakeTestPage() {
   if (phase === "start" && testInfo && testMetadata && testMode === "standard" && startTpl) {
     const exhausted =
       testMetadata.maxAttempts !== null && testMetadata.completedAttempts >= testMetadata.maxAttempts;
+    // PRD-19 Block F (FR-19/20): cooldown facts render the cooldown card + disabled
+    // start button ON this start page (no separate block-wall). Prior summary shows
+    // for both eligible «повтор: можно» and cooldown. The web has no client-side PDF
+    // report, so «Скачать отчёт» is omitted (canDownloadReport stays off) — only
+    // «Мой результат» links the prior attempt.
+    const gate = testMetadata.retakeGate;
     const startContext = buildStartState({
       info: {
         title: testInfo.title,
@@ -1606,6 +1642,13 @@ export default function TakeTestPage() {
           : null,
       hasCompletedResults: testMetadata.completedAttempts > 0,
       canStartNew: !exhausted,
+      cooldown: gate
+        ? {
+            availableDateHuman: fmtIsoDateHuman(gate.availableDate),
+            daysUntil: daysUntilIsoDate(gate.availableDate),
+          }
+        : null,
+      priorResult: testMetadata.priorResult,
       showBack: true,
     });
     return (

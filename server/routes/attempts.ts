@@ -115,6 +115,39 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
           .slice()
           .sort((a, b) => new Date(b.finishedAt as Date).getTime() - new Date(a.finishedAt as Date).getTime())[0];
 
+        // PRD-19 Block F (FR-19/20): resolve the retake cooldown decision up front so
+        // the START screen can render the cooldown state (date + disabled button +
+        // prior summary) ON the standard start page — parity with the SCORM gate's
+        // `renderCooldownStart`, no separate block-wall. The date source is the
+        // server's own completed attempts (no LMS plugin in the web; PRD-12). Inert
+        // unless the policy is enabled, so legacy tests carry `retakeGate: null`.
+        const retakePolicy = test.retakePolicyJson as RetakePolicy | null;
+        const gate = decideRetake(
+          retakePolicy,
+          lastCompletedAttemptDate(completed.map((a) => a.finishedAt)),
+          toIsoDateUTC(new Date()),
+        );
+        const retakeGate =
+          gate.allowed
+            ? null
+            : { cooldownPeriodDays: gate.cooldownPeriodDays ?? null, availableDate: gate.availableDate ?? null };
+
+        // PRD-19 Block F (FR-19/20): prior-attempt summary for the start screen.
+        // The web uses the MOST RECENT completed attempt — the same one
+        // `lastCompletedAttemptId` ("Мой результат") points at, so the shown
+        // percent and the linked result agree. Present whenever a completed
+        // attempt exists (eligible «повтор: можно» AND cooldown).
+        const lastResult = lastCompleted?.resultJson as AttemptResult | null | undefined;
+        const priorResult =
+          lastResult && typeof lastResult.overallPercent === "number"
+            ? {
+                percent: lastResult.overallPercent,
+                passed: lastResult.overallPassed ?? null,
+                attemptNumber: completedAttempts,
+                maxAttempts: test.maxAttempts ?? null,
+              }
+            : null;
+
         return {
           ...test,
           sections: sectionsWithNames,
@@ -123,6 +156,8 @@ router.get("/learner/tests", requirePermission("attempts.self.read"), async (req
           resumeIndex,
           resumeTotal,
           lastCompletedAttemptId: lastCompleted?.id || null,
+          retakeGate,
+          priorResult,
         };
       })
     );
