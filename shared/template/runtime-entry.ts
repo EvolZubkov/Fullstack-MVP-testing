@@ -27,3 +27,7 @@ export { resolveOverallRule, resolveTopicRule, checkPassRule } from "../scoring/
 export { buildStartState } from "./start-state";
 export { buildTransitionContext } from "./transition-context";
 export { buildTemplateCssVars, DEFAULT_PARAM_CSS_VARS } from "./params-css";
+// PRD-19 Block C: progress-pills builder, shared by both hosts.
+export { buildQuestionProgress } from "./question-progress-context";
+// PRD-19 Block D: review/finish (обзор) screen builder.
+export { buildReviewContext } from "./review-context";

@@ -82,7 +82,7 @@ function baseModel(overrides: Partial<TestEditorModel> = {}): TestEditorModel {
       webhookUrl: "",
       telemetryEnabled: false,
     },
-    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false },
+    runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: true },
     passRules: { decisionPolicy: "overall_only", overall: { type: "percent", value: 70 }, byTopic: {} },
     sections: [],
     adaptive: { showDifficultyLevel: true, testSettings: { showDifficultyLevel: true }, topics: [] },
@@ -337,6 +337,23 @@ describe("<StructureSection /> — kind-aware layout", () => {
     expect(topic).toContainElement(screen.getByTestId("structure-system-summary-t1"));
     // No test-level intro/summary in «До теста»/«После теста».
     expect(screen.queryByTestId("structure-system-intro")).toBeNull();
+  });
+
+  it("PRD-19 FR-05a: showSectionResults OFF hides the «Итоги раздела» (summary) row, intro stays", async () => {
+    installApi([
+      buildPage({ id: "pg-it1", kind: "intro", position: "before_topic", topicId: "t1", templateKey: "intro.hero", valuesJson: { values: { title: "Вступление" } } }),
+      buildPage({ id: "pg-st1", kind: "summary", position: "after_topic", topicId: "t1", templateKey: "summary.result", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-qt1", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
+    ]);
+    renderSection(baseModel({
+      flowMode: "linear_by_topics",
+      sections: [buildSection({ topicId: "t1", topicName: "Тема А" })],
+      runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: false },
+    }));
+    await waitFor(() => expect(screen.getByTestId("structure-zone-topic-t1")).toBeInTheDocument());
+    // The section-results node is gated out (FR-05a), but «Введение раздела» stays.
+    expect(screen.getByTestId("structure-system-intro-t1")).toBeInTheDocument();
+    expect(screen.queryByTestId("structure-system-summary-t1")).toBeNull();
   });
 });
 

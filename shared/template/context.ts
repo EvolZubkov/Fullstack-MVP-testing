@@ -120,6 +120,76 @@ export interface CtxState {
   canViewResults?: boolean;
   /** Web-only: show the "back to list" action (the SCORM host omits it). */
   showBack?: boolean;
+  /** PRD-19 Block C: clickable progress pills for the current scope (replaces the linear bar). */
+  questionsProgress?: CtxQuestionsProgress;
+}
+
+/**
+ * One progress pill (PRD-19 Block C). Core-prepared so the DSL only interpolates:
+ * the builder ({@link module:shared/template/question-progress-context}) computes
+ * the status class, a11y label and frontier (`clickable`); the layout renders a
+ * `<button class="tb-pill {{statusClass}}">` with `data-action="goto:{{index}}"`.
+ */
+export interface CtxQuestionPill {
+  /** Absolute 0-based question index — the `goto:<index>` jump target. */
+  index: number;
+  /** Display number, 1-based within the current navigation scope. */
+  number: number;
+  /** Status class: `is-answered`/`is-current`/`is-skipped`/`""` (+ review: `is-correct`/`is-incorrect`/`is-unanswered`). */
+  statusClass: string;
+  /** A11y label, e.g. «Вопрос 3, текущий» (FR-12). */
+  ariaLabel: string;
+  /** Reachable jump target? Frontier (FR-11): future / committed-section pills are not clickable. */
+  clickable: boolean;
+}
+
+/**
+ * Progress-pills map for the CURRENT navigation scope (`state.questionsProgress`,
+ * PRD-19 Block C). Sectional flows scope it to the current section; the flat flow
+ * spans the whole test. Absent on screens without a question map (e.g. content pages).
+ */
+export interface CtxQuestionsProgress {
+  /** Scope heading, e.g. «Вопросы раздела «Сеть»» / «Вопросы теста». */
+  scopeLabel: string;
+  /** Questions in scope. */
+  total: number;
+  answeredCount: number;
+  skippedCount: number;
+  /** One entry per in-scope question, in display order. */
+  states: CtxQuestionPill[];
+}
+
+/** One unanswered question in the review screen's explicit list (PRD-19 FR-08). */
+export interface CtxReviewUnanswered {
+  /** Absolute 0-based question index — the `goto:<index>` jump target. */
+  index: number;
+  /** Display number, 1-based within the review scope. */
+  number: number;
+  /** Question prompt (escaped by the renderer). */
+  prompt: string;
+}
+
+/**
+ * Review/finish screen namespace (`review.*`, PRD-19 Block D, FR-08). The system
+ * обзор screen (section-finish / test-finish) shows the pills
+ * ({@link CtxState.questionsProgress}, built with all pills issued) PLUS this
+ * explicit unanswered list and the «Завершить …» action. Runtime-rendered on both
+ * hosts from the shared `review` layout (no content_pages row — incremental model).
+ */
+export interface CtxReview {
+  /** Heading, e.g. «Раздел «Сеть» · обзор» / «Обзор теста». */
+  scopeLabel: string;
+  /** True for the test-finish обзор, false for a section-finish обзор. */
+  isTest: boolean;
+  /** Finish-button label: «Завершить раздел» / «Завершить тест». */
+  finishLabel: string;
+  /** Explicit list of still-unanswered (or skipped) questions in scope. */
+  unanswered: CtxReviewUnanswered[];
+  unansweredCount: number;
+  answeredCount: number;
+  total: number;
+  /** Pre-answer hint shown above the list. */
+  hint: string;
 }
 
 /** Adaptive inter-level/topic transition interstitial (`transition.*`). */
@@ -153,6 +223,18 @@ export interface CtxRetake {
 }
 
 /**
+ * Per-test branding shown across learner screens (`design.*`, PRD-7). Carried in
+ * the render context so the SAME layout binding works on both hosts. Built from
+ * the test's design params — the value is already RESOLVED to a plain URL string
+ * (the author stores a `{ url, name, … }` media envelope; each host extracts
+ * `.url` before it reaches the context, never the envelope).
+ */
+export interface CtxDesign {
+  /** Logo URL; absent → the `{{#if design.logoUrl}}` layout block renders nothing. */
+  logoUrl?: string;
+}
+
+/**
  * The public render context handed to the unified renderer for any screen. Every
  * namespace is optional — present only on the screens that use it (`course` on
  * start/question/results; `result` on results; `state` on start/question; `retake`
@@ -164,4 +246,8 @@ export interface PublicRenderContext {
   state?: CtxState;
   retake?: CtxRetake;
   transition?: CtxTransition;
+  /** Per-test branding (logo); present on every learner screen that shows it. */
+  design?: CtxDesign;
+  /** PRD-19 Block D: review/finish (обзор) screen data. */
+  review?: CtxReview;
 }

@@ -48,6 +48,11 @@ function saveCurrentSession() {
     routerTopicStates: JSON.parse(JSON.stringify(state.routerTopicStates || {})),
     sectionResults: JSON.parse(JSON.stringify(state.sectionResults || {})),
     routerFinished: state.routerFinished === true,
+    // PRD-19 (Block B): per-question status + per-section commit freeze travel
+    // with the checkpoint so a resumed session restores skipped/answered marks.
+    // Absent keys on legacy packages restore as {} (everything 'unanswered').
+    questionStatuses: JSON.parse(JSON.stringify(state.questionStatuses || {})),
+    sectionCommitted: JSON.parse(JSON.stringify(state.sectionCommitted || {})),
   };
   writeSuspendObj(s);
   console.log('💾 Session saved at question', state.currentIndex);
@@ -134,6 +139,10 @@ function restoreSession(session) {
   state.flatQuestions = session.flatQuestions;
   state.answers = session.answers || {};
   state.currentIndex = session.currentIndex || 0;
+  // PRD-19 (Block B): restore navigation statuses; legacy checkpoints lack
+  // these keys and default to empty (treated as all-'unanswered').
+  state.questionStatuses = session.questionStatuses || {};
+  state.sectionCommitted = session.sectionCommitted || {};
   state.phase = 'question';
   state.submitted = false;
   state.feedbackShown = false;

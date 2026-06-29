@@ -16,6 +16,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { TemplateScreen } from "@/components/template-screen";
 import type { Question } from "@shared/schema";
+import type { CtxQuestionsProgress } from "@shared/template/context";
 import {
   normalizePool,
   dropOnRight,
@@ -264,7 +265,15 @@ function mediaHtml(question: Question): string {
 }
 
 export interface TemplateQuestionScreenProps {
-  tpl: { layout: string; css: string; theme?: { background: string; foreground: string } };
+  tpl: {
+    layout: string;
+    css: string;
+    theme?: { background: string; foreground: string };
+    /** Per-test design-param CSS-var overrides (PRD-7 branding); applied on the shadow host. */
+    cssVars?: Record<string, string>;
+    /** Per-test branding for the render context (logo). */
+    design?: { logoUrl?: string };
+  };
   testTitle: string;
   counterLabel: string;
   progressPercent: number;
@@ -285,10 +294,17 @@ export interface TemplateQuestionScreenProps {
   // Standard-mode nav (used only when `footer` is not provided):
   canPrev?: boolean;
   onPrev?: () => void;
+  /** PRD-19 (Block B): «Пропустить» — flexible-mode skip, shown when `canSkip`. */
+  canSkip?: boolean;
+  onSkip?: () => void;
   isLast?: boolean;
   isSubmitting?: boolean;
   onNext?: () => void;
   onSubmit?: () => void;
+  /** PRD-19 Block C: progress-pills map (Core-prepared); renders the pill row. */
+  questionsProgress?: CtxQuestionsProgress;
+  /** PRD-19 Block C: jump to an absolute question index from a pill click. */
+  onNavigateToQuestion?: (index: number) => void;
 }
 
 export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
@@ -367,9 +383,17 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
         className="tbh-fill"
         layout={tpl.layout}
         css={css}
-        context={{ course: { title: testTitle }, state: { questionCounterLabel: counterLabel } }}
+        cssVars={tpl.cssVars}
+        context={{ course: { title: testTitle }, state: { questionCounterLabel: counterLabel, questionsProgress: props.questionsProgress }, design: tpl.design }}
         slots={slots}
         onAction={(action) => {
+          // PRD-19 Block C: pill navigation works even when the question is locked
+          // (the lock guards answer editing, not navigating away).
+          if (action.startsWith("goto:")) {
+            const i = Number(action.slice("goto:".length));
+            if (!Number.isNaN(i)) props.onNavigateToQuestion?.(i);
+            return;
+          }
           if (props.locked) return; // read-only while feedback is shown
           if (action.startsWith("select:")) {
             const i = Number(action.slice("select:".length));
@@ -410,6 +434,11 @@ export function TemplateQuestionScreen(props: TemplateQuestionScreenProps) {
             >
               ← Назад
             </button>
+            {props.canSkip && (
+              <button type="button" onClick={props.onSkip} className="tbh-navbtn">
+                Пропустить
+              </button>
+            )}
             <button
               type="button"
               onClick={props.isLast ? props.onSubmit : props.onNext}

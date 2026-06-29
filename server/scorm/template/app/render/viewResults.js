@@ -85,6 +85,7 @@ function renderViewResultsTemplated(app, results) {
     backAction: 'back-to-start',
     backLabel: 'Вернуться к тесту'
   });
+  ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
 
   // PRD-7 G21: mount default's results layout + activate default's stylesheet
   // when `results` falls back to the default template.

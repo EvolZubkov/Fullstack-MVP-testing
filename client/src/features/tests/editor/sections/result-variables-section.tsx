@@ -54,6 +54,10 @@ import {
   type ResultVariableFormulaValidation,
 } from "../result-variables-api";
 
+// Вывод показателей ученику — отдельный PRD (дальняя перспектива). До него тогл
+// «Показывать результат обучающемуся» скрыт; поле showToLearner сохранено в модели.
+const SHOW_LEARNER_RESULT_TOGGLE: boolean = false;
+
 export type ResultVariablesSectionProps = {
   model: TestEditorModel;
   /** Test id; `undefined` in create mode — disables live formula validation. */
@@ -467,13 +471,15 @@ function VariableForm({ variable: v, index, topics, testId, readOnly, fieldError
 
       <hr className="wf-sep" />
 
-      <Switch
-        label="Показывать результат обучающемуся"
-        checked={v.showToLearner}
-        disabled={readOnly}
-        onChange={(e) => onChange({ showToLearner: e.target.checked })}
-        data-testid={`metrics-show-${index}`}
-      />
+      {SHOW_LEARNER_RESULT_TOGGLE && (
+        <Switch
+          label="Показывать результат обучающемуся"
+          checked={v.showToLearner}
+          disabled={readOnly}
+          onChange={(e) => onChange({ showToLearner: e.target.checked })}
+          data-testid={`metrics-show-${index}`}
+        />
+      )}
       <Select<ResultVariableScormTarget>
         size="m"
         fullWidth

@@ -21,6 +21,8 @@ interface AttemptWithResult extends Attempt {
     css: string;
     context: unknown;
     theme?: { background: string; foreground: string };
+    /** Per-test design-param CSS-var overrides (PRD-7 branding); applied on the shadow host. */
+    cssVars?: Record<string, string>;
   } | null;
 }
 
@@ -83,6 +85,7 @@ function TemplateResultPage({ attempt }: { attempt: AttemptWithResult }) {
         className="tbh-fill"
         layout={render.layout}
         css={render.css}
+        cssVars={render.cssVars}
         context={render.context}
         onAction={(action) => {
           if (action === "restart" && attempt.canRetake) {

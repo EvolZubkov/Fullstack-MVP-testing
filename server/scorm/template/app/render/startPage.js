@@ -67,10 +67,26 @@ function wireStartAction(root, action, fn) {
   if (btn) btn.onclick = fn;
 }
 
+/**
+ * Resolve per-test branding for the render context (`design.*`, PRD-7). The logo
+ * param is baked into TEST_DATA as a media envelope `{ url, name, … }` (or a bare
+ * string for legacy values); the layout binds a plain URL string, so `.url` is
+ * unwrapped here — mirroring the web host's server-side `resolveLogoUrl`.
+ */
+function scormDesignContext() {
+  var p = (typeof TEST_DATA !== 'undefined' && TEST_DATA.designSettings) ? TEST_DATA.designSettings.params : null;
+  var logo = p ? p.logoUrl : null;
+  var url = '';
+  if (logo && typeof logo === 'object' && typeof logo.url === 'string') url = logo.url;
+  else if (typeof logo === 'string') url = logo;
+  return url ? { logoUrl: url } : {};
+}
+
 /** Build the start context (shared builder) and mount the shared layout (standard mode). */
 function renderStartPageTemplated() {
   var app = document.getElementById('app');
   var ctx = buildScormStartContext();
+  ctx.design = scormDesignContext();
   // PRD-7 G21: when `start` falls back to default, mount default's layout AND
   // activate default's stylesheet so the screen is fully styled.
   var layout = (typeof systemLayout === 'function') ? systemLayout('start') : state.templateLayouts['start'];
@@ -438,6 +454,21 @@ function continueSession() {
     return;
   }
   restoreSession(recovery.session);
+  // PRD-19 (Block B): mirror the bootstrap restore path — rebuild the page
+  // sequence and jump to the resumed question item so syncPhaseToCurrentPage
+  // re-establishes state.activeSectionTopic and the timer/freeze hooks. Without
+  // this the first post-restore section boundary fails to freeze the prior
+  // section (answerCommitScope='section').
+  if (typeof rebuildPageSequence === 'function') {
+    rebuildPageSequence();
+    var qIndex = state.currentIndex || 0;
+    var itemIndex = (state.pageSequence || []).findIndex(function (item) {
+      return item && item.kind === 'question' && item.questionIndex === qIndex;
+    });
+    if (typeof goToPageSequenceIndex === 'function') {
+      goToPageSequenceIndex(itemIndex >= 0 ? itemIndex : 0);
+    }
+  }
   render();
 }
 

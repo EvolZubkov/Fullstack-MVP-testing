@@ -63,6 +63,12 @@ function render() {
         return;
     }
 
+    // PRD-19 (Block D): review/обзор screen (section-finish / test-finish).
+    if (state.phase === 'review') {
+        renderReviewScreen();
+        return;
+    }
+
     if (state.phase === 'content' || state.phase === 'router') {
         var item = typeof currentPageItem === 'function' ? currentPageItem() : null;
         var manifest = state.templateManifest || {};
@@ -119,18 +125,175 @@ function buildQuestionFeedbackHtml(q) {
     return html;
 }
 
-/** Navigation row HTML (Принять / Далее / Завершить), onclick-wired. */
-function buildQuestionNavHtml(current, total) {
-    var html = '<div class="navigation" style="justify-content:flex-end">';
-    if (TEST_DATA.showCorrectAnswers && !state.feedbackShown) {
-        html += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()">Принять</button>';
-    } else if (current < total - 1 || (state.pageSequence && state.currentPageIndex < state.pageSequence.length - 1)) {
-        html += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
-    } else {
-        html += '<button class="btn" data-action="test-finish" onclick="submit()">Завершить тест</button>';
+// PRD-19 (Block D): true when the current scope has ≥1 skipped question — drives
+// the «Вернуться» button (the obvious navigation path to the обзор screen, FR-04c).
+function hasSkippedInScope() {
+    if (!TEST_DATA.allowReturnToUnanswered || !state.flatQuestions) return false;
+    var sectionScope = TEST_DATA.answerCommitScope === 'section';
+    var curFq = state.flatQuestions[state.currentIndex];
+    var curTopic = sectionScope && curFq ? curFq.topicId : null;
+    for (var i = 0; i < state.flatQuestions.length; i++) {
+        var fq = state.flatQuestions[i];
+        if (!fq) continue;
+        if (sectionScope && fq.topicId !== curTopic) continue;
+        if (state.questionStatuses && state.questionStatuses[fq.question.id] === 'skipped') return true;
     }
-    html += '</div>';
-    return html;
+    return false;
+}
+
+// PRD-19 (Block D): open the обзор screen (section-finish / test-finish).
+function goToReview() {
+    state.phase = 'review';
+    state.feedbackShown = false;
+    render();
+}
+
+/**
+ * PRD-19 (Block D / FR-09): finish-confirm modal — host-chrome overlay (agreed),
+ * styled with template tokens (.tb-modal). Shown when finishing with unanswered
+ * questions; «Отмена» dismisses, the confirm button runs `onConfirm`.
+ */
+function showFinishConfirm(unansweredCount, finishLabel, onConfirm) {
+    var prev = document.getElementById('tb-finish-modal');
+    if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+    var back = document.createElement('div');
+    back.id = 'tb-finish-modal';
+    back.className = 'tb-modal-backdrop';
+    back.setAttribute('role', 'dialog');
+    back.setAttribute('aria-modal', 'true');
+    back.innerHTML =
+        '<div class="tb-modal">' +
+          '<div class="tb-modal__head">' +
+            '<div class="tb-modal__icon" aria-hidden="true">!</div>' +
+            '<div><h2 class="tb-modal__title">' + escapeHtml(finishLabel) + '?</h2>' +
+            '<p class="tb-modal__desc">Вопросов без ответа: ' + unansweredCount +
+              '. Они будут засчитаны как неверные. После завершения вернуться к ним нельзя.</p></div>' +
+          '</div>' +
+          '<div class="tb-modal__foot">' +
+            '<button type="button" class="btn btn-outline" data-modal="cancel">Отмена</button>' +
+            '<button type="button" class="btn" data-modal="confirm">' + escapeHtml(finishLabel) + '</button>' +
+          '</div>' +
+        '</div>';
+    document.body.appendChild(back);
+    function close() { if (back.parentNode) back.parentNode.removeChild(back); }
+    back.querySelector('[data-modal="cancel"]').addEventListener('click', close);
+    back.querySelector('[data-modal="confirm"]').addEventListener('click', function () { close(); onConfirm(); });
+    back.addEventListener('click', function (e) { if (e.target === back) close(); });
+}
+
+/**
+ * PRD-19 (Block D): render the обзор screen from the SHARED `review` template
+ * layout (pills + explicit unanswered list + «Завершить»). Wires pill/row `goto`
+ * jumps and the finish action. Оформление — через шаблон (FR-16/контракт §5);
+ * this is NOT a non-template UI. Staged per-section finish + section-results is a
+ * later step — here «Завершить» finishes the test (submit()).
+ */
+function renderReviewScreen() {
+    var app = document.getElementById('app');
+    var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+    var layout = state.templateLayouts && state.templateLayouts['review'];
+    if (!layout || !TB || !TB.renderScreenInto || !TB.buildReviewContext) {
+        submit(); // no review layout — fall through to finishing
+        return;
+    }
+    var sectionScope = TEST_DATA.answerCommitScope === 'section';
+    var curFq = state.flatQuestions[state.currentIndex];
+    var scopeTopicId = sectionScope && curFq ? curFq.topicId : null;
+    var scopeName = curFq ? (curFq.topicName || '') : '';
+    var built = TB.buildReviewContext({
+        questions: state.flatQuestions.map(function (fq) {
+            return { id: fq.question.id, topicId: fq.topicId, prompt: fq.question.prompt };
+        }),
+        statuses: state.questionStatuses || {},
+        commitScope: sectionScope ? 'section' : 'test',
+        scopeTopicId: scopeTopicId,
+        isTest: true,
+        scopeLabel: sectionScope ? ('Раздел «' + scopeName + '» · обзор') : 'Обзор теста',
+        finishLabel: 'Завершить тест'
+    });
+    var context = {
+        course: { title: TEST_DATA.title },
+        design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {},
+        state: { questionsProgress: built.questionsProgress },
+        review: built.review
+    };
+    app.innerHTML = '';
+    var wrap = document.createElement('div');
+    app.appendChild(wrap);
+    TB.renderScreenInto(wrap, { layout: layout, context: context });
+    var actionEls = wrap.querySelectorAll('[data-action]');
+    Array.prototype.forEach.call(actionEls, function (el) {
+        var a = el.getAttribute('data-action') || '';
+        if (a.indexOf('goto:') === 0) {
+            el.addEventListener('click', function () {
+                if (el.disabled) return;
+                var idx = parseInt(a.slice(5), 10);
+                if (!isNaN(idx)) { state.phase = 'question'; goToQuestionIndex(idx); }
+            });
+        } else if (a === 'finish-review') {
+            el.addEventListener('click', function () {
+                // FR-09: confirm when finishing with unanswered questions.
+                if (built.review.unansweredCount > 0) {
+                    showFinishConfirm(built.review.unansweredCount, built.review.finishLabel, function () { submit(); });
+                } else {
+                    submit();
+                }
+            });
+        }
+    });
+}
+
+/**
+ * Navigation row HTML, onclick-wired. PRD-19 (Block B):
+ * - strict-linear (allowReturnToUnanswered=false, B2): original single-button
+ *   flow verbatim — «Принять» (showCorrectAnswers only) → «Далее»/«Завершить»;
+ * - flexible (allowReturnToUnanswered=true, B3): before fixation two buttons —
+ *   «Пропустить» (left) + «Отправить ответ» (right); after fixation «Далее»/
+ *   «Завершить тест».
+ */
+function buildQuestionNavHtml(current, total) {
+    var hasNext = current < total - 1 ||
+        (state.pageSequence && state.currentPageIndex < state.pageSequence.length - 1);
+
+    if (!TEST_DATA.allowReturnToUnanswered) {
+        var sh = '<div class="navigation" style="justify-content:flex-end">';
+        if (TEST_DATA.showCorrectAnswers && !state.feedbackShown) {
+            sh += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()">Принять</button>';
+        } else if (hasNext) {
+            sh += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
+        } else {
+            sh += '<button class="btn" data-action="test-finish" onclick="submit()">Завершить тест</button>';
+        }
+        sh += '</div>';
+        return sh;
+    }
+
+    // Flexible mode. «Вернуться» → обзор (Block D) and the clickable progress
+    // pills (Block C) are layered on later; goToNextUnanswered() already backs them.
+    var fq = state.flatQuestions[current];
+    var committed = state.feedbackShown ||
+        !!(fq && state.questionStatuses && state.questionStatuses[fq.question.id] === 'answered');
+
+    var left = '';
+    var right = '';
+    if (!committed) {
+        left += '<button class="btn btn-outline" data-action="answer-skip" onclick="skipQuestion()">Пропустить</button>';
+        right += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()">Отправить ответ</button>';
+    } else if (hasNext) {
+        right += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
+    } else {
+        right += '<button class="btn" data-action="test-finish" onclick="submit()">Завершить тест</button>';
+    }
+    // PRD-19 (Block D / FR-04c): «Вернуться» → обзор, only when skipped questions
+    // exist in scope (the obvious navigation path alongside the quick pills).
+    if (hasSkippedInScope()) {
+        left += '<button class="btn btn-outline" data-action="answer-return" onclick="goToReview()">Вернуться</button>';
+    }
+
+    return '<div class="navigation">' +
+        '<div class="navigation__left" style="display:flex;gap:12px">' + left + '</div>' +
+        '<div class="navigation__right" style="display:flex;gap:12px">' + right + '</div>' +
+        '</div>';
 }
 
 /**
@@ -152,7 +315,23 @@ function renderStandardQuestion(qData, current, total, progress) {
 
     if (layout && TB && TB.renderScreenInto) {
         var counterLabel = 'Вопрос ' + (current + 1) + ' из ' + total + ' | ' + qData.topicName;
-        var context = { course: { title: TEST_DATA.title }, state: { questionCounterLabel: counterLabel } };
+        // PRD-19 Block C: progress-pills map for the current scope (replaces the bar).
+        var sectionScope = TEST_DATA.answerCommitScope === 'section';
+        var qProgress = (TB.buildQuestionProgress) ? TB.buildQuestionProgress({
+            questions: state.flatQuestions.map(function (fq) { return { id: fq.question.id, topicId: fq.topicId }; }),
+            statuses: state.questionStatuses || {},
+            currentIndex: current,
+            commitScope: sectionScope ? 'section' : 'test',
+            sectionCommitted: state.sectionCommitted || {},
+            allowReturn: !!TEST_DATA.allowReturnToUnanswered,
+            scopeLabel: sectionScope ? ('Вопросы раздела «' + (qData.topicName || '') + '»') : 'Вопросы теста'
+        }) : null;
+        var context = {
+            course: { title: TEST_DATA.title },
+            state: { questionCounterLabel: counterLabel },
+            design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {}
+        };
+        if (qProgress) context.state.questionsProgress = qProgress;
         var slots = {
             'question-text': escapeHtml(q.prompt),
             'question-media': renderQuestionMedia(q),
@@ -163,6 +342,19 @@ function renderStandardQuestion(qData, current, total, progress) {
         var wrap = document.createElement('div');
         app.appendChild(wrap);
         TB.renderScreenInto(wrap, { layout: layout, context: context, slots: slots });
+
+        // PRD-19 Block C: wire pill clicks → goToQuestionIndex (frontier enforced
+        // by the `disabled` attribute the builder set on non-reachable pills).
+        var pills = wrap.querySelectorAll('.tb-pill[data-action]');
+        Array.prototype.forEach.call(pills, function (btn) {
+            btn.addEventListener('click', function () {
+                if (btn.disabled) return;
+                var a = btn.getAttribute('data-action') || '';
+                if (a.indexOf('goto:') !== 0) return;
+                var idx = parseInt(a.slice(5), 10);
+                if (!isNaN(idx) && typeof goToQuestionIndex === 'function') goToQuestionIndex(idx);
+            });
+        });
 
         // Progress fill (or hide the bar when progress is suppressed).
         var pb = wrap.querySelector('.progress-bar');

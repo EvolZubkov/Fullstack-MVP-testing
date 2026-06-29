@@ -81,6 +81,10 @@ export type ApiTestResponse = {
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
   showCorrectAnswers?: boolean | null;
+  // PRD-19 (Блок A)
+  allowReturnToUnanswered?: boolean | null;
+  allowAnswerChange?: boolean | null;
+  showSectionResults?: boolean | null;
   startPageContent?: string | null;
   folderId?: string | null;
   sections?: unknown[];
@@ -759,6 +763,10 @@ export function emptyEditorModel(args: { folderId: string | null }): TestEditorM
       timeLimitMinutes: null,
       maxAttempts: null,
       showCorrectAnswers: false,
+      // PRD-19 (Блок A): новый тест — возврат ВКЛ по умолчанию (FR-01).
+      allowReturnToUnanswered: true,
+      allowAnswerChange: false,
+      showSectionResults: true,
     },
     passRules: {
       decisionPolicy: "overall_only",
@@ -844,6 +852,14 @@ export function apiToEditorModel(api: unknown): TestEditorModel {
       maxAttempts: typeof src.maxAttempts === "number" ? src.maxAttempts : null,
       showCorrectAnswers:
         typeof src.showCorrectAnswers === "boolean" ? src.showCorrectAnswers : false,
+      // PRD-19 (Блок A): загрузка существующего теста. Отсутствие поля (до A3) → консервативно:
+      // возврат ВЫКЛ (как у существующих после миграции), итоги раздела ВКЛ.
+      allowReturnToUnanswered:
+        typeof src.allowReturnToUnanswered === "boolean" ? src.allowReturnToUnanswered : false,
+      allowAnswerChange:
+        typeof src.allowAnswerChange === "boolean" ? src.allowAnswerChange : false,
+      showSectionResults:
+        typeof src.showSectionResults === "boolean" ? src.showSectionResults : true,
     },
     passRules: {
       decisionPolicy,
@@ -902,6 +918,9 @@ export function editorModelToPayload(model: TestEditorModel): TestSettingsPayloa
     timeLimitMinutes: model.runtime.timeLimitMinutes,
     maxAttempts: model.runtime.maxAttempts,
     showCorrectAnswers: model.runtime.showCorrectAnswers,
+    allowReturnToUnanswered: model.runtime.allowReturnToUnanswered,
+    allowAnswerChange: model.runtime.allowAnswerChange,
+    showSectionResults: model.runtime.showSectionResults,
     feedbackJson,
     webhookUrl: emptyToNull(model.basic.webhookUrl),
     telemetryEnabled: model.basic.telemetryEnabled,

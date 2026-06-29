@@ -18,6 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { buildResultContext, buildAdaptiveResultContext } from "./result-context";
+import { buildTemplateCssVars, type TemplateParamDef } from "@shared/template/params-css";
 import type { AttemptResult } from "@shared/schema";
 
 /** What the web host needs to render one screen via the unified renderer. */
@@ -27,6 +28,37 @@ export interface ScreenRenderPayload {
   context: unknown;
   /** Resolved theme tokens so the embedding host can match the template surface. */
   theme: { background: string; foreground: string };
+  /**
+   * Per-test design-param overrides as CSS custom properties (PRD-7 branding),
+   * built from the test's `designSettingsJson.params` + the template manifest via
+   * the SHARED {@link module:shared/template/params-css buildTemplateCssVars} —
+   * the SAME mapping the SCORM runtime bakes in, so colours/font render identically
+   * on both hosts. Applied on the {@link TemplateScreen} shadow host. Omitted when
+   * no param resolves a CSS variable.
+   */
+  cssVars?: Record<string, string>;
+  /**
+   * Per-test branding for the render context (`design.*`, PRD-7). The client spreads
+   * this into the context it builds for client-built screens (start/question/blocked);
+   * for the results screen the context is server-built and already carries it.
+   * Omitted when the test has no logo. The logo param is stored as a media envelope
+   * `{ url, name, … }`; `.url` is extracted here so the layout binds a plain string.
+   */
+  design?: { logoUrl?: string };
+}
+
+/**
+ * Resolve the design `logoUrl` to a plain URL string. The author stores it as a
+ * media envelope `{ url, name, … }` (or, for legacy/string values, a bare URL);
+ * the layout binds a string, so the envelope is unwrapped here.
+ */
+function resolveLogoUrl(designParams: Record<string, unknown> | null | undefined): string | undefined {
+  const logo = designParams?.logoUrl;
+  if (typeof logo === "string") return logo || undefined;
+  if (logo && typeof logo === "object" && typeof (logo as { url?: unknown }).url === "string") {
+    return (logo as { url: string }).url || undefined;
+  }
+  return undefined;
 }
 
 /** Extract a CSS custom property value (e.g. `--background`) from a stylesheet. */
@@ -44,6 +76,21 @@ function readFileSafe(p: string): string {
 }
 
 /**
+ * Read a template's manifest `params[]` (the CSS-var definitions) from its dir.
+ * Empty on any read/parse failure — branding then simply falls back to theme.css.
+ */
+function readManifestParams(dir: string): TemplateParamDef[] {
+  try {
+    const raw = readFileSafe(path.join(dir, "manifest.json"));
+    if (!raw) return [];
+    const manifest = JSON.parse(raw) as { params?: TemplateParamDef[] };
+    return Array.isArray(manifest.params) ? manifest.params : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Read a named screen's template ASSETS (layout HTML + css + theme tokens) without
  * building a context — for screens whose context the client assembles itself
  * (e.g. the start screen). Returns null when the layout file is missing.
@@ -55,6 +102,8 @@ function readFileSafe(p: string): string {
 export function readScreenTemplate(
   dir: string,
   layoutFile: string,
+  designParams?: Record<string, unknown> | null,
+  paramsDir?: string,
 ): Omit<ScreenRenderPayload, "context"> | null {
   try {
     const layout = readFileSafe(path.join(dir, "layouts", layoutFile));
@@ -65,7 +114,22 @@ export function readScreenTemplate(
     ]
       .filter(Boolean)
       .join("\n");
-    return { layout, css, theme: { background: cssVar(css, "background"), foreground: cssVar(css, "foreground") } };
+    // PRD-7 branding: resolve the per-test design params against the ACTIVE
+    // template's manifest into CSS-var overrides — the SAME single-source mapping
+    // the SCORM runtime uses (`templateCore.buildCssVarDeclarations`), so the web
+    // host applies the author's colours/font instead of only theme.css defaults.
+    // The manifest comes from `paramsDir` (the active template the params were set
+    // against) so a screen whose LAYOUT falls back to `default` still resolves the
+    // active template's params — parity with SCORM's global cssVar application.
+    const cssVars = buildTemplateCssVars(designParams, readManifestParams(paramsDir || dir));
+    const logoUrl = resolveLogoUrl(designParams);
+    return {
+      layout,
+      css,
+      theme: { background: cssVar(css, "background"), foreground: cssVar(css, "foreground") },
+      ...(Object.keys(cssVars).length > 0 ? { cssVars } : {}),
+      ...(logoUrl ? { design: { logoUrl } } : {}),
+    };
   } catch {
     return null;
   }
@@ -80,14 +144,24 @@ export function readResultsRenderPayload(
   dir: string,
   result: AttemptResult | (Record<string, unknown> & { mode?: string }),
   testTitle: string,
+  designParams?: Record<string, unknown> | null,
+  paramsDir?: string,
 ): ScreenRenderPayload | null {
   try {
     const isAdaptive = (result as { mode?: string }).mode === "adaptive";
-    const base = readScreenTemplate(dir, isAdaptive ? "results.adaptive.html" : "results.html");
+    const base = readScreenTemplate(
+      dir,
+      isAdaptive ? "results.adaptive.html" : "results.html",
+      designParams,
+      paramsDir,
+    );
     if (!base) return null;
     const context = isAdaptive
       ? buildAdaptiveResultContext(result, testTitle)
       : buildResultContext(result as AttemptResult, testTitle);
+    // The results context is server-built, so merge branding straight in (the
+    // client passes `render.context` verbatim to the renderer).
+    if (base.design) (context as { design?: { logoUrl?: string } }).design = base.design;
     return { ...base, context };
   } catch {
     return null;

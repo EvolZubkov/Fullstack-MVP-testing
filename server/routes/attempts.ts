@@ -12,7 +12,7 @@ import { loadTestScoringContext } from "../services/effective-scoring";
 import { computeAttemptResult } from "../services/result-compute";
 import { decideRetake, lastCompletedAttemptDate, toIsoDateUTC } from "../services/retake-gate";
 import { readResultsRenderPayload } from "../services/template-render";
-import { resolveSystemScreenDir } from "../services/template-dir";
+import { resolveSystemScreenDir, resolveTemplateDir } from "../services/template-dir";
 import {
   liveDataSource,
   snapshotDataSource,
@@ -21,9 +21,28 @@ import {
   type TestSnapshotContent,
 } from "../services/test-snapshot";
 import type { QuestionType } from "@shared/scales/engine";
+import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import type { Test, TestVariant, AttemptResult, TopicResult, PassRule, RetakePolicy } from "@shared/schema";
 
 const router = Router();
+
+/**
+ * PRD-19 (Block B): the runtime navigation settings the web learner host reads
+ * from the attempt start / resume responses (the web analogue of TEST_DATA in
+ * the SCORM package). `answerCommitScope` is resolved here from mode + flow mode
+ * through the SAME shared resolver the SCORM exporter uses, so both hosts agree.
+ */
+function prd19RuntimeSettings(test: Test) {
+  return {
+    allowReturnToUnanswered: test.allowReturnToUnanswered ?? true,
+    allowAnswerChange: test.allowAnswerChange ?? false,
+    showSectionResults: test.showSectionResults ?? true,
+    answerCommitScope: resolveAnswerCommitScope({
+      mode: test.mode,
+      flowMode: (test.flowPolicyJson as { mode?: string } | null)?.mode,
+    }),
+  };
+}
 
 /**
  * Resolves the data source for STARTING an attempt (PRD-15 block B). A published
@@ -237,6 +256,8 @@ router.post("/tests/:testId/attempts/start", requirePermission("attempts.take"),
       testTitle: test.title,
       showCorrectAnswers: test.showCorrectAnswers || false,
       timeLimitMinutes: test.timeLimitMinutes || null,
+      // PRD-19 (Block B): runtime navigation settings for the web host.
+      ...prd19RuntimeSettings(test),
       questions: questionsForClient,
     });
   } catch (error) {
@@ -708,7 +729,7 @@ router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.ta
       return res.status(400).json({ error: "Attempt already finished" });
     }
 
-    const { answers, currentIndex, shuffleMappings } = req.body;
+    const { answers, currentIndex, shuffleMappings, questionStatus } = req.body;
 
     const updatedVariant: any = {
       ...(attempt.variantJson as any),
@@ -717,6 +738,13 @@ router.post("/attempts/:attemptId/save-progress", requirePermission("attempts.ta
 
     if (shuffleMappings) {
       updatedVariant.shuffleMappings = shuffleMappings;
+    }
+
+    // PRD-19 (Block B): per-question navigation status travels with the variant
+    // (web analogue of suspend_data.currentSession.questionStatuses). Absent =
+    // legacy progress (treated as all-'unanswered' on resume).
+    if (questionStatus) {
+      updatedVariant.questionStatus = questionStatus;
     }
 
     await storage.updateAttempt(attempt.id, {
@@ -764,10 +792,14 @@ router.get("/tests/:testId/resume", requirePermission("attempts.take"), async (r
         testTitle: test.title,
         showCorrectAnswers: test.showCorrectAnswers || false,
         timeLimitMinutes: test.timeLimitMinutes || null,
+        // PRD-19 (Block B): runtime navigation settings for the web host.
+        ...prd19RuntimeSettings(test),
         questions: questionsForClient,
       },
       savedAnswers: inProgressAttempt.answersJson || {},
       currentIndex: variant.currentIndex || 0,
+      // PRD-19 (Block B): restore per-question statuses; absent = all-'unanswered'.
+      questionStatus: variant.questionStatus || {},
     });
   } catch (error) {
     logger.error("Resume attempt error: " + (error as Error).message);
@@ -946,7 +978,10 @@ router.get("/attempts/:attemptId/result", requirePermission("attempts.self.read"
       // active template declares no `results` contentTemplate, render the results
       // screen from `default` (same fallback as «Структура» / the preview).
       const dir = await resolveSystemScreenDir(templateId, "results", { activeOnly: true });
-      render = readResultsRenderPayload(dir, resultJson, test?.title || "");
+      // Branding/cssVars resolve against the ACTIVE template manifest even when the
+      // results layout falls back to `default` (active template owns no `results`).
+      const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
+      render = readResultsRenderPayload(dir, resultJson, test?.title || "", (test?.designSettingsJson as any)?.params, paramsDir);
     }
 
     res.json({

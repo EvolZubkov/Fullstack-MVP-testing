@@ -5,6 +5,10 @@ function confirmAnswer() {
   // Вместо render() - обновляем DOM точечно
   var fq = state.flatQuestions[state.currentIndex];
   var q = fq.question;
+  // PRD-19 (Block B): confirmAnswer is the single canonical fixation point —
+  // mark the question 'answered' here, NOT on option selection (a selection is
+  // not a commit). skipQuestion sets 'skipped'; everything else stays 'unanswered'.
+  state.questionStatuses[q.id] = 'answered';
   var answer = state.answers[q.id];
   var scoreRatio = checkAnswer(q, answer);
   var isCorrect = scoreRatio === 1;
@@ -46,18 +50,25 @@ function confirmAnswer() {
     items: rankingItems
   });
   
-  // Блокируем варианты ответов (добавляем disabled и меняем курсор)
-  lockAnswerOptions(q);
-  
-  // Показываем правильные/неправильные ответы
+  // PRD-19 (Block B): lock the inputs only when the answer is frozen. With
+  // allowAnswerChange the learner may re-open and re-confirm, so keep the inputs
+  // live (re-selecting resets the fixation, see reopenIfCommitted in answers.js).
+  if (!TEST_DATA.allowAnswerChange) {
+    lockAnswerOptions(q);
+  }
+
+  // PRD-19 (Block B): reveal correctness + feedback only when showCorrectAnswers.
+  // The explicit fixation itself works without feedback — flexible-mode
+  // «Отправить ответ» with showCorrectAnswers off just commits and advances.
   if (TEST_DATA.showCorrectAnswers) {
     highlightCorrectAnswers(q, answer);
+    insertFeedback(q, isCorrect, scoreRatio);
   }
-  
-  // Вставляем feedback после вопроса
-  insertFeedback(q, isCorrect, scoreRatio);
-  
-  // Меняем кнопку "Принять" на "Далее"/"Завершить"
+
+  // PRD-19 (Block B): persist the 'answered' fixation immediately.
+  if (typeof saveSessionState === 'function') saveSessionState();
+
+  // Перерисовываем строку навигации: «Отправить ответ»/«Принять» → «Далее»/«Завершить».
   updateNavigationButton();
 }
 
@@ -249,12 +260,24 @@ function insertFeedback(q, isCorrect, scoreRatio) {
 }
 
 function updateNavigationButton() {
-  var navBtn = document.querySelector('.navigation .btn');
-  if (!navBtn) return;
-  
+  var nav = document.querySelector('.navigation');
+  if (!nav) return;
+
   var total = state.flatQuestions.length;
   var current = state.currentIndex;
-  
+
+  // PRD-19 (Block B): re-render the WHOLE nav row from buildQuestionNavHtml so a
+  // two-button flexible row (Отправить ответ / Пропустить) is replaced cleanly by
+  // the post-commit Далее/Завершить — a textContent swap on a single .btn would
+  // leave the «Пропустить» button stranded.
+  if (typeof buildQuestionNavHtml === 'function') {
+    nav.outerHTML = buildQuestionNavHtml(current, total);
+    return;
+  }
+
+  // Fallback (legacy chrome without buildQuestionNavHtml): point-swap the button.
+  var navBtn = nav.querySelector('.btn');
+  if (!navBtn) return;
   if (current < total - 1) {
     navBtn.textContent = 'Далее';
     navBtn.onclick = next;

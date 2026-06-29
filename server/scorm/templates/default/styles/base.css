@@ -30,6 +30,73 @@ body {
   margin: 0 auto;
 }
 
+/* ===== Brand / Logo (PRD-7 design param `logoUrl`) =====
+   Rendered at the top of each learner screen (start / question / results) when
+   the test sets a logo; the `{{#if design.logoUrl}}` block omits it otherwise. */
+.tb-brand {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 28px;
+}
+.tb-brand__logo {
+  max-height: 72px;
+  max-width: 300px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+/* ===== Progress pills (PRD-19 Block C, FR-10/11/12) =====
+   Clickable question map that replaces the linear progress bar. Framework-free —
+   rendered from `state.questionsProgress` via the unified template on BOTH hosts;
+   ported to template tokens from docs/wireframes/prd19-learner-real.html. */
+.tb-pills { display: flex; flex-direction: column; gap: 8px; margin: 0 0 20px; }
+.tb-pills__head { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: hsl(var(--muted-foreground)); }
+.tb-pills__head b { color: hsl(var(--foreground)); font-weight: 600; }
+.tb-pills__dots { display: flex; flex-wrap: wrap; gap: 6px; }
+.tb-pill { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); border: 0; cursor: pointer; font-family: inherit; }
+.tb-pill.is-answered { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+.tb-pill.is-current { background: hsl(var(--card)); color: hsl(var(--primary)); box-shadow: inset 0 0 0 2px hsl(var(--primary)), 0 0 0 3px hsl(var(--primary) / .2); }
+.tb-pill.is-skipped { background: transparent; color: hsl(var(--muted-foreground)); box-shadow: inset 0 0 0 1px hsl(var(--border)); }
+/* FR-10a review marking (only when showCorrectAnswers is on). */
+.tb-pill.is-correct { background: hsl(var(--success)); color: hsl(var(--primary-foreground)); }
+.tb-pill.is-incorrect { background: hsl(var(--destructive, 0 72% 51%)); color: hsl(var(--primary-foreground)); }
+.tb-pill.is-unanswered { background: transparent; color: hsl(var(--muted-foreground)); box-shadow: inset 0 0 0 1px hsl(var(--border)); }
+.tb-pill:disabled { opacity: .4; cursor: not-allowed; }
+.tb-pill:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
+.tb-pills__legend { display: flex; flex-wrap: wrap; gap: 10px 16px; font-size: 12px; color: hsl(var(--muted-foreground)); }
+.tb-pills__legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.tb-pills__legend-dot { width: 10px; height: 10px; border-radius: 50%; background: hsl(var(--muted)); box-shadow: inset 0 0 0 1px hsl(var(--border)); }
+.tb-pills__legend-dot.is-answered { background: hsl(var(--primary)); box-shadow: none; }
+.tb-pills__legend-dot.is-current { background: hsl(var(--card)); box-shadow: inset 0 0 0 2px hsl(var(--primary)); }
+.tb-pills__legend-dot.is-skipped { background: transparent; box-shadow: inset 0 0 0 1px hsl(var(--border)); }
+.tb-pills__legend-dot.is-locked { opacity: .4; }
+
+/* ===== Review (обзор) screen + question actions (PRD-19 Block D, FR-04c/FR-08) =====
+   The обзор (section-finish / test-finish) screen: pills + explicit unanswered list
+   + «Завершить …». Ported to template tokens from docs/wireframes/prd19-learner-real.html. */
+.q-actions { display: flex; align-items: center; gap: 12px; margin-top: 22px; flex-wrap: wrap; }
+.q-actions__spacer { flex: 1; }
+.obzor-title { font-size: 18px; font-weight: 800; color: hsl(var(--foreground)); margin: 0 0 4px; }
+.obzor-sub { font-size: 14px; color: hsl(var(--muted-foreground)); margin: 0 0 18px; }
+.tb-unanswered { display: flex; flex-direction: column; gap: 8px; text-align: left; margin-top: 16px; }
+.tb-unanswered__head { font-size: 14px; font-weight: 600; color: hsl(var(--foreground)); margin-bottom: 4px; }
+.tb-unanswered__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 12px 16px; border: 1px solid hsl(var(--border)); border-radius: 10px; background: hsl(var(--card)); cursor: pointer; color: hsl(var(--foreground)); font-size: 14px; font-family: inherit; text-align: left; }
+.tb-unanswered__row:hover { border-color: hsl(var(--primary)); background: hsl(var(--accent)); }
+.tb-unanswered__go { color: hsl(var(--primary)); font-weight: 600; white-space: nowrap; }
+
+/* ===== Finish-confirm modal (PRD-19 Block D, FR-09) — host-chrome overlay,
+   styled with template tokens so it matches the active theme. ===== */
+.tb-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+.tb-modal { background: hsl(var(--card)); color: hsl(var(--card-foreground)); border: 1px solid hsl(var(--card-border)); border-radius: var(--radius); max-width: 440px; width: 100%; box-shadow: var(--shadow); overflow: hidden; }
+.tb-modal__head { display: flex; gap: 12px; padding: 20px 20px 8px; align-items: flex-start; }
+.tb-modal__icon { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: hsl(38 92% 50% / .15); color: hsl(38 92% 50%); }
+.tb-modal__title { font-size: 17px; font-weight: 700; margin: 0 0 4px; color: hsl(var(--foreground)); }
+.tb-modal__desc { font-size: 14px; color: hsl(var(--muted-foreground)); margin: 0; }
+.tb-modal__body { padding: 0 20px; font-size: 13px; color: hsl(var(--muted-foreground)); }
+.tb-modal__foot { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 20px 20px; }
+
 h1 {
   font-size: 28px;
   margin: 0 0 24px;

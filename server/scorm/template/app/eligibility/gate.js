@@ -207,13 +207,13 @@ var RetakeGate = (function () {
   function renderBlockWallBuiltin(retake, el) {
     var avail = retake.availableDate ? fmtDateHuman(retake.availableDate) : null;
     var errorNote = retake.reason === 'plugin_error_fail_closed'
-      ? '<p class="retake-wall__note">Не удалось проверить доступ. Обратитесь к администратору курса.</p>'
+      ? '<p class="retake-wall__note">Не удалось проверить доступ. Обратитесь к администратору теста.</p>'
       : '';
     el.innerHTML =
       '<div class="retake-wall" data-testid="retake-wall">' +
       '<div class="retake-wall__card">' +
       '<h1 class="retake-wall__title">Повторное прохождение пока недоступно</h1>' +
-      '<p class="retake-wall__lead">Этот курс можно проходить не чаще, чем раз в ' +
+      '<p class="retake-wall__lead">Этот тест можно проходить не чаще, чем раз в ' +
       esc(retake.cooldownPeriodDays) + ' дн.</p>' +
       (avail ? '<p class="retake-wall__date">Повторный запуск будет доступен с <strong>' + esc(avail) + '</strong>.</p>' : '') +
       errorNote +
@@ -246,9 +246,9 @@ var RetakeGate = (function () {
     el.innerHTML =
       '<div class="retake-shell" data-testid="retake-start-shell">' +
       '<div class="retake-shell__card">' +
-      '<h1 class="retake-shell__title">' + esc(td.title || 'Курс') + '</h1>' +
+      '<h1 class="retake-shell__title">' + esc(td.title || 'Тест') + '</h1>' +
       '<p class="retake-shell__lead">Доступ к прохождению открыт.</p>' +
-      '<button type="button" class="retake-shell__btn" data-testid="retake-start-course">Начать курс</button>' +
+      '<button type="button" class="retake-shell__btn" data-testid="retake-start-course">Начать тестирование</button>' +
       '</div></div>';
     var btn = el.querySelector('[data-testid="retake-start-course"]');
     if (btn) btn.addEventListener('click', function () { if (typeof onStart === 'function') onStart(); });

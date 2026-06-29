@@ -59,6 +59,10 @@ import {
 import type { FieldErrorIndex } from "../field-errors";
 import { FoldAllButtons, useSectionFold } from "./section-fold";
 
+// Вывод шкал ученику — отдельный PRD (дальняя перспектива). До него тогл
+// «Показывать результат обучающемуся» скрыт; поле showToLearner сохранено в модели.
+const SHOW_LEARNER_RESULT_TOGGLE: boolean = false;
+
 export type ScalesSectionProps = {
   model: TestEditorModel;
   /** Test id; `undefined` in create mode — disables the calculation preview. */
@@ -595,14 +599,18 @@ function ScaleForm({
         }
       />
 
-      <hr className="wf-sep" />
-      <Switch
-        label="Показывать результат обучающемуся"
-        checked={s.showToLearner}
-        disabled={readOnly}
-        onChange={(e) => onChange({ showToLearner: e.target.checked })}
-        data-testid={`scales-show-${index}`}
-      />
+      {SHOW_LEARNER_RESULT_TOGGLE && (
+        <>
+          <hr className="wf-sep" />
+          <Switch
+            label="Показывать результат обучающемуся"
+            checked={s.showToLearner}
+            disabled={readOnly}
+            onChange={(e) => onChange({ showToLearner: e.target.checked })}
+            data-testid={`scales-show-${index}`}
+          />
+        </>
+      )}
     </>
   );
 }

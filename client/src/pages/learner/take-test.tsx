@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { ChevronLeft, CheckCircle, XCircle, Trophy, RotateCcw } from "lucide-react";
-import { Banner, Box, Button, Card, CardBody, CardHeader, Center, Cluster, Stack, Tag, Text } from "@universityrt/ui-kit";
+import { Banner, Box, Button, Card, CardBody, CardHeader, Center, Cluster, ModalDialog, Stack, Tag, Text } from "@universityrt/ui-kit";
 import { useToast } from "@/hooks/use-toast";
 import { LoadingState } from "@/components/loading-state";
 import { TemplateScreen } from "@/components/template-screen";
 import { TemplateQuestionScreen } from "./template-question-screen";
 import { buildStartState } from "@shared/template/start-state";
+import { buildQuestionProgress } from "@shared/template/question-progress-context";
+import { buildReviewContext } from "@shared/template/review-context";
 import {
   useSectionTimer,
   useAdaptiveSectionTimer,
@@ -128,12 +130,16 @@ export default function TakeTestPage() {
     layout: string;
     css: string;
     theme?: { background: string; foreground: string };
+    cssVars?: Record<string, string>;
+    design?: { logoUrl?: string };
   } | null>(null);
   // PRD-12 / PRD-6: retake block-wall template + cooldown data (set on 403).
   const [blockedTpl, setBlockedTpl] = useState<{
     layout: string;
     css: string;
     theme?: { background: string; foreground: string };
+    cssVars?: Record<string, string>;
+    design?: { logoUrl?: string };
   } | null>(null);
   const [blockData, setBlockData] = useState<{ cooldownPeriodDays?: number; availableDate?: string | null } | null>(null);
   // PRD-12 #3: question screen template assets (null -> legacy React markup).
@@ -141,7 +147,20 @@ export default function TakeTestPage() {
     layout: string;
     css: string;
     theme?: { background: string; foreground: string };
+    cssVars?: Record<string, string>;
+    design?: { logoUrl?: string };
   } | null>(null);
+  // PRD-19 Block D: обзор (review) screen template + visibility flag.
+  const [reviewTpl, setReviewTpl] = useState<{
+    layout: string;
+    css: string;
+    theme?: { background: string; foreground: string };
+    cssVars?: Record<string, string>;
+    design?: { logoUrl?: string };
+  } | null>(null);
+  const [showReview, setShowReview] = useState(false);
+  // PRD-19 Block D (FR-09): finish-confirm modal payload (null = hidden).
+  const [finishConfirm, setFinishConfirm] = useState<{ count: number; label: string } | null>(null);
 
   // Standard mode state
   // Standard mode state
@@ -165,6 +184,26 @@ export default function TakeTestPage() {
   // annulled by an emergency re-publish — the learner is told to start over.
   const [attemptGone, setAttemptGone] = useState(false);
   const [shuffleMappings, setShuffleMappings] = useState<Record<string, any>>({});
+
+  // PRD-19 (Block B): runtime navigation settings + per-question status, the web
+  // analogue of TEST_DATA + suspend_data.currentSession.questionStatuses in the
+  // SCORM host. Read from the attempt start / resume responses; status persisted
+  // through save-progress. Defaults keep legacy (strict-linear) behaviour until
+  // the response populates them.
+  const [navSettings, setNavSettings] = useState<{
+    allowReturnToUnanswered: boolean;
+    allowAnswerChange: boolean;
+    showSectionResults: boolean;
+    answerCommitScope: "test" | "section";
+  }>({
+    allowReturnToUnanswered: false,
+    allowAnswerChange: false,
+    showSectionResults: true,
+    answerCommitScope: "test",
+  });
+  const [questionStatus, setQuestionStatus] = useState<
+    Record<string, "unanswered" | "answered" | "skipped">
+  >({});
 
   // PRD-4 v1.1 §3.2 — per-topic (section) timer for the standard flow. The
   // expiry handler is invoked via a ref so it can read the freshest state
@@ -364,6 +403,9 @@ export default function TakeTestPage() {
           if (tplRes.ok) setStartTpl(await tplRes.json());
           const qRes = await fetch(`/api/tests/${testId}/screen-template/question`, { credentials: "include" });
           if (qRes.ok) setQuestionTpl(await qRes.json());
+          // PRD-19 Block D: обзор (review) screen layout.
+          const rvRes = await fetch(`/api/tests/${testId}/screen-template/review`, { credentials: "include" });
+          if (rvRes.ok) setReviewTpl(await rvRes.json());
         } catch {
           /* fall back to React markup */
         }
@@ -458,6 +500,14 @@ export default function TakeTestPage() {
       setShowCorrectAnswers(data.attempt.showCorrectAnswers || false);
       setAnswers(data.savedAnswers || {});
       setCurrentIndex(data.currentIndex || 0);
+      // PRD-19 (Block B): restore runtime settings + per-question statuses.
+      setNavSettings({
+        allowReturnToUnanswered: data.attempt.allowReturnToUnanswered ?? false,
+        allowAnswerChange: data.attempt.allowAnswerChange ?? false,
+        showSectionResults: data.attempt.showSectionResults ?? true,
+        answerCommitScope: data.attempt.answerCommitScope ?? "test",
+      });
+      setQuestionStatus(data.questionStatus || {});
 
       // Инициализация таймера (с учётом прошедшего времени)
       if (data.attempt.timeLimitMinutes && data.attempt.timeLimitMinutes > 0) {
@@ -579,6 +629,14 @@ export default function TakeTestPage() {
     const data = await res.json();
     setAttempt(data);
     setShowCorrectAnswers(data.showCorrectAnswers || false);
+    // PRD-19 (Block B): runtime navigation settings from the start response.
+    setNavSettings({
+      allowReturnToUnanswered: data.allowReturnToUnanswered ?? false,
+      allowAnswerChange: data.allowAnswerChange ?? false,
+      showSectionResults: data.showSectionResults ?? true,
+      answerCommitScope: data.answerCommitScope ?? "test",
+    });
+    setQuestionStatus({});
 
     // Инициализация таймера
     if (data.timeLimitMinutes && data.timeLimitMinutes > 0) {
@@ -697,23 +755,52 @@ export default function TakeTestPage() {
     }
   };
 
+  // PRD-19 (Block B): persist progress including per-question status (web
+  // analogue of saveCurrentSession in the SCORM host). Pass the NEXT values
+  // explicitly to avoid React state staleness.
+  const saveProgress = (
+    nextAnswers: Record<string, any>,
+    nextIndex: number,
+    nextStatus: Record<string, "unanswered" | "answered" | "skipped">,
+  ) => {
+    if (!attempt) return;
+    fetch(`/api/attempts/${attempt.id}/save-progress`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ answers: nextAnswers, currentIndex: nextIndex, questionStatus: nextStatus }),
+    }).catch((err) => console.error("Auto-save error:", err));
+  };
+
+  // PRD-19 (Block B): is the question locked against edits? A committed
+  // ('answered') question is read-only unless allowAnswerChange — mirrors
+  // isAnswerLocked in the SCORM runtime. Cross-section freeze (answerCommitScope
+  // 'section') is enforced by bounding «Назад» to the current section (below),
+  // so a frozen section is never reachable for editing.
+  const isQuestionLocked = (fq: FlatQuestion): boolean => {
+    return questionStatus[fq.question.id] === "answered" && !navSettings.allowAnswerChange;
+  };
+
   // Standard mode handlers
   const handleAnswer = (questionId: string, answer: any) => {
-    setAnswers((prev) => {
-      const newAnswers = { ...prev, [questionId]: answer };
+    const fq = flatQuestions[currentIndex];
+    if (fq && isQuestionLocked(fq)) return; // committed + no allowAnswerChange → read-only
 
-      // Автосохранение прогресса
-      if (attempt) {
-        fetch(`/api/attempts/${attempt.id}/save-progress`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ answers: newAnswers, currentIndex }),
-        }).catch(err => console.error("Auto-save error:", err));
-      }
+    // Pure update + side effects as plain statements (no side effects inside the
+    // setAnswers updater). newAnswers is built from the current render's `answers`.
+    const newAnswers = { ...answers, [questionId]: answer };
+    setAnswers(newAnswers);
 
-      return newAnswers;
-    });
+    // PRD-19 (Block B): re-editing a committed answer (allowAnswerChange on)
+    // re-opens it — drop the 'answered' fixation until the learner re-commits.
+    let nextStatus = questionStatus;
+    if (questionStatus[questionId] === "answered") {
+      nextStatus = { ...questionStatus, [questionId]: "unanswered" };
+      setQuestionStatus(nextStatus);
+    }
+
+    // Автосохранение прогресса
+    saveProgress(newAnswers, currentIndex, nextStatus);
   };
 
   // Локальная проверка ответа для стандартного теста
@@ -790,6 +877,12 @@ export default function TakeTestPage() {
       feedback: feedback || undefined,
     });
     setStandardFeedbackShown(true);
+
+    // PRD-19 (Block B): «Принять» is the explicit fixation point in
+    // showCorrectAnswers mode — mark the question 'answered' and persist.
+    const nextStatus = { ...questionStatus, [currentQ.question.id]: "answered" as const };
+    setQuestionStatus(nextStatus);
+    saveProgress(answers, currentIndex, nextStatus);
   };
 
   // Перейти к следующему вопросу после просмотра фидбека
@@ -799,7 +892,11 @@ export default function TakeTestPage() {
 
     // Skip past any topic whose section timer has already expired.
     const nextIdx = nextAccessibleIndex(flatQuestions, currentIndex + 1, lockedTopics);
-    if (nextIdx !== null) setCurrentIndex(nextIdx);
+    if (nextIdx !== null) {
+      setCurrentIndex(nextIdx);
+      // PRD-19 (Block B): persist the advance (status already set by confirm).
+      saveProgress(answers, nextIdx, questionStatus);
+    }
   };
 
   const handleNext = () => {
@@ -841,9 +938,44 @@ export default function TakeTestPage() {
       }
     }
 
+    // PRD-19 (Block B): «Далее» commits the current answer — mark 'answered'.
+    const nextStatus = { ...questionStatus, [currentQ.question.id]: "answered" as const };
+    setQuestionStatus(nextStatus);
+
     // Skip past any topic whose section timer has already expired.
     const nextIdx = nextAccessibleIndex(flatQuestions, currentIndex + 1, lockedTopics);
-    if (nextIdx !== null) setCurrentIndex(nextIdx);
+    if (nextIdx !== null) {
+      setCurrentIndex(nextIdx);
+      saveProgress(answers, nextIdx, nextStatus);
+    } else {
+      saveProgress(answers, currentIndex, nextStatus);
+    }
+  };
+
+  // PRD-19 (Block B): «Пропустить» — flexible mode only. Marks the current
+  // question 'skipped' WITHOUT requiring an answer, clears any uncommitted draft
+  // (so a final 'skipped' scores as incorrect, FR-07 — the server grades answers,
+  // not status), then advances. Mirrors skipQuestion in the SCORM runtime.
+  const handleSkip = () => {
+    if (!navSettings.allowReturnToUnanswered) return;
+    const currentQ = flatQuestions[currentIndex];
+    if (!currentQ) return;
+    setStandardFeedbackShown(false);
+    setStandardAnswerResult(null);
+    const nextStatus = { ...questionStatus, [currentQ.question.id]: "skipped" as const };
+    setQuestionStatus(nextStatus);
+    // PRD-19 (Block B): clear the uncommitted draft so a skipped question scores as
+    // incorrect (FR-07) — the server grades answers, not status. Mirrors SCORM skipQuestion.
+    const nextAnswers = { ...answers };
+    delete nextAnswers[currentQ.question.id];
+    setAnswers(nextAnswers);
+    const nextIdx = nextAccessibleIndex(flatQuestions, currentIndex + 1, lockedTopics);
+    if (nextIdx !== null) {
+      setCurrentIndex(nextIdx);
+      saveProgress(nextAnswers, nextIdx, nextStatus);
+    } else {
+      saveProgress(nextAnswers, currentIndex, nextStatus);
+    }
   };
 
   const handleSubmit = async () => {
@@ -853,7 +985,11 @@ export default function TakeTestPage() {
       (fq) => answers[fq.question.id] === undefined || answers[fq.question.id] === null
     );
 
-    if (unansweredQuestions.length > 0) {
+    // PRD-19 (Block B): strict-linear tests (allowReturnToUnanswered=false) still
+    // require every question answered — you cannot skip, so any gap is a mistake.
+    // Flexible tests MAY finish with skipped/unanswered questions: they score as
+    // incorrect (FR-07). The обзор / finish-confirm warning is added in Block D.
+    if (unansweredQuestions.length > 0 && !navSettings.allowReturnToUnanswered) {
       toast({
         variant: "destructive",
         title: "Не все вопросы отвечены",
@@ -1285,7 +1421,8 @@ export default function TakeTestPage() {
           className="tbh-fill"
           layout={blockedTpl.layout}
           css={blockCss}
-          context={{ retake: { cooldownPeriodDays: blockData.cooldownPeriodDays, availableDateHuman } }}
+          cssVars={blockedTpl.cssVars}
+          context={{ retake: { cooldownPeriodDays: blockData.cooldownPeriodDays, availableDateHuman }, ...(blockedTpl.design ? { design: blockedTpl.design } : {}) }}
         />
         <div className="tbh-center-foot">
           <Button variant="secondary" leadingIcon={<ChevronLeft size={16} />} onClick={() => navigate("/learner")}>
@@ -1335,7 +1472,8 @@ export default function TakeTestPage() {
           className="tbh-wfull"
           layout={startTpl.layout}
           css={startTpl.css}
-          context={startContext}
+          cssVars={startTpl.cssVars}
+          context={{ ...startContext, ...(startTpl.design ? { design: startTpl.design } : {}) }}
           onAction={(action) => {
             if (action === "start-test" || action === "restart") handleStartTest();
             else if (action === "resume") handleResumeTest();
@@ -1515,6 +1653,86 @@ export default function TakeTestPage() {
   // Standard mode — question screen via the design template (PRD-12 #3): all question
   // types (single/multiple/ranking/matching). The per-question feedback mode
   // (showCorrectAnswers) still uses the React markup below.
+  // PRD-19 Block D: обзор (review) screen — rendered from the SHARED `review`
+  // template layout (pills + unanswered list + «Завершить»), reached via «Вернуться».
+  // Оформление — через шаблон (parity with SCORM); finish здесь = завершить тест.
+  if (testMode === "standard" && attempt && flatQuestions.length > 0 && showReview && reviewTpl) {
+    const curQ = flatQuestions[currentIndex];
+    const sectionScope = navSettings.answerCommitScope === "section";
+    const built = buildReviewContext({
+      questions: flatQuestions.map((fq) => ({ id: fq.question.id, topicId: fq.topicId, prompt: fq.question.prompt })),
+      statuses: questionStatus,
+      commitScope: navSettings.answerCommitScope,
+      scopeTopicId: sectionScope ? curQ.topicId : null,
+      isTest: true,
+      scopeLabel: sectionScope ? `Раздел «${curQ.topicName}» · обзор` : "Обзор теста",
+      finishLabel: "Завершить тест",
+    });
+    return (
+      <div className="tbh-minh-screen tbh-col" style={{ background: reviewTpl.theme?.background }}>
+        <TemplateScreen
+          className="tbh-fill"
+          layout={reviewTpl.layout}
+          css={reviewTpl.css}
+          cssVars={reviewTpl.cssVars}
+          context={{
+            course: { title: attempt.testTitle },
+            design: reviewTpl.design,
+            state: { questionsProgress: built.questionsProgress },
+            review: built.review,
+          }}
+          onAction={(action) => {
+            if (action.startsWith("goto:")) {
+              const i = Number(action.slice("goto:".length));
+              if (!Number.isNaN(i) && i >= 0 && i < flatQuestions.length && !lockedTopics.has(flatQuestions[i].topicId)) {
+                setStandardFeedbackShown(false);
+                setStandardAnswerResult(null);
+                setCurrentIndex(i);
+                saveProgress(answers, i, questionStatus);
+              }
+              setShowReview(false);
+            } else if (action === "finish-review") {
+              // FR-09: confirm when finishing with unanswered questions.
+              if (built.review.unansweredCount > 0) {
+                setFinishConfirm({ count: built.review.unansweredCount, label: built.review.finishLabel });
+              } else {
+                setShowReview(false);
+                handleSubmit();
+              }
+            }
+          }}
+        />
+        {finishConfirm && (
+          <ModalDialog
+            open
+            size="s"
+            onClose={() => setFinishConfirm(null)}
+            title={`${finishConfirm.label}?`}
+            description={`Вопросов без ответа: ${finishConfirm.count}. Они будут засчитаны как неверные. После завершения вернуться к ним нельзя.`}
+            footer={
+              <>
+                <Button variant="ghost" size="m" onClick={() => setFinishConfirm(null)}>
+                  Отмена
+                </Button>
+                <Button
+                  variant="primary"
+                  size="m"
+                  onClick={() => {
+                    setFinishConfirm(null);
+                    setShowReview(false);
+                    handleSubmit();
+                  }}
+                >
+                  {finishConfirm.label}
+                </Button>
+              </>
+            }
+          />
+        )}
+      </div>
+    );
+  }
+
   if (
     testMode === "standard" &&
     attempt &&
@@ -1524,8 +1742,35 @@ export default function TakeTestPage() {
     const currentQ = flatQuestions[currentIndex];
     // PRD-4 v1.1 §3.2 — section-timer state for the templated standard screen.
     const currentTopicLocked = lockedTopics.has(currentQ.topicId);
-    const prevIdx = prevAccessibleIndex(flatQuestions, currentIndex - 1, lockedTopics);
+    const rawPrevIdx = prevAccessibleIndex(flatQuestions, currentIndex - 1, lockedTopics);
+    // PRD-19 (Block B): bound «Назад». Strict mode (allowReturnToUnanswered=false)
+    // forbids return entirely; sectional scope keeps return inside the current
+    // section (earlier sections are frozen on exit). Flat flexible = free back-nav.
+    let prevIdx = rawPrevIdx;
+    if (!navSettings.allowReturnToUnanswered) {
+      prevIdx = null;
+    } else if (
+      navSettings.answerCommitScope === "section" &&
+      rawPrevIdx !== null &&
+      flatQuestions[rawPrevIdx].topicId !== currentQ.topicId
+    ) {
+      prevIdx = null;
+    }
     const isLastQuestion = currentIndex === flatQuestions.length - 1;
+    // PRD-19 (Block B): «Пропустить» — flexible mode, before the current question
+    // is committed and not during showCorrectAnswers feedback review.
+    const committedCurrent = questionStatus[currentQ.question.id] === "answered";
+    const canSkip = navSettings.allowReturnToUnanswered && !committedCurrent && !standardFeedbackShown;
+    // PRD-19 (Block D / FR-04c): «Вернуться» → обзор, shown when skipped questions
+    // exist in scope (section in sectional flows, whole test in flat).
+    const hasSkipped =
+      navSettings.allowReturnToUnanswered &&
+      flatQuestions.some((fq) => {
+        if (navSettings.answerCommitScope === "section" && fq.topicId !== currentQ.topicId) return false;
+        return questionStatus[fq.question.id] === "skipped";
+      });
+    // PRD-19 (Block B): a committed answer is read-only unless allowAnswerChange.
+    const prd19Locked = isQuestionLocked(currentQ);
     const sectionClock =
       sectionRemainingSeconds !== null
         ? ` · Время темы ${Math.floor(sectionRemainingSeconds / 60)}:${String(sectionRemainingSeconds % 60).padStart(2, "0")}`
@@ -1534,12 +1779,39 @@ export default function TakeTestPage() {
       setStandardFeedbackShown(false);
       setStandardAnswerResult(null);
       // Skip back over any topic whose section timer already expired.
-      if (prevIdx !== null) setCurrentIndex(prevIdx);
+      if (prevIdx !== null) {
+        setCurrentIndex(prevIdx);
+        // PRD-19 (Block B): persist the back position like every forward move.
+        saveProgress(answers, prevIdx, questionStatus);
+      }
     };
-    // Per-question review (showCorrectAnswers) renders through the SAME template
-    // (parity with SCORM + adaptive): answer → «Принять» → correct/wrong highlight
-    // + feedback → «Далее». Custom footer replaces the default Назад/Далее nav.
-    const reviewFooter = showCorrectAnswers ? (
+    // PRD-19 (Block C): clickable progress-pills map (replaces the linear bar). The
+    // builder gates `clickable` (frontier + strict mode); the jump mirrors goBack.
+    const questionsProgress =
+      buildQuestionProgress({
+        questions: flatQuestions.map((fq) => ({ id: fq.question.id, topicId: fq.topicId })),
+        statuses: questionStatus,
+        currentIndex,
+        commitScope: navSettings.answerCommitScope,
+        allowReturn: navSettings.allowReturnToUnanswered,
+        scopeLabel:
+          navSettings.answerCommitScope === "section"
+            ? `Вопросы раздела «${currentQ.topicName}»`
+            : "Вопросы теста",
+      }) ?? undefined;
+    const navigateToQuestion = (idx: number) => {
+      if (idx < 0 || idx >= flatQuestions.length) return;
+      if (lockedTopics.has(flatQuestions[idx].topicId)) return; // expired section
+      setStandardFeedbackShown(false);
+      setStandardAnswerResult(null);
+      setCurrentIndex(idx);
+      saveProgress(answers, idx, questionStatus);
+    };
+    // PRD-19 (Block B): the two-step footer (explicit «Отправить ответ»/«Принять»
+    // fixation → «Далее»/«Завершить») is used for BOTH showCorrectAnswers AND any
+    // flexible test (allowReturnToUnanswered), mirroring the SCORM «Отправить
+    // ответ»+«Пропустить» nav. Strict non-feedback tests keep the default footer.
+    const reviewFooter = (showCorrectAnswers || navSettings.allowReturnToUnanswered) ? (
       <>
         <button
           type="button"
@@ -1549,14 +1821,24 @@ export default function TakeTestPage() {
         >
           ← Назад
         </button>
+        {canSkip && (
+          <button type="button" onClick={handleSkip} className="tbh-navbtn">
+            Пропустить
+          </button>
+        )}
+        {hasSkipped && (
+          <button type="button" onClick={() => setShowReview(true)} className="tbh-navbtn">
+            Вернуться
+          </button>
+        )}
         <button
           type="button"
-          onClick={!standardFeedbackShown ? handleStandardConfirm : isLastQuestion ? handleSubmit : handleStandardContinue}
+          onClick={!(standardFeedbackShown || committedCurrent) ? handleStandardConfirm : isLastQuestion ? handleSubmit : handleStandardContinue}
           disabled={isSubmitting}
           className="tbh-primarybtn"
           style={{ background: "#2563eb" }}
         >
-          {!standardFeedbackShown ? "Принять" : isLastQuestion ? (isSubmitting ? "Отправка..." : "Завершить тест") : "Далее →"}
+          {!(standardFeedbackShown || committedCurrent) ? (navSettings.allowReturnToUnanswered ? "Отправить ответ" : "Принять") : isLastQuestion ? (isSubmitting ? "Отправка..." : "Завершить тест") : "Далее →"}
         </button>
       </>
     ) : undefined;
@@ -1570,7 +1852,7 @@ export default function TakeTestPage() {
         answer={answers[currentQ.question.id]}
         shuffleMapping={shuffleMappings[currentQ.question.id]}
         onAnswer={(a) => handleAnswer(currentQ.question.id, a)}
-        locked={showCorrectAnswers ? standardFeedbackShown : currentTopicLocked}
+        locked={(showCorrectAnswers && standardFeedbackShown) || currentTopicLocked || prd19Locked}
         reviewMode={showCorrectAnswers && standardFeedbackShown}
         correctAnswer={standardAnswerResult?.correctAnswer}
         feedbackHtml={
@@ -1579,8 +1861,12 @@ export default function TakeTestPage() {
             : undefined
         }
         footer={reviewFooter}
+        questionsProgress={questionsProgress}
+        onNavigateToQuestion={navigateToQuestion}
         canPrev={prevIdx !== null}
         onPrev={goBack}
+        canSkip={canSkip}
+        onSkip={handleSkip}
         isLast={isLastQuestion}
         isSubmitting={isSubmitting}
         onNext={handleNext}

@@ -330,6 +330,17 @@ export const tests = pgTable("tests", {
   // PRD-15 block D (FR-31): test-wide default price of a question. Null = no
   // default — the effective chain falls through to the system default (1 point).
   defaultQuestionPoints: integer("default_question_points"),
+  // PRD-19 (FR-01): allow skipping a question and returning to unanswered ones within an
+  // attempt. Default true (new tests); migration 031 backfills EXISTING tests to false to
+  // preserve their strict-linear navigation.
+  allowReturnToUnanswered: boolean("allow_return_to_unanswered").notNull().default(true),
+  // PRD-19 (FR-04a): permit changing an already-submitted answer before section/test finish.
+  // Default false. Depends on allowReturnToUnanswered=true and is mutually exclusive with
+  // showCorrectAnswers (FR-04b) — enforced in the editor/service layer, not as a DB CHECK.
+  allowAnswerChange: boolean("allow_answer_change").notNull().default(false),
+  // PRD-19 (FR-05a): show the section-results screen (optional system node, sectioned tests).
+  // Default true; not applicable to linear_flat (no sections) — ignored by the runtime there.
+  showSectionResults: boolean("show_section_results").notNull().default(true),
 });
 
 /**

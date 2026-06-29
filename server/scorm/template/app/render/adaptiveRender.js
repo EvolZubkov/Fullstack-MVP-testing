@@ -87,7 +87,11 @@ function renderAdaptiveQuestionTemplated(app, qData) {
   app.appendChild(wrap);
   window.TBTemplate.renderScreenInto(wrap, {
     layout: state.templateLayouts['question'],
-    context: { course: { title: TEST_DATA.title }, state: { questionCounterLabel: counter } },
+    context: {
+      course: { title: TEST_DATA.title },
+      state: { questionCounterLabel: counter },
+      design: (typeof scormDesignContext === 'function') ? scormDesignContext() : {}
+    },
     slots: slots
   });
   var fill = wrap.querySelector('#q-progress-fill');

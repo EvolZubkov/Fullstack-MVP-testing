@@ -22,7 +22,7 @@
  * classes live in `client/src/styles/tb-components.css`; controls use
  * `@universityrt/ui-kit`.
  */
-import { createContext, Fragment, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, Fragment, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   AlertTriangle,
@@ -30,17 +30,20 @@ import {
   FileText,
   GripVertical,
   HelpCircle,
+  Image as ImageIcon,
   Info,
   Layout,
   MoreHorizontal,
   Plus,
   Route,
   Search,
+  Upload,
   X,
 } from "lucide-react";
 import {
   Banner,
   Button,
+  IconButton,
   Input,
   Menu,
   MenuItem,
@@ -77,6 +80,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   useContentPages,
+  canonicalValues,
   type ContentPage,
   type ContentPageKind,
   type ContentPagePosition,
@@ -496,8 +500,16 @@ function ZonesBlock(props: {
   // «Итоги раздела» are one-per-topic in per-topic modes.
   const introForTopic = (tid: string) =>
     pages.find((p) => p.kind === "intro" && p.topicId === tid) ?? null;
+  // PRD-19 FR-05a: «Итоги раздела» (section-results) is an OPTIONAL system node
+  // gated by the test setting `showSectionResults`. When OFF the runtime goes
+  // straight to the next section (results only at the test level), so the
+  // structure must not present the node as available/editable — hide its row.
+  // (This differs from the «обзор» element, FR-08a, which is shown DISABLED with
+  // a comment when its setting is off; section-results is simply absent.)
   const summaryForTopic = (tid: string) =>
-    pages.find((p) => p.kind === "summary" && p.topicId === tid) ?? null;
+    model.runtime.showSectionResults
+      ? (pages.find((p) => p.kind === "summary" && p.topicId === tid) ?? null)
+      : null;
 
   // «После теста» order list = author after-pages + «Итоги теста» (results), by
   // sortOrder. Reordering/adding here renumbers this combined list so «Итоги
@@ -1480,8 +1492,15 @@ function PageEditForm(props: {
   const setStyle = (key: string, s: { fontSize?: number }) => setStyles((p) => ({ ...p, [key]: s }));
 
   const save = () => {
+    const nextValuesJson = { values, placeholderStyles: styles };
+    // No-op guard: if nothing actually changed (e.g. the author just opened the
+    // props and hit «Сохранить»), don't dirty the draft — just close the form.
+    if (canonicalValues(page.valuesJson) === canonicalValues(nextValuesJson)) {
+      props.onDone();
+      return;
+    }
     void cp
-      .update(page.id, { valuesJson: { values, placeholderStyles: styles } })
+      .update(page.id, { valuesJson: nextValuesJson })
       .then(() => props.onDone())
       .catch(() => {
         /* error surfaced via cp.mutationError banner */
@@ -1683,6 +1702,8 @@ function PlaceholderControl(props: {
           data-testid={testId}
         />
       );
+    case "image":
+      return <ImagePlaceholderControl label={label} value={value} onChange={onChange} testId={testId} />;
     case "text":
     default:
       return (
@@ -1697,6 +1718,136 @@ function PlaceholderControl(props: {
         />
       );
   }
+}
+
+/** Best-effort human file name from an uploaded media URL (`/uploads/media/...`). */
+function imageNameFromUrl(url: string): string {
+  try {
+    const clean = url.split("?")[0].split("#")[0];
+    const seg = clean.substring(clean.lastIndexOf("/") + 1);
+    return decodeURIComponent(seg) || "изображение";
+  } catch {
+    return "изображение";
+  }
+}
+
+/**
+ * Upload control for `image`-typed page placeholders (PRD-1 content pages). Mirrors
+ * the «Оформление» {@link MediaParamRow} (hidden file input behind a DS Button +
+ * a filename chip with remove), but stores a PLAIN URL string — the unified
+ * renderer emits `String(value)` for image placeholders
+ * ({@link module:shared/template/render-screen}), so the design-section media
+ * ENVELOPE (`{ url, name, ... }`) would render as `[object Object]`. Upload goes
+ * through `POST /api/media/upload` (multer disk storage), the same endpoint the
+ * design tab uses.
+ */
+function ImagePlaceholderControl(props: {
+  label: string;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  testId: string;
+}) {
+  const { value, onChange, testId } = props;
+  const fieldId = useId();
+  // Image placeholders store a PLAIN URL string. Be tolerant of a legacy media
+  // envelope `{ url, name }` (e.g. copied from «Оформление» params, imported, or
+  // hand-edited): surface its `.url` so the field isn't shown as empty, and heal
+  // it on mount so the stray object never survives to render as `[object Object]`.
+  const url =
+    typeof value === "string"
+      ? value
+      : value && typeof value === "object" && typeof (value as { url?: unknown }).url === "string"
+        ? (value as { url: string }).url
+        : "";
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploadedName, setUploadedName] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const maxSizeKb = 512;
+
+  useEffect(() => {
+    // Normalise a non-string value once, on mount (no-op for the common string case).
+    if (typeof value !== "string") onChange(url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleFile(file: File) {
+    setError(null);
+    if (file.size > maxSizeKb * 1024) {
+      setError(`Файл превышает ${maxSizeKb} КБ.`);
+      return;
+    }
+    const form = new FormData();
+    form.append("file", file);
+    setUploading(true);
+    try {
+      const res = await fetch("/api/media/upload", {
+        method: "POST",
+        credentials: "include",
+        body: form,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = (await res.json()) as { url: string; originalName?: string };
+      setUploadedName(body.originalName ?? null);
+      onChange(body.url);
+    } catch (err) {
+      setError((err as Error)?.message ?? "Не удалось загрузить изображение");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="ou-formfield" data-testid={testId}>
+      <label className="ou-formfield__lbl" htmlFor={fieldId}>
+        {props.label}
+      </label>
+      <div className="design-media-row">
+        <Button
+          id={fieldId}
+          variant="secondary"
+          size="s"
+          leadingIcon={<Upload width={12} height={12} aria-hidden="true" />}
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          loading={uploading}
+          data-testid={`${testId}-upload`}
+        >
+          {uploading ? "Загрузка…" : url ? "Заменить изображение" : "Загрузить изображение"}
+        </Button>
+        {url && (
+          <span className="design-media-chip" data-testid={`${testId}-chip`}>
+            <ImageIcon className="design-media-chip__ico" width={14} height={14} aria-hidden="true" />
+            <span className="design-media-chip__name">{uploadedName || imageNameFromUrl(url)}</span>
+            <IconButton
+              icon={<X width={12} height={12} aria-hidden="true" />}
+              aria-label="Удалить изображение"
+              variant="ghost"
+              size="s"
+              onClick={() => onChange("")}
+              data-testid={`${testId}-remove`}
+            />
+          </span>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/svg+xml,image/webp"
+          style={{ display: "none" }}
+          aria-hidden="true"
+          tabIndex={-1}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void handleFile(file);
+            e.target.value = "";
+          }}
+          data-testid={`${testId}-file`}
+        />
+      </div>
+      <div className="ou-formfield__desc">PNG, JPEG, SVG или WebP; до {maxSizeKb} КБ.</div>
+      {error && <Banner tone="error" size="sm" description={error} data-testid={`${testId}-error`} />}
+    </div>
+  );
 }
 
 // ─── Add page modal (variant picker) ─────────────────────────────────────────────

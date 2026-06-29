@@ -1,6 +1,7 @@
 import type { Test, TestSection, Topic, Question, TopicCourse, TopicEvent, PassRule, AdaptiveTopicSettings, AdaptiveLevel, AdaptiveLevelLink, ContentPage, ResultVariable, Scale, QuestionMeasurement, RetakePolicy, TestQuestionScoring } from "@shared/schema";
 import { sanitizeHtml } from "../../utils/html-sanitizer";
 import { findEligibilityPlugin, findEligibilityConfig } from "@shared/eligibility/registry";
+import { resolveAnswerCommitScope } from "@shared/flow/answer-commit-scope";
 import { buildTestScoringContext, type TestScoringContext } from "../../services/effective-scoring";
 
 interface AdaptiveLevelWithLinks extends AdaptiveLevel {
@@ -146,6 +147,17 @@ export function buildTestJson(data: ExportData): string {
     timeLimitMinutes: data.test.timeLimitMinutes || null,
     maxAttempts: data.test.maxAttempts || null,
     showCorrectAnswers: data.test.showCorrectAnswers || false,
+    // PRD-19 (Блок A): правила навигации/завершения для рантайма (применение — Блок B/C/D).
+    allowReturnToUnanswered: data.test.allowReturnToUnanswered ?? true,
+    allowAnswerChange: data.test.allowAnswerChange ?? false,
+    showSectionResults: data.test.showSectionResults ?? true,
+    // PRD-19 (Блок B): единый резолв гранулярности фиксации ответа — оба хоста
+    // читают готовое значение (без повторного вывода из flowMode), что
+    // исключает дрейф skip/return/freeze между SCORM и вебом.
+    answerCommitScope: resolveAnswerCommitScope({
+      mode: data.test.mode,
+      flowMode: exportedFlowPolicy.mode,
+    }),
     // PRD-7 S10: legacy `start_page_content` is no longer exported into TEST_DATA.
     // Its content is migrated to a `content_pages` 'intro' row (migration 003 §4.2)
     // and rendered by the content-flow runtime; the DB column is kept write-only

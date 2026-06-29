@@ -137,6 +137,7 @@
     // carrying this topicId), stopped when transitioning to a different
     // topic or to the test-end content / results.
     maybeUpdateSectionTimer(item);
+    maybeFreezeSectionOnExit(item);
     if (item.kind === "content") {
       // PRD-4 v1.1 §4.7: router pages enter the dedicated 'router' phase
       // so mainRender.js routes to RouterFlow.renderRouterPage.
@@ -301,6 +302,28 @@
       topicName: result.topicName,
       result: result,
     };
+  }
+
+  /**
+   * PRD-19 (Block B / B4-freeze): when answerCommitScope === 'section', freeze a
+   * section's answers on exit so they can no longer be edited (isAnswerLocked in
+   * answers.js reads state.sectionCommitted). Detects the section boundary the
+   * same way the section timer does — a change in the item's topicId — so it
+   * works even for sections without an after_topic content page. Flat / adaptive
+   * tests (scope 'test') keep answers editable until submit and are skipped here.
+   * state.activeSectionTopic tracks the section currently being traversed; it is
+   * transient (re-derived after a restore, while sectionCommitted is persisted).
+   */
+  function maybeFreezeSectionOnExit(item) {
+    if (typeof TEST_DATA === "undefined" || TEST_DATA.answerCommitScope !== "section") return;
+    var currentTopicId = topicIdForItem(item);
+    var prev = state.activeSectionTopic || null;
+    if (prev === currentTopicId) return; // still inside the same section
+    if (prev) {
+      if (!state.sectionCommitted) state.sectionCommitted = {};
+      state.sectionCommitted[prev] = true;
+    }
+    state.activeSectionTopic = currentTopicId || null;
   }
 
   function goToPageSequenceIndex(index) {

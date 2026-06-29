@@ -233,6 +233,34 @@ function pageToInput(page: ContentPage): ContentPageInput {
   };
 }
 
+/** Stable JSON stringify with sorted keys — order-insensitive value comparison. */
+function stableStringify(v: unknown): string {
+  if (v === null || typeof v !== "object") return JSON.stringify(v ?? null);
+  if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
+  const obj = v as Record<string, unknown>;
+  return (
+    "{" +
+    Object.keys(obj)
+      .sort()
+      .map((k) => JSON.stringify(k) + ":" + stableStringify(obj[k]))
+      .join(",") +
+    "}"
+  );
+}
+
+/**
+ * Canonical form of a page's `valuesJson` for change detection: missing/empty
+ * `values` and `placeholderStyles` both collapse to `{}` and keys sort, so a
+ * `placeholderStyles: undefined → {}` rewrite (the inline form seeds an empty
+ * styles object) or a differing key order never reads as a real change.
+ */
+export function canonicalValues(vj: ContentPage["valuesJson"] | undefined): string {
+  return stableStringify({
+    values: vj?.values ?? {},
+    placeholderStyles: vj?.placeholderStyles ?? {},
+  });
+}
+
 /** True when two pages differ in any committed field (order is handled by reorder). */
 function pageChanged(a: ContentPage, b: ContentPage): boolean {
   return (
@@ -243,8 +271,28 @@ function pageChanged(a: ContentPage, b: ContentPage): boolean {
     a.type !== b.type ||
     a.autoAdvance !== b.autoAdvance ||
     a.autoAdvanceDelayMs !== b.autoAdvanceDelayMs ||
-    JSON.stringify(a.valuesJson ?? {}) !== JSON.stringify(b.valuesJson ?? {})
+    canonicalValues(a.valuesJson) !== canonicalValues(b.valuesJson)
   );
+}
+
+/**
+ * True when the local draft differs from the persisted server list in any way
+ * the unified «Сохранить» would push: a not-yet-created page, an add/delete, a
+ * reorder, or a changed committed field. Normalised (see {@link canonicalValues})
+ * so a no-op edit never counts. This is the REAL dirty signal for the Save gate;
+ * the sticky `dirty` flag only means "the draft was touched" (it guards the
+ * server re-sync from clobbering in-progress edits).
+ */
+function listDirty(draft: ContentPage[], server: ContentPage[]): boolean {
+  if (draft.some((p) => isDraftId(p.id))) return true; // a not-yet-created page
+  if (draft.length !== server.length) return true; // an add or a delete
+  const ds = [...draft].sort((a, b) => a.sortOrder - b.sortOrder);
+  const ss = [...server].sort((a, b) => a.sortOrder - b.sortOrder);
+  for (let i = 0; i < ds.length; i++) {
+    if (ds[i].id !== ss[i].id) return true; // reordered or different membership
+    if (pageChanged(ss[i], ds[i])) return true;
+  }
+  return false;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -585,6 +633,15 @@ export function useContentPages(
     setDraftPages((serverPages ?? []).map((p) => ({ ...p })));
   }, [serverPages]);
 
+  // The REAL dirty signal for the «Сохранить» gate: a structural diff between the
+  // draft and the persisted list. A no-op edit (opening page props, Save-in-row
+  // without changes, an `undefined → {}` style normalisation) leaves `dirty` true
+  // — the draft was touched — but `structurallyDirty` false, so Save stays off.
+  const structurallyDirty = useMemo(
+    () => listDirty(draftPages, serverPages ?? []),
+    [draftPages, serverPages],
+  );
+
   return {
     pages,
     contentTemplates,
@@ -604,7 +661,7 @@ export function useContentPages(
     remove,
     isRemoving: false,
     mutationError: commitError,
-    isDirty: dirty,
+    isDirty: dirty && structurallyDirty,
     commit,
     discard,
   };

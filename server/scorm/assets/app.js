@@ -143,6 +143,14 @@ function generateVariant() {
   if (flowMode === 'linear_flat') {
     state.flatQuestions = shuffle(state.flatQuestions);
   }
+  // PRD-19 (Block B): seed per-question status for the freshly built variant.
+  // Every delivered question starts 'unanswered'; confirmAnswer / skipQuestion
+  // transition it. Done here (post-shuffle) so the keys match flatQuestions.
+  state.questionStatuses = {};
+  state.sectionCommitted = {};
+  state.flatQuestions.forEach(function (fq) {
+    if (fq && fq.question) state.questionStatuses[fq.question.id] = 'unanswered';
+  });
   if (typeof rebuildPageSequence === 'function') {
     rebuildPageSequence();
     goToPageSequenceIndex(0);
@@ -173,6 +181,14 @@ function renderResults() {
 
   var html = '';
   html += '<div class="results-page">';
+
+  // PRD-7 branding: logo at the top of the LIVE results screen — parity with the
+  // templated results.html (web + «Мой результат»), which this legacy hand-built
+  // renderer mirrors. Reuses the shared extractor (startPage.js) via a typeof guard.
+  var resultsLogoUrl = (typeof scormDesignContext === 'function' && scormDesignContext().logoUrl) || '';
+  if (resultsLogoUrl) {
+    html +=   '<div class="tb-brand"><img class="tb-brand__logo" src="' + escapeHtml(resultsLogoUrl) + '" alt=""></div>';
+  }
 
   // Top hero
   html +=   '<div class="results-hero">';
@@ -433,6 +449,13 @@ function renderSavedResults(attempt) {
 
   var html = '';
   html += '<div class="results-page">';
+
+  // PRD-7 branding: logo on the saved-results screen too, for parity with the live
+  // results screen and the templated results.html.
+  var savedLogoUrl = (typeof scormDesignContext === 'function' && scormDesignContext().logoUrl) || '';
+  if (savedLogoUrl) {
+    html +=   '<div class="tb-brand"><img class="tb-brand__logo" src="' + escapeHtml(savedLogoUrl) + '" alt=""></div>';
+  }
 
   // Top hero
   html +=   '<div class="results-hero">';

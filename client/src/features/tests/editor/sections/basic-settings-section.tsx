@@ -356,7 +356,13 @@ function BasicPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: Set
                 const checked = e.target.checked;
                 updateModel((m) => ({
                   ...m,
-                  runtime: { ...m.runtime, showCorrectAnswers: checked },
+                  runtime: {
+                    ...m.runtime,
+                    showCorrectAnswers: checked,
+                    // PRD-19 FR-04b: взаимоисключение — при показе правильных ответов
+                    // изменение ответа недоступно.
+                    allowAnswerChange: checked ? false : m.runtime.allowAnswerChange,
+                  },
                 }));
               }}
               data-testid="settings-show-correct-checkbox"
@@ -756,8 +762,81 @@ const DECISION_POLICIES: { value: PassDecisionPolicy; label: string }[] = [
 ];
 
 function PassRulesPane({ model, updateModel, fieldErrors = EMPTY_FIELD_ERRORS }: SettingsSectionProps) {
+  // PRD-19 (FR-04b): «изменение ответа» зависит от возврата ВКЛ и взаимоисключается с показом
+  // правильных ответов (раздел «Ограничения»). showSectionResults — только для секционных.
+  const changeDisabled =
+    !model.runtime.allowReturnToUnanswered || model.runtime.showCorrectAnswers;
+  const showSectionResultsApplicable =
+    model.flowMode !== "linear_flat" && model.sections.length > 0;
   return (
     <>
+      <div className="ou-formfield">
+        <Switch
+          label="Разрешить возврат к неотвеченным вопросам"
+          description="Ученик может пропускать вопросы и возвращаться к ним до завершения. Включает карту-индикатор прогресса и экран обзора."
+          checked={model.runtime.allowReturnToUnanswered}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: {
+                ...m.runtime,
+                allowReturnToUnanswered: checked,
+                // изменение ответа невозможно без возврата
+                allowAnswerChange: checked ? m.runtime.allowAnswerChange : false,
+              },
+            }));
+          }}
+          data-testid="settings-allow-return-checkbox"
+        />
+      </div>
+      <div className="ou-formfield">
+        <Switch
+          label="Позволить изменять ответ до завершения"
+          description="При возврате к уже отвеченному вопросу можно изменить ответ (до завершения раздела/теста)."
+          checked={model.runtime.allowAnswerChange && !changeDisabled}
+          disabled={changeDisabled}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            updateModel((m) => ({
+              ...m,
+              runtime: { ...m.runtime, allowAnswerChange: checked },
+            }));
+          }}
+          data-testid="settings-allow-change-checkbox"
+        />
+        {changeDisabled && (
+          <Banner
+            tone="warning"
+            size="sm"
+            description={
+              !model.runtime.allowReturnToUnanswered
+                ? "Доступно только при включённом возврате к неотвеченным."
+                : "Недоступно при включённом показе правильных ответов (раздел «Ограничения»): иначе ученик увидит правильный ответ и переправит свой."
+            }
+          />
+        )}
+      </div>
+      {showSectionResultsApplicable && (
+        <div className="ou-formfield">
+          <Switch
+            label="Показывать итоги раздела"
+            description="После завершения раздела показывается экран с его результатом. Только для секционных тестов."
+            checked={model.runtime.showSectionResults}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              updateModel((m) => ({
+                ...m,
+                runtime: { ...m.runtime, showSectionResults: checked },
+              }));
+            }}
+            data-testid="settings-show-section-results-checkbox"
+          />
+        </div>
+      )}
+
+      <hr className="wf-sep" />
+
       <Card
         variant="outlined"
         size="sm"

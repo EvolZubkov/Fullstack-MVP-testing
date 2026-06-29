@@ -156,6 +156,10 @@ export interface TestPayload {
   timeLimitMinutes?: number | null;
   maxAttempts?: number | null;
   showCorrectAnswers?: boolean;
+  // PRD-19 (Блок A): правила навигации/завершения.
+  allowReturnToUnanswered?: boolean;
+  allowAnswerChange?: boolean;
+  showSectionResults?: boolean;
   startPageContent?: string | null;
   mode?: "standard" | "adaptive";
   showDifficultyLevel?: boolean;
@@ -220,6 +224,10 @@ export class TestSettingsService {
         flowPolicyJson: payload.test.flowPolicyJson ?? null,
         retakePolicyJson: (payload.test.retakePolicyJson as never) ?? null,
         showCorrectAnswers: payload.test.showCorrectAnswers ?? false,
+        // PRD-19 (Блок A): новый тест — возврат ВКЛ по умолчанию (FR-01).
+        allowReturnToUnanswered: payload.test.allowReturnToUnanswered ?? true,
+        allowAnswerChange: payload.test.allowAnswerChange ?? false,
+        showSectionResults: payload.test.showSectionResults ?? true,
         timeLimitMinutes: payload.test.timeLimitMinutes ?? null,
         maxAttempts: payload.test.maxAttempts ?? null,
         startPageContent: payload.test.startPageContent ?? null,

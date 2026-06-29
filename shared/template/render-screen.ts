@@ -70,8 +70,19 @@ function renderPlaceholderHtml(type: string, value: unknown): string {
       return String(value);
     case "number":
       return escHtml(String(value));
-    case "image":
-      return '<img src="' + escHtml(String(value)) + '" alt="" style="max-width:100%;max-height:100%;">';
+    case "image": {
+      // Image placeholders carry a plain URL string. Guard against a non-string
+      // (e.g. a legacy media envelope `{ url, name }`) so a stray object never
+      // leaks as `<img src="[object Object]">` on either host — extract `.url`
+      // when present, otherwise render nothing.
+      const src =
+        typeof value === "string"
+          ? value
+          : value && typeof value === "object" && typeof (value as { url?: unknown }).url === "string"
+            ? (value as { url: string }).url
+            : "";
+      return src ? '<img src="' + escHtml(src) + '" alt="" style="max-width:100%;max-height:100%;">' : "";
+    }
     case "boolean":
       return value ? "&#10003;" : "";
     default:

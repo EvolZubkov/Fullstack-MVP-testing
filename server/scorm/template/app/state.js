@@ -21,7 +21,17 @@ var state = {
   answerConfirmed: false,
   feedbackShown: false,
   attemptSavedForThisSession: false,
-  
+
+  // PRD-19 (Block B): per-question navigation status, keyed by question.id.
+  // 'unanswered' (initial) | 'answered' (explicit fixation via confirmAnswer)
+  // | 'skipped' (learner used «Пропустить»). Drives the progress pills and the
+  // обзор screen; seeded in generateVariant(), persisted inside suspend_data.
+  questionStatuses: {},
+  // PRD-19 (Block B): per-section answer-commit freeze, keyed by topicId. Set
+  // true on section exit when answerCommitScope === 'section' (sectional modes),
+  // locking that section's answers against further edits even if allowAnswerChange.
+  sectionCommitted: {},
+
   // Adaptive mode state
   adaptiveState: null, // Will be initialized for adaptive tests
 

@@ -72,6 +72,10 @@ const testBodyBaseSchema = z.object({
   webhookUrl: z.union([z.string().url(), z.literal(""), z.null()]).optional(),
   sections: z.array(sectionBodySchema).optional(),
   showCorrectAnswers: z.boolean().optional(),
+  // PRD-19 (Блок A): правила навигации/завершения.
+  allowReturnToUnanswered: z.boolean().optional(),
+  allowAnswerChange: z.boolean().optional(),
+  showSectionResults: z.boolean().optional(),
   timeLimitMinutes: z.number().int().positive().nullable().optional(),
   maxAttempts: z.number().int().positive().nullable().optional(),
   startPageContent: z.string().nullable().optional(),
@@ -326,6 +330,9 @@ const SCREEN_LAYOUTS: Record<string, string> = {
   start: "start.html",
   blocked: "system.blocked.html",
   question: "question.html",
+  // PRD-19 Block D: обзор (section-finish / test-finish). No backing variant kind
+  // (runtime template layout, like blocked) — resolved straight from the template dir.
+  review: "review.html",
 };
 // System variant kind backing each screen (for the default-fallback resolution).
 // `blocked` is a pure system layout with no contentTemplate kind — never falls back.
@@ -349,7 +356,10 @@ router.get("/:id/screen-template/:screen", requireUserContext, requireTestScope(
     const dir = kind
       ? await resolveSystemScreenDir(templateId, kind, { activeOnly: true })
       : await resolveTemplateDir(templateId, { activeOnly: true });
-    const payload = readScreenTemplate(dir, layoutFile);
+    // cssVars/branding resolve against the ACTIVE template's manifest even when the
+    // layout dir fell back to `default` (a screen kind the active template doesn't own).
+    const paramsDir = await resolveTemplateDir(templateId, { activeOnly: true });
+    const payload = readScreenTemplate(dir, layoutFile, (test.designSettingsJson as any)?.params, paramsDir);
     if (!payload) return res.status(404).json({ error: "Template not found" });
     res.json(payload);
   } catch (error) {
@@ -438,6 +448,9 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
       webhookUrl,
       sections,
       showCorrectAnswers,
+      allowReturnToUnanswered,
+      allowAnswerChange,
+      showSectionResults,
       timeLimitMinutes,
       maxAttempts,
       startPageContent,
@@ -487,6 +500,9 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         status,
         published,
         showCorrectAnswers,
+        allowReturnToUnanswered,
+        allowAnswerChange,
+        showSectionResults,
         timeLimitMinutes,
         maxAttempts,
         startPageContent,
@@ -669,6 +685,9 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
       webhookUrl,
       sections,
       showCorrectAnswers,
+      allowReturnToUnanswered,
+      allowAnswerChange,
+      showSectionResults,
       timeLimitMinutes,
       maxAttempts,
       startPageContent,
@@ -721,6 +740,9 @@ router.put("/:id", requirePermission("tests.edit"), requireTestScope("edit"), as
         overallPassRuleJson,
         webhookUrl: webhookUrl ?? undefined,
         showCorrectAnswers,
+        allowReturnToUnanswered,
+        allowAnswerChange,
+        showSectionResults,
         timeLimitMinutes,
         maxAttempts,
         startPageContent,

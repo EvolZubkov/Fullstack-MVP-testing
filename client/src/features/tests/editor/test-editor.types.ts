@@ -353,6 +353,10 @@ export type TestEditorModel = {
     timeLimitMinutes: number | null;
     maxAttempts: number | null;
     showCorrectAnswers: boolean;
+    // PRD-19 (Блок A): правила навигации/завершения.
+    allowReturnToUnanswered: boolean; // FR-01
+    allowAnswerChange: boolean; // FR-04a (зависит от возврата; взаимоискл. с showCorrectAnswers)
+    showSectionResults: boolean; // FR-05a (секционные)
   };
   passRules: PassRules;
   sections: EditorSection[];
@@ -416,6 +420,10 @@ export type TestSettingsPayload = {
   timeLimitMinutes: number | null;
   maxAttempts: number | null;
   showCorrectAnswers: boolean;
+  // PRD-19 (Блок A): правила навигации/завершения теста.
+  allowReturnToUnanswered: boolean;
+  allowAnswerChange: boolean;
+  showSectionResults: boolean;
   /**
    * Test-level feedback. Sent under the `feedbackJson` key because the legacy
    * `feedback` server field is `string`-typed (zod-validated). The new structured
