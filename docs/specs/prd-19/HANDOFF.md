@@ -61,10 +61,24 @@ dev-БД `test_builder` (Docker :55432) — СТАРЫЙ снимок схемы
 БД дропнута, `.env` и `test_builder` НЕ тронуты. Чтобы повторить визуал — пересоздать `prd19qa`
 (push + сид) или мигрировать `test_builder` (рискованно — есть данные).
 
+### Router-визуал (давний follow-up D5) — ПРОВЕРЕН
+
+Скрин `.playwright-mcp/prd19-router-hub.png`. На том же `prd19qa` собран router_by_topics-тест
+ЧЕРЕЗ `testSettingsService.create` (важно: только так `content-pages-lifecycle` создаёт системную
+страницу `kind:"router"` — хаб; при ручном SQL без неё рантайм идёт по темам линейно). Router
+использует ОТДЕЛЬНУЮ модель навигации `routerFlow.js` (`window.RouterFlow`: `renderRouterPage` хаб,
+`selectRouterTopic`, `returnFromTopic`, `isRouterReadyToFinish`) — НЕ плоский `state.pageSequence`;
+дженерик `next()`/`skipQuestion()` гонит линейно и хаб не показывает. Проигран правильным путём
+(хаб → выбор темы → ответы → `returnFromTopic`): хаб рендерится из общего шаблона, пройденная тема
+помечена «Пройдена» и заблокирована, невыбранная «Не начата» кликабельна, «Завершить тест» гейтится
+(«Сначала ответьте на вопрос») до прохождения всех тем — FR-05b подтверждён.
+
 ### Осталось после сессии 4
 
-- КОММИТ сессии 4 (web cooldown + блок G; БЕЗ `Co-Authored-By`).
-- ROUTER визуально (нужен `router_by_topics`-пакет) — давний follow-up D5.
+- Трек PRD-19 (A-G) РЕАЛИЗОВАН, ЗАКОММИЧЕН (4 коммита: `38a627b` cooldown, `06174a9` блок G,
+  `4c2bebf` HANDOFF, `b04fe24` settings) и ВИЗУАЛЬНО ПРОВЕРЕН (cooldown-старт, отладчик «Статус»,
+  router-хаб). Осталось закоммитить только doc-апдейты этой добивки (ROADMAP + этот HANDOFF). Трек
+  можно считать закрытым.
 
 ## Обновление 2026-06-29 (сессия 3): блоки E и F ЗАКОММИЧЕНЫ
 
