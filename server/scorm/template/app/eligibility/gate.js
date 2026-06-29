@@ -1,10 +1,12 @@
 // app/eligibility/gate.js
 // PRD-6 retake gate runtime. Runs BEFORE SCORM.Initialize for tests with a
 // retake policy (NFR-01/02): evaluates the configured eligibility plugin, and
-// either renders a block-wall (blocked => no Initialize, no cmi.*) or a neutral
-// "Начать курс" start shell whose click runs the normal course (Initialize +
-// flow). Non-gated tests never reach here. Side effects (fetch, suspend_data
-// read, render) live here; the pure logic is EligibilityEngine/EligibilityPlugins.
+// either renders a block-wall (blocked => no Initialize, no cmi.*) or — when
+// eligible — hands straight to the normal course (Initialize + flow) with NO
+// extra gate-shell (PRD-19 FR-19: an elapsed-cooldown test is indistinguishable
+// from an ordinary test). Non-gated tests never reach here. Side effects (fetch,
+// suspend_data read, render) live here; the pure logic is
+// EligibilityEngine/EligibilityPlugins.
 var RetakeGate = (function () {
   var GATE_TIMEOUT_MS = 5000; // NFR-06
 
@@ -157,6 +159,19 @@ var RetakeGate = (function () {
     return m ? (m[3] + '.' + m[2] + '.' + m[1]) : iso;
   }
 
+  // Whole days from today until the ISO date (UTC day granularity), or null when
+  // not in the future. Drives the optional «через N дн.» on the cooldown start.
+  function daysUntilIso(iso) {
+    if (!iso) return null;
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+    if (!m) return null;
+    var target = Date.UTC(+m[1], (+m[2]) - 1, +m[3]);
+    var now = new Date();
+    var today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    var d = Math.ceil((target - today) / 86400000);
+    return d > 0 ? d : null;
+  }
+
   // The block page is a SYSTEM PAGE of the design template (PRD-6 §4.4): the gate
   // renders the template's `system.blocked` layout and fills `retake.*` via the
   // shared path-DSL. The template manifest/layouts are NOT loaded yet at gate time
@@ -165,7 +180,12 @@ var RetakeGate = (function () {
   // touch SCORM, so NFR-01/02 (no Initialize before the gate decides) still holds.
   function ensureTemplate() {
     var layouts = (typeof state !== 'undefined' && state) ? state.templateLayouts : null;
-    if (layouts) return Promise.resolve(layouts);
+    // `state.templateLayouts` is initialised to an EMPTY object (state.js), and
+    // loadDesignTemplate runs only inside runCourse — which the gate never reaches.
+    // So an empty map means "not loaded yet": load it ourselves (a pure package-local
+    // fetch, no SCORM). Treating {} as loaded made the gate render its built-in wall
+    // instead of the template's system.blocked / start screens.
+    if (layouts && Object.keys(layouts).length > 0) return Promise.resolve(layouts);
     if (typeof loadDesignTemplate === 'function') {
       return loadDesignTemplate()
         .then(function () { return (typeof state !== 'undefined' && state) ? state.templateLayouts : null; })
@@ -240,18 +260,51 @@ var RetakeGate = (function () {
     });
   }
 
-  function renderStartShell(retake, td, onStart) {
+  // PRD-19 FR-20: render the cooldown state ON the normal start page (start.html)
+  // instead of a separate block-wall — pre-Initialize, so a blocked test never
+  // opens a SCORM session (NFR-01/02). Only the date + a DISABLED start button are
+  // shown: the prior result / report are NOT offered here because suspend_data is
+  // unavailable before Initialize (and WebTutor has no cross-attempt store), so the
+  // builder gets no prior facts. Falls back to the block-wall if the active
+  // template ships no `start` layout (every conformant template does).
+  function renderCooldownStart(retake, td) {
     var el = appEl();
-    if (!el) { if (typeof onStart === 'function') onStart(); return; }
-    el.innerHTML =
-      '<div class="retake-shell" data-testid="retake-start-shell">' +
-      '<div class="retake-shell__card">' +
-      '<h1 class="retake-shell__title">' + esc(td.title || 'Тест') + '</h1>' +
-      '<p class="retake-shell__lead">Доступ к прохождению открыт.</p>' +
-      '<button type="button" class="retake-shell__btn" data-testid="retake-start-course">Начать тестирование</button>' +
-      '</div></div>';
-    var btn = el.querySelector('[data-testid="retake-start-course"]');
-    if (btn) btn.addEventListener('click', function () { if (typeof onStart === 'function') onStart(); });
+    if (!el) return;
+    ensureTemplate().then(function (layouts) {
+      var TB = (typeof window !== 'undefined') ? window.TBTemplate : null;
+      var layout = layouts && layouts['start'];
+      if (!layout || !TB || !TB.renderScreenInto || !TB.buildStartState) {
+        renderBlockWall(retake, td);
+        return;
+      }
+      var ctx = TB.buildStartState({
+        info: {
+          title: td.title || '',
+          description: td.description || '',
+          questionCount: td.totalQuestions,
+          passPercent: td.passPercent,
+          timeLimitMinutes: td.timeLimitMinutes,
+          maxAttempts: td.maxAttempts
+        },
+        maxAttempts: td.maxAttempts || null,
+        completedAttempts: 0,
+        resume: null,
+        hasCompletedResults: false,
+        canStartNew: false,
+        cooldown: {
+          availableDateHuman: retake.availableDate ? fmtDateHuman(retake.availableDate) : '',
+          daysUntil: daysUntilIso(retake.availableDate)
+        }
+      });
+      ctx.design = (typeof scormDesignContext === 'function') ? scormDesignContext() : {};
+      if (typeof applySystemScreenStyles === 'function') applySystemScreenStyles('start');
+      el.innerHTML = '';
+      var wrap = document.createElement('div');
+      el.appendChild(wrap);
+      TB.renderScreenInto(wrap, { layout: layout, context: ctx });
+      // No action wiring: the start button is disabled and nothing else is
+      // clickable pre-Initialize, so the SCORM session stays unopened.
+    });
   }
 
   function run(td, onAllowedStart) {
@@ -266,8 +319,13 @@ var RetakeGate = (function () {
         console.log('PRD-6 retake gate:', result.allowed ? 'allowed' : 'blocked',
           '(' + (retake.reason || '') + (retake.availableDate ? ', available ' + retake.availableDate : '') + ')');
       }
-      if (!result.allowed) renderBlockWall(retake, td);
-      else renderStartShell(retake, td, onAllowedStart);
+      // PRD-19 FR-19: eligible => NO gate-shell. Hand straight to the normal
+      // course (onAllowedStart = runCourse: Initialize + the standard start page),
+      // so an elapsed-cooldown test is indistinguishable from an ordinary one.
+      // FR-20: blocked => the cooldown state renders ON the standard start page
+      // (pre-Initialize), not a separate wall — NFR-01/02 still hold.
+      if (!result.allowed) renderCooldownStart(retake, td);
+      else onAllowedStart();
     });
   }
 

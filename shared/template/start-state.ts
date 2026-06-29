@@ -17,7 +17,7 @@
  * this builder owns only the flag assembly. Pure — no DOM, no Node.
  */
 
-import type { CtxCourse, CtxState } from "./context";
+import type { CtxCourse, CtxState, CtxStartCooldown } from "./context";
 
 /** Test info shown on the start screen (maps to `course.*`). */
 export interface StartInfo {
@@ -43,6 +43,25 @@ export interface StartStateInput {
   canStartNew: boolean;
   /** Web-only "back to list" action (the SCORM host omits it). */
   showBack?: boolean;
+  /**
+   * PRD-19 Block F (FR-20): cooldown facts when a retake is blocked. Presence ⇒
+   * the start button renders disabled and the cooldown card shows. Pass null/omit
+   * when the learner is eligible.
+   */
+  cooldown?: CtxStartCooldown | null;
+  /**
+   * PRD-19 Block F (FR-20): raw prior-attempt facts (eligible retake AND cooldown);
+   * the builder derives the verdict label/class + attempts label. Omit when the
+   * host cannot supply prior-attempt data (e.g. SCORM cooldown, pre-Initialize).
+   */
+  priorResult?: {
+    percent: number;
+    passed: boolean | null;
+    attemptNumber?: number | null;
+    maxAttempts?: number | null;
+  } | null;
+  /** PRD-19 Block F (FR-20): the prior attempt's report is downloadable («Скачать отчёт»). */
+  canDownloadReport?: boolean;
 }
 
 /** Built `{ course, state }` for the start layout. */
@@ -63,7 +82,10 @@ export interface StartRenderContext {
 export function buildStartState(input: StartStateInput): StartRenderContext {
   const noAttempts = input.maxAttempts != null && input.completedAttempts >= input.maxAttempts;
   const hasCompleted = input.hasCompletedResults;
-  const canResume = !!input.resume;
+  // FR-20: a cooldown block any new attempt — it overrides resume/start (the
+  // learner cannot proceed), so resume is suppressed while blocked.
+  const blocked = !!input.cooldown;
+  const canResume = !!input.resume && !blocked;
 
   const state: CtxState = {
     exhausted: false,
@@ -77,7 +99,13 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
     showBack: !!input.showBack,
   };
 
-  if (noAttempts && !hasCompleted) {
+  if (blocked) {
+    // FR-20: cooldown — start disabled (the layout renders a disabled button from
+    // `state.cooldown`), no resume/restart. Reviewing the prior result stays
+    // available where the host can supply it (web; SCORM only post-Initialize).
+    state.cooldown = input.cooldown as CtxStartCooldown;
+    state.canViewResults = hasCompleted;
+  } else if (noAttempts && !hasCompleted) {
     state.exhausted = true;
   } else if (noAttempts && hasCompleted) {
     state.canViewResults = true;
@@ -98,6 +126,23 @@ export function buildStartState(input: StartStateInput): StartRenderContext {
       state.canStart = true;
       state.startLabel = "Начать тестирование";
     }
+  }
+
+  // FR-20: prior-attempt summary (eligible retake AND cooldown), Core-prepared so
+  // the layout only interpolates. Set only where the host supplies the facts.
+  if (input.priorResult) {
+    const p = input.priorResult;
+    state.priorResult = {
+      percent: Math.round(p.percent),
+      verdictLabel: p.passed === null ? "" : p.passed ? "пройдено" : "не пройдено",
+      verdictClass: p.passed === false ? "prior-fail" : "",
+      attemptsLabel:
+        p.attemptNumber != null && p.maxAttempts != null
+          ? "попытка " + p.attemptNumber + " из " + p.maxAttempts
+          : "",
+    };
+    // «Скачать отчёт» is meaningful only when a prior attempt exists.
+    if (input.canDownloadReport) state.canDownloadReport = true;
   }
 
   const i = input.info;

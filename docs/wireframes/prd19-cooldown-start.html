@@ -7,15 +7,18 @@
     Wireframe: PRD-19 — старт дефолтного шаблона + cooldown/повтор. НЕ отдельные экраны.
     Разметка 1:1 с server/scorm/templates/default/layouts/start.html (.start-page / .card /
     .start-info / .info-row / .start-actions); реальные theme.css + base.css шаблона; обе темы.
-    Сценарии старта:
-      - первый раз: только «Начать тестирование»;
+    Сценарии старта (одна и та же start.html, доп-логика поверх — НЕ отдельные экраны):
+      - первый раз: только «Начать тестирование» (state.canStart);
       - повтор (eligible + была попытка): «Начать тестирование» + «Мой результат» (view-results) +
-        «Скачать отчёт» + сводка прошлой попытки;
-      - cooldown (нельзя): то же (Мой результат / Скачать отчёт / прошлый результат) + дата + «Начать»
-        disabled.
-    FR-19: гейт-шелл «Доступ к прохождению открыт» УДАЛЁН. FR-20: cooldown — на старте, не отдельная
-    блок-стена. «Скачать отчёт» = реальный «Скачать PDF» (results view), здесь дан прямой доступ.
-    НЕ согласован — черновик к ревью.
+        «Скачать отчёт» (если отчёт доступен) + сводка прошлой попытки (state.priorResult);
+      - cooldown (нельзя): то же (Мой результат / Скачать отчёт / прошлый результат) + дата следующей
+        попытки + «Начать тестирование» DISABLED (state.cooldown присутствует → старт недоступен).
+    FR-19: гейт-шелл «Доступ к прохождению открыт» (renderStartShell) УДАЛЁН — при eligible сразу
+    обычный старт (РЕАЛИЗОВАНО, gate.js). FR-20: cooldown — доп-логика НА start.html, отдельная
+    блок-стена (system.blocked) НЕ используется. «Скачать отчёт» = реальный «Скачать PDF» (results
+    view), здесь дан прямой доступ со старта. Дата — посуточная (ДД.ММ.ГГГГ, как fmtDateHuman гейта;
+    cooldown измеряется в днях, времени суток нет). Паритет PRD-12: ту же start.html рендерят ОБА
+    хоста (SCORM-пакет + веб). Финал к согласованию (2026-06-29).
     -->
     <title>PRD-19 — Старт дефолтного шаблона + cooldown/повтор</title>
     <link rel="stylesheet" href="/server/scorm/templates/default/styles/theme.css" />
@@ -193,8 +196,8 @@
                   <span class="cooldown-ico" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
                   <div><div class="cooldown-title">Повторное прохождение пока недоступно</div><div class="cooldown-sub">Действует период ожидания между попытками.</div></div>
                 </div>
-                <div class="cooldown-when">Можно будет: <strong>30 июня 2026, 14:00</strong> &middot; через 2 дня</div>
-                <div class="start-prior-row">Прошлая попытка: <strong>65%</strong> &middot; <span class="prior-fail">не пройдено</span></div>
+                <div class="cooldown-when">Повторный запуск будет доступен с <strong>30.06.2026</strong> &middot; через 2 дн.</div>
+                <div class="start-prior-row">Прошлая попытка: <strong>65%</strong> &middot; <span class="prior-fail">не пройдено</span> &middot; попытка 2 из 3</div>
                 <div class="prior-actions">
                   <button type="button" class="btn btn--outline wf-btn-sm" data-action="view-results">Мой результат</button>
                   <button type="button" class="btn btn--outline wf-btn-sm" data-action="download-report"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Скачать отчёт</button>
@@ -217,21 +220,38 @@
               <thead><tr><th>Элемент</th><th>Поле / условие</th><th>Примечание</th></tr></thead>
               <tbody>
                 <tr><td>Один экран — реальный старт</td><td>FR-19; start.html</td><td>Разметка 1:1 с дефолтным шаблоном (<code>.start-page</code> / <code>.start-info</code> / <code>.info-row</code> / <code>.start-actions</code>); реальные theme.css + base.css. cooldown/повтор — доп-логика на нём, НЕ отдельный экран</td></tr>
-                <tr><td>Первый раз</td><td>нет прошлой попытки</td><td>Только «Начать тестирование»</td></tr>
-                <tr><td>Повтор: можно</td><td>eligible + была попытка</td><td>Реальный <code>start.html</code>: <code>canStart</code> «Начать тестирование» + <code>canViewResults</code> «Мой результат». Добавлены сводка прошлой попытки + «Скачать отчёт»</td></tr>
-                <tr><td>Повтор: cooldown</td><td>FR-20; нельзя</td><td>На ТОЙ ЖЕ start-page: «пока недоступно» + дата + прошлый результат + «Мой результат» + «Скачать отчёт»; <code>.start-btn</code> disabled. Отдельная блок-стена (system.blocked) НЕ используется</td></tr>
-                <tr><td>Мой результат</td><td>view-results</td><td>Реальное действие <code>data-action="view-results"</code> → экран результатов прошлой попытки (там «Скачать PDF», <code>results.adaptive.html</code> download-pdf)</td></tr>
-                <tr><td>Скачать отчёт</td><td>условно</td><td>= реальный «Скачать PDF» из results view; здесь дан ПРЯМОЙ доступ со старта. Кнопка только если отчёт доступен для скачивания</td></tr>
-                <tr><td>Гейт-шелл удалён</td><td>FR-19; gate.js</td><td>Экран «Доступ к прохождению открыт» (renderStartShell) при eligible НЕ показывается — сразу обычный старт</td></tr>
-                <tr><td>Тема (light / dark)</td><td>вариант шаблона</td><td>Тема — вариант оформления (выбор автора): шаблон поддерживает обе. Тогл «Светлая/Тёмная». В theme.css добавить светлый набор токенов (сейчас только тёмный)</td></tr>
-                <tr><td>Реализация</td><td>gate.js / startPage.js / start.html / theme.css</td><td>Снять renderStartShell при allowed; ветку cooldown перенести из system.blocked на start.html; «Мой результат»/«Скачать отчёт» на старте при наличии прошлой попытки (до Initialize, NFR-01/02 цел); + светлый набор токенов</td></tr>
+                <tr><td>Первый раз</td><td>нет прошлой попытки</td><td>Только «Начать тестирование» (<code>state.canStart</code>)</td></tr>
+                <tr><td>Повтор: можно</td><td>eligible + была попытка</td><td>Реальный <code>start.html</code>: <code>state.canStart</code> «Начать тестирование» + <code>state.canViewResults</code> «Мой результат». Добавлены сводка прошлой попытки (<code>state.priorResult</code>) + «Скачать отчёт» (<code>state.canDownloadReport</code>)</td></tr>
+                <tr><td>Повтор: cooldown</td><td>FR-20; нельзя</td><td>На ТОЙ ЖЕ start-page: «пока недоступно» + дата + прошлый результат + «Мой результат» + «Скачать отчёт»; кнопка старта DISABLED. Отдельная блок-стена (system.blocked) НЕ используется</td></tr>
+                <tr><td>Мой результат</td><td><code>data-action="view-results"</code></td><td>Реальное действие → экран результатов прошлой попытки (там «Скачать PDF», <code>results.adaptive.html</code> download-pdf)</td></tr>
+                <tr><td>Скачать отчёт</td><td><code>data-action="download-report"</code> (новое)</td><td>= реальный «Скачать PDF» из results view; здесь дан ПРЯМОЙ доступ со старта. Кнопка только если <code>state.canDownloadReport</code> (отчёт по прошлой попытке доступен)</td></tr>
+                <tr><td>Гейт-шелл удалён</td><td>FR-19; gate.js — РЕАЛИЗОВАНО</td><td>Экран «Доступ к прохождению открыт» (renderStartShell) при eligible НЕ показывается — гейт зовёт onAllowedStart напрямую → сразу обычный старт</td></tr>
+                <tr><td>Дата следующей попытки</td><td>ДД.ММ.ГГГГ</td><td>Формат как <code>fmtDateHuman</code> гейта (cooldown — посуточный, времени суток нет). «через N дн.» — производное (availableDate − today), опционально</td></tr>
+                <tr><td>Тема (light / dark)</td><td>вариант шаблона</td><td>Тема — вариант оформления (выбор автора): шаблон поддерживает обе. Тогл «Светлая/Тёмная». В theme.css добавить светлый набор токенов (сейчас только тёмный) — ОТДЕЛЬНАЯ задача, вне объёма F2</td></tr>
+                <tr><td>Паритет хостов</td><td>PRD-12</td><td>Ту же start.html со state.priorResult / state.cooldown рендерят ОБА хоста; всё гейтится по state.*, поэтому каждый хост отдаёт что МОЖЕТ. SCORM-источник различается с вебом (SCORM — гейт PRD-6; веб — серверный retake-gate)</td></tr>
+                <tr><td>Реализуемость прошлого результата / отчёта на SCORM cooldown</td><td>FR-20; NFR-01/02</td><td>SCORM cooldown-экран рендерится ДО Initialize; данные прошлой попытки (cmi.suspend_data) тогда НЕДОСТУПНЫ (нужен Initialize; WebTutor — нет cross-attempt стора). Поэтому на SCORM cooldown — ТОЛЬКО дата + disabled-кнопка (state.priorResult / state.canDownloadReport не задаются). Прошлый результат + «Скачать отчёт» показываются на ВЕБЕ (серверная БД попыток) и на SCORM eligible-повторе ПОСЛЕ Initialize, где LMS хранит историю (как текущий «Мой результат»). Решение пользователя: «доступен, если технически реализуемо»</td></tr>
               </tbody>
             </table>
           </div>
 
           <div class="wf-mapping">
             <h2>Источник</h2>
-            <p>Учебный экран рендерится ШАБЛОНОМ (PRD-12), не DS. Здесь — реальная разметка start.html дефолтного шаблона + его theme.css/base.css. Действия <code>view-results</code> / <code>start-test</code> — реальные; блоки <code>.start-prior</code> / <code>.start-cooldown</code> и светлые токены — добавка эскиза/реализации (на токенах шаблона).</p>
+            <p>Учебный экран рендерится ШАБЛОНОМ (PRD-12), не DS. Здесь — реальная разметка start.html дефолтного шаблона + его theme.css/base.css. Действия <code>start-test</code> / <code>view-results</code> — реальные; <code>download-report</code>, блоки <code>.start-prior</code> / <code>.start-cooldown</code> и светлые токены — добавка реализации F2 (на токенах шаблона).</p>
+          </div>
+
+          <div class="wf-mapping">
+            <h2>Контракт состояния F2 (новые поля + гейтинг layout)</h2>
+            <p>Новые поля контекста (builder <code>buildStartState</code>, <code>shared/template/start-state.ts</code> + <code>context.ts</code>) и блоки <code>start.html</code>, которые их гейтят. CSS-классы — в <code>base.css</code> на токенах шаблона. Источник данных различается по хостам (см. «Паритет хостов»).</p>
+            <table>
+              <thead><tr><th>Поле <code>state.*</code></th><th>Блок layout (гейт)</th><th>Содержание / правило</th></tr></thead>
+              <tbody>
+                <tr><td><code>priorResult</code> = <code>{ percent, passed, attemptNumber?, maxAttempts? }</code> | null</td><td><code>{{#if state.priorResult}}</code> → <code>.card.start-prior</code></td><td>Сводка прошлой попытки: «Прошлая попытка: N% · пройдено/не пройдено [· попытка K из M]». Вердикт-цвет <code>.prior-fail</code> при <code>passed=false</code></td></tr>
+                <tr><td><code>canDownloadReport</code> : bool</td><td><code>{{#if state.canDownloadReport}}</code> → кнопка <code>data-action="download-report"</code></td><td>Показывать «Скачать отчёт» только когда отчёт по прошлой попытке доступен для скачивания (FR-20)</td></tr>
+                <tr><td><code>cooldown</code> = <code>{ availableDateHuman, daysUntil? }</code> | null</td><td><code>{{#if state.cooldown}}</code> → <code>.card.start-cooldown</code></td><td>Присутствует ТОЛЬКО когда повтор заблокирован (FR-20): «пока недоступно» + дата (ДД.ММ.ГГГГ) [+ «через N дн.»]. Присутствие → старт недоступен</td></tr>
+                <tr><td>кнопка старта при <code>cooldown</code></td><td><code>{{#if state.cooldown}}</code> рендерит <code>.start-btn</code> с <code>disabled aria-disabled</code>, иначе <code>{{#if state.canStart}}</code> обычная</td><td>FR-20: «Начать тестирование» видна, но DISABLED, когда cooldown активен (НЕ скрыта). NFR-01/02: cooldown-старт рендерится ДО Initialize, disabled-кнопка сессию не открывает</td></tr>
+              </tbody>
+            </table>
+            <p>Реализация (после согласования): <code>start-state.ts</code>/<code>context.ts</code> (поля) · <code>start.html</code> (гейтинг) · <code>base.css</code> (<code>.start-prior</code>/<code>.start-cooldown</code> и др.) · SCORM <code>gate.js</code>+<code>startPage.js</code> (cooldown-ветку из <code>system.blocked</code> → на start.html, до Initialize) · веб <code>take-test.tsx</code>/серверный <code>retake-gate.ts</code> (паритет). Светлые токены theme.css — вне объёма F2.</p>
           </div>
         </div>
       </div>

@@ -52,13 +52,44 @@
   {{#if course.startPageContent}}
   <div class="card start-note">{{course.startPageContent}}</div>
   {{/if}}
+  {{#if state.cooldown}}
+  <div class="card start-cooldown">
+    <div class="cooldown-head">
+      <span class="cooldown-ico" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </span>
+      <div>
+        <div class="cooldown-title">Повторное прохождение пока недоступно</div>
+        <div class="cooldown-sub">Действует период ожидания между попытками.</div>
+      </div>
+    </div>
+    <div class="cooldown-when">Повторный запуск будет доступен с <strong><span data-path="state.cooldown.availableDateHuman"></span></strong>{{#if state.cooldown.daysUntil}} &middot; через <span data-path="state.cooldown.daysUntil"></span> дн.{{/if}}</div>
+    {{#if state.priorResult}}
+    <div class="start-prior-row">Прошлая попытка: <strong><span data-path="state.priorResult.percent"></span>%</strong>{{#if state.priorResult.verdictLabel}} &middot; <span class="{{state.priorResult.verdictClass}}" data-path="state.priorResult.verdictLabel"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path="state.priorResult.attemptsLabel"></span>{{/if}}</div>
+    <div class="prior-actions">
+      {{#if state.canViewResults}}<button type="button" class="btn btn--outline" data-action="view-results">Мой результат</button>{{/if}}
+      {{#if state.canDownloadReport}}<button type="button" class="btn btn--outline" data-action="download-report">Скачать отчёт</button>{{/if}}
+    </div>
+    {{/if}}
+  </div>
+  {{/if}}
+  {{#unless state.cooldown}}{{#if state.priorResult}}
+  <div class="card start-prior">
+    <div class="start-prior-row">Прошлая попытка: <strong><span data-path="state.priorResult.percent"></span>%</strong>{{#if state.priorResult.verdictLabel}} &middot; <span class="{{state.priorResult.verdictClass}}" data-path="state.priorResult.verdictLabel"></span>{{/if}}{{#if state.priorResult.attemptsLabel}} &middot; <span data-path="state.priorResult.attemptsLabel"></span>{{/if}}</div>
+    <div class="prior-actions">
+      {{#if state.canViewResults}}<button type="button" class="btn btn--outline" data-action="view-results">Мой результат</button>{{/if}}
+      {{#if state.canDownloadReport}}<button type="button" class="btn btn--outline" data-action="download-report">Скачать отчёт</button>{{/if}}
+    </div>
+  </div>
+  {{/if}}{{/unless}}
   <div class="start-actions">
     {{#if state.resumeNote}}<div class="start-resume-note">{{state.resumeNote}}</div>{{/if}}
     {{#if state.exhausted}}<div class="start-actions-note">Попытки закончились</div>{{/if}}
     {{#if state.canResume}}<button type="button" class="btn start-btn" data-action="resume">{{state.resumeLabel}}</button>{{/if}}
+    {{#if state.cooldown}}<button type="button" class="btn start-btn" disabled aria-disabled="true">Начать тестирование</button>{{/if}}
     {{#if state.canStart}}<button type="button" class="btn start-btn" data-action="start-test">{{state.startLabel}}</button>{{/if}}
     {{#if state.canRestart}}<button type="button" class="btn btn--outline start-btn" data-action="restart">Начать заново</button>{{/if}}
-    {{#if state.canViewResults}}<button type="button" class="btn btn--outline start-btn" data-action="view-results">Мой результат</button>{{/if}}
+    {{#unless state.priorResult}}{{#if state.canViewResults}}<button type="button" class="btn btn--outline start-btn" data-action="view-results">Мой результат</button>{{/if}}{{/unless}}
     {{#if state.showBack}}<button type="button" class="btn btn--outline" data-action="back">К списку тестов</button>{{/if}}
   </div>
 </div>

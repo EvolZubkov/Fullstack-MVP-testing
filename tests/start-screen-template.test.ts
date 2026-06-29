@@ -86,4 +86,55 @@ describe("start.html — info + state-driven actions", () => {
     expect(root.textContent).toContain("Незавершённый тест — вопрос 2 из 5");
     expect(root.querySelector('[data-action="back"]')).toBeNull();
   });
+
+  describe("PRD-19 Block F — cooldown / prior result on the start screen (FR-20)", () => {
+    it("cooldown (date only, SCORM pre-Initialize): cooldown card + DISABLED start, no actions", () => {
+      const root = render({ cooldown: { availableDateHuman: "30.06.2026", daysUntil: 2 } });
+      // Cooldown card with the next-available date and the derived «через N дн.».
+      expect(root.querySelector(".start-cooldown")).toBeTruthy();
+      expect(root.querySelector('[data-path="state.cooldown.availableDateHuman"]')?.textContent).toBe("30.06.2026");
+      expect(root.textContent).toContain("через");
+      expect(root.querySelector('[data-path="state.cooldown.daysUntil"]')?.textContent).toBe("2");
+      // FR-20: start button rendered but DISABLED (not hidden), and NOT clickable.
+      const disabled = root.querySelector(".start-btn[disabled]");
+      expect(disabled?.textContent).toBe("Начать тестирование");
+      expect(root.querySelector('[data-action="start-test"]')).toBeNull();
+      // No prior result on the pre-Initialize SCORM path.
+      expect(root.querySelector(".start-prior-row")).toBeNull();
+      expect(actions(root)).toEqual([]);
+    });
+
+    it("cooldown + prior result + report (web): prior summary inside the cooldown card", () => {
+      const root = render({
+        cooldown: { availableDateHuman: "30.06.2026", daysUntil: 2 },
+        priorResult: { percent: 65, verdictLabel: "не пройдено", verdictClass: "prior-fail", attemptsLabel: "попытка 2 из 3" },
+        canViewResults: true,
+        canDownloadReport: true,
+      });
+      const cd = root.querySelector(".start-cooldown")!;
+      expect(cd.querySelector('[data-path="state.priorResult.percent"]')?.textContent).toBe("65");
+      expect(cd.querySelector(".prior-fail")?.textContent).toBe("не пройдено");
+      expect(cd.querySelector('[data-path="state.priorResult.attemptsLabel"]')?.textContent).toBe("попытка 2 из 3");
+      // Review + download grouped in the card; start stays disabled (no start-test).
+      expect(actions(root)).toEqual(["view-results", "download-report"]);
+      expect(root.querySelector(".start-btn[disabled]")).toBeTruthy();
+    });
+
+    it("eligible retake (FR-19): separate prior card, start enabled, no duplicate review", () => {
+      const root = render({
+        canStart: true,
+        startLabel: "Начать тестирование заново",
+        canViewResults: true,
+        canDownloadReport: true,
+        priorResult: { percent: 88, verdictLabel: "пройдено", verdictClass: "", attemptsLabel: "" },
+      });
+      // Eligible ⇒ the prior summary is its own card, NOT the cooldown card.
+      expect(root.querySelector(".start-prior")).toBeTruthy();
+      expect(root.querySelector(".start-cooldown")).toBeNull();
+      expect(root.querySelector(".prior-fail")).toBeNull(); // passed ⇒ no fail class
+      // Review + download live in the prior card; the standalone start-actions
+      // «Мой результат» is suppressed (no duplicate) when a prior card is shown.
+      expect(actions(root)).toEqual(["view-results", "download-report", "start-test"]);
+    });
+  });
 });

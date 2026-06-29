@@ -108,4 +108,96 @@ describe("buildStartState", () => {
     expect(buildStartState({ info, maxAttempts: null, completedAttempts: 0, hasCompletedResults: false, canStartNew: true, showBack: true }).state.showBack).toBe(true);
     expect(buildStartState({ info, maxAttempts: null, completedAttempts: 0, hasCompletedResults: false, canStartNew: true }).state.showBack).toBe(false);
   });
+
+  describe("PRD-19 Block F — cooldown / prior result (FR-20)", () => {
+    it("cooldown present: start disabled (via state.cooldown), no resume, review where available", () => {
+      const { state } = buildStartState({
+        info,
+        maxAttempts: 3,
+        completedAttempts: 1,
+        resume: { index: 4, total: 20 }, // even with a resumable session, cooldown blocks it
+        hasCompletedResults: true,
+        canStartNew: true,
+        cooldown: { availableDateHuman: "30.06.2026", daysUntil: 2 },
+      });
+      expect(state.cooldown).toEqual({ availableDateHuman: "30.06.2026", daysUntil: 2 });
+      expect(state.canStart).toBe(false);
+      expect(state.canResume).toBe(false);
+      expect(state.canRestart).toBe(false);
+      // FR-20: reviewing the prior result stays available where the host supplies it.
+      expect(state.canViewResults).toBe(true);
+    });
+
+    it("cooldown without prior data (SCORM pre-Initialize): date only, no review", () => {
+      const { state } = buildStartState({
+        info,
+        maxAttempts: 3,
+        completedAttempts: 0,
+        resume: null,
+        hasCompletedResults: false, // pre-Initialize: suspend_data unavailable
+        canStartNew: false,
+        cooldown: { availableDateHuman: "30.06.2026" },
+      });
+      expect(state.cooldown?.availableDateHuman).toBe("30.06.2026");
+      expect(state.canViewResults).toBe(false);
+      expect(state.priorResult).toBeUndefined();
+      expect(state.canDownloadReport).toBeUndefined();
+    });
+
+    it("prior result (failed): verdict label/class + attempts label, percent rounded", () => {
+      const { state } = buildStartState({
+        info,
+        maxAttempts: 3,
+        completedAttempts: 1,
+        resume: null,
+        hasCompletedResults: true,
+        canStartNew: true,
+        priorResult: { percent: 64.7, passed: false, attemptNumber: 2, maxAttempts: 3 },
+        canDownloadReport: true,
+      });
+      // eligible retake: start enabled AND prior summary shown (FR-19 "повтор: можно")
+      expect(state.canStart).toBe(true);
+      expect(state.priorResult).toEqual({
+        percent: 65,
+        verdictLabel: "не пройдено",
+        verdictClass: "prior-fail",
+        attemptsLabel: "попытка 2 из 3",
+      });
+      expect(state.canDownloadReport).toBe(true);
+    });
+
+    it("prior result (passed): no fail class, no attempts label when counts absent", () => {
+      const { state } = buildStartState({
+        info: { title: "T" },
+        maxAttempts: null,
+        completedAttempts: 1,
+        resume: null,
+        hasCompletedResults: true,
+        canStartNew: true,
+        priorResult: { percent: 88, passed: true },
+      });
+      expect(state.priorResult).toEqual({
+        percent: 88,
+        verdictLabel: "пройдено",
+        verdictClass: "",
+        attemptsLabel: "",
+      });
+      // «Скачать отчёт» absent unless explicitly downloadable.
+      expect(state.canDownloadReport).toBeUndefined();
+    });
+
+    it("prior result (no resolved verdict): empty verdict label/class", () => {
+      const { state } = buildStartState({
+        info: { title: "T" },
+        maxAttempts: null,
+        completedAttempts: 1,
+        resume: null,
+        hasCompletedResults: true,
+        canStartNew: true,
+        priorResult: { percent: 50, passed: null },
+      });
+      expect(state.priorResult?.verdictLabel).toBe("");
+      expect(state.priorResult?.verdictClass).toBe("");
+    });
+  });
 });

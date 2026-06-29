@@ -154,8 +154,9 @@
   }
 
   // PRD-6: the retake gate runs BEFORE SCORM.Initialize for tests with a policy
-  // (NFR-01/02). Blocked => block-wall (no init, no cmi). Allowed => «Начать
-  // курс» shell whose click runs the normal course. Non-gated tests run directly.
+  // (NFR-01/02). Blocked => block-wall (no init, no cmi). Allowed (PRD-19 FR-19)
+  // => runs the normal course directly (no gate-shell). Non-gated tests run
+  // directly too.
   function boot() {
     if (typeof RetakeGate !== "undefined" && RetakeGate.isGated(TEST_DATA)) {
       RetakeGate.run(TEST_DATA, runCourse);
