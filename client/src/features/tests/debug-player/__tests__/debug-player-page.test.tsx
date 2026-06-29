@@ -29,7 +29,7 @@ import DebugPlayerPage from "../debug-player-page";
 function row(over: Partial<ProtocolRow>): ProtocolRow {
   return {
     idx: 1, topicName: "Алгебра", prompt: "2+2?", type: "single", typeLabel: "Один ответ", answerStr: "4",
-    answered: true, verdict: "correct", ratio: 1, ratioPct: 100, score: 1, sMax: 1, priceNote: "цена: точное совпадение · верно → 1",
+    answered: true, status: "answered", verdict: "correct", ratio: 1, ratioPct: 100, score: 1, sMax: 1, priceNote: "цена: точное совпадение · верно → 1",
     earned: 1, points: 1, difficulty: null, levelName: null, contribs: [], ...over,
   };
 }

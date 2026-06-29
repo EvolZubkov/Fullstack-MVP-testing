@@ -232,6 +232,12 @@
       if (att && (!att.flatQuestions || !att.flatQuestions.length)) note = "Для этой попытки детальный состав не сохранён (адаптивный режим).";
     }
     var showDiff = pkg && pkg.mode === "adaptive";
+    // PRD-19 (FR-24): the per-question commit status (отвечен / пропущен / не отвечен)
+    // for the «Протокол» — read from the LIVE runtime status map. It is distinct from
+    // raw answer presence: a skipped question may carry an editable draft, so `answered`
+    // (draft present) can be true while the status is still 'skipped'. Past attempts
+    // (suspend_data) carry no status map → derive from answer presence.
+    var liveStatuses = (mode === "live" && pkg && pkg.state && pkg.state.questionStatuses) || null;
     var out = rows.map(function (row, i) {
       var q = row.q, ans = row.answer;
       var pr = pkg ? priceFor(pkg, q, ans) : null;
@@ -239,11 +245,12 @@
       var answered = !(ans == null || (Array.isArray(ans) && ans.length === 0) ||
         (q.type === "matching" && (!ans || !Object.keys(ans).length)));
       var verdict = !answered ? "none" : ratio >= 1 ? "correct" : ratio > 0 ? "partial" : "wrong";
+      var status = (liveStatuses && liveStatuses[q.id]) ? liveStatuses[q.id] : (answered ? "answered" : "unanswered");
       var points = q.points || 1;
       var earned = pr ? points * pr.ratio : 0;
       return {
         idx: i + 1, topicName: row.topicName || "", prompt: q.prompt || "", type: q.type, typeLabel: typeLabel(q.type),
-        answerStr: humanAnswer(q, ans), answered: answered, verdict: verdict,
+        answerStr: humanAnswer(q, ans), answered: answered, status: status, verdict: verdict,
         ratio: Math.round(ratio * 100) / 100, ratioPct: Math.round(ratio * 100),
         score: pr ? pr.score : null, sMax: pr ? pr.sMax : null,
         priceNote: priceNote(pr),

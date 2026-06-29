@@ -109,6 +109,10 @@
         : r.verdict === "correct" ? '<span class="tag ok">верно</span>'
         : r.verdict === "partial" ? '<span class="tag part">частично ' + r.ratioPct + "%</span>"
         : '<span class="tag no">неверно</span>';
+      // PRD-19 (FR-24): skip/return commit status, distinct from the verdict.
+      var slabel = r.status === "skipped" ? '<span class="tag part">пропущен</span>'
+        : r.status === "unanswered" ? '<span class="tag">не отвечен</span>'
+        : '<span class="tag ok">отвечен</span>';
       var balStr = " · балл " + fmtNum(r.earned) + "/" + fmtNum(r.points);
       var priceTag = r.priceNote
         ? '<span class="tag price">' + esc(r.priceNote) + balStr + "</span>"
@@ -122,7 +126,7 @@
       }).join(", ");
       return '<div class="pcard">' +
         '<div class="pcard-head"><span class="pcard-idx">#' + r.idx + "</span>" +
-        '<span class="tag">' + esc(r.typeLabel) + "</span>" + vlabel + priceTag + diffTag + lvlTag + "</div>" +
+        '<span class="tag">' + esc(r.typeLabel) + "</span>" + slabel + vlabel + priceTag + diffTag + lvlTag + "</div>" +
         '<div class="pcard-q" title="' + esc(r.prompt) + '">' + esc(trunc(r.prompt || "(без текста)", 160)) +
         (r.topicName ? ' <span class="muted">· ' + esc(r.topicName) + "</span>" : "") + "</div>" +
         '<div class="pcard-row"><b>Ответ:</b> ' + esc(r.answerStr) + "</div>" +
@@ -148,10 +152,10 @@
   function exportCsv() {
     if (!protoRows.length) return;
     function csv(s) { s = String(s == null ? "" : s); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
-    var lines = [["#", "Тема", "Вопрос", "Тип", "Ответ", "Верность", "Ratio", "score", "sMax", "Балл", "ВозможныйБалл", "Сложность", "ВкладыВШкалы"].join(";")];
+    var lines = [["#", "Тема", "Вопрос", "Тип", "Ответ", "Статус", "Верность", "Ratio", "score", "sMax", "Балл", "ВозможныйБалл", "Сложность", "ВкладыВШкалы"].join(";")];
     protoRows.forEach(function (r, i) {
       var contribsPlain = r.contribs.map(function (c) { return c.scaleKey + " " + (c.delta >= 0 ? "+" : "") + fmtNum(c.delta); }).join(" | ");
-      lines.push([i + 1, csv(r.topicName), csv(r.prompt), r.type, csv(r.answerStr), r.verdict, r.ratio,
+      lines.push([i + 1, csv(r.topicName), csv(r.prompt), r.type, csv(r.answerStr), r.status, r.verdict, r.ratio,
         r.score == null ? "" : r.score, r.sMax == null ? "" : r.sMax, r.earned, r.points,
         r.difficulty == null ? "" : r.difficulty, csv(contribsPlain)].join(";"));
     });

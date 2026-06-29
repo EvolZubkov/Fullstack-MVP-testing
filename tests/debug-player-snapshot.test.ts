@@ -18,7 +18,7 @@ import {
 function row(over: Partial<ProtocolRow>): ProtocolRow {
   return {
     idx: 1, topicName: "", prompt: "", type: "single", typeLabel: "Один ответ", answerStr: "",
-    answered: false, verdict: "none", ratio: 0, ratioPct: 0, score: null, sMax: null, priceNote: null,
+    answered: false, status: "unanswered", verdict: "none", ratio: 0, ratioPct: 0, score: null, sMax: null, priceNote: null,
     earned: 0, points: 1, difficulty: null, levelName: null, contribs: [], ...over,
   };
 }
@@ -124,13 +124,20 @@ describe("buildSnapshot", () => {
 describe("protocolToCsv", () => {
   it("writes a header and one line per row, escaping separators", () => {
     const rows = [
-      row({ idx: 1, topicName: "Тема; A", prompt: "2+2?", type: "single", answerStr: "4", verdict: "correct", ratio: 1, score: 1, sMax: 1, earned: 1, points: 1, contribs: [{ scaleKey: "S", delta: 2 }] }),
+      row({ idx: 1, topicName: "Тема; A", prompt: "2+2?", type: "single", answerStr: "4", status: "answered", verdict: "correct", ratio: 1, score: 1, sMax: 1, earned: 1, points: 1, contribs: [{ scaleKey: "S", delta: 2 }] }),
     ];
     const csv = protocolToCsv(rows);
     const lines = csv.split("\n");
     expect(lines[0]).toContain("Вопрос");
     expect(lines[1]).toContain('"Тема; A"'); // quoted because it has a separator
     expect(lines[1]).toContain("S +2");
+  });
+
+  it("includes the PRD-19 skip/return status column (FR-24)", () => {
+    const csv = protocolToCsv([row({ idx: 1, status: "skipped" })]);
+    const lines = csv.split("\n");
+    expect(lines[0]).toContain("Статус");
+    expect(lines[1].split(";")).toContain("skipped");
   });
 
   it("leaves price columns blank when the question has no score", () => {

@@ -27,6 +27,12 @@ export interface ProtocolRow {
   typeLabel: string;
   answerStr: string;
   answered: boolean;
+  /**
+   * PRD-19 (FR-24): the question's navigation commit status — отвечен / пропущен /
+   * не отвечен. Distinct from `answered` (raw answer presence): a skipped question
+   * may carry an editable draft, so the protocol surfaces the skip/return state.
+   */
+  status: "unanswered" | "answered" | "skipped";
   verdict: "none" | "correct" | "partial" | "wrong";
   ratio: number;
   ratioPct: number;
@@ -351,12 +357,12 @@ export function protocolToCsv(rows: ProtocolRow[]): string {
     return /[";\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
   };
   const lines = [
-    ["#", "Тема", "Вопрос", "Тип", "Ответ", "Верность", "Ratio", "score", "sMax", "Балл", "ВозможныйБалл", "Сложность", "ВкладыВШкалы"].join(";"),
+    ["#", "Тема", "Вопрос", "Тип", "Ответ", "Статус", "Верность", "Ratio", "score", "sMax", "Балл", "ВозможныйБалл", "Сложность", "ВкладыВШкалы"].join(";"),
   ];
   rows.forEach((r, i) => {
     const contribs = r.contribs.map((c) => `${c.scaleKey} ${c.delta >= 0 ? "+" : ""}${c.delta}`).join(" | ");
     lines.push([
-      i + 1, cell(r.topicName), cell(r.prompt), r.type, cell(r.answerStr), r.verdict, r.ratio,
+      i + 1, cell(r.topicName), cell(r.prompt), r.type, cell(r.answerStr), r.status, r.verdict, r.ratio,
       r.score == null ? "" : r.score, r.sMax == null ? "" : r.sMax, r.earned, r.points,
       r.difficulty == null ? "" : r.difficulty, cell(contribs),
     ].join(";"));

@@ -482,6 +482,15 @@ function verdictTag(r: ProtocolRow) {
   return <Tag size="s" tone="error">неверно</Tag>;
 }
 
+// PRD-19 (FR-24): the per-question skip/return commit status, surfaced so the
+// methodologist sees пропущен vs отвечен distinctly from the verdict (a skipped
+// question may still carry a draft answer).
+function statusTag(r: ProtocolRow) {
+  if (r.status === "answered") return <Tag size="s" tone="success" variant="soft">отвечен</Tag>;
+  if (r.status === "skipped") return <Tag size="s" tone="warning" variant="soft">пропущен</Tag>;
+  return <Tag size="s" variant="soft">не отвечен</Tag>;
+}
+
 function ScorePanel({ snap }: { snap: InspectorSnapshot }) {
   const sc = snap.score;
   if (!sc.available) return <PanelEmpty text="Запустите пакет и начните отвечать — здесь появится агрегат результата." />;
@@ -554,6 +563,7 @@ function ProtocolPanel({ snap }: { snap: InspectorSnapshot }) {
         </Stack>
       ),
     },
+    { key: "status", header: "Статус", width: "104px", render: statusTag },
     { key: "verdict", header: "Вердикт", width: "118px", render: verdictTag },
     { key: "score", header: "Балл", width: "78px", render: (r) => `${r.earned} / ${r.points}` },
   ];

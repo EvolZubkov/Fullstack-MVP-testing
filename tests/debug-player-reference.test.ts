@@ -12,9 +12,12 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 
+interface ProtocolStatusRow { idx: number; status: string; answered: boolean }
 interface RefApi {
   applyReference(win: { document: Document; state: unknown } | null): void;
   clearReference(win: { document: Document } | null): void;
+  readPkg(win: unknown): unknown;
+  buildProtocolRows(pkg: unknown, cmi: Record<string, string>, mode: string): { rows: ProtocolStatusRow[] };
 }
 
 beforeAll(() => {
@@ -110,5 +113,41 @@ describe("Эталон overlay — applyReference", () => {
     expect(marks()).toHaveLength(1);
     ref().clearReference(win);
     expect(marks()).toHaveLength(0);
+  });
+});
+
+describe("Протокол — skip/return commit status (PRD-19 FR-24)", () => {
+  // The live runtime status map drives the «Статус» column. It is distinct from
+  // raw answer presence: q2 carries a draft (answers.q2) yet is 'skipped'.
+  const win = {
+    TEST_DATA: { mode: "standard" },
+    state: {
+      phase: "question",
+      currentIndex: 3,
+      flatQuestions: [
+        { question: { id: "q1", type: "single", prompt: "A" }, topicName: "T" },
+        { question: { id: "q2", type: "single", prompt: "B" }, topicName: "T" },
+        { question: { id: "q3", type: "single", prompt: "C" }, topicName: "T" },
+      ],
+      answers: { q1: 0, q2: 1 },
+      questionStatuses: { q1: "answered", q2: "skipped", q3: "unanswered" },
+    },
+  };
+
+  it("reads each row's status from state.questionStatuses (skipped distinct from a draft)", () => {
+    const pkg = ref().readPkg(win);
+    const { rows } = ref().buildProtocolRows(pkg, {}, "live");
+    expect(rows.map((r) => r.status)).toEqual(["answered", "skipped", "unanswered"]);
+    // q2 has a draft answer (answered=true) but its commit status is 'skipped'.
+    expect(rows[1].answered).toBe(true);
+    expect(rows[1].status).toBe("skipped");
+  });
+
+  it("derives status from answer presence when no status map exists (past attempts / legacy)", () => {
+    const legacy = { TEST_DATA: { mode: "standard" }, state: { ...win.state, questionStatuses: undefined } };
+    const pkg = ref().readPkg(legacy);
+    const { rows } = ref().buildProtocolRows(pkg, {}, "live");
+    // q1/q2 carry an answer → 'answered'; q3 has none → 'unanswered'.
+    expect(rows.map((r) => r.status)).toEqual(["answered", "answered", "unanswered"]);
   });
 });
