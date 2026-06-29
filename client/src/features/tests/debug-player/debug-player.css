@@ -113,8 +113,28 @@
 .dbg__frame-screen { flex: 1; min-height: 0; display: flex; }
 .dbg__iframe { flex: 1; width: 100%; border: 0; background: #fff; }
 
-/* Build / error / access overlays centred on the stage. */
+/* Access (forbidden) screen — standalone, no player chrome. */
 .dbg__center { display: grid; place-items: center; height: 100vh; padding: var(--ou-space-6); }
+
+/* Build / error overlays OVER the stage canvas — the toolbar, status bar and
+   inspector stay mounted (wireframe: «Индетерминированный прогресс над стейджем,
+   действия недоступны»). The opaque page background hides the frame underneath. */
+.dbg__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ou-space-3);
+  padding: var(--ou-space-6);
+  text-align: center;
+  background: var(--ou-bg-page);
+}
+.dbg__overlay .ou-progress { width: 100%; max-width: 280px; }
+.dbg__overlay-text { font: var(--ou-text-body-m); color: var(--ou-fg-muted); }
+.dbg__overlay .ou-banner { max-width: 480px; text-align: start; }
 
 /* ── Inspector: collapsible sidebar ── */
 .dbg__inspector {
@@ -176,9 +196,16 @@
 .dbg__draw-section { padding-bottom: var(--ou-space-3); margin-bottom: var(--ou-space-3); border-bottom: 1px solid var(--ou-border-soft); }
 .dbg__draw-section:last-child { padding-bottom: 0; margin-bottom: 0; border-bottom: 0; }
 
+/* Выдача — one question row in the expandable list: prompt left, delivery status right. */
+.dbg__q-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--ou-space-3); padding: var(--ou-space-1) 0; }
+.dbg__q-row > .dbg__q-label { flex: 1 1 auto; }
+.dbg__q-row > :last-child { flex: 0 0 auto; }
+
 .dbg__contrib { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
 .dbg__price { font: var(--ou-text-caption); color: var(--ou-accent-default); }
-.dbg__qico { color: var(--ou-fg-muted); vertical-align: middle; margin-right: var(--ou-space-1); }
+.dbg__qico { flex: 0 0 auto; margin-top: 3px; color: var(--ou-fg-muted); }
+.dbg__q-label { display: flex; align-items: flex-start; gap: var(--ou-space-1); font: var(--ou-text-body-s); min-width: 0; }
+.dbg__q-topic { color: var(--ou-fg-muted); }
 .dbg__sum {
   display: flex;
   align-items: center;
@@ -192,17 +219,52 @@
 .dbg__path { font-family: var(--ou-font-mono, ui-monospace, monospace); word-break: break-all; }
 .dbg__panel-empty { padding: var(--ou-space-6); text-align: center; }
 
-/* LMS — raw RTE traffic disclosure under the structured table. */
-.dbg__rawlog-summary { font: var(--ou-text-body-s); color: var(--ou-fg-muted); cursor: pointer; }
-.dbg__rawlog {
+/* LMS — a long value (suspend_data) toggles a full-width expanded row (N4): the
+   «N КБ» button stays in the row, the formatted payload expands below on full width. */
+.dbg__disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ou-space-1);
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: var(--ou-text-body-s);
+  color: var(--ou-fg-muted);
+}
+.dbg__disclosure-chevron { flex: 0 0 auto; transition: transform var(--ou-motion-fast) ease; }
+.dbg__disclosure-chevron.is-open { transform: rotate(90deg); }
+.dbg__payload-body {
   font: var(--ou-text-body-xs, var(--ou-text-caption));
   font-family: var(--ou-font-mono, ui-monospace, monospace);
   color: var(--ou-fg-muted);
   white-space: pre-wrap;
-  margin-top: var(--ou-space-2);
-  max-height: 220px;
+  word-break: break-all;
+  padding: var(--ou-space-2) var(--ou-space-3);
+  max-height: 280px;
   overflow: auto;
 }
+
+/* LMS — raw RTE traffic disclosure: a scannable list, one call per line. */
+.dbg__rawlog {
+  margin-top: var(--ou-space-2);
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--ou-border-soft);
+  border-radius: var(--ou-radius-s);
+}
+.dbg__rte-line {
+  font: var(--ou-text-body-xs, var(--ou-text-caption));
+  font-family: var(--ou-font-mono, ui-monospace, monospace);
+  color: var(--ou-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px var(--ou-space-2);
+  border-bottom: 1px solid var(--ou-border-soft);
+}
+.dbg__rte-line:last-child { border-bottom: 0; }
+.dbg__rte-line:hover { background: var(--ou-bg-hover); color: var(--ou-fg-default); }
 
 /* LMS narrative — kind tints the row's leading edge. */
 .dbg__lms {

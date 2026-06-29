@@ -49,8 +49,11 @@ export function useDebugSession(testId: string) {
     setState({ status: "loading" });
     (async () => {
       try {
-        await loadScript(`/api/tests/${testId}/debug/shim.js`);
-        await loadScript(`/api/tests/${testId}/debug/inspector-compute.js`);
+        // Inject the RTE shim + inspector compute ONCE per window. On «Пересобрать»
+        // (buildKey bump) they already exist — re-injecting would duplicate the
+        // <script> tags and reset window.__scorm, dropping the token-keyed store.
+        if (!window.__scorm) await loadScript(`/api/tests/${testId}/debug/shim.js`);
+        if (!window.TBInspector) await loadScript(`/api/tests/${testId}/debug/inspector-compute.js`);
         const res = await apiRequest("POST", `/api/tests/${testId}/debug/session`);
         const data = (await res.json()) as {
           token: string; launch: string; playUrl: string; title?: string; template?: string;

@@ -66,6 +66,8 @@ export interface AdaptiveBar {
     levelName: string; minDifficulty: number; maxDifficulty: number;
   } | null;
   confirmed?: { kind: "ok" | "no"; topicName: string; levelName?: string; correctCount?: number; total?: number }[];
+  /** Per-topic confirmed level + status — status-bar adaptive lane + «Результаты» adaptive table. */
+  topicLevels?: { topicName: string; levelName: string | null; status: "confirmed" | "running" | "failed" | "pending" }[];
 }
 
 /** The methodologist's at-a-glance verdict shown in the status panel over the stage. */
@@ -76,6 +78,8 @@ export interface StatusVM {
   /** Published score, present only once the module has reported it to the LMS. */
   score: { raw: string; max: string; scaledPct: number | null } | null;
   verdict: "passed" | "failed" | "unknown" | null;
+  /** True once the module reported completion to the LMS — only then is pass/fail meaningful (N2). */
+  completed: boolean;
   /** Non-empty when a scale/indicator formula errored — the only status-level alarm. */
   alarm: string | null;
 }
@@ -84,7 +88,7 @@ export interface StatusVM {
 export interface TBInspectorApi {
   readPkg(win: Window | null): TBPkg | null;
   parseInteractions(cmi: Record<string, string>): unknown[];
-  buildProtocolRows(pkg: TBPkg | null, cmi: Record<string, string>, mode: string): { rows: ProtocolRow[]; note: string };
+  buildProtocolRows(pkg: TBPkg | null, cmi: Record<string, string>, mode: string): { rows: ProtocolRow[]; note: string; total?: number };
   buildScaleRows(pkg: TBPkg | null, ints: unknown[]): ScaleRow[];
   buildResultRows(pkg: TBPkg | null, ints: unknown[]): ResultRow[];
   buildAdaptiveBar(pkg: TBPkg | null): AdaptiveBar;
@@ -94,6 +98,8 @@ export interface TBInspectorApi {
   applyReference(iframeWin: Window | null): void;
   /** Remove all «Эталон» markers from the iframe. */
   clearReference(iframeWin: Window | null): void;
+  /** Disable the «Завершить тест» button after it's clicked (debug — no re-submit). */
+  guardFinishButton(iframeWin: Window | null): void;
   humanizeTraffic(traffic: unknown[]): LmsEvent[];
   buildLmsTable(traffic: unknown[]): LmsRow[];
   buildLmsRawLog(traffic: unknown[]): string;
@@ -119,6 +125,8 @@ export type WatchSource = "state" | "suspend" | "cmi";
 export interface ScoreVM {
   available: boolean;
   adaptive: boolean;
+  /** Sectioned flow (linear_by_topics / router) — drives the status-bar «разделы» lane. */
+  sectioned?: boolean;
   bar?: AdaptiveBar;
   earnedPoints?: number;
   possiblePoints?: number;
@@ -127,7 +135,7 @@ export interface ScoreVM {
   percent?: number;
   passed?: boolean;
   rule?: { type: string; value: number } | null;
-  sections?: { topicName: string; earnedPoints: number; possiblePoints: number; percent: number; passed: boolean | null; correct: number; total: number }[];
+  sections?: { topicName: string; earnedPoints: number; possiblePoints: number; percent: number; passed: boolean | null; correct: number; total: number; completed: boolean }[];
 }
 
 export interface DrawSectionVM {
@@ -144,6 +152,32 @@ export interface DrawSectionVM {
   /** Composition of the drawn set by question type. */
   byType: { type: string; typeLabel: string; count: number }[];
   quotas: { tag: string; planned: number; actual: number; mode: string; short: boolean }[] | null;
+  /** The drawn questions with their delivery status (N3 — «выдан»/«не выдан»). */
+  questions: { id: string; idx: number; prompt: string; type: string; typeLabel: string; topicName: string; delivered: boolean }[];
+  /** How many of this section's questions have been delivered so far. */
+  delivered: number;
+}
+
+/** One step of an adaptive topic's level path (Шаг|Уровень|Ответ|Переход). */
+export interface AdaptivePathStep {
+  step: number;
+  levelName: string;
+  /** «верно» | «неверно» | «—» (the current unanswered question). */
+  answer: string;
+  /** «↑ повышение» | «↓ понижение» | «= закрепление» | «подтверждён: N ✓» | «идёт». */
+  transition: string;
+  current: boolean;
+}
+
+/** «Выдача» (adaptive) — one topic's level path + its confirmed/current level. */
+export interface AdaptivePathTopic {
+  topicId: string;
+  topicName: string;
+  status: "confirmed" | "running" | "failed" | "pending";
+  confirmedLevelName: string | null;
+  currentLevelName: string | null;
+  currentArrow: string;
+  steps: AdaptivePathStep[];
 }
 
 /** «Выдача» — what THIS run delivered per section (variant / quota / draw). */
@@ -151,13 +185,18 @@ export interface DrawVM {
   available: boolean;
   adaptive: boolean;
   bar?: AdaptiveBar;
+  /** Adaptive level path per topic — the «Выдача» adaptive table source. */
+  path?: AdaptivePathTopic[];
+  /** Flat flow (linear_flat) → one combined «Вопросы» list; sectioned → per-topic. */
+  flat?: boolean;
   sections?: DrawSectionVM[];
 }
 
 export interface InspectorSnapshot {
   hasData: boolean;
   score: ScoreVM;
-  protocol: { rows: ProtocolRow[]; note: string };
+  /** `total` = full drawn count for the progress denominator; `rows` are delivered-so-far (N1). */
+  protocol: { rows: ProtocolRow[]; note: string; total?: number };
   draw: DrawVM;
   scales: ScaleRow[];
   results: ResultRow[];
@@ -174,12 +213,41 @@ function num(s: string | undefined): boolean {
   return s != null && s !== "";
 }
 
+/**
+ * Expand a flat dotted-key record (`cmi.score.scaled`, `cmi.interactions.0.id`, …)
+ * into a nested object so the «Состояние» tree renders the `cmi` source the SAME
+ * hierarchical way as `state`/`suspend_data` — every element is a uniform tree node.
+ */
+function nestDotted(flat: Record<string, string>): Record<string, unknown> {
+  const root: Record<string, unknown> = {};
+  for (const key of Object.keys(flat)) {
+    const parts = key.split(".");
+    let cur = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const p = parts[i];
+      // A leaf already sitting where a branch is needed yields to the branch
+      // (SCORM never sets both a node and its children, so this is safe).
+      if (typeof cur[p] !== "object" || cur[p] === null) cur[p] = {};
+      cur = cur[p] as Record<string, unknown>;
+    }
+    cur[parts[parts.length - 1]] = flat[key];
+  }
+  return root;
+}
+
 /** Resolve the watch object for the chosen source (mirrors the CLI inspector). */
 function watchObject(pkg: TBPkg | null, cmi: Record<string, string>, src: WatchSource): unknown {
   if (src === "suspend") {
     try { return JSON.parse(cmi["cmi.suspend_data"] || "null"); } catch { return null; }
   }
-  if (src === "cmi") return Object.keys(cmi).length ? cmi : null;
+  // The cmi store is a flat dotted-key map. Nest it so its tree matches the others,
+  // dropping the redundant top-level «cmi» (we're already inside the cmi source).
+  if (src === "cmi") {
+    if (!Object.keys(cmi).length) return null;
+    const stripped: Record<string, string> = {};
+    for (const k of Object.keys(cmi)) stripped[k.replace(/^cmi\./, "")] = cmi[k];
+    return nestDotted(stripped);
+  }
   return pkg ? pkg.state : null;
 }
 
@@ -206,7 +274,7 @@ export function buildSnapshot(
     scales: [], results: [], lms: [], lmsRows: [], lmsRawLog: "—",
     watch: { rows: [], json: "—", count: 0, tree: [] },
     adaptive: { visible: false },
-    status: { drawn: 0, answered: 0, percentDone: 0, score: null, verdict: null, alarm: null },
+    status: { drawn: 0, answered: 0, percentDone: 0, score: null, verdict: null, completed: false, alarm: null },
     attempts: [{ value: "live", label: "Текущая (live)" }],
   };
   if (!TB) return empty;
@@ -229,7 +297,7 @@ export function buildSnapshot(
   const watchTree = wObj ? TB.buildStateTree(wObj) : [];
   const watchJson = wObj ? TB.safeJson(wObj) : "—";
 
-  const drawn = protocol.rows.length;
+  const drawn = protocol.total ?? protocol.rows.length;
   const answered = protocol.rows.filter((r) => r.answered).length;
   const scaled = cmi["cmi.score.scaled"];
   const score = num(cmi["cmi.score.raw"]) || num(scaled)
@@ -237,6 +305,20 @@ export function buildSnapshot(
     : null;
   const ss = cmi["cmi.success_status"];
   const verdict = ss === "passed" || ss === "failed" || ss === "unknown" ? ss : null;
+  // The run is "done" (verdict meaningful) once it reports completion to the LMS OR the
+  // learner reached the end / results screen — standard: currentIndex past the last
+  // question; adaptive: adaptiveState.isFinished. (cmi.completion_status alone is set only
+  // on the final close, so the results screen would otherwise read «в процессе».)
+  const pstate = (pkg && pkg.state) as Record<string, unknown> | null;
+  let reachedEnd = false;
+  if (pstate) {
+    const as = pstate.adaptiveState as { isFinished?: boolean } | undefined;
+    if (as && typeof as === "object") reachedEnd = !!as.isFinished;
+    else if (typeof pstate.currentIndex === "number" && Array.isArray(pstate.flatQuestions)) {
+      reachedEnd = pstate.flatQuestions.length > 0 && (pstate.currentIndex as number) >= pstate.flatQuestions.length;
+    }
+  }
+  const completed = cmi["cmi.completion_status"] === "completed" || reachedEnd;
   const errs = ((pkg && pkg.scaleErrors) || []).length + ((pkg && pkg.resultErrors) || []).length;
   const alarm = pkg && pkg.engineError ? pkg.engineError : errs ? "Ошибка расчёта показателей или шкал" : null;
 
@@ -257,7 +339,7 @@ export function buildSnapshot(
     lmsRawLog,
     watch: { rows: watchRows, json: watchJson, count: watchRows.length, tree: watchTree },
     adaptive,
-    status: { drawn, answered, percentDone: drawn ? Math.round((answered / drawn) * 100) : 0, score, verdict, alarm },
+    status: { drawn, answered, percentDone: drawn ? Math.round((answered / drawn) * 100) : 0, score, verdict, completed, alarm },
     attempts,
   };
 }

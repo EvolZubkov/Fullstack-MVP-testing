@@ -189,7 +189,12 @@
       });
       Object.keys(byId).forEach(function (qid) { if (!seen[qid]) rows.push(byId[qid]); });
     } else {
-      (st.flatQuestions || []).forEach(function (fq) {
+      // Progressive: only questions the learner has actually passed (index <
+      // currentIndex). Future questions aren't delivered yet, and their pre-filled
+      // ranking/matching default order must NOT show as an answered result.
+      var limit = (typeof st.currentIndex === "number") ? st.currentIndex : (st.flatQuestions || []).length;
+      (st.flatQuestions || []).forEach(function (fq, i) {
+        if (i >= limit) return;
         rows.push({ q: fq.question, topicName: fq.topicName, answer: st.answers[fq.question.id], levelName: null });
       });
     }
@@ -210,15 +215,20 @@
   // correctness, price PRD-10, scale contributions PRD-5). HTML/JSX is the host's. ──
   function buildProtocolRows(pkg, cmi, mode) {
     mode = mode || "live";
-    var rows, note = "";
+    var rows, note = "", total = 0;
     if (mode === "live" && (!pkg || !pkg.started)) {
-      return { rows: [], note: "Тест ещё не начат — протокол появится после старта." };
+      return { rows: [], note: "Тест ещё не начат — протокол появится после старта.", total: 0 };
     }
     if (mode === "live") {
       rows = pkg ? buildLiveRows(pkg) : [];
+      var pst = pkg && pkg.state;
+      // Total drawn for the progress denominator: flat = the full draw; adaptive =
+      // delivered so far (the level path is dynamic, no fixed total).
+      total = (pst && pkg.mode !== "adaptive" && pst.flatQuestions) ? pst.flatQuestions.length : rows.length;
     } else {
       var att = getSuspendAttempts(cmi)[parseInt(mode.slice(4), 10)];
       rows = att ? buildAttemptRows(att) : [];
+      total = rows.length;
       if (att && (!att.flatQuestions || !att.flatQuestions.length)) note = "Для этой попытки детальный состав не сохранён (адаптивный режим).";
     }
     var showDiff = pkg && pkg.mode === "adaptive";
@@ -243,7 +253,7 @@
         contribs: pkg ? contributionsFor(pkg, q, ans) : [],
       };
     });
-    return { rows: out, note: note };
+    return { rows: out, note: note, total: total };
   }
 
   // ── Шкалы / Показатели: structured rows (live value + what was published). ──
@@ -512,7 +522,70 @@
       });
       if (t.status === "completed" && t.finalLevelIndex === null) confirmed.push({ kind: "no", topicName: t.topicName });
     });
-    return { visible: true, finished: finished, now: now, confirmed: confirmed };
+    // Per-topic CONFIRMED level + status, in topic order — the source for the
+    // status-bar adaptive lane and the «Результаты» adaptive table (one row per
+    // topic, current topic as the «идёт» tail). status: confirmed | running |
+    // failed | pending.
+    var topicLevels = topics.map(function (t, ti) {
+      var achieved = (t.finalLevelIndex !== null && t.levelsState[t.finalLevelIndex]) ? t.levelsState[t.finalLevelIndex] : null;
+      var isCurrent = !finished && ti === as.currentTopicIndex && t.status !== "completed";
+      var curLvl = t.levelsState[t.currentLevelIndex];
+      var status = t.status === "completed" ? (achieved ? "confirmed" : "failed") : (isCurrent ? "running" : "pending");
+      return {
+        topicName: t.topicName,
+        levelName: achieved ? achieved.levelName : (isCurrent && curLvl ? curLvl.levelName : null),
+        status: status,
+      };
+    });
+    return { visible: true, finished: finished, now: now, confirmed: confirmed, topicLevels: topicLevels };
+  }
+
+  // Display label for a step's transition (PRD-18 «Выдача» adaptive table). The
+  // direction is the REAL one the engine recorded in stepLog (Вариант B), not a
+  // heuristic: up/down level move, level confirmed (terminal), or staying in level.
+  function adaptiveTransitionLabel(s) {
+    if (s.transitionType === "up") return "↑ повышение";
+    if (s.transitionType === "down") return "↓ понижение";
+    if (s.transitionType === "complete") {
+      return s.achievedLevelName ? ("подтверждён: " + s.achievedLevelName + " ✓") : "не подтверждён";
+    }
+    return "= закрепление";
+  }
+
+  // ── Адаптив «Выдача»: per-topic level path (Шаг|Уровень|Ответ|Переход) from the
+  // engine's stepLog, with the current on-screen question appended as an «идёт»
+  // tail row. Topics not yet reached are skipped. ──
+  function buildAdaptivePath(pkg) {
+    var st = pkg && pkg.state, as = st && st.adaptiveState;
+    if (!pkg || pkg.mode !== "adaptive" || !as) return [];
+    var log = as.stepLog || [], topics = as.topics || [], finished = !!as.isFinished;
+    var byTopic = {};
+    log.forEach(function (s) { (byTopic[s.topicId] = byTopic[s.topicId] || []).push(s); });
+    var out = [];
+    topics.forEach(function (t, ti) {
+      var answered = byTopic[t.topicId] || [];
+      var steps = answered.map(function (s, i) {
+        return { step: i + 1, levelName: s.levelName, answer: s.isCorrect ? "верно" : "неверно",
+          transition: adaptiveTransitionLabel(s), current: false };
+      });
+      var isCurrent = !finished && ti === as.currentTopicIndex && t.status !== "completed";
+      var curLvl = t.levelsState[t.currentLevelIndex];
+      if (isCurrent && curLvl) {
+        steps.push({ step: steps.length + 1, levelName: curLvl.levelName, answer: "—", transition: "идёт", current: true });
+      }
+      if (!steps.length) return; // topic not reached yet
+      var achieved = (t.finalLevelIndex !== null && t.levelsState[t.finalLevelIndex]) ? t.levelsState[t.finalLevelIndex] : null;
+      var status = t.status === "completed" ? (achieved ? "confirmed" : "failed") : (isCurrent ? "running" : "pending");
+      var last = answered[answered.length - 1], arrow = "";
+      if (isCurrent && last) arrow = last.transitionType === "up" ? "↑" : last.transitionType === "down" ? "↓" : "";
+      out.push({
+        topicId: t.topicId, topicName: t.topicName, status: status,
+        confirmedLevelName: achieved ? achieved.levelName : null,
+        currentLevelName: isCurrent && curLvl ? curLvl.levelName : null,
+        currentArrow: arrow, steps: steps,
+      });
+    });
+    return out;
   }
 
   function round2(n) { return (typeof n === "number" && isFinite(n)) ? Math.round(n * 100) / 100 : 0; }
@@ -551,8 +624,21 @@
     var r = null;
     try { if (typeof pkg.w.calculateResults === "function") r = pkg.w.calculateResults(); } catch (e) {}
     if (!r) return { available: false, adaptive: false };
+    // Sectioned flow (linear_by_topics / router_by_topics) drives the status-bar
+    // «Прогресс · разделы» lane; flat flow shows «вопрос i из N». Default flat.
+    var flowMode = (pkg.TEST_DATA && pkg.TEST_DATA.flowPolicy && pkg.TEST_DATA.flowPolicy.mode) || "linear_flat";
+    // Per-topic completion: a topic is done once ALL its drawn questions have been
+    // passed (flat index < currentIndex) — only then is its pass/fail meaningful (N9).
+    var bst = pkg.state || {};
+    var bIdx = (typeof bst.currentIndex === "number") ? bst.currentIndex : (bst.flatQuestions || []).length;
+    var topicDone = {};
+    (bst.flatQuestions || []).forEach(function (fq, i) {
+      if (topicDone[fq.topicId] === undefined) topicDone[fq.topicId] = true;
+      if (i >= bIdx) topicDone[fq.topicId] = false;
+    });
     return {
       available: true, adaptive: false,
+      sectioned: flowMode !== "linear_flat",
       earnedPoints: round2(r.earnedPoints), possiblePoints: round2(r.possiblePoints),
       correct: r.correct, totalQuestions: r.totalQuestions,
       percent: Math.round(r.percent || 0), passed: !!r.passed,
@@ -561,6 +647,7 @@
         return {
           topicName: td.topicName, earnedPoints: round2(td.earnedPoints), possiblePoints: round2(td.possiblePoints),
           percent: Math.round(td.percent || 0), passed: td.passed, correct: td.correct, total: td.total,
+          completed: !!topicDone[td.topicId],
         };
       }),
     };
@@ -571,23 +658,36 @@
   // plan-vs-actual (PRD-11), or a plain/whole-topic draw. Adaptive → level path. ──
   function buildDraw(pkg) {
     if (!pkg || !pkg.state) return { available: false, adaptive: false };
-    if (pkg.mode === "adaptive") return { available: true, adaptive: true, bar: buildAdaptiveBar(pkg) };
+    if (pkg.mode === "adaptive") return { available: true, adaptive: true, bar: buildAdaptiveBar(pkg), path: buildAdaptivePath(pkg) };
     var variant = pkg.state.variant;
     if (!variant || !variant.sections) return { available: false, adaptive: false };
     var secDefs = (pkg.TEST_DATA && pkg.TEST_DATA.sections) || [];
+    var st = pkg.state;
+    // Delivery progress (N3): a drawn question is "delivered" once the learner has
+    // passed its flat position (index < currentIndex). flatIndex keeps delivery order.
+    var currentIndex = (typeof st.currentIndex === "number") ? st.currentIndex : (st.flatQuestions || []).length;
+    var flatIndex = {};
+    (st.flatQuestions || []).forEach(function (fq, i) { flatIndex[fq.question.id] = i; });
     var drawnByTopic = {};
-    (pkg.state.flatQuestions || []).forEach(function (fq) {
+    (st.flatQuestions || []).forEach(function (fq) {
       (drawnByTopic[fq.topicId] = drawnByTopic[fq.topicId] || []).push(fq.question);
     });
     var sections = variant.sections.map(function (vs) {
       var def = secDefs.filter(function (s) { return s.topicId === vs.topicId; })[0] || {};
       var drawnIds = vs.questionIds || [];
       var drawn = drawnByTopic[vs.topicId] || [];
+      var qlist = drawn.map(function (q) {
+        var fi = (typeof flatIndex[q.id] === "number") ? flatIndex[q.id] : -1;
+        return { id: q.id, idx: fi, prompt: q.prompt || "", type: q.type, typeLabel: typeLabel(q.type),
+          topicName: vs.topicName, delivered: fi >= 0 && fi < currentIndex };
+      });
       var out = {
         topicName: vs.topicName, count: drawnIds.length, mode: "all",
         formId: null, formIndex: null, formCount: null, quotas: null,
         bankSize: (def.questions && def.questions.length) || drawnIds.length,
         byTag: composeByTag(drawn), byType: composeByType(drawn),
+        questions: qlist,
+        delivered: qlist.filter(function (qq) { return qq.delivered; }).length,
       };
       if (def.formSet && def.formSet.forms && def.formSet.forms.length) {
         out.mode = "variants";
@@ -615,7 +715,8 @@
       }
       return out;
     });
-    return { available: true, adaptive: false, sections: sections };
+    var dFlow = (pkg.TEST_DATA && pkg.TEST_DATA.flowPolicy && pkg.TEST_DATA.flowPolicy.mode) || "linear_flat";
+    return { available: true, adaptive: false, sections: sections, flat: dFlow === "linear_flat" };
   }
 
   // ═══ «Эталон» — highlight the correct answers ON the real question render in the
@@ -718,10 +819,35 @@
     }
   }
 
+  // ═══ «Завершить тест» guard (debug player): after the finish button is clicked,
+  // disable it so the finished run can't be re-submitted. Re-applies across the
+  // package's re-renders via the per-window __tbFinished flag. ──
+  function guardFinishButton(iframeWin) {
+    var doc = iframeWin && iframeWin.document;
+    if (!doc) return;
+    var found = [];
+    var tagged = doc.querySelectorAll('[data-action="test-finish"], [data-action="router-finish"]');
+    for (var i = 0; i < tagged.length; i++) found.push(tagged[i]);
+    var all = doc.getElementsByTagName("button");
+    for (var j = 0; j < all.length; j++) {
+      if (found.indexOf(all[j]) === -1 && (all[j].textContent || "").trim() === "Завершить тест") found.push(all[j]);
+    }
+    found.forEach(function (b) {
+      if (b.__tbFinishWired) return;
+      b.__tbFinishWired = true;
+      // Disable ONLY this button after ITS OWN click (prevents a double-submit of the
+      // same action). A finish button on a DIFFERENT screen — e.g. the per-question
+      // «Завершить тест» vs the results-page one — is independent and stays enabled.
+      b.addEventListener("click", function () {
+        setTimeout(function () { b.disabled = true; }, 0);
+      });
+    });
+  }
+
   window.TBInspector = {
     fmtNum: fmtNum, trunc: trunc, byteLen: byteLen, fmtBytes: fmtBytes,
     buildScore: buildScore, buildDraw: buildDraw,
-    applyReference: applyReference, clearReference: clearReference,
+    applyReference: applyReference, clearReference: clearReference, guardFinishButton: guardFinishButton,
     readPkg: readPkg, parseInteractions: parseInteractions, interactionById: interactionById,
     typeLabel: typeLabel, humanAnswer: humanAnswer, isActiveMeasure: isActiveMeasure,
     contributionsFor: contributionsFor, priceFor: priceFor,
@@ -729,6 +855,6 @@
     buildProtocolRows: buildProtocolRows, buildScaleRows: buildScaleRows, buildResultRows: buildResultRows,
     flattenLimited: flattenLimited, buildStateTree: buildStateTree, dispVal: dispVal, safeJson: safeJson,
     humanizeTraffic: humanizeTraffic, buildLmsTable: buildLmsTable, buildLmsRawLog: buildLmsRawLog,
-    buildAdaptiveBar: buildAdaptiveBar,
+    buildAdaptiveBar: buildAdaptiveBar, buildAdaptivePath: buildAdaptivePath,
   };
 })();

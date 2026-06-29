@@ -1122,6 +1122,7 @@ a.ou-crumbs__crumb:hover { color: var(--ou-fg-default); background: var(--ou-bg-
 .ou-btn--full { width: 100%; }
 
 /* Sizes */
+.ou-btn--xs { height: var(--ou-size-control-xs); padding: 0 var(--ou-space-2); font-size: 12px; line-height: 1; }
 .ou-btn--s { height: var(--ou-size-control-s); padding: 0 var(--ou-space-3); font-size: 13px; line-height: 1; }
 .ou-btn--m { height: var(--ou-size-control-m); padding: 0 var(--ou-space-4); font-size: 14px; line-height: 1; }
 .ou-btn--l { height: var(--ou-size-control-l); padding: 0 var(--ou-space-5); font-size: 15px; line-height: 1; }

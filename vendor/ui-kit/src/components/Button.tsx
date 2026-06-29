@@ -1,9 +1,9 @@
 import React, { forwardRef } from 'react';
-import { cn, type Size, type ButtonVariant } from '../utils';
+import { cn, type SizeXS, type ButtonVariant } from '../utils';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
-  size?: Size;
+  size?: SizeXS;
   fullWidth?: boolean;
   loading?: boolean;
   leadingIcon?: React.ReactNode;

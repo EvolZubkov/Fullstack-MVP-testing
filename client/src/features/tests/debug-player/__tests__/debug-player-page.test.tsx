@@ -45,7 +45,7 @@ function installTB(over: Partial<TBInspectorApi> = {}) {
     buildScore: vi.fn(() => ({
       available: true, adaptive: false, earnedPoints: 1, possiblePoints: 2, correct: 1, totalQuestions: 2,
       percent: 50, passed: false, rule: { type: "percent", value: 70 },
-      sections: [{ topicName: "Алгебра", earnedPoints: 1, possiblePoints: 2, percent: 50, passed: false, correct: 1, total: 2 }],
+      sections: [{ topicName: "Алгебра", earnedPoints: 1, possiblePoints: 2, percent: 50, passed: false, correct: 1, total: 2, completed: false }],
     })),
     buildDraw: vi.fn(() => ({
       available: true, adaptive: false,
@@ -53,10 +53,13 @@ function installTB(over: Partial<TBInspectorApi> = {}) {
         topicName: "Алгебра", count: 2, mode: "quota" as const, formId: null, formIndex: null, formCount: null,
         bankSize: 5, byTag: [{ tag: "Дроби", count: 1 }], byType: [{ type: "single", typeLabel: "Один ответ", count: 2 }],
         quotas: [{ tag: "Дроби", planned: 2, actual: 1, mode: "exact", short: true }],
+        questions: [{ id: "q1", idx: 0, prompt: "2+2?", type: "single", typeLabel: "Один ответ", topicName: "Алгебра", delivered: true }],
+        delivered: 1,
       }],
     })),
     applyReference: vi.fn(),
     clearReference: vi.fn(),
+    guardFinishButton: vi.fn(),
     humanizeTraffic: vi.fn(() => [{ kind: "sess", text: "Сеанс открыт", sub: "" }]),
     buildLmsTable: vi.fn(() => [{ idx: 0, call: "Set", key: "completion_status", value: "completed", marker: false }]),
     buildLmsRawLog: vi.fn(() => 'Initialize("") → "true"'),
@@ -79,10 +82,12 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("DebugPlayerPage — states", () => {
-  it("shows the loading state while the session is built", () => {
+  it("shows the build overlay over the stage while the session is built", () => {
     sessionState.current = { status: "loading" };
     render(<DebugPlayerPage />);
-    expect(screen.getByText(/Готовим прогон отладки/)).toBeInTheDocument();
+    // Chrome stays mounted (toolbar visible); the overlay sits over the stage.
+    expect(screen.getByText(/Собираем пакет из живого состояния/)).toBeInTheDocument();
+    expect(screen.getByText("Отладка теста")).toBeInTheDocument();
   });
 
   it("shows the «нет доступа» screen on a forbidden session (no edit scope)", () => {
@@ -113,7 +118,8 @@ describe("DebugPlayerPage — ready", () => {
 
   it("shows the score aggregate on the default «Результаты» tab", () => {
     render(<DebugPlayerPage />);
-    expect(screen.getAllByText("Не пройден").length).toBeGreaterThan(0);
+    // Run not completed (mock cmi has no completion_status) → verdict is «в процессе» (N2).
+    expect(screen.getAllByText("в процессе").length).toBeGreaterThan(0);
     expect(screen.getByText("порог 70%")).toBeInTheDocument(); // status threshold tag
   });
 

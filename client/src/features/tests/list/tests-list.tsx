@@ -267,6 +267,17 @@ export function TestsListPage(): React.JSX.Element {
     | { kind: "create"; folderId: string | null }
   >(null);
 
+  // PRD-18 (FR-16): a `?edit=<id>` deep-link opens the editor Drawer for that test.
+  // The debug player's build-error «Открыть тест в редакторе» action points here so
+  // the author can fix the variant/состав and rebuild. The param is stripped after
+  // opening so a refresh/back doesn't re-open the Drawer.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("edit");
+    if (!id) return;
+    setEditorTarget({ kind: "edit", testId: id });
+    window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+  }, []);
+
   // More-menu --------------------------------------------------------------
   const [testMenu, setTestMenu] = useState<{ id: string } | null>(null);
   const [folderMenu, setFolderMenu] = useState<{ id: string } | null>(null);
@@ -875,13 +886,18 @@ export function TestsListPage(): React.JSX.Element {
           role="menuitem"
           onClick={() => {
             setTestMenu(null);
-            // PRD-18: open the in-service debug player in a separate window.
-            window.open(`/author/tests/${test.id}/debug`, "_blank", "noopener");
+            // PRD-18: open the in-service debug player in a chromeless popup window
+            // (no address bar), sized to the screen, named per test so it's reused.
+            window.open(
+              `/author/tests/${test.id}/debug`,
+              `tb-debug-${test.id}`,
+              `popup=yes,width=${window.screen.availWidth},height=${window.screen.availHeight},left=0,top=0`,
+            );
           }}
           data-testid={`menu-debug-${test.id}`}
         >
           <FlaskConical size={14} />
-          Тестовый прогон
+          Выполнить отладку
         </button>
         <a
           className="dropdown-item"

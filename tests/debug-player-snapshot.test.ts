@@ -97,11 +97,12 @@ describe("buildSnapshot", () => {
     expect(s.status.alarm).toContain("Ошибка расчёта");
   });
 
-  it("selects the cmi store as the watch source", () => {
+  it("selects the cmi store as the watch source, nested into a uniform tree", () => {
     const tb = mockTB();
     window.TBInspector = tb;
     const s = buildSnapshot(null, bridge({ "cmi.location": "3" }), { protocolMode: "live", watchSource: "cmi" });
-    expect(tb.flattenLimited).toHaveBeenCalledWith({ "cmi.location": "3" });
+    // Flat dotted cmi keys are nested (sans redundant «cmi» root) so the tree matches state/suspend.
+    expect(tb.flattenLimited).toHaveBeenCalledWith({ location: "3" });
     expect(s.watch.count).toBeGreaterThan(0);
   });
 
