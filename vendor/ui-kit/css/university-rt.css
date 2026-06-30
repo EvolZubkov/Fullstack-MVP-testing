@@ -5763,6 +5763,13 @@ span.ou-quiz__dot:hover { transform: none; }
   box-shadow: var(--ou-shadow-md);
   max-height: 280px; overflow-y: auto;
 }
+.ou-select__optgroup {
+  padding: var(--ou-space-2) var(--ou-space-3) var(--ou-space-1);
+  font: var(--ou-text-body-s);
+  font-weight: 600;
+  color: var(--ou-fg-muted);
+  pointer-events: none;
+}
 .ou-select__opt {
   padding: var(--ou-space-2) var(--ou-space-3);
   border-radius: var(--ou-radius-s);
