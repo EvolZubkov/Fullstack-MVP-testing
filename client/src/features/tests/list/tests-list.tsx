@@ -568,7 +568,13 @@ export function TestsListPage(): React.JSX.Element {
             setAssignTest({ id, title });
             setAssignDialogOpen(true);
           }}
-          onOpenMore={(id) => setTestMenu({ id })}
+          onOpenMore={(id) => {
+            // Mutually exclusive with the folder menu + toggle on re-click,
+            // so at most one more-menu is ever open (the more-button stops
+            // propagation, so the outside-click handler can't do this for us).
+            setFolderMenu(null);
+            setTestMenu((cur) => (cur?.id === id ? null : { id }));
+          }}
           testMenu={testMenu}
           entriesById={byId(entries)}
           renderTestMenu={renderTestMenu}
@@ -591,8 +597,16 @@ export function TestsListPage(): React.JSX.Element {
             setAssignTest({ id, title });
             setAssignDialogOpen(true);
           }}
-          onOpenMore={(id) => setTestMenu({ id })}
-          onOpenFolderMore={(id) => setFolderMenu({ id })}
+          onOpenMore={(id) => {
+            // At most one more-menu open at a time: opening a test menu closes
+            // any folder menu; clicking the same button again toggles it shut.
+            setFolderMenu(null);
+            setTestMenu((cur) => (cur?.id === id ? null : { id }));
+          }}
+          onOpenFolderMore={(id) => {
+            setTestMenu(null);
+            setFolderMenu((cur) => (cur?.id === id ? null : { id }));
+          }}
           testMenu={testMenu}
           folderMenu={folderMenu}
           renderTestMenu={renderTestMenu}

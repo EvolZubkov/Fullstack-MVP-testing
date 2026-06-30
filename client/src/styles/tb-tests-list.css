@@ -114,7 +114,10 @@
 .tb-tests-list .tl-chips { margin-bottom: var(--ou-space-3); }
 
 /* ─── Tree container + 9-column grid (PRD-13: + "Владелец") ──────────────── */
-.tb-tests-list .tree-area { flex: 1; min-height: 0; overflow-y: auto; }
+/* `scrollbar-gutter: stable` always reserves the scrollbar strip so opening a
+   bottom more-menu (which extends the scroll height) cannot make a scrollbar
+   pop in and shift the whole grid sideways. */
+.tb-tests-list .tree-area { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
 
 .tb-tests-list .tree-header,
 .tb-tests-list .tree-root,
