@@ -110,12 +110,34 @@ router.get("/duplicates-report", requirePermission("topics.read"), async (req, r
   }
 });
 
+/**
+ * Validate the optional topic code (PRD-2 §4.2): a readable slug used by
+ * `topicById("<code>")`. Returns `null` for a blank value, the trimmed slug when
+ * valid, or `false` when malformed (→ 400).
+ */
+function normalizeTopicCode(raw: unknown): string | null | false {
+  if (raw == null) return null;
+  if (typeof raw !== "string") return false;
+  const v = raw.trim();
+  if (v === "") return null;
+  return /^[a-z][a-z0-9_]{0,63}$/.test(v) ? v : false;
+}
+
+const INVALID_TOPIC_CODE = {
+  error: "invalid_topic_code",
+  message: "Id (код): строчная буква в начале; буквы/цифры/подчёркивание; до 64 символов",
+};
+
 // POST /api/topics - Создать тему
 router.post("/", requirePermission("topics.manage"), async (req, res) => {
   try {
-    const { name, description, feedback, folderId, feedbackJson } = req.body;
+    const { name, description, feedback, folderId, feedbackJson, code } = req.body;
     if (!name) {
       return res.status(400).json({ error: "Name required" });
+    }
+    const topicCode = normalizeTopicCode(code);
+    if (topicCode === false) {
+      return res.status(400).json(INVALID_TOPIC_CODE);
     }
     const fb = parseFeedbackJson(feedbackJson);
     if (!fb.ok) {
@@ -133,6 +155,7 @@ router.post("/", requirePermission("topics.manage"), async (req, res) => {
     }
     const topic = await storage.createTopic({
       name,
+      code: topicCode,
       description,
       feedback,
       feedbackJson: fb.value,
@@ -165,7 +188,11 @@ router.put("/:id", requirePermission("topics.manage"), async (req, res) => {
       respondForbiddenContent(res);
       return;
     }
-    const { name, description, feedback, folderId, feedbackJson } = req.body;
+    const { name, description, feedback, folderId, feedbackJson, code } = req.body;
+    const topicCode = normalizeTopicCode(code);
+    if (topicCode === false) {
+      return res.status(400).json(INVALID_TOPIC_CODE);
+    }
     const fb = parseFeedbackJson(feedbackJson);
     if (!fb.ok) {
       return res.status(400).json({ error: "invalid_feedback_json" });
@@ -187,6 +214,7 @@ router.put("/:id", requirePermission("topics.manage"), async (req, res) => {
     }
     const updated = await storage.updateTopic(req.params.id, {
       name,
+      code: topicCode,
       description,
       feedback,
       folderId,
@@ -196,6 +224,11 @@ router.put("/:id", requirePermission("topics.manage"), async (req, res) => {
     });
     if (!updated) {
       return res.status(404).json({ error: "Topic not found" });
+    }
+    // PRD-2 §4.2: a rename rewrites `topicByName("…")` references in the live
+    // formulas of tests using this topic, so показатели stay intact.
+    if (typeof name === "string" && name.length > 0 && name !== topic.name) {
+      await storage.renameTopicInFormulas(req.params.id, topic.name, name);
     }
     let warnings: Array<{ kind: string; topics: unknown[] }> | undefined;
     if (typeof name === "string" && name.length > 0) {

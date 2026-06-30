@@ -41,7 +41,7 @@ import {
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
 import { topicCoursesFromFeedback, topicEventsFromFeedback } from "@shared/topics/recommendations";
-import { validate, type ValidationResult, type ValueType } from "@shared/formula";
+import { validate, renameTopicByNameInFormula, type ValidationResult, type ValueType } from "@shared/formula";
 import { normalizeTopicName } from "@shared/topics/naming";
 
 /**
@@ -181,6 +181,7 @@ export interface IStorage {
   getTopic(id: string): Promise<Topic | undefined>;
   createTopic(topic: InsertTopic): Promise<Topic>;
   updateTopic(id: string, topic: Partial<InsertTopic>): Promise<Topic | undefined>;
+  renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void>;
   deleteTopic(id: string): Promise<boolean>;
   deleteTopicsBulk(ids: string[]): Promise<number>;
 
@@ -974,6 +975,7 @@ export class DatabaseStorage implements IStorage {
     const [newTopic] = await db.insert(topics).values({
       id,
       name: topic.name,
+      code: topic.code ?? null,
       description: topic.description || null,
       feedback: topic.feedback || null,
       feedbackJson: topic.feedbackJson ?? null,
@@ -997,6 +999,32 @@ export class DatabaseStorage implements IStorage {
         : updates;
     const [updated] = await db.update(topics).set(patch).where(eq(topics.id, id)).returning();
     return updated || undefined;
+  }
+
+  /**
+   * Keep `topicByName("…")` formula references consistent after a topic rename
+   * (PRD-2 §4.2). Scoped to LIVE result variables of tests that USE this topic —
+   * a formula may only reference its own test's topics, so the rename resolves
+   * unambiguously. Published snapshots are frozen and intentionally untouched.
+   */
+  async renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void> {
+    if (oldName === newName) return;
+    const sections = await db
+      .select({ testId: testSections.testId })
+      .from(testSections)
+      .where(eq(testSections.topicId, topicId));
+    const testIds = [...new Set(sections.map((s) => s.testId))];
+    if (testIds.length === 0) return;
+    const rvs = await db.select().from(resultVariables).where(inArray(resultVariables.testId, testIds));
+    for (const rv of rvs) {
+      const next = renameTopicByNameInFormula(rv.formula, oldName, newName);
+      if (next !== rv.formula) {
+        await db
+          .update(resultVariables)
+          .set({ formula: next, updatedAt: new Date() })
+          .where(eq(resultVariables.id, rv.id));
+      }
+    }
   }
 
   // ─── Topic ownership and access grants (PRD-15 block C) ────────────────────
@@ -1772,7 +1800,21 @@ export class DatabaseStorage implements IStorage {
     opts: { sortOrder?: number; excludeId?: string; extraScaleKeys?: string[]; extraVarNames?: string[] } = {},
   ): Promise<ValidationResult> {
     const sections = await db.select().from(testSections).where(eq(testSections.testId, testId));
-    const topicIds = new Set(sections.map((s) => s.topicId));
+    const sectionTopicIds = sections.map((s) => s.topicId);
+    // Valid `topicById` args = topic UUIDs plus their custom codes; `topicByName`
+    // args = topic names.
+    const topicRows = sectionTopicIds.length
+      ? await db
+          .select({ id: topics.id, name: topics.name, code: topics.code })
+          .from(topics)
+          .where(inArray(topics.id, sectionTopicIds))
+      : [];
+    const topicIds = new Set<string>(sectionTopicIds);
+    const topicNames = new Set<string>();
+    for (const t of topicRows) {
+      if (t.code) topicIds.add(t.code);
+      if (t.name) topicNames.add(t.name);
+    }
     const existing = await this.getResultVariables(testId);
     const prior = existing.filter(
       (rv) => rv.id !== opts.excludeId && (opts.sortOrder === undefined || rv.sortOrder < opts.sortOrder),
@@ -1784,7 +1826,7 @@ export class DatabaseStorage implements IStorage {
     const priorVarNames = new Set([...prior.map((rv) => rv.name), ...(opts.extraVarNames ?? [])]);
     const scaleRows = await db.select().from(scales).where(eq(scales.testId, testId));
     const scaleKeys = new Set([...scaleRows.map((s) => s.key), ...(opts.extraScaleKeys ?? [])]);
-    return validate(formula, type, { topicIds, priorVarNames, scaleKeys });
+    return validate(formula, type, { topicIds, topicNames, priorVarNames, scaleKeys });
   }
 
   // ─── PRD-5: scales ──────────────────────────────────────────────────────────

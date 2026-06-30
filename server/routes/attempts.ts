@@ -1000,11 +1000,19 @@ router.post("/attempts/:attemptId/finish", requirePermission("attempts.take"), a
     let resultVariables: AttemptResult["resultVariables"];
     let status: AttemptResult["status"];
     if (scoringConfig.scales.length > 0 || scoringConfig.resultVariables.length > 0) {
+      // Topic codes enable `topicById("<code>")` (readable id); names already on
+      // topicResults enable `topicByName("<name>")` (PRD-2 §4.2).
+      const topicCodeById = new Map(
+        (await src.getTopics()).map((t) => [t.id, t.code ?? null] as const),
+      );
       const computation = computeAttemptResult(
         scoringConfig,
         answers ?? {},
         questionTypes,
-        { percent: overallPercent, topicResults },
+        {
+          percent: overallPercent,
+          topicResults: topicResults.map((t) => ({ ...t, code: topicCodeById.get(t.topicId) ?? null })),
+        },
       );
       if (Object.keys(computation.scaleResults).length > 0) scaleResults = computation.scaleResults;
       if (Object.keys(computation.resultVariables).length > 0) resultVariables = computation.resultVariables;

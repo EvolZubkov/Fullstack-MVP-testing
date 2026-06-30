@@ -39,7 +39,16 @@ export interface AttemptComputation {
 /** Per-topic inputs the result-variable context needs (`percent`, `topicById`). */
 export interface AttemptResultBase {
   percent: number;
-  topicResults: Array<{ topicId: string; percent: number; passed: boolean | null; earnedPoints: number }>;
+  topicResults: Array<{
+    topicId: string;
+    percent: number;
+    passed: boolean | null;
+    earnedPoints: number;
+    /** Topic display name — keys `topicByName(...)`. */
+    topicName?: string;
+    /** Author-defined readable id — additional key for `topicById(...)`. */
+    code?: string | null;
+  }>;
 }
 
 /**
@@ -59,18 +68,23 @@ export function computeAttemptResult(
     ? computeScales(config.scales, config.measurements, answers, questionTypes)
     : { values: {} as Record<string, ScaleResult>, errors: [] };
 
+  // Topics are keyed by UUID and (when set) the author's custom code, so
+  // `topicById(...)` accepts either; names key `topicByName(...)`.
   const topics: EvalContext["topics"] = {};
+  const topicsByName: NonNullable<EvalContext["topicsByName"]> = {};
   for (const tr of base.topicResults) {
-    topics[tr.topicId] = {
-      percent: tr.percent || 0,
-      passed: tr.passed === true,
-      score: tr.earnedPoints || 0,
-    };
+    const r = { percent: tr.percent || 0, passed: tr.passed === true, score: tr.earnedPoints || 0 };
+    topics[tr.topicId] = r;
+    if (tr.code) topics[tr.code] = r;
+    if (tr.topicName) topicsByName[tr.topicName] = r;
   }
 
   const evalBase: Omit<EvalContext, "vars"> = {
     percent: base.percent || 0,
+    // Overall earned points across the test = Σ of per-topic earned points.
+    score: base.topicResults.reduce((sum, tr) => sum + (tr.earnedPoints || 0), 0),
     topics,
+    topicsByName,
     tags: {},
     scales: scaleComputation.values,
     sections: {},

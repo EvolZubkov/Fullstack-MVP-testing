@@ -190,6 +190,8 @@ async function loadFullTest(testId: string): Promise<Record<string, unknown> | n
       return {
         ...s,
         topicName: topic?.name || "Unknown",
+        // PRD-2 §4.2: author-defined readable id for `topicById("<code>")`; null → UUID.
+        topicCode: topic?.code ?? null,
         maxQuestions: questions.length,
         // PRD-10: the section's maximum attainable points (Σ points). Absolute
         // pass thresholds are compared against earned POINTS at runtime, so the

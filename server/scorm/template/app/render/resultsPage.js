@@ -74,12 +74,35 @@ function buildScaleInteractions(scaleComputation) {
 // tags/sections resolve to neutral defaults (tag aggregation and PRD-4 section
 // keys come later).
 function buildResultVarContext(results, scaleComputation) {
+  // Topic name/code come from TEST_DATA.sections so `topicByName("<name>")` and
+  // `topicById("<code>")` resolve (PRD-2 §4.2); fall back to topicResult fields.
+  var meta = {};
+  var secs = (typeof TEST_DATA !== "undefined" && TEST_DATA.sections) || [];
+  for (var i = 0; i < secs.length; i++) meta[secs[i].topicId] = secs[i];
   var topics = {};
+  var topicsByName = {};
+  var totalScore = 0;
   (results.topicResults || []).forEach(function (tr) {
-    topics[tr.topicId] = { percent: tr.percent || 0, passed: tr.passed === true, score: tr.earnedPoints || 0 };
+    var r = { percent: tr.percent || 0, passed: tr.passed === true, score: tr.earnedPoints || 0 };
+    topics[tr.topicId] = r;
+    totalScore += tr.earnedPoints || 0;
+    var m = meta[tr.topicId] || {};
+    var code = m.topicCode || tr.code || null;
+    var name = m.topicName || tr.topicName || null;
+    if (code) topics[code] = r;
+    if (name) topicsByName[name] = r;
   });
   var scales = (scaleComputation && scaleComputation.values) || {};
-  return { percent: results.percent || 0, topics: topics, tags: {}, scales: scales, sections: {} };
+  // Overall earned points across the test = Σ of per-topic earned points.
+  return {
+    percent: results.percent || 0,
+    score: totalScore,
+    topics: topics,
+    topicsByName: topicsByName,
+    tags: {},
+    scales: scales,
+    sections: {},
+  };
 }
 
 function computeTestResultVariables(results, scaleComputation) {

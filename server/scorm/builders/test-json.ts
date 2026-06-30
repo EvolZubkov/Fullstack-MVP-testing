@@ -167,6 +167,8 @@ export function buildTestJson(data: ExportData): string {
     sections: data.sections.map((s) => ({
       topicId: s.topic.id,
       topicName: s.topic.name,
+      // Author-defined readable id (slug) for `topicById("<code>")`; null → UUID.
+      topicCode: s.topic.code ?? null,
       drawCount: effectiveDraw(s),
       // PRD-4 v1.1 §4.7: `required` drives routerCompletionPolicy's
       // «all_required_*» calculation; `false` means optional (the test can
@@ -357,7 +359,8 @@ export function buildTestJson(data: ExportData): string {
     test.resultVariables = data.resultVariables.map((rv) => ({
       id: rv.id,
       name: rv.name,
-      label: rv.label,
+      // Label is optional; fall back to the name so the package never shows blank.
+      label: rv.label.trim() ? rv.label : rv.name,
       type: rv.type,
       formula: rv.formula,
       showToLearner: rv.showToLearner,
