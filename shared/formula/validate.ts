@@ -25,6 +25,7 @@ function inferType(node: Ast): ValueType | "unknown" {
   switch (node.type) {
     case "number":
     case "percent":
+    case "score":
     case "nullary":
     case "count":
       return "number";
@@ -105,6 +106,9 @@ export function validate(
   walk(ast, (n) => {
     if (n.type === "accessor") {
       if (n.fn === "topicById" && refs.topicIds && !refs.topicIds.has(n.arg)) {
+        errors.push({ code: "unknown-topic", message: `Неизвестная тема «${n.arg}»` });
+      }
+      if (n.fn === "topicByName" && refs.topicNames && !refs.topicNames.has(n.arg)) {
         errors.push({ code: "unknown-topic", message: `Неизвестная тема «${n.arg}»` });
       }
       if (n.fn === "sectionById" && refs.sectionKeys && !refs.sectionKeys.has(n.arg)) {

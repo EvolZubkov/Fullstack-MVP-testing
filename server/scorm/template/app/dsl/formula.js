@@ -17,11 +17,12 @@ var FormulaDSL = (function () {
 
   var ACCESSOR_PROPS = {
     topicById: ["percent", "passed", "score"],
+    topicByName: ["percent", "passed", "score"],
     tag: ["percent", "score", "maxScore", "count"],
     scaleById: ["raw", "normalized", "percent", "level", "label", "hasValue"],
     sectionById: ["percent", "passed", "completed"],
   };
-  var ACCESSOR_FNS = { topicById: 1, tag: 1, scaleById: 1, sectionById: 1 };
+  var ACCESSOR_FNS = { topicById: 1, topicByName: 1, tag: 1, scaleById: 1, sectionById: 1 };
   var NULLARY_FNS = { countPassed: 1, countTopics: 1, avgPercent: 1 };
   var COUNT_FNS = { countVars: 1, countScales: 1 };
   var COMPARISONS = { "=": 1, "!=": 1, ">": 1, ">=": 1, "<": 1, "<=": 1 };
@@ -140,6 +141,7 @@ var FormulaDSL = (function () {
         return { type: "if", cond: cond, then: then, otherwise: otherwise };
       }
       if (name === "percent") { nextTok(); return { type: "percent" }; }
+      if (name === "score") { nextTok(); return { type: "score" }; }
       if (ACCESSOR_FNS[name]) {
         nextTok(); expectPunct("(");
         var arg = parseStr(); expectPunct(")"); expectPunct(".");
@@ -196,9 +198,11 @@ var FormulaDSL = (function () {
     switch (node.type) {
       case "number": case "string": case "boolean": return node.value;
       case "percent": return ctx.percent;
+      case "score": return ctx.score;
       case "accessor": {
         var src;
         if (node.fn === "topicById") src = ctx.topics[node.arg] || DEFAULT_TOPIC;
+        else if (node.fn === "topicByName") src = (ctx.topicsByName || {})[node.arg] || DEFAULT_TOPIC;
         else if (node.fn === "tag") src = ctx.tags[node.arg] || DEFAULT_TAG;
         else if (node.fn === "scaleById") src = ctx.scales[node.arg] || DEFAULT_SCALE;
         else src = ctx.sections[node.arg] || DEFAULT_SECTION;

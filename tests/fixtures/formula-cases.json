@@ -1,9 +1,13 @@
 {
   "context": {
     "percent": 80,
+    "score": 14,
     "topics": {
       "t1": { "percent": 90, "passed": true, "score": 9 },
       "t2": { "percent": 50, "passed": false, "score": 5 }
+    },
+    "topicsByName": {
+      "Финансы": { "percent": 90, "passed": true, "score": 9 }
     },
     "tags": { "scale:EE": { "percent": 60, "score": 6, "maxScore": 10, "count": 3 } },
     "scales": {
@@ -15,6 +19,9 @@
   "cases": [
     { "formula": "percent", "expected": 80 },
     { "formula": "percent >= 75", "expected": true },
+    { "formula": "score", "expected": 14 },
+    { "formula": "score >= 10", "expected": true },
+    { "formula": "score + percent", "expected": 94 },
     { "formula": "2 + 3 * 4", "expected": 14 },
     { "formula": "(2 + 3) * 4", "expected": 20 },
     { "formula": "true OR false AND false", "expected": true },
@@ -24,6 +31,8 @@
     { "formula": "-5 + 2", "expected": -3 },
     { "formula": "topicById(\"t1\").percent", "expected": 90 },
     { "formula": "topicById(\"t1\").passed", "expected": true },
+    { "formula": "topicByName(\"Финансы\").percent", "expected": 90 },
+    { "formula": "topicByName(\"Нет такой\").score", "expected": 0 },
     { "formula": "topicById(\"missing\").score", "expected": 0 },
     { "formula": "tag(\"scale:EE\").count", "expected": 3 },
     { "formula": "scaleById(\"leadership\").level", "expected": "high" },

@@ -18,7 +18,7 @@ import {
 } from "./types";
 import { tokenize, type Token } from "./tokens";
 
-const ACCESSOR_FNS = new Set<AccessorFn>(["topicById", "tag", "scaleById", "sectionById"]);
+const ACCESSOR_FNS = new Set<AccessorFn>(["topicById", "topicByName", "tag", "scaleById", "sectionById"]);
 const NULLARY_FNS = new Set<NullaryFn>(["countPassed", "countTopics", "avgPercent"]);
 const COUNT_FNS = new Set<CountFn>(["countVars", "countScales"]);
 const COMPARISONS = new Set(["=", "!=", ">", ">=", "<", "<="]);
@@ -168,6 +168,11 @@ class Parser {
     if (name === "percent") {
       this.next();
       return { type: "percent" };
+    }
+
+    if (name === "score") {
+      this.next();
+      return { type: "score" };
     }
 
     if (ACCESSOR_FNS.has(name as AccessorFn)) {

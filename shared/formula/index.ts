@@ -19,6 +19,7 @@ export { parse } from "./parser";
 export { evaluate } from "./evaluator";
 export { validate } from "./validate";
 export { tokenize } from "./tokens";
+export { renameTopicByNameInFormula } from "./rename";
 export {
   computeResultVariables,
   type ResultVariableSpec,
