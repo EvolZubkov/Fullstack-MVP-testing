@@ -563,6 +563,10 @@ function ScaleForm({
               /* composite scales (source = other scales) are deferred; questions only */
             }}
           />
+          <p className="ou-formfield__desc">
+            «Другие шкалы» пока недоступны — расчёт шкалы из других шкал ещё не
+            реализован.
+          </p>
         </div>
         <Select<RecalcValue>
           size="m"
