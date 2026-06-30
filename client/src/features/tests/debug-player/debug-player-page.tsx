@@ -577,7 +577,7 @@ function ProtocolPanel({ snap }: { snap: InspectorSnapshot }) {
       </div>
       <Table columns={columns} rows={rows} rowKey={(r) => String(r.idx)} />
       <div className="dbg__sum">
-        <span>{`итог: `}<strong>{`${Math.round(earned * 100) / 100} из ${possible}`}</strong>{` · ${pct}%`}</span>
+        <span>{`итог: `}<strong>{`${Math.round(earned * 100) / 100} из ${possible}`}</strong>{` баллов · ${pct}%`}</span>
         {snap.score.available && !snap.score.adaptive
           ? (snap.status.completed
               ? <Tag size="s" tone={snap.score.passed ? "success" : "error"}>{snap.score.passed ? "Пройден" : "Не пройден"}</Tag>

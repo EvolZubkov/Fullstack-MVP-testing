@@ -4,8 +4,9 @@
  *
  * Coverage:
  *   - flowMode banner, empty state, create-mode notice, no stub
- *   - Kind-aware layout: intro → «До теста», summary → «После теста»,
- *     questions → one row per topic (no synthetic duplicate)
+ *   - Kind-aware layout: start → «До теста», results → «После теста», questions →
+ *     one row per topic; PRD-19 обзор (review) + итоги раздела (section-results)
+ *     system nodes per section (no legacy per-topic intro/summary)
  *   - Author info pages: add (variant modal), inline edit, reorder, delete
  *   - Required-field + missing-template warnings
  *   - «Сменить вариант» on system rows (enabled when >1 variant, replace-variant)
@@ -55,9 +56,12 @@ const TEMPLATE = {
         placeholders: [],
       },
       { key: "intro.hero", label: "Введение", kind: "intro", placeholders: [{ key: "title", type: "text", label: "Заголовок" }] },
-      // Two summary variants → «Сменить вариант» enabled.
       { key: "summary.result", label: "Итог: результат", kind: "summary", placeholders: [] },
-      { key: "summary.ring", label: "Итог: кольцо", kind: "summary", placeholders: [] },
+      // PRD-19 section-boundary system nodes. One review variant → «Сменить вариант»
+      // disabled on the обзор; two section-results variants → enabled on the итоги node.
+      { key: "review.standard", label: "Обзор: стандартный", kind: "review", placeholders: [] },
+      { key: "section-results.result", label: "Итог: результат", kind: "section-results", placeholders: [] },
+      { key: "section-results.ring", label: "Итог: кольцо", kind: "section-results", placeholders: [] },
       // One questions variant → «Сменить вариант» disabled.
       { key: "question.standard", label: "Стандартный макет вопроса", kind: "questions", placeholders: [] },
     ],
@@ -324,25 +328,29 @@ describe("<StructureSection /> — kind-aware layout", () => {
     expect(screen.getByTestId("structure-system-results")).toHaveTextContent("Итоги теста");
   });
 
-  it("linear_by_topics: section «Введение раздела»/«Итоги раздела» render inside the topic block", async () => {
+  it("linear_by_topics: «Введение раздела» + «Обзор раздела» + «Итоги раздела» nodes render inside the topic block", async () => {
     installApi([
-      buildPage({ id: "pg-it1", kind: "intro", position: "before_topic", topicId: "t1", templateKey: "intro.hero", valuesJson: { values: { title: "Вступление" } } }),
-      buildPage({ id: "pg-st1", kind: "summary", position: "after_topic", topicId: "t1", templateKey: "summary.result", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-it1", kind: "intro", position: "before_topic", topicId: "t1", templateKey: "intro.hero", valuesJson: { values: { instruction: "Инструкция" } } }),
+      buildPage({ id: "pg-rv", kind: "review", position: "after", topicId: null, templateKey: "review.standard", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-sr", kind: "section-results", position: "after", topicId: null, templateKey: "section-results.result", valuesJson: { values: {} } }),
       buildPage({ id: "pg-qt1", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
     ]);
     renderSection(baseModel({ flowMode: "linear_by_topics", sections: [buildSection({ topicId: "t1", topicName: "Тема А" })] }));
     await waitFor(() => expect(screen.getByTestId("structure-zone-topic-t1")).toBeInTheDocument());
     const topic = screen.getByTestId("structure-zone-topic-t1");
+    // PRD-1 §4.3: «Введение раздела» (intro) at the top; PRD-19 §3.2: the boundary is
+    // the обзор (review-slot) + section-results nodes.
     expect(topic).toContainElement(screen.getByTestId("structure-system-intro-t1"));
-    expect(topic).toContainElement(screen.getByTestId("structure-system-summary-t1"));
-    // No test-level intro/summary in «До теста»/«После теста».
-    expect(screen.queryByTestId("structure-system-intro")).toBeNull();
+    expect(topic).toContainElement(screen.getByTestId("structure-review-slot-t1"));
+    expect(topic).toContainElement(screen.getByTestId("structure-system-section-results-t1"));
+    // Legacy per-topic `summary` is gone (now the computed section-results node).
+    expect(screen.queryByTestId("structure-system-summary-t1")).toBeNull();
   });
 
-  it("PRD-19 FR-05a: showSectionResults OFF hides the «Итоги раздела» (summary) row, intro stays", async () => {
+  it("PRD-19 FR-05a: showSectionResults OFF hides the «Итоги раздела» node; «Обзор раздела» stays", async () => {
     installApi([
-      buildPage({ id: "pg-it1", kind: "intro", position: "before_topic", topicId: "t1", templateKey: "intro.hero", valuesJson: { values: { title: "Вступление" } } }),
-      buildPage({ id: "pg-st1", kind: "summary", position: "after_topic", topicId: "t1", templateKey: "summary.result", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-rv", kind: "review", position: "after", topicId: null, templateKey: "review.standard", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-sr", kind: "section-results", position: "after", topicId: null, templateKey: "section-results.result", valuesJson: { values: {} } }),
       buildPage({ id: "pg-qt1", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
     ]);
     renderSection(baseModel({
@@ -351,9 +359,9 @@ describe("<StructureSection /> — kind-aware layout", () => {
       runtime: { timeLimitMinutes: null, maxAttempts: null, showCorrectAnswers: false, allowReturnToUnanswered: true, allowAnswerChange: false, showSectionResults: false },
     }));
     await waitFor(() => expect(screen.getByTestId("structure-zone-topic-t1")).toBeInTheDocument());
-    // The section-results node is gated out (FR-05a), but «Введение раздела» stays.
-    expect(screen.getByTestId("structure-system-intro-t1")).toBeInTheDocument();
-    expect(screen.queryByTestId("structure-system-summary-t1")).toBeNull();
+    // The section-results node is gated out (FR-05a), but «Обзор раздела» stays.
+    expect(screen.getByTestId("structure-review-slot-t1")).toBeInTheDocument();
+    expect(screen.queryByTestId("structure-system-section-results-t1")).toBeNull();
   });
 });
 
@@ -527,27 +535,27 @@ describe("<StructureSection /> — warnings", () => {
 });
 
 describe("<StructureSection /> — switch variant of a system page", () => {
-  it("section summary has >1 variant → «Сменить вариант» applies the new variant to the local draft", async () => {
+  it("section-results node has >1 variant → «Сменить вариант» applies the new variant to the local draft", async () => {
     const spies = installApi([
-      buildPage({ id: "pg-sum", kind: "summary", position: "after_topic", topicId: "t1", templateKey: "summary.result", valuesJson: { values: {} } }),
+      buildPage({ id: "pg-sr", kind: "section-results", position: "after", topicId: null, templateKey: "section-results.result", valuesJson: { values: {} } }),
       buildPage({ id: "pg-qt1", kind: "questions", position: "before_topic", topicId: "t1", templateKey: "question.standard", valuesJson: { values: {} } }),
     ]);
     renderSection(baseModel({ flowMode: "linear_by_topics", sections: [buildSection({ topicId: "t1", topicName: "Тема А" })] }));
-    await waitFor(() => expect(screen.getByTestId("structure-system-summary-t1")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("structure-system-section-results-t1")).toBeInTheDocument());
 
-    // Two summary variants → the variant hint is shown on the per-topic summary row.
-    expect(screen.getByTestId("structure-system-summary-t1-variant-hint")).toBeInTheDocument();
+    // Two section-results variants → the variant hint is shown on the итоги node row.
+    expect(screen.getByTestId("structure-system-section-results-t1-variant-hint")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId("structure-system-summary-t1-actions"));
-    fireEvent.click(screen.getByTestId("structure-system-summary-t1-replace"));
-    await waitFor(() => expect(screen.getByTestId("structure-replace-option-summary.ring")).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId("structure-replace-option-summary.ring"));
+    fireEvent.click(screen.getByTestId("structure-system-section-results-t1-actions"));
+    fireEvent.click(screen.getByTestId("structure-system-section-results-t1-replace"));
+    await waitFor(() => expect(screen.getByTestId("structure-replace-option-section-results.ring")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("structure-replace-option-section-results.ring"));
     fireEvent.click(screen.getByTestId("structure-replace-confirm"));
 
     // The system row's badge switches to the new variant label in the local draft;
     // the replace-variant call only fires at commit (drawer save).
     await waitFor(() =>
-      expect(screen.getByTestId("structure-system-summary-t1")).toHaveTextContent("Итог: кольцо"),
+      expect(screen.getByTestId("structure-system-section-results-t1")).toHaveTextContent("Итог: кольцо"),
     );
     expect(spies.replaceVariant).not.toHaveBeenCalled();
   });

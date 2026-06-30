@@ -426,7 +426,10 @@ describe("TestSettingsService._reconcileSystemPages — via create()", () => {
 
     const cpInserts = inserts.filter((i) => i.table === contentPages);
     const kinds = cpInserts.map((i) => (i.values as { kind: string }).kind).sort();
-    expect(kinds).toEqual(["intro", "questions", "router", "summary"]);
+    // PRD-1 §4.3: per-topic `intro` is created; legacy per-topic `summary` is not.
+    // This fixture's template declares no start/results/review/section-results, so
+    // the rows are the router hub + the topic's intro + questions (one topic).
+    expect(kinds).toEqual(["intro", "questions", "router"]);
   });
 
   it("silently no-ops reconciliation when default template manifest is missing", async () => {
@@ -522,6 +525,12 @@ describe("TestSettingsService._reconcileSystemPages — via save()", () => {
     const kinds = cpInserts.map((i) => (i.values as { kind: string }).kind);
     expect(kinds).toContain("router");
     expect(kinds.filter((k) => k === "questions")).toHaveLength(0); // existing tp1 questions kept
+    // PRD-4 v1.1 §4.7: the router hub is a test-scope «До теста» page. It MUST be
+    // inserted at position 'before' (not 'before_topic') — the router runtime seeds
+    // the initial pageSequence from the test-scope 'before' pages, so 'before_topic'
+    // would orphan the hub and the router page would never render.
+    const routerInsert = cpInserts.find((i) => (i.values as { kind: string }).kind === "router");
+    expect((routerInsert!.values as { position: string }).position).toBe("before");
   });
 
   it("flowMode change router_by_topics → linear_*: deletes router row", async () => {

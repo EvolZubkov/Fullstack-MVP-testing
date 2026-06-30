@@ -49,7 +49,13 @@ function renderMatchingQuestionInput(q, answer, locked, correct, shuffleMapping)
       + '<span class="match-chip-text">' + escapeHtml(q.data.left[li]) + '</span></div>';
   }
 
-  var html = '<div class="matching-board" data-qid="' + escapeHtml(q.id) + '" style="--matchRowH:auto;">';
+  // `is-locked` marks the board as committed so a submitted answer gets a neutral
+  // «зафиксировано» accent (CSS) even when showCorrectAnswers is off — parity with
+  // the persistent `.option.selected` on single/multiple. Driven by the committed
+  // status (covers navigate-back to an editable committed answer too), not just the
+  // draggability `locked`; confirmAnswer also adds it point-wise on submit.
+  var committed = !!(state.questionStatuses && state.questionStatuses[q.id] === 'answered') || locked;
+  var html = '<div class="matching-board' + (committed ? ' is-locked' : '') + '" data-qid="' + escapeHtml(q.id) + '" style="--matchRowH:auto;">';
   var poolSlot = 0;
 
   rightMapping.forEach(function (rightIdx) {

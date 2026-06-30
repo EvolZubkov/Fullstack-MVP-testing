@@ -25,7 +25,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ContentPagePosition = "before" | "after" | "before_topic" | "after_topic";
-export type ContentPageKind = "start" | "questions" | "router" | "summary" | "results" | "intro" | "info";
+export type ContentPageKind = "start" | "questions" | "router" | "summary" | "results" | "intro" | "info" | "review" | "section-results";
 export type ContentPageMode = "template" | "standard" | "html";
 export type ContentPageType = "intro" | "info" | "summary" | "html";
 

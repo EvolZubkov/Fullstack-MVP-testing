@@ -167,6 +167,9 @@ export function buildTestJson(data: ExportData): string {
     sections: data.sections.map((s) => ({
       topicId: s.topic.id,
       topicName: s.topic.name,
+      // PRD-1 §4.3: topic description (from topic properties) — rendered on the
+      // «Введение раздела» (section-intro) screen. null/empty → no description block.
+      topicDescription: s.topic.description ?? null,
       // Author-defined readable id (slug) for `topicById("<code>")`; null → UUID.
       topicCode: s.topic.code ?? null,
       drawCount: effectiveDraw(s),

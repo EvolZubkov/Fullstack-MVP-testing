@@ -1,0 +1,33 @@
+<div class="results-page section-intro">
+  {{#if design.logoUrl}}<div class="tb-brand"><img class="tb-brand__logo" src="{{ design.logoUrl }}" alt=""></div>{{/if}}
+  <div class="card section-intro__card">
+    <div class="section-intro__eyebrow">{{ sectionIntro.eyebrow }}</div>
+    <h1 class="section-intro__title" data-path="sectionIntro.topicName"></h1>
+
+    {{#if sectionIntro.hasDescription}}
+    <div class="section-intro__desc" data-path="sectionIntro.description"></div>
+    {{/if}}
+
+    <div class="section-intro__meta">
+      <span class="section-intro__meta-item">
+        <span class="section-intro__meta-dot" aria-hidden="true"></span>{{ sectionIntro.questionCountLabel }}
+      </span>
+      {{#if sectionIntro.hasTimeLimit}}
+      <span class="section-intro__meta-item">
+        <span class="section-intro__meta-dot" aria-hidden="true"></span>{{ sectionIntro.timeLimitLabel }}
+      </span>
+      {{/if}}
+    </div>
+
+    {{#if sectionIntro.hasInstruction}}
+    <div class="section-intro__instruction">
+      <div class="section-intro__instruction-head">Инструкция</div>
+      <div class="section-intro__instruction-body" data-slot="instruction"></div>
+    </div>
+    {{/if}}
+
+    <div class="q-actions q-actions--center">
+      <button type="button" class="btn" data-action="section-intro-continue">{{ sectionIntro.continueLabel }}</button>
+    </div>
+  </div>
+</div>

@@ -57,6 +57,15 @@ function confirmAnswer() {
     lockAnswerOptions(q);
   }
 
+  // Committed accent: mark matching/ranking boards as submitted so a drag-based
+  // answer is VISIBLY fixed right after «Отправить ответ» — parity with the
+  // persistent `.option.selected` on single/multiple. Done point-wise because this
+  // commit path updates the DOM in place (no full re-render). When showCorrectAnswers
+  // is on, the green/red correctness states below win (CSS :not()).
+  document.querySelectorAll('.matching-board, .ranking-board').forEach(function (b) {
+    b.classList.add('is-locked');
+  });
+
   // PRD-19 (Block B): reveal correctness + feedback only when showCorrectAnswers.
   // The explicit fixation itself works without feedback — flexible-mode
   // «Отправить ответ» with showCorrectAnswers off just commits and advances.

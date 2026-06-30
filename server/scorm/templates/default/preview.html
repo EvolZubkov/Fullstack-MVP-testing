@@ -436,6 +436,11 @@ h1 {
   margin-right: 14px;
   width: 20px;
   height: 20px;
+  /* Fixed control size: as a flex item the radio/checkbox would otherwise shrink
+     (default flex-shrink:1) when the answer text wraps, so the circle drifted /
+     went oval with longer answers. `flex:0 0 20px` pins it regardless of text length
+     (alignment stays centered via the row's align-items: center). */
+  flex: 0 0 20px;
   cursor: pointer;
 }
 
@@ -566,9 +571,12 @@ h1 {
   user-select:none;
   width: 100%;
   padding: 10px 12px;
-  /* border-radius: 12px;
-  background: hsl(var(--muted) / .35);
-  border: 1px solid hsl(var(--border)); */
+  /* Flex row: grip (fixed) + gap + wrapping text. The grip/text rules below
+     (.match-grip flex:0 0 auto, .match-chip-text min-width:0) expect this — without
+     `display:flex` the grip fell inline to the top-left and stuck to the text. */
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: hsl(var(--foreground));
   cursor: grab;
   font-size: 14px;
@@ -619,6 +627,14 @@ h1 {
 .matching-line.incorrect-answer{
   border-color: hsl(var(--destructive));
   background: color-mix(in oklab, hsl(var(--destructive)) 10%, hsl(var(--card)));
+}
+/* Committed (submitted) accent — shown when the matching board is locked but
+   correctness is NOT revealed (showCorrectAnswers off), so the submitted answer is
+   visibly fixed, mirroring `.option.selected` on single/multiple. The green/red
+   correctness states win via :not(). */
+.matching-board.is-locked .matching-line.is-joined:not(.correct-answer):not(.incorrect-answer){
+  border-color: hsl(var(--primary));
+  background: color-mix(in oklab, hsl(var(--primary)) 8%, hsl(var(--card)));
 }
 
 .slot-placeholder{
@@ -697,6 +713,11 @@ h1 {
 .rank-item.incorrect-answer{
   border-color: hsl(var(--destructive));
   background: color-mix(in oklab, hsl(var(--destructive)) 10%, hsl(var(--card)));
+}
+/* Committed (submitted) accent for ranking — same rationale as matching above. */
+.ranking-board.is-locked .rank-item:not(.correct-answer):not(.incorrect-answer){
+  border-color: hsl(var(--primary));
+  background: color-mix(in oklab, hsl(var(--primary)) 8%, hsl(var(--card)));
 }
 
 /* ===== Loading State ===== */
@@ -847,6 +868,24 @@ h1 {
 .section-results .q-actions--center{ margin-top: 16px; }
 .q-actions--center{ justify-content:center; }
 
+/* PRD-1 §4.3: «Введение раздела» (section-intro) — topic name / description /
+   meta (questions + time) + author instruction at section start. Rendered from
+   layouts/section-intro.html. */
+.section-intro{ max-width: 600px; }
+.section-intro__card{ padding: 30px 26px 22px; text-align:center; }
+.section-intro__eyebrow{ font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: hsl(var(--muted-foreground)); margin-bottom: 6px; }
+.section-intro__title{ font-size: 28px; font-weight: 900; margin: 0 0 10px; line-height: 1.2; }
+.section-intro__desc{ font-size: 15px; line-height: 1.55; color: hsl(var(--muted-foreground)); margin: 0 auto 16px; max-width: 48ch; }
+.section-intro__meta{ display:flex; flex-wrap:wrap; justify-content:center; gap: 18px; margin: 4px 0 18px; }
+.section-intro__meta-item{ display:inline-flex; align-items:center; gap: 7px; font-size: 14px; font-weight: 600; color: hsl(var(--foreground)); }
+.section-intro__meta-dot{ width: 6px; height: 6px; border-radius: 50%; background: hsl(var(--primary)); display:inline-block; }
+.section-intro__instruction{ text-align:left; background: hsl(var(--muted)); border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 14px 16px; margin: 4px 0 6px; }
+.section-intro__instruction-head{ font-size: 12px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: hsl(var(--muted-foreground)); margin-bottom: 6px; }
+.section-intro__instruction-body{ font-size: 15px; line-height: 1.55; color: hsl(var(--foreground)); }
+.section-intro__instruction-body > :first-child{ margin-top: 0; }
+.section-intro__instruction-body > :last-child{ margin-bottom: 0; }
+.section-intro .q-actions--center{ margin-top: 18px; }
+
 .results-section-title{
   margin: 28px 0 14px;
   font-size: 22px;
@@ -971,6 +1010,18 @@ h1 {
   gap: 12px;
   margin-top: 24px;
 }
+/* The router is a HUB — navigation is the topic cards, not the content wrapper's
+   «Далее». The runtime removes that nav imperatively; this rule hides it in the
+   «Структура» preview (which renders the content layout verbatim) so run + preview
+   match. Scoped to a content wrapper that actually contains router cards. */
+.layout-content-wrap:has(.router-topic-cards) .navigation { display: none; }
+/* Required-section progress on the router hub («Разделы X / Y» + thin bar). */
+.router-progress { margin: 18px 0 4px; }
+.router-progress__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.router-progress__label { font-size: 13px; font-weight: 600; color: hsl(var(--muted-foreground)); }
+.router-progress__count { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: hsl(var(--foreground)); }
+.router-progress__bar { height: 6px; border-radius: 999px; background: hsl(var(--muted)); overflow: hidden; }
+.router-progress__fill { height: 100%; border-radius: 999px; background: hsl(var(--primary)); transition: width .25s ease; }
 .router-topic-card {
   display: flex;
   flex-direction: column;
@@ -1172,7 +1223,7 @@ a.results-rec-item:hover { text-decoration: underline; }
 .rank-draggable { cursor: grab; }
 .match-grip { flex: 0 0 auto; display: inline-flex; align-items: center; opacity: .55; }
 .match-chip:hover .match-grip { opacity: .85; }
-.match-chip-text { min-width: 0; }
+.match-chip-text { flex: 1 1 auto; min-width: 0; }
 .rank-draggable, .match-chip { touch-action: none; }
 .start-page { max-width: 600px; margin: 40px auto; padding: 0 18px; }
 .start-header { padding: 32px; text-align: center; margin-bottom: 24px; }
@@ -1316,7 +1367,7 @@ a.results-rec-item:hover { text-decoration: underline; }
       </div>
 
       <div class="pv-dialog-foot">
-        <span>10 экранов · 7 шаблонов контента · шаблон «Стандартный» v1.1.0</span>
+        <span>12 экранов · 9 шаблонов контента · шаблон «Стандартный» v1.2.0</span>
         <button type="button" class="pv-btn">Закрыть</button>
       </div>
     </div>
@@ -1328,7 +1379,7 @@ a.results-rec-item:hover { text-decoration: underline; }
   window.PRD1_PREVIEW_MANIFEST  = {
   "id": "default",
   "name": "Стандартный",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "templateApiVersion": "1.0",
   "description": "Базовый одноколоночный плеер. Используется по умолчанию для обратной совместимости.",
   "params": [
@@ -1462,50 +1513,33 @@ a.results-rec-item:hover { text-decoration: underline; }
       "placeholders": []
     },
     {
-      "key": "intro.hero",
-      "label": "Введение: заголовок и изображение",
+      "key": "intro.standard",
+      "label": "Введение раздела: стандартное",
       "kind": "intro",
       "pageKind": "content.intro",
+      "layoutFile": "layouts/section-intro.html",
+      "isDefault": true,
       "placeholders": [
         {
-          "key": "title",
-          "type": "text",
-          "label": "Заголовок",
+          "key": "instruction",
+          "type": "richText",
+          "label": "Краткая инструкция к разделу",
           "required": false,
-          "maxLength": 120,
           "textFit": {
-            "mode": "autoFitFont",
-            "defaultFontSize": 36,
-            "minFontSize": 24,
-            "maxFontSize": 36,
-            "allowAuthorFontSize": false,
+            "mode": "growBox",
+            "defaultFontSize": 16,
             "overflow": "warn"
-          }
-        },
-        {
-          "key": "subtitle",
-          "type": "text",
-          "label": "Подзаголовок",
-          "required": false,
-          "maxLength": 300,
-          "textFit": {
-            "mode": "fixed",
-            "defaultFontSize": 18,
-            "allowAuthorFontSize": true,
-            "allowedFontSizes": [
-              16,
-              18,
-              20,
-              22
-            ],
-            "overflow": "warn"
-          }
-        },
-        {
-          "key": "heroImage",
-          "type": "image",
-          "label": "Изображение",
-          "required": false
+          },
+          "allowedMarks": [
+            "bold",
+            "italic",
+            "link"
+          ],
+          "allowedBlocks": [
+            "paragraph",
+            "bulletedList",
+            "numberedList"
+          ]
         }
       ]
     },
@@ -1592,6 +1626,24 @@ a.results-rec-item:hover { text-decoration: underline; }
       ]
     },
     {
+      "key": "review.standard",
+      "label": "Обзор раздела: стандартный",
+      "kind": "review",
+      "pageKind": "review",
+      "layoutFile": "layouts/review.html",
+      "isDefault": true,
+      "placeholders": []
+    },
+    {
+      "key": "section-results.standard",
+      "label": "Итоги раздела: стандартные",
+      "kind": "section-results",
+      "pageKind": "section-results",
+      "layoutFile": "layouts/section-results.html",
+      "isDefault": true,
+      "placeholders": []
+    },
+    {
       "key": "question.standard",
       "label": "Стандартный макет вопроса",
       "kind": "questions",
@@ -1638,6 +1690,7 @@ a.results-rec-item:hover { text-decoration: underline; }
     "results.adaptive": "layouts/results.adaptive.html",
     "review": "layouts/review.html",
     "section-results": "layouts/section-results.html",
+    "section-intro": "layouts/section-intro.html",
     "system.blocked": "layouts/system.blocked.html",
     "system.transition": "layouts/system.transition.html"
   },
@@ -1691,8 +1744,8 @@ a.results-rec-item:hover { text-decoration: underline; }
       {
         "route": "content.intro",
         "pageId": "demo-intro",
-        "templateKey": "intro.hero",
-        "label": "Введение: заголовок и изображение"
+        "templateKey": "intro.standard",
+        "label": "Введение раздела"
       },
       {
         "route": "content.info",
@@ -1725,6 +1778,14 @@ a.results-rec-item:hover { text-decoration: underline; }
         "pageId": "demo-summary",
         "templateKey": "summary.result",
         "label": "Итог: результат"
+      },
+      {
+        "route": "review",
+        "label": "Обзор раздела"
+      },
+      {
+        "route": "section-results",
+        "label": "Итоги раздела"
       },
       {
         "route": "results",
@@ -1778,12 +1839,10 @@ a.results-rec-item:hover { text-decoration: underline; }
         "id": "demo-intro",
         "type": "intro",
         "route": "content.intro",
-        "templateKey": "intro.hero",
+        "templateKey": "intro.standard",
         "topicId": "topic-1",
         "values": {
-          "title": "Введение в раздел",
-          "subtitle": "Перед началом ответьте внимательно на каждый вопрос",
-          "heroImage": null
+          "instruction": "<p>Перед началом ответьте внимательно на каждый вопрос. Вернуться к вопросам можно до завершения раздела.</p>"
         }
       },
       {
@@ -1998,6 +2057,7 @@ a.results-rec-item:hover { text-decoration: underline; }
   "results.adaptive": "<div class=\"results-page\">\n  <div class=\"results-hero\">\n    <div class=\"results-hero-icon is-info\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"26\" height=\"26\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M8 21h8\"/><path d=\"M12 17v4\"/><path d=\"M7 4h10\"/><path d=\"M17 4v5a5 5 0 0 1-10 0V4\"/><path d=\"M5 6h2\"/><path d=\"M17 6h2\"/></svg>\n    </div>\n    <div class=\"results-hero-title\">Тест завершён</div>\n    <div class=\"results-hero-sub\" data-path=\"course.title\"></div>\n  </div>\n\n  <div class=\"results-section-title\">Результаты по темам</div>\n  <div class=\"results-topics-grid\">\n    {{#each result.topicResults}}\n    <div class=\"card topic-card\">\n      <div class=\"topic-head\">\n        <div class=\"topic-name\">{{topicName}}</div>\n        <div class=\"results-pill {{levelClass}}\">{{levelLabel}}</div>\n      </div>\n      {{#if hasFeedback}}\n      <div class=\"topic-feedback\">{{feedback}}</div>\n      {{/if}}\n      {{#if hasLinks}}\n      <div class=\"topic-links\">\n        {{#each links}}\n        <a class=\"topic-link\" href=\"{{url}}\" target=\"_blank\" rel=\"noopener noreferrer\">{{title}}</a>\n        {{/each}}\n      </div>\n      {{/if}}\n    </div>\n    {{/each}}\n  </div>\n\n  <div class=\"results-actions\">\n    {{#if result.showPdf}}<button type=\"button\" class=\"btn btn--outline\" data-action=\"download-pdf\">Скачать PDF</button>{{/if}}\n    {{#if result.canRetry}}<button type=\"button\" class=\"btn\" data-action=\"restart-adaptive\">Пройти заново</button>{{/if}}\n    {{#if result.showFinish}}<button type=\"button\" class=\"btn\" data-action=\"finish\">Завершить тест</button>{{/if}}\n    {{#unless result.hasScormActions}}<button type=\"button\" class=\"btn\" data-action=\"restart\">Пройти снова</button>{{/unless}}\n  </div>\n</div>\n",
   "review": "<div class=\"results-page\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"card\">\n    <div class=\"obzor-title\">{{review.scopeLabel}}</div>\n    <div class=\"obzor-sub\">{{review.hint}}</div>\n    {{#if state.questionsProgress}}\n    <div class=\"tb-pills\" role=\"group\" aria-label=\"Карта вопросов\">\n      <div class=\"tb-pills__head\">\n        <span>{{state.questionsProgress.scopeLabel}}</span>\n        <b>отвечено {{state.questionsProgress.answeredCount}} из {{state.questionsProgress.total}}</b>\n      </div>\n      <div class=\"tb-pills__dots\">\n        {{#each state.questionsProgress.states}}\n        <button type=\"button\" class=\"tb-pill {{statusClass}}\" {{#unless clickable}}disabled{{/unless}} data-action=\"goto:{{index}}\" aria-label=\"{{ariaLabel}}\">{{number}}</button>\n        {{/each}}\n      </div>\n      <div class=\"tb-pills__legend\">\n        <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-answered\"></span>отвечен</span>\n        <span class=\"tb-pills__legend-item\"><span class=\"tb-pills__legend-dot is-skipped\"></span>не отвечен</span>\n      </div>\n    </div>\n    {{/if}}\n    {{#if review.unansweredCount}}\n    <div class=\"tb-unanswered\">\n      <div class=\"tb-unanswered__head\">Без ответа ({{review.unansweredCount}}) — ответьте перед завершением:</div>\n      {{#each review.unanswered}}\n      <button type=\"button\" class=\"tb-unanswered__row\" data-action=\"goto:{{index}}\">\n        <span><strong>Вопрос {{number}}</strong> · {{prompt}}</span>\n        <span class=\"tb-unanswered__go\">Перейти →</span>\n      </button>\n      {{/each}}\n    </div>\n    {{/if}}\n    <div class=\"q-actions\">\n      <span class=\"q-actions__spacer\"></span>\n      <button type=\"button\" class=\"btn\" data-action=\"finish-review\">{{review.finishLabel}}</button>\n    </div>\n  </div>\n</div>\n",
   "section-results": "<div class=\"results-page section-results\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"card section-results__card\">\n    <div class=\"section-results__eyebrow\">Итоги раздела</div>\n    <div class=\"section-results__title\">Раздел «<span data-path=\"sectionResult.topicName\"></span>»</div>\n\n    <div class=\"results-ring\">\n      <svg viewBox=\"0 0 140 140\" width=\"140\" height=\"140\">\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-bg\" stroke-width=\"14\" fill=\"none\"></circle>\n        <circle cx=\"70\" cy=\"70\" r=\"63\" class=\"ring-fg {{ sectionResult.passClass }}\" stroke-width=\"14\" fill=\"none\" stroke-linecap=\"round\" style=\"stroke-dasharray:395.84;stroke-dashoffset:{{ sectionResult.ringDashoffset }}\"></circle>\n      </svg>\n      <div class=\"results-ring-center\">\n        <div class=\"results-ring-pct\"><span data-path=\"sectionResult.scorePercent\"></span>%</div>\n        <div class=\"results-ring-label\">Баллы</div>\n      </div>\n    </div>\n\n    <div class=\"section-results__summary\" data-path=\"sectionResult.summaryLabel\"></div>\n    {{#if sectionResult.hasVerdict}}\n    <div class=\"results-pill {{ sectionResult.passClass }}\" data-path=\"sectionResult.statusLabel\"></div>\n    {{/if}}\n\n    <div class=\"q-actions q-actions--center\">\n      <button type=\"button\" class=\"btn\" data-action=\"section-continue\">{{ sectionResult.continueLabel }}</button>\n    </div>\n  </div>\n</div>\n",
+  "section-intro": "<div class=\"results-page section-intro\">\n  {{#if design.logoUrl}}<div class=\"tb-brand\"><img class=\"tb-brand__logo\" src=\"{{ design.logoUrl }}\" alt=\"\"></div>{{/if}}\n  <div class=\"card section-intro__card\">\n    <div class=\"section-intro__eyebrow\">{{ sectionIntro.eyebrow }}</div>\n    <h1 class=\"section-intro__title\" data-path=\"sectionIntro.topicName\"></h1>\n\n    {{#if sectionIntro.hasDescription}}\n    <div class=\"section-intro__desc\" data-path=\"sectionIntro.description\"></div>\n    {{/if}}\n\n    <div class=\"section-intro__meta\">\n      <span class=\"section-intro__meta-item\">\n        <span class=\"section-intro__meta-dot\" aria-hidden=\"true\"></span>{{ sectionIntro.questionCountLabel }}\n      </span>\n      {{#if sectionIntro.hasTimeLimit}}\n      <span class=\"section-intro__meta-item\">\n        <span class=\"section-intro__meta-dot\" aria-hidden=\"true\"></span>{{ sectionIntro.timeLimitLabel }}\n      </span>\n      {{/if}}\n    </div>\n\n    {{#if sectionIntro.hasInstruction}}\n    <div class=\"section-intro__instruction\">\n      <div class=\"section-intro__instruction-head\">Инструкция</div>\n      <div class=\"section-intro__instruction-body\" data-slot=\"instruction\"></div>\n    </div>\n    {{/if}}\n\n    <div class=\"q-actions q-actions--center\">\n      <button type=\"button\" class=\"btn\" data-action=\"section-intro-continue\">{{ sectionIntro.continueLabel }}</button>\n    </div>\n  </div>\n</div>\n",
   "system.blocked": "<div class=\"layout-blocked-wrap\">\n  <div class=\"card blocked-card\" data-testid=\"retake-wall\">\n    <div class=\"blocked-icon\" role=\"img\" aria-label=\"Доступ заблокирован\">\n      <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"36\" height=\"36\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\" ry=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"/></svg>\n    </div>\n    <div data-retake-branch=\"default\">\n      <h1 class=\"blocked-title\">Доступ к тесту ограничен</h1>\n      <p class=\"blocked-description\">Для этого теста больше нет доступных попыток.</p>\n    </div>\n    <div data-retake-branch=\"cooldown\" hidden>\n      <h1 class=\"blocked-title\">Повторное прохождение пока недоступно</h1>\n      <p class=\"blocked-description\">Этот курс можно проходить не чаще, чем раз в <span data-path=\"retake.cooldownPeriodDays\">&mdash;</span> дн.</p>\n      <p class=\"blocked-description\" data-retake-available>Повторный запуск будет доступен с <strong data-path=\"retake.availableDateHuman\">&mdash;</strong>.</p>\n    </div>\n    <div data-retake-branch=\"error\" hidden>\n      <h1 class=\"blocked-title\">Не удалось проверить доступ</h1>\n      <p class=\"blocked-description\">Не удалось проверить доступность повторного прохождения. Обратитесь к администратору курса.</p>\n    </div>\n  </div>\n</div>\n",
   "system.transition": "<div class=\"transition-page\">\n  <div class=\"transition-icon {{ transition.iconClass }}\">\n    {{#if transition.isCorrect}}\n    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M20 6 9 17l-5-5\"/></svg>\n    {{/if}}\n    {{#unless transition.isCorrect}}\n    <svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/></svg>\n    {{/unless}}\n  </div>\n\n  <div class=\"transition-title\">{{ transition.title }}</div>\n\n  {{#if transition.level}}\n  <div class=\"transition-level {{ transition.level.class }}\">\n    {{#if transition.level.isUp}}<svg class=\"transition-level-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M12 19V5M5 12l7-7 7 7\"/></svg>{{/if}}\n    {{#if transition.level.isDown}}<svg class=\"transition-level-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><path d=\"M12 5v14M5 12l7 7 7-7\"/></svg>{{/if}}\n    {{#if transition.level.isComplete}}<svg class=\"transition-level-icon\" xmlns=\"http://www.w3.org/2000/svg\" width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M12 16v-4M12 8h.01\"/></svg>{{/if}}\n    <span class=\"transition-level-msg\" data-path=\"transition.level.message\"></span>\n  </div>\n  {{/if}}\n\n  {{#if transition.topic}}\n  <div class=\"transition-topic\">Переход к теме: <strong data-path=\"transition.topic.toTopic\"></strong></div>\n  {{/if}}\n\n  {{#if transition.showContinue}}\n  <div class=\"transition-actions\">\n    <button type=\"button\" class=\"btn\" data-action=\"continue\">Продолжить</button>\n  </div>\n  {{/if}}\n</div>\n"
 };
@@ -2860,6 +2920,105 @@ function contentPublicContext() {
   return { course: { title: (typeof TEST_DATA !== "undefined" ? TEST_DATA.title : "") } };
 }
 
+/**
+ * PRD-1 §4.3: renders the «Введение раздела» (intro) page from its OWN section-intro
+ * layout — topic name / description / question count / time limit (auto from the
+ * section) + the author instruction (slot) — instead of the generic content wrapper.
+ * Returns true when it rendered; false (caller falls back to the wrapper) when the
+ * layout, the renderer, or the matching section is unavailable.
+ * @param {object} page  An intro content page (kind: "intro").
+ * @returns {boolean}
+ */
+function pluralQuestions(n) {
+  var abs = Math.abs(n) % 100;
+  var d = abs % 10;
+  if (abs > 10 && abs < 20) return "вопросов";
+  if (d === 1) return "вопрос";
+  if (d > 1 && d < 5) return "вопроса";
+  return "вопросов";
+}
+
+/**
+ * Plain-JS fallback for buildSectionIntroContext — used only when the shared
+ * builder is absent from the (per-process cached) TBTemplate bundle, e.g. in dev
+ * before a server restart picks up a newly-added export. Mirrors
+ * shared/template/result-context.buildSectionIntroContext exactly so the screen
+ * renders identically regardless of which path built the context.
+ */
+function buildSectionIntroFallback(inp) {
+  var count = Math.max(0, Math.round(inp.questionCount || 0));
+  var desc = (inp.description == null ? "" : String(inp.description)).trim();
+  var hasTime = !!(inp.timeLimitMinutes && inp.timeLimitMinutes > 0);
+  var instr = typeof inp.instruction === "string" ? inp.instruction : "";
+  var instrText = instr.replace(/<[^>]*>/g, "").trim();
+  return {
+    course: { title: inp.topicName || "" },
+    sectionIntro: {
+      eyebrow: "Раздел " + (inp.sectionNumber || 1),
+      topicName: inp.topicName || "",
+      description: desc,
+      hasDescription: desc.length > 0,
+      questionCount: count,
+      questionCountLabel: count + " " + pluralQuestions(count),
+      hasTimeLimit: hasTime,
+      timeLimitLabel: hasTime ? String(inp.timeLimitMinutes) + " мин" : "",
+      hasInstruction: instrText.length > 0,
+      continueLabel: inp.continueLabel || "Далее",
+    },
+  };
+}
+
+function renderSectionIntro(page) {
+  var layouts = (typeof state !== "undefined" && state) ? state.templateLayouts : null;
+  var layout = layouts && layouts["section-intro"];
+  var TB = (typeof window !== "undefined") ? window.TBTemplate : null;
+  // NOTE: do NOT require TB.buildSectionIntroContext here — it is a recent export
+  // and may be missing from the per-process-cached runtime bundle in dev. Only
+  // TB.renderScreenInto (long-present) is required; the context is built via the
+  // shared builder when available, else the inline fallback above.
+  if (!layout || !TB || !TB.renderScreenInto) return false;
+
+  var sections = (typeof TEST_DATA !== "undefined" && TEST_DATA.sections) || [];
+  var section = null, idx = -1;
+  for (var i = 0; i < sections.length; i++) {
+    if (sections[i].topicId === page.topicId) { section = sections[i]; idx = i; break; }
+  }
+  if (!section) return false;
+
+  var values = getPageValues(page);
+  var instruction = values && values.instruction != null ? String(values.instruction) : "";
+  var introInput = {
+    sectionNumber: idx + 1,
+    topicName: section.topicName,
+    description: section.topicDescription,
+    questionCount: section.drawCount,
+    timeLimitMinutes: section.timeLimitMinutes,
+    instruction: instruction,
+    continueLabel: "Далее",
+  };
+  var built = TB.buildSectionIntroContext
+    ? TB.buildSectionIntroContext(introInput)
+    : buildSectionIntroFallback(introInput);
+  var context = {
+    course: built.course,
+    design: (typeof scormDesignContext === "function") ? scormDesignContext() : {},
+    sectionIntro: built.sectionIntro,
+  };
+
+  var app = document.getElementById("app");
+  app.innerHTML = "";
+  var wrap = document.createElement("div");
+  app.appendChild(wrap);
+  // The author instruction is sanitized rich text → injected raw via the slot (the
+  // same trust model as info-page bodies / the question-interaction slot).
+  TB.renderScreenInto(wrap, { layout: layout, context: context, slots: { instruction: instruction } });
+  var btn = wrap.querySelector('[data-action="section-intro-continue"]');
+  if (btn) btn.addEventListener("click", function () {
+    if (typeof advancePageSequence === "function") advancePageSequence();
+  });
+  return true;
+}
+
 function renderContentPage(page, contentTemplates) {
   var app = document.getElementById("app");
   if (!app) return;
@@ -2867,6 +3026,10 @@ function renderContentPage(page, contentTemplates) {
   // Cancel any previous autoAdvance timer
   var tb = typeof window !== "undefined" ? window.TestBuilder : null;
   if (tb && tb._internal) tb._internal.cancelAutoAdvance();
+
+  // PRD-1 §4.3: «Введение раздела» renders via its own section-intro layout
+  // (topic metadata + author instruction), not the generic content wrapper.
+  if (page && page.kind === "intro" && renderSectionIntro(page)) return;
 
   var contentTemplate = findContentTemplate(page, contentTemplates);
   var values = getPageValues(page);

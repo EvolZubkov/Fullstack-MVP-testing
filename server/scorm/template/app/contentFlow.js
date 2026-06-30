@@ -8,10 +8,17 @@
   function contentPagesFor(topicId, position) {
     return (TEST_DATA.contentPages || [])
       .filter(function (p) {
-        // `kind: "start"`/`"results"` are the landing and final-results screens,
-        // rendered separately by their own runtimes — they must never enter the
-        // content-page flow sequence.
-        return p.kind !== "start" && p.kind !== "results"
+        // Only AUTHOR content pages (`info`, legacy `intro`/`summary`) flow here.
+        // System design-bindings and runtime nodes are rendered by their own
+        // phases and must NEVER enter the content-page sequence as a page:
+        //   - `start`/`results` — landing / final-results screens;
+        //   - `questions` — the question-stream DESIGN BINDING (the «Вопросы» row);
+        //     leaking it renders a blank page with just «Далее» at the section start;
+        //   - `review`/`section-results` — PRD-19 обзор / итоги раздела nodes.
+        // `router` is intentionally NOT excluded — the hub legitimately enters the
+        // test-scope «before» sequence (rebuildPageSequence sets its isRouter flag).
+        return p.kind !== "start" && p.kind !== "results" && p.kind !== "questions"
+          && p.kind !== "review" && p.kind !== "section-results"
           && p.topicId === topicId && p.position === position;
       })
       .sort(function (a, b) {
@@ -226,6 +233,7 @@
    */
   function skipSectionFromCurrent(topicId) {
     if (!state.pageSequence) return;
+    state.fromReview = false; // left the section — clear the «К обзору» review flag.
     var i = state.currentPageIndex || 0;
     while (
       i < state.pageSequence.length &&

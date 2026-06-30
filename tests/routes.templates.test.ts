@@ -202,6 +202,9 @@ describe("syncBuiltinTemplates", () => {
       { key: "intro.simple", label: "Введение", kind: "intro", pageKind: "content.intro", placeholders: [] },
       { key: "summary.simple", label: "Итоги", kind: "summary", pageKind: "content.summary", placeholders: [] },
       { key: "router.menu", label: "Меню", kind: "router", pageKind: "content.router", placeholders: [] },
+      // PRD-19: required section-boundary system nodes (review + section-results).
+      { key: "review.standard", label: "Обзор", kind: "review", pageKind: "review", placeholders: [] },
+      { key: "section-results.standard", label: "Итоги раздела", kind: "section-results", pageKind: "section-results", placeholders: [] },
     ],
     params: [],
   };

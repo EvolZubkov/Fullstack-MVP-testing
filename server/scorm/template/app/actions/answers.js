@@ -311,6 +311,37 @@ function goToNextUnanswered() {
 }
 
 
+// PRD-19 (Block B): the previous question the learner may return to, or -1.
+// Mirrors the web host (take-test.tsx prevAccessibleIndex + section bound):
+// «Назад» works only in flexible mode (allowReturnToUnanswered); in sectional
+// scope (linear_by_topics / router_by_topics) the return stays inside the
+// current section — earlier sections freeze on exit, so it never crosses the
+// section boundary.
+function prevAccessibleQuestionIndex() {
+  if (!TEST_DATA.allowReturnToUnanswered) return -1;
+  var cur = state.currentIndex || 0;
+  if (cur <= 0) return -1;
+  var prev = cur - 1;
+  var prevFq = state.flatQuestions[prev];
+  if (!prevFq) return -1;
+  if (TEST_DATA.answerCommitScope === 'section') {
+    var curFq = state.flatQuestions[cur];
+    if (!curFq || prevFq.topicId !== curFq.topicId) return -1;
+  }
+  return prev;
+}
+
+// PRD-19 (Block B): «Назад» — return to the previous accessible question
+// (bounded to the current section in sectional flows). Persists the back
+// position like every forward move so a SCO reload resumes there. No-op when
+// there is no accessible previous question (the button is disabled in that case).
+function goBack() {
+  var prev = prevAccessibleQuestionIndex();
+  if (prev < 0) return;
+  state.feedbackShown = false;
+  if (goToQuestionIndex(prev)) saveSessionState();
+}
+
 function submit(force) {
   if (state.submitted) return;
 

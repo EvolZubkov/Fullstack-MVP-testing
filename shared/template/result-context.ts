@@ -19,6 +19,7 @@ import type {
   CtxCourse,
   CtxResult,
   CtxSectionResult,
+  CtxSectionIntro,
   CtxTopicResultView,
   CtxAdaptiveTopicView,
   CtxRecommendation,
@@ -167,6 +168,59 @@ export function buildSectionResultContext(input: SectionResultInput): {
     continueLabel: input.continueLabel || "Продолжить",
   };
   return { course: { title: input.topicName || "" }, sectionResult };
+}
+
+/** Russian plural for «вопрос» (1 вопрос / 2 вопроса / 5 вопросов). */
+function pluralQuestions(n: number): string {
+  const abs = Math.abs(n) % 100;
+  const d = abs % 10;
+  if (abs > 10 && abs < 20) return "вопросов";
+  if (d === 1) return "вопрос";
+  if (d > 1 && d < 5) return "вопроса";
+  return "вопросов";
+}
+
+/** Normalized input for the «Введение раздела» screen (PRD-1 §4.3). */
+export interface SectionIntroInput {
+  /** 1-based section index (for the «Раздел N» eyebrow). */
+  sectionNumber: number;
+  topicName: string;
+  /** Topic description from its properties. */
+  description?: string | null;
+  questionCount: number;
+  timeLimitMinutes?: number | null;
+  /** Author instruction (HTML/text); non-empty → the instruction block shows. */
+  instruction?: string | null;
+  continueLabel?: string;
+}
+
+/**
+ * Build the «Введение раздела» context: `{ course, sectionIntro }`. The host injects
+ * the author instruction HTML via the layout's `instruction` slot; this builder only
+ * derives `hasInstruction` (gating the block) by stripping tags + whitespace.
+ */
+export function buildSectionIntroContext(input: SectionIntroInput): {
+  course: CtxCourse;
+  sectionIntro: CtxSectionIntro;
+} {
+  const count = Math.max(0, Math.round(input.questionCount || 0));
+  const desc = (input.description ?? "").trim();
+  const hasTime = !!(input.timeLimitMinutes && input.timeLimitMinutes > 0);
+  const instrRaw = typeof input.instruction === "string" ? input.instruction : "";
+  const instrText = instrRaw.replace(/<[^>]*>/g, "").trim();
+  const sectionIntro: CtxSectionIntro = {
+    eyebrow: "Раздел " + (input.sectionNumber || 1),
+    topicName: input.topicName || "",
+    description: desc,
+    hasDescription: desc.length > 0,
+    questionCount: count,
+    questionCountLabel: count + " " + pluralQuestions(count),
+    hasTimeLimit: hasTime,
+    timeLimitLabel: hasTime ? String(input.timeLimitMinutes) + " мин" : "",
+    hasInstruction: instrText.length > 0,
+    continueLabel: input.continueLabel || "Далее",
+  };
+  return { course: { title: input.topicName || "" }, sectionIntro };
 }
 
 /** Normalized adaptive per-topic input. */

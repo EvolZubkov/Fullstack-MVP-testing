@@ -60,27 +60,40 @@ function extractTemplateId(designSettingsJson: unknown): string {
  *  dropped in a future release (PRD-7 §1.12). */
 function legacyTypeForKind(kind: SystemKind): "intro" | "info" | "summary" | "html" {
   switch (kind) {
-    case "intro":   return "intro";
-    case "summary":
+    case "intro":   return "intro"; // section «Введение раздела»
+    case "section-results": // section «Итоги раздела» — results-shaped legacy type
     case "results": return "summary";
-    case "start":   // start/router/questions have no native legacy type (column is
-    case "router":  // deprecated, PRD-7 §1.12) — "info" is the neutral placeholder.
-    case "questions":
+    case "start":   // start/router/questions/review have no native legacy type
+    case "router":  // (column is deprecated, PRD-7 §1.12) — "info" is the neutral
+    case "questions": // placeholder.
+    case "review":
     default:        return "info";
   }
 }
 
 /** Position value for a system row. The position column was designed for
  *  content-page placement before/after a topic; system kinds reuse it on a
- *  best-fit basis (intro → "before", summary → "after_topic",
- *  router/questions → "before_topic"). */
+ *  best-fit basis (start/router → "before", results → "after",
+ *  summary → "after_topic", intro/questions → "before_topic").
+ *
+ *  `router` is test-scope (topicId = null): it is the «До теста» navigation hub
+ *  shown before the topics, so it MUST be "before" — the router runtime seeds the
+ *  initial pageSequence from the test-scope "before" pages (PRD-4 v1.1 §4.7;
+ *  contentFlow.rebuildPageSequence). Placing it at "before_topic" orphans the hub
+ *  (no per-topic loop matches a null topicId), so the flow skips straight to the
+ *  questions and the router page never renders. */
 function positionForKind(kind: SystemKind): "before" | "after" | "before_topic" | "after_topic" {
   switch (kind) {
     case "start":   return "before"; // test landing — «До теста», before everything
+    case "router":  return "before"; // router hub — test-scope «До теста», before the topics
     case "results": return "after";  // test final results — «После теста»
-    case "intro":   // section intro/summary are per-topic («Введение/Итоги раздела»)
-    case "summary": return kind === "summary" ? "after_topic" : "before_topic";
-    case "router":
+    // PRD-19 runtime nodes (обзор / итоги раздела): test-level singletons rendered
+    // by their own runtime phase and EXCLUDED from the content-page flow by kind
+    // (contentFlow.contentPagesFor), so the position is cosmetic — "after" keeps
+    // them out of the per-topic before/after zones.
+    case "review":
+    case "section-results": return "after";
+    case "intro":   // section «Введение раздела» — before the topic's questions
     case "questions":
     default:        return "before_topic";
   }

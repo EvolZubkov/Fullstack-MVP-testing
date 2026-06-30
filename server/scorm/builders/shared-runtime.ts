@@ -48,25 +48,32 @@ export async function buildSharedRuntimeBundle(): Promise<string> {
 let _cache: string | null = null;
 
 /**
- * The shared runtime bundle, cached per process. Prefers the pre-built asset
- * (production); falls back to bundling from sources (dev).
+ * The shared runtime bundle.
+ *
+ * Production (`NODE_ENV=production`) reads the pre-built asset once and caches it,
+ * keeping esbuild (a devDependency) out of the prod load path.
+ *
+ * Dev/test ALWAYS bundle from the current TS sources and do NOT cache. This is
+ * deliberate: `shared-runtime.js` has no source copy under `server/scorm`, so a stale
+ * `dist/scorm/assets/shared-runtime.js` left by a prior `npm run build` would
+ * otherwise be served by {@link readAsset} and shadow live edits to `shared/template`
+ * (e.g. the progress-pills builder) — surviving every server restart and «Пересобрать».
+ * Bundling from source on each export (~100ms esbuild) lets edits take effect on the
+ * next rebuild without a restart.
  */
 export async function getSharedRuntimeBundle(): Promise<string> {
-  if (_cache !== null) return _cache;
-  try {
-    _cache = readAsset(SHARED_RUNTIME_FILENAME);
-    return _cache;
-  } catch {
-    // No pre-built asset (dev): bundle from the TS sources below.
-  }
-  if (process.env.VITEST) {
-    // esbuild's TextEncoder/Uint8Array invariant fails under vitest's jsdom
-    // environment. The bundle has its own node-env test
-    // (tests/scorm-shared-bundle.test.ts), so skip it during the suite — package
-    // generation tests don't execute the bundled JS.
-    _cache = "";
+  if (process.env.NODE_ENV === "production") {
+    if (_cache !== null) return _cache;
+    try {
+      _cache = readAsset(SHARED_RUNTIME_FILENAME);
+    } catch {
+      _cache = await buildSharedRuntimeBundle();
+    }
     return _cache;
   }
-  _cache = await buildSharedRuntimeBundle();
-  return _cache;
+  // esbuild's TextEncoder/Uint8Array invariant fails under vitest's jsdom env. The
+  // bundle has its own node-env test (tests/scorm-shared-bundle.test.ts), so skip it
+  // during the suite — package-generation tests don't execute the bundled JS.
+  if (process.env.VITEST) return "";
+  return buildSharedRuntimeBundle();
 }

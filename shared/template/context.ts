@@ -265,6 +265,35 @@ export interface CtxSectionResult {
   continueLabel: string;
 }
 
+/**
+ * PRD-1 §4.3: «Введение раздела» (section-intro) screen data (`sectionIntro.*`).
+ * Shown at the START of a section: topic name, description (from topic properties),
+ * question count, time limit (when set), and an author instruction. Both hosts build
+ * it from {@link module:shared/template/result-context}.buildSectionIntroContext.
+ */
+export interface CtxSectionIntro {
+  /** «Раздел N» eyebrow label. */
+  eyebrow: string;
+  /** Section/topic name (heading). */
+  topicName: string;
+  /** Topic description from its properties; empty string when absent. */
+  description: string;
+  /** Gates the description block. */
+  hasDescription: boolean;
+  /** Number of questions delivered in the section. */
+  questionCount: number;
+  /** Localized count label, e.g. «16 вопросов». */
+  questionCountLabel: string;
+  /** Gates the time-limit meta item. */
+  hasTimeLimit: boolean;
+  /** Localized time-limit label, e.g. «20 мин». */
+  timeLimitLabel: string;
+  /** Gates the author instruction block (set when the instruction is non-empty). */
+  hasInstruction: boolean;
+  /** «Далее» action label. */
+  continueLabel: string;
+}
+
 /** Adaptive inter-level/topic transition interstitial (`transition.*`). */
 export interface CtxTransition {
   isCorrect: boolean;
@@ -325,4 +354,6 @@ export interface PublicRenderContext {
   review?: CtxReview;
   /** PRD-19 Block D / FR-05a: computed section-results (итоги раздела) screen data. */
   sectionResult?: CtxSectionResult;
+  /** PRD-1 §4.3: «Введение раздела» (section-intro) screen data. */
+  sectionIntro?: CtxSectionIntro;
 }

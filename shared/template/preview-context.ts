@@ -17,8 +17,9 @@
  */
 
 import { buildStartState } from "./start-state";
-import { buildResultContext, buildAdaptiveResultContext, type ResultInput } from "./result-context";
+import { buildResultContext, buildAdaptiveResultContext, buildSectionResultContext, type ResultInput } from "./result-context";
 import { buildTransitionContext } from "./transition-context";
+import { buildReviewContext } from "./review-context";
 import type { ScreenRenderInput, PlaceholderDef } from "./render-screen";
 
 /** One preview route, normalized (`manifest.preview.routes[]` may be a string or object). */
@@ -155,12 +156,35 @@ interface RouterTopic {
 }
 
 /**
- * Build the router topic-menu markup (`.router-topic-cards` → `.router-topic-card`),
- * byte-for-byte the same structure/classes the SCORM runtime emits
- * (`server/scorm/template/app/routerFlow.js → renderRouterPage`), so the preview
- * shows the real topic menu on the template's demo topics. Demo `status` is mapped
- * to the runtime's per-topic states (notStarted / inProgress / completed, plus a
- * `locked` modifier) with the same status labels.
+ * Required-section progress counter («Разделы X / Y» + bar), prepended to the
+ * router menu — the SAME markup `routerFlow.js → renderRouterPage` emits, so run +
+ * preview match. Y counts ONLY required sections; empty string when none required.
+ */
+function buildRouterProgress(topics: RouterTopic[]): string {
+  const required = topics.filter((t) => t.required !== false);
+  const total = required.length;
+  if (total === 0) return "";
+  const done = required.filter((t) => String(t.status ?? "") === "completed").length;
+  const pct = Math.round((done / total) * 100);
+  return (
+    '<div class="router-progress" role="group" aria-label="Прогресс по разделам">' +
+    '<div class="router-progress__head">' +
+    '<span class="router-progress__label">Разделы</span>' +
+    `<span class="router-progress__count">${done} / ${total}</span>` +
+    "</div>" +
+    `<div class="router-progress__bar"><div class="router-progress__fill" style="width:${pct}%"></div></div>` +
+    "</div>"
+  );
+}
+
+/**
+ * Build the router topic-menu markup: the «Разделы X / Y» progress counter followed
+ * by `.router-topic-cards` → `.router-topic-card`, byte-for-byte the same
+ * structure/classes the SCORM runtime emits (`server/scorm/template/app/
+ * routerFlow.js → renderRouterPage`), so the preview shows the real topic menu on
+ * the template's demo topics. Demo `status` is mapped to the runtime's per-topic
+ * states (notStarted / inProgress / completed, plus a `locked` modifier) with the
+ * same status labels.
  */
 function buildRouterCards(topics: RouterTopic[]): string {
   const cards = topics
@@ -189,7 +213,10 @@ function buildRouterCards(topics: RouterTopic[]): string {
       );
     })
     .join("");
-  return `<div class="router-topic-cards" role="list" aria-label="Доступные темы">${cards}</div>`;
+  return (
+    buildRouterProgress(topics) +
+    `<div class="router-topic-cards" role="list" aria-label="Доступные темы">${cards}</div>`
+  );
 }
 
 /** True when a content route/kind is the router (topic menu). */
@@ -418,6 +445,47 @@ function buildOne(target: PreviewRouteTarget, dataset: PreviewDemoDataset, manif
     };
   }
 
+  // PRD-19: «Обзор раздела/теста» (review / section-finish). Demo: one question
+  // answered, the rest unanswered, so the pills + explicit unanswered list show.
+  if (route === "review") {
+    const qs = c.questions ?? [];
+    const statuses: Record<string, "answered" | "skipped" | "unanswered"> = {};
+    if (qs[0]) statuses[qs[0].id] = "answered";
+    const built = buildReviewContext({
+      questions: qs.map((q) => ({ id: q.id, topicId: c.topics?.[0]?.id ?? null, prompt: q.prompt })),
+      statuses,
+      commitScope: "test",
+      isTest: true,
+      scopeLabel: "Обзор теста",
+      finishLabel: "Завершить тест",
+    });
+    const context = {
+      course: { title: c.title },
+      state: { questionsProgress: built.questionsProgress },
+      review: built.review,
+    };
+    return { ...base, requiredSlots: [], input: { context } };
+  }
+
+  // PRD-19 FR-05a: «Итоги раздела» (computed section-results). Demo score from the
+  // runtime sectionResult/result, scoped to the first demo topic.
+  if (route === "section-results") {
+    const sr = (dataset.runtime?.sectionResult ?? dataset.runtime?.result ?? {}) as Record<string, unknown>;
+    const total = Number(sr.total) || Number(c.questionCount) || c.questions?.length || 10;
+    const percent = Number(sr.scorePercent) || 0;
+    const correct = sr.correct != null ? Number(sr.correct) : Math.round((percent / 100) * total);
+    const passed = sr.passed != null ? !!sr.passed : sr.status === "passed";
+    const built = buildSectionResultContext({
+      topicName: c.topics?.[0]?.title ?? "Раздел",
+      correct,
+      total,
+      percent,
+      passed,
+      continueLabel: "Продолжить",
+    });
+    return { ...base, requiredSlots: [], input: { context: { course: built.course, sectionResult: built.sectionResult } } };
+  }
+
   if (route === "system.transition") {
     const context = buildTransitionContext({
       isCorrect: true,
@@ -536,6 +604,13 @@ export interface ContentPageScreenInput {
   courseTitle: string;
   /** `result` namespace (for `summary`/`resultField` placeholders); zeroed when absent. */
   result?: Record<string, unknown>;
+  /**
+   * PRD-8/PRD-4 router: REAL test topics for the router topic-menu. When the page
+   * is the `router` (kind/route), the preview appends the real `.router-topic-cards`
+   * built from these topics — so «Предпросмотр» of the маршрутизатор shows the
+   * actual topic menu instead of an empty placeholder. Ignored for other kinds.
+   */
+  routerTopics?: RouterTopic[];
 }
 
 /**
@@ -550,6 +625,12 @@ export function buildContentPageScreen(inp: ContentPageScreenInput): ScreenSpec 
   const tpl = findContentTemplate(inp.manifest, inp.templateKey);
   const placeholders = tpl?.placeholders ?? [];
   const skeleton = buildSkeleton(placeholders);
+  // Router pages append the runtime topic-menu (`.router-topic-cards`) built from
+  // the REAL test topics (same markup as buildOne / the SCORM runtime), so the
+  // маршрутизатор preview shows the actual menu rather than an empty placeholder.
+  const pageContent = isRouterScreen(inp.route, tpl?.kind)
+    ? skeleton + buildRouterCards(inp.routerTopics ?? [])
+    : skeleton;
   const result = inp.result ?? { scorePercent: 0, status: "", passed: false };
   return {
     id: inp.templateKey ?? inp.route,
@@ -558,7 +639,7 @@ export function buildContentPageScreen(inp: ContentPageScreenInput): ScreenSpec 
     requiredSlots: ["page-content"],
     input: {
       context: { course: { title: inp.courseTitle }, result },
-      slots: { "page-content": skeleton },
+      slots: { "page-content": pageContent },
       content: { template: { placeholders }, values: inp.values },
     },
   };

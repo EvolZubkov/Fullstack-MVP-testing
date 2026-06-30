@@ -19,7 +19,7 @@ export {
   returnToPool,
 } from "./dnd/matching-model";
 export { attachPointerDnd } from "./dnd/pointer-dnd";
-export { buildResultContext, buildAdaptiveResultContext, buildSectionResultContext } from "./result-context";
+export { buildResultContext, buildAdaptiveResultContext, buildSectionResultContext, buildSectionIntroContext } from "./result-context";
 // PRD-18: the SINGLE standard result-aggregation + pass-rule engine shared by the
 // SCORM runtime (resultsPage.js) and the web grader (attempts.ts).
 export { aggregateStandardResult, aggregateAdaptiveResult } from "../scoring/aggregate";

@@ -53,7 +53,30 @@ async function applyPrd7ContentPageMigrations(
   for (let i = 0; i < repeat003; i++) {
     await client.query(MIGRATION_SQL);
   }
-  await client.query(MIGRATION_004_SQL);
+  // Migration 004's historical CHECK constraint only allowed the original 5 kinds.
+  // The live DB has since gained `start`/`results` (migration 018) and PRD-19
+  // `review`/`section-results` (migration 034) rows, which that constraint would
+  // reject when re-applied against the whole (committed) table. Widen the kind list
+  // in the replayed SQL to the CURRENT valid set so the constraint addition reflects
+  // reality — this test verifies migration 003's behaviour, not the kind enumeration.
+  const widened004 = MIGRATION_004_SQL.replace(
+    /CHECK\s*\(\s*"kind"\s+IN\s*\([^)]*\)\s*\)/i,
+    `CHECK ("kind" IN ('start', 'questions', 'router', 'summary', 'results', 'intro', 'info', 'review', 'section-results'))`,
+  );
+  await client.query(widened004);
+}
+
+/**
+ * Applies ONLY migration 003 for cases that assert its `tests`/`test_sections`
+ * effects (not content_pages). Migration 003's bulk content_pages INSERT predates
+ * the `kind` column and runs over the WHOLE tests table, so against the fully-
+ * migrated live DB (kind NOT NULL) it would violate the constraint for any existing
+ * test that has `start_page_content`. Relaxing NOT NULL inside the rolled-back
+ * transaction lets 003 complete without affecting what these cases verify.
+ */
+async function applyMig003(client: pg.PoolClient): Promise<void> {
+  await client.query(`ALTER TABLE "content_pages" ALTER COLUMN "kind" DROP NOT NULL`);
+  await client.query(MIGRATION_SQL);
 }
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -151,7 +174,7 @@ SUITE("migration 003_prd7_test_settings", () => {
     await withRollback(async (client) => {
       const id = `${FIXTURE_PREFIX}pub-true`;
       await insertLegacyTest(client, { id, published: true });
-      await client.query(MIGRATION_SQL);
+      await applyMig003(client);
       const { rows } = await client.query<{ status: string }>(
         `SELECT "status" FROM "tests" WHERE "id" = $1`,
         [id],
@@ -166,7 +189,7 @@ SUITE("migration 003_prd7_test_settings", () => {
     await withRollback(async (client) => {
       const id = `${FIXTURE_PREFIX}pub-false`;
       await insertLegacyTest(client, { id, published: false });
-      await client.query(MIGRATION_SQL);
+      await applyMig003(client);
       const { rows } = await client.query<{ status: string }>(
         `SELECT "status" FROM "tests" WHERE "id" = $1`,
         [id],
@@ -210,7 +233,7 @@ SUITE("migration 003_prd7_test_settings", () => {
     await withRollback(async (client) => {
       const id = `${FIXTURE_PREFIX}empty-intro`;
       await insertLegacyTest(client, { id, published: false, startPageContent: "   " });
-      await client.query(MIGRATION_SQL);
+      await applyMig003(client);
       const { rowCount } = await client.query(
         `SELECT 1 FROM "content_pages" WHERE "test_id" = $1`,
         [id],
@@ -243,7 +266,7 @@ SUITE("migration 003_prd7_test_settings", () => {
         [sectionId, testId, topicId],
       );
 
-      await client.query(MIGRATION_SQL);
+      await applyMig003(client);
 
       const { rows } = await client.query<{ required: boolean; time_limit_minutes: number | null; feedback_json: unknown }>(
         `SELECT "required", "time_limit_minutes", "feedback_json"
@@ -260,7 +283,7 @@ SUITE("migration 003_prd7_test_settings", () => {
   it("adds expected new columns and index to tests/test_sections", async () => {
     if (!dbReachable) return;
     await withRollback(async (client) => {
-      await client.query(MIGRATION_SQL);
+      await applyMig003(client);
 
       const cols = await client.query<{ table_name: string; column_name: string }>(
         `SELECT table_name, column_name
@@ -298,7 +321,7 @@ SUITE("migration 003_prd7_test_settings", () => {
   it("does NOT drop legacy columns published / start_page_content", async () => {
     if (!dbReachable) return;
     await withRollback(async (client) => {
-      await client.query(MIGRATION_SQL);
+      await applyMig003(client);
       const { rows } = await client.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns
           WHERE table_schema = current_schema()

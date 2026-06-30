@@ -257,7 +257,9 @@ function renderReviewScreen() {
             el.addEventListener('click', function () {
                 if (el.disabled) return;
                 var idx = parseInt(a.slice(5), 10);
-                if (!isNaN(idx)) { state.phase = 'question'; goToQuestionIndex(idx); }
+                // Mark that this question was opened FROM the обзор, so its nav
+                // offers «К обзору» to return (the обзор itself has no «back»).
+                if (!isNaN(idx)) { state.fromReview = true; state.phase = 'question'; goToQuestionIndex(idx); }
             });
         } else if (a === 'finish-review') {
             el.addEventListener('click', function () {
@@ -300,6 +302,7 @@ function finishSection(topicId, isLast, unansweredCount, skipConfirm) {
     function proceed() {
         if (!state.sectionCommitted) state.sectionCommitted = {};
         state.sectionCommitted[topicId] = true; // FR-06: freeze the section.
+        state.fromReview = false; // leaving the section — clear the «К обзору» flag.
         if (typeof saveSessionState === 'function') saveSessionState();
         if (TEST_DATA.showSectionResults) {
             state.sectionResultsTopicId = topicId;
@@ -392,6 +395,12 @@ function buildQuestionNavHtml(current, total) {
 
     var left = '';
     var right = '';
+    // PRD-19 (Block B): «Назад» — return to the previous accessible question
+    // (bounded to the current section in sectional flows). Parity with the web
+    // host (take-test.tsx); rendered always in flexible mode, disabled when no
+    // accessible previous question exists (first question of the test/section).
+    var prevIdx = typeof prevAccessibleQuestionIndex === 'function' ? prevAccessibleQuestionIndex() : -1;
+    left += '<button class="btn btn-outline" data-action="answer-back" onclick="goBack()"' + (prevIdx < 0 ? ' disabled' : '') + '>← Назад</button>';
     if (!committed) {
         left += '<button class="btn btn-outline" data-action="answer-skip" onclick="skipQuestion()">Пропустить</button>';
         right += '<button class="btn" data-action="answer-submit" onclick="confirmAnswer()">Отправить ответ</button>';
@@ -401,10 +410,12 @@ function buildQuestionNavHtml(current, total) {
         // On the last item «Далее» → advancePageSequence reaches the обзор (D5).
         right += '<button class="btn" data-nav="next" onclick="next()">Далее</button>';
     }
-    // PRD-19 (Block D / FR-04c): «Вернуться» → обзор, only when skipped questions
-    // exist in scope (the obvious navigation path alongside the quick pills).
-    if (hasSkippedInScope()) {
-        left += '<button class="btn btn-outline" data-action="answer-return" onclick="goToReview()">Вернуться</button>';
+    // PRD-19 (Block D / FR-04c): «К обзору» → обзор. Shown when skipped questions
+    // exist in scope (the obvious navigation path alongside the quick pills) OR the
+    // learner jumped here FROM the обзор (a review jump must always be able to return —
+    // the обзор itself has no «back»). Cleared when the section is finished.
+    if (hasSkippedInScope() || state.fromReview) {
+        left += '<button class="btn btn-outline" data-action="answer-return" onclick="goToReview()">К обзору</button>';
     }
 
     return '<div class="navigation">' +

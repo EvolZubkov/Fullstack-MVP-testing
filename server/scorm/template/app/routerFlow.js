@@ -46,11 +46,21 @@
     return out;
   }
 
+  /** True when `p` is an AUTHOR content page that may flow in a sequence — i.e.
+   *  NOT a system design-binding (`questions`/`start`/`results`/`router`) nor a
+   *  PRD-19 section node (`review`/`section-results`), all of which render via
+   *  their own phases. Mirrors contentFlow.contentPagesFor so the router topic
+   *  chunks never show a blank «Далее» page from the «Вопросы» binding row. */
+  function isFlowContentPage(p) {
+    return p && p.kind !== "start" && p.kind !== "results" && p.kind !== "questions"
+      && p.kind !== "router" && p.kind !== "review" && p.kind !== "section-results";
+  }
+
   /** Lists per-topic content pages at the given position, in sortOrder. */
   function contentPagesForRouter(topicId, position) {
     return (TEST_DATA.contentPages || [])
       .filter(function (p) {
-        return p.topicId === topicId && p.position === position;
+        return isFlowContentPage(p) && p.topicId === topicId && p.position === position;
       })
       .sort(function (a, b) {
         return (a.sortOrder || 0) - (b.sortOrder || 0);
@@ -87,7 +97,7 @@
     var postResults = [];
     var seenSummary = false;
     (TEST_DATA.contentPages || [])
-      .filter(function (p) { return p.topicId === null && p.position === "after"; })
+      .filter(function (p) { return isFlowContentPage(p) && p.topicId === null && p.position === "after"; })
       .sort(function (a, b) { return (a.sortOrder || 0) - (b.sortOrder || 0); })
       .forEach(function (page) {
         if (page.type === "summary") { seenSummary = true; return; }
@@ -180,8 +190,16 @@
     }
     var app = document.getElementById("app");
     if (!app) return;
-    var existing = app.querySelector(".router-topic-cards");
-    if (existing) existing.parentNode.removeChild(existing);
+    // The router is a HUB — navigation is via the topic cards, not the content
+    // wrapper's «Далее». Remove that nav so the run matches the «Структура» preview.
+    var nav = app.querySelector(".navigation");
+    if (nav && nav.parentNode) nav.parentNode.removeChild(nav);
+    // Cards (and the «Завершить» action) live INSIDE the content wrapper's
+    // page-content slot — the SAME DOM the preview builds (buildRouterCards into
+    // page-content) — so the run and the structure preview look identical.
+    var host = app.querySelector('[data-slot="page-content"]') || app;
+    var existing = host.querySelector(".router-topic-cards");
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
 
     var cards = document.createElement("div");
     cards.className = "router-topic-cards";
@@ -220,7 +238,32 @@
       cards.appendChild(card);
     });
 
-    app.appendChild(cards);
+    // Progress counter «Разделы X / Y» + thin bar, above the cards. Y counts ONLY
+    // required sections (the ones that gate «Перейти к результатам»); hidden when
+    // there are no required sections.
+    var prevProg = host.querySelector(".router-progress");
+    if (prevProg && prevProg.parentNode) prevProg.parentNode.removeChild(prevProg);
+    var reqSections = (TEST_DATA.sections || []).filter(function (s) { return s.required !== false; });
+    var reqTotal = reqSections.length;
+    if (reqTotal > 0) {
+      var reqDone = reqSections.filter(function (s) {
+        return state.routerTopicStates[s.topicId] === "completed";
+      }).length;
+      var pct = Math.round((reqDone / reqTotal) * 100);
+      var prog = document.createElement("div");
+      prog.className = "router-progress";
+      prog.setAttribute("role", "group");
+      prog.setAttribute("aria-label", "Прогресс по разделам");
+      prog.innerHTML =
+        '<div class="router-progress__head">' +
+          '<span class="router-progress__label">Разделы</span>' +
+          '<span class="router-progress__count">' + reqDone + " / " + reqTotal + "</span>" +
+        "</div>" +
+        '<div class="router-progress__bar"><div class="router-progress__fill" style="width:' + pct + '%"></div></div>';
+      host.appendChild(prog);
+    }
+
+    host.appendChild(cards);
 
     // PRD-4 v1.1 §4.7: «Завершить» is gated by routerCompletionPolicy
     // (all required sections completed, optionally also passed). Optional
@@ -231,9 +274,9 @@
       finishBtn.type = "button";
       finishBtn.className = "btn router-finish";
       finishBtn.setAttribute("data-action", "router-finish");
-      finishBtn.textContent = "Завершить тест";
+      finishBtn.textContent = "Перейти к результатам";
       finishBtn.onclick = finishRouter;
-      app.appendChild(finishBtn);
+      host.appendChild(finishBtn);
     }
 
     // PRD-8 FR-18: emit router lifecycle events for diagnostics + template

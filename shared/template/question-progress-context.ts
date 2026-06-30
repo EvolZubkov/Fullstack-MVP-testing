@@ -9,9 +9,9 @@
  * `statusClass` / `ariaLabel` / `clickable` this prepares — no logic in the layout.
  *
  * Scope (FR-11): sectional flows show only the CURRENT section's questions; the
- * flat flow spans the whole test. Frontier: only already-issued questions
- * (`index <= currentIndex`) of a not-yet-committed section are clickable jump
- * targets; future questions and a frozen section are not.
+ * flat flow spans the whole test. Frontier: already-issued questions — reached
+ * (`index <= currentIndex`) OR already answered/skipped — of a not-yet-committed
+ * section are clickable jump targets; genuinely future and frozen ones are not.
  *
  * Pure — no DOM, no host globals — unit-testable and safe to bundle for both hosts.
  */
@@ -132,9 +132,16 @@ export function buildQuestionProgress(input: BuildQuestionProgressInput): CtxQue
     // The current question stays visually current even in review marking.
     if (!input.reviewMarking && index === currentIndex) statusClass = "is-current";
 
-    // Frontier (FR-11): future questions and a frozen section are not jumpable;
-    // strict mode (no return) makes the whole map read-only (FR-02).
-    const issued = input.allIssued || index <= currentIndex;
+    // Frontier (FR-11): a question is "issued" (a valid jump target, rendered at full
+    // opacity) once the learner has reached its position (index <= currentIndex) OR
+    // already committed it (answered/skipped). The status clause keeps answered
+    // questions AHEAD of the current one — reached after navigating BACK via the обзор —
+    // clickable and full-opacity instead of dimmed as «не выдан» (currentIndex is the
+    // CURRENT position, not a high-water mark). Genuinely future untouched questions and
+    // a frozen section stay non-jumpable; strict mode (no return) makes the whole map
+    // read-only (FR-02).
+    const issued =
+      input.allIssued || index <= currentIndex || status === "answered" || status === "skipped";
     const clickable = (input.allowReturn ?? true) && issued && !sectionLocked;
 
     const number = pos + 1;

@@ -67,10 +67,12 @@ describe("buildScreenInputs (demo dataset → screen specs)", () => {
   });
 
   it("content screens carry a placeholder skeleton in page-content", () => {
+    // PRD-1 §4.3: the default intro variant (intro.standard) carries a single
+    // `instruction` author placeholder (topic name/count/time render from the section).
     const intro = specs.find((s) => s.route === "content.intro")!;
     expect(intro.requiredSlots).toEqual(["page-content"]);
-    expect(intro.input.slots!["page-content"]).toContain('data-placeholder="title"');
-    expect(intro.input.content!.values.title).toBe("Введение в раздел");
+    expect(intro.input.slots!["page-content"]).toContain('data-placeholder="instruction"');
+    expect(String(intro.input.content!.values.instruction)).toContain("ответьте внимательно");
   });
 });
 

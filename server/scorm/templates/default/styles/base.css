@@ -380,6 +380,11 @@ h1 {
   margin-right: 14px;
   width: 20px;
   height: 20px;
+  /* Fixed control size: as a flex item the radio/checkbox would otherwise shrink
+     (default flex-shrink:1) when the answer text wraps, so the circle drifted /
+     went oval with longer answers. `flex:0 0 20px` pins it regardless of text length
+     (alignment stays centered via the row's align-items: center). */
+  flex: 0 0 20px;
   cursor: pointer;
 }
 
@@ -510,9 +515,12 @@ h1 {
   user-select:none;
   width: 100%;
   padding: 10px 12px;
-  /* border-radius: 12px;
-  background: hsl(var(--muted) / .35);
-  border: 1px solid hsl(var(--border)); */
+  /* Flex row: grip (fixed) + gap + wrapping text. The grip/text rules below
+     (.match-grip flex:0 0 auto, .match-chip-text min-width:0) expect this — without
+     `display:flex` the grip fell inline to the top-left and stuck to the text. */
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: hsl(var(--foreground));
   cursor: grab;
   font-size: 14px;
@@ -563,6 +571,14 @@ h1 {
 .matching-line.incorrect-answer{
   border-color: hsl(var(--destructive));
   background: color-mix(in oklab, hsl(var(--destructive)) 10%, hsl(var(--card)));
+}
+/* Committed (submitted) accent — shown when the matching board is locked but
+   correctness is NOT revealed (showCorrectAnswers off), so the submitted answer is
+   visibly fixed, mirroring `.option.selected` on single/multiple. The green/red
+   correctness states win via :not(). */
+.matching-board.is-locked .matching-line.is-joined:not(.correct-answer):not(.incorrect-answer){
+  border-color: hsl(var(--primary));
+  background: color-mix(in oklab, hsl(var(--primary)) 8%, hsl(var(--card)));
 }
 
 .slot-placeholder{
@@ -641,6 +657,11 @@ h1 {
 .rank-item.incorrect-answer{
   border-color: hsl(var(--destructive));
   background: color-mix(in oklab, hsl(var(--destructive)) 10%, hsl(var(--card)));
+}
+/* Committed (submitted) accent for ranking — same rationale as matching above. */
+.ranking-board.is-locked .rank-item:not(.correct-answer):not(.incorrect-answer){
+  border-color: hsl(var(--primary));
+  background: color-mix(in oklab, hsl(var(--primary)) 8%, hsl(var(--card)));
 }
 
 /* ===== Loading State ===== */
@@ -791,6 +812,24 @@ h1 {
 .section-results .q-actions--center{ margin-top: 16px; }
 .q-actions--center{ justify-content:center; }
 
+/* PRD-1 §4.3: «Введение раздела» (section-intro) — topic name / description /
+   meta (questions + time) + author instruction at section start. Rendered from
+   layouts/section-intro.html. */
+.section-intro{ max-width: 600px; }
+.section-intro__card{ padding: 30px 26px 22px; text-align:center; }
+.section-intro__eyebrow{ font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: hsl(var(--muted-foreground)); margin-bottom: 6px; }
+.section-intro__title{ font-size: 28px; font-weight: 900; margin: 0 0 10px; line-height: 1.2; }
+.section-intro__desc{ font-size: 15px; line-height: 1.55; color: hsl(var(--muted-foreground)); margin: 0 auto 16px; max-width: 48ch; }
+.section-intro__meta{ display:flex; flex-wrap:wrap; justify-content:center; gap: 18px; margin: 4px 0 18px; }
+.section-intro__meta-item{ display:inline-flex; align-items:center; gap: 7px; font-size: 14px; font-weight: 600; color: hsl(var(--foreground)); }
+.section-intro__meta-dot{ width: 6px; height: 6px; border-radius: 50%; background: hsl(var(--primary)); display:inline-block; }
+.section-intro__instruction{ text-align:left; background: hsl(var(--muted)); border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 14px 16px; margin: 4px 0 6px; }
+.section-intro__instruction-head{ font-size: 12px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: hsl(var(--muted-foreground)); margin-bottom: 6px; }
+.section-intro__instruction-body{ font-size: 15px; line-height: 1.55; color: hsl(var(--foreground)); }
+.section-intro__instruction-body > :first-child{ margin-top: 0; }
+.section-intro__instruction-body > :last-child{ margin-bottom: 0; }
+.section-intro .q-actions--center{ margin-top: 18px; }
+
 .results-section-title{
   margin: 28px 0 14px;
   font-size: 22px;
@@ -915,6 +954,18 @@ h1 {
   gap: 12px;
   margin-top: 24px;
 }
+/* The router is a HUB — navigation is the topic cards, not the content wrapper's
+   «Далее». The runtime removes that nav imperatively; this rule hides it in the
+   «Структура» preview (which renders the content layout verbatim) so run + preview
+   match. Scoped to a content wrapper that actually contains router cards. */
+.layout-content-wrap:has(.router-topic-cards) .navigation { display: none; }
+/* Required-section progress on the router hub («Разделы X / Y» + thin bar). */
+.router-progress { margin: 18px 0 4px; }
+.router-progress__head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.router-progress__label { font-size: 13px; font-weight: 600; color: hsl(var(--muted-foreground)); }
+.router-progress__count { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; color: hsl(var(--foreground)); }
+.router-progress__bar { height: 6px; border-radius: 999px; background: hsl(var(--muted)); overflow: hidden; }
+.router-progress__fill { height: 100%; border-radius: 999px; background: hsl(var(--primary)); transition: width .25s ease; }
 .router-topic-card {
   display: flex;
   flex-direction: column;
@@ -1116,7 +1167,7 @@ a.results-rec-item:hover { text-decoration: underline; }
 .rank-draggable { cursor: grab; }
 .match-grip { flex: 0 0 auto; display: inline-flex; align-items: center; opacity: .55; }
 .match-chip:hover .match-grip { opacity: .85; }
-.match-chip-text { min-width: 0; }
+.match-chip-text { flex: 1 1 auto; min-width: 0; }
 .rank-draggable, .match-chip { touch-action: none; }
 .start-page { max-width: 600px; margin: 40px auto; padding: 0 18px; }
 .start-header { padding: 32px; text-align: center; margin-bottom: 24px; }

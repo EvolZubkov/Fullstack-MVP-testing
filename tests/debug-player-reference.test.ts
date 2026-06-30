@@ -13,11 +13,13 @@ import fs from "node:fs";
 import path from "node:path";
 
 interface ProtocolStatusRow { idx: number; status: string; answered: boolean }
+interface ScoreSection { topicName: string; percent: number; passed: boolean | null; completed: boolean }
 interface RefApi {
   applyReference(win: { document: Document; state: unknown } | null): void;
   clearReference(win: { document: Document } | null): void;
   readPkg(win: unknown): unknown;
   buildProtocolRows(pkg: unknown, cmi: Record<string, string>, mode: string): { rows: ProtocolStatusRow[] };
+  buildScore(pkg: unknown): { available: boolean; sections?: ScoreSection[] };
 }
 
 beforeAll(() => {
@@ -149,5 +151,61 @@ describe("Протокол — skip/return commit status (PRD-19 FR-24)", () => 
     const { rows } = ref().buildProtocolRows(pkg, {}, "live");
     // q1/q2 carry an answer → 'answered'; q3 has none → 'unanswered'.
     expect(rows.map((r) => r.status)).toEqual(["answered", "answered", "unanswered"]);
+  });
+});
+
+describe("Результаты по разделам — per-section completion (router_by_topics, N9)", () => {
+  // calculateResults stub: topic A fully answered/passed, topic B untouched.
+  const calculateResults = () => ({
+    earnedPoints: 2, possiblePoints: 4, correct: 2, totalQuestions: 4, percent: 50, passed: false,
+    topicResults: [
+      { topicId: "A", topicName: "О компании", percent: 100, passed: true, correct: 2, total: 2, earnedPoints: 2, possiblePoints: 2 },
+      { topicId: "B", topicName: "Право", percent: 0, passed: null, correct: 0, total: 2, earnedPoints: 0, possiblePoints: 2 },
+    ],
+  });
+  // The bug scenario: learner finished topic A and returned to the router hub, so
+  // currentIndex is FROZEN on A's last question (index 1) — the flat-index heuristic
+  // would misread A as still «в процессе». routerTopicStates is the truth.
+  const routerWin = {
+    TEST_DATA: { mode: "standard", flowPolicy: { mode: "router_by_topics" } },
+    calculateResults,
+    state: {
+      phase: "router",
+      currentIndex: 1,
+      flatQuestions: [
+        { topicId: "A", question: { id: "a1" } },
+        { topicId: "A", question: { id: "a2" } },
+        { topicId: "B", question: { id: "b1" } },
+        { topicId: "B", question: { id: "b2" } },
+      ],
+      routerTopicStates: { A: "completed" },
+    },
+  };
+
+  it("marks a topic completed from routerTopicStates even when currentIndex sits on its last question", () => {
+    const pkg = ref().readPkg(routerWin);
+    const score = ref().buildScore(pkg);
+    const a = score.sections!.find((s) => s.topicName === "О компании")!;
+    const b = score.sections!.find((s) => s.topicName === "Право")!;
+    expect(a.completed).toBe(true); // hub shows «Пройдена» → inspector must agree
+    expect(a.passed).toBe(true);
+    expect(b.completed).toBe(false); // not yet visited
+  });
+
+  it("linear flow keeps the flat-index heuristic (no routerTopicStates)", () => {
+    const linearWin = {
+      TEST_DATA: { mode: "standard", flowPolicy: { mode: "linear_by_topics" } },
+      calculateResults,
+      state: {
+        phase: "question",
+        currentIndex: 2, // moved past topic A into topic B
+        flatQuestions: routerWin.state.flatQuestions,
+      },
+    };
+    const score = ref().buildScore(ref().readPkg(linearWin));
+    const a = score.sections!.find((s) => s.topicName === "О компании")!;
+    const b = score.sections!.find((s) => s.topicName === "Право")!;
+    expect(a.completed).toBe(true); // all of A's questions are behind currentIndex
+    expect(b.completed).toBe(false); // still inside B
   });
 });

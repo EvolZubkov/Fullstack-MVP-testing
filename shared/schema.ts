@@ -1270,8 +1270,12 @@ export const contentPages = pgTable("content_pages", {
   mode: text("mode", { enum: ["template", "standard", "html"] }).notNull().default("template"),
   /** @deprecated Use `kind` instead. Kept for backward compat in this release. */
   type: text("type", { enum: ["intro", "info", "summary", "html"] }).notNull(),
-  /** PRD-1 §4.3: variant-binding kind. Drives lifecycle of system pages. */
-  kind: text("kind", { enum: ["start", "questions", "router", "summary", "results", "intro", "info"] }).notNull(),
+  /** PRD-1 §4.3: variant-binding kind. Drives lifecycle of system pages.
+   *  PRD-19: `review` (обзор / section-finish) and `section-results` (итоги раздела)
+   *  are system runtime nodes — singleton design bindings like start/results,
+   *  rendered by their own runtime phase and EXCLUDED from the content-page flow.
+   *  They replace the legacy per-topic `intro`/`summary` section pages. */
+  kind: text("kind", { enum: ["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results"] }).notNull(),
   templateKey: text("template_key"),
   sortOrder: integer("sort_order").notNull().default(0),
   valuesJson: jsonb("values_json").notNull().default({}),
@@ -1302,7 +1306,7 @@ export type ScormAnswer = typeof scormAnswers.$inferSelect;
  * PRD-1 §4.3: variant.kind — functional role of a template variant.
  * Drives variant binding rules in PRD-7 §1.4 (silent binding for system kinds).
  */
-export const variantKindSchema = z.enum(["start", "questions", "router", "summary", "results", "intro", "info"]);
+export const variantKindSchema = z.enum(["start", "questions", "router", "summary", "results", "intro", "info", "review", "section-results"]);
 export type VariantKind = z.infer<typeof variantKindSchema>;
 
 /**
@@ -1339,10 +1343,15 @@ export const templateManifestSchema = z.object({
  * default itself must declare each system kind, otherwise reconcile silently
  * fails to materialize the corresponding `content_pages` row (G48 2026-05-28).
  *
- * System kinds: `start`, `intro`, `summary`, `results`, `router`, `questions`. The
- * user kind `info` is author-created and not lifecycle-managed.
+ * System kinds: `start`, `results`, `router`, `questions`, `intro` («Введение
+ * раздела», per-topic — PRD-1 §4.3), plus the PRD-19 section nodes `review` (обзор)
+ * and `section-results` (итоги раздела — supersedes the legacy per-topic `summary`).
+ * `summary` is kept as a valid kind for backward compatibility with existing
+ * rows/templates but is no longer system-managed (its «Итог раздела» role is the
+ * computed `section-results` node). The user kind `info` is author-created and not
+ * lifecycle-managed.
  */
-const REQUIRED_DEFAULT_VARIANT_KINDS = ["start", "intro", "summary", "results", "router", "questions"] as const;
+const REQUIRED_DEFAULT_VARIANT_KINDS = ["start", "results", "router", "questions", "intro", "review", "section-results"] as const;
 
 export const defaultTemplateManifestSchema = templateManifestSchema.superRefine((m, ctx) => {
   const declared = new Set(m.contentTemplates.map((ct) => ct.kind));

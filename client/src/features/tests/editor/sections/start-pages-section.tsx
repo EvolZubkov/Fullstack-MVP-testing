@@ -4,18 +4,28 @@
  * `prd7-structure-linear-flat.html`, `prd7-structure-linear-by-topics.html`,
  * `prd7-structure-router.html`; closeout of PRD-1 §4).
  *
- * Rendering is **kind-aware** (PRD-1 §4.3), not position-tuple-based: system
- * pages are placed by their `kind` into semantic zones, author pages by their
- * position/topic into editable groups.
- *   - `intro`   (singleton) → «До теста» zone, read-only + variant switch.
- *   - `summary` (singleton) → «После теста» zone, read-only + variant switch.
+ * Rendering is **kind-aware** (PRD-1 §4.3 / PRD-19 §3.2), not position-tuple-based:
+ * system pages are placed by their `kind` into semantic zones, author pages by
+ * their position/topic into editable groups.
+ *   - `start`   (singleton) → «До теста» zone, read-only + variant switch.
+ *   - `results` (singleton) → «После теста» zone, read-only + variant switch.
  *   - `router`  (singleton) → «Маршрутизатор» zone (router_by_topics).
  *   - `questions` → one row per topic (per-topic modes) or one flat row
  *     (linear_flat), enriched with the section's question count; read-only +
  *     variant switch. NOT duplicated with a synthetic row.
+ *   - `review` (singleton, PRD-19) → «Обзор раздела/теста» system node at the
+ *     section/test boundary — variant switch + preview; gated by «возврат к
+ *     неотвеченным» (dimmed + comment when off) and hidden for adaptive.
+ *   - `section-results` (singleton, PRD-19) → «Итоги раздела» system node, shown
+ *     in each section block when `showSectionResults` is ON; variant switch + preview.
  *   - `info` (author) → editable rows in «До/После теста» and per-topic
  *     before/after groups: add (insert-row + variant modal), inline-expand
  *     edit, drag-reorder, delete.
+ *
+ * The legacy per-topic `intro` («Введение раздела») / `summary` («Итоги раздела»)
+ * system pages were removed (PRD-19 contract §3.2): section intro/summary content
+ * is authored via the topic-before/after `info` zones, and the section boundary
+ * is the `review` + `section-results` nodes above.
  *
  * System rows expose «Сменить вариант» (FR-46 / PRD-1 §4.3.3) — disabled when
  * the active template declares a single variant of that kind. Structural
@@ -36,6 +46,7 @@ import {
   List,
   Lock,
   MoreHorizontal,
+  PieChart,
   Plus,
   Route,
   Search,
@@ -156,6 +167,9 @@ const KIND_LABEL: Record<string, string> = {
   results: "Итоги теста",
   router: "Маршрутизатор",
   questions: "Вопросы",
+  // PRD-19 section-boundary system nodes.
+  review: "Обзор",
+  "section-results": "Итоги раздела",
 };
 
 /** Placement of a not-yet-created author page, captured on insert-row click. */
@@ -175,6 +189,40 @@ type ReplaceContext = { page: ContentPage };
 /** Author-editable pages. System kinds are bound by the service. */
 function isAuthorPage(page: ContentPage): boolean {
   return page.kind === "info";
+}
+
+/**
+ * PRD-19: synthesize a display-only system-node page for `review` /
+ * `section-results` when the test has no persisted singleton row yet (legacy test
+ * not reconciled, or a pending save). It binds to the template's default variant
+ * of that kind so the row still renders the variant badge + «Предпросмотр»
+ * (the обзор/итоги must always be template-overridable — PRD-19 contract §5).
+ * A persisted row (created by the planner on save / by migration) takes precedence.
+ * Returns null when the template declares no variant of the kind (contract §7:
+ * an optional node absent from the template is simply not shown).
+ */
+function synthSystemNode(
+  kind: "review" | "section-results",
+  variants: ReadonlyArray<ContentTemplateVariant>,
+): ContentPage | null {
+  const variant = variants.find((v) => v.kind === kind);
+  if (!variant) return null;
+  return {
+    id: `__virtual-${kind}`,
+    testId: "",
+    topicId: null,
+    position: "after",
+    mode: "template",
+    type: kind === "section-results" ? "summary" : "info",
+    kind,
+    templateKey: variant.key,
+    sortOrder: 0,
+    valuesJson: { values: {} },
+    autoAdvance: false,
+    autoAdvanceDelayMs: null,
+    createdAt: "",
+    updatedAt: "",
+  };
 }
 
 function pageTitle(page: ContentPage): string {
@@ -404,6 +452,24 @@ export function StructureSection({ model, testId, content: contentProp, savedFlo
           params={designDraft?.params ?? {}}
           page={previewCtx.page}
           pageTitle={pageTitle(previewCtx.page)}
+          // FR-44: preview from REAL test data where possible — real title, topics
+          // (router menu / section labels) and total question count. Demo fills
+          // the rest (e.g. example questions, not loaded in the structure editor).
+          realData={{
+            courseTitle: model.basic.title,
+            // FR-44: real test description → the «Старт» subtitle (not the demo's).
+            description: model.basic.description,
+            passPercent: model.passRules.overall.type === "percent" ? model.passRules.overall.value : null,
+            timeLimitMinutes: model.runtime.timeLimitMinutes,
+            maxAttempts: model.runtime.maxAttempts,
+            topics: model.sections.map((s) => ({ id: s.topicId, title: s.topicName })),
+            questionCount: model.sections.reduce((n, s) => n + s.drawCount, 0),
+            sections: model.sections.map((s) => ({
+              topicId: s.topicId,
+              topicName: s.topicName,
+              questionCount: s.drawCount,
+            })),
+          }}
         />
       )}
     </div>
@@ -498,20 +564,25 @@ function ZonesBlock(props: {
     pages.find((p) => p.kind === kind && p.topicId === null) ?? null;
   const questionsForTopic = (tid: string) =>
     pages.find((p) => p.kind === "questions" && p.topicId === tid) ?? null;
-  // Per-section system rows (PRD-1 §4.3 structure model): «Введение раздела» /
-  // «Итоги раздела» are one-per-topic in per-topic modes.
+  // PRD-1 §4.3: «Введение раздела» (intro) — a per-topic system node shown at the top
+  // of each section block. Carries the author instruction (editable inline); topic
+  // name / description / count / time are rendered from the section at runtime.
   const introForTopic = (tid: string) =>
     pages.find((p) => p.kind === "intro" && p.topicId === tid) ?? null;
-  // PRD-19 FR-05a: «Итоги раздела» (section-results) is an OPTIONAL system node
-  // gated by the test setting `showSectionResults`. When OFF the runtime goes
-  // straight to the next section (results only at the test level), so the
-  // structure must not present the node as available/editable — hide its row.
-  // (This differs from the «обзор» element, FR-08a, which is shown DISABLED with
-  // a comment when its setting is off; section-results is simply absent.)
-  const summaryForTopic = (tid: string) =>
-    model.runtime.showSectionResults
-      ? (pages.find((p) => p.kind === "summary" && p.topicId === tid) ?? null)
-      : null;
+  // PRD-19 §3.2: «Обзор раздела» (review) and «Итоги раздела» (section-results) are
+  // TEST-LEVEL design bindings (singletons, topicId=null) — the section boundary
+  // SYSTEM nodes, shown in every section block. They replace the legacy per-topic
+  // `intro`/`summary` content pages.
+  //   - review: design is always bindable; its DISPLAY is gated by «возврат к
+  //     неотвеченным» (reviewSlot below) and hidden for adaptive (FR-08a / FR-22).
+  //   - section-results: OPTIONAL, gated by the `showSectionResults` setting
+  //     (FR-05a). When OFF the runtime goes straight to the next section, so the
+  //     row is hidden.
+  const reviewPage =
+    systemSingleton("review") ?? synthSystemNode("review", handlers.cp.contentTemplates);
+  const sectionResultsPage = model.runtime.showSectionResults
+    ? (systemSingleton("section-results") ?? synthSystemNode("section-results", handlers.cp.contentTemplates))
+    : null;
 
   // «После теста» order list = author after-pages + «Итоги теста» (results), by
   // sortOrder. Reordering/adding here renumbers this combined list so «Итоги
@@ -717,7 +788,7 @@ function ZonesBlock(props: {
             testId="structure-flat-questions-row"
           />
           {/* PRD-19 FR-08a: flat tests have a single test-level «Обзор теста». */}
-          <ReviewSlotRow state={reviewSlot} scope="test" testId="structure-review-slot" />
+          <ReviewNodeRow state={reviewSlot} scope="test" page={reviewPage} handlers={handlers} testId="structure-review-slot" />
         </Zone>
       ) : (
         <SortableContext items={topicSortableIds} strategy={verticalListSortingStrategy}>
@@ -729,7 +800,8 @@ function ZonesBlock(props: {
               infoIn={infoIn}
               questionsForTopic={questionsForTopic}
               introForTopic={introForTopic}
-              summaryForTopic={summaryForTopic}
+              reviewPage={reviewPage}
+              sectionResultsPage={sectionResultsPage}
               reviewSlot={reviewSlot}
               dragEnabled={Boolean(updateModel) && !handlers.readOnly}
               dimGrip={handlers.readOnly}
@@ -741,7 +813,8 @@ function ZonesBlock(props: {
                 index={idx + 1}
                 section={section}
                 intro={introForTopic(section.topicId)}
-                summary={summaryForTopic(section.topicId)}
+                reviewPage={reviewPage}
+                sectionResultsPage={sectionResultsPage}
                 before={infoIn("before_topic", section.topicId)}
                 after={infoIn("after_topic", section.topicId)}
                 questions={questionsForTopic(section.topicId)}
@@ -801,10 +874,14 @@ function Zone(props: { title: string; testId: string; children: React.ReactNode 
 function TopicBlock(props: {
   index: number;
   section: TestEditorModel["sections"][number];
-  /** Per-section «Введение раздела» (kind: intro), shown first. */
+  /** PRD-1 §4.3: per-topic «Введение раздела» (kind: intro), shown FIRST. */
   intro: ContentPage | null;
-  /** Per-section «Итоги раздела» (kind: summary), shown last. */
-  summary: ContentPage | null;
+  /** PRD-19: test-level «Обзор раздела» (kind: review) design binding, shown
+   *  after the questions/after-zone. `null` only if the singleton is missing. */
+  reviewPage: ContentPage | null;
+  /** PRD-19: test-level «Итоги раздела» (kind: section-results) design binding,
+   *  shown last. `null` when `showSectionResults` is OFF (node hidden). */
+  sectionResultsPage: ContentPage | null;
   before: ContentPage[];
   after: ContentPage[];
   questions: ContentPage | null;
@@ -855,10 +932,14 @@ function TopicBlock(props: {
         <span className="topic-count">{section.drawCount} вопросов</span>
       </div>
       <div className="topic-body">
+        {/* PRD-1 §4.3: section-level «Введение раздела» (intro node) — shown first;
+            expand to edit the author instruction. Topic name/description/count/time
+            render from the section at runtime. */}
         {props.intro && (
           <SystemPageRow
             page={props.intro}
-            title={pageTitle(props.intro)}
+            title="Введение раздела"
+            icon="content"
             handlers={props.handlers}
             testId={`structure-system-intro-${section.topicId}`}
           />
@@ -883,18 +964,25 @@ function TopicBlock(props: {
           zoneLabel={`«${section.topicName}» — после темы`}
           handlers={props.handlers}
         />
-        {/* PRD-19 FR-08a: section-level «Обзор раздела» (section-finish slot). */}
-        <ReviewSlotRow
+        {/* PRD-19 FR-08a: section-level «Обзор раздела» (section-finish node) —
+            design via template (variant + preview) when enabled; dimmed + comment
+            when «возврат к неотвеченным» is OFF; hidden for adaptive. */}
+        <ReviewNodeRow
           state={props.reviewSlot}
           scope="section"
+          page={props.reviewPage}
+          handlers={props.handlers}
           testId={`structure-review-slot-${section.topicId}`}
         />
-        {props.summary && (
+        {/* PRD-19 FR-05a: section-level «Итоги раздела» (section-results node) —
+            shown only when `showSectionResults` is ON; design via template. */}
+        {props.sectionResultsPage && (
           <SystemPageRow
-            page={props.summary}
-            title={pageTitle(props.summary)}
+            page={props.sectionResultsPage}
+            title="Итоги раздела"
+            icon="section-results"
             handlers={props.handlers}
-            testId={`structure-system-summary-${section.topicId}`}
+            testId={`structure-system-section-results-${section.topicId}`}
           />
         )}
       </div>
@@ -903,22 +991,45 @@ function TopicBlock(props: {
 }
 
 /**
- * PRD-19 FR-08a: virtual «Обзор» (section-finish / test-finish) system row in the
- * structure tree. The обзор is a RUNTIME template screen (not a content_page), so
- * the row is informational/read-only — there is no per-page variant to switch.
- * `enabled` (when `allowReturnToUnanswered` is ON) accents the navigation slot;
- * `disabled` (return OFF) dims it and adds a comment pointing to the setting;
- * `null` hides the row entirely (adaptive — skip/return impossible, FR-22).
+ * PRD-19 FR-08a: «Обзор» (section-finish / test-finish) SYSTEM NODE row in the
+ * structure tree. Unlike the previous informational slot, the обзор is now a
+ * template-backed system node (`kind: review`), so when enabled it renders the
+ * SAME system row as questions/results — with a design-variant badge,
+ * «Сменить вариант» and «Предпросмотр» (PRD-19 contract §5: «Дизайн — через
+ * шаблон»). States:
+ *   - `enabled` (когда «возврат к неотвеченным» ВКЛ): full system row backed by
+ *     the test-level `review` design binding (`page`);
+ *   - `disabled` (возврат ВЫКЛ): dimmed row + comment pointing to the setting —
+ *     the обзор screen does not run in strict mode, so no design actions;
+ *   - `null` (adaptive): hidden entirely (skip/return impossible, FR-22).
  */
-function ReviewSlotRow(props: {
+function ReviewNodeRow(props: {
   state: "enabled" | "disabled" | null;
   scope: "section" | "test";
+  /** Test-level `review` design binding (singleton); may be null on legacy data
+   *  not yet reconciled — then an informational accent row is shown. */
+  page: ContentPage | null;
+  handlers: ZoneHandlers;
   testId: string;
 }) {
   if (props.state === null) return null;
   const noun = props.scope === "section" ? "раздела" : "теста";
   const finishLabel = props.scope === "section" ? "«Завершить раздел»" : "«Завершить тест»";
+  const title = `Обзор ${noun} — навигация по вопросам и ${finishLabel}`;
   if (props.state === "enabled") {
+    // Template-backed system node: variant badge + «Сменить вариант» + «Предпросмотр».
+    if (props.page) {
+      return (
+        <SystemPageRow
+          page={props.page}
+          title={title}
+          icon="review"
+          handlers={props.handlers}
+          testId={props.testId}
+        />
+      );
+    }
+    // Binding singleton missing (legacy test not yet reconciled) — informational.
     return (
       <div
         className="page-row page-row--system page-row--obzor"
@@ -927,9 +1038,7 @@ function ReviewSlotRow(props: {
       >
         <List className="page-icon" size={14} aria-hidden="true" />
         <span className="page-variant-badge">Обзор</span>
-        <span className="page-title">
-          Обзор {noun} — навигация по вопросам и {finishLabel}
-        </span>
+        <span className="page-title">{title}</span>
       </div>
     );
   }
@@ -970,15 +1079,19 @@ function InsideTestZone(props: {
   sections: TestEditorModel["sections"];
   infoIn: (position: ContentPagePosition, topicId: string | null) => ContentPage[];
   questionsForTopic: (topicId: string) => ContentPage | null;
+  /** PRD-1 §4.3: per-topic «Введение раздела» resolver. */
   introForTopic: (topicId: string) => ContentPage | null;
-  summaryForTopic: (topicId: string) => ContentPage | null;
+  /** PRD-19: test-level «Обзор раздела» design binding (singleton). */
+  reviewPage: ContentPage | null;
+  /** PRD-19: test-level «Итоги раздела» design binding (null when hidden). */
+  sectionResultsPage: ContentPage | null;
   /** PRD-19 FR-08a: «Обзор раздела» slot state (`null` = hidden, e.g. adaptive). */
   reviewSlot: "enabled" | "disabled" | null;
   dragEnabled: boolean;
   /** PRD-7 G19 read-only: dim topic grips without removing them. */
   dimGrip?: boolean;
 }) {
-  const { router, handlers, sections, infoIn, questionsForTopic, introForTopic, summaryForTopic, reviewSlot, dragEnabled, dimGrip } = props;
+  const { router, handlers, sections, infoIn, questionsForTopic, introForTopic, reviewPage, sectionResultsPage, reviewSlot, dragEnabled, dimGrip } = props;
   return (
     <section className="inside-test" data-testid="structure-inside-test">
       <div className="inside-test__label">
@@ -1002,7 +1115,8 @@ function InsideTestZone(props: {
                 index={idx + 1}
                 section={section}
                 intro={introForTopic(section.topicId)}
-                summary={summaryForTopic(section.topicId)}
+                reviewPage={reviewPage}
+                sectionResultsPage={sectionResultsPage}
                 before={infoIn("before_topic", section.topicId)}
                 after={infoIn("after_topic", section.topicId)}
                 questions={questionsForTopic(section.topicId)}
@@ -1061,7 +1175,7 @@ function SystemPageRow(props: {
   page: ContentPage;
   title: string;
   handlers: ZoneHandlers;
-  icon?: "questions" | "router" | "content";
+  icon?: "questions" | "router" | "content" | "review" | "section-results";
   testId: string;
 }) {
   const { page, handlers } = props;
@@ -1091,7 +1205,16 @@ function SystemPageRow(props: {
     (page.kind === "intro" || page.kind === "summary") &&
     Object.values(values).every((v) => v === null || v === undefined || v === "");
 
-  const Icon = props.icon === "router" ? Route : props.icon === "questions" ? HelpCircle : FileText;
+  const Icon =
+    props.icon === "router"
+      ? Route
+      : props.icon === "questions"
+        ? HelpCircle
+        : props.icon === "review"
+          ? List
+          : props.icon === "section-results"
+            ? PieChart
+            : FileText;
 
   return (
     <>
@@ -1575,11 +1698,15 @@ function PageEditForm(props: {
   const setValue = (key: string, v: unknown) => setValues((p) => ({ ...p, [key]: v }));
   const setStyle = (key: string, s: { fontSize?: number }) => setStyles((p) => ({ ...p, [key]: s }));
 
+  // True only when the form actually differs from the page's saved values — drives
+  // both the no-op save guard AND the Save-button disabled state, so «Сохранить» is
+  // OFF until the author really changes something (no false "unsaved" affordance).
+  const nextValuesJson = { values, placeholderStyles: styles };
+  const formDirty = canonicalValues(page.valuesJson) !== canonicalValues(nextValuesJson);
+
   const save = () => {
-    const nextValuesJson = { values, placeholderStyles: styles };
-    // No-op guard: if nothing actually changed (e.g. the author just opened the
-    // props and hit «Сохранить»), don't dirty the draft — just close the form.
-    if (canonicalValues(page.valuesJson) === canonicalValues(nextValuesJson)) {
+    // No-op guard: if nothing actually changed, don't dirty the draft — just close.
+    if (!formDirty) {
       props.onDone();
       return;
     }
@@ -1714,7 +1841,7 @@ function PageEditForm(props: {
               variant="primary"
               size="s"
               onClick={save}
-              disabled={cp.isUpdating}
+              disabled={cp.isUpdating || !formDirty}
               loading={cp.isUpdating}
               data-testid={`structure-page-edit-save-${page.id}`}
             >

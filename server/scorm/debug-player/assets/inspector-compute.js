@@ -189,12 +189,18 @@
       });
       Object.keys(byId).forEach(function (qid) { if (!seen[qid]) rows.push(byId[qid]); });
     } else {
-      // Progressive: only questions the learner has actually passed (index <
-      // currentIndex). Future questions aren't delivered yet, and their pre-filled
-      // ranking/matching default order must NOT show as an answered result.
+      // A question belongs in the protocol once the learner has COMMITTED it
+      // (questionStatuses = answered/skipped) OR passed its flat position. Position
+      // ALONE (i < currentIndex) is wrong: currentIndex is the CURRENT position, not a
+      // high-water mark, so it drops the question the learner is currently ON (already
+      // answered) and any answered question they navigated BACK past (skip/return,
+      // «К обзору» pills). Status keeps NOT-yet-reached questions — and their pre-filled
+      // ranking/matching default order — out, preserving the original intent.
+      var statuses = st.questionStatuses || {};
       var limit = (typeof st.currentIndex === "number") ? st.currentIndex : (st.flatQuestions || []).length;
       (st.flatQuestions || []).forEach(function (fq, i) {
-        if (i >= limit) return;
+        var stt = statuses[fq.question.id];
+        if (!(stt === "answered" || stt === "skipped" || i < limit)) return;
         rows.push({ q: fq.question, topicName: fq.topicName, answer: st.answers[fq.question.id], levelName: null });
       });
     }
@@ -639,10 +645,22 @@
     var bst = pkg.state || {};
     var bIdx = (typeof bst.currentIndex === "number") ? bst.currentIndex : (bst.flatQuestions || []).length;
     var topicDone = {};
-    (bst.flatQuestions || []).forEach(function (fq, i) {
-      if (topicDone[fq.topicId] === undefined) topicDone[fq.topicId] = true;
-      if (i >= bIdx) topicDone[fq.topicId] = false;
-    });
+    if (flowMode === "router_by_topics" && bst.routerTopicStates) {
+      // Router mode: topics are traversed non-linearly via the hub, and on the hub
+      // currentIndex stays frozen on the LAST question of the topic just left — so
+      // that question's flat index equals currentIndex and the heuristic below would
+      // misread the (already completed) topic as still «в процессе». The router
+      // runtime tracks authoritative per-topic completion in routerTopicStates; use
+      // it so a topic shown «Пройдена» on the hub also reads «пройден» here.
+      (bst.flatQuestions || []).forEach(function (fq) {
+        topicDone[fq.topicId] = bst.routerTopicStates[fq.topicId] === "completed";
+      });
+    } else {
+      (bst.flatQuestions || []).forEach(function (fq, i) {
+        if (topicDone[fq.topicId] === undefined) topicDone[fq.topicId] = true;
+        if (i >= bIdx) topicDone[fq.topicId] = false;
+      });
+    }
     return {
       available: true, adaptive: false,
       sectioned: flowMode !== "linear_flat",
@@ -671,7 +689,10 @@
     var secDefs = (pkg.TEST_DATA && pkg.TEST_DATA.sections) || [];
     var st = pkg.state;
     // Delivery progress (N3): a drawn question is "delivered" once the learner has
-    // passed its flat position (index < currentIndex). flatIndex keeps delivery order.
+    // COMMITTED it (questionStatuses = answered/skipped) OR passed its flat position.
+    // Position alone (index < currentIndex) drops the current question and anything
+    // navigated back past — see buildLiveRows. flatIndex keeps delivery order.
+    var statuses = st.questionStatuses || {};
     var currentIndex = (typeof st.currentIndex === "number") ? st.currentIndex : (st.flatQuestions || []).length;
     var flatIndex = {};
     (st.flatQuestions || []).forEach(function (fq, i) { flatIndex[fq.question.id] = i; });
@@ -685,8 +706,10 @@
       var drawn = drawnByTopic[vs.topicId] || [];
       var qlist = drawn.map(function (q) {
         var fi = (typeof flatIndex[q.id] === "number") ? flatIndex[q.id] : -1;
+        var stt = statuses[q.id];
+        var delivered = (stt === "answered" || stt === "skipped") || (fi >= 0 && fi < currentIndex);
         return { id: q.id, idx: fi, prompt: q.prompt || "", type: q.type, typeLabel: typeLabel(q.type),
-          topicName: vs.topicName, delivered: fi >= 0 && fi < currentIndex };
+          topicName: vs.topicName, delivered: delivered };
       });
       var out = {
         topicName: vs.topicName, count: drawnIds.length, mode: "all",
@@ -736,10 +759,13 @@
     b.setAttribute("data-tb-ref", "1");
     b.textContent = text;
     if (kind === "key") {
-      // matching pair letter — small accent key badge sitting on the tile.
-      b.style.cssText = "display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:18px;" +
-        "margin-left:8px;padding:0 5px;border-radius:4px;background:#ede9fe;color:#6d28d9;" +
-        "font:700 11px/1 system-ui,sans-serif;vertical-align:middle;flex:0 0 auto;";
+      // matching pair letter — centered in a reserved LEFT gutter on the chip / right
+      // tile (reserveKeyGutter makes the room). Absolute + translateY(-50%) keeps it on
+      // the middle horizontal no matter how many lines the tile/chip text wraps to.
+      b.style.cssText = "position:absolute;left:10px;top:50%;transform:translateY(-50%);" +
+        "display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:18px;" +
+        "padding:0 5px;border-radius:4px;background:#ede9fe;color:#6d28d9;" +
+        "font:700 11px/1 system-ui,sans-serif;flex:0 0 auto;pointer-events:none;";
       return b;
     }
     // single/multiple/ranking — marker in a LEFT GUTTER OUTSIDE the variant (absolute,
@@ -758,6 +784,21 @@
     for (var i = 0; i < marks.length; i++) {
       if (marks[i].parentNode) marks[i].parentNode.removeChild(marks[i]);
     }
+    // Restore the left padding reserved for the centered matching pair letters.
+    var padded = doc.querySelectorAll('[data-tb-ref-pad]');
+    for (var k = 0; k < padded.length; k++) {
+      padded[k].style.paddingLeft = padded[k].getAttribute("data-tb-ref-pad");
+      padded[k].removeAttribute("data-tb-ref-pad");
+    }
+  }
+  // Reserve a fixed left gutter on a matching chip / right tile so the centered
+  // «Эталон» pair letter has room without overlapping content; the original inline
+  // padding-left is stashed and restored in clearReference.
+  function reserveKeyGutter(el) {
+    if (!el) return;
+    if (el.getAttribute("data-tb-ref-pad") === null) el.setAttribute("data-tb-ref-pad", el.style.paddingLeft);
+    el.style.position = "relative";
+    el.style.paddingLeft = "40px";
   }
   function applyReference(iframeWin) {
     var doc = iframeWin && iframeWin.document;
@@ -819,9 +860,9 @@
         var letter = String.fromCharCode(65 + idx);
         var line = mboards[mb].querySelector('.matching-line[data-right="' + p.right + '"]');
         var rt = line ? line.querySelector(".match-right-tile") : null;
-        if (rt) rt.appendChild(tbRefBadge(doc, letter, "key"));
+        if (rt) { reserveKeyGutter(rt); rt.appendChild(tbRefBadge(doc, letter, "key")); }
         var chip = mboards[mb].querySelector('.match-chip[data-drag="' + p.left + '"]');
-        if (chip) chip.appendChild(tbRefBadge(doc, letter, "key"));
+        if (chip) { reserveKeyGutter(chip); chip.appendChild(tbRefBadge(doc, letter, "key")); }
       });
     }
   }

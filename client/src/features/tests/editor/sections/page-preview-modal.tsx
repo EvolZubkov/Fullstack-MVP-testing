@@ -18,6 +18,7 @@ import { useMemo } from "react";
 import { Banner, Button, ModalDialog } from "@universityrt/ui-kit";
 import { TemplateScreen } from "@/components/template-screen";
 import { buildContentPageScreen, buildScreenInputs, type PreviewDemoDataset } from "@shared/template/preview-context";
+import { buildSectionIntroContext } from "@shared/template/result-context";
 import { buildTemplateCssVars } from "@shared/template/params-css";
 import { useTemplateBundle } from "./use-template-bundle";
 
@@ -28,6 +29,8 @@ export interface PagePreviewPage {
   id: string;
   /** Variant-binding kind (PRD-1 §4.3): intro | info | summary | router | questions. */
   kind?: string | null;
+  /** Topic this page belongs to (per-topic kinds, e.g. `intro`) — picks the real section. */
+  topicId?: string | null;
   templateKey?: string | null;
   valuesJson?: unknown;
 }
@@ -43,35 +46,123 @@ export type PagePreviewModalProps = {
   page: PagePreviewPage;
   /** Display title for the modal header («Предпросмотр: <title>»). */
   pageTitle: string;
+  /**
+   * REAL test data so previews render the actual test where possible (FR-44): the
+   * test title, its topics (router topic-menu + section/topic labels) and total
+   * question count override the template's demo dataset. Falls back to the demo
+   * when a field is absent (e.g. real questions are not loaded in the editor).
+   */
+  realData?: {
+    courseTitle?: string;
+    /** Real test description → «Старт» subtitle. */
+    description?: string;
+    /** Pass threshold percent (null when the rule is absolute/none). */
+    passPercent?: number | null;
+    timeLimitMinutes?: number | null;
+    maxAttempts?: number | null;
+    topics?: Array<{ id: string; title: string }>;
+    questionCount?: number;
+    /** Per-section data for the «Введение раздела» preview (topic name + count). */
+    sections?: Array<{ topicId: string; topicName: string; questionCount: number }>;
+  };
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function PagePreviewModal({ open, onClose, templateId, params, page, pageTitle }: PagePreviewModalProps) {
+export function PagePreviewModal({ open, onClose, templateId, params, page, pageTitle, realData }: PagePreviewModalProps) {
   const bundleQuery = useTemplateBundle(templateId, open);
   const bundle = bundleQuery.data;
 
-  // One ScreenSpec for THIS page. `start` / `results` / `questions` are rendered
-  // by their OWN runtimes (landing, final results, question stream), not as
-  // content pages — preview them from the template's demo dataset via the SAME
-  // builders the player/«Предпросмотр» use (buildStartState / buildResultContext /
-  // demo question). Content kinds (intro/info/summary) render the page's own values.
+  // REAL test data overlaid on the template's demo dataset (FR-44: preview from
+  // real data where possible). Real title + topics + question count drive the
+  // router topic-menu, section/итоги labels and counters; demo fills the rest
+  // (e.g. example questions, which the structure editor does not load).
+  const effectiveDemo = useMemo<PreviewDemoDataset | null>(() => {
+    const base = (bundle?.demo as PreviewDemoDataset | undefined) ?? undefined;
+    if (!base) return null;
+    if (!realData) return base;
+    const topics = realData.topics?.length
+      ? realData.topics.map((t) => ({ id: t.id, title: t.title, status: "available" }))
+      : base.course.topics;
+    return {
+      ...base,
+      course: {
+        ...base.course,
+        ...(realData.courseTitle ? { title: realData.courseTitle } : {}),
+        ...(topics ? { topics } : {}),
+        ...(realData.questionCount != null ? { questionCount: realData.questionCount } : {}),
+        // Start-screen facts: overlaid whenever the editor provides them (using
+        // `!== undefined` so a real `null` — e.g. "no time limit" — overrides the
+        // demo value instead of leaving the demo's number).
+        ...(realData.description !== undefined ? { description: realData.description } : {}),
+        ...(realData.passPercent !== undefined ? { passPercent: realData.passPercent } : {}),
+        ...(realData.timeLimitMinutes !== undefined ? { timeLimitMinutes: realData.timeLimitMinutes } : {}),
+        ...(realData.maxAttempts !== undefined ? { maxAttempts: realData.maxAttempts } : {}),
+      },
+    };
+  }, [bundle, realData]);
+
+  // One ScreenSpec for THIS page. `start` / `results` / `questions` and the PRD-19
+  // system nodes `review` (обзор) / `section-results` (итоги раздела) are rendered
+  // by their OWN runtimes (not as content pages) — preview them from the (real-data
+  // overlaid) demo dataset via the SAME builders the player/«Предпросмотр» use
+  // (buildStartState / buildResultContext / buildReviewContext /
+  // buildSectionResultContext / demo question). Content kinds (intro/info/summary/
+  // router) render the page's own values; router also gets the REAL topic-menu.
   const spec = useMemo(() => {
     if (!bundle) return null;
-    if (page.kind === "start" || page.kind === "results" || page.kind === "questions") {
-      const demoScreens = bundle.demo ? buildScreenInputs(bundle.demo as PreviewDemoDataset, bundle.manifest) : [];
+    if (
+      page.kind === "start" ||
+      page.kind === "results" ||
+      page.kind === "questions" ||
+      page.kind === "review" ||
+      page.kind === "section-results"
+    ) {
+      const demoScreens = effectiveDemo ? buildScreenInputs(effectiveDemo, bundle.manifest) : [];
       const matches =
         page.kind === "start"
           ? (r: string) => r === "start"
           : page.kind === "results"
             ? (r: string) => r === "results" || r === "results.adaptive"
-            : (r: string) => r.startsWith("question");
+            : page.kind === "review"
+              ? (r: string) => r === "review"
+              : page.kind === "section-results"
+                ? (r: string) => r === "section-results"
+                : (r: string) => r.startsWith("question");
       return demoScreens.find((s) => matches(s.route)) ?? null;
+    }
+    // PRD-1 §4.3: «Введение раздела» (intro) renders via its own section-intro layout
+    // — real topic name + question count (from the editor sections) + the author
+    // instruction (slot). Topic description / time limit are shown in the real run
+    // (the export carries them); not loaded in the editor, so the preview omits them.
+    if (page.kind === "intro" && bundle.layouts["section-intro"]) {
+      const sections = realData?.sections ?? [];
+      const i = sections.findIndex((s) => s.topicId === page.topicId);
+      const section = i >= 0 ? sections[i] : sections[0];
+      const instr = String(
+        (page.valuesJson as { values?: { instruction?: unknown } } | null)?.values?.instruction ?? "",
+      );
+      const built = buildSectionIntroContext({
+        sectionNumber: i >= 0 ? i + 1 : 1,
+        topicName: section?.topicName ?? effectiveDemo?.course.topics?.[0]?.title ?? "Раздел",
+        questionCount: section?.questionCount ?? effectiveDemo?.course.questionCount ?? 0,
+        instruction: instr,
+      });
+      return {
+        id: page.id,
+        route: "content.intro",
+        layoutKey: "section-intro",
+        requiredSlots: [],
+        input: {
+          context: { course: built.course, sectionIntro: built.sectionIntro },
+          slots: { instruction: instr },
+        },
+      };
     }
     const values = (page.valuesJson as { values?: Record<string, unknown> } | null)?.values ?? {};
     const tpl = (bundle.manifest.contentTemplates ?? []).find((c) => c.key === page.templateKey);
     const route = tpl?.pageKind ?? `content.${page.kind ?? "info"}`;
-    const runtime = (bundle.demo as { runtime?: { result?: Record<string, unknown>; sectionResult?: Record<string, unknown> } } | null)?.runtime;
+    const runtime = effectiveDemo?.runtime;
     const rr = runtime?.sectionResult ?? runtime?.result;
     const result = rr
       ? { scorePercent: Number(rr.scorePercent) || 0, status: rr.status ?? "", passed: !!rr.passed }
@@ -81,10 +172,16 @@ export function PagePreviewModal({ open, onClose, templateId, params, page, page
       route,
       templateKey: page.templateKey ?? undefined,
       values,
-      courseTitle: "",
+      courseTitle: realData?.courseTitle ?? effectiveDemo?.course.title ?? "",
       result,
+      // Real topics → the router preview renders the actual topic-menu cards.
+      routerTopics: (effectiveDemo?.course.topics ?? []).map((t) => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+      })),
     });
-  }, [bundle, page]);
+  }, [bundle, page, effectiveDemo, realData]);
 
   // Draft branding → CSS variables, via the SAME mapping the runtime uses.
   const cssVars = useMemo(() => buildTemplateCssVars(params, bundle?.manifest.params), [params, bundle]);

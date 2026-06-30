@@ -11,22 +11,40 @@
  * their own transactions.
  *
  * System kinds covered here:
- *   - `intro`     — always exactly one row (`topicId: null`)
- *   - `summary`   — always exactly one row (`topicId: null`)
- *   - `router`    — exactly one row (`topicId: null`) iff flowMode = router_by_topics
- *   - `questions` — one row (`topicId: null`) in linear_flat, one per topic in
- *                   linear_by_topics / router_by_topics
+ *   - `start`           — always exactly one row (`topicId: null`)
+ *   - `results`         — always exactly one row (`topicId: null`)
+ *   - `router`          — exactly one row (`topicId: null`) iff flowMode = router_by_topics
+ *   - `questions`       — one row (`topicId: null`) in linear_flat, one per topic in
+ *                         linear_by_topics / router_by_topics
+ *   - `intro`           — PRD-1 §4.3 «Введение раздела». One row PER TOPIC in
+ *                         per-topic modes; none in linear_flat. Renders topic name /
+ *                         description / question count / time limit + an author
+ *                         instruction at section start.
+ *   - `review`          — PRD-19 обзор (section-finish / test-finish). Exactly one
+ *                         row (`topicId: null`): a test-level DESIGN binding for the
+ *                         runtime obзор node. Always present (like start/results);
+ *                         the editor/runtime gate its display by the «возврат к
+ *                         неотвеченным» setting (FR-08a) and hide it for adaptive.
+ *   - `section-results` — PRD-19 итоги раздела. Exactly one row (`topicId: null`)
+ *                         in per-topic modes (linear_by_topics / router_by_topics):
+ *                         a test-level design binding for the runtime section-results
+ *                         node, gated for display by the `showSectionResults` setting.
  *
  * The user kind `info` is NOT planned here — `info` pages are author-created
  * and survive flowMode changes unchanged (FR-40).
+ *
+ * The legacy per-topic `summary` («Итог раздела») is NO LONGER planned — its role is
+ * the computed `section-results` node. Existing `summary` rows are removed by migration.
  */
 import type { VariantKind, TemplateManifest } from "@shared/schema";
 import { bindSystemVariant } from "./variant-binding";
 
 export type FlowMode = "linear_flat" | "linear_by_topics" | "router_by_topics";
 
-/** System kinds the planner manages (excludes `info`). */
-export const SYSTEM_KINDS = ["start", "intro", "summary", "results", "router", "questions"] as const;
+/** System kinds the planner manages (excludes `info` and the deprecated per-topic
+ *  `summary` — its «Итог раздела» role is now the computed `section-results` node).
+ *  `intro` («Введение раздела») is a per-topic system node (PRD-1 §4.3). */
+export const SYSTEM_KINDS = ["start", "results", "router", "questions", "intro", "review", "section-results"] as const;
 export type SystemKind = (typeof SYSTEM_KINDS)[number];
 
 /** A system content_pages row currently in the database. */
@@ -87,9 +105,10 @@ export function needsRouter(flowMode: FlowMode): boolean {
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
-/** Plans the single-row-per-test system kinds (start, results, router). */
+/** Plans the single-row-per-test system kinds (start, results, router, review,
+ *  section-results). */
 function planSingletonKind(
-  kind: "start" | "results" | "router",
+  kind: "start" | "results" | "router" | "review" | "section-results",
   existing: ExistingSystemPage[],
   desired: DesiredTestState,
   required: boolean,
@@ -244,30 +263,25 @@ function planQuestionsKind(
 }
 
 /**
- * Plans a PER-TOPIC-ONLY system kind (`intro` = «Введение раздела»,
- * `summary` = «Итоги раздела»). One row per topic in per-topic modes
- * (linear_by_topics / router_by_topics); ZERO rows in linear_flat — a flat test
- * has no section, so it has no section intro/summary (PRD-1 §4.3 structure model).
- *
- * Rows are preserved by topicId across topic-list changes; a flowMode transition
- * out of per-topic deletes them, and into per-topic creates fresh ones.
+ * Plans the per-topic `intro` («Введение раздела») system rows (PRD-1 §4.3): one
+ * row per topic in per-topic modes (linear_by_topics / router_by_topics); ZERO rows
+ * in linear_flat (no sections). Rows are preserved by topicId across topic-list
+ * changes; a flowMode transition out of per-topic deletes them, and into per-topic
+ * creates fresh ones. Mirrors planQuestionsKind's per-topic preservation.
  */
-function planPerTopicOnlyKind(
-  kind: "intro" | "summary",
+function planPerTopicIntro(
   existing: ExistingSystemPage[],
   desired: DesiredTestState,
 ): { keep: Array<{ id: string }>; create: ContentPageInsert[]; delete: Array<{ id: string }> } {
-  const owned = existing.filter((e) => e.kind === kind);
-  const binding = bindSystemVariant(desired.template, desired.defaultTemplate, kind);
+  const owned = existing.filter((e) => e.kind === "intro");
+  const binding = bindSystemVariant(desired.template, desired.defaultTemplate, "intro");
   if (!binding) {
+    // No intro variant anywhere — keep existing rows, create none (caller surfaces).
     return { keep: owned.map((e) => ({ id: e.id })), create: [], delete: [] };
   }
-  const hints = {
-    fallbackUsed: binding.fallbackUsed,
-    hasMultipleChoices: binding.hasMultipleChoices,
-  };
+  const hints = { fallbackUsed: binding.fallbackUsed, hasMultipleChoices: binding.hasMultipleChoices };
 
-  // linear_flat: section intro/summary do not exist → remove any leftover rows.
+  // linear_flat: no sections → remove any leftover intro rows.
   if (!isPerTopicMode(desired.flowMode)) {
     return { keep: [], create: [], delete: owned.map((e) => ({ id: e.id })) };
   }
@@ -286,7 +300,7 @@ function planPerTopicOnlyKind(
       keep.push({ id: ex.id });
       keptIds.add(ex.id);
     } else {
-      create.push({ kind, topicId, templateKey: binding.variantKey, valuesJson: {}, bindingHints: hints });
+      create.push({ kind: "intro", topicId, templateKey: binding.variantKey, valuesJson: {}, bindingHints: hints });
     }
   }
   // Delete everything not kept: null-topic rows, stale-topic rows AND duplicates.
@@ -306,21 +320,34 @@ export function planSystemPages(
   desired: DesiredTestState,
 ): ContentPagesPlan {
   // `start` is the test landing screen — a single test-level row (До теста),
-  // always present, like intro/summary (PRD-1 §4.3: template-backed start).
+  // always present, template-backed (PRD-1 §4.3: template-backed start).
   const start = planSingletonKind("start", existing, desired, true);
-  // intro/summary are per-SECTION («Введение раздела»/«Итоги раздела») — one per
-  // topic in per-topic modes, none in linear_flat.
-  const intro = planPerTopicOnlyKind("intro", existing, desired);
-  const summary = planPerTopicOnlyKind("summary", existing, desired);
   // `results` is the test-level final-results screen («После теста»), a single
   // row, template-backed like start (PRD-1 §4.3: «Итоги теста»).
   const results = planSingletonKind("results", existing, desired, true);
   const router = planSingletonKind("router", existing, desired, needsRouter(desired.flowMode));
   const questions = planQuestionsKind(existing, desired);
+  // PRD-1 §4.3: `intro` («Введение раздела») is a per-topic system node — one row per
+  // topic in per-topic modes, none in linear_flat.
+  const intro = planPerTopicIntro(existing, desired);
+  // PRD-19 §3.2: `review` (обзор — section-finish / test-finish) is a test-level
+  // DESIGN binding for the runtime обзор node — always present, like start/results.
+  // Its actual display is gated by the «возврат к неотвеченным» setting (FR-08a)
+  // and hidden for adaptive tests; that gating lives in the editor/runtime, not here.
+  const review = planSingletonKind("review", existing, desired, true);
+  // PRD-19 FR-05a: `section-results` (итоги раздела) is a test-level design binding
+  // for the runtime section-results node — only meaningful when the test HAS sections
+  // (per-topic modes). Its display is gated by the `showSectionResults` setting.
+  const sectionResults = planSingletonKind(
+    "section-results",
+    existing,
+    desired,
+    isPerTopicMode(desired.flowMode),
+  );
 
   return {
-    keep: [...start.keep, ...intro.keep, ...summary.keep, ...results.keep, ...router.keep, ...questions.keep],
-    create: [...start.create, ...intro.create, ...summary.create, ...results.create, ...router.create, ...questions.create],
-    delete: [...start.delete, ...intro.delete, ...summary.delete, ...results.delete, ...router.delete, ...questions.delete],
+    keep: [...start.keep, ...results.keep, ...router.keep, ...questions.keep, ...intro.keep, ...review.keep, ...sectionResults.keep],
+    create: [...start.create, ...results.create, ...router.create, ...questions.create, ...intro.create, ...review.create, ...sectionResults.create],
+    delete: [...start.delete, ...results.delete, ...router.delete, ...questions.delete, ...intro.delete, ...review.delete, ...sectionResults.delete],
   };
 }
