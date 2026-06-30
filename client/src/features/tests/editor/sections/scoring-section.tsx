@@ -25,12 +25,16 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Pencil, RotateCcw } from "lucide-react";
+import {
+  CheckSquare, ChevronDown, ChevronRight, CircleDot, ListOrdered, Pencil, RotateCcw, Unplug,
+  type LucideIcon,
+} from "lucide-react";
 import {
   Banner, Collapsible, CollapsibleContent, CollapsibleTrigger, IconButton, Input, Tag,
 } from "@universityrt/ui-kit";
 
 import { resolveEffectiveScoring } from "@shared/scoring/effective-scoring";
+import { t } from "@/lib/i18n";
 import type { Question } from "@shared/schema";
 import type { TestEditorModel } from "../test-editor.types";
 import {
@@ -50,6 +54,22 @@ export type ScoringSectionProps = {
 };
 
 type QuestionRow = Question & { topicName?: string };
+
+type QuestionType = "single" | "multiple" | "matching" | "ranking";
+
+/** Question-type pictograms — same convention as the content tree (content-tree.tsx). */
+const TYPE_ICON: Record<QuestionType, LucideIcon> = {
+  single: CircleDot,
+  multiple: CheckSquare,
+  matching: Unplug,
+  ranking: ListOrdered,
+};
+const TYPE_LABEL: Record<QuestionType, string> = {
+  single: t.questions.singleChoice,
+  multiple: t.questions.multipleChoice,
+  matching: t.questions.matching,
+  ranking: t.questions.ranking,
+};
 
 /** Human label of a graded-config kind (PRD-10). */
 const KIND_LABEL: Record<string, string> = {
@@ -261,6 +281,8 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                       questionContentHash: q.contentHash ?? null,
                     });
                     const difficulty = override?.difficulty ?? q.difficulty;
+                    const qType = q.type as QuestionType;
+                    const TypeIcon = TYPE_ICON[qType] ?? CircleDot;
                     const cellTitle = "Настроено в тесте";
                     const openModal = () =>
                       setModalState({
@@ -275,7 +297,12 @@ export function ScoringSection({ model, testId, updateModel, readOnly }: Scoring
                         className={override ? "tb-qscoring__row--override" : undefined}
                         data-testid={`scoring-row-${q.id}`}
                       >
-                        <td>{q.prompt}</td>
+                        <td>
+                          <span className="tb-qscoring__qtype" title={TYPE_LABEL[qType] ?? qType}>
+                            <TypeIcon width={16} height={16} aria-hidden="true" />
+                          </span>
+                          {q.prompt}
+                        </td>
                         <td
                           className={override?.points != null ? "tb-qscoring__cell--override" : undefined}
                           title={override?.points != null ? cellTitle : undefined}
