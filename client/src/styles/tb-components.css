@@ -118,6 +118,24 @@
 /* Section caption (subdued uppercase-like heading внутри формы). */
 .tb-section-label { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); display: inline-flex; align-items: center; gap: var(--ou-space-2); }
 
+/* Result-variable visual builder (PRD-2 §4.1): template select + condition rows.
+   A condition row is «Элемент(grow) · Свойство · Оператор · Значение · удалить»;
+   the same primitive renders «Порог» (one row) and «Вердикт» (a list). */
+.tb-formula-builder { display: flex; flex-direction: column; gap: var(--ou-space-3); margin-top: var(--ou-space-2); }
+.tb-rows { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+.tb-rows-actions { margin-top: var(--ou-space-2); }
+.tb-cond-row { display: flex; align-items: flex-end; gap: var(--ou-space-2); }
+.tb-cond-row > .tb-cond-row__grow { flex: 1 1 auto; min-width: 0; }
+.tb-cond-sep { font: var(--ou-text-body-s); color: var(--ou-fg-muted); white-space: nowrap; padding-bottom: var(--ou-space-2); }
+
+/* DSL «Функции» reference (modal): toolbar trigger + grouped function rows. */
+.tb-fn-toolbar { display: flex; justify-content: flex-end; margin-bottom: var(--ou-space-2); }
+.tb-fn-group { margin-bottom: var(--ou-space-5); }
+.tb-fn-group__title { font: var(--ou-text-body-s); font-weight: 600; color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); }
+.tb-fn-row { display: grid; grid-template-columns: max-content 1fr auto; align-items: center; gap: var(--ou-space-3); padding: var(--ou-space-2) 0; border-top: var(--wf-border-w) solid var(--ou-border-soft); }
+.tb-fn-sig { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+.tb-fn-desc { color: var(--ou-fg-muted); font: var(--ou-text-body-s); }
+
 /* Card body paragraph (muted info). */
 .tb-card-desc { font: var(--ou-text-body-s); color: var(--ou-fg-muted); margin: 0 0 var(--ou-space-2); }
 
@@ -146,6 +164,46 @@
 .tb-table tr:last-child td { border-bottom: none; }
 .tb-table--mb { margin-bottom: var(--ou-space-3); }
 .tb-table__cell--nowrap { white-space: nowrap; }
+
+/* ─── PRD-5 «Вклады вопросов»: contribution matrix ───────────────────────────── */
+/* Scoped to .tb-contrib-grid so the shared .tb-table (bands, scoring, preview)
+   keeps its full-width auto layout. The answer-text column is widened and pinned;
+   the scale-value columns are narrowed; the table scrolls horizontally inside the
+   card body when the scale columns overflow the drawer width. */
+.tb-contrib-grid-wrap { overflow-x: auto; }
+/* table-layout: fixed + an EXPLICIT table width = the exact column sum. With
+   width:auto the table grows to max-content (the inputs' ~20ch intrinsic size)
+   and the surplus inflates the value columns, defeating the narrowing. Pinning
+   the width to (text col + N × value col) — N comes from the inline
+   --tb-contrib-cols var — makes fixed layout honor each column exactly, and the
+   table overflows the drawer when there are many scales → the wrapper scrolls. */
+.tb-table.tb-contrib-grid {
+  table-layout: fixed;
+  width: calc(var(--tb-contrib-unit-w, 18rem) + var(--tb-contrib-cols, 0) * var(--tb-contrib-val-w, 7rem));
+}
+
+/* Answer-text column: ~2x wider than its prior auto width, pinned on scroll. */
+.tb-contrib-grid__unit-col { width: var(--tb-contrib-unit-w, 18rem); }
+.tb-contrib-grid th.tb-contrib-grid__unit-col,
+.tb-contrib-grid td.tb-contrib-grid__unit-col {
+  position: -webkit-sticky; position: sticky; left: 0; z-index: 1;
+  box-shadow: 1px 0 0 0 var(--ou-border-soft);
+}
+/* Opaque fills so scrolled value cells pass cleanly under the pinned column. */
+.tb-contrib-grid td.tb-contrib-grid__unit-col { background: var(--ou-bg-elevated); }
+.tb-contrib-grid th.tb-contrib-grid__unit-col { background: var(--ou-bg-muted); }
+
+/* Check icon to the left of the option text; the reserved slot keeps the text
+   left edge aligned across rows whether or not the row is the correct answer. */
+.tb-contrib-grid__unit { display: flex; align-items: flex-start; gap: var(--ou-space-2); }
+.tb-contrib-grid__check {
+  flex: 0 0 1rem; display: inline-flex; align-items: center;
+  height: 1.25rem; color: var(--ou-success-default);
+}
+.tb-contrib-grid__unit-text { min-width: 0; }
+
+/* Scale value columns: ~half their prior auto width (input fills the cell). */
+.tb-contrib-grid__val-col { width: var(--tb-contrib-val-w, 7rem); }
 
 /* Compact rule cell inside table (custom rule + fields + unit). */
 .tb-rule-cell { display: flex; flex-direction: column; gap: var(--ou-space-1); }
@@ -1911,6 +1969,8 @@
 /* Переопределённое ЗНАЧЕНИЕ — мягкая акцентная заливка ячейки. */
 .tb-qscoring .tb-table tbody td.tb-qscoring__cell--override { background: var(--ou-accent-soft); }
 .tb-qscoring__actions { display: inline-flex; gap: var(--ou-space-1); justify-content: flex-end; }
+/* Пиктограмма типа вопроса — инлайново перед текстом, на той же строке. */
+.tb-qscoring__qtype { display: inline-flex; vertical-align: -0.15em; margin-right: var(--ou-space-2); color: var(--ou-fg-muted); }
 /* Recap вопроса в модале переопределения (read-only контекст). */
 .tb-qscoring__recap {
   padding: var(--ou-space-3) var(--ou-space-4);
@@ -1935,6 +1995,13 @@
 .tb-fw-sm { width: 5rem; }
 .tb-fw-md { width: 6rem; }
 .tb-fw-lg { width: 9rem; }
+/* The DS Select trigger carries min-width:180px; on the compact operator /
+   counter selects that floor overrides the width above, so the trigger stays
+   ~180px and the count field wraps under it. Relax the floor when one of these
+   width utilities is applied to a Select so the intended width takes effect. */
+.tb-fw-sm.ou-select .ou-select__trigger,
+.tb-fw-md.ou-select .ou-select__trigger,
+.tb-fw-lg.ou-select .ou-select__trigger { min-width: 0; }
 
 /* PRD-16: drag handle for the answer-option / ranking reorder rows in the
    question editor (mirrors the wireframe `.qd-grip` affordance). */

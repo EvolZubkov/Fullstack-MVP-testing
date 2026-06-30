@@ -454,14 +454,8 @@ function validateResultVariables(
       }
     }
 
-    if (!v.label.trim()) {
-      errors.push({
-        field: `resultVariables[${i}].label`,
-        code: "required",
-        message: "Укажите метку показателя.",
-        severity: "error",
-      });
-    }
+    // Label is OPTIONAL (parity with scales): an empty label is not an error;
+    // consumers fall back to the name for display (see scorm test-json bake).
 
     if (!v.formula.trim()) {
       errors.push({

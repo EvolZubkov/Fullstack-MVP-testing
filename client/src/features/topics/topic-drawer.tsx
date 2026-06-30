@@ -127,6 +127,7 @@ export function TopicDrawer({
   // ── Properties draft ──────────────────────────────────────────────────────
   const [tab, setTab] = useState<TopicTab>(initialTab);
   const [name, setName] = useState("");
+  const [code, setCode] = useState("");
   const [description, setDescription] = useState("");
   const [folderId, setFolderId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackContent>(() => feedbackOf(null));
@@ -147,11 +148,13 @@ export function TopicDrawer({
     setTab(target.mode === "create" ? "props" : initialTab);
     if (target.mode === "edit") {
       setName(target.topic.name ?? "");
+      setCode(target.topic.code ?? "");
       setDescription(target.topic.description ?? "");
       setFolderId(target.topic.folderId ?? null);
       setFeedback(feedbackOf(target.topic));
     } else {
       setName("");
+      setCode("");
       setDescription("");
       setFolderId(target.folderId ?? null);
       setFeedback(feedbackOf(null));
@@ -230,6 +233,7 @@ export function TopicDrawer({
     mutationFn: async () => {
       const body = {
         name: name.trim(),
+        code: code.trim() || null,
         description: description.trim() || undefined,
         folderId,
         feedbackJson: feedback,
@@ -371,6 +375,15 @@ export function TopicDrawer({
                 data-testid="topic-name-warning"
               />
             )}
+            <Input
+              label="Id (код)"
+              fullWidth
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="напр. ethics — необязательно"
+              hint={'Читаемый идентификатор для формул показателей: topicById("код"). Пусто → используется внутренний UUID.'}
+              data-testid="input-topic-code"
+            />
             <Stack gap={2} data-testid="select-topic-folder">
               <Label>Папка</Label>
               <FolderTreeSelect folders={folders} value={folderId} onChange={setFolderId} rootLabel="Без папки" />

@@ -161,6 +161,8 @@ export type SectionTimeLimit =
 export type EditorSection = {
   topicId: string;
   topicName: string;
+  /** PRD-2 §4.2: topic's author-defined readable id (slug), or null → use the UUID. */
+  topicCode?: string | null;
   maxQuestions: number;
   /**
    * PRD-10: the topic pool's maximum attainable points (Σ question points).

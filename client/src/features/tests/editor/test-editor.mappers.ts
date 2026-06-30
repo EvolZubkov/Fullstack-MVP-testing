@@ -337,6 +337,7 @@ function buildSectionsFromApi(src: ApiTestResponse): {
 
     const topicId = typeof raw.topicId === "string" ? raw.topicId : "";
     const topicName = typeof raw.topicName === "string" ? raw.topicName : "";
+    const topicCode = typeof raw.topicCode === "string" ? raw.topicCode : null;
     const maxQuestions = typeof raw.maxQuestions === "number" ? raw.maxQuestions : 0;
     // PRD-10: Σ points of the topic pool (falls back to the question count for an
     // older API response without it — points >= 1 per question, so it stays a
@@ -357,6 +358,7 @@ function buildSectionsFromApi(src: ApiTestResponse): {
     sections.push({
       topicId,
       topicName,
+      topicCode,
       maxQuestions,
       maxPoints,
       drawCount,

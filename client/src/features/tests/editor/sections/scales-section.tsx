@@ -16,7 +16,7 @@
  * yet compute scale-of-scales — so that source option is shown disabled.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Banner,
   Button,
@@ -36,7 +36,7 @@ import {
   Switch,
   Tag,
 } from "@universityrt/ui-kit";
-import { ChevronDown, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Info, Plus, Trash2 } from "lucide-react";
 
 import type {
   QuestionMeasurementModel,
@@ -449,6 +449,7 @@ function ScaleCard({ index, scale: s, scales, coverage, readOnly, expanded, onTo
     <section
       className={"ou-card ou-card--outlined ou-card--sm tb-level-card" + (expanded ? "" : " is-collapsed")}
       data-testid={`scales-card-${index}`}
+      data-field={`scales[${index}]`}
     >
       <header className="ou-card__header tb-level-card__head">
         <span className={"tb-status-dot " + dotClass} aria-hidden="true"></span>
@@ -1195,38 +1196,48 @@ function QuestionContribCard({
           ) : q.units.length === 0 ? (
             <p className="tb-card-desc">У вопроса нет единиц ответа для измерения.</p>
           ) : (
-            <table className="tb-table tb-table--mb" data-testid={`contrib-grid-${index}`}>
-              <thead>
-                <tr>
-                  <th>{UNIT_HEADER[q.type]}</th>
-                  {scales.map((s) => (
-                    <th key={s.key} title={s.label}>{s.key.toUpperCase()}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {q.units.map((unit) => (
-                  <tr key={`${unit.sourceType}:${unit.sourceKey}`}>
-                    <td>
-                      {unit.label}
-                      {unit.correct && (
-                        <Tag tone="success" variant="outline" style={{ marginInlineStart: "var(--ou-space-2)" }}>✓ верный</Tag>
-                      )}
-                    </td>
+            <div className="tb-contrib-grid-wrap">
+              <table
+                className="tb-table tb-table--mb tb-contrib-grid"
+                style={{ "--tb-contrib-cols": scales.length } as CSSProperties}
+                data-testid={`contrib-grid-${index}`}
+              >
+                <thead>
+                  <tr>
+                    <th className="tb-contrib-grid__unit-col">{UNIT_HEADER[q.type]}</th>
                     {scales.map((s) => (
-                      <td key={s.key}>
-                        <MatrixCell
-                          value={cellMap.get(cellKey(q.id, unit.sourceType, unit.sourceKey, s.key))}
-                          disabled={readOnly}
-                          ariaLabel={`Вклад «${unit.label}» в шкалу ${s.key}`}
-                          onCommit={(v) => onSetCell(q.id, unit, s.key, v)}
-                        />
-                      </td>
+                      <th key={s.key} className="tb-contrib-grid__val-col" title={s.label}>{s.key.toUpperCase()}</th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {q.units.map((unit) => (
+                    <tr key={`${unit.sourceType}:${unit.sourceKey}`}>
+                      <td className="tb-contrib-grid__unit-col">
+                        <span className="tb-contrib-grid__unit">
+                          <span className="tb-contrib-grid__check">
+                            {unit.correct && (
+                              <Check width={16} height={16} role="img" aria-label="Верный вариант" />
+                            )}
+                          </span>
+                          <span className="tb-contrib-grid__unit-text">{unit.label}</span>
+                        </span>
+                      </td>
+                      {scales.map((s) => (
+                        <td key={s.key} className="tb-contrib-grid__val-col">
+                          <MatrixCell
+                            value={cellMap.get(cellKey(q.id, unit.sourceType, unit.sourceKey, s.key))}
+                            disabled={readOnly}
+                            ariaLabel={`Вклад «${unit.label}» в шкалу ${s.key}`}
+                            onCommit={(v) => onSetCell(q.id, unit, s.key, v)}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
           {hint && q.units.length > 0 && scales.length > 0 && (
             <Banner tone="info" size="sm" description={hint} />
@@ -1262,6 +1273,7 @@ function MatrixCell({
   return (
     <Input
       size="s"
+      fullWidth
       value={text}
       disabled={disabled}
       aria-label={ariaLabel}
