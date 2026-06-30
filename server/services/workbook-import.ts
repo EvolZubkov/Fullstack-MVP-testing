@@ -9,9 +9,10 @@
  * Multi-pass order (FR-15.7): questions first (фиксируем `ID`↔`Ключ строки`),
  * then scales (upsert by `key`), then measurements (resolve question by
  * `ID`/alias and scale by `key`) and result variables (validate formula), then
- * the per-test scoring overrides («Оценка», PRD-15 block D FR-36) and finally
- * the structure + quotas (FR-16). Writes are skipped under `dryRun`; counts are
- * still computed (FR-13).
+ * the per-test scoring overrides (PRD-15 block D FR-36 — from the «Оценка» sheet,
+ * or, when it is absent, derived from the legacy «Балл»/«Цена ответа» columns of
+ * the «Вопросы» sheet) and finally the structure + quotas (FR-16). Writes are
+ * skipped under `dryRun`; counts are still computed (FR-13).
  *
  * Upsert keys (FR-15 idempotency): scale = (test, key); result variable =
  * (test, name); measurements are replaced per question (the sheet is
@@ -36,6 +37,7 @@ import {
 import { buildFormSet, parseVariantNumbers, type VariantMembership } from "@shared/draw/forms";
 import { randomUUID } from "crypto";
 import type { ValueType } from "@shared/formula";
+import type { Role } from "@shared/access";
 import { importQuestionRows, type ResolvedQuestion } from "./questions-import";
 import { testSettingsService, type SectionPayload } from "./test-settings";
 import { parseScoringCell } from "../utils/scoring-excel";
@@ -87,9 +89,9 @@ function unitCountOfQuestion(q: { type: string; dataJson: unknown }): number {
 export async function importWorkbook(
   testId: string,
   workbook: ExcelJS.Workbook,
-  opts: { dryRun: boolean },
+  opts: { dryRun: boolean; actor?: { id: string; roles: readonly Role[] } },
 ): Promise<WorkbookImportResult> {
-  const { dryRun } = opts;
+  const { dryRun, actor } = opts;
   const result: WorkbookImportResult = {
     questions: { created: 0, updated: 0, skipped: 0 },
     scales: { created: 0, updated: 0 },
@@ -110,13 +112,20 @@ export async function importWorkbook(
   // each topic's distinct labels become its section's variants (built in Pass 6).
   const membershipByTopic = new Map<string, VariantMembership[]>();
   const questionsSheet = findSheet(workbook, "Вопросы");
+  // Hoisted so the «Оценка» pass can fall back to the «Вопросы» sheet's legacy
+  // «Балл»/«Цена ответа» columns when no «Оценка» sheet is present (see Pass 5).
+  let questionRows: Record<string, unknown>[] = [];
   if (questionsSheet) {
     const qrows = sheetToObjects(questionsSheet);
+    questionRows = qrows;
     for (const r of qrows) {
       const name = normalizeName(String(r["Тема"] ?? ""));
       if (name) questionTopicNames.add(name);
     }
-    const qres = await importQuestionRows(qrows, sheetHeaders(questionsSheet), { dryRun });
+    // FR-28: thread the importer through so topics/questions created in the
+    // «Вопросы» pass are owned by them (createTopic derives ownerId from
+    // createdBy) and topic-name matching respects their visible scope.
+    const qres = await importQuestionRows(qrows, sheetHeaders(questionsSheet), { dryRun, actor });
     result.questions = { created: qres.created, updated: qres.updated, skipped: qres.skipped };
     for (const e of qres.errors) result.errors.push(`Лист «Вопросы», ${e}`);
     for (const [alias, q] of qres.aliasToQuestion) aliasToQuestion.set(alias, q);
@@ -319,45 +328,99 @@ export async function importWorkbook(
     }
   }
 
-  // ── Pass 5: «Оценка» (PRD-15 block D, FR-36: per-test scoring overrides). ──
-  // One row per overridden question: «Балл» / «Цена ответа» / «Сложность» are
-  // independent links of the effective chain (an empty cell = no override).
-  // The sheet is AUTHORITATIVE for the target test's override set: a successful
-  // import replaces all of the test's overrides with the sheet rows (an
-  // empty/header-only sheet clears them). Overrides are pinned to the
-  // question's current contentHash (FR-30 staleness).
+  // ── Pass 5: per-test scoring overrides (PRD-15 block D, FR-36). ──
+  // Source priority:
+  //   1. «Оценка» sheet — the canonical, AUTHORITATIVE source when present. One
+  //      row per overridden question: «Балл» / «Цена ответа» / «Сложность» are
+  //      independent links of the effective chain (an empty cell = no override);
+  //      an empty/header-only sheet clears the test's overrides.
+  //   2. Legacy/compat fallback — when there is NO «Оценка» sheet but the
+  //      «Вопросы» sheet carries «Балл»/«Цена ответа» columns (the layout the
+  //      import guide documents and pre-T-40 exports used), derive overrides from
+  //      those columns. «Сложность» is NOT taken as an override here — it stays on
+  //      the question itself (written in Pass 1).
+  // Whichever source is used REPLACES the test's whole override set. Overrides are
+  // pinned to the question's current contentHash (FR-30 staleness).
   const scoringSheet = findSheet(workbook, "Оценка");
-  if (scoringSheet) {
-    const rows = sheetToObjects(scoringSheet);
+  const questionsHaveScoringCols =
+    questionsSheet != null &&
+    (() => {
+      const h = sheetHeaders(questionsSheet);
+      return h.has("Балл") || h.has("Цена ответа");
+    })();
+
+  /** Normalized scoring input from either source. */
+  type ScoringInput = {
+    where: string;
+    ref: string;
+    points: number | null;
+    scoringRaw: string;
+    difficulty: number | null;
+  };
+
+  if (scoringSheet || questionsHaveScoringCols) {
+    const inputs: ScoringInput[] = [];
+
+    if (scoringSheet) {
+      const rows = sheetToObjects(scoringSheet);
+      for (let i = 0; i < rows.length; i++) {
+        const where = `Лист «Оценка», строка ${i + 2}`;
+        const parsed = parseScoringOverrideRow(rows[i]);
+        if (!parsed.ok) {
+          result.errors.push(`${where}: ${parsed.error}`);
+          continue;
+        }
+        const o = parsed.value;
+        inputs.push({ where, ref: o.questionRef, points: o.points, scoringRaw: o.scoringRaw, difficulty: o.difficulty });
+      }
+    } else {
+      // Fallback: read «Балл»/«Цена ответа» off the «Вопросы» rows. A row with
+      // neither cell carries no override (not an error — most rows are like that).
+      for (let i = 0; i < questionRows.length; i++) {
+        const row = questionRows[i];
+        const ref = String(row["Ключ строки"] ?? "").trim() || String(row["ID"] ?? "").trim();
+        const pointsRaw = String(row["Балл"] ?? "").trim();
+        const scoringRaw = String(row["Цена ответа"] ?? "").trim();
+        if (pointsRaw === "" && scoringRaw === "") continue;
+
+        const where = `Лист «Вопросы», строка ${i + 2}`;
+        if (!ref) {
+          result.errors.push(`${where}: задана цена ответа/балл, но нет «Ключ строки» или «ID» вопроса`);
+          continue;
+        }
+        let points: number | null = null;
+        if (pointsRaw !== "") {
+          const n = Number(pointsRaw);
+          if (!Number.isInteger(n) || n < 0) {
+            result.errors.push(`${where}: «Балл» должен быть целым ≥ 0 ("${row["Балл"]}")`);
+            continue;
+          }
+          points = n;
+        }
+        inputs.push({ where, ref, points, scoringRaw, difficulty: null });
+      }
+    }
+
     const overrideRows: Array<Omit<InsertTestQuestionScoring, "testId">> = [];
     const seenQuestionIds = new Set<string>();
-
-    for (let i = 0; i < rows.length; i++) {
-      const where = `Лист «Оценка», строка ${i + 2}`;
-      const parsed = parseScoringOverrideRow(rows[i]);
-      if (!parsed.ok) {
-        result.errors.push(`${where}: ${parsed.error}`);
-        continue;
-      }
-      const o = parsed.value;
-
-      const q = await resolveQuestion(o.questionRef);
+    for (const input of inputs) {
+      const q = await resolveQuestion(input.ref);
       if (!q) {
-        result.errors.push(`${where}: вопрос "${o.questionRef}" не найден (ни ID, ни «Ключ строки»)`);
+        result.errors.push(`${input.where}: вопрос "${input.ref}" не найден (ни ID, ни «Ключ строки»)`);
         continue;
       }
       if (seenQuestionIds.has(q.id)) {
-        result.errors.push(`${where}: повторная строка для вопроса "${o.questionRef}"`);
+        result.errors.push(`${input.where}: повторная строка для вопроса "${input.ref}"`);
         continue;
       }
 
       // «Цена ответа» needs the question type/option count; "точное" becomes an
       // EXPLICIT exact override (parseScoringCell returns null for it).
       let scoringJson: QuestionScoring | null = null;
-      if (o.scoringRaw !== "") {
-        const sp = parseScoringCell(o.scoringRaw, q.type, q.unitCount);
+      if (input.scoringRaw !== "") {
+        const sp = parseScoringCell(input.scoringRaw, q.type, q.unitCount);
         if (!sp.ok) {
-          result.errors.push(`${where}: ${sp.error}`);
+          result.errors.push(`${input.where}: ${sp.error}`);
           continue;
         }
         scoringJson = sp.value ?? { kind: "exact" };
@@ -366,9 +429,9 @@ export async function importWorkbook(
       seenQuestionIds.add(q.id);
       overrideRows.push({
         questionId: q.id,
-        points: o.points,
+        points: input.points,
         scoringJson,
-        difficulty: o.difficulty,
+        difficulty: input.difficulty,
         pinnedContentHash: q.contentHash,
       });
       result.scoring.rows++;

@@ -28,6 +28,7 @@ const { storageMock, testSettingsMock } = vi.hoisted(() => ({
     createQuestion: vi.fn(),
     updateQuestion: vi.fn(),
     getContentHashesByTopic: vi.fn(),
+    getQuestionsByTopic: vi.fn(),
     // scales / result vars / measurements
     getScales: vi.fn(),
     createScale: vi.fn(),
@@ -106,6 +107,7 @@ beforeEach(() => {
   storageMock.getUserRoles.mockResolvedValue(["administrator"]);
   storageMock.getTopics.mockResolvedValue([dbTopic]);
   storageMock.getContentHashesByTopic.mockResolvedValue(new Set());
+  storageMock.getQuestionsByTopic.mockResolvedValue([]);
   storageMock.createQuestion.mockResolvedValue({ id: "newq-1" });
   storageMock.getScales.mockResolvedValue([]);
   storageMock.createScale.mockResolvedValue({ id: "scale-new", key: "ee" });
@@ -168,6 +170,27 @@ describe("POST /:id/workbook/import — основной поток", () => {
       "test-1",
       "q-existing",
       expect.any(Array),
+    );
+  });
+
+  it("FR-28: тема и вопрос, созданные при импорте, принадлежат импортёру", async () => {
+    // Тема из файла отсутствует в банке → создаётся. Импортёр (user-1) должен
+    // стать её владельцем (createTopic выводит ownerId из createdBy). Регрессия:
+    // раньше importWorkbook не пробрасывал actor и темы получали createdBy=null.
+    storageMock.getTopics.mockResolvedValue([]);
+    storageMock.createTopic.mockResolvedValue({ id: "t-new", name: "Новая тема" });
+
+    const buf = await makeWorkbook({
+      "Вопросы": [{ ...questionRow, "Тема": "Новая тема" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(storageMock.createTopic).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Новая тема", createdBy: "user-1" }),
+    );
+    expect(storageMock.createQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({ createdBy: "user-1" }),
     );
   });
 
@@ -397,6 +420,84 @@ describe("POST /:id/workbook/import — «Оценка»", () => {
     const res = await postWorkbook(buf, "?dryRun=true");
     expect(res.body.scoring).toEqual({ rows: 1 });
     expect(storageMock.replaceTestQuestionScoring).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Legacy «Вопросы»-sheet scoring fallback (нет листа «Оценка») ──────────────
+// Files authored per the import guide put «Балл»/«Цена ответа» on the «Вопросы»
+// sheet (pre-T-40 layout). With no «Оценка» sheet, scoring is derived from those
+// columns into the test's per-question overrides; «Оценка» wins when both exist.
+
+describe("POST /:id/workbook/import — цена ответа на листе «Вопросы» (fallback)", () => {
+  it("выводит переопределения из «Балл»/«Цена ответа» листа «Вопросы», когда нет листа «Оценка»", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [{ ...questionRow, "Балл": "2", "Цена ответа": "веса: 1 # 0 # 0" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.scoring).toEqual({ rows: 1 });
+    expect(storageMock.replaceTestQuestionScoring).toHaveBeenCalledWith("test-1", [
+      expect.objectContaining({
+        questionId: "newq-1",
+        points: 2,
+        scoringJson: { kind: "weighted", weights: [1, 0, 0] },
+        difficulty: null,
+        pinnedContentHash: expect.any(String),
+      }),
+    ]);
+  });
+
+  it("«ступени» для одиночного выбора на листе «Вопросы» → ошибка строки", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [{ ...questionRow, "Цена ответа": "ступени: correct == total => 2" }],
+    });
+    const res = await postWorkbook(buf);
+    expect(res.body.errors.some((e: string) => /Вопросы.*одиночн/i.test(e))).toBe(true);
+    expect(res.body.scoring.rows).toBe(0);
+  });
+
+  it("лист «Оценка» имеет приоритет над «Балл»/«Цена ответа» листа «Вопросы»", async () => {
+    const buf = await makeWorkbook({
+      "Вопросы": [{ ...questionRow, "Балл": "9", "Цена ответа": "веса: 1 # 0 # 0" }],
+      "Оценка": [{ "Вопрос": "q1", "Балл": "2" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.errors).toEqual([]);
+    // Только переопределение из «Оценки» (Балл=2, без градуированной цены).
+    expect(storageMock.replaceTestQuestionScoring).toHaveBeenCalledWith("test-1", [
+      expect.objectContaining({ questionId: "newq-1", points: 2, scoringJson: null }),
+    ]);
+  });
+
+  it("дедуплицированный вопрос сохраняет алиас «Ключ строки» для резолва цены", async () => {
+    // Вопрос уже есть в банке (хэш совпал) → пропуск; алиас всё равно резолвится
+    // в существующий id, и цена с листа «Вопросы» к нему применяется.
+    storageMock.getContentHashesByTopic.mockImplementation(async () => {
+      // Любой хэш считаем существующим (для этого теста единственный вопрос).
+      return new Set<string>(["__match_all__"]);
+    });
+    const existing = { id: "q-existing", type: "single", dataJson: { options: ["3", "4", "5"] }, contentHash: "h-existing" };
+    storageMock.getQuestionsByTopic.mockResolvedValue([existing]);
+    // Подменяем проверку хэша: getContentHashesByTopic должен вернуть хэш строки.
+    // Проще — вернуть set, содержащий вычисленный хэш. Используем реальный расчёт:
+    const { computeQuestionHash } = await import("../server/services/questions-import");
+    const hash = computeQuestionHash("single", "2+2?", { options: ["3", "4", "5"] });
+    storageMock.getContentHashesByTopic.mockResolvedValue(new Set([hash]));
+    storageMock.getQuestionsByTopic.mockResolvedValue([{ ...existing, contentHash: hash }]);
+
+    const buf = await makeWorkbook({
+      "Вопросы": [{ ...questionRow, "Балл": "5" }],
+    });
+    const res = await postWorkbook(buf);
+
+    expect(res.body.questions.skipped).toBe(1);
+    expect(res.body.errors).toEqual([]);
+    expect(storageMock.replaceTestQuestionScoring).toHaveBeenCalledWith("test-1", [
+      expect.objectContaining({ questionId: "q-existing", points: 5 }),
+    ]);
   });
 });
 

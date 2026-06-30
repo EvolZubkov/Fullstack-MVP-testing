@@ -149,10 +149,16 @@ router.post(
       const dryRun = String(req.query.dryRun ?? "").toLowerCase() === "true";
       const workbook = await readWorkbookFromBuffer(req.file.buffer);
 
+      // FR-28: questions/topics created during import are owned by the importer;
+      // under dryRun the actor still scopes topic-name matching for an accurate plan.
+      const actor = req.currentUser
+        ? { id: req.currentUser.id, roles: req.effectiveRoles ?? [] }
+        : undefined;
+
       if (dryRun) {
         // Plan against an empty target — nothing is created, so the synthetic id
         // is never persisted; every test-scoped DB read resolves to empty.
-        const result = await importWorkbook(DRYRUN_NEW_TEST_ID, workbook, { dryRun: true });
+        const result = await importWorkbook(DRYRUN_NEW_TEST_ID, workbook, { dryRun: true, actor });
         return res.json({ ...result, test: { id: null, title } });
       }
 
@@ -164,7 +170,7 @@ router.post(
       });
       await storage.setTestOwner(test.id, req.session.userId ?? null);
 
-      const result = await importWorkbook(test.id, workbook, { dryRun: false });
+      const result = await importWorkbook(test.id, workbook, { dryRun: false, actor });
       res.status(201).json({ ...result, test: { id: test.id, title: test.title } });
     } catch (error) {
       logger.error("Workbook import-new error: " + (error as Error).message, "workbook");

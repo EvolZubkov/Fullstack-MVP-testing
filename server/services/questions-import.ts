@@ -16,6 +16,7 @@ import { createHash } from "crypto";
 import { storage } from "../storage";
 import { logger } from "../logger";
 import { normalizeTags } from "@shared/tags";
+import type { Question } from "@shared/schema";
 import type { Role } from "@shared/access";
 import {
   assessQuestionChange,
@@ -108,6 +109,16 @@ export async function importQuestionRows(
       hashCache.set(topicId, await storage.getContentHashesByTopic(topicId));
     }
     return hashCache.get(topicId)!;
+  };
+
+  // Lazy per-topic question list — used only to resolve a deduplicated question's
+  // id when it carries a «Ключ строки» (so the alias can still be recorded, FR-15.6).
+  const questionsCache = new Map<string, Question[]>();
+  const getTopicQuestions = async (topicId: string): Promise<Question[]> => {
+    if (!questionsCache.has(topicId)) {
+      questionsCache.set(topicId, await storage.getQuestionsByTopic(topicId));
+    }
+    return questionsCache.get(topicId)!;
   };
 
   const result: QuestionImportResult = {
@@ -414,6 +425,22 @@ export async function importQuestionRows(
       const existingHashes = await getTopicHashes(topic.id);
       if (existingHashes.has(contentHash)) {
         result.skipped++;
+        // FR-15.6: record the local alias even for a deduplicated question, so
+        // the workbook's «Оценка»/«Вклады вопросов» sheets can still reference it
+        // by «Ключ строки» on re-import (otherwise scoring/contributions for an
+        // already-existing question would resolve to "вопрос не найден").
+        const alias = String(row["Ключ строки"] ?? "").trim();
+        if (alias) {
+          const dup = (await getTopicQuestions(topic.id)).find((q) => q.contentHash === contentHash);
+          if (dup) {
+            recordAlias(row, {
+              id: dup.id,
+              type: dup.type as QuestionType,
+              unitCount: unitCountOf(dup.type as QuestionType, dup.dataJson),
+              contentHash: dup.contentHash ?? contentHash,
+            });
+          }
+        }
         continue;
       }
 

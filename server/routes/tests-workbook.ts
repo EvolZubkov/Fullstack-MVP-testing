@@ -71,7 +71,13 @@ router.post(
 
       const dryRun = String(req.query.dryRun ?? "").toLowerCase() === "true";
       const workbook = await readWorkbookFromBuffer(req.file.buffer);
-      const result = await importWorkbook(testId, workbook, { dryRun });
+      const result = await importWorkbook(testId, workbook, {
+        dryRun,
+        // FR-28: questions/topics created during import are owned by the importer.
+        actor: req.currentUser
+          ? { id: req.currentUser.id, roles: req.effectiveRoles ?? [] }
+          : undefined,
+      });
       res.json(result);
     } catch (error) {
       logger.error("Workbook import error: " + (error as Error).message, "tests-workbook");
