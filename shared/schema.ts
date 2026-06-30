@@ -127,6 +127,11 @@ export const topics = pgTable("topics", {
   // the per-owner uniqueness index and the same-name warning. NULL only for rows
   // not yet backfilled by migration 022.
   nameNormalized: text("name_normalized"),
+  // Optional author-defined readable id (slug). When set, result-variable formulas
+  // address the topic via `topicById("<code>")` instead of the opaque UUID; absent
+  // (NULL) → formulas fall back to the UUID. Uniqueness is not enforced at the DB
+  // level — resolution is per-test (migration 032).
+  code: text("code"),
 }, (table) => ({
   // FR-27: hard uniqueness only WITHIN one owner; legacy unowned rows (owner
   // NULL) are excluded by the partial predicate, so they never collide.
@@ -558,7 +563,17 @@ export type InsertTestQuestionScoring = z.infer<typeof insertTestQuestionScoring
 export const insertTestFolderSchema = createInsertSchema(testFolders).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertFolderSchema = createInsertSchema(folders).omit({ id: true });
-export const insertTopicSchema = createInsertSchema(topics).omit({ id: true });
+export const insertTopicSchema = createInsertSchema(topics).omit({ id: true }).extend({
+  // Optional readable id (slug): lower snake_case, ≤64. Blank → NULL (use the UUID).
+  code: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+    z
+      .string()
+      .regex(/^[a-z][a-z0-9_]{0,63}$/, "code: строчная буква в начале; буквы/цифры/подчёркивание; до 64 символов")
+      .nullable()
+      .optional(),
+  ),
+});
 export const insertQuestionSchema = createInsertSchema(questions)
   .omit({ id: true })
   // drizzle-zod types jsonb loosely; normalize tags on save (PRD-11 §3a:
@@ -1414,7 +1429,10 @@ export const insertResultVariableSchema = createInsertSchema(resultVariables)
     name: z
       .string()
       .regex(/^[a-z][a-z0-9_]{0,63}$/, "name: начинается с буквы; строчные/цифры/подчёркивание; до 64 символов"),
-    label: z.string().min(1).max(120),
+    // Label is OPTIONAL (parity with scales, per the approved wireframe). Empty is
+    // allowed; consumers fall back to the name for display. Column is NOT NULL, so
+    // "" (not null) is stored.
+    label: z.string().max(120).default(""),
   });
 
 export type InsertResultVariable = z.infer<typeof insertResultVariableSchema>;
