@@ -11,7 +11,7 @@ const { storageMock } = vi.hoisted(() => ({
   storageMock: {
     // topics
     getTopics: vi.fn(), getTopic: vi.fn(), createTopic: vi.fn(),
-    updateTopic: vi.fn(), deleteTopic: vi.fn(), deleteTopicsBulk: vi.fn(),
+    updateTopic: vi.fn(), renameTopicInFormulas: vi.fn(), deleteTopic: vi.fn(), deleteTopicsBulk: vi.fn(),
     getTopicCourses: vi.fn(), createTopicCourse: vi.fn(), deleteTopicCourse: vi.fn(),
     getTopicEvents: vi.fn(), createTopicEvent: vi.fn(), deleteTopicEvent: vi.fn(),
     getQuestionsByTopic: vi.fn(),
@@ -130,6 +130,18 @@ describe("Topics routes", () => {
     const res = await asAuthor(request(app).put("/api/topics/t1").send({ name: "TypeScript" }));
     expect(res.status).toBe(200);
     expect(res.body.name).toBe("TypeScript");
+  });
+
+  it("PUT /:id — a rename rewrites topicByName(...) formula references (PRD-2 §4.2)", async () => {
+    storageMock.updateTopic.mockResolvedValue({ ...topic, name: "TypeScript" });
+    await asAuthor(request(app).put("/api/topics/t1").send({ name: "TypeScript" }));
+    expect(storageMock.renameTopicInFormulas).toHaveBeenCalledWith("t1", "JavaScript", "TypeScript");
+  });
+
+  it("PUT /:id — no formula rewrite when the name is unchanged", async () => {
+    storageMock.updateTopic.mockResolvedValue(topic);
+    await asAuthor(request(app).put("/api/topics/t1").send({ name: "JavaScript", description: "x" }));
+    expect(storageMock.renameTopicInFormulas).not.toHaveBeenCalled();
   });
 
   it("PUT /:id — returns 404 when topic not found", async () => {

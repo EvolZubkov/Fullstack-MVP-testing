@@ -83,9 +83,10 @@ describe("validateTestEditor — result variables", () => {
     expect(errors.some((e) => e.code === "duplicate")).toBe(true);
   });
 
-  it("requires a label and a formula", () => {
+  it("requires a formula but treats the label as optional (parity with scales)", () => {
     const errors = rvErrors([rv({ label: "", formula: "  " })]);
-    expect(errors.some((e) => e.field === "resultVariables[0].label")).toBe(true);
+    // Label is OPTIONAL — an empty label is not an error (consumers fall back to name).
+    expect(errors.some((e) => e.field === "resultVariables[0].label")).toBe(false);
     expect(errors.some((e) => e.field === "resultVariables[0].formula")).toBe(true);
   });
 
