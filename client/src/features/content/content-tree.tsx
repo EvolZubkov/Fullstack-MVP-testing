@@ -8,7 +8,7 @@
  * Assembled on the client from `/api/folders` + `/api/topics` + `/api/questions`.
  *
  * Phase 1: read-only tree, search, expand/collapse.
- * Phase 2: facet filter as a popover (Тип/Сложность/Теги/Медиа/Автор/Область)
+ * Phase 2: facet filter as a popover (Тип/Сложность/Теги/Медиа/Владелец/Область)
  * with «Сбросить всё» / «Применить»; active-condition Chips; auto-expand to
  * matches with a "найдено / всего" count and a result note.
  * Phase 3: interaction layer matching the wireframe — an always-visible ⋯ menu
@@ -183,8 +183,8 @@ function useDebouncedValue<T>(value: T, ms: number): T {
 
 interface UserLite {
   id: string;
-  firstName?: string | null;
-  lastName?: string | null;
+  /** The user model carries a single `name` (not first/last) — see server schema. */
+  name?: string | null;
   email?: string | null;
 }
 
@@ -342,7 +342,7 @@ export function ContentTree() {
 
   const userNameById = useMemo(() => {
     const m = new Map<string, string>();
-    for (const u of users) m.set(u.id, [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.email || u.id);
+    for (const u of users) m.set(u.id, u.name || u.email || u.id);
     return m;
   }, [users]);
 
@@ -525,7 +525,7 @@ export function ContentTree() {
   else if (filter.diffMin > 0 || filter.diffMax < 100) chips.push({ key: "d-range", label: `Сложность: ${filter.diffMin}–${filter.diffMax}`, remove: () => commitFilter({ ...filter, diffMin: 0, diffMax: 100 }) });
   for (const tg of filter.tags) chips.push({ key: `g-${tg}`, label: `Тег: ${tg}`, remove: () => commitFilter({ ...filter, tags: filter.tags.filter((x) => x !== tg) }) });
   for (const m of filter.media) chips.push({ key: `m-${m}`, label: `Медиа: ${MEDIA_OPTS.find((o) => o.value === m)?.label}`, remove: () => commitFilter({ ...filter, media: filter.media.filter((x) => x !== m) }) });
-  if (filter.author) chips.push({ key: "a", label: `Автор: ${authorOptions.find((o) => o.value === filter.author)?.label ?? filter.author}`, remove: () => commitFilter({ ...filter, author: "" }) });
+  if (filter.author) chips.push({ key: "a", label: `Владелец: ${authorOptions.find((o) => o.value === filter.author)?.label ?? filter.author}`, remove: () => commitFilter({ ...filter, author: "" }) });
   if (filter.scope !== "all") chips.push({ key: "s", label: `Область: ${SCOPE_OPTS.find((o) => o.value === filter.scope)?.label}`, remove: () => commitFilter({ ...filter, scope: "all" }) });
 
   // Result note when filtering.

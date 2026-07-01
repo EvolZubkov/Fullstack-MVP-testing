@@ -5,7 +5,7 @@
  * the approved wireframe docs/wireframes/approved/content-bank-explorer.html
  * (state s-filters): a floating `cb-filterpop` card anchored under the toolbar
  * with a single vertical stack of facets (Тип вопроса / Сложность / Теги /
- * Медиа / Автор / Область) and a «Сбросить всё» / «Применить» footer. The panel
+ * Медиа / Владелец / Область) and a «Сбросить всё» / «Применить» footer. The panel
  * edits a DRAFT filter; the tree re-filters only on «Применить» (batching —
  * keeps the tree responsive on large banks). Active-condition chips are rendered
  * by the tree itself. See docs/PLAN_content_axis_implementation.md.
@@ -134,8 +134,8 @@ export function ContentFilters({ value, onChange, onApply, onReset, tagOptions, 
         </div>
 
         <div className="ct-facet">
-          <span className="ct-facet__lbl">Автор</span>
-          <Select value={value.author} onChange={(v) => onChange({ ...value, author: v })} options={[{ value: "", label: "Любой" }, ...authorOptions]} aria-label="Автор" />
+          <span className="ct-facet__lbl">Владелец</span>
+          <Select value={value.author} onChange={(v) => onChange({ ...value, author: v })} options={[{ value: "", label: "Любой" }, ...authorOptions]} aria-label="Владелец" />
         </div>
 
         <div className="ct-facet">
