@@ -355,10 +355,7 @@ function submit(force) {
 
   state.submitted = true;
 
-  if (state.timerInterval) {
-    clearInterval(state.timerInterval);
-    state.timerInterval = null;
-  }
+  stopTestTimer();
 
   state.currentIndex = state.flatQuestions.length;
   state.currentPageIndex = state.pageSequence ? state.pageSequence.length : state.currentPageIndex;
@@ -410,10 +407,7 @@ function restart() {
   state.feedbackShown = false;
   state.timeExpired = false;
 
-  if (state.timerInterval) {
-    clearInterval(state.timerInterval);
-    state.timerInterval = null;
-  }
+  stopTestTimer();
   state.remainingSeconds = null;
 
   generateVariant();

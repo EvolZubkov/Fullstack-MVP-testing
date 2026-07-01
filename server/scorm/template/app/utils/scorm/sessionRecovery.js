@@ -28,7 +28,10 @@ function saveCurrentSession() {
     TEST_DATA.flowPolicy && TEST_DATA.flowPolicy.mode === 'router_by_topics';
 
   if (!isRouterMode) {
-    if (TEST_DATA.timeLimitMinutes || TEST_DATA.mode === 'adaptive') return;
+    // PRD-20 (5.12): timed non-router tests now persist progress (the timer is
+    // restored separately from the active-time anchor). Adaptive mid-session
+    // state stays non-restorable — keep skipping it.
+    if (TEST_DATA.mode === 'adaptive') return;
     if (!state.flatQuestions || state.flatQuestions.length === 0) return;
   }
 
@@ -48,6 +51,10 @@ function saveCurrentSession() {
     routerTopicStates: JSON.parse(JSON.stringify(state.routerTopicStates || {})),
     sectionResults: JSON.parse(JSON.stringify(state.sectionResults || {})),
     routerFinished: state.routerFinished === true,
+    // PRD-20 (2e): in-progress router topic + position within its chunk, so a
+    // reload resumes INSIDE the unfinished non-adaptive topic (not re-run).
+    currentRouterTopic: state.currentRouterTopic || null,
+    currentPageIndex: state.currentPageIndex || 0,
     // PRD-19 (Block B): per-question status + per-section commit freeze travel
     // with the checkpoint so a resumed session restores skipped/answered marks.
     // Absent keys on legacy packages restore as {} (everything 'unanswered').
@@ -122,15 +129,25 @@ function determineRecovery() {
     return { action: 'start_fresh' };
   }
 
-  // With timer — time is gone, cannot restore
+  // PRD-20 (5.12): timed tests resume when the active-time anchor lets us
+  // restore the remaining time; otherwise fall back to the previous behaviour
+  // (show last attempt) so a learner never silently regains the full limit.
   if (TEST_DATA.timeLimitMinutes) {
-    if (attempts.length > 0) {
-      return { action: 'show_last_attempt', attempt: attempts[attempts.length - 1] };
+    var anchor = (typeof readTimerAnchor === 'function') ? readTimerAnchor() : null;
+    var totalNow = (typeof readTotalTimeSec === 'function') ? readTotalTimeSec() : null;
+    var canRestoreTimer = !!(anchor &&
+      anchor.limitMinutes === TEST_DATA.timeLimitMinutes &&
+      typeof anchor.baselineTotalSec === 'number' &&
+      totalNow !== null);
+    if (!canRestoreTimer) {
+      if (attempts.length > 0) {
+        return { action: 'show_last_attempt', attempt: attempts[attempts.length - 1] };
+      }
+      return { action: 'start_fresh' };
     }
-    return { action: 'start_fresh' };
   }
 
-  // No timer — restore in-progress session
+  // Restore in-progress session (no timer, or timer restorable from anchor)
   return { action: 'restore', session: session };
 }
 

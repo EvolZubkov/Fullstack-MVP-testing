@@ -401,10 +401,7 @@ function restart() {
   state.matchingPools = {};
 
   // Сброс таймера
-  if (state.timerInterval) {
-    clearInterval(state.timerInterval);
-    state.timerInterval = null;
-  }
+  stopTestTimer();
   state.remainingSeconds = null;
 
   // Сброс adaptive state если есть

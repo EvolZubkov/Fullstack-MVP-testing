@@ -443,6 +443,37 @@
   }
 
   /**
+   * PRD-20 (2e): resume INTO an unfinished topic on reload — reconstruct its
+   * chunk and enter at the saved page position instead of dropping the learner
+   * back on the router page. Adaptive topics cannot resume (their state is not
+   * persisted) — the caller excludes them. Returns true on success.
+   */
+  function resumeRouterTopic(topicId, pageIndex) {
+    if (!isRouterMode() || !topicId) return false;
+    if (TEST_DATA.mode === "adaptive") return false;
+    var chunk = buildTopicChunk(topicId);
+    if (!chunk || chunk.length === 0) return false;
+    state.routerTopicStates[topicId] = "inProgress";
+    state.currentRouterTopic = topicId;
+    state.pageSequence = chunk;
+    var idx = (typeof pageIndex === "number" && pageIndex >= 0 && pageIndex < chunk.length)
+      ? pageIndex : 0;
+    state.currentPageIndex = idx;
+    // Section timers are not persisted (PRD-4 §3.2): restart fresh on re-entry.
+    var section = (TEST_DATA.sections || []).find(function (s) {
+      return s.topicId === topicId;
+    });
+    if (section && section.timeLimitMinutes && typeof startSectionTimer === "function") {
+      startSectionTimer(topicId, section.timeLimitMinutes, function () {
+        returnFromTopic();
+      });
+    }
+    if (typeof syncPhaseToCurrentPage === "function") syncPhaseToCurrentPage();
+    if (typeof render === "function") render();
+    return true;
+  }
+
+  /**
    * Triggered by the «Завершить тест» action on the router. Switches the
    * page sequence to the post-router test-end content (test-scope after,
    * minus the summary boundary which gates post-results). Then advances
@@ -475,6 +506,7 @@
     buildPostRouterSequence: buildPostRouterSequence,
     renderRouterPage: renderRouterPage,
     selectRouterTopic: selectRouterTopic,
+    resumeRouterTopic: resumeRouterTopic,
     returnFromTopic: returnFromTopic,
     finishRouter: finishRouter,
     isSectionUnlocked: isSectionUnlocked,

@@ -24,6 +24,56 @@ function writeSuspendObj(obj) {
   }
 }
 
+// PRD-20 phase 2: active-time anchor persisted in suspend_data.timer.
+// Shape: { limitMinutes, baselineTotalSec, sig } | null. Absence/failure = the
+// runtime degrades to the phase-1 (session-only) timer.
+//
+// PRD-20 phase 2f: obfuscation-grade tamper-evidence. The key ships inside the
+// package, so this detects a CASUAL suspend_data edit (e.g. bumping
+// baselineTotalSec to regain time), not a prepared attacker. On a signature
+// mismatch the anchor is treated as absent -> no resume, so editing it forfeits
+// the session rather than granting free time.
+function timerSignatureKey() {
+  return (typeof TEST_DATA !== 'undefined' && TEST_DATA.integritySecret) || 'tb-prd20-anchor-v1';
+}
+
+function computeAnchorSignature(anchor) {
+  var payload = timerSignatureKey() + '|' + anchor.limitMinutes + '|' + anchor.baselineTotalSec;
+  var hash = 5381; // djb2 (ES5-safe: no Math.imul / SubtleCrypto)
+  for (var i = 0; i < payload.length; i++) {
+    hash = ((hash << 5) + hash + payload.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(16);
+}
+
+function readTimerAnchor() {
+  var s = readSuspendObj();
+  var a = s.timer;
+  if (!a) return null;
+  if (a.sig !== computeAnchorSignature(a)) {
+    // Tampered or legacy (unsigned): degrade to a fresh timer and flag it.
+    if (typeof state !== 'undefined' && state) state.timerAnchorTampered = true;
+    return null;
+  }
+  return a;
+}
+
+function writeTimerAnchor(anchor) {
+  var s = readSuspendObj();
+  var a = { limitMinutes: anchor.limitMinutes, baselineTotalSec: anchor.baselineTotalSec };
+  a.sig = computeAnchorSignature(a);
+  s.timer = a;
+  writeSuspendObj(s);
+}
+
+function clearTimerAnchor() {
+  var s = readSuspendObj();
+  if (s.timer) {
+    s.timer = null;
+    writeSuspendObj(s);
+  }
+}
+
 function getAttemptsUsed() {
   var s = readSuspendObj();
   return typeof s.attemptsUsed === 'number' ? s.attemptsUsed : 0;

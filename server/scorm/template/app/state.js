@@ -15,6 +15,9 @@ var state = {
   shuffleMappings: {},
   matchingPools: {},
   timerInterval: null,
+  timerStartPerfMs: null,
+  timerCommitInterval: null,
+  timerAnchorTampered: false,
   remainingSeconds: null,
   timeExpired: false,
   submitted: false,
@@ -58,7 +61,7 @@ var state = {
   // is inside a section with a non-null section.timeLimitMinutes. Started
   // by contentFlow / routerFlow at section entry; stopped on section exit
   // or expiry. Shape: { topicId, limitMinutes, remainingSeconds, expired,
-  // onExpire, intervalId } or null.
+  // onExpire, intervalId, startPerfMs } or null.
   sectionTimer: null,
 };
 
