@@ -1,5 +1,535 @@
 # Changelog
 
+## [2.6.0-beta](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.5.1-beta...v2.6.0-beta)
+
+### Features
+
+- **feat**(tests): открытие редактора теста двойным кликом по строке (2026-07-01) [`25fd4aa913b8054ea6d16628b240a1a4242f736f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/25fd4aa913b8054ea6d16628b240a1a4242f736f)
+  Одинарный клик по строке больше не открывает дровер; кнопка «Редактировать» (и клавиатура) сохраняют одинарный клик. Курсор строки → default.
+
+- **feat**(content): групповые операции «Папки и темы» в дереве контента (2026-07-01) [`8fb870546cd39c213bd4c013704c1d98e4cc3860`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8fb870546cd39c213bd4c013704c1d98e4cc3860)
+  Два взаимоисключающих режима выделения; выбранная папка захватывает свои темы транзитивно. Бар групповых действий: перенос (темы→папка, папки→reparent), доступ (выдать/отозвать/видимость/владелец, у папок доступа нет — действует на темы), удаление через сводную защиту. Одиночное удаление темы теперь тоже через подтверждение/защиту (не мгновенно).
+
+- **feat**(content): серверные групповые операции с темами и двухрежимное удаление папки (2026-07-01) [`ae0dbf3001a592e6232483407a2b356fe369ed24`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ae0dbf3001a592e6232483407a2b356fe369ed24)
+  Темы: bulk-delete (partial-batch — незаблокированные удаляются, используемые в опубликованных тестах пропускаются, admin ?force), bulk-move/visibility/owner/grant/revoke (soft+hard). Папки: DELETE в режимах «перенести содержимое»/«каскад» через content-guard, bulk-reparent с защитой от цикла. Путь выдачи/оценки права на тему не проверяет (инвариант PRD-15).
+
+### Fixes
+
+- **fix**(content): дропдаун в модалках перемещения не обрезается краем модалки (2026-07-01) [`64a2062209ed03b8d429bec70cb345ebd35894a3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/64a2062209ed03b8d429bec70cb345ebd35894a3)
+  «Переместить тему в папку»: DS Select (абсолютный .ou-select__menu клиппился телом модалки, overflow-y:auto) заменён на FolderTreeSelect — его поповер портируется в &lt;body&gt;, как в соседней модалке создания папки; заодно UX-дерево вместо плоского списка. «Переместить вопросы в тему»: там выбор темы (не папки), поэтому точечный overflow-оверрайд tb-select-modal — меню выходит за тело короткой модалки (контейнер не клиппит, z-index меню 50 &gt; футера).
+
+### Documentation
+
+- **docs**(wireframes): групповые операции с папками и темами в эскизе «Темы и вопросы» (2026-07-01) [`8785151ca7040f897dcd5d965ba1bd8007aefaee`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8785151ca7040f897dcd5d965ba1bd8007aefaee)
+  Два режима выделения (Папки+Темы / Вопросы), групповой доступ, двухрежимное удаление папки, сводная защита partial-batch и жёсткий отзыв.
+
+## [2.5.1-beta](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.5.0-beta...v2.5.1-beta)
+
+### Fixes
+
+- **fix**(content): фильтр контента по владельцу — «Владелец» вместо «Автор» + имя/email вместо UUID (2026-07-01) [`88a884a2330f7e485bf24fcb16077bc3581b018a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/88a884a2330f7e485bf24fcb16077bc3581b018a)
+  Подпись бралась через несуществующие поля firstName/lastName (у модели одно поле name) и сваливалась в сырой UUID; теперь name || email || id. Заодно фильтр переименован «Автор» → «Владелец» (подпись, aria-label, чип активного условия).
+
+- **fix**(static): кеш-политика SPA — no-cache на index.html, immutable на хеш-ассеты (2026-07-01) [`0abf79afff975c432a1ad4f9804dacfb332d0510`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0abf79afff975c432a1ad4f9804dacfb332d0510)
+  Без явного no-cache Express отдавал index.html как public,max-age=0, и устаревший index.html в кеше браузера/прокси продолжал указывать на старые хеш-бандлы — «другой пользователь после деплоя видит старый UI». Теперь index.html всегда ревалидируется, хешированные ассеты кешируются как immutable.
+
+## [2.5.0-beta](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.4.0-beta...v2.5.0-beta)
+
+### Features
+
+- **feat**(prd-19): системные узлы границ раздела + фиксы навигации, инспектора и сборки отладчика (2026-07-01) [`833978506d0f30cde68c68941445c580b7ec587e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/833978506d0f30cde68c68941445c580b7ec587e)
+  Структура / шаблон:
+  \- Введение/Обзор/Итоги раздела как системные узлы шаблона (intro per-topic,
+    review/section-results singletons); убраны legacy intro/summary — чинит пустую
+    страницу «Далее» в начале раздела и дублирующиеся «Итоги раздела»
+    (миграции 034/035, идемпотентны)
+  \- предпросмотр страниц «Структуры» из реальных данных; страница-роутер:
+    счётчик «Разделы X/Y» + «Перейти к результатам», карточки тем
+  \- единый размер контролов вариантов; грип сопоставления по центру строки;
+    подсветка зафиксированного ответа matching/ranking
+  
+  Навигация прохождения:
+  \- кнопка «К обзору» в карточке вопроса при заходе из обзора
+  \- пилюли: отвечённые впереди текущей позиции больше не гаснут как «не выдан»
+    (фронтир по статусу answered/skipped, а не по currentIndex)
+  
+  Отладчик (PRD-18):
+  \- протокол / «выдан» / итог считаются по статусу answered/skipped, а не по
+    currentIndex — отвечённые на текущей позиции и после возврата не теряются;
+    единица измерения «баллов» в футере протокола
+  \- метки пар «Эталона» слева и жёстко по серединной горизонтали
+  
+  Сборка:
+  \- dev собирает бандл shared/template из исходников и не кеширует — устаревший
+    dist/scorm/assets/shared-runtime.js больше не теневит правки
+  \- build копирует ассеты отладчика (shim.js / inspector-compute.js) в dist,
+    reader резолвит их и в проде — чинит /debug/shim.js в контейнере
+
+- **feat**(scales): хинт о нереализованном источнике «Другие шкалы» (2026-06-30) [`89b255111dcc8f0e45a8138ac81aa791c50ae8c6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/89b255111dcc8f0e45a8138ac81aa791c50ae8c6)
+  Переключатель «Источник» с опцией «Другие шкалы» отключён, так как
+  композитные шкалы (расчёт шкалы из других шкал) отложены. Добавлена
+  подсказка, чтобы недоступность опции не выглядела как дефект.
+
+- **feat**(scoring): пиктограммы типов вопросов в таблице «Оценка» (2026-06-30) [`722ab46bd85fdf8689cb07c684b4d3000a50a3fb`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/722ab46bd85fdf8689cb07c684b4d3000a50a3fb)
+  Иконки одиночный/множественный/сопоставление/ранжирование (как в дереве контента) с i18n-подписями.
+
+- **feat**(prd-14): импорт книги — оценка из легаси-колонок «Вопросы» при отсутствии листа «Оценка»; импорт с владельцем (FR-28/FR-36) (2026-06-30) [`82282183a85a3a9ca5e25ab3f7125cf8030c3ce9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/82282183a85a3a9ca5e25ab3f7125cf8030c3ce9)
+  Когда лист «Оценка» отсутствует, переопределения оценки выводятся из колонок «Балл»/«Цена ответа» листа «Вопросы». Через importWorkbook/importQuestionRows протянут actor — темы/вопросы импорта владеет импортирующий.
+
+- **feat**(prd-2): пересборка конструктора показателей + поле «Id» темы (2026-06-30) [`23324bdd70b0b1043933f752bc0f449417c58ba5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/23324bdd70b0b1043933f752bc0f449417c58ba5)
+  Карточка в 3 блока (Имя·Метка / Формула / Вывод). 4 шаблона (Порог/Категория/Взвеш.сумма/Вердикт) на одном условие-примитиве Элемент·Свойство·Оператор·Значение; группированный «Элемент» (Общий/Темы/Шкалы); тип выводится из шаблона; формула пишется сразу; читаемые ссылки на тему (topicById(код)/topicByName(имя), без UUID); справочник «Функции» + вставка по курсору. Метка опциональна, data-field-якоря для перехода к ошибке. Редактор темы получил поле «Id (код)».
+
+- **feat**(ui-kit): Select — опциональные группы опций (optgroup-заголовки) (2026-06-30) [`9bf1a27b57af2495a6581ba4de8ae6869896044e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/9bf1a27b57af2495a6581ba4de8ae6869896044e)
+  Поле group у SelectOption: соседние опции с одним group рендерятся под нерасклик­иваемым заголовком. Обратносовместимо. Стиль .ou-select__optgroup в обеих копиях DS-CSS.
+
+- **feat**(prd-2): рантайм/роуты — резолв тем по коду/имени + общий балл; код темы и rewrite topicByName при переименовании (2026-06-30) [`794363e38218b8d3e4906ab7d7233d8a62b53dd5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/794363e38218b8d3e4906ab7d7233d8a62b53dd5)
+  Оба рантайма индексируют темы по uuid+код+имя (topicsByName) и считают общий балл. Валидатор формулы знает коды и имена тем. Роут темы валидирует/сохраняет код и при переименовании переписывает topicByName в живых показателях тестов, использующих тему (снапшоты не трогаются).
+
+- **feat**(prd-2): DSL — общий балл (score), topicByName, адресация темы по коду + целостность при переименовании (2026-06-30) [`3417d297b9b0643d67c21d1a13898fe64607d50d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3417d297b9b0643d67c21d1a13898fe64607d50d)
+  Аксессоры score и topicByName (TS + JS-порт, golden-парити). topicById принимает код-или-UUID. Чистый хелпер renameTopicByNameInFormula для rewrite ссылок при переименовании темы.
+
+- **feat**(prd-2): колонка topics.code + опциональная метка показателя (схема + миграция 032) (2026-06-30) [`7bd9a64dfbbd53ef645fd2a8a2a1ef0c93479aae`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7bd9a64dfbbd53ef645fd2a8a2a1ef0c93479aae)
+  Читаемый авторский id темы для topicById("код") (иначе UUID). Метка показателя становится необязательной — паритет со шкалами; пустая подставляется именем.
+
+- **feat**(prd-19): статусы пропуска/возврата в отладчике PRD-18 (FR-24) (2026-06-29) [`06174a997b98338951f8d859693d926a8da1eb2a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/06174a997b98338951f8d859693d926a8da1eb2a)
+  В «Протоколе» отладчика добавлена колонка «Статус» (отвечен/пропущен/не отвечен),
+  читаемая из живой карты state.questionStatuses. Статус отличается от сырого
+  наличия ответа: пропуск с черновиком — answered=true, но status='skipped', так
+  что методолог видит навигацию отдельно от вердикта. Изменения единым потоком:
+  общий inspector-compute.js (поле status в строке протокола), тип ProtocolRow +
+  колонка в React-таблице, столбец «Статус» в CSV, CLI inspector.js (тег + CSV) —
+  паритет, т.к. CLI и веб делят один compute. «Состояние» уже показывало
+  questionStatuses в дереве state.
+
+- **feat**(prd-19): веб-паритет cooldown — состояние охлаждения на стартовой странице (FR-19/20) (2026-06-29) [`38a627b45fea2489f79b05491165943750f8a2a8`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/38a627b45fea2489f79b05491165943750f8a2a8)
+  Веб-хост теперь рендерит cooldown через тот же общий шаблон start.html
+  (buildStartState), без отдельной блок-стены — паритет со SCORM-гейтом
+  renderCooldownStart. GET /api/learner/tests считает decideRetake (источник даты —
+  собственные завершённые попытки сервера) и отдаёт retakeGate + priorResult из
+  resultJson последней попытки (на неё же указывает «Мой результат»). Стартовый
+  экран показывает дату ДД.ММ.ГГГГ + «через N дн.» (хелперы cooldown-format,
+  зеркало SCORM fmtDateHuman/daysUntilIso) и сводку прошлой попытки; кнопка старта
+  disabled. «Скачать отчёт» на вебе не предлагается (нет клиентского PDF). На
+  403-гонке cooldown сворачивается на стартовую, блок-стена — только fallback.
+
+- **feat**(prd-19): SCORM eligible-повтор — сводка прошлой попытки + «Скачать отчёт» на старте (FR-19) (2026-06-29) [`4075a201b438b6c64c7501396c25864ee3b3ad32`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4075a201b438b6c64c7501396c25864ee3b3ad32)
+  «Повтор: можно»: buildScormStartContext отдаёт priorResult (балл/вердикт/попытка из getBestAttempt) и canDownloadReport ПОСЛЕ Initialize. На start.html карточка прошлой попытки + «Мой результат» (view-results) + «Скачать отчёт» (download-report -&gt; downloadPDF(true): лучший сохранённый attempt, а не пустая текущая попытка). Приёмка на плеере: prior-карточка, «Прошлая попытка 65% не пройдено попытка 1 из 3», PDF лучшей попытки скачивается. Контракт/layout/CSS из коммита 75941a6.
+
+- **feat**(prd-19): cooldown-состояние на стартовой странице + снятие гейт-шелла (FR-19/20) (2026-06-29) [`75941a69cb049088e871d0961be93b74696e0584`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/75941a69cb049088e871d0961be93b74696e0584)
+  FR-19: при eligible гейт ведёт сразу на обычный старт (renderStartShell удалён) — повтор неотличим от обычного теста. FR-20: при блокировке cooldown рендерится НА start.html (дата ДД.ММ.ГГГГ + «через N дн.» + disabled-кнопка), а не отдельной блок-стеной; prior-результат/«Скачать отчёт» гейтятся по state.* (на SCORM до Initialize недоступны — только дата). buildStartState получил cooldown/priorResult/canDownloadReport. Фикс латентного бага ensureTemplate: пустой templateLayouts={} считался загруженным — гейт рендерил встроенную стену вместо шаблона. Приёмка на standalone-плеере (:5050): eligible -&gt; обычный старт; cooldown -&gt; карточка на start.html, Initialize не вызван (NFR-01/02).
+
+- **feat**(prd-19): поэтапное завершение D5/D6, итоги раздела, строгий режим, неотвеченный=неверный (E) (2026-06-29) [`36026bf4f0a5fd0841708526ea99bc0059c1c153`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/36026bf4f0a5fd0841708526ea99bc0059c1c153)
+  Завершение по разделам (D5): перехват границы раздела -&gt; обзор -&gt; модал -&gt; заморозка -&gt; вычисляемые итоги раздела (section-results, новый шаблонный layout + builder) -&gt; следующий раздел/роутер; строгий режим показывает итоги между разделами без обзора. Редактор структуры (D6): виртуальная строка «Обзор», гейт по allowReturnToUnanswered. Блок E (FR-13/14): неотвеченный/черновик/пропуск = 0 баллов и вердикт «неверно» в едином движке (gradedAnswerFor), включая SCORM-интеракции (раньше интеракции брали сырой ответ и могли дать correct при балле 0). Веб-эндпоинт section-result грейдит раздел тем же aggregateStandardResult. Общие контракты/стили (context.ts, base.css), на которых далее строится cooldown-старт, добавлены здесь — файлы делят D5 и F построчно.
+
+- **feat**(prd-19): навигация прохождения A–D + ревизия оформления/структуры (2026-06-29) [`adbc29d92f904d15d113c1f009b949d0ee43503e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/adbc29d92f904d15d113c1f009b949d0ee43503e)
+  PRD-19 «Навигация прохождения» (пропуск/возврат): настройки (блок A), рантайм
+  статусов вопроса/пропуска/возврата (B), кликабельные прогресс-пиллы вместо
+  линейного бара (C), экран обзора неотвеченных + кнопка «Вернуться» + модал
+  подтверждения завершения FR-09 (D — обзор/возврат/модал; поэтапное завершение
+  и итоги раздела ещё впереди). Пиллы и обзор — framework-free через общий шаблон
+  (.tb-pills/.tb-unanswered, builder question-progress/review-context), рендер на
+  ОБОИХ хостах (web + SCORM), паритет PRD-12.
+  
+  Плюс ревизия оформления/структуры (Этапы 1-3): производный dirty-флаг контент-
+  страниц, загрузчик изображений в свойствах страницы, проводка design_settings
+  (цвета/шрифт на вебе + логотип на обоих хостах) через общий buildTemplateCssVars,
+  cssVars из манифеста активного шаблона.
+  
+  Содержит также накопленные правки редактора (настройки/секции). tsc чист,
+  2807 тестов зелёные.
+
+- **feat**(debug-player): доводка встроенного плеера отладки PRD-18 (окно/инспектор/эталон + DS-примитивы) (2026-06-29) [`186f6abb1c5f698dc0b7f90c3706df4f1620a6e0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/186f6abb1c5f698dc0b7f90c3706df4f1620a6e0)
+
+- **feat**(debug-player): инспектор по утверждённым эскизам PRD-18 (2026-06-28) [`a96df04f0a464139ba616d0b943401465c37be63`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a96df04f0a464139ba616d0b943401465c37be63)
+  Bring the in-service debug player chrome + every inspector tab into full
+  conformance with docs/wireframes/approved/prd18-debug-player.html:
+  
+  \- toolbar / status bar over the stage / stage ribbon + «Эталон» switch /
+    edge collapse FAB / tab overflow scroll arrows.
+  \- «Результаты» ou-kpi grid + threshold ProgressBar + per-section table.
+  \- «Выдача»: per-tag composition table + «По типам» breakdown + «из банка N»
+    \+ итог; no internal formId on the canvas.
+  \- «Протокол»: method-aware «цена» note (веса опций · / тиры · c,x → ratio /
+    точное совпадение) via the shared explainAnswer; before-start gating.
+  \- «LMS»: structured Вызов · Ключ · Значение table + raw-log details.
+  \- «Состояние»: DS ou-tree with state/suspend_data/cmi sub-tabs + filter.
+
+- **feat**(scoring): единый движок агрегации результата + резолвер pass-rule (2026-06-28) [`4e3ec6f6fb871f58e3464a055ac61891f10fb371`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4e3ec6f6fb871f58e3464a055ac61891f10fb371)
+  THE single implementation of standard AND adaptive result aggregation
+  (aggregateStandardResult / aggregateAdaptiveResult) plus the pass-rule
+  resolver (resolveOverallRule / resolveTopicRule / checkPassRule), consumed
+  by both the web grader and the SCORM runtime via the TBTemplate bundle.
+  
+  \- Fixes the inherit_overall / none topic rules that were treated as
+    unsatisfiable count rules (100% read as «не пройден»).
+  \- Adaptive aggregation resolves the achieved level POSITIONALLY (the
+    reference SCORM convention) with a bounds guard instead of an unguarded
+    throw, fixing the web value-match off-by-one on non-contiguous levelIndex.
+  \- Adds explainAnswer (method + tallies) for the debug player «цена» note,
+    with a plain-JS twin kept in golden parity.
+
+- **feat**(web): окно встроенного плеера тестирования и отладки (PRD-18) (2026-06-27) [`8974a798a54eebfe2bd24af796c81ba7bebfdab1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8974a798a54eebfe2bd24af796c81ba7bebfdab1)
+  Full-screen окно /author/tests/:id/debug (пункт меню «Тестовый прогон» → отдельное окно): статус-панель над стейджем, iframe прогона на применённом шаблоне, сворачивающийся DS-инспектор с 7 вкладками (Результаты/Протокол/Выдача/Шкалы/Показатели/Состояние/LMS на Tabs+tb-table), тумблер «Эталон» (подсветка правильных ответов ✓/№/буквы-пар на реальном рендере), экспорт CSV, сброс прогона; экран «недоступно» при отсутствии edit. Чистый адаптер buildSnapshot поверх window.TBInspector держит React-панели тонкими.
+
+- **feat**(api): роутер встроенного отладочного плеера (PRD-18) (2026-06-27) [`5f870a8ae2878397f055a2184295ef2c5a7aac7a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5f870a8ae2878397f055a2184295ef2c5a7aac7a)
+  POST/GET/DELETE /api/tests/:id/debug/session|play|... + shim.js/inspector-compute.js. Пакет собирается из ЖИВОГО состояния теста с telemetry:null и отдаётся VERBATIM same-origin под одноразовым токеном (in-memory стор: TTL 30 мин, LRU 50, владение по userId). Шим хостится в окне-плеере — SCO находит API_1484_11 по window.parent (R-7). Гейт = edit-scope теста (как у экспорта SCORM). Прогон изолирован: ни attempts, ни телеметрии (R-2).
+
+- **feat**(scorm): вынести общий buildScormExportData для экспорта и отладки (PRD-18) (2026-06-27) [`028da02944638660e15024f010853d38cdb1aa43`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/028da02944638660e15024f010853d38cdb1aa43)
+  Единый сборщик SCORM ExportData (live или snapshot-источник) — production-экспорт и встроенный отладочный плеер собирают ОДИН и тот же артефакт тем же пайплайном (NFR-18, R-4: «отлаживаешь то, что отгрузится»). Export-роут делегирует ему; ScormBuildError маппится на 404/422.
+
+### Fixes
+
+- **fix**(owner): владелец теста при импорте суперадмином + атомарное назначение (2026-07-01) [`ced30d682b653926c29667be9c61bdece6049a96`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ced30d682b653926c29667be9c61bdece6049a96)
+  Симптом: тест, импортированный на инстансе, где автор залогинен как
+  конфиг-суперадмин, показывал «Владелец» = «—» (у обычного администратора всё ок).
+  
+  Причина: владелец назначается корректно (owner_id = id импортёра), но
+  конфиг-суперадмин провижинится с name=null (provisionSuperadmins), а колонка
+  «Владелец» резолвит ИМЯ владельца → null → «—». То есть пробел отображения
+  безымянного пользователя, а не сбой назначения.
+  
+  \- server/routes/tests.ts: колонка «Владелец» падает на email, если у пользователя
+    нет имени (u.name || u.email) — тесты суперадмина больше не выглядят как «—».
+  \- server/services/access.ts: будущие суперадмины провижинятся с name=email,
+    чтобы не быть безымянными нигде.
+  \- server/services/test-settings.ts + routes/tests.ts + routes/workbook.ts:
+    create() пишет owner_id прямо в INSERT (атомарно, в одной транзакции с тестом);
+    import-new и обычное создание передают id создателя/импортёра. Владелец больше
+    не зависит от отдельного post-insert setTestOwner (оставлен подстраховкой),
+    который мог не отработать на старом образе.
+
+- **fix**(tests-list): одно открытое меню действий + стабильный жёлоб скроллбара (2026-06-30) [`2913a15874771b91ac9e8421dae63b3b082c4057`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2913a15874771b91ac9e8421dae63b3b082c4057)
+  Меню теста и меню папки взаимоисключающи, повторный клик закрывает; scrollbar-gutter:stable, чтобы открытие нижнего меню не сдвигало сетку.
+
+- **fix**(analytics): градуированная цена ответа в детализации и SCORM-роллапе (2026-06-28) [`2071c0cff96521c9de1f9d0d5b43bdf1df9b0e23`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2071c0cff96521c9de1f9d0d5b43bdf1df9b0e23)
+  The per-attempt detail and the SCORM topic rollup re-derived points
+  independently of the graded engine and dropped partial credit:
+  
+  \- analytics/attempts.ts: use the graded checkAnswer ratio (× points) instead
+    of a binary === 1 collapse with all-or-nothing points, so per-row earned
+    reconciles with the stored attempt total for weighted/tiered questions.
+  \- analytics/scorm.ts: accrue the baked partial points unconditionally instead
+    of gating earnedPoints behind isCorrect, so a tiered/weighted partial row
+    (isCorrect=false, points&gt;0) no longer vanishes from the topic rollup.
+
+- **fix**(editor): вписать модал вариантов в форму и шрифт вопросов по WF (PRD-17) (2026-06-26) [`22cd4136d989095664d829a4786ed2144c3bff1e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/22cd4136d989095664d829a4786ed2144c3bff1e)
+  В Ф4 при портировании эскиза в ModalDialog + ui-kit TransferList потеряли
+  модал-scoped оверрайды трансфера (в prd17-test-variants.html заданы под
+  #wf-modal). Из-за дефолтов ui-kit панели расползались за пределы формы
+  (.ou-transfer__pane min-height:420px + body display:block без внутреннего
+  скролла → панель раздувалась, колонка стрелок-переноса уезжала ниже видимой
+  зоны), а текст вопросов рендерился крупнее WF (body-m/nowrap вместо body-s).
+  
+  Перенесены оверрайды эскиза, scoped под .tb-variants-modal (чтобы не задеть
+  другой TransferList): body → flex-колонка с min-height:0, .ou-transfer flex:1
+  и minmax(0,1fr) грид, .ou-transfer__pane/__list min-height:0 + overflow:auto,
+  .ou-transfer__row-name body-s с переносом. На ModalDialog добавлен
+  className=tb-variants-modal как якорь стилей.
+
+### Documentation
+
+- **docs**(prd-2): актуализация — §3/§10/§12 и шапка под реализованную модель (2026-06-30) [`c3806eeb3f69b80a298a63c6a30c22b5f3cdda6c`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c3806eeb3f69b80a298a63c6a30c22b5f3cdda6c)
+  Окружающие разделы приведены к коду: тип выводится из шаблона (не поле), метка опциональна, тогл «показывать обучающемуся» скрыт, карточка из 3 блоков; score — не «планируемое», а реализован; шаблон «Категория по уровням шкалы»; адресация темы по коду/имени + rewrite topicByName при переименовании. v2.3, дата 2026-06-30. markdownlint чист.
+
+- **docs**(prd-2): модель показателей — объекты/единицы, 4 шаблона, справочник функций, topicByName (2026-06-30) [`5a4403bcac22650f80be5ef788c177b169b3bfef`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/5a4403bcac22650f80be5ef788c177b169b3bfef)
+  PRD-2 §4: каталог объектов результата и единиц, шаблоны конструктора, справочник DSL, адресация темы по имени/коду. Эскиз prd2-prd5-scoring-tabs обновлён под новую модель (+ group-опции в prd7-shared.js).
+
+- **docs**(prd-19): закрытие трека — ROADMAP до PRD-19 + router-визуал проверен (FR-05b) (2026-06-29) [`8eb0f61a93f432bfa4a13d5d2e516c40ac929770`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8eb0f61a93f432bfa4a13d5d2e516c40ac929770)
+  ROADMAP актуализирован до PRD-19 (версия 1.11, блоки A-G, паритет обоих хостов,
+  приёмка SCORM-плеер + Playwright). HANDOFF: router-визуал подтверждён на хабе из
+  общего шаблона (пройденная тема «Пройдена»+заблокирована, «Завершить тест»
+  гейтится). Зафиксированы гочи: router_by_topics нужно собирать через
+  testSettingsService.create (иначе нет системной страницы kind:router = хаба);
+  router использует отдельную модель routerFlow.js (window.RouterFlow), а не плоский
+  state.pageSequence. Трек PRD-19 закрыт.
+
+- **docs**(prd-19): HANDOFF — сессия 4 (веб-паритет cooldown + блок G), визуал в Playwright + гоча dev-БД (2026-06-29) [`4c2bebfd30f1addb131db4e294c8e1726a5b53a9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/4c2bebfd30f1addb131db4e294c8e1726a5b53a9)
+  Зафиксирована реализация остатка трека (Block F веб-паритет cooldown, Block G
+  FR-24) и её визуальная проверка через Playwright (скрины cooldown-старта и колонки
+  «Статус»). Отдельно записана гоча окружения: dev-БД test_builder (:55432) — старый
+  снимок схемы, текущий код на ней не стартует; визуал делался на изолированной
+  prd19qa с override DATABASE_URL.
+
+- **docs**(prd-19): HANDOFF — SCORM eligible-повтор (FR-19) сделан, остаток F = веб-паритет (2026-06-29) [`e21211045bd1bd95d54d1781e63a5c236698d507`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e21211045bd1bd95d54d1781e63a5c236698d507)
+  Отмечен коммит 4075a20 (повтор: можно на SCORM); в остатке блока F только веб-паритет cooldown + блок G.
+
+- **docs**(prd-19): актуализация HANDOFF — блоки E и F закоммичены, остаток трека (2026-06-29) [`80cdfcd6cf0997a65b75aaa16321898f295620f1`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/80cdfcd6cf0997a65b75aaa16321898f295620f1)
+  Зафиксирован статус: весь PRD-19 в git (E/F закоммичены, приёмка F на плеере); обновлён список «Осталось» (веб-паритет cooldown, SCORM eligible-повтор, блок G).
+
+- **docs**(prd-18): описать встроенный плеер отладки в README (2026-06-27) [`64dddf78ddf3cac726899bd0898b0c91dc2335a8`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/64dddf78ddf3cac726899bd0898b0c91dc2335a8)
+  Возможности → новый раздел «Тестирование и отладка» (PRD-18): тестовый прогон, инспектор реального времени (7 вкладок), «Эталон», изоляция прогонов. API Reference (эндпоинты /debug) и дерево структуры дополнены debug-player/buildScormExportData. Попутно снят устаревший стек: shadcn/Radix/Tailwind удалены → @universityrt/ui-kit; убраны несуществующие tailwind.config.ts и components.json.
+
+- **docs**(prd-18): записать трек встроенного плеера отладки в ROADMAP (2026-06-27) [`dd22cf42dd48505269f816281f19543295b89bc3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/dd22cf42dd48505269f816281f19543295b89bc3)
+  Трек PRD-18 (Фазы 0-4 реализованы и запушены, приёмка Этап 14 закрыта) — в журнал актуализаций; источник → PRD-1...PRD-18, версия 1.10.
+
+- **docs**(prd-18): спека плеера отладки, эскиз и приёмка BRD (Этап 14) (2026-06-27) [`abfa7f1e57d05a1ea02c51e6a98d4d54cfcd7fb8`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/abfa7f1e57d05a1ea02c51e6a98d4d54cfcd7fb8)
+  PRD-18 (§11 — Фазы 1–4 закрыты), согласованный эскиз prd18-debug-player.html и чеклист приёмки BR-13 в BRD отмечены как выполненные.
+
+## [2.4.0-beta](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.3.0-beta...v2.4.0-beta)
+
+### Features
+
+- **feat**(editor): гасить взаимоисключающие контролы выдачи вместо скрытия (PRD-17) (2026-06-26) [`d34a6a465d0261575228fa7de75a6628922dd1b4`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d34a6a465d0261575228fa7de75a6628922dd1b4)
+  UX-уточнение 1.2: карточка темы больше не «теряет» настройки визуально. Режим вариантов, «Все вопросы темы» и адаптив теперь делают конфликтующие контролы неактивными (disabled) с пояснением, а не прячут их. Добавлены пропсы disabled/disabledReason в QuotaEditor и VariantsEditor; конфиг сохраняется в draft, просто не применяется. Плюс R-9: ненавязчивое предупреждение о неравных размерах вариантов.
+
+- **feat**(scorm): паритет вариантной выдачи в рантайме пакета (PRD-17) (2026-06-25) [`363a40c67d0a89e279e6d574202834d7c6fd5d5f`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/363a40c67d0a89e279e6d574202834d7c6fd5d5f)
+  Тот же опубликованный тест должен раздавать варианты и в SCORM. В
+  рантайм-близнеце app.js добавлен plain-JS порт selectForm и ветка в
+  generateVariant (режим вариантов вместо drawSection), а builder
+  пробрасывает form_set_json в TEST_DATA (включается только при наличии,
+  FR-02). У пакета нет cross-attempt-стора (NFR-17), поэтому ротация
+  деградирует до случайного выбора. Golden-тест forms-port держит JS и TS
+  движки в паритете; проверено рантайм-плеером — выдаётся ровно один
+  вариант целиком.
+
+- **feat**(editor): редактор вариантов теста на вкладке «Состав» (PRD-17) (2026-06-25) [`6cbf073d1e7067fc31fba3adb6259854fb007576`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/6cbf073d1e7067fc31fba3adb6259854fb007576)
+  Авторам нужен визуальный сбор форм по утверждённому эскизу. В строке
+  темы добавлен свитч-режим «Варианты теста»: включение скрывает контролы
+  выдачи из всего банка и показывает таблицу размеров форм + строку
+  покрытия (FR-18). Модал — табы по вариантам с «+ Вариант» и TransferList
+  «банк темы ↔ вариант», с иконкой типа вопроса и бейджами принадлежности
+  к другим формам (FR-06). Маппинг formSet &lt;-&gt; formSetJson (load/save) и
+  валидация (&gt;= 2 форм, каждая непустая; контроль выдачи не проверяется в
+  режиме вариантов).
+
+- **feat**(ui-kit): иконка элемента в TransferList (TransferItem.icon) (2026-06-25) [`a3a0c7611021cd3140a224ff191f106bb640302d`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a3a0c7611021cd3140a224ff191f106bb640302d)
+  renderRow заменяет строку целиком и ломает выбор/перенос, поэтому для
+  произвольной пиктограммы в слоте аватара добавлен необязательный
+  TransferItem.icon (фолбэк на буквенный аватар). Нужно редактору
+  вариантов теста (PRD-17), чтобы показывать тип вопроса в списках.
+
+- **feat**(workbook): импорт/экспорт колонки «Варианты» книги теста (PRD-17) (2026-06-25) [`96c270d179eb56a220b86c5280c383647224dec5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/96c270d179eb56a220b86c5280c383647224dec5)
+  Варианты курируются массово, поэтому состав форм нужен в Excel рядом с
+  вопросами, а не только в редакторе. На листе «Вопросы» добавлена колонка
+  «Варианты» с НОМЕРАМИ форм (метки авто-нумеруются позиционно, D-10):
+  импорт группирует вопросы по номеру в form_set_json per section
+  (parseVariantNumbers/buildFormSet), экспорт пишет номер = позиция формы.
+  SectionPayload.formSetJson персистит варианты при сохранении секции.
+  Меньше двух форм в секции — ошибка импорта. Спецификация §6.4.
+
+- **feat**(feasibility): защита целостности вариантов выдачи (PRD-17) (2026-06-25) [`a923de25839cb526d80edbe4a6b01dc9ba37c33a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a923de25839cb526d80edbe4a6b01dc9ba37c33a)
+  Удаление вопроса/темы или публикация с неполным вариантом раньше
+  проходили молча: формы (form_set_json) ссылаются на вопросы напрямую,
+  и устаревшая форма доставляла бы меньше заявленного. Добавлен issue
+  variant_incomplete в общий движок shared/draw/feasibility и проброс
+  variantQuestionIds через гейты удаления/публикации (published -&gt; 409,
+  draft -&gt; предупреждение) + клиентское зеркало. Снапшот замораживает
+  form_set_json целиком (FR-11) — подтверждено тестом.
+
+- **feat**(attempts): выдача темы по фиксированному варианту с ротацией (PRD-17) (2026-06-25) [`a2f1bd916ced01bfd72b15dcf1c9c63906b7e34a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/a2f1bd916ced01bfd72b15dcf1c9c63906b7e34a)
+  При старте попытки секция с form_set_json выдаётся через selectForm: историю
+  ротации собираем из завершённых попыток пользователя (formId по теме), пин
+  выпавшего formId в variant_json. Без набора — прежний drawSection. Историю
+  грузим лишь когда тест использует варианты. storage пишет form_set_json при
+  сохранении секций. Адаптивный режим не затронут (варианты — для стандартной
+  выдачи).
+
+- **feat**(draw): движок выбора варианта selectForm (PRD-17) (2026-06-25) [`35233cfa4cb7bcebe96fd5718c4b514dc7f285d7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/35233cfa4cb7bcebe96fd5718c4b514dc7f285d7)
+  Чистый selectForm: выбирает один вариант, исключая выпадавшие в прошлых
+  завершённых попытках (ротация по formId; при исчерпании — цикл), и выдаёт
+  его состав целиком — в случайном порядке, с мягкой нехваткой (вопрос, ушедший
+  из банка, отбрасывается без дублирования). shuffle инъектируется, поэтому и
+  выбор, и порядок детерминированно тестируемы. В SCORM previousFormIds пуст
+  (нет cross-attempt-стора) — выбор сводится к случайному.
+
+- **feat**(schema): колонка form_set_json и схема вариантов выдачи (PRD-17) (2026-06-25) [`c54af2afde471704cf8a5f4ca8634ed285826f8b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c54af2afde471704cf8a5f4ca8634ed285826f8b)
+  Добавляет на test_sections опциональный form_set_json: список ≥2 вариантов
+  (стабильный id, label, явный questionIds). Наличие переводит секцию в режим
+  вариантов — выпавший вариант выдаётся целиком; draw_count/draw_all/квоты
+  тогда не применяются. id стабилен, чтобы история ротации не «съезжала» при
+  правке набора. В testVariantSchema добавлен formId (пин выпавшего варианта).
+  Колонка nullable — все существующие тесты сохраняют поведение.
+
+### Documentation
+
+- **docs**(prd-17): UX-уточнение 1.2 — disabled вместо скрытия контролов (2026-06-26) [`8f36894debb62262bfbb139a50eb0b10c6255bab`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/8f36894debb62262bfbb139a50eb0b10c6255bab)
+  Спецификация (v1.2) и согласованный эскиз приведены к реализации: взаимоисключающие контролы выдачи показываются неактивными, а не прячутся (FR-03, D-2, фаза 4a). Семантика выдачи не изменилась — только подача в UI.
+
+- **docs**(prd-17): закрытие фаз 2-5 «варианты теста» (2026-06-25) [`26af93001fea96e2b5163cb775bad95c7483d0fd`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/26af93001fea96e2b5163cb775bad95c7483d0fd)
+  Статус PRD переведён в «реализован полностью»: фазы 2 (снапшоты +
+  целостность), 3 (Excel), 4 (редактор) и 5 (SCORM-паритет) отмечены
+  закрытыми с итогами проверки (golden-тест + рантайм-плеер).
+
+- **docs**(prd-17): спецификация «варианты теста» (BR-12) + согласованный эскиз (2026-06-25) [`7fed13c70ae13ac4ef17ee3c7cb975e3f81a8d16`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7fed13c70ae13ac4ef17ee3c7cb975e3f81a8d16)
+  Корпоративная сертификация (эталон РТК) требует фиксированных вариантов
+  выдачи: автор курирует наборы вопросов на тему, при старте выпадает один
+  вариант целиком, на повторе — другой. PRD-17 фиксирует модель и границу
+  реализуемости (ротация — только веб-хост: WebTutor не даёт cross-attempt
+  хранилища, NFR-17), BRD дополнен BR-12 + BR-12-09 (покрытие банка).
+  
+  Эскиз вкладки «Состав» построен на реальной разметке редактора; режим
+  «Варианты теста» при включении скрывает контролы выдачи из всей темы.
+
+## [2.3.0-beta](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.2.0-beta...v2.3.0-beta)
+
+### Features
+
+- **feat**(content): колонка «Владелец», инлайн-превью вопроса и фикс вложенности (2026-06-17) [`b7c3f8463ab2deba4243ebc676983a311b0b3856`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b7c3f8463ab2deba4243ebc676983a311b0b3856)
+  В дерево «Темы и вопросы» добавлены: колонка «Владелец» темы; инлайн-раскрытие
+  строки вопроса в компактную read-only карточку (question-preview.tsx) с отметкой
+  корректных вариантов значком чек-бокса. Исправлена вложенность на уровне вопросов:
+  порядок элементов строки вопроса приведён к строке темы ([чекбокс][твист][тип]),
+  из-за чего твист вопроса теперь на шаг правее родителя; вертикальная направляющая
+  выровнена под шевроном темы. Страница и шапка таблицы стали sticky (внутренний
+  скролл оболочки).
+
+- **feat**(tests): паритет списка «Тесты» с разделом «Темы и вопросы» (2026-06-17) [`2b094c676940c43115d90a6196e65192768cc49b`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2b094c676940c43115d90a6196e65192768cc49b)
+  Тулбар приведён к языку контент-дерева: PageHeader-заголовок, DS Input-поиск,
+  кнопка «Фильтры» с фасетами (Статус/Режим/Сценарий/Владелец/Область) и чипами
+  активных условий (tests-filters.tsx), «Развернуть всё/Свернуть всё». Терминология
+  сценария совпадает с колонкой («Линейный/По темам/Роутер»). Шапка таблицы и тулбар
+  sticky; перенос теста в папку переведён с радио-списка на FolderTreeSelect. Линия
+  над шапкой убрана, выровнены отступы и позиция поиска. Тесты обновлены под комбобокс.
+
+- **feat**(content): слой действий раздела «Темы и вопросы» (Фаза 3) — меню, FAB, перенос, экспорт (2026-06-16) [`ca1984e418bdbb226c5c8bb49e74c763f7942038`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ca1984e418bdbb226c5c8bb49e74c763f7942038)
+  Раздел доведён до утверждённого эскиза: на каждой строке (папка/тема/вопрос)
+  всегда видимое ⋯-меню; чекбоксы вопросов + панель массовых действий; FAB
+  speed-dial создания (папка/тема/вопрос); клик по вопросу открывает общий
+  QuestionEditorDrawer; пикеры переноса вопроса в тему и темы в папку; удаление/
+  перенос вопроса проходят через PRD-15 content guard.
+  
+  Выбор расположения папки/темы — компактный комбобокс, раскрывающийся деревом
+  папок (общий FolderTreeSelect поверх DS Tree): в модалке создания папки и в
+  поле «Папка» Drawer темы. В ⋯-меню папки добавлена команда «Добавить папку».
+  
+  Экспорт вопросов в Excel перенесён в раздел: команда «Экспорт в Excel» в
+  ⋯-меню темы (одна тема) и кнопка в панели при выборе тем (чекбоксы тем).
+  Терминология типов вопроса в фасет-фильтре — из i18n.
+
+- **feat**(content): фасет-фильтр по эскизу + сложность интервалом/«Не задана» (2026-06-16) [`31be02566fb1245239933772ea7bb93473ee9179`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/31be02566fb1245239933772ea7bb93473ee9179)
+  Фильтр приведён к утверждённому эскизу: floating popover, draft + «Применить»
+  (батч-перефильтрация), мемоизация дерева и дебаунс поиска. Фасет «Сложность» =
+  свитч «Не задана» (гейт) + слайдер-интервал 0–100 вместо фикс-таксономии;
+  колонка дерева показывает число, для null — приглушённое «Не задано» (убраны
+  выдуманные легко/средне/сложно). facetMatch и чипы — на интервал/unset; ключи
+  i18n difficultyUnset/difficultyNotSet. PRD-16 FR-03/11/13.
+
+- **feat**(questions): сложность вопроса опциональна (nullable) — PRD-16 FR-10 (2026-06-16) [`0c03a2ff4ecce2a0aa3e81df1f402acbaf545af7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/0c03a2ff4ecce2a0aa3e81df1f402acbaf545af7)
+  Сложность — число 0–100; отсутствие (NULL) означает «не задано». Снят
+  NOT NULL с questions.difficulty (миграция 029), default 50 сохранён для
+  обратной совместимости. Метки/уровни сложности — свойство теста
+  (adaptive_levels), не банка.
+
+- **feat**(content): фасет-фильтр «Темы и вопросы» (Фаза 2) (2026-06-16) [`b9af11fc8f77ae2936bffff5a0a1bdd1235db7c9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b9af11fc8f77ae2936bffff5a0a1bdd1235db7c9)
+  Панель фасетов (Тип/Сложность/Теги/Медиа/Автор/Область) + чипы активных условий + «Очистить всё»; клиентская фильтрация дерева с авто-раскрытием к совпадениям и счётчиком «найдено/всего» на теме; Теги/Автор скрываются при отсутствии данных (тегов/createdBy/прав users.read). URL-синхронизация фильтров отложена. tsc зелёный; проверено на живом приложении (фильтр по типу → дерево сузилось, чипы, счётчики).
+
+- **feat**(content): table-tree «Темы и вопросы» — чтение (Фаза 1) (2026-06-16) [`c3cc1acbaaba4a301ff5d4dc820065634fd7af11`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/c3cc1acbaaba4a301ff5d4dc820065634fd7af11)
+  Единое дерево Папка superset Тема superset Вопрос в визуальном языке списка тестов: колонки Название/Сложность/Вопросов, корневой «Все темы (N)», папки «(N тем)», тип вопроса — пиктограмма, сложность — тег в колонке, indent-line, рендер вопросов по раскрытию темы; тулбар поиск + Развернуть/Свернуть всё (поиск фильтрует дерево). Дерево собирается на клиенте из /api/folders + /api/topics + /api/questions. tsc + 2620 тестов зелёные; проверено на живом приложении (реальные данные, светлая/тёмная).
+
+- **feat**(content): каркас раздела «Темы и вопросы» (Фаза 0) (2026-06-16) [`7f465dffd4ce43361530d556dd975dc96b3efec5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/7f465dffd4ce43361530d556dd975dc96b3efec5)
+  Маршрут /author/content (ProtectedRoute topics.manage), пункт сайдбара «Темы и вопросы» (FolderTree; старые Темы/Вопросы пока сохранены), страница-заготовка content.tsx, ключи i18n navigation.topicsAndQuestions + content. Дерево/фильтры/редакторы — следующие фазы. tsc + 2620 тестов зелёные.
+
+- **feat**(learner): review-режим в общем шаблоне вопроса (PRD-12 паритет) (2026-06-15) [`ec190993e0cd99be702a8c3df4cae8369c3414e7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ec190993e0cd99be702a8c3df4cae8369c3414e7)
+  TemplateQuestionScreen + optionsHtml/rankingHtml/matchingHtml получили пропы
+  reviewMode + correctAnswer: в режиме просмотра ответов опции/ступени/строки
+  соответствия получают классы correct-answer/incorrect-answer — ТЕ ЖЕ, что эмитит
+  SCORM-рантайм (server/scorm .../single.js, multiple.js, feedback.js) и которые уже
+  стилизованы в общем base.css. Логика correct/wrong зеркалит SCORM feedback.js
+  (single: correctIndex; multiple: correctIndices; matching: pairs[{right,left}];
+  ranking: correctOrder). Новый CSS не добавлялся, SCORM не затронут.
+
+- **feat**(ui-kit): Grid label-control + утилиты ou-link-reset / ou-list--bulleted (2026-06-15) [`161837d1a9067c072eca79d51f40c07d1a0e0af7`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/161837d1a9067c072eca79d51f40c07d1a0e0af7)
+  Закрытие пробелов DS для этапа 2d:
+  \- Grid: проп template="label-control" + класс ou-lgrid--label-control
+    (grid-template-columns: 1fr var(--ou-lgrid-control,6rem); align-items:center)
+    — двухколоночный «подпись + фикс-контрол» вместо arbitrary grid-cols-[1fr_6rem].
+  \- .ou-link-reset (color:inherit; text-decoration:none) — сброс нативной &lt;a&gt;.
+  \- .ou-list--bulleted (list-style:disc; padding-inline-start + li+li gap) —
+    маркированный нативный список без сырого Tailwind, сохраняя a11y/роль списка.
+  Все классы добавлены в ОБЕ копии university-rt.css.
+
+- **feat**(ui-kit): проп surface на flow-примитивах Stack/Cluster (2026-06-15) [`e51edbb19aa8e1c79466c57507fd90f752f2d9a9`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e51edbb19aa8e1c79466c57507fd90f752f2d9a9)
+  Stack/Cluster теперь принимают surface ('muted'|'subtle'|'elevated'),
+  переиспользуя самостоятельные ou-box--surface-* утилиты (как padding) —
+  flex-панель несёт собственный фон без обёртки-Box. Закрывает пробел для
+  полупрозрачных Tailwind-фонов (bg-*/30) через DS-токен поверхности.
+
+- **feat**(ui-kit): Box.border принимает 'solid'|'dashed' (+ ou-box--border-dashed) (2026-06-15) [`62abbc12ee983efd3759041a90b8cd98f7bb126e`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/62abbc12ee983efd3759041a90b8cd98f7bb126e)
+  Проп border расширен до boolean|'solid'|'dashed'; добавлен CSS-класс
+  .ou-box--border-dashed (1px dashed var(--ou-border-soft)) в обе копии
+  university-rt.css. Закрывает пробел DS: пунктирные рамки-подсказки больше
+  не требуют сырого Tailwind border border-dashed.
+
+- **feat**(ui-kit): добавить token-пропсы padding в flow-примитивы Stack/Cluster (2026-06-14) [`f6224da6b796c9adbd96c4b1a7f7b65c6cde64ce`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f6224da6b796c9adbd96c4b1a7f7b65c6cde64ce)
+  Stack/Cluster теперь принимают pad/padX/padY/padTop/padBottom/padStart/padEnd
+  (как Box), переиспользуя существующие ou-box--pad* утилиты — flex-контейнер
+  несёт собственный padding без обёртки-Box. Общий PaddingProps + хелпер
+  padClasses для Box и Stack, без дублирования логики.
+
+- **feat**(ui-kit): TagInput — чип-инпут тегов с автодополнением (домен-логика через пропы) (2026-06-14) [`991f7fa50110487a3f4ca4e1780b024e4da188cb`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/991f7fa50110487a3f4ca4e1780b024e4da188cb)
+
+- **feat**(ui-kit): примитивы для экранов входа — Center, IconBadge, Input revealToggle (eye), Stack minH, Box maxW/full (2026-06-14) [`2e6dec6510d2b96907d2e72aee8aa1057e4790e8`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2e6dec6510d2b96907d2e72aee8aa1057e4790e8)
+
+- **feat**(ui-kit): направленные паддинги Box (padX/padY/padStart/padEnd/padTop/padBottom) (2026-06-14) [`1509d49144e7cdc29d96615314fe3b8804941b60`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/1509d49144e7cdc29d96615314fe3b8804941b60)
+
+- **feat**(ui-kit): добавить layout/typography-примитивы (Stack/Cluster/Grid/Box/Text) + ScrollArea/Separator/Label/Collapsible и раскрываемые строки Table (2026-06-14) [`97247c115d572dc5aa5db84a41a2fd3e979be372`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/97247c115d572dc5aa5db84a41a2fd3e979be372)
+
+### Fixes
+
+- **fix**(content): выровнять структуру инлайн-превью на уровне вариантов ответа (2026-06-17) [`d006d355b716818d133054de0b4c65ae05793c18`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/d006d355b716818d133054de0b4c65ae05793c18)
+  Карточка превью индентируется на ширину ведущих контролов вопроса (слот чекбокса
+  \+ твист + зазоры), из-за чего иконки вариантов выступали левее самого вопроса.
+  Теперь иконки вариантов стоят под тип-иконкой вопроса, текст вариантов — под его
+  текстом, а направляющая родительской темы продолжается сквозь карточку без разрыва.
+
+- **fix**(ds): закрепить высоту .ou-shell (height:100vh) (2026-06-17) [`31161a2af224fb84da777f5981dc1a51d8788aad`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/31161a2af224fb84da777f5981dc1a51d8788aad)
+  min-height позволял гриду оболочки расти по контенту: скроллился документ,
+  а .ou-shell__main никогда не использовал свой overflow:auto. Фиксированная
+  высота возвращает внутренний скролл main — это включает sticky-области
+  (заголовок страницы + тулбар + шапка таблицы) на «Темы и вопросы» и «Тесты».
+  Правка внесена в обе копии DS-CSS (vendor-источник и client/styles/vendor).
+
+- **fix**(tests): нейтральный цвет пиктограммы папки (DS-стандарт) (2026-06-15) [`94ac16d02da947e6f57584f35e64e8a7875846cd`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/94ac16d02da947e6f57584f35e64e8a7875846cd)
+  Иконки папок в списке тестов были на warning-токенах (жёлтые); приведены к --ou-fg-muted, как у шеврона и прочих иконок дерева. Индикатор «Требует обновления» (.test-name-warn) не затронут.
+
+- **fix**(learner): просмотр ответов (standard/adaptive) через общий шаблон; удалён React-фолбэк (2026-06-15) [`325663b3be724d9da82b59bc55b8c12310965863`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/325663b3be724d9da82b59bc55b8c12310965863)
+  Дефект паритета (feedback_web_must_use_templates): при showCorrectAnswers веб
+  рендерил отдельный React-компонент мимо PRD-12 шаблона. Исправление (этап 4-A):
+  \- standard-review теперь идёт через TemplateQuestionScreen (2-шаговый футер
+    «Принять» -&gt; «Далее»/«Завершить», reviewMode + correctAnswer + feedbackHtml + locked);
+  \- adaptive-review тоже получил поэлементную подсветку (reviewMode/correctAnswer);
+  \- удалён React-фолбэк (QuestionInput/MatchingQuestion/RankingQuestion + ставшие
+    мёртвыми TimerDisplay/SectionTimerDisplay, ~640 строк сырого Tailwind) и
+    неиспользуемые импорты иконок;
+  \- редкий случай недоступного шаблона (fetch упал) -&gt; аккуратный DS-guard вместо
+    второго React-рендера.
+  Оба рендера (web + SCORM) рисуют просмотр из общего шаблона. tsc/build/2620 зелёные;
+  визуально подтверждён ranking-review через шаблон (footer Принять/Далее, feedback-слот,
+  locked, тёмная тема).
+
+- **fix**(ui-kit): развести layout Grid и DataGrid в .ou-lgrid (фон/граница DataGrid протекали в просветы сетки) (2026-06-14) [`e98a425dd95fbf47eee76711358c8300c9786630`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e98a425dd95fbf47eee76711358c8300c9786630)
+
+### Documentation
+
+- **docs**(content-axis): смена типа вопроса сохраняет варианты + дефолт «Не задано» (2026-06-16) [`accacb062e7db0eff2b9710695a2d61168eb5bc0`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/accacb062e7db0eff2b9710695a2d61168eb5bc0)
+  Решение 2026-06-16: смена типа вопроса переносит введённые варианты между
+  типами без подтверждения (пересобирается только структура ответа) — заменяет
+  прежнее подтверждение с потерей данных. Обновлены BRC-CA-32, FR-32 и приёмка;
+  FR-12 фиксирует дефолт «Не задано» для нового вопроса. Из утверждённого эскиза
+  удалён obsolete state подтверждения смены типа (s-q-typechange).
+
+- **docs**(content-axis): BRD + PRD-16 + план модели вопроса; эскиз дополнен (2026-06-16) [`3432e8ab74408ace81e5703e7407f5b255b001f6`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/3432e8ab74408ace81e5703e7407f5b255b001f6)
+  BRD оси контента (BRC-CA-01..44) и PRD-16 (FR-01..50) фиксируют принятый
+  объём: сложность число/nullable, медиа только-загрузка, валидация
+  конструкторов, порядок и «Случайный порядок» вариантов; переопределение
+  выдачи на уровне теста (FR-90/BRC-CA-44) — отложено до подтверждения
+  гипотезы. План дополнен блоками C1-C6 (C5 отложен), ROADMAP — строка PRD-16.
+  Эскиз content-bank-explorer обновлён под модель сложности/медиа/edge cases
+  и терминологию i18n.
+
+- **docs**(ux): план реализации раздела «Темы и вопросы» (2026-06-16) [`54382d1be80d37921d0902d896eeb99b9e157f22`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/54382d1be80d37921d0902d896eeb99b9e157f22)
+  Фазовый план объединения страниц Темы+Вопросы в единый table-tree раздел (Папка superset Тема superset Вопрос) по визуальному языку списка тестов. 6 фаз, карта переиспользования, статус серверных API. На согласовании выбран старт с Фазы 0.
+
+- **docs**(ux): аудит авторских разделов + эскиз «Темы и вопросы» (2026-06-15) [`ef22c7b2690e1bba4101ebfa8acf5ab96360b530`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/ef22c7b2690e1bba4101ebfa8acf5ab96360b530)
+  UX/UI-аудит разделов Темы/Вопросы/Тесты (docs/AUDIT_UX_AUTHOR_CONTENT.md, UX-01..13) и утверждённый эскиз единого раздела «Темы и вопросы»: table-tree по визуальному языку списка «Тесты»; единое дерево Папка superset Тема superset Вопрос, ортогональное оси тестов (тест ссылается на тему и выбирает из пула).
+
+- **docs**: актуализировать README/ROADMAP/.env.example под текущий код (2.2.0-beta) (2026-06-13) [`b718bdce750fe92dda111118c12c0e02aecd26b5`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/b718bdce750fe92dda111118c12c0e02aecd26b5)
+  README приведён в соответствие с PRD-13/14/15 и схемой БД 2.2.0-beta: 5-ролевая
+  модель доступа вместо двух ролей, актуальные таблицы (user_roles, *_access_grants,
+  test_snapshots, test_question_scoring), оценка как свойство теста (T-40), exceljs
+  вместо XLSX, дерево проекта, демо-юзеры, маршруты API и формат Excel-импорта.
+  ROADMAP §0 — дата статуса. .env.example — добавлен обязательный DATABASE_URL.
+
 ## [2.2.0-beta](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.1.0-beta...v2.2.0-beta)
 
 ### Features
