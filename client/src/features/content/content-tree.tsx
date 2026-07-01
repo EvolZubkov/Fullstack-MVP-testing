@@ -66,6 +66,12 @@ import { TopicDrawer, type TopicDrawerTarget } from "@/features/topics/topic-dra
 import { useContentGuard } from "@/features/content-protection/use-content-guard";
 import { ContentImpactDialog } from "@/features/content-protection/content-impact-dialog";
 import {
+  GroupAccessModal,
+  GroupMoveModal,
+  FolderDeleteDialog,
+  GroupDeleteFlow,
+} from "@/features/content/bulk-content-ops";
+import {
   ContentFilters,
   diffActive,
   EMPTY_FILTER,
@@ -220,11 +226,18 @@ export function ContentTree() {
   const [topicTab, setTopicTab] = useState<"props" | "access">("props");
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [selectedTopics, setSelectedTopics] = useState<ReadonlySet<string>>(() => new Set());
+  const [selectedFolders, setSelectedFolders] = useState<ReadonlySet<string>>(() => new Set());
   const [moveQ, setMoveQ] = useState<{ ids: string[]; topicId: string } | null>(null);
   const [moveTopicTarget, setMoveTopicTarget] = useState<{ id: string; folderId: string } | null>(null);
   const [newFolder, setNewFolder] = useState<{ parentId: string | null; name: string } | null>(null);
   const [renameFolderTarget, setRenameFolderTarget] = useState<{ id: string; name: string } | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ kind: "topic" | "folder"; id: string; name: string } | null>(null);
+  // Group («Папки и темы») operation modals (Р-2..Р-8).
+  const [groupMoveOpen, setGroupMoveOpen] = useState(false);
+  const [groupAccessOpen, setGroupAccessOpen] = useState(false);
+  // Topic delete (single ⋯ or group) routes through the same guarded flow
+  // (GroupDeleteFlow): clean → DS confirm, conflicts → partial-batch impact.
+  const [deleteTopicIds, setDeleteTopicIds] = useState<string[] | null>(null);
+  const [folderDelete, setFolderDelete] = useState<{ folderIds: string[]; folderName: string; standaloneTopicIds: string[] } | null>(null);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/questions"] });
@@ -238,16 +251,10 @@ export function ContentTree() {
     onSuccess: () => { invalidateAll(); toast({ title: t.questions.duplicated }); },
     onError: onMutError,
   });
-  const deleteTopicMut = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/topics/${id}`),
-    onSuccess: () => { invalidateAll(); setDeleteConfirm(null); },
-    onError: onMutError,
-  });
-  const deleteFolderMut = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/folders/${id}`),
-    onSuccess: () => { invalidateAll(); setDeleteConfirm(null); },
-    onError: onMutError,
-  });
+  // Topic/folder deletion is guarded (single topic → content guard; folder →
+  // two-mode dialog; groups → the bulk flows), so no plain delete mutations here.
+  const clearGroupSelection = () => { setSelectedTopics(new Set()); setSelectedFolders(new Set()); };
+  const onGroupDone = () => { invalidateAll(); clearGroupSelection(); };
   const createFolderMut = useMutation({
     mutationFn: (body: { name: string; parentId: string | null }) => apiRequest("POST", "/api/folders", body),
     onSuccess: () => { invalidateAll(); setNewFolder(null); },
@@ -286,12 +293,23 @@ export function ContentTree() {
     });
   }
 
+  // Two mutually-exclusive selection modes: «Вопросы» and «Папки и темы».
+  // Toggling a question clears folders/topics; toggling a folder/topic (same
+  // mode) clears questions.
+  const toggle = (set: ReadonlySet<string>, id: string) => { const n = new Set(set); n.has(id) ? n.delete(id) : n.add(id); return n; };
   function toggleSelected(id: string) {
-    setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelectedTopics(new Set()); setSelectedFolders(new Set());
+    setSelected((prev) => toggle(prev, id));
   }
   function toggleTopicSelected(id: string) {
-    setSelectedTopics((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelected(new Set());
+    setSelectedTopics((prev) => toggle(prev, id));
   }
+  function toggleFolderSelected(id: string) {
+    setSelected(new Set());
+    setSelectedFolders((prev) => toggle(prev, id));
+  }
+
   /** Export the questions of the given topics to Excel (PRD-16 — replaces the old «Вопросы» export). */
   function exportTopicsToExcel(ids: string[]) {
     if (ids.length === 0) return;
@@ -333,6 +351,25 @@ export function ContentTree() {
     }
     return map;
   }, [topics]);
+
+  // Topics resolved from the «Папки и темы» selection: directly-selected topics
+  // plus every topic inside a selected folder (transitively).
+  function topicsUnderFolder(folderId: string): string[] {
+    const out: string[] = [];
+    const queue = [folderId];
+    while (queue.length > 0) {
+      const f = queue.shift()!;
+      for (const tp of topicsByFolder.get(f) ?? []) out.push(tp.id);
+      for (const sub of childFolders.get(f) ?? []) queue.push(sub.id);
+    }
+    return out;
+  }
+  const resolvedTopicIds = useMemo(() => {
+    const set = new Set<string>(selectedTopics);
+    for (const fid of selectedFolders) for (const tid of topicsUnderFolder(fid)) set.add(tid);
+    return Array.from(set);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTopics, selectedFolders, topicsByFolder, childFolders]);
 
   const tagOptions = useMemo(() => {
     const set = new Set<string>();
@@ -440,7 +477,7 @@ export function ContentTree() {
           {can("topics.manage") && <MenuItem icon={<Pencil size={16} />} onClick={() => { setMenu(null); setTopicTab("props"); setTopicTarget({ mode: "edit", topic }); }}>{t.content.topicSettings}</MenuItem>}
           {can("topics.access.grant") && <MenuItem icon={<KeyRound size={16} />} onClick={() => { setMenu(null); setTopicTab("access"); setTopicTarget({ mode: "edit", topic }); }}>{t.content.topicAccess}</MenuItem>}
           {can("topics.manage") && <MenuItem icon={<Move size={16} />} onClick={() => { setMenu(null); setMoveTopicTarget({ id: topic.id, folderId: topic.folderId ?? "" }); }}>{t.content.moveTopicToFolder}</MenuItem>}
-          {can("topics.manage") && <MenuItem danger icon={<Trash2 size={16} />} onClick={() => { setMenu(null); setDeleteConfirm({ kind: "topic", id: topic.id, name: topic.name }); }}>{t.content.deleteTopic}</MenuItem>}
+          {can("topics.manage") && <MenuItem danger icon={<Trash2 size={16} />} onClick={() => { setMenu(null); setDeleteTopicIds([topic.id]); }}>{t.content.deleteTopic}</MenuItem>}
         </RowActions>
       </div>,
     );
@@ -489,10 +526,13 @@ export function ContentTree() {
     const open = contentActive || !collapsedFolders.has(folder.id);
     const topicCount = (topicsByFolder.get(folder.id) ?? []).length;
     const menuOpen = menu?.kind === "folder" && menu.id === folder.id;
+    const folderSel = selectedFolders.has(folder.id);
     rows.push(
-      <div key={`f-${folder.id}`} className={`ct-row ct-row--folder ${depthClass(depth)}`} onClick={() => toggleFolder(folder.id)} role="button" tabIndex={0}>
+      <div key={`f-${folder.id}`} className={`ct-row ct-row--folder ${depthClass(depth)}${folderSel ? " is-tselected" : ""}`} onClick={() => toggleFolder(folder.id)} role="button" tabIndex={0}>
         <div className="ct-name">
-          <span className="ct-qcheck" aria-hidden="true" />
+          <span className="ct-qcheck" onClick={(e) => e.stopPropagation()}>
+            <Checkbox checked={folderSel} onChange={() => toggleFolderSelected(folder.id)} aria-label={t.content.selectFolder} />
+          </span>
           <span className="ct-twist">{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
           <span className="ct-ico"><FolderIcon size={16} /></span>
           <span className="ct-name__label">{folder.name}</span>
@@ -505,7 +545,7 @@ export function ContentTree() {
           {can("topics.manage") && <MenuItem icon={<Plus size={16} />} onClick={() => { setMenu(null); setTopicTab("props"); setTopicTarget({ mode: "create", folderId: folder.id }); }}>{t.content.addTopicHere}</MenuItem>}
           {can("folders.manage") && <MenuItem icon={<FolderPlus size={16} />} onClick={() => { setMenu(null); setNewFolder({ parentId: folder.id, name: "" }); }}>{t.content.addSubfolder}</MenuItem>}
           {can("folders.manage") && <MenuItem icon={<Pencil size={16} />} onClick={() => { setMenu(null); setRenameFolderTarget({ id: folder.id, name: folder.name }); }}>{t.content.renameFolder}</MenuItem>}
-          {can("folders.manage") && <MenuItem danger icon={<Trash2 size={16} />} onClick={() => { setMenu(null); setDeleteConfirm({ kind: "folder", id: folder.id, name: folder.name }); }}>{t.content.deleteFolder}</MenuItem>}
+          {can("folders.manage") && <MenuItem danger icon={<Trash2 size={16} />} onClick={() => { setMenu(null); setFolderDelete({ folderIds: [folder.id], folderName: folder.name, standaloneTopicIds: [] }); }}>{t.content.deleteFolder}</MenuItem>}
         </RowActions>
       </div>,
     );
@@ -580,15 +620,43 @@ export function ContentTree() {
         </div>
       )}
 
-      {/* PRD-16: selecting any topic(s) reveals the «Экспорт в Excel» action. */}
-      {selectedTopics.size > 0 && (
+      {/* «Папки и темы» selection bar: group move / access / export / delete. */}
+      {(selectedTopics.size + selectedFolders.size) > 0 && (
         <div className="ct-bulkbar">
-          <span className="ct-bulkbar__count">{t.content.selectedTopicsCount} {selectedTopics.size}</span>
+          <span className="ct-bulkbar__count">
+            {t.content.selectedFtCount} {resolvedTopicIds.length} {plural(resolvedTopicIds.length, "тема", "темы", "тем")}
+            {selectedFolders.size > 0 ? ` · ${selectedFolders.size} ${plural(selectedFolders.size, "папка", "папки", "папок")}` : ""}
+          </span>
           <span className="ct-bulkbar__spacer" />
-          {can("questions.importExport") && (
-            <Button variant="secondary" size="s" leadingIcon={<Download size={16} />} onClick={() => exportTopicsToExcel(Array.from(selectedTopics))} data-testid="ct-export-topics">{t.content.exportToExcel}</Button>
+          {can("topics.manage") && (
+            <Button variant="ghost" size="s" leadingIcon={<Move size={16} />} onClick={() => setGroupMoveOpen(true)} data-testid="ct-group-move">{t.content.moveSelected}</Button>
           )}
-          <Button variant="ghost" size="s" onClick={() => setSelectedTopics(new Set())}>{t.content.clearSelection}</Button>
+          {can("topics.access.grant") && (
+            <Button variant="ghost" size="s" leadingIcon={<KeyRound size={16} />} onClick={() => setGroupAccessOpen(true)} data-testid="ct-group-access">{t.content.groupAccess}</Button>
+          )}
+          {can("questions.importExport") && (
+            <Button variant="ghost" size="s" leadingIcon={<Download size={16} />} onClick={() => exportTopicsToExcel(resolvedTopicIds)} data-testid="ct-export-topics">{t.content.exportToExcel}</Button>
+          )}
+          {can("topics.manage") && (
+            <Button
+              variant="ghost"
+              size="s"
+              leadingIcon={<Trash2 size={16} />}
+              data-testid="ct-group-delete"
+              onClick={() => {
+                if (selectedFolders.size > 0) {
+                  const fid = Array.from(selectedFolders);
+                  const primary = folders.find((f) => f.id === fid[0]);
+                  setFolderDelete({ folderIds: fid, folderName: primary?.name ?? "", standaloneTopicIds: Array.from(selectedTopics) });
+                } else {
+                  setDeleteTopicIds(resolvedTopicIds);
+                }
+              }}
+            >
+              {t.content.deleteSelected}
+            </Button>
+          )}
+          <Button variant="ghost" size="s" onClick={clearGroupSelection}>{t.content.clearSelection}</Button>
         </div>
       )}
 
@@ -798,37 +866,47 @@ export function ContentTree() {
         />
       </ModalDialog>
 
-      {/* Delete confirm (topic / folder) */}
-      <ModalDialog
-        open={deleteConfirm !== null}
-        onClose={() => setDeleteConfirm(null)}
-        size="m"
-        title={deleteConfirm?.kind === "topic" ? t.content.deleteTopic : t.content.deleteFolder}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>{t.common.cancel}</Button>
-            <Button
-              variant="destructive"
-              loading={deleteTopicMut.isPending || deleteFolderMut.isPending}
-              onClick={() => {
-                if (!deleteConfirm) return;
-                if (deleteConfirm.kind === "topic") deleteTopicMut.mutate(deleteConfirm.id);
-                else deleteFolderMut.mutate(deleteConfirm.id);
-              }}
-              data-testid="ct-delete-confirm"
-            >
-              {t.content.deleteSelected}
-            </Button>
-          </>
-        }
-      >
-        <Text>
-          {(deleteConfirm?.kind === "topic" ? t.content.confirmDeleteTopic : t.content.confirmDeleteFolder)}
-          {deleteConfirm ? ` («${deleteConfirm.name}»)` : ""}
-        </Text>
-      </ModalDialog>
+      {/* Group operations over the «Папки и темы» selection (Р-2..Р-8) */}
+      <GroupMoveModal
+        open={groupMoveOpen}
+        directTopicIds={Array.from(selectedTopics)}
+        folderIds={Array.from(selectedFolders)}
+        folders={folders}
+        onClose={() => setGroupMoveOpen(false)}
+        onDone={onGroupDone}
+      />
+      <GroupAccessModal
+        open={groupAccessOpen}
+        topicIds={resolvedTopicIds}
+        topicCount={resolvedTopicIds.length}
+        folderCount={selectedFolders.size}
+        users={users}
+        isAdmin={isAdmin}
+        canForce={isAdmin}
+        onClose={() => setGroupAccessOpen(false)}
+        onDone={onGroupDone}
+      />
+      <GroupDeleteFlow
+        open={deleteTopicIds !== null}
+        topicIds={deleteTopicIds ?? []}
+        canForce={isAdmin}
+        onClose={() => setDeleteTopicIds(null)}
+        onDone={onGroupDone}
+      />
+      {folderDelete && (
+        <FolderDeleteDialog
+          open
+          folderIds={folderDelete.folderIds}
+          folderName={folderDelete.folderName}
+          standaloneTopicIds={folderDelete.standaloneTopicIds}
+          folders={folders}
+          canForce={isAdmin}
+          onClose={() => setFolderDelete(null)}
+          onDone={onGroupDone}
+        />
+      )}
 
-      {/* PRD-15 content guard for question deletes/moves affecting published tests */}
+      {/* PRD-15 content guard for topic/question deletes/moves affecting published tests */}
       <ContentImpactDialog {...contentGuard.dialogProps} />
     </div>
   );
