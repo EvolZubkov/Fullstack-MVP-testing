@@ -22,6 +22,7 @@ const { storageMock } = vi.hoisted(() => ({
     // folders
     getFolders: vi.fn(), getFolder: vi.fn(), createFolder: vi.fn(),
     updateFolder: vi.fn(), deleteFolder: vi.fn(),
+    getFolderSubtreeIds: vi.fn(), deleteFoldersBulk: vi.fn(), moveTopicsToFolder: vi.fn(),
     // groups
     getGroups: vi.fn(), getGroup: vi.fn(), createGroup: vi.fn(),
     updateGroup: vi.fn(), deleteGroup: vi.fn(),
@@ -311,6 +312,8 @@ describe("Folders routes", () => {
   });
 
   it("DELETE /:id — deletes folder", async () => {
+    // No body → "folder-only" mode: contents reparented to root, folder dropped.
+    storageMock.getFolder.mockResolvedValue(folder);
     storageMock.deleteFolder.mockResolvedValue(true);
     const res = await asAuthor(request(app).delete("/api/folders/f1"));
     expect(res.status).toBe(200);

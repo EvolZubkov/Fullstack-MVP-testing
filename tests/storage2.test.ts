@@ -680,3 +680,54 @@ describe("DatabaseStorage — topic courses", () => {
     expect(events[0]).toMatchObject({ topicId: "t1", title: "Вебинар" });
   });
 });
+
+// ─── Content folders & topic bulk helpers (Р-2..Р-8) ──────────────────────────
+describe("DatabaseStorage — content folders & topic bulk", () => {
+  let storage: DatabaseStorage;
+  beforeEach(() => { vi.clearAllMocks(); storage = new DatabaseStorage(); });
+
+  it("deleteFolder — reparents contents to moveTo and drops the folder", async () => {
+    setupUpdate({});
+    setupDelete(1);
+    const ok = await storage.deleteFolder("f1", "f2");
+    expect(ok).toBe(true);
+    expect(dbMock.update).toHaveBeenCalledTimes(2); // topics + child folders
+    expect(dbMock.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("deleteFolder — false when the row does not exist", async () => {
+    setupUpdate({});
+    setupDelete(0);
+    expect(await storage.deleteFolder("x")).toBe(false);
+  });
+
+  it("getFolderSubtreeIds — BFS of a folder and its descendants", async () => {
+    setupSelect([
+      { id: "f1", parentId: null },
+      { id: "f2", parentId: "f1" },
+      { id: "f3", parentId: "f2" },
+      { id: "f4", parentId: null },
+    ]);
+    expect(await storage.getFolderSubtreeIds("f1")).toEqual(["f1", "f2", "f3"]);
+  });
+
+  it("deleteFoldersBulk — returns the deleted row count", async () => {
+    dbMock.delete.mockReturnValue(makeChain([{}, {}]));
+    expect(await storage.deleteFoldersBulk(["a", "b"])).toBe(2);
+  });
+
+  it("deleteFoldersBulk — no-op for empty ids", async () => {
+    expect(await storage.deleteFoldersBulk([])).toBe(0);
+    expect(dbMock.delete).not.toHaveBeenCalled();
+  });
+
+  it("moveTopicsToFolder — bulk-reparents topics, returns count", async () => {
+    dbMock.update.mockReturnValue(makeChain([{}, {}, {}]));
+    expect(await storage.moveTopicsToFolder(["t1", "t2", "t3"], "f1")).toBe(3);
+  });
+
+  it("moveTopicsToFolder — no-op for empty ids", async () => {
+    expect(await storage.moveTopicsToFolder([], null)).toBe(0);
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+});
