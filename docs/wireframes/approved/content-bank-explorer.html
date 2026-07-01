@@ -127,6 +127,30 @@
     .qd-stack--tight { gap: var(--ou-space-2); }
     .qd-addrow { margin-top: var(--ou-space-2); }
     .cb-drawer-tabs { padding: 0 var(--ou-space-6); border-bottom: 1px solid var(--ou-border-default); }
+
+    /* ── Групповые операции (Р-1..Р-8): режим «папки и темы», доступ, удаление папки, влияние ── */
+    /* Чекбоксы папок/тем видимы в режиме «папки и темы» (у вопросов свой режим) */
+    .cb-selcheck { flex: none; display: inline-flex; }
+    .cb-seltools__scope { flex-basis: 100%; font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    /* Групповой доступ: поля активной операции (сегмент переключает) */
+    .ba-group { display: none; flex-direction: column; gap: var(--ou-space-5); }
+    .ba-group.is-active { display: flex; }
+    .ba-scope { display: flex; align-items: flex-start; gap: var(--ou-space-2); padding: var(--ou-space-3); background: var(--ou-accent-soft); border-radius: var(--ou-radius-s); font: var(--ou-text-body-s); }
+    .ba-scope__ico { color: var(--ou-accent-default); flex: none; }
+    /* Удаление папки: режим (radio) + его под-панель */
+    .fd-opt { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+    .fd-mode { display: flex; flex-direction: column; gap: var(--ou-space-3); padding: var(--ou-space-1) 0 var(--ou-space-2) calc(var(--ou-space-5) + var(--ou-space-3)); }
+    .fd-opt.is-off .fd-mode { display: none; }
+    /* Влияние (content-guard, partial-batch) */
+    .ci-group { display: flex; flex-direction: column; gap: var(--ou-space-2); }
+    .ci-grouplbl { font: var(--ou-text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ou-fg-muted); }
+    .ci-row { display: flex; align-items: flex-start; gap: var(--ou-space-2); padding: var(--ou-space-2) var(--ou-space-3); border: 1px solid var(--ou-border-default); border-radius: var(--ou-radius-s); }
+    .ci-row__ico { flex: none; }
+    .ci-row__main { min-width: 0; }
+    .ci-row__title { font: var(--ou-text-body-s); font-weight: 600; }
+    .ci-row__meta { font: var(--ou-text-caption); color: var(--ou-fg-muted); }
+    .ci-row--block .ci-row__ico { color: var(--ou-error-default); }
+    .ci-row--ok .ci-row__ico { color: var(--ou-accent-default); }
     .wf-sprite { display: none; }
   </style>
 </head>
@@ -164,9 +188,18 @@
   <button class="wf-btn" type="button" onclick="showState(this,'s-collapsed')">Свернуть всё</button>
   <button class="wf-btn" type="button" onclick="showState(this,'s-filters')">Фильтр (панель)</button>
   <button class="wf-btn" type="button" onclick="showState(this,'s-filtered')">Фильтр применён</button>
-  <button class="wf-btn" type="button" onclick="showState(this,'s-select')">Режим выбора</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-select')">Выбор: вопросы</button>
   <button class="wf-btn" type="button" onclick="showState(this,'s-move')">Перенос вопросов</button>
   <button class="wf-btn" type="button" onclick="showState(this,'s-move-topic')">Перенос темы</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-select-ft')">Выбор: папки и темы</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-bulk-access')">Групповой доступ</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-move-ft')">Перенос группы</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-folder-menu')">Меню папки</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-folder-delete')">Удаление папки</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-content-impact')">Влияние: частично</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-impact-blocked')">Влияние: всё заблокировано</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-delete-confirm')">Удаление без конфликтов</button>
+  <button class="wf-btn" type="button" onclick="showState(this,'s-revoke-impact')">Жёсткий отзыв</button>
   <button class="wf-btn" type="button" onclick="showState(this,'s-empty')">Пустая тема</button>
   <button class="wf-btn" type="button" onclick="showState(this,'s-menu')">Меню темы</button>
   <button class="wf-btn" type="button" onclick="showState(this,'s-q-menu')">Меню вопроса</button>
@@ -690,7 +723,7 @@
       <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null,'s-topic-drawer')"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-shield"/></svg></span>Доступ…</button>
       <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null,'s-move-topic')"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-move"/></svg></span>Переместить в папку…</button>
       <div class="ou-menu__divider"></div>
-      <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></span>Удалить тему</button>
+      <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null,'s-delete-confirm')"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></span>Удалить тему</button>
     </div>
   </div>
 </div>
@@ -1107,6 +1140,435 @@
   </div>
 </div>
 
+<!-- ════ s-select-ft: режим выбора «Папки и темы» (единица операции — тема) ════ -->
+<div class="wf-state" id="s-select-ft">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null,'s-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы — выбор">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-seltools">
+        <span class="cb-selcount">Выбрано: 1 папка + 1 тема → 4 темы</span>
+        <span class="cb-seldiv" aria-hidden="true"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s">Выделить все</button>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null,'s-default')">Снять выделение</button>
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null,'s-move-ft')"><svg width="14" height="14"><use href="#i-move"/></svg> Переместить…</button>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null,'s-bulk-access')"><svg width="14" height="14"><use href="#i-shield"/></svg> Доступ…</button>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--s" onclick="showState(null,'s-folder-delete')"><svg width="14" height="14"><use href="#i-trash"/></svg> Удалить</button>
+        <span class="cb-seltools__scope">Единица операции — тема. Выбранная папка захватывает свои темы (транзитивно). Выбор вопроса переключает в режим «Вопросы» и снимает это выделение.</span>
+      </div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><label class="ou-check cb-selcheck"><input class="ou-check__input" type="checkbox" checked aria-label="Выбрать папку «Личные финансы»"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Личные финансы</span><span class="cb-foldercount">3 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div><div class="cb-acts"></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><label class="ou-check cb-selcheck"><input class="ou-check__input" type="checkbox" checked disabled aria-label="Тема входит в выбранную папку"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Финансовая грамотность</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">32</div><div class="cb-acts"></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><label class="ou-check cb-selcheck"><input class="ou-check__input" type="checkbox" checked disabled aria-label="Тема входит в выбранную папку"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Налоги физлиц</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">18</div><div class="cb-acts"></div>
+      </div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><label class="ou-check cb-selcheck"><input class="ou-check__input" type="checkbox" aria-label="Выбрать папку «Экономика»"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Экономика</span><span class="cb-foldercount">2 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div><div class="cb-acts"></div>
+      </div>
+      <div class="cb-row cb-row--topic is-open">
+        <div class="cb-name"><label class="ou-check cb-selcheck"><input class="ou-check__input" type="checkbox" checked aria-label="Выбрать тему «Инвестиции»"><span class="ou-check__box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span></label><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Инвестиции</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">14</div><div class="cb-acts"></div>
+      </div>
+      <div class="cb-row cb-row--q">
+        <div class="cb-name"><span class="cb-qtype" title="Один ответ"><svg width="16" height="16"><use href="#i-q-single"/></svg></span><span class="cb-name__label">Что такое диверсификация портфеля?</span></div>
+        <div class="cb-cell">22</div><div class="cb-cell"></div><div class="cb-acts"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-move-ft: перенос группы (папки+темы) в папку ════ -->
+<div class="wf-state" id="s-move-ft">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="mvf-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="mvf-title" class="ou-modal__title">Переместить в папку</h1>
+          <p class="ou-modal__desc">1 папка и 2 темы — выберите папку-получатель</p>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null,'s-select-ft')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="ou-formfield">
+          <label class="ou-formfield__lbl" for="mvf-target">В папку</label>
+          <select class="ou-select ou-field--m" id="mvf-target" aria-label="Папка-получатель">
+            <option>Без папки (в корень)</option>
+            <optgroup label="Папки">
+              <option disabled>Личные финансы — выбрана</option>
+              <option selected>Экономика</option>
+              <option>Охрана труда</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="mv-hint">Папки переносятся целиком (со вложенными темами) под выбранную; отдельные темы меняют папку. Папка не может быть перенесена внутрь самой себя или своего потомка. Перенос организационный — на выдачу и оценивание не влияет.</div>
+      </div>
+      <footer class="ou-modal__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-select-ft')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Переместить</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-bulk-access: групповой доступ к темам (сегмент операции) ════ -->
+<div class="wf-state" id="s-bulk-access">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="ba-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="ba-title" class="ou-modal__title">Групповой доступ</h1>
+          <p class="ou-modal__desc">Правило применится к темам выбранного набора</p>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null,'s-select-ft')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="qd-stack">
+          <div class="ba-scope">
+            <span class="ba-scope__ico"><svg width="18" height="18"><use href="#i-shield"/></svg></span>
+            <span>Применится к <b>4 темам</b>: 2 выбраны напрямую + 2 из папки «Личные финансы». У папок собственного доступа нет — правило действует на темы внутри.</span>
+          </div>
+          <div class="ou-formfield">
+            <span class="ou-formfield__lbl">Операция</span>
+            <div class="ou-seg ou-seg--m" role="group" aria-label="Операция доступа">
+              <button type="button" class="ou-seg__item is-active" aria-pressed="true" onclick="baOp(this,'grant')">Выдать доступ</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="baOp(this,'revoke')">Отозвать</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="baOp(this,'vis')">Видимость</button>
+              <button type="button" class="ou-seg__item" aria-pressed="false" onclick="baOp(this,'owner')">Владелец</button>
+            </div>
+          </div>
+
+          <div class="ba-group is-active" data-op="grant">
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl" for="ba-grant-user">Пользователь</label>
+              <select class="ou-select ou-field--m" id="ba-grant-user"><option value="">Выберите пользователя…</option><option selected>Петров И. — ivanov@corp.ru</option><option>Сидорова А. — sidorova@corp.ru</option></select>
+            </div>
+            <div class="ou-formfield">
+              <span class="ou-formfield__lbl">Уровень доступа</span>
+              <div class="ou-seg ou-seg--m" role="group" aria-label="Уровень доступа">
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Использование</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">Управление</button>
+              </div>
+              <span class="qd-hint">Использование — видеть тему и брать в тесты. Управление — плюс CRUD вопросов и правка темы. Если грант у пользователя уже есть — уровень перезаписывается (upsert).</span>
+            </div>
+          </div>
+
+          <div class="ba-group" data-op="revoke">
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl" for="ba-revoke-user">Пользователь</label>
+              <select class="ou-select ou-field--m" id="ba-revoke-user"><option value="">Выберите пользователя…</option><option selected>Петров И. — ivanov@corp.ru</option></select>
+            </div>
+            <div class="ou-formfield">
+              <span class="ou-formfield__lbl">Тип отзыва</span>
+              <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="ba-revoke" class="ou-radio__input" checked /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-field__text"><span class="ou-radio-field__label">Мягкий отзыв</span><span class="qd-hint">Тема скрывается из банка пользователя и недоступна для новых тестов; существующие тесты не ломаются.</span></span></label>
+              <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="ba-revoke" class="ou-radio__input" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-field__text"><span class="ou-radio-field__label">Жёсткий отзыв (администратор)</span><span class="qd-hint">Полностью удаляет грант. Если у пользователя есть опубликованные тесты на этих темах — покажем список и потребуем разрешить (замена/снятие с публикации/снапшот).</span></span></label>
+            </div>
+          </div>
+
+          <div class="ba-group" data-op="vis">
+            <div class="ou-formfield">
+              <span class="ou-formfield__lbl">Видимость</span>
+              <div class="ou-seg ou-seg--m" role="group" aria-label="Видимость">
+                <button type="button" class="ou-seg__item is-active" aria-pressed="true">Приватная</button>
+                <button type="button" class="ou-seg__item" aria-pressed="false">Общая</button>
+              </div>
+              <span class="qd-hint">Приватная — тема видна владельцу и по грантам. Общая — доступна всем авторам (раскрывает варианты и ключи).</span>
+            </div>
+          </div>
+
+          <div class="ba-group" data-op="owner">
+            <div class="ou-formfield">
+              <label class="ou-formfield__lbl" for="ba-owner-user">Новый владелец</label>
+              <select class="ou-select ou-field--m" id="ba-owner-user"><option value="">Выберите пользователя…</option><option selected>Петров И. — ivanov@corp.ru</option><option>Сидорова А. — sidorova@corp.ru</option></select>
+              <span class="qd-hint">Доступно администратору. Владелец получает полные права на темы; прежние гранты сохраняются.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-select-ft')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--primary ou-btn--m">Применить</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-folder-menu: меню действий папки (⋯) ════ -->
+<div class="wf-state" id="s-folder-menu">
+  <div class="cb-wrap">
+    <div class="cb-toolbar"><span class="cb-title">Темы и вопросы</span></div>
+    <div class="cb-toolbar">
+      <div class="cb-search"><div class="ou-field ou-field--m"><div class="ou-field__box"><span class="ou-field__icon"><svg width="16" height="16"><use href="#i-search"/></svg></span><input class="ou-field__input" type="text" placeholder="Поиск по темам и вопросам — фильтрует дерево…" aria-label="Поиск по темам и вопросам" /></div></div></div>
+      <button type="button" class="ou-btn ou-btn--secondary ou-btn--m" onclick="showState(null,'s-filters')"><svg width="16" height="16"><use href="#i-filter"/></svg> Фильтры</button>
+      <span class="cb-spacer"></span>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-expand-all"/></svg> Развернуть всё</button>
+      <button type="button" class="ou-btn ou-btn--ghost ou-btn--m"><svg width="16" height="16"><use href="#i-collapse-all"/></svg> Свернуть всё</button>
+    </div>
+    <div class="cb-tree" aria-label="Папки, темы и вопросы">
+      <div class="cb-thead"><div>Название</div><div>Сложность</div><div>Вопросов</div><div></div></div>
+      <div class="cb-row cb-row--folder">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-down"/></svg></span><span class="cb-ico"><svg width="16" height="16"><use href="#i-folder"/></svg></span><span class="cb-name__label">Личные финансы</span><span class="cb-foldercount">3 темы</span></div>
+        <div class="cb-cell"></div><div class="cb-cell"></div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия папки" aria-expanded="true"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+      <div class="cb-row cb-row--topic">
+        <div class="cb-name"><span class="cb-twist"><svg width="16" height="16"><use href="#i-chev-right"/></svg></span><span class="cb-ico cb-ico--topic"><svg width="16" height="16"><use href="#i-topic"/></svg></span><span class="cb-name__label">Финансовая грамотность</span></div>
+        <div class="cb-cell"></div><div class="cb-cell">32</div>
+        <div class="cb-acts"><button type="button" class="ou-btn ou-btn--ghost ou-btn--s" aria-label="Действия темы"><svg width="16" height="16"><use href="#i-more"/></svg></button></div>
+      </div>
+    </div>
+    <div class="ou-menu ou-menu--sm cb-menu-pop" role="menu" aria-label="Действия папки">
+      <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null,'s-fab')"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg></span>Добавить тему сюда</button>
+      <button type="button" class="ou-menu__item" role="menuitem"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-pencil"/></svg></span>Переименовать…</button>
+      <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null,'s-move-ft')"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-move"/></svg></span>Переместить…</button>
+      <div class="ou-menu__divider"></div>
+      <button type="button" class="ou-menu__item" role="menuitem" onclick="showState(null,'s-folder-delete')"><span class="ou-menu__item-ico"><svg viewBox="0 0 24 24"><use href="#i-trash"/></svg></span>Удалить папку…</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-folder-delete: удаление папки — два режима ════ -->
+<div class="wf-state" id="s-folder-delete">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="fd-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="fd-title" class="ou-modal__title">Удалить папку «Личные финансы»</h1>
+          <p class="ou-modal__desc">В папке 3 темы и 54 вопроса — выберите, что с ними сделать</p>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null,'s-default')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="qd-stack">
+          <div class="fd-opt" id="fd-opt-move">
+            <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="fd-mode" class="ou-radio__input" checked onchange="fdMode('move')" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-field__text"><span class="ou-radio-field__label">Перенести содержимое в другую папку</span><span class="qd-hint">Темы и вложенные папки переедут; сама папка удалится. На выдачу не влияет.</span></span></label>
+            <div class="fd-mode">
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="fd-target">Переместить в</label>
+                <select class="ou-select ou-field--m" id="fd-target"><option>Без папки (в корень)</option><option selected>Экономика</option><option>Охрана труда</option></select>
+              </div>
+            </div>
+          </div>
+          <div class="fd-opt is-off" id="fd-opt-cascade">
+            <label class="ou-radio-field"><span class="ou-radio ou-radio--m"><input type="radio" name="fd-mode" class="ou-radio__input" onchange="fdMode('cascade')" /><span class="ou-radio__ring"><span class="ou-radio__dot"></span></span></span><span class="ou-radio-field__text"><span class="ou-radio-field__label">Удалить папку со всем содержимым</span><span class="qd-hint">Удалит 3 темы и все их вопросы (54), вложенные папки — тоже. Необратимо.</span></span></label>
+            <div class="fd-mode">
+              <div role="alert" class="ou-banner ou-banner--subtle ou-banner--warning">
+                <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+                <div class="ou-banner__body"><div class="ou-banner__desc">Темы, используемые в опубликованных тестах, будут пропущены — покажем список перед удалением.</div></div>
+              </div>
+              <div class="ou-formfield">
+                <label class="ou-formfield__lbl" for="fd-confirm">Введите имя папки для подтверждения</label>
+                <div class="ou-field ou-field--m"><div class="ou-field__box"><input class="ou-field__input" id="fd-confirm" type="text" placeholder="Личные финансы" aria-label="Имя папки" /></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-default')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--destructive ou-btn--m" onclick="showState(null,'s-content-impact')">Удалить</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-content-impact: сводная защита (content-guard, partial-batch) ════ -->
+<div class="wf-state" id="s-content-impact">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="ci-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="ci-title" class="ou-modal__title">Проверка перед удалением</h1>
+          <p class="ou-modal__desc">4 темы к удалению · 2 используются в опубликованных тестах</p>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null,'s-select-ft')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="qd-stack">
+          <div role="alert" class="ou-banner ou-banner--subtle ou-banner--warning">
+            <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+            <div class="ou-banner__body"><div class="ou-banner__desc">Часть тем используется в опубликованных тестах — их удаление сломало бы выдачу или оценивание. Удалим только незаблокированные.</div></div>
+          </div>
+          <div class="ci-group">
+            <span class="ci-grouplbl">Будет удалено (2)</span>
+            <div class="ci-row ci-row--ok">
+              <span class="ci-row__ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <div class="ci-row__main"><div class="ci-row__title">Кредиты и вклады</div><div class="ci-row__meta">12 вопросов · в тестах не используется</div></div>
+            </div>
+            <div class="ci-row ci-row--ok">
+              <span class="ci-row__ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <div class="ci-row__main"><div class="ci-row__title">Инвестиции</div><div class="ci-row__meta">14 вопросов · только в черновиках</div></div>
+            </div>
+          </div>
+          <div class="ci-group">
+            <span class="ci-grouplbl">Пропущено — используются в тестах (2)</span>
+            <div class="ci-row ci-row--block">
+              <span class="ci-row__ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+              <div class="ci-row__main"><div class="ci-row__title">Финансовая грамотность</div><div class="ci-row__meta">Тест «Итоговый экзамен» (опубликован) · выдача из темы</div></div>
+            </div>
+            <div class="ci-row ci-row--block">
+              <span class="ci-row__ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+              <div class="ci-row__main"><div class="ci-row__title">Налоги физлиц</div><div class="ci-row__meta">Тест «Входной контроль» (опубликован) · шкала «Знание налогов»</div></div>
+            </div>
+          </div>
+          <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Администратор: удалить всё равно</span><span class="qd-hint">Удалит и заблокированные темы — сломает 2 опубликованных теста. Только для администратора.</span></span></label>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-select-ft')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--destructive ou-btn--m">Удалить 2 темы</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-delete-confirm: удаление тем без конфликтов (чистая ветка content-guard) ════ -->
+<div class="wf-state" id="s-delete-confirm">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="dc-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--s">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="dc-title" class="ou-modal__title">Удалить 3 темы?</h1>
+          <p class="ou-modal__desc">Ни одна не используется в опубликованных тестах</p>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null,'s-select-ft')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div role="alert" class="ou-banner ou-banner--subtle ou-banner--warning">
+          <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+          <div class="ou-banner__body"><div class="ou-banner__desc">Будут удалены 3 темы и все их вопросы (58). Действие необратимо. (Одиночное удаление темы использует этот же диалог — одна тема.)</div></div>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-select-ft')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--destructive ou-btn--m">Удалить</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-revoke-impact: жёсткий отзыв доступа — зависимые опубликованные тесты (partial-skip) ════ -->
+<div class="wf-state" id="s-revoke-impact">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="ri-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="ri-title" class="ou-modal__title">Жёсткий отзыв доступа</h1>
+          <p class="ou-modal__desc">Пользователь Петров И. · 4 темы</p>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null,'s-bulk-access')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="qd-stack">
+          <div role="alert" class="ou-banner ou-banner--subtle ou-banner--warning">
+            <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+            <div class="ou-banner__body"><div class="ou-banner__desc">У пользователя есть опубликованные тесты на части тем — там доступ сохраним, иначе тесты сломаются. Полностью отзовём только там, где зависимостей нет.</div></div>
+          </div>
+          <div class="ci-group">
+            <span class="ci-grouplbl">Отозвано (2)</span>
+            <div class="ci-row ci-row--ok">
+              <span class="ci-row__ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <div class="ci-row__main"><div class="ci-row__title">Кредиты и вклады</div><div class="ci-row__meta">У пользователя нет тестов на этой теме</div></div>
+            </div>
+            <div class="ci-row ci-row--ok">
+              <span class="ci-row__ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <div class="ci-row__main"><div class="ci-row__title">Инвестиции</div><div class="ci-row__meta">У пользователя нет тестов на этой теме</div></div>
+            </div>
+          </div>
+          <div class="ci-group">
+            <span class="ci-grouplbl">Пропущено — опубликованные тесты пользователя (2)</span>
+            <div class="ci-row ci-row--block">
+              <span class="ci-row__ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+              <div class="ci-row__main"><div class="ci-row__title">Финансовая грамотность</div><div class="ci-row__meta">Тест «Бюджет семьи» пользователя (опубликован)</div></div>
+            </div>
+            <div class="ci-row ci-row--block">
+              <span class="ci-row__ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+              <div class="ci-row__main"><div class="ci-row__title">Налоги физлиц</div><div class="ci-row__meta">Тест «НДФЛ на практике» пользователя (опубликован)</div></div>
+            </div>
+          </div>
+          <span class="qd-hint">Чтобы отозвать и там, разрешите зависимость: заменить секции теста · снять тест с публикации · сменить владельца темы · зафиксировать снапшот.</span>
+          <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Администратор: отозвать всё равно</span><span class="qd-hint">Аннулирует доступ и сломает 2 опубликованных теста пользователя. Только для администратора.</span></span></label>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-bulk-access')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--destructive ou-btn--m">Отозвать у 2 тем</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
+<!-- ════ s-impact-blocked: сводная защита — удалять нечего (всё в опубликованных тестах) ════ -->
+<div class="wf-state" id="s-impact-blocked">
+  <div class="ou-modal-root" role="dialog" aria-modal="true" aria-labelledby="ib-title">
+    <div class="ou-modal__backdrop"></div>
+    <div class="ou-modal ou-modal--m">
+      <header class="ou-modal__head">
+        <div class="ou-modal__head-text">
+          <h1 id="ib-title" class="ou-modal__title">Удаление невозможно</h1>
+          <p class="ou-modal__desc">Все 3 выбранные темы используются в опубликованных тестах</p>
+        </div>
+        <button type="button" class="ou-modal__close" aria-label="Закрыть" onclick="showState(null,'s-select-ft')"><svg width="16" height="16"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="ou-modal__body">
+        <div class="qd-stack">
+          <div role="alert" class="ou-banner ou-banner--subtle ou-banner--error">
+            <span class="ou-banner__ico"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+            <div class="ou-banner__body"><div class="ou-banner__desc">Ни одну из выбранных тем нельзя удалить — все используются в опубликованных тестах. Удалять нечего.</div></div>
+          </div>
+          <div class="ci-group">
+            <span class="ci-grouplbl">Пропущено — используются в тестах (3)</span>
+            <div class="ci-row ci-row--block">
+              <span class="ci-row__ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+              <div class="ci-row__main"><div class="ci-row__title">Финансовая грамотность</div><div class="ci-row__meta">Тест «Итоговый экзамен» (опубликован)</div></div>
+            </div>
+            <div class="ci-row ci-row--block">
+              <span class="ci-row__ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+              <div class="ci-row__main"><div class="ci-row__title">Налоги физлиц</div><div class="ci-row__meta">Тест «Входной контроль» (опубликован)</div></div>
+            </div>
+            <div class="ci-row ci-row--block">
+              <span class="ci-row__ico"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+              <div class="ci-row__main"><div class="ci-row__title">Кредиты и вклады</div><div class="ci-row__meta">Тест «Финансы 101» (опубликован)</div></div>
+            </div>
+          </div>
+          <label class="ou-switch-field"><span class="ou-switch ou-switch--m"><input type="checkbox" /><span class="ou-switch__track"></span><span class="ou-switch__thumb"></span></span><span class="ou-switch-field__text"><span class="ou-switch-field__label">Администратор: удалить всё равно</span><span class="qd-hint">Удалит все 3 темы — сломает 3 опубликованных теста. Только для администратора.</span></span></label>
+        </div>
+      </div>
+      <footer class="ou-modal__foot">
+        <span class="qd-spacer"></span>
+        <button type="button" class="ou-btn ou-btn--ghost ou-btn--m" onclick="showState(null,'s-select-ft')">Отмена</button>
+        <button type="button" class="ou-btn ou-btn--destructive ou-btn--m" disabled aria-disabled="true">Удалить</button>
+      </footer>
+    </div>
+  </div>
+</div>
+
 <!-- Пояснения -->
 <section class="wf-notes">
   <h3 class="wf-notes-title">Пояснения</h3>
@@ -1135,6 +1597,17 @@
       <tr><td>Порядок вариантов и перемешивание</td><td>Для ВСЕХ типов, кроме Ранжирования (одиночный/множественный/соответствие): автор задаёт базовый порядок вручную — перетаскиванием за ручку слева; переключатель «Случайный порядок вариантов» (рядом с вариантами, по умолчанию вкл) рандомизирует показ ученику, выключен — показ в заданном порядке (для «Все/Ничего из перечисленного» и т. п.). Ранжирование — исключение: заданный порядок и есть эталон ответа, перемешивание при выдаче обязательно и без тоггла</td><td>уточнение: ручной порядок + «Случайный порядок» для всех типов, кроме ранжирования</td></tr>
       <tr><td>⋯-меню вне карточки</td><td>Выпадающее меню рендерится вне карточки (портал), чтобы не обрезалось её границей</td><td>фикс клиппинга</td></tr>
       <tr><td>Оценка не в этом разделе</td><td>Балл/цена ответа в Drawer вопроса НЕ задаются — свойство теста</td><td>ортогональность; PRD-15 D</td></tr>
+      <tr><td>Групповые операции — два режима выделения</td><td>Выделение работает в двух взаимоисключающих режимах: «Папки и темы» (чекбоксы на строках папок и тем — s-select-ft) и «Вопросы» (чекбоксы на вопросах — s-select). Отметка узла одного режима снимает выделение другого. Каждый режим показывает свой тулбар с применимыми действиями</td><td>Р-1; ответ «выделение вопроса снимает выделение папок/тем»</td></tr>
+      <tr><td>Единица операции — тема; папка захватывает свои темы</td><td>В режиме «Папки и темы» операции действуют на ТЕМЫ. Выбранная папка = все её темы (транзитивно, включая вложенные папки). Итог = напрямую выбранные темы + темы выбранных папок; счётчик показывает «выбрано … → N тем». Темы, попавшие через папку, помечены (disabled-чекбокс)</td><td>Р-4; ответ «права на темы в папках при выделении папок»</td></tr>
+      <tr><td>Групповой доступ (s-bulk-access)</td><td>Одна модалка, сегмент «Операция»: Выдать доступ (пользователь + уровень Использование/Управление) · Отозвать (пользователь + мягкий/жёсткий отзыв) · Видимость (Приватная/Общая) · Владелец (админ). Полоса охвата показывает, к скольким темам применится (в т.ч. из папок). У ПАПОК собственного доступа нет — правило всегда действует на темы. Жёсткий отзыв проверяет зависимые опубликованные тесты (partial-skip)</td><td>Р-4; зеркало prd15-topic-access, но пакетно</td></tr>
+      <tr><td>Перенос группы (s-move-ft)</td><td>«Переместить…» из тулбара «Папки и темы» открывает выбор папки-получателя (вкл. «в корень»). Папки переносятся как КОНТЕЙНЕР (reparent, со вложенными темами), отдельные темы меняют папку. Защита от цикла: папку нельзя перенести внутрь себя/потомка. Перенос организационный — на выдачу не влияет, content-guard не нужен</td><td>Р-3/Р-6; асимметрия «перенос=контейнер, доступ=темы»</td></tr>
+      <tr><td>Удаление папки — два режима (s-folder-delete)</td><td>«Удалить папку…» (⋯-меню папки — s-folder-menu, или групповое удаление с папками в наборе) открывает выбор: «Перенести содержимое в другую папку» (пикер получателя, вкл. корень — папка удаляется, содержимое переезжает, выдача не затронута) ИЛИ «Удалить папку со всем содержимым» (каскад тем→вопросов→секций→страниц, подтверждение точным именем папки). Прежнее молчаливое «свалить в корень» заменено явным выбором. Зеркало s-folder-delete-a/b у папок тестов (prd7-tests-list), но с content-guard</td><td>Р-5; ГО-7</td></tr>
+      <tr><td>Защита при удалении (s-content-impact, content-guard)</td><td>Удаление темы (одиночное и групповое) и каскад папки проходят сводную проверку выполнимости (dry-run): темы, используемые в опубликованных тестах, показываются в блоке «Пропущено» с указанием теста/причины; незаблокированные — в блоке «Будет удалено». По умолчанию выполняем для незаблокированных (partial-batch), заблокированные пропускаем. Свитч «Администратор: удалить всё равно» = force (сломает перечисленные тесты). Путь выдачи/оценки права на тему не проверяет — инвариант PRD-15</td><td>Р-2/Р-7; ответ «сводный диалог, выполнить для незаблокированных»</td></tr>
+      <tr><td>Одиночное удаление темы — тоже через content-guard</td><td>Раньше в дереве одиночное «Удалить тему» шло прямым запросом и на конфликт показывало лишь тост. Теперь одиночное и групповое удаление тем идут через один и тот же сводный диалог влияния (s-content-impact)</td><td>Р-7; ГО-6, закрытие пробела в content-tree</td></tr>
+      <tr><td>Права папок и наследование — НЕ здесь</td><td>Идея «дать папкам собственные права и наследовать их темам» вынесена в ОТДЕЛЬНЫЙ трек (BRD/PRD/эскизы): это реверс решения PRD-15 «папки косметичны» и несёт риск утечки ключей при переносе. В этом эскизе групповой доступ = перебор грантов ТЕМ, без наследования</td><td>решение 2026-07-01; вне охвата</td></tr>
+      <tr><td>Ветвление удаления (дерево решений)</td><td>«Удалить» из тулбара «Папки и темы» разветвляется: (1) если в наборе есть ПАПКА — сперва двухрежимный диалог папки (s-folder-delete: перенести содержимое / каскад), единый путь с ⋯-удалением папки; (2) затем сводная проверка (dry-run): есть конфликты → s-content-impact (partial-batch), конфликтов нет → простой конфирм s-delete-confirm, всё заблокировано → s-impact-blocked (удалять нечего, кнопка выключена, только admin-force). Одиночное «Удалить тему» из ⋯-меню темы идёт по той же ветке (s-delete-confirm / s-content-impact при count=1)</td><td>Р-2/Р-5/Р-7; закрытие пробелов 2/3/4/5</td></tr>
+      <tr><td>Жёсткий отзыв — экран зависимостей (s-revoke-impact)</td><td>Мягкий отзыв применяется сразу. Жёсткий (админ) сначала показывает сводку: «Отозвано» (у пользователя нет тестов на теме) vs «Пропущено — опубликованные тесты пользователя» (там доступ сохраняется, иначе тесты сломаются). Варианты полного отзыва: заменить секции теста / снять с публикации / сменить владельца темы / зафиксировать снапшот. Свитч «Администратор: отозвать всё равно» = force. Симметрично удалению (partial-skip)</td><td>Р-4; закрытие пробела 1; dependentTestsForGrant</td></tr>
+      <tr><td>Смешанные права и upsert в наборе</td><td>Кнопки тулбара гейтятся правами: если для действия нет прав ни на одну тему — кнопка скрыта. В наборе могут быть темы, которыми пользователь не управляет (админ видит всё): такие строки для действия недоступны и в сводке помечаются как пропущенные. Групповая выдача доступа — это upsert: если у пользователя уже есть грант на теме, уровень перезаписывается</td><td>Р-8; закрытие пробела 6</td></tr>
     </tbody>
   </table>
 </section>
@@ -1157,7 +1630,8 @@
       <tr><td><code>.ou-tag</code></td><td>Счётчики тем (метрика), бейдж числа активных фильтров</td><td>Tag</td><td><code>Tag</code></td></tr>
       <tr><td><code>.ou-chip--removable</code></td><td>Теги подтем в поле (token-input: <code>ou-field__box.wf-tags-box</code> + чипы + инлайн-инпут) и съёмные чипы активных условий фильтра. Канон — prd11-question-tags</td><td>Chip / TagInput (композиция Field + Chip)</td><td><code>TagInput</code> / <code>Chip</code></td></tr>
       <tr><td><code>.ou-empty</code></td><td>Пустая тема</td><td>EmptyState</td><td><code>EmptyState</code></td></tr>
-      <tr><td><code>.cb-*</code> / <code>.qd-*</code> / <code>.mv-*</code></td><td>Layout-композиция на DS-токенах (как <code>.tree-*</code> в prd7-tests-list)</td><td>—</td><td>Stack / Cluster / Box</td></tr>
+      <tr><td><code>.ou-banner--warning</code></td><td>Каскад папки и сводная защита (s-content-impact / s-folder-delete)</td><td>Banner</td><td><code>Banner</code></td></tr>
+      <tr><td><code>.cb-*</code> / <code>.qd-*</code> / <code>.mv-*</code> / <code>.ba-*</code> / <code>.fd-*</code> / <code>.ci-*</code></td><td>Layout-композиция на DS-токенах (как <code>.tree-*</code> в prd7-tests-list): выбор, групповой доступ, удаление папки, влияние</td><td>—</td><td>Stack / Cluster / Box</td></tr>
     </tbody>
   </table>
 </section>
@@ -1180,6 +1654,30 @@
     btn.textContent = compact ? 'Normal' : 'Compact';
     btn.classList.toggle('active', compact);
   };
+  // Групповой доступ: сегмент операции переключает видимые поля
+  window.baOp = function baOp(btn, op) {
+    var modal = btn.closest('.ou-modal');
+    modal.querySelectorAll('.ou-seg[aria-label="Операция доступа"] .ou-seg__item').forEach(function (i) {
+      var on = i === btn; i.classList.toggle('is-active', on); i.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    modal.querySelectorAll('.ba-group').forEach(function (g) { g.classList.toggle('is-active', g.getAttribute('data-op') === op); });
+  };
+  // Удаление папки: radio переключает под-панель режима
+  window.fdMode = function fdMode(mode) {
+    document.getElementById('fd-opt-move').classList.toggle('is-off', mode !== 'move');
+    document.getElementById('fd-opt-cascade').classList.toggle('is-off', mode !== 'cascade');
+  };
+  // DS-радио показывает точку через класс .ou-radio.is-on (не через :checked) — держим его
+  // синхронным с checked, чтобы выбранный вариант был виден в статичном эскизе.
+  window.syncRadios = function syncRadios() {
+    document.querySelectorAll('.ou-radio__input').forEach(function (inp) {
+      var r = inp.closest('.ou-radio'); if (r) r.classList.toggle('is-on', inp.checked);
+    });
+  };
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains('ou-radio__input')) window.syncRadios();
+  });
+  window.syncRadios();
 </script>
 
 </body>
