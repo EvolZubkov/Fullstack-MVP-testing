@@ -261,9 +261,13 @@ router.get("/", requirePermission("tests.read"), async (req, res) => {
     const topics = await storage.getTopics();
     const topicMap = new Map(topics.map((t) => [t.id, t]));
 
-    // PRD-13: resolve owner display names for the list "Владелец" column.
+    // PRD-13: resolve owner display names for the list "Владелец" column. Fall back
+    // to email for users WITHOUT a name — notably configured superadmins, which
+    // provisionSuperadmins creates with name=null. Their imported/created tests ARE
+    // owned (owner_id is set), but a null name made the column render «—» as if
+    // unowned. (getUsers decrypts emails, so u.email is plaintext here.)
     const allUsers = await storage.getUsers();
-    const ownerNameById = new Map(allUsers.map((u) => [u.id, u.name]));
+    const ownerNameById = new Map(allUsers.map((u) => [u.id, u.name || u.email]));
 
     const testsWithSections = await Promise.all(
       visibleTests.map(async (test) => {
@@ -520,6 +524,9 @@ router.post("/", requirePermission("tests.create"), async (req, res) => {
         retakePolicyJson: retakePolicyJson ?? null,
         defaultQuestionPoints: defaultQuestionPoints ?? null,
         folderId: folderId ?? null,
+        // PRD-13: creator owns the test atomically in the INSERT (the post-insert
+        // setTestOwner below is now a redundant safety net).
+        ownerId: req.currentUser?.id ?? req.session.userId ?? null,
       },
       sections: (sections ?? []) as SectionPayload[],
       adaptiveSettings: mode === "adaptive"

@@ -180,6 +180,13 @@ export interface TestPayload {
   folderId?: string | null;
   /** PRD-15 block D (FR-31): test-wide default price; null = system default. */
   defaultQuestionPoints?: number | null;
+  /**
+   * PRD-13: test owner (= creator/importer). Written INSIDE the create INSERT so
+   * ownership is atomic with the row — not a fragile post-insert `setTestOwner`
+   * UPDATE that can be skipped (older deployment) or lost, which left imported
+   * tests ownerless («Владелец» = «—»).
+   */
+  ownerId?: string | null;
 }
 
 export interface CreatePayload {
@@ -226,6 +233,8 @@ export class TestSettingsService {
 
       const [newTest] = await tx.insert(tests).values({
         id,
+        // PRD-13: own the test atomically in the INSERT (no fragile post-insert UPDATE).
+        ownerId: payload.test.ownerId ?? null,
         title: payload.test.title ?? "",
         description: payload.test.description ?? null,
         overallPassRuleJson: payload.test.overallPassRuleJson ?? { type: "percent", value: 70 },

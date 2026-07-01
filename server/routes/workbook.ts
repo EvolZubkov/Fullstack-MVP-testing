@@ -164,11 +164,17 @@ router.post(
 
       // A workbook-imported test is a scoring shell: scales/variables/measurements
       // but no sections yet (the author adds structure in the editor afterwards).
+      // FR-28/FR-36: the importer OWNS it — set the owner INSIDE the create INSERT
+      // (atomic) so an imported test is never ownerless («Владелец» «—»). Use
+      // req.currentUser.id (same as the import actor); requirePermission("tests.create")
+      // guarantees it is non-null here.
+      const importerId = req.currentUser?.id ?? req.session.userId ?? null;
       const test = await testSettingsService.create({
-        test: { title, mode: "standard", status: "draft" },
+        test: { title, mode: "standard", status: "draft", ownerId: importerId },
         sections: [],
       });
-      await storage.setTestOwner(test.id, req.session.userId ?? null);
+      // Redundant safety net — the INSERT above already owns the row; kept idempotent.
+      await storage.setTestOwner(test.id, importerId);
 
       const result = await importWorkbook(test.id, workbook, { dryRun: false, actor });
       res.status(201).json({ ...result, test: { id: test.id, title: test.title } });
