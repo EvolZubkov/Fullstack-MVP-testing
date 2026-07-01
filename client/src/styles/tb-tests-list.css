@@ -205,7 +205,9 @@
 .tb-tests-list .tree-test {
   align-items: center;
   border-bottom: var(--wf-border-w) solid var(--ou-border-default);
-  cursor: pointer;
+  /* Opens on double-click (single-click no longer opens), so no pointer cursor;
+     the «Редактировать» button inside keeps its own pointer. */
+  cursor: default;
 }
 .tb-tests-list .tree-test:hover,
 .tb-tests-list .tree-test.is-selected { background: var(--ou-accent-soft); }

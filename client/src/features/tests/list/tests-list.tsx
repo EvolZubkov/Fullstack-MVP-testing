@@ -1151,7 +1151,7 @@ function DefaultTree(props: {
             key={`test-${row.id}`}
             entry={row.entry}
             indented={row.depth >= 2}
-            onClick={() => props.onOpenTest(row.id)}
+            onOpen={() => props.onOpenTest(row.id)}
             onEdit={() => props.onOpenTest(row.id)}
             onAssign={() => props.onAssign(row.id, row.entry.title)}
             onMore={(e) => {
@@ -1191,7 +1191,7 @@ function SearchTree(props: {
           entry={row.entry}
           indented={false}
           breadcrumb={row.folderName}
-          onClick={() => props.onOpenTest(row.id)}
+          onOpen={() => props.onOpenTest(row.id)}
           onEdit={() => props.onOpenTest(row.id)}
           onAssign={() => props.onAssign(row.id, row.entry.title)}
           onMore={(e) => {
@@ -1264,7 +1264,7 @@ function TestRow(props: {
   entry: TestListEntry;
   indented: boolean;
   breadcrumb?: string | null;
-  onClick: () => void;
+  onOpen: () => void;
   onEdit: () => void;
   onAssign: () => void;
   onMore: (e: React.MouseEvent) => void;
@@ -1292,12 +1292,15 @@ function TestRow(props: {
     enabled: false,
     staleTime: Infinity,
   });
+  // Row body opens the editor Drawer on DOUBLE-click; the «Редактировать»
+  // (pencil) button still opens it on a single click and is the
+  // keyboard-accessible path.
   return (
     <div
       className={"tree-test" + (props.indented ? " indent-1" : "")}
       role="treeitem"
       aria-level={props.indented ? 3 : 2}
-      onClick={canEdit ? props.onClick : undefined}
+      onDoubleClick={canEdit ? props.onOpen : undefined}
       data-testid={`test-row-${e.id}`}
     >
       <div className="tree-test-name">
