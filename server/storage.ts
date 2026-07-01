@@ -157,7 +157,17 @@ export interface IStorage {
   getFolder(id: string): Promise<Folder | undefined>;
   createFolder(folder: InsertFolder): Promise<Folder>;
   updateFolder(id: string, folder: Partial<InsertFolder>): Promise<Folder | undefined>;
-  deleteFolder(id: string): Promise<boolean>;
+  /**
+   * Удаляет папку контента, предварительно переместив её темы и вложенные папки
+   * в указанное место (`moveTo`, по умолчанию `null` = корень) — вариант
+   * «Перенести содержимое» диалога удаления папки (s-folder-delete). Папки не
+   * несут прав, поэтому content-guard не нужен.
+   */
+  deleteFolder(id: string, moveTo?: string | null): Promise<boolean>;
+  /** Идентификаторы папки и всех её потомков (включая саму), обход в ширину. */
+  getFolderSubtreeIds(id: string): Promise<string[]>;
+  /** Удаляет строки папок по id (судьбу их содержимого решает вызывающий). */
+  deleteFoldersBulk(ids: string[]): Promise<number>;
 
   getTestFolders(): Promise<TestFolder[]>;
   createTestFolder(folder: InsertTestFolder): Promise<TestFolder>;
@@ -184,6 +194,8 @@ export interface IStorage {
   renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void>;
   deleteTopic(id: string): Promise<boolean>;
   deleteTopicsBulk(ids: string[]): Promise<number>;
+  /** Массово переносит темы в папку (или в корень при `null`). Организационно. */
+  moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number>;
 
   // TD-02 r.3: recommended courses/events are derived from topics.feedback_json
   // (write paths removed). Only the read accessors remain, kept for delivery.
@@ -884,13 +896,38 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
-  async deleteFolder(id: string): Promise<boolean> {
-    // When deleting a folder, move all its topics to root (folderId = null)
-    await db.update(topics).set({ folderId: null }).where(eq(topics.folderId, id));
-    // Move child folders to root (parentId = null)
-    await db.update(folders).set({ parentId: null }).where(eq(folders.parentId, id));
+  async deleteFolder(id: string, moveTo: string | null = null): Promise<boolean> {
+    // "Folder only" mode: reparent the folder's topics and direct sub-folders to
+    // the chosen destination (`moveTo`, default null = root), then drop the row.
+    // Purely organizational — folders carry no ownership, so no content guard.
+    await db.update(topics).set({ folderId: moveTo }).where(eq(topics.folderId, id));
+    await db.update(folders).set({ parentId: moveTo }).where(eq(folders.parentId, id));
     const result = await db.delete(folders).where(eq(folders.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getFolderSubtreeIds(id: string): Promise<string[]> {
+    const all = await db.select({ id: folders.id, parentId: folders.parentId }).from(folders);
+    const childrenByParent = new Map<string | null, string[]>();
+    for (const f of all) {
+      const key = f.parentId ?? null;
+      if (!childrenByParent.has(key)) childrenByParent.set(key, []);
+      childrenByParent.get(key)!.push(f.id);
+    }
+    const out: string[] = [];
+    const queue: string[] = [id];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      out.push(current);
+      queue.push(...(childrenByParent.get(current) ?? []));
+    }
+    return out;
+  }
+
+  async deleteFoldersBulk(ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await db.delete(folders).where(inArray(folders.id, ids)).returning();
+    return result.length;
   }
 
   async getTestFolders(): Promise<TestFolder[]> {
@@ -1129,6 +1166,12 @@ export class DatabaseStorage implements IStorage {
     await db.delete(testSections).where(inArray(testSections.topicId, ids));
     await db.delete(contentPages).where(inArray(contentPages.topicId, ids));
     const result = await db.delete(topics).where(inArray(topics.id, ids)).returning();
+    return result.length;
+  }
+
+  async moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await db.update(topics).set({ folderId }).where(inArray(topics.id, ids)).returning();
     return result.length;
   }
 

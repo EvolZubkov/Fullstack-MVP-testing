@@ -3,14 +3,15 @@ import { logger } from "../logger";
 import { storage } from "../storage";
 import { topicCoursesFromFeedback, topicEventsFromFeedback } from "@shared/topics/recommendations";
 import { requirePermission } from "../middleware/auth";
-import { assessTopicDeletion } from "../services/draw-feasibility";
+import { assessTopicDeletion, type FeasibilityAssessment } from "../services/draw-feasibility";
 import {
   respondForbiddenContent,
   respondIfBlocked,
-  mergeAssessments,
   isDryRun,
+  isForcedByAdmin,
   respondDryRun,
 } from "../services/content-guard";
+import type { Role } from "@shared/access";
 import {
   visibleTopicScope,
   canManageTopicContent,
@@ -278,31 +279,302 @@ router.delete("/:id", requirePermission("topics.manage"), async (req, res) => {
   }
 });
 
-// POST /api/topics/bulk-delete - Массовое удаление тем
-// PRD-15 FR-05 (E-10): bulk paths run the same guards as single deletes.
+/** One topic entry with its display name, used in bulk-operation summaries. */
+type TopicRefName = { topicId: string; name: string };
+
+/**
+ * Partition topic ids for deletion against the PRD-15 content guard (FR-05,
+ * partial-batch): `deletable` (no published-test conflicts), `blocked` (used in
+ * published tests — skipped unless an admin forces) and `forbidden` (actor may
+ * not delete). `warnings` aggregates non-blocking advisories. Used by both the
+ * topic bulk-delete and the folder cascade so they share one policy.
+ */
+async function partitionTopicDeletion(
+  ids: string[],
+  roles: readonly Role[],
+  userId: string,
+  forced: boolean,
+): Promise<{
+  deletable: TopicRefName[];
+  blocked: Array<TopicRefName & { blocking: FeasibilityAssessment["blocking"] }>;
+  forbidden: TopicRefName[];
+  warnings: FeasibilityAssessment["warnings"];
+}> {
+  const deletable: TopicRefName[] = [];
+  const blocked: Array<TopicRefName & { blocking: FeasibilityAssessment["blocking"] }> = [];
+  const forbidden: TopicRefName[] = [];
+  const warnings: FeasibilityAssessment["warnings"] = [];
+  for (const id of ids) {
+    const topic = await storage.getTopic(id);
+    if (!topic) continue;
+    if (!canDeleteTopic(roles, userId, topic)) {
+      forbidden.push({ topicId: id, name: topic.name });
+      continue;
+    }
+    const assessment = await assessTopicDeletion(id);
+    warnings.push(...assessment.warnings);
+    if (assessment.blocking.length > 0 && !forced) {
+      blocked.push({ topicId: id, name: topic.name, blocking: assessment.blocking });
+    } else {
+      deletable.push({ topicId: id, name: topic.name });
+    }
+  }
+  return { deletable, blocked, forbidden, warnings };
+}
+
+// POST /api/topics/bulk-delete - Массовое удаление тем (partial-batch, PRD-15 FR-05)
+// The batch runs the same guard as single delete, but per-topic: deletable topics
+// go, topics used in published tests are skipped and listed (admin `?force=true`
+// deletes them too). `?dryRun=true` previews the partition without mutating.
 router.post("/bulk-delete", requirePermission("topics.manage"), async (req, res) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: "IDs array required" });
     }
-    for (const id of ids) {
-      const topic = await storage.getTopic(id);
-      if (topic && !canDeleteTopic(req.effectiveRoles ?? [], req.currentUser?.id ?? "", topic)) {
-        respondForbiddenContent(res);
-        return;
-      }
-    }
-    const assessment = mergeAssessments(
-      await Promise.all(ids.map((id: string) => assessTopicDeletion(id))),
+    const part = await partitionTopicDeletion(
+      ids,
+      req.effectiveRoles ?? [],
+      req.currentUser?.id ?? "",
+      isForcedByAdmin(req),
     );
-    if (isDryRun(req)) return respondDryRun(req, res, assessment);
-    if (respondIfBlocked(req, res, assessment)) return;
-    const deletedCount = await storage.deleteTopicsBulk(ids);
-    res.json({ success: true, deletedCount, warnings: assessment.warnings });
+    if (isDryRun(req)) {
+      return res.json({
+        dryRun: true,
+        deletable: part.deletable,
+        blocked: part.blocked,
+        forbidden: part.forbidden,
+        warnings: part.warnings,
+      });
+    }
+    const deletableIds = part.deletable.map((t) => t.topicId);
+    const deletedCount = await storage.deleteTopicsBulk(deletableIds);
+    res.json({
+      success: true,
+      deletedCount,
+      deletedIds: deletableIds,
+      skipped: [
+        ...part.blocked.map((b) => ({ topicId: b.topicId, name: b.name, reason: "in_use", blocking: b.blocking })),
+        ...part.forbidden.map((f) => ({ topicId: f.topicId, name: f.name, reason: "forbidden" })),
+      ],
+      warnings: part.warnings,
+    });
   } catch (error) {
     logger.error("Bulk delete topics error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to delete topics" });
+  }
+});
+
+// POST /api/topics/bulk-move - Массовый перенос тем в папку (или в корень).
+// Организационный (folders carry no ownership) — content-guard не нужен; темы,
+// которыми пользователь не управляет, пропускаются.
+router.post("/bulk-move", requirePermission("topics.manage"), async (req, res) => {
+  try {
+    const { ids, folderId } = req.body ?? {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "IDs array required" });
+    }
+    if (folderId !== null && typeof folderId !== "string") {
+      return res.status(400).json({ error: "folderId must be a string or null" });
+    }
+    if (typeof folderId === "string" && !(await storage.getFolder(folderId))) {
+      return res.status(404).json({ error: "Folder not found" });
+    }
+    const roles = req.effectiveRoles ?? [];
+    const userId = req.currentUser?.id ?? "";
+    const movable: string[] = [];
+    const skipped: Array<{ topicId: string; name: string; reason: string }> = [];
+    for (const id of ids) {
+      const topic = await storage.getTopic(id);
+      if (!topic) continue;
+      if (!(await canManageTopicContent(roles, userId, topic))) {
+        skipped.push({ topicId: id, name: topic.name, reason: "forbidden" });
+        continue;
+      }
+      movable.push(id);
+    }
+    const movedCount = await storage.moveTopicsToFolder(movable, (folderId as string | null) ?? null);
+    res.json({ success: true, movedCount, movedIds: movable, skipped });
+  } catch (error) {
+    logger.error("Bulk move topics error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to move topics" });
+  }
+});
+
+// POST /api/topics/bulk-visibility - Массовая смена видимости (private/shared).
+router.post("/bulk-visibility", requirePermission("topics.access.grant"), async (req, res) => {
+  try {
+    const { ids, visibility } = req.body ?? {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "IDs array required" });
+    }
+    if (visibility !== "private" && visibility !== "shared") {
+      return res.status(400).json({ error: "visibility must be 'private' or 'shared'" });
+    }
+    const roles = req.effectiveRoles ?? [];
+    const userId = req.currentUser?.id ?? "";
+    let updatedCount = 0;
+    const skipped: Array<{ topicId: string; name: string; reason: string }> = [];
+    for (const id of ids) {
+      const topic = await storage.getTopic(id);
+      if (!topic) continue;
+      if (!canGrantTopicAccess(roles, userId, topic)) {
+        skipped.push({ topicId: id, name: topic.name, reason: "forbidden" });
+        continue;
+      }
+      await storage.setTopicVisibility(id, visibility);
+      updatedCount++;
+    }
+    res.json({ success: true, updatedCount, skipped });
+  } catch (error) {
+    logger.error("Bulk set visibility error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to set visibility" });
+  }
+});
+
+// POST /api/topics/bulk-owner - Массовая смена владельца (только администратор).
+router.post("/bulk-owner", requirePermission("topics.owner.change"), async (req, res) => {
+  try {
+    const { ids, ownerId } = req.body ?? {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "IDs array required" });
+    }
+    if (ownerId !== null && typeof ownerId !== "string") {
+      return res.status(400).json({ error: "ownerId must be a string or null" });
+    }
+    if (!canChangeTopicOwner(req.effectiveRoles ?? [])) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    if (typeof ownerId === "string" && !(await storage.getUser(ownerId))) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    let updatedCount = 0;
+    for (const id of ids) {
+      const topic = await storage.getTopic(id);
+      if (!topic) continue;
+      await storage.setTopicOwner(id, ownerId);
+      updatedCount++;
+    }
+    res.json({ success: true, updatedCount });
+  } catch (error) {
+    logger.error("Bulk set owner error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to set owner" });
+  }
+});
+
+// POST /api/topics/bulk-grant - Массовая выдача доступа пользователю (upsert).
+router.post("/bulk-grant", requirePermission("topics.access.grant"), async (req, res) => {
+  try {
+    const { ids, granteeId, accessLevel } = req.body ?? {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "IDs array required" });
+    }
+    if (typeof granteeId !== "string" || !granteeId) {
+      return res.status(400).json({ error: "granteeId required" });
+    }
+    if (accessLevel !== "use" && accessLevel !== "manage") {
+      return res.status(400).json({ error: "accessLevel must be 'use' or 'manage'" });
+    }
+    if (!(await storage.getUser(granteeId))) {
+      return res.status(404).json({ error: "Grantee not found" });
+    }
+    const roles = req.effectiveRoles ?? [];
+    const userId = req.currentUser?.id ?? "";
+    let grantedCount = 0;
+    const skipped: Array<{ topicId: string; name: string; reason: string }> = [];
+    for (const id of ids) {
+      const topic = await storage.getTopic(id);
+      if (!topic) continue;
+      if (!canGrantTopicAccess(roles, userId, topic)) {
+        skipped.push({ topicId: id, name: topic.name, reason: "forbidden" });
+        continue;
+      }
+      await storage.upsertTopicGrant({ topicId: id, granteeId, accessLevel, grantedBy: userId || null });
+      grantedCount++;
+    }
+    logger.info(`Bulk topic grant: ${grantedCount} topics -> user:${granteeId} ${accessLevel} by ${userId || "?"}`);
+    res.json({ success: true, grantedCount, skipped });
+  } catch (error) {
+    logger.error("Bulk grant error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to grant access" });
+  }
+});
+
+// POST /api/topics/bulk-revoke - Массовый отзыв доступа пользователя.
+// Soft (по умолчанию): грант -> revoked_in_use. Hard (`?mode=hard`, админ): грант
+// удаляется; темы, где у получателя есть опубликованные зависимые тесты,
+// пропускаются (partial-batch) без `?force=true`. `?dryRun=true` — предпросмотр.
+router.post("/bulk-revoke", requirePermission("topics.access.grant"), async (req, res) => {
+  try {
+    const { ids, granteeId } = req.body ?? {};
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "IDs array required" });
+    }
+    if (typeof granteeId !== "string" || !granteeId) {
+      return res.status(400).json({ error: "granteeId required" });
+    }
+    const roles = req.effectiveRoles ?? [];
+    const userId = req.currentUser?.id ?? "";
+    const skipped: Array<{ topicId: string; name: string; reason: string }> = [];
+
+    if (req.query.mode !== "hard") {
+      // Soft revoke: flip each existing grant to revoked_in_use.
+      let revokedCount = 0;
+      for (const id of ids) {
+        const topic = await storage.getTopic(id);
+        if (!topic) continue;
+        if (!canGrantTopicAccess(roles, userId, topic)) {
+          skipped.push({ topicId: id, name: topic.name, reason: "forbidden" });
+          continue;
+        }
+        const grant = await storage.getTopicGrantForGrantee(id, granteeId);
+        if (!grant) {
+          skipped.push({ topicId: id, name: topic.name, reason: "no_grant" });
+          continue;
+        }
+        await storage.setTopicGrantState(grant.id, "revoked_in_use");
+        revokedCount++;
+      }
+      return res.json({ mode: "soft", success: true, revokedCount, skipped });
+    }
+
+    // Hard revoke — administrator only (FR-26).
+    if (!isAdminOrSuper(roles)) {
+      return res.status(403).json({ error: "hard_revoke_admin_only", message: "Жёсткий отзыв доступен только администратору" });
+    }
+    const forced = isForcedByAdmin(req);
+    const revocable: Array<{ grantId: string; topicId: string; name: string }> = [];
+    const blocked: Array<{ topicId: string; name: string; dependents: Awaited<ReturnType<typeof dependentTestsForGrant>> }> = [];
+    for (const id of ids) {
+      const topic = await storage.getTopic(id);
+      if (!topic) continue;
+      if (!canGrantTopicAccess(roles, userId, topic)) {
+        skipped.push({ topicId: id, name: topic.name, reason: "forbidden" });
+        continue;
+      }
+      const grant = await storage.getTopicGrantForGrantee(id, granteeId);
+      if (!grant) {
+        skipped.push({ topicId: id, name: topic.name, reason: "no_grant" });
+        continue;
+      }
+      const dependents = await dependentTestsForGrant(id, granteeId);
+      const publishedDeps = dependents.filter((d) => d.status === "published");
+      if (publishedDeps.length > 0 && !forced) {
+        blocked.push({ topicId: id, name: topic.name, dependents });
+        continue;
+      }
+      revocable.push({ grantId: grant.id, topicId: id, name: topic.name });
+    }
+    const resolutions = ["replace_sections", "unpublish", "change_owner", "materialize_snapshot"];
+    if (isDryRun(req)) {
+      return res.json({ dryRun: true, mode: "hard", revocable, blocked, skipped, resolutions });
+    }
+    for (const r of revocable) await storage.removeTopicGrant(r.grantId);
+    logger.info(`Bulk hard-revoke: ${revocable.length} grants of user:${granteeId} by ${userId || "?"} (force=${forced}, blocked=${blocked.length})`);
+    res.json({ mode: "hard", success: true, revokedCount: revocable.length, revoked: revocable, blocked, skipped, resolutions });
+  } catch (error) {
+    logger.error("Bulk revoke error: " + (error as Error).message);
+    res.status(500).json({ error: "Failed to revoke access" });
   }
 });
 
