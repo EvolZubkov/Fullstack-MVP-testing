@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.7.0-beta](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.6.0-beta...v2.7.0-beta)
+
+### Features
+
+- **feat**(scorm): PRD-20 — устойчивый таймер и возобновление timed-тестов (2026-07-02) [`2632991b6ccc923ac8f51bf959d34e3d23be9ca3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/2632991b6ccc923ac8f51bf959d34e3d23be9ca3)
+  Таймер экзамена переведён на монотонный performance.now(): устранён дрейф в фоне и выигрыш от перевода часов в сессии. Кросс-reload восстановление на модели активного времени (cmi.total_time + baseline-anchor в suspend_data) — timed-тесты снова резюмятся (снят технический guard, adaptive остаётся исключением); периодический commit session_time даёт kill-устойчивость; tamper-evidence на anchor превращает правку suspend_data в потерю resume, а не «фри тайм»; router продолжает незавершённую тему с точной позиции. Любой сбой персистентности деградирует к прежнему поведению. LMS-валидация — в техдолге.
+
+### Documentation
+
+- **docs**(prd-20): актуализация требований под реализацию (2026-07-02) [`f6f69d358fb058179dff17f308f7c96ceef4188a`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/f6f69d358fb058179dff17f308f7c96ceef4188a)
+  Требования приведены в соответствие с кодом: tamper-evidence — keyed djb2-checksum на anchor (не HMAC на весь блоб); watchdog отката часов снят (модель активного времени не держит клиентские часы в контуре доверия) → флаг аномалии при регрессе total_time; счётчики reload/сессий отложены; Фаза 3 — 5.12/5.14 реализованы, 5.13 закрыта моделью (активное время = «пауза при закрытии»); runtime-таблица дополнена timerCommitInterval/timerAnchorTampered; привязка к BR-14.
+
+- **docs**(brd): BR-14 — устойчивость таймера и возобновление timed-тестов (2026-07-02) [`fd69693ccc9ce93a5af6ba1050931571f48f15d3`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/fd69693ccc9ce93a5af6ba1050931571f48f15d3)
+  Добавлено бизнес-требование BR-14 (Этап 15, PRD-20): реальное время без выигрыша от троттлинга/перевода часов, восстановление таймера и прогресса timed-тестов на reload по активному времени, единообразие по режимам BR-06, kill-устойчивость, tamper-evidence (дезтеррент), деградация и приёмка на целевой LMS (техдолг). Плюс два риска: LMS-специфичность total_time и подделываемость клиентского учёта (уровень B).
+
+- **docs**: актуализация документации под релиз 2.6.0-beta (2026-07-02) [`48faa82364d707464e4188f96f7b082b29b65308`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/48faa82364d707464e4188f96f7b082b29b65308)
+  CHANGELOG 2.6.0-beta; README/ROADMAP/architecture/AUDIT и PRD-16/19 приведены в соответствие с осью контента и групповыми операциями «Папки и темы» (модульные роутеры, bulk-эндпоинты topics/folders, двухрежимное удаление папки, partial-batch с защитой контента).
+
+- **docs**(prd-20): спецификация и план реализации устойчивого таймера (2026-07-02) [`e159d1e5b0c69f583bccaf109cf1fe4e39532575`](https://github.com/vvlad1973/Fullstack-MVP-testing/commit/e159d1e5b0c69f583bccaf109cf1fe4e39532575)
+  PRD-20 (Фазы 1-2) и поэтапный план реализации Фазы 2: модель активного времени (cmi.total_time + performance.now), tamper-evidence на anchor, единообразное возобновление по режимам PRD-4, деградация и чек-лист LMS-валидации (техдолг перед включением в прод).
+
 ## [2.6.0-beta](https://github.com/vvlad1973/Fullstack-MVP-testing/compare/v2.5.1-beta...v2.6.0-beta)
 
 ### Features
