@@ -668,11 +668,13 @@ export function ContentTree() {
         onClose={() => setTopicTarget(null)}
       />
 
-      {/* Move questions → topic */}
+      {/* Move questions → topic. `tb-select-modal` lets the DS Select popup escape
+          the modal body's overflow (this is a short modal — see tb-components.css). */}
       <ModalDialog
         open={moveQ !== null}
         onClose={() => setMoveQ(null)}
         size="m"
+        className="tb-select-modal"
         title={t.content.moveQuestionsTitle}
         footer={
           <>
@@ -717,13 +719,18 @@ export function ContentTree() {
           </>
         }
       >
-        <Select
-          label={t.content.targetFolder}
-          value={moveTopicTarget?.folderId ?? ""}
-          onChange={(v) => setMoveTopicTarget((prev) => (prev ? { ...prev, folderId: v } : prev))}
-          fullWidth
-          options={[{ value: "", label: t.content.rootFolder }, ...folders.map((f) => ({ value: f.id, label: f.name }))]}
-        />
+        {/* FolderTreeSelect (popover portaled to <body>) instead of a DS Select,
+            whose absolute `.ou-select__menu` was clipped by the modal body's
+            `overflow-y: auto`. Same picker as the create-folder modal below. */}
+        <Stack gap={2}>
+          <Label>{t.content.targetFolder}</Label>
+          <FolderTreeSelect
+            folders={folders}
+            value={moveTopicTarget?.folderId || null}
+            onChange={(pid) => setMoveTopicTarget((prev) => (prev ? { ...prev, folderId: pid ?? "" } : prev))}
+            rootLabel={t.content.rootFolder}
+          />
+        </Stack>
       </ModalDialog>
 
       {/* Create folder */}

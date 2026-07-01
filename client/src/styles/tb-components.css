@@ -81,6 +81,15 @@
   overflow: visible;
 }
 
+/* Modal opt-in: a SHORT modal (`tb-select-modal`) lets the DS Select's absolute
+   `.ou-select__menu` escape the modal body's `overflow-y: auto` while it is open.
+   Safe here because `.ou-modal` has no overflow clip and the menu (z-index:50) sits
+   above the footer. NOT applied to all modals — a tall/scrolling modal would spill
+   its content when a Select opens. */
+.tb-select-modal .ou-modal__body:has(.ou-select.is-open) {
+  overflow: visible;
+}
+
 /* ── Settings content container (правая колонка drawer-а Настроек) ──── */
 /* container-type: inline-size — точка отсчёта для @container ниже:
    адаптив реагирует на ширину самой колонки настроек, а не viewport
