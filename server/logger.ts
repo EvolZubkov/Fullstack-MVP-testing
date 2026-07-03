@@ -1,15 +1,39 @@
+/**
+ * @module server/logger
+ * @description Application logging facade built on a hierarchical Pino logger tree
+ * (`@vvlad1973/pino-logger-tree`).
+ *
+ * Sinks mirror the reference service (see botapp-service.new/src/init/logger.js):
+ * a pino-pretty console sink and an optional pino-pretty file sink, each with its
+ * own level. Configuration comes from {@link config.log}: `level.common` is the
+ * base level the logger processes, `level.console`/`level.file` gate the two sinks,
+ * `level.objects` holds per-subsystem (per-source) overrides, and `fileName` (when
+ * set) enables the file sink. The app writes to a fixed file and never rotates it —
+ * rotation/retention are the runtime's responsibility.
+ *
+ * The most recent events are additionally retained in an in-memory ring buffer that
+ * backs the in-app "recent events" view.
+ *
+ * The audit trail is a separate concern and remains app-managed: it is written to a
+ * dedicated file (`audit-YYYY-MM-DD.log`) with its own retention window.
+ */
 import fs from "fs";
 import path from "path";
 import { AsyncLocalStorage } from "async_hooks";
+import pino, { type Logger, type LogFn } from "pino";
+import pretty from "pino-pretty";
+import { LoggerTree, type LoggerLevel } from "@vvlad1973/pino-logger-tree";
+import { config } from "./config";
 
-// ─── Константы ────────────────────────────────────────────────────────────────
+// ─── Constants ──────────────────────────────────────────────────────────────────
 const LOG_DIR = path.resolve(process.cwd(), "logs");
-const MAX_LOG_DAYS = 14;
 const MAX_AUDIT_DAYS = 90;
 const SLOW_REQUEST_MS = 1000;
+const RING_BUFFER_SIZE = 2000;
+const ROOT_PATH = "app";
 
-// ─── Типы ─────────────────────────────────────────────────────────────────────
-type LogLevel = "debug" | "info" | "warn" | "error" | "fatal";
+// ─── Types ──────────────────────────────────────────────────────────────────────
+type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 
 export interface RequestContext {
   reqId: string;
@@ -18,43 +42,111 @@ export interface RequestContext {
   path?: string;
 }
 
-// ─── Request context (AsyncLocalStorage) ──────────────────────────────────────
+/**
+ * A single structured log event retained in the in-memory ring buffer.
+ *
+ * @public
+ */
+export interface LogEntry {
+  /** Human-readable timestamp, `YYYY-MM-DD HH:mm:ss`. */
+  ts: string;
+  level: LogLevel;
+  source: string;
+  message: string;
+  reqId?: string;
+  userId?: string;
+}
+
+/** Filter applied when reading recent events from the ring buffer. */
+export interface LogFilter {
+  level?: LogLevel | "all";
+  search?: string;
+  limit?: number;
+}
+
+// ─── Request context (AsyncLocalStorage) ──────────────────────────────────────────
 export const requestContext = new AsyncLocalStorage<RequestContext>();
 
-// ─── Файловые утилиты ─────────────────────────────────────────────────────────
-function getLogFilePath(date: Date = new Date()): string {
-  return path.join(LOG_DIR, `app-${date.toISOString().slice(0, 10)}.log`);
+// ─── Shared helpers ───────────────────────────────────────────────────────────────
+function formatTs(date: Date = new Date()): string {
+  return date.toISOString().replace("T", " ").slice(0, 19);
 }
 
-function getAuditFilePath(date: Date = new Date()): string {
-  return path.join(LOG_DIR, `audit-${date.toISOString().slice(0, 10)}.log`);
+function formatError(err: unknown): string {
+  if (err instanceof Error) {
+    return err.stack ? `${err.message}\n${err.stack}` : err.message;
+  }
+  return String(err);
 }
 
-function ensureLogDir() {
-  if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+// ─── Logger tree (Pino) ─────────────────────────────────────────────────────────────
+// Build the destination: a pino-pretty console sink plus an optional pino-pretty
+// file sink, each with its own level (config.log.level.console / .file). A
+// single-thread pino.multistream is used instead of pino's worker transports
+// because the server is bundled (esbuild) and worker transports do not resolve
+// reliably from a bundle; the on-disk/console formatting still matches the
+// reference's pino-pretty targets.
+function buildDestination(): pino.MultiStreamRes {
+  const { fileName, level } = config.log;
+  // Cast: StreamEntry.level excludes "silent"; at runtime a "silent" stream level
+  // is inert (nothing routes to it), which is the intended "sink off" behaviour.
+  const streams: pino.StreamEntry[] = [
+    { level: level.console as pino.Level, stream: pretty({ translateTime: "SYS:standard" }) },
+  ];
+  if (fileName && level.file) {
+    streams.push({
+      level: level.file as pino.Level,
+      stream: pretty({
+        colorize: false,
+        translateTime: "SYS:standard",
+        destination: fileName,
+        mkdir: true,
+      }),
+    });
+  }
+  return pino.multistream(streams);
 }
 
-function cleanOldLogs() {
-  try {
-    const files = fs.readdirSync(LOG_DIR);
-    const now = Date.now();
-    for (const file of files) {
-      const appMatch = file.match(/^app-(\d{4}-\d{2}-\d{2})\.log$/);
-      const auditMatch = file.match(/^audit-(\d{4}-\d{2}-\d{2})\.log$/);
-      const match = appMatch || auditMatch;
-      if (!match) continue;
-      const maxDays = auditMatch ? MAX_AUDIT_DAYS : MAX_LOG_DAYS;
-      const fileDate = new Date(match[1]).getTime();
-      if (now - fileDate > maxDays * 86400_000) {
-        fs.unlinkSync(path.join(LOG_DIR, file));
-      }
-    }
-  } catch {}
+// The tree and its sinks are built lazily on first use, reading config.log AFTER
+// initConfig() has populated it (the DI model) — so importing this module does
+// not touch config. Base level is `common`; per-object (per-source) overrides
+// come from `log.level.objects`.
+let tree: LoggerTree | undefined;
+let levelOverrides = new Map<string, LoggerLevel>();
+function ensureTree(): LoggerTree {
+  if (tree) return tree;
+  tree = new LoggerTree(
+    {
+      level: config.log.level.common,
+      name: ROOT_PATH,
+      redact: { paths: ["password", "token", "secret", "secretToken"], remove: true },
+    },
+    buildDestination()
+  );
+  levelOverrides = new Map<string, LoggerLevel>(
+    Object.entries(config.log.level.objects) as Array<[string, LoggerLevel]>
+  );
+  return tree;
 }
 
-// ─── Дедупликация ошибок ──────────────────────────────────────────────────────
+// Per-source Pino loggers, one tree node per source, created and cached on demand.
+const nodeCache = new Map<string, Logger>();
+function nodeFor(source: string): Logger {
+  const t = ensureTree();
+  let node = nodeCache.get(source);
+  if (node === undefined) {
+    const options: Record<string, unknown> = { name: source };
+    const override = levelOverrides.get(source);
+    if (override !== undefined) options.level = override;
+    node = t.createLogger(`${ROOT_PATH}.${source}`, options) as unknown as Logger;
+    nodeCache.set(source, node);
+  }
+  return node;
+}
+
+// ─── Error deduplication ───────────────────────────────────────────────────────────
 const errorCounts = new Map<string, { count: number; lastLoggedAt: number }>();
-const ERROR_DEDUP_WINDOW_MS = 60_000; // 1 минута
+const ERROR_DEDUP_WINDOW_MS = 60_000; // 1 minute
 const ERROR_DEDUP_THRESHOLD = 3;
 
 function shouldLog(key: string): boolean {
@@ -66,79 +158,108 @@ function shouldLog(key: string): boolean {
   }
   entry.count++;
   if (entry.count <= ERROR_DEDUP_THRESHOLD) return true;
-  // Каждые 10 подавленных — логируем суммарно
+  // Every 10 suppressed occurrences, emit a summary line.
   if (entry.count % 10 === 0) {
-    writeRaw("warn", "logger", `[dedup] Suppressed ${entry.count - ERROR_DEDUP_THRESHOLD} identical errors for: ${key.slice(0, 80)}`);
+    emit("warn", "logger", `[dedup] Suppressed ${entry.count - ERROR_DEDUP_THRESHOLD} identical errors for: ${key.slice(0, 80)}`);
   }
   return false;
 }
 
-// ─── Форматирование ───────────────────────────────────────────────────────────
-function formatLine(level: LogLevel, source: string, message: string): string {
-  const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
-  const ctx = requestContext.getStore();
-  const reqPart = ctx?.reqId ? ` [req:${ctx.reqId}]` : "";
-  const userPart = ctx?.userId ? ` [user:${ctx.userId}]` : "";
-  return `${ts} [${level.toUpperCase().padEnd(5)}] [${source}]${reqPart}${userPart} ${message}`;
+// ─── In-memory ring buffer ─────────────────────────────────────────────────────────
+const ring: (LogEntry | undefined)[] = new Array<LogEntry | undefined>(RING_BUFFER_SIZE);
+let ringHead = 0; // index of the next write
+let ringCount = 0; // number of live entries (<= RING_BUFFER_SIZE)
+
+function pushRing(entry: LogEntry): void {
+  ring[ringHead] = entry;
+  ringHead = (ringHead + 1) % RING_BUFFER_SIZE;
+  if (ringCount < RING_BUFFER_SIZE) ringCount++;
 }
 
-function formatError(err: unknown): string {
-  if (err instanceof Error) {
-    return err.stack ? `${err.message}\n${err.stack}` : err.message;
+/** Snapshot the ring buffer oldest-to-newest. */
+function snapshotRing(): LogEntry[] {
+  const out: LogEntry[] = [];
+  const start = ringCount < RING_BUFFER_SIZE ? 0 : ringHead;
+  for (let i = 0; i < ringCount; i++) {
+    const entry = ring[(start + i) % RING_BUFFER_SIZE];
+    if (entry) out.push(entry);
   }
-  return String(err);
+  return out;
 }
 
-// ─── Запись ───────────────────────────────────────────────────────────────────
-function writeRaw(level: LogLevel, source: string, message: string) {
-  const line = formatLine(level, source, message);
+// ─── Emit ───────────────────────────────────────────────────────────────────────────
+function emit(level: LogLevel, source: string, message: string): void {
+  const node = nodeFor(source);
 
-  if (level === "fatal" || level === "error") console.error(line);
-  else if (level === "warn") console.warn(line);
-  else console.log(line);
+  // Respect the node's effective level for both the Pino sink and the ring buffer.
+  if (!node.isLevelEnabled(level)) return;
 
-  try {
-    ensureLogDir();
-    fs.appendFileSync(getLogFilePath(), line + "\n", "utf8");
-  } catch (e) {
-    process.stderr.write(`[logger write failed] ${(e as Error).message}\n`);
-  }
-}
-
-function write(level: LogLevel, source: string, message: string) {
-  // Дедупликация только для error/fatal
+  // Deduplicate repeated error/fatal within a short window.
   if (level === "error" || level === "fatal") {
     const key = `${source}:${message.slice(0, 120)}`;
     if (!shouldLog(key)) return;
   }
-  writeRaw(level, source, message);
+
+  const ctx = requestContext.getStore();
+  const fields: Record<string, unknown> = {};
+  if (ctx?.reqId) fields.reqId = ctx.reqId;
+  if (ctx?.userId) fields.userId = ctx.userId;
+
+  (node[level] as LogFn)(fields, message);
+
+  const entry: LogEntry = { ts: formatTs(), level, source, message };
+  if (ctx?.reqId) entry.reqId = ctx.reqId;
+  if (ctx?.userId) entry.userId = ctx.userId;
+  pushRing(entry);
 }
 
-// ─── Audit log ────────────────────────────────────────────────────────────────
+// ─── Audit log (separate, app-managed) ─────────────────────────────────────────────
+function ensureLogDir() {
+  if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+}
+
+function getAuditFilePath(date: Date = new Date()): string {
+  return path.join(LOG_DIR, `audit-${date.toISOString().slice(0, 10)}.log`);
+}
+
+function cleanOldAuditLogs() {
+  try {
+    const files = fs.readdirSync(LOG_DIR);
+    const now = Date.now();
+    for (const file of files) {
+      const match = file.match(/^audit-(\d{4}-\d{2}-\d{2})\.log$/);
+      if (!match) continue;
+      const fileDate = new Date(match[1]).getTime();
+      if (now - fileDate > MAX_AUDIT_DAYS * 86400_000) {
+        fs.unlinkSync(path.join(LOG_DIR, file));
+      }
+    }
+  } catch {}
+}
+
 function writeAudit(action: string, details: Record<string, unknown>) {
   try {
     ensureLogDir();
     const ctx = requestContext.getStore();
-    const ts = new Date().toISOString().replace("T", " ").slice(0, 19);
     const line = JSON.stringify({
-      ts,
+      ts: formatTs(),
       action,
       reqId: ctx?.reqId,
       userId: ctx?.userId,
       ...details,
     });
     fs.appendFileSync(getAuditFilePath(), line + "\n", "utf8");
-    writeRaw("info", "audit", `${action} ${JSON.stringify(details)}`);
+    emit("info", "audit", `${action} ${JSON.stringify(details)}`);
   } catch (e) {
     process.stderr.write(`[audit write failed] ${(e as Error).message}\n`);
   }
 }
 
-// ─── Heartbeat ────────────────────────────────────────────────────────────────
+// ─── Heartbeat ─────────────────────────────────────────────────────────────────────
 function logHeartbeat() {
   const mem = process.memoryUsage();
   const uptime = Math.floor(process.uptime());
-  writeRaw("info", "heartbeat", [
+  emit("info", "heartbeat", [
     `uptime=${uptime}s`,
     `rss=${Math.round(mem.rss / 1024 / 1024)}MB`,
     `heapUsed=${Math.round(mem.heapUsed / 1024 / 1024)}MB`,
@@ -146,24 +267,30 @@ function logHeartbeat() {
   ].join(" "));
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
-setInterval(cleanOldLogs, 86400_000);
-cleanOldLogs();
-setInterval(logHeartbeat, 5 * 60_000); // каждые 5 минут
+// ─── Init ──────────────────────────────────────────────────────────────────────────
+setInterval(cleanOldAuditLogs, 86400_000);
+cleanOldAuditLogs();
+setInterval(logHeartbeat, 5 * 60_000); // every 5 minutes
 
-// ─── Экспорт ─────────────────────────────────────────────────────────────────
+// ─── Exports ───────────────────────────────────────────────────────────────────────
 export const logger = {
-  debug: (message: string, source = "app") => {
-    if (process.env.NODE_ENV !== "production") write("debug", source, message);
-  },
-  info:  (message: string, source = "app") => write("info",  source, message),
-  warn:  (message: string, source = "app") => write("warn",  source, message),
+  trace: (message: string, source = "app") => emit("trace", source, message),
+  debug: (message: string, source = "app") => emit("debug", source, message),
+  info:  (message: string, source = "app") => emit("info",  source, message),
+  warn:  (message: string, source = "app") => emit("warn",  source, message),
   error: (message: string | Error | unknown, source = "app") => {
-    write("error", source, typeof message === "string" ? message : formatError(message));
+    emit("error", source, typeof message === "string" ? message : formatError(message));
   },
   fatal: (message: string | Error | unknown, source = "app") => {
-    write("fatal", source, typeof message === "string" ? message : formatError(message));
+    emit("fatal", source, typeof message === "string" ? message : formatError(message));
   },
+  /**
+   * Whether `level` is enabled for `source` — pino's own gate (delegated to the
+   * source's tree node). Use it to guard construction of expensive log arguments
+   * (e.g. SQL query strings) so nothing is built when the level is disabled.
+   */
+  isLevelEnabled: (level: LogLevel, source = "app"): boolean =>
+    nodeFor(source).isLevelEnabled(level),
 };
 
 export const audit = {
@@ -189,26 +316,32 @@ export const audit = {
 
 export { SLOW_REQUEST_MS };
 
-// ─── Утилиты для API страницы логов ──────────────────────────────────────────
-export function getAvailableLogDates(): string[] {
-  try {
-    ensureLogDir();
-    return fs.readdirSync(LOG_DIR)
-      .map(f => f.match(/^app-(\d{4}-\d{2}-\d{2})\.log$/)?.[1])
-      .filter(Boolean)
-      .sort()
-      .reverse() as string[];
-  } catch {
-    return [];
-  }
-}
+/**
+ * Read recent events from the in-memory ring buffer, applying optional level/text
+ * filters. Backs the in-app "recent events" view; not a source of historical logs.
+ *
+ * @param filter - Optional level, case-insensitive text search, and result limit.
+ * @returns The matching events (newest last), plus total-before-limit and shown counts.
+ */
+export function getRecentLogs(filter: LogFilter = {}): {
+  total: number;
+  shown: number;
+  entries: LogEntry[];
+} {
+  let entries = snapshotRing();
 
-export function readLogFile(date: string): string[] {
-  try {
-    const filePath = getLogFilePath(new Date(date));
-    if (!fs.existsSync(filePath)) return [];
-    return fs.readFileSync(filePath, "utf8").split("\n").filter(Boolean);
-  } catch {
-    return [];
+  if (filter.level && filter.level !== "all") {
+    entries = entries.filter((e) => e.level === filter.level);
   }
+  if (filter.search) {
+    const q = filter.search.toLowerCase();
+    entries = entries.filter(
+      (e) => e.message.toLowerCase().includes(q) || e.source.toLowerCase().includes(q)
+    );
+  }
+
+  const total = entries.length;
+  const limit = filter.limit ?? 100;
+  const shown = entries.slice(-limit);
+  return { total, shown: shown.length, entries: shown };
 }
