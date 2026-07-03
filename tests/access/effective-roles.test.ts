@@ -14,10 +14,10 @@ import { ROLES } from "@shared/access";
 
 const { storageMock, configMock } = vi.hoisted(() => ({
   storageMock: { getUserRoles: vi.fn() },
-  configMock: { isSuperadminEmailHash: vi.fn(), SUPERADMIN_EMAILS: [] as string[] },
+  configMock: { isSuperadminEmailHash: vi.fn(), superadminEmails: () => [] as string[] },
 }));
 vi.mock("../../server/storage", () => ({ storage: storageMock }));
-vi.mock("../../server/config", () => configMock);
+vi.mock("../../server/superadmin", () => configMock);
 
 import { getEffectiveRoles, isSuperadmin } from "../../server/services/access";
 
