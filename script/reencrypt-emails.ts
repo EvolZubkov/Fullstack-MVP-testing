@@ -23,9 +23,9 @@
  * service window. See docs/RUNBOOK_SECRET_ROTATION.md.
  */
 
-import "dotenv/config";
 import { createHash } from "crypto";
 import pg from "pg";
+import { loadEnv, loadConfiguration } from "../server/config-loader.mjs";
 
 const { Pool } = pg;
 
@@ -72,7 +72,10 @@ function requireEnv(name: string): string {
 }
 
 async function main() {
-  if (!process.env.DATABASE_URL) {
+  loadEnv();
+  const cfg = await loadConfiguration();
+  const databaseUrl = (cfg.database as { url?: string } | undefined)?.url ?? "";
+  if (!databaseUrl) {
     console.error("[reencrypt-emails] DATABASE_URL must be set");
     process.exit(1);
   }
@@ -92,7 +95,7 @@ async function main() {
   const oldCrypto = await makeCrypto(oldKeys);
   const newCrypto = await makeCrypto(newKeys);
 
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new Pool({ connectionString: databaseUrl });
   const client = await pool.connect();
 
   let total = 0;

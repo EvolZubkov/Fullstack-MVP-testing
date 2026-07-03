@@ -11,7 +11,7 @@
 
 import { randomBytes } from "crypto";
 import { storage } from "../storage";
-import { isSuperadminEmailHash, SUPERADMIN_EMAILS } from "../config";
+import { isSuperadminEmailHash, superadminEmails } from "../superadmin";
 import { logger } from "../logger";
 import {
   effectiveRoles,
@@ -65,7 +65,7 @@ export async function userHasPermission(
  * Best-effort: a failure for one address is logged and does not abort startup.
  */
 export async function provisionSuperadmins(): Promise<void> {
-  for (const email of SUPERADMIN_EMAILS) {
+  for (const email of superadminEmails()) {
     try {
       const existing = await storage.getUserByEmail(email);
       if (existing) {

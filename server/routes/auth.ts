@@ -6,6 +6,7 @@ import { getEffectiveRoles, getUserCapabilities } from "../services/access";
 import { sendPasswordResetEmail } from "../email";
 import { maskEmail } from "../utils/mask-email";
 import { logger, audit, requestContext } from "../logger";
+import { appBaseUrl } from "../config";
 
 const router = Router();
 
@@ -223,7 +224,7 @@ router.post("/forgot-password", async (req, res) => {
     await storage.createPasswordResetToken(user.id, tokenHash, requestIp);
 
     // Формируем ссылку
-    const baseUrl = (process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/$/, '');
+    const baseUrl = appBaseUrl();
     const resetLink = `${baseUrl}/reset-password?token=${token}`;
 
     // Отправляем email

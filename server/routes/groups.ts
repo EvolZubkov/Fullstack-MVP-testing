@@ -1,11 +1,10 @@
 import { Router } from "express";
 import { createHash, randomBytes } from "crypto";
 import { logger } from "../logger";
+import { appBaseUrl } from "../config";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { sendAssignmentEmail } from "../email";
-
-const APP_URL = (process.env.APP_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/$/, '');
 
 const router = Router();
 
@@ -46,7 +45,7 @@ async function notifyNewGroupMember(userId: string, groupId: string) {
         expiresAt,
       });
 
-      const magicLink = `${APP_URL}/access/${raw}`;
+      const magicLink = `${appBaseUrl()}/access/${raw}`;
       await sendAssignmentEmail({
         to: email,
         userName: user.name || undefined,

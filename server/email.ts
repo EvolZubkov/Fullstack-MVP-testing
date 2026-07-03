@@ -1,37 +1,39 @@
 import nodemailer from "nodemailer";
 import { logger } from "./logger";
+import { config } from "./config";
 
-// Конфигурация из переменных окружения
-const SMTP_HOST = process.env.SMTP_HOST || "";
-const SMTP_PORT = parseInt(process.env.SMTP_PORT || "587");
-const SMTP_SECURE = process.env.SMTP_SECURE === "true";
-const SMTP_USER = process.env.SMTP_USER || "";
-const SMTP_PASS = process.env.SMTP_PASS || "";
-const SMTP_FROM = process.env.SMTP_FROM || SMTP_USER;
-const APP_NAME = process.env.APP_NAME || "СкилУм";
-
-// Создаём транспорт
+// SMTP settings are read from `config` (populated by initConfig) inside the
+// functions below — not at import time (the DI model). Non-secret settings
+// (host/port/secure/from) come from the config file; credentials are secrets.
 let transporter: nodemailer.Transporter | null = null;
 
 function getTransporter(): nodemailer.Transporter | null {
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+  const { host, port, secure, auth } = config.email;
+  if (!host || !auth.user || !auth.pass) {
     logger.info("SMTP not configured. Email sending disabled.");
     return null;
   }
 
   if (!transporter) {
     transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
-      auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
-      },
+      host,
+      port,
+      secure,
+      auth: { user: auth.user, pass: auth.pass },
     });
   }
 
   return transporter;
+}
+
+/** Product name used in subjects/sender, read at send time. */
+function appName(): string {
+  return config.server.appName;
+}
+
+/** Envelope "from" address (falls back to the SMTP user), read at send time. */
+function fromAddress(): string {
+  return config.email.from || config.email.auth.user;
 }
 
 export async function sendPasswordResetEmail(
@@ -40,7 +42,9 @@ export async function sendPasswordResetEmail(
   userName?: string
 ): Promise<boolean> {
   const transport = getTransporter();
-  
+  const APP_NAME = appName();
+  const SMTP_FROM = fromAddress();
+
   if (!transport) {
     logger.info("===========================================");
     logger.info("PASSWORD RESET LINK (SMTP not configured):");
@@ -144,6 +148,8 @@ export async function sendAssignmentEmail(opts: {
   magicLink: string;
 }): Promise<boolean> {
   const transport = getTransporter();
+  const APP_NAME = appName();
+  const SMTP_FROM = fromAddress();
 
   const dueDateStr = opts.dueDate
     ? opts.dueDate.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" })
@@ -257,6 +263,8 @@ export async function sendInviteEmail(opts: {
   inviterName?: string;
 }): Promise<boolean> {
   const transport = getTransporter();
+  const APP_NAME = appName();
+  const SMTP_FROM = fromAddress();
 
   if (!transport) {
     logger.info("===========================================");

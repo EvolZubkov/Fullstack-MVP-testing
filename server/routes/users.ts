@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { logger, audit } from "../logger";
+import { appBaseUrl } from "../config";
 import { storage } from "../storage";
 import { requirePermission } from "../middleware/auth";
 import { getEffectiveRoles, isSuperadmin } from "../services/access";
@@ -465,7 +466,7 @@ router.post("/bulk-import", requirePermission("users.create"), async (req, res) 
       return res.status(400).json({ error: "No rows provided" });
     }
 
-    const baseUrl = (process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/$/, '');
+    const baseUrl = appBaseUrl();
 
     // Cache auto-created groups within this import to avoid duplicates
     const groupNameToId = new Map<string, string>();

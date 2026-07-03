@@ -8,6 +8,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 
 import { routerConfig } from "./routes/index";
+import { config } from "./config";
 
 // Media upload configuration
 const mediaDir = path.resolve(process.cwd(), "uploads", "media");
@@ -65,11 +66,11 @@ export async function registerRoutes(
   app.use(
     session({
       store: new MemStore({ checkPeriod: 86400000 }),
-      secret: process.env.SESSION_SECRET || "scorm-test-constructor-secret",
+      secret: config.session.secret || "scorm-test-constructor-secret",
       resave: false,
       saveUninitialized: false,
       cookie: {
-        secure: process.env.COOKIE_SECURE === "true",
+        secure: config.server.cookieSecure,
         httpOnly: true,
         sameSite: "lax" as const,
         maxAge: 24 * 60 * 60 * 1000,

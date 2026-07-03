@@ -1,51 +1,48 @@
 import { createHash } from "crypto";
 import { logger } from "../logger";
+import { config } from "../config";
 
-// Проверяем наличие обязательных переменных окружения
-const ENCRYPTION_PASSWORD = process.env.ENCRYPTION_PASSWORD;
-const ENCRYPTION_SALT = process.env.ENCRYPTION_SALT;
-
-if (!ENCRYPTION_PASSWORD || !ENCRYPTION_SALT) {
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "CRITICAL: ENCRYPTION_PASSWORD and ENCRYPTION_SALT environment variables must be set.\n" +
-      "Generate secure values using: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
-    );
-  }
-
-  logger.warn(
-    "\n⚠️  WARNING: ENCRYPTION_PASSWORD and ENCRYPTION_SALT are not set!\n" +
-    "   Using default values for development only.\n" +
-    "   Generate secure values for production:\n" +
-    "   node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"\n"
-  );
-}
-
-// В dev режиме используем дефолты, в prod — упадёт раньше на throw
-const PASSWORD = ENCRYPTION_PASSWORD ?? "dev-default-key";
-const SALT = ENCRYPTION_SALT ?? "dev-default-salt";
-
-// Фиксированный IV (генерируем из пароля и соли для воспроизводимости)
-const IV_SEED = createHash("sha256")
-  .update(PASSWORD + SALT)
-  .digest()
-  .slice(0, 16); // 16 байт для AES
-
-// Lazy initialization for ESM module compatibility
+// Lazily-built cipher. Encryption keys are secrets read from the config
+// (config.encryption, populated by initConfig) on first encrypt/decrypt — not at
+// import time (the DI model). `hashEmail` below needs no keys.
 let cryptoInstance: any = null;
 
 async function getCryptoInstance() {
-  if (!cryptoInstance) {
-    const { default: Crypto } = await import("@vvlad1973/crypto");
-    cryptoInstance = new Crypto({
-      password: PASSWORD,
-      salt: SALT,
-      algorithm: "SHA512",
-      iterations: 10000,
-      keyLength: 32,
-      iv: IV_SEED,
-    });
+  if (cryptoInstance) return cryptoInstance;
+
+  const encPassword = config.encryption.password;
+  const encSalt = config.encryption.salt;
+
+  if (!encPassword || !encSalt) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "CRITICAL: ENCRYPTION_PASSWORD and ENCRYPTION_SALT environment variables must be set.\n" +
+        "Generate secure values using: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""
+      );
+    }
+    logger.warn(
+      "\n⚠️  WARNING: ENCRYPTION_PASSWORD and ENCRYPTION_SALT are not set!\n" +
+      "   Using default values for development only.\n" +
+      "   Generate secure values for production:\n" +
+      "   node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"\n"
+    );
   }
+
+  // dev fallbacks (`||`: an unset reference resolves to "").
+  const password = encPassword || "dev-default-key";
+  const salt = encSalt || "dev-default-salt";
+  // Fixed IV derived from password+salt for reproducibility (16 bytes for AES).
+  const ivSeed = createHash("sha256").update(password + salt).digest().slice(0, 16);
+
+  const { default: Crypto } = await import("@vvlad1973/crypto");
+  cryptoInstance = new Crypto({
+    password,
+    salt,
+    algorithm: "SHA512",
+    iterations: 10000,
+    keyLength: 32,
+    iv: ivSeed,
+  });
   return cryptoInstance;
 }
 

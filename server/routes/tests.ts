@@ -18,6 +18,7 @@ import { generateScormPackage } from "../scorm-exporter";
 import { buildScormExportData, ScormBuildError } from "../scorm/build-export-data";
 import { isSupportedTemplateApiVersion } from "../template-registry";
 import { logger } from "../logger";
+import { appBaseUrl } from "../config";
 import {
   testSettingsService,
   VersionConflictError,
@@ -966,7 +967,7 @@ router.get("/:id/export/scorm", requirePermission("tests.export.scorm"), require
     if (enableTelemetry) {
       const packageId = crypto.randomUUID();
       const secretKey = crypto.randomBytes(32).toString("hex");
-      const apiBaseUrl = (process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5001}`).replace(/\/$/, '');
+      const apiBaseUrl = appBaseUrl();
 
       // Create scorm_package record
       await storage.createScormPackage({

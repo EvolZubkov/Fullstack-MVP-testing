@@ -1,0 +1,33 @@
+{
+  // =========================================================================
+  // Development environment (NODE_ENV=development). Selected by the loader over
+  // config/config.jsonc. Non-secret settings only; secrets are defined in
+  // .env.development (or .env) and referenced via { "env": "VAR" }.
+  // See config/config.jsonc for the fully-documented base.
+  // =========================================================================
+  "log": {
+    "fileName": "",
+    "level": { "common": "debug", "console": "debug", "file": "debug", "objects": {} }
+  },
+  "server": {
+    "port": 5000,
+    // Empty -> http://localhost:<port>.
+    "appUrl": "",
+    "appName": "СкилУм",
+    "cookieSecure": false
+  },
+  "database": { "url": { "env": "DATABASE_URL" } },
+  "session": { "secret": { "env": "SESSION_SECRET" } },
+  "encryption": {
+    "password": { "env": "ENCRYPTION_PASSWORD" },
+    "salt": { "env": "ENCRYPTION_SALT" }
+  },
+  "email": {
+    "host": "",
+    "port": 587,
+    "secure": false,
+    "from": "",
+    "auth": { "user": { "env": "SMTP_USER" }, "pass": { "env": "SMTP_PASS" } }
+  },
+  "access": { "superadminEmails": [] }
+}

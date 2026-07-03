@@ -1,8 +1,9 @@
-import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import pg from "pg";
 import { encryptEmail, hashEmail } from "../server/utils/crypto";
+import { config, initConfig } from "../server/config";
+import { loadEnv } from "../server/config-loader.mjs";
 
 const { Pool } = pg;
 
@@ -61,7 +62,7 @@ function parseOptions(): Options {
     throw new Error("Admin password must be at least 6 characters.");
   }
 
-  if (!process.env.DATABASE_URL) {
+  if (!config.database.url) {
     throw new Error("DATABASE_URL must be set in .env or environment.");
   }
 
@@ -69,7 +70,7 @@ function parseOptions(): Options {
 }
 
 async function upsertAdmin(options: Options) {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  const pool = new Pool({ connectionString: config.database.url });
 
   try {
     const passwordHash = await bcrypt.hash(options.password, 10);
@@ -157,6 +158,8 @@ async function upsertAdmin(options: Options) {
 }
 
 async function main() {
+  loadEnv();
+  await initConfig();
   const options = parseOptions();
   const result = await upsertAdmin(options);
 

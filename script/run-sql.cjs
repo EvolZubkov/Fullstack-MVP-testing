@@ -27,7 +27,6 @@
 
 "use strict";
 
-require("dotenv").config();
 const fs = require("node:fs");
 const { Client } = require("pg");
 
@@ -38,7 +37,13 @@ async function main() {
     process.exit(1);
   }
 
-  const connectionString = process.env.DATABASE_URL;
+  // CommonJS on Node 20 cannot `require` the ESM loader — use dynamic import.
+  // Resolve DATABASE_URL through the standard getConfig loader (config maps
+  // database.url -> { env: "DATABASE_URL" }, resolved from the loaded env).
+  const { loadEnv, loadConfiguration } = await import("../server/config-loader.mjs");
+  loadEnv();
+  const cfg = await loadConfiguration();
+  const connectionString = (cfg.database || {}).url;
   if (!connectionString) {
     console.error("[run-sql] DATABASE_URL is not set");
     process.exit(1);

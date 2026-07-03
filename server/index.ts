@@ -1,5 +1,3 @@
-import "dotenv/config";
-
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
@@ -14,6 +12,8 @@ import {
   getDatabaseStatus,
 } from "./db";
 import { logger, requestContext, SLOW_REQUEST_MS } from "./logger";
+import { config, initConfig } from "./config";
+import { loadEnv } from "./config-loader.mjs";
 import { randomUUID } from "crypto";
 
 process.on("uncaughtException", async (err) => {
@@ -102,10 +102,15 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Load environment (.env.<NODE_ENV> then .env), then the configuration via the
+  // standard getConfig loader, before anything reads config/db/logger.
+  loadEnv();
+  await initConfig();
+
   // Warn about weak secrets in production
   if (process.env.NODE_ENV === "production") {
     const weakSecrets = ["scorm-test-constructor-secret", "your-secret-key-change-in-production", ""];
-    if (weakSecrets.includes(process.env.SESSION_SECRET ?? "")) {
+    if (weakSecrets.includes(config.session.secret)) {
       logger.warn("SESSION_SECRET is not set or uses a default value — set a strong secret in production!", "security");
     }
   }
@@ -180,7 +185,9 @@ app.use((req, res, next) => {
   // Other ports are firewalled. Default to 5000 if not specified.
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
+  // The container sets PORT (matches EXPOSE / compose mapping); it wins over the
+  // configured default so infra stays authoritative for the listen port.
+  const port = parseInt(process.env.PORT || String(config.server.port), 10);
   // httpServer.listen(
   //   {
   //     port,
