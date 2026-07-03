@@ -145,12 +145,19 @@ export interface ScoreVM {
 }
 
 export interface DrawSectionVM {
+  /** Stable topic id — keys the PRD-18 variant pin (`{ topicId: formId }`). */
+  topicId: string;
   topicName: string;
   count: number;
   mode: "all" | "variants" | "quota" | "draw";
   formId: string | null;
   formIndex: number | null;
   formCount: number | null;
+  /**
+   * PRD-18 debug: the topic's full variant list (variants mode only; `[]` otherwise)
+   * — feeds the «Выдача» tab per-topic pin selector.
+   */
+  forms: { id: string; label: string; index: number }[];
   /** Size of the topic's full question bank (the «из банка M» denominator). */
   bankSize: number;
   /** Composition of the drawn set by sub-topic tag (empty for untagged banks). */
@@ -196,6 +203,11 @@ export interface DrawVM {
   /** Flat flow (linear_flat) → one combined «Вопросы» list; sectioned → per-topic. */
   flat?: boolean;
   sections?: DrawSectionVM[];
+  /**
+   * PRD-18 debug: the run has started (`phase !== 'start'`). Variant pins lock once
+   * started (all variants are fixed at draw time); the «Выдача» selectors go disabled.
+   */
+  started?: boolean;
 }
 
 export interface InspectorSnapshot {

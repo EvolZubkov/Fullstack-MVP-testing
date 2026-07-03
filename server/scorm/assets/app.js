@@ -61,12 +61,30 @@ function selectForm(forms, previousFormIds, availableIds, shuffleFn) {
   return { formId: chosen.id, questionIds: shuffleFn(present.slice()) };
 }
 
+// PRD-18 (debug player only): read the per-topic variant PINS the in-service debug
+// player passes via the stage launch-URL hash (`#tbff=<encodeURIComponent(JSON)>`,
+// a `{ topicId: formId }` map). Lets the methodologist force an exact variant instead
+// of the random draw. Read under a guard: a production LMS launch carries no such
+// hash (and runs on another origin), so this returns null and selection stays random
+// — fully inert in production. Returns the parsed map or null.
+function tbDebugForcedForms() {
+  try {
+    var h = (typeof window !== 'undefined' && window.location && window.location.hash) || '';
+    var m = /(?:^#|[#&])tbff=([^&]+)/.exec(h);
+    if (!m) return null;
+    var map = JSON.parse(decodeURIComponent(m[1]));
+    return (map && typeof map === 'object') ? map : null;
+  } catch (e) { return null; }
+}
+
 function generateVariant() {
   state.variant = { sections: [] };
   state.flatQuestions = [];
   state.shuffleMappings = {}; // Store shuffle mappings for each question
 
   var usedIds = {}; // Track used question IDs across all sections to prevent duplicates
+  // PRD-18 debug: per-topic pinned variants (null in production — inert).
+  var tbForcedForms = tbDebugForcedForms();
 
   TEST_DATA.sections.forEach(function(section) {
     var available = section.questions.filter(function(q) { return !usedIds[q.id]; });
@@ -79,7 +97,19 @@ function generateVariant() {
       var availIds = {};
       var byId = {};
       available.forEach(function (q) { availIds[q.id] = true; byId[q.id] = q; });
-      var picked = selectForm(section.formSet.forms, [], availIds, shuffle);
+      // PRD-18 debug: if this topic's variant is pinned, deliver EXACTLY that form
+      // (still whole + bank-filtered + order-shuffled), bypassing the random pick.
+      var forcedId = tbForcedForms ? tbForcedForms[section.topicId] : null;
+      var forcedForm = forcedId
+        ? section.formSet.forms.filter(function (f) { return f.id === forcedId; })[0]
+        : null;
+      var picked;
+      if (forcedForm) {
+        var present = forcedForm.questionIds.filter(function (id) { return availIds[id]; });
+        picked = { formId: forcedForm.id, questionIds: shuffle(present.slice()) };
+      } else {
+        picked = selectForm(section.formSet.forms, [], availIds, shuffle);
+      }
       questions = picked.questionIds.map(function (id) { return byId[id]; }).filter(Boolean);
     } else {
       var drawn = drawSection(available, section.drawCount, section.drawBlueprint, shuffle);
