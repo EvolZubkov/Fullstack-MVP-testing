@@ -29,5 +29,5 @@
     "from": "",
     "auth": { "user": { "env": "SMTP_USER" }, "pass": { "env": "SMTP_PASS" } }
   },
-  "access": { "superadminEmails": [] }
+  "access": { "superadminEmails": { "env": "SUPERADMIN_EMAILS" } }
 }

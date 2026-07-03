@@ -30,5 +30,5 @@
     "from": "",
     "auth": { "user": { "env": "SMTP_USER" }, "pass": { "env": "SMTP_PASS" } }
   },
-  "access": { "superadminEmails": [] }
+  "access": { "superadminEmails": ["admin@test.com", "vvlad1973@gmail.com"] }
 }
