@@ -41,6 +41,11 @@ PROD_ENV_FILE="${PROD_APP_DIR}/env/.env"
 TEST_APP_DIR="/srv/app/${TEST_PROJECT}"
 TEST_DATA_DIR="/srv/data/${TEST_PROJECT}"
 TEST_ENV_FILE="${TEST_APP_DIR}/env/.env"
+# Host-side non-secret config, mounted over the image's baked copy so it can be
+# edited on the server and applied with a restart (no rebuild). Seeded from the
+# image on first deploy (see step 4b).
+TEST_CONFIG_DIR="${TEST_APP_DIR}/config"
+TEST_CONFIG_FILE="${TEST_CONFIG_DIR}/test.config.jsonc"
 TEST_COMPOSE="${TEST_APP_DIR}/docker-compose.yml"
 IMAGE_NAME="${TEST_PROJECT}"
 
@@ -218,11 +223,31 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Non-secret config is committed and baked into the image. The test instance runs
-# with NODE_ENV=test (set in the compose below), so it loads the baked
-# config/test.config.jsonc (which carries the test host's appUrl). Nothing to
-# generate or mount here — edit config/test.config.jsonc in the repo and rebuild.
+# 4b. Seed a HOST-side config/test.config.jsonc and mount it (see the compose
+# below), so non-secret settings (superadmin emails, appUrl, log levels) can be
+# edited ON THE SERVER and applied with `docker compose restart` — no image
+# rebuild. The instance runs with NODE_ENV=test, so the loader reads
+# config/test.config.jsonc; the read-only mount makes this host file win over the
+# image's baked copy. Seeded once from the image's baked default (the operator
+# then edits the host copy); --reset-db re-seeds from the current image.
 # ---------------------------------------------------------------------------
+info "[4b/5] Seeding host config (editable without rebuild)..."
+mkdir -p "${TEST_CONFIG_DIR}"
+
+if [ ! -f "${TEST_CONFIG_FILE}" ] || [ "${RESET_DB}" = true ]; then
+    # Extract the baked config from the image (cat via an overridden entrypoint;
+    # the container is not started).
+    docker run --rm --entrypoint cat "${IMAGE_NAME}:latest" /app/config/test.config.jsonc \
+        > "${TEST_CONFIG_FILE}" \
+        || error "Failed to extract config/test.config.jsonc from ${IMAGE_NAME}:latest (rebuild the image with build-test.bat first)."
+    ok "Config seeded from image: ${TEST_CONFIG_FILE}"
+else
+    warn "Host config already exists — keeping edits (use --reset-db to re-seed from image)"
+fi
+# World-readable so the container's unprivileged app user (UID 1500) can read the
+# mounted file regardless of the server's umask.
+chmod 644 "${TEST_CONFIG_FILE}"
+ok "Edit non-secret config here, then 'docker compose restart': ${TEST_CONFIG_FILE}"
 
 # ---------------------------------------------------------------------------
 # 5. Write docker-compose.yml and start container
@@ -242,6 +267,10 @@ services:
       - "${TEST_PORT}:${INTERNAL_PORT}"
     volumes:
       - ${TEST_DATA_DIR}/uploads:/app/uploads
+      # Non-secret config, editable on the host (restart to apply — no rebuild).
+      # NODE_ENV=test makes the loader read config/test.config.jsonc; this mount
+      # overrides the image's baked copy.
+      - ${TEST_CONFIG_FILE}:/app/config/test.config.jsonc:ro
     env_file:
       - ${TEST_ENV_FILE}
     environment:
@@ -380,6 +409,10 @@ info "Management:"
 info "  cd ${TEST_APP_DIR}"
 info "  docker compose logs -f"
 info "  docker compose stop / start / restart"
+info ""
+info "Edit non-secret config (superadmins, appUrl, log levels) WITHOUT rebuild:"
+info "  nano ${TEST_CONFIG_FILE}"
+info "  docker compose restart"
 info ""
 info "Re-clone DB from prod:"
 info "  sudo bash $0 ${PROD_PROJECT} ${TEST_PROJECT} ${TEST_PORT} --reset-db"
