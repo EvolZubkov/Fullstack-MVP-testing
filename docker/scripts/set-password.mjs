@@ -21,16 +21,27 @@
 import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 import pg from "pg";
+// Runs from /app inside the container (docker cp -> /app/set-password.mjs), so
+// the baked config loader (server/config-loader.mjs) and config file (config/) are
+// reachable relative to /app.
+import { loadEnv, loadConfiguration } from "./server/config-loader.mjs";
 
 const EMAIL = (process.env.SP_EMAIL ?? "").trim();
 const PASSWORD_B64 = process.env.SP_PASSWORD_B64 ?? "";
 const FORCE_CHANGE = process.env.SP_FORCE_CHANGE === "true";
 
+// Resolve the connection string through the standard getConfig loader (config
+// maps database.url -> { env: "DATABASE_URL" }). loadEnv reads the mounted
+// .env.<NODE_ENV>/.env; getConfig resolves the reference.
+loadEnv();
+const cfg = await loadConfiguration();
+const DATABASE_URL = cfg.database?.url ?? "";
+
 if (!EMAIL || !PASSWORD_B64) {
   console.error("ERROR: SP_EMAIL and SP_PASSWORD_B64 are required.");
   process.exit(1);
 }
-if (!process.env.DATABASE_URL) {
+if (!DATABASE_URL) {
   console.error("ERROR: DATABASE_URL is not set inside the container.");
   process.exit(1);
 }
@@ -49,7 +60,7 @@ const emailHash = createHash("sha256")
 // Mirror server/storage.ts: bcrypt.hash(password, 10).
 const passwordHash = await bcrypt.hash(password, 10);
 
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+const client = new pg.Client({ connectionString: DATABASE_URL });
 
 try {
   await client.connect();

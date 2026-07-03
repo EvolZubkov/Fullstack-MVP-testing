@@ -23,6 +23,8 @@ client/
 # Docker forbids re-including a path whose parent dir is excluded, so we descend
 # level by level instead of a blanket `server/`.
 server/*
+# Shared config loader is needed at runtime by run-sql.cjs / set-password.
+!server/config-loader.mjs
 !server/scorm
 server/scorm/*
 !server/scorm/templates

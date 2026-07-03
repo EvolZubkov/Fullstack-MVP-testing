@@ -30,11 +30,20 @@ error() { echo -e "${RED}[entrypoint]${NC} $*"; exit 1; }
 # The app fails fast on its own if DATABASE_URL is missing, so we only warn.
 # ---------------------------------------------------------------------------
 if [ -f /app/.env ]; then
-    ok "ENV: /app/.env (file)"
+    ok "ENV: /app/.env (file, secrets)"
 elif [ -n "${DATABASE_URL:-}" ]; then
     ok "ENV: injected from environment"
 else
     warn "No /app/.env file and DATABASE_URL not set — app may fail to start"
+fi
+
+# Non-secret settings come from the baked, committed per-environment config file
+# (config/<NODE_ENV>.config.jsonc, falling back to config/config.jsonc), selected
+# by NODE_ENV. Only secrets are host-side (/app/.env).
+if [ -f "/app/config/${NODE_ENV}.config.jsonc" ]; then
+    ok "CONFIG: /app/config/${NODE_ENV}.config.jsonc (baked)"
+else
+    ok "CONFIG: /app/config/config.jsonc (baked default; NODE_ENV=${NODE_ENV:-unset})"
 fi
 
 # ---------------------------------------------------------------------------

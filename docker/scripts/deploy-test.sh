@@ -204,10 +204,6 @@ if [ ! -f "${TEST_ENV_FILE}" ] || [ "${RESET_DB}" = true ]; then
     # Replace DATABASE_URL with test instance URL
     sed -i "s|^DATABASE_URL=.*|DATABASE_URL=${TEST_DB_URL}|" "${TEST_ENV_FILE}"
 
-    # Point API_BASE_URL at the test instance
-    TEST_HOST_IP=$(hostname -I | awk '{print $1}')
-    sed -i "s|^API_BASE_URL=.*|API_BASE_URL=http://${TEST_HOST_IP}:${TEST_PORT}/|" "${TEST_ENV_FILE}"
-
     ok ".env written: ${TEST_ENV_FILE}"
 else
     warn ".env already exists — skipping (use --reset-db to overwrite)"
@@ -220,6 +216,13 @@ if echo "${ACTUAL_URL}" | grep -qF "/${TEST_DB_NAME}"; then
 else
     error "DATABASE_URL in ${TEST_ENV_FILE} still points to wrong DB.\nEdit manually: nano ${TEST_ENV_FILE}"
 fi
+
+# ---------------------------------------------------------------------------
+# Non-secret config is committed and baked into the image. The test instance runs
+# with NODE_ENV=test (set in the compose below), so it loads the baked
+# config/test.config.jsonc (which carries the test host's appUrl). Nothing to
+# generate or mount here — edit config/test.config.jsonc in the repo and rebuild.
+# ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
 # 5. Write docker-compose.yml and start container
@@ -241,6 +244,8 @@ services:
       - ${TEST_DATA_DIR}/uploads:/app/uploads
     env_file:
       - ${TEST_ENV_FILE}
+    environment:
+      NODE_ENV: test
     healthcheck:
       test: ["CMD", "sh", "-c", "wget -q --spider http://127.0.0.1:${INTERNAL_PORT}/api/me"]
       interval: 30s
