@@ -374,6 +374,56 @@ describe("DELETE /api/tests/:id — confirmTitle", () => {
   });
 });
 
+// ─── PUT /:id — section formSetJson round-trip (PRD-17 regression) ─────────────
+// Guards against the Zod-strip bug where sectionBodySchema omitted formSetJson, so
+// the editor's saved variant set was silently dropped (200 OK, but not persisted).
+describe("PUT /api/tests/:id — section formSetJson (PRD-17)", () => {
+  let app: express.Express;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageMock.getUser.mockResolvedValue(authorUser);
+    storageMock.getTest.mockResolvedValue(dbTest);
+    // dbSection.topicId === "t1" → already referenced → exempt from the visibility gate.
+    storageMock.getTestSections.mockResolvedValue([dbSection]);
+    storageMock.getTopic.mockResolvedValue({ id: "t1", name: "Тема" });
+    serviceMock.save.mockResolvedValue(dbTest);
+    app = makeApp();
+  });
+
+  it("passes formSetJson through to the save service instead of stripping it", async () => {
+    const formSet = {
+      forms: [
+        { id: "f1", label: "Вариант 1", questionIds: ["q1", "q2"] },
+        { id: "f2", label: "Вариант 2", questionIds: ["q3", "q4"] },
+      ],
+    };
+    const res = await asAuthor(
+      request(app).put("/api/tests/test1").send({
+        title: "My Test",
+        mode: "standard",
+        sections: [{ topicId: "t1", drawCount: 2, formSetJson: formSet }],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(serviceMock.save).toHaveBeenCalled();
+    const savePayload = serviceMock.save.mock.calls[0][1];
+    expect(savePayload.sections[0].formSetJson).toEqual(formSet);
+  });
+
+  it("rejects an invalid form set (< 2 variants) with 400", async () => {
+    const res = await asAuthor(
+      request(app).put("/api/tests/test1").send({
+        title: "My Test",
+        mode: "standard",
+        sections: [{ topicId: "t1", drawCount: 2, formSetJson: { forms: [{ id: "f1", label: "Вариант 1", questionIds: ["q1"] }] } }],
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(serviceMock.save).not.toHaveBeenCalled();
+  });
+});
+
 // ─── Backward compat: POST / and PUT /:id unchanged ──────────────────────────
 describe("Backward compat — POST / and PUT /:id", () => {
   let app: express.Express;

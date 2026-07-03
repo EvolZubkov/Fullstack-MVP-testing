@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { storage } from "../storage";
 import { db } from "../db";
-import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, retakePolicySchema, questionScoringSchema } from "@shared/schema";
+import { templates, feedbackContentSchema, passRuleSchema, drawBlueprintSchema, formSetSchema, retakePolicySchema, questionScoringSchema } from "@shared/schema";
 import { listActiveEligibilityPlugins } from "@shared/eligibility/registry";
 import { readScreenTemplate } from "../services/template-render";
 import { resolveTemplateDir, resolveSystemScreenDir } from "../services/template-dir";
@@ -46,6 +46,10 @@ const sectionBodySchema = z
     timeLimitMinutes: z.number().int().positive().nullable().optional(),
     feedbackJson: z.unknown().optional(),
     drawBlueprintJson: drawBlueprintSchema.nullish(),
+    // PRD-17 (BR-12): fixed-variant set. MUST be listed here — Zod strips unknown
+    // keys, so without this the editor's saved form set is silently dropped before
+    // it reaches the storage layer (200 OK, but nothing persisted). null = legacy draw.
+    formSetJson: formSetSchema.nullish(),
     // PRD-15 block D (FR-31): per-section default price; null = inherit test.
     defaultPoints: z.number().int().min(0).nullable().optional(),
   })
