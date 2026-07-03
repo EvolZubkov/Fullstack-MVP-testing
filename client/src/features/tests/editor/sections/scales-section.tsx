@@ -640,7 +640,14 @@ function BandsEditor({
 
   return (
     <>
-      <table className="tb-table tb-table--mb" data-testid={`scales-bands-${index}`}>
+      <table className="tb-table tb-table--mb tb-bands-table" data-testid={`scales-bands-${index}`}>
+        <colgroup>
+          <col />
+          <col />
+          <col />
+          <col />
+          <col className="tb-bands-table__act" />
+        </colgroup>
         <thead>
           <tr>
             <th>min</th>

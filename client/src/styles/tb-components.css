@@ -174,6 +174,15 @@
 .tb-table--mb { margin-bottom: var(--ou-space-3); }
 .tb-table__cell--nowrap { white-space: nowrap; }
 
+/* PRD-5 «Диапазоны (пороги)» editor: a 5-column row of DS Inputs must FIT the
+   drawer pane (it scrolls only vertically) instead of overflowing to the right.
+   Fixed layout + full-width, shrinkable inputs make the columns share the available
+   width; the actions column is a fixed narrow track for the delete button. */
+.tb-bands-table { table-layout: fixed; }
+.tb-bands-table__act { width: 40px; }
+.tb-bands-table .ou-field,
+.tb-bands-table .ou-field__box { width: 100%; min-width: 0; }
+
 /* ─── PRD-5 «Вклады вопросов»: contribution matrix ───────────────────────────── */
 /* Scoped to .tb-contrib-grid so the shared .tb-table (bands, scoring, preview)
    keeps its full-width auto layout. The answer-text column is widened and pinned;
