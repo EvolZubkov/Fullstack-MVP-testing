@@ -117,7 +117,11 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
   - [x] 12.1. Пилот **Users** — `server/storage/users-repository.ts` (10 методов),
     `pickDefined` вынесен в `shared.ts`, фасад делегирует. `tsc` + оба сьюта
     зелёные, маршруты не тронуты.
-  - [ ] 12.2. Groups (группы + членство).
+  - [x] 12.2. Groups — `server/storage/groups-repository.ts` (`GroupsRepository`,
+    10 методов групп + членства, транзакции `deleteGroup`/`setUserGroups`). Внешние
+    вызовы `getUserGroups` (`isTestAssignedToUser`, `getAssignedTestsForUser`)
+    перенаправлены на `this.groupsRepo`; из фасада убраны таблицы
+    `users`/`groups`/`userGroups` и `decryptEmail`. `tsc` + оба сьюта зелёные.
   - [ ] 12.3. Access (роли + гранты тестов/тем).
   - [ ] 12.4. Topics (темы, владение, обратная связь).
   - [ ] 12.5. Questions (вопросы, измерения).
