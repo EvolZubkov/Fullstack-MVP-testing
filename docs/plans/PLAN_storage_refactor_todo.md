@@ -99,9 +99,17 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
   ownership/grants ×10, `duplicateQuestion`, `duplicateTopicWithQuestions`);
   `getTopicByName` не добавлен — 0 вызовов (мёртв, → пункт 13). Сняты
   `(storage as any)`-касты в маршрутах. `tsc` чист (раздел 6.2).
+- [x] 13. Мёртвый код и единый JSDoc (разделы 6.3, 6.4). Аудит вызовов:
+  `getTopicByName` (0 вызовов, вне контракта) удалён; `duplicateQuestion`,
+  `duplicateTopicWithQuestions`, `getMigrationHealth` живые (маршруты + тесты) —
+  сохранены; `mapLegacyTest` сохранён (не мёртв: `getTests`/`getTest`), его снятие
+  — отдельный deploy-gated шаг, `getMigrationHealth` его не гейтит (считает
+  несвязанную величину). Все русские комментарии `storage.ts` переведены на
+  английский (data-литералы `" (копия)"` и лист «Оценка» — доменные, сохранены);
+  добавлен module-level JSDoc `@module server/storage`. Пункты «единый писатель
+  секций» и «мёртвая ветка `updateTest(sections)`» закрыты в пункте 6. `tsc` чист;
+  главный (2940) + интеграционный (22) сьюты зелёные.
 - [ ] 12. Разбить `DatabaseStorage` на доменные репозитории за фасадом
   `IStorage` (Users / Groups / Access / Topics / Questions / Tests / Attempts /
   Scorm / Adaptive / ScalesVariables), инкрементально по доменам (раздел 6.1).
-- [ ] 13. Удалить мёртвый код (после проверки востребованности `getTopicByName`,
-  `duplicate*`, `getMigrationHealth`, `mapLegacyTest`); привести комментарии к
-  единому английскому JSDoc (разделы 6.3, 6.4).
+  Выполняется после пункта 13 (согласованный порядок: сперва чистка поверхности).
