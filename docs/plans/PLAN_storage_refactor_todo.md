@@ -163,7 +163,12 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
     `draw-feasibility`). В `getTestsUsingQuestion` вызов `questionsRepo.getQuestion`
     заменён прямым чтением `questions`. `tsc` + оба сьюта зелёные.
   - Остаток фасада (вне исходных 10 доменов, полный сплит по согласованию):
-    - [ ] 12.11. ContentPages (`content_pages` CRUD).
+    - [x] 12.11. ContentPages — `server/storage/content-pages-repository.ts`
+      (`ContentPagesRepository`, 6 методов CRUD на `content_pages` PRD-1;
+      чтение в порядке доставки `(topicId, position, sortOrder)`,
+      `reorderContentPages` пакетом в транзакции). Полностью изолирован — каскад
+      уносит FK при удалении теста, отдельного каскада нет. `tsc` + оба сьюта
+      зелёные.
     - [ ] 12.12. Assignments (назначения + токены доступа к назначениям).
     - [ ] 12.13. Folders (папки контента + папки тестов).
     - [ ] 12.14. PasswordResetTokens — в `UsersRepository` (токены пользователя).
