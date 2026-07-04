@@ -187,7 +187,14 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
       репозитории (правило границы); мягкая доочистка adaptive-строк остаётся за
       обработчиком маршрута. Папки косметичны — прав не несут. `tsc` + оба сьюта
       зелёные.
-    - [ ] 12.14. PasswordResetTokens — в `UsersRepository` (токены пользователя).
+    - [x] 12.14. PasswordResetTokens — сложены в существующий `UsersRepository`
+      (`password_reset_tokens` принадлежат агрегату пользователя, отдельный
+      репозиторий не нужен): `createPasswordResetToken`/`getPasswordResetToken`/
+      `markTokenAsUsed`/`getRecentTokensCount`. Токен хранит только хэш,
+      «гасится» через `usedAt` (не удаляется), поэтому `getRecentTokensCount`
+      может ограничивать частоту запросов. Фасад делегирует в `usersRepo`. После
+      этого пункта тело фасада — чистая делегация (inline-обращений к `db` в
+      методах не осталось). `tsc` + оба сьюта зелёные.
   - [x] 12.7. Attempts — `server/storage/attempts-repository.ts`
     (`AttemptsRepository`, 8 методов на таблице `attempts`: create/lookup/
     whitelist-update/deletes; `annulInProgressAttempts` PRD-15 FR-14). Внутренний
