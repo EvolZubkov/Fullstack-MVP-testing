@@ -24,6 +24,7 @@ import { ScalesVariablesRepository } from "./storage/scales-variables-repository
 import { TestsRepository, type TestUsageRef } from "./storage/tests-repository";
 import { ContentPagesRepository } from "./storage/content-pages-repository";
 import { AssignmentsRepository } from "./storage/assignments-repository";
+import { FoldersRepository } from "./storage/folders-repository";
 
 export type { TestUsageRef };
 import {
@@ -349,6 +350,7 @@ export class DatabaseStorage implements IStorage {
   private readonly testsRepo = new TestsRepository();
   private readonly contentPagesRepo = new ContentPagesRepository();
   private readonly assignmentsRepo = new AssignmentsRepository();
+  private readonly foldersRepo = new FoldersRepository();
 
   // ============================================
   // Users (delegated to UsersRepository)
@@ -635,137 +637,60 @@ export class DatabaseStorage implements IStorage {
     return this.assignmentsRepo.revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId, userId);
   }
 
-  async getFolders(): Promise<Folder[]> {
-    return db.select().from(folders);
+  // ============================================
+  // Folders: content + test trees (delegated to FoldersRepository)
+  // ============================================
+
+  getFolders(): Promise<Folder[]> {
+    return this.foldersRepo.getFolders();
   }
 
-  async getFolder(id: string): Promise<Folder | undefined> {
-    const [folder] = await db.select().from(folders).where(eq(folders.id, id));
-    return folder || undefined;
+  getFolder(id: string): Promise<Folder | undefined> {
+    return this.foldersRepo.getFolder(id);
   }
 
-  async createFolder(folder: InsertFolder): Promise<Folder> {
-    const id = randomUUID();
-    const [newFolder] = await db.insert(folders).values({
-      id,
-      name: folder.name,
-      parentId: folder.parentId || null,
-      createdBy: folder.createdBy || null,
-    }).returning();
-    return newFolder;
+  createFolder(folder: InsertFolder): Promise<Folder> {
+    return this.foldersRepo.createFolder(folder);
   }
 
-  async updateFolder(id: string, updates: Partial<InsertFolder>): Promise<Folder | undefined> {
-    const [updated] = await db.update(folders).set(updates).where(eq(folders.id, id)).returning();
-    return updated || undefined;
+  updateFolder(id: string, updates: Partial<InsertFolder>): Promise<Folder | undefined> {
+    return this.foldersRepo.updateFolder(id, updates);
   }
 
-  async deleteFolder(id: string, moveTo: string | null = null): Promise<boolean> {
-    // "Folder only" mode: reparent the folder's topics and direct sub-folders to
-    // the chosen destination (`moveTo`, default null = root), then drop the row —
-    // as one unit. Purely organizational — folders carry no ownership.
-    return db.transaction(async (tx) => {
-      await tx.update(topics).set({ folderId: moveTo }).where(eq(topics.folderId, id));
-      await tx.update(folders).set({ parentId: moveTo }).where(eq(folders.parentId, id));
-      const result = await tx.delete(folders).where(eq(folders.id, id)).returning();
-      return result.length > 0;
-    });
+  deleteFolder(id: string, moveTo: string | null = null): Promise<boolean> {
+    return this.foldersRepo.deleteFolder(id, moveTo);
   }
 
-  async getFolderSubtreeIds(id: string): Promise<string[]> {
-    const all = await db.select({ id: folders.id, parentId: folders.parentId }).from(folders);
-    const childrenByParent = new Map<string | null, string[]>();
-    for (const f of all) {
-      const key = f.parentId ?? null;
-      if (!childrenByParent.has(key)) childrenByParent.set(key, []);
-      childrenByParent.get(key)!.push(f.id);
-    }
-    const out: string[] = [];
-    const queue: string[] = [id];
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      out.push(current);
-      queue.push(...(childrenByParent.get(current) ?? []));
-    }
-    return out;
+  getFolderSubtreeIds(id: string): Promise<string[]> {
+    return this.foldersRepo.getFolderSubtreeIds(id);
   }
 
-  async deleteFoldersBulk(ids: string[]): Promise<number> {
-    if (ids.length === 0) return 0;
-    const result = await db.delete(folders).where(inArray(folders.id, ids)).returning();
-    return result.length;
+  deleteFoldersBulk(ids: string[]): Promise<number> {
+    return this.foldersRepo.deleteFoldersBulk(ids);
   }
 
-  async getTestFolders(): Promise<TestFolder[]> {
-    return db.select().from(testFolders).orderBy(testFolders.name);
+  getTestFolders(): Promise<TestFolder[]> {
+    return this.foldersRepo.getTestFolders();
   }
 
-  async createTestFolder(folder: InsertTestFolder): Promise<TestFolder> {
-    const id = randomUUID();
-    const [newFolder] = await db.insert(testFolders).values({
-      id,
-      name: folder.name,
-      parentId: folder.parentId || null,
-      createdBy: folder.createdBy || null,
-    }).returning();
-    return newFolder;
+  createTestFolder(folder: InsertTestFolder): Promise<TestFolder> {
+    return this.foldersRepo.createTestFolder(folder);
   }
 
-  async updateTestFolder(id: string, updates: Partial<InsertTestFolder>): Promise<TestFolder | undefined> {
-    const [updated] = await db.update(testFolders).set(updates).where(eq(testFolders.id, id)).returning();
-    return updated || undefined;
+  updateTestFolder(id: string, updates: Partial<InsertTestFolder>): Promise<TestFolder | undefined> {
+    return this.foldersRepo.updateTestFolder(id, updates);
   }
 
-  async deleteTestFolder(id: string, moveTo: string | null = null): Promise<boolean> {
-    // Move direct tests + reparent child folders to the destination, then drop
-    // the row — as one unit (root by default).
-    return db.transaction(async (tx) => {
-      await tx.update(tests).set({ folderId: moveTo }).where(eq(tests.folderId, id));
-      await tx.update(testFolders).set({ parentId: moveTo }).where(eq(testFolders.parentId, id));
-      const result = await tx.delete(testFolders).where(eq(testFolders.id, id)).returning();
-      return result.length > 0;
-    });
+  deleteTestFolder(id: string, moveTo: string | null = null): Promise<boolean> {
+    return this.foldersRepo.deleteTestFolder(id, moveTo);
   }
 
-  /**
-   * Recursively delete a folder, its sub-folders and every test inside them.
-   * Test-side soft cleanup (adaptive levels/links/topic-settings) is the
-   * caller's responsibility (route handler), keeping this method focused on
-   * the folder/test row deletion.
-   */
-  async deleteTestFolderCascade(id: string): Promise<boolean> {
-    // Collect all descendant folder ids breadth-first.
-    const allFolders = await db.select().from(testFolders);
-    const childrenByParent = new Map<string | null, string[]>();
-    for (const f of allFolders) {
-      const key = f.parentId ?? null;
-      if (!childrenByParent.has(key)) childrenByParent.set(key, []);
-      childrenByParent.get(key)!.push(f.id);
-    }
-    const descendantIds: string[] = [];
-    const queue: string[] = [id];
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      descendantIds.push(current);
-      const children = childrenByParent.get(current) ?? [];
-      queue.push(...children);
-    }
-
-    // Delete every test in any of those folders, then the folders — as one unit.
-    // Adaptive children rows are assumed cleaned up by the route handler first.
-    if (descendantIds.length > 0) {
-      return db.transaction(async (tx) => {
-        await tx.delete(tests).where(inArray(tests.folderId, descendantIds));
-        const result = await tx.delete(testFolders).where(inArray(testFolders.id, descendantIds)).returning();
-        return result.length > 0;
-      });
-    }
-    return false;
+  deleteTestFolderCascade(id: string): Promise<boolean> {
+    return this.foldersRepo.deleteTestFolderCascade(id);
   }
 
-  async moveTestToFolder(testId: string, folderId: string | null): Promise<boolean> {
-    const result = await db.update(tests).set({ folderId }).where(eq(tests.id, testId)).returning();
-    return result.length > 0;
+  moveTestToFolder(testId: string, folderId: string | null): Promise<boolean> {
+    return this.foldersRepo.moveTestToFolder(testId, folderId);
   }
 
   // ============================================
