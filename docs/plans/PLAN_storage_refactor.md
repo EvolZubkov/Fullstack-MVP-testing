@@ -370,6 +370,17 @@ password-моки тестов проведены через обёртки. З�
 **Действие:** достроить `IStorage` до полного контракта до начала разбиения —
 интерфейс должен быть авторитетным источником поверхности API.
 
+**Статус: ВЫПОЛНЕНО.** Аудит (diff публичных методов класса против интерфейса)
+дал 13 недостающих. 12 живых добавлены в `IStorage`: topic-ownership/grants
+(`setTopicOwner`/`setTopicVisibility`/`getTopicIdsByOwner`/`getSharedTopicIds`/
+`getTopicGrants`/`getActiveTopicGrantsForGrantees`/`getTopicGrantForGrantee`/
+`upsertTopicGrant`/`setTopicGrantState`/`removeTopicGrant`), `duplicateQuestion`,
+`duplicateTopicWithQuestions`. `getTopicByName` НЕ добавлен — 0 вызовов
+(мёртвый, удаляется в разделе 6.3/пункте 13). Приватные хелперы
+(`topicInsertValues`, `uniqueTopicName`) в контракт не входят. Из маршрутов сняты
+`(storage as any)`-касты для `duplicateQuestion`/`duplicateTopicWithQuestions`.
+Класс удовлетворяет интерфейсу (`tsc` чист).
+
 ### 6.3. Дублирование и мёртвый код
 
 - Вставка секций — в трёх местах (см. 3.4); свести к одному `writeSections`.

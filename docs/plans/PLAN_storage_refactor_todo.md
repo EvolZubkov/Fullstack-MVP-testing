@@ -95,9 +95,10 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
 
 ## Приоритет 4 — поддерживаемость и архитектура
 
-- [ ] 11. Достроить контракт `IStorage` до полной поверхности (добавить
-  недостающие методы владения/грантов тем, `duplicate*`, `getTopicByName`
-  и прочие) (раздел 6.2).
+- [x] 11. Контракт `IStorage` достроен: 12 живых методов добавлены (topic
+  ownership/grants ×10, `duplicateQuestion`, `duplicateTopicWithQuestions`);
+  `getTopicByName` не добавлен — 0 вызовов (мёртв, → пункт 13). Сняты
+  `(storage as any)`-касты в маршрутах. `tsc` чист (раздел 6.2).
 - [ ] 12. Разбить `DatabaseStorage` на доменные репозитории за фасадом
   `IStorage` (Users / Groups / Access / Topics / Questions / Tests / Attempts /
   Scorm / Adaptive / ScalesVariables), инкрементально по доменам (раздел 6.1).
