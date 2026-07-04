@@ -285,7 +285,16 @@ Promise<boolean>`). Поскольку это один файл и единст�
 PRD-9 позже меняет внутренности и эволюционирует этот вызов без затрат — ровно та
 изоляция, которую PRD-9 и предполагает.
 
-### 5.3. Возможность перечисления пользователей по времени ответа
+**Статус: ВЫПОЛНЕНО.** В `server/utils/crypto.ts` добавлены тонкие обёртки
+`hashPassword(plain)` / `verifyPassword(plain, stored)` над `bcryptjs` (фактор
+стоимости — одна константа `PASSWORD_HASH_ROUNDS`). Через них проведены все точки:
+`createUser`, `validatePassword`, `updateUserPassword`, сидер (admin/learner) и
+`script/create-admin.ts`. Из `server/storage.ts` убран прямой импорт `bcryptjs` —
+слой доступа к данным крипто-агностичен; примитив остаётся только в шве
+`crypto.ts`. Детекция формата/scrypt/ленивый rehash НЕ строились (тело PRD-9).
+Обёртки покрыты `tests/crypto-password.test.ts` (реальный bcrypt round-trip);
+password-моки тестов проведены через обёртки. Замена на `@vvlad1973/crypto` теперь
+— правка одного файла.
 
 `validatePassword` (`:360`) при неизвестном e-mail мгновенно возвращает `null`
 без фиктивной сверки. Разница во времени ответа позволяет отличать существующие

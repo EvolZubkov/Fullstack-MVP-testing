@@ -75,16 +75,16 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
   (email отдельно, `emailHash`/`passwordHash`/аудит недоступны); group —
   `name/description`; attempt — `variantJson/answersJson/resultJson/finishedAt`.
   Тест `tests/it/mass-assignment.it.test.ts` (раздел 5.1).
-- [ ] 8. Централизация хеширования пароля: тонкие обёртки `hashPassword(plain)`
-  / `verifyPassword(plain, stored)` в `server/utils/crypto.ts` над текущим
-  `bcryptjs`, провести через них все точки (`createUser`, `validatePassword`,
-  `updateUserPassword`, сидер, `script/create-admin.ts`), убрать импорт примитива
-  и дубль фактора стоимости из слоя доступа к данным. Детекцию формата, scrypt и
-  ленивый rehash НЕ строить — это тело PRD-9. Сделать ДО пункта 12 (разбиения),
-  чтобы Users/Access-репозиторий родился крипто-агностичным (раздел 5.2).
-- [ ] 9. `validatePassword`: провести через обёртку `verifyPassword`; фиктивная
-  сверка при отсутствии пользователя (выровнять время ответа, убрать
-  перечисление). Ленивый rehash — в PRD-9, не сейчас (раздел 5.3).
+- [x] 8. Централизация хеширования пароля: обёртки `hashPassword`/`verifyPassword`
+  в `server/utils/crypto.ts` над `bcryptjs` (фактор стоимости — одна константа);
+  все точки проведены через них (`createUser`, `validatePassword`,
+  `updateUserPassword`, сидер, `script/create-admin.ts`); прямой импорт `bcryptjs`
+  убран из `server/storage.ts` (DAL крипто-агностичен, примитив только в шве).
+  Детекция формата/scrypt/rehash НЕ строились (тело PRD-9). Тест обёрток
+  `tests/crypto-password.test.ts`. Раздел 5.2.
+- [ ] 9. `validatePassword`: уже проведён через обёртку `verifyPassword` (пункт 8);
+  ОСТАЁТСЯ фиктивная сверка при отсутствии пользователя (выровнять время ответа,
+  убрать перечисление). Ленивый rehash — в PRD-9, не сейчас (раздел 5.3).
 - [ ] 10. `seedDatabase`: гейт по окружению (не выполнять в production) или креды
   из env; вынести функцию из слоя доступа к данным в `scripts/`; хеширование —
   через шов `hashPassword` (раздел 5.4).
