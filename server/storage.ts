@@ -10,9 +10,8 @@
  * Routes depend only on `IStorage`, never on the concrete class.
  */
 import { randomUUID } from "crypto";
-import { eq, inArray, and, sql, desc, isNull } from "drizzle-orm";
+import { eq, inArray, and, sql, desc } from "drizzle-orm";
 import { db } from "./db";
-import { pickDefined } from "./storage/shared";
 import { UsersRepository } from "./storage/users-repository";
 import { GroupsRepository } from "./storage/groups-repository";
 import { AccessRepository } from "./storage/access-repository";
@@ -20,6 +19,7 @@ import { TopicsRepository } from "./storage/topics-repository";
 import { QuestionsRepository } from "./storage/questions-repository";
 import { ScormRepository } from "./storage/scorm-repository";
 import { AdaptiveRepository } from "./storage/adaptive-repository";
+import { AttemptsRepository } from "./storage/attempts-repository";
 import {
   topics, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks,
@@ -363,6 +363,7 @@ export class DatabaseStorage implements IStorage {
   private readonly questionsRepo = new QuestionsRepository();
   private readonly scormRepo = new ScormRepository();
   private readonly adaptiveRepo = new AdaptiveRepository();
+  private readonly attemptsRepo = new AttemptsRepository();
 
   // ============================================
   // Users (delegated to UsersRepository)
@@ -1177,67 +1178,40 @@ export class DatabaseStorage implements IStorage {
       .where(eq(contentPages.topicId, topicId));
   }
 
-  async createAttempt(attempt: InsertAttempt): Promise<Attempt> {
-    const id = randomUUID();
-    const [newAttempt] = await db.insert(attempts).values({
-      id,
-      userId: attempt.userId,
-      testId: attempt.testId,
-      testVersion: attempt.testVersion || 1,
-      snapshotId: attempt.snapshotId ?? null,
-      variantJson: attempt.variantJson,
-      answersJson: attempt.answersJson || null,
-      resultJson: attempt.resultJson || null,
-      startedAt: new Date(attempt.startedAt),
-      finishedAt: attempt.finishedAt ? new Date(attempt.finishedAt) : null,
-    }).returning();
-    return newAttempt;
+  // ============================================
+  // Attempts (delegated to AttemptsRepository)
+  // ============================================
+
+  createAttempt(attempt: InsertAttempt): Promise<Attempt> {
+    return this.attemptsRepo.createAttempt(attempt);
   }
 
-  async getAttempt(id: string): Promise<Attempt | undefined> {
-    const [attempt] = await db.select().from(attempts).where(eq(attempts.id, id));
-    return attempt || undefined;
+  getAttempt(id: string): Promise<Attempt | undefined> {
+    return this.attemptsRepo.getAttempt(id);
   }
 
-  async updateAttempt(id: string, updates: Partial<Attempt>): Promise<Attempt | undefined> {
-    // Whitelist: only the mutable progress/result fields. userId/testId/
-    // testVersion/snapshotId/startedAt are fixed at creation and must not move.
-    const set = pickDefined(updates, [
-      "variantJson", "answersJson", "resultJson", "finishedAt",
-    ] as const);
-    if (Object.keys(set).length === 0) return this.getAttempt(id);
-    const [updated] = await db.update(attempts).set(set).where(eq(attempts.id, id)).returning();
-    return updated || undefined;
+  updateAttempt(id: string, updates: Partial<Attempt>): Promise<Attempt | undefined> {
+    return this.attemptsRepo.updateAttempt(id, updates);
   }
 
-  async getAttemptsByUser(userId: string): Promise<Attempt[]> {
-    return db.select().from(attempts).where(eq(attempts.userId, userId));
+  getAttemptsByUser(userId: string): Promise<Attempt[]> {
+    return this.attemptsRepo.getAttemptsByUser(userId);
   }
 
-  async getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]> {
-    return db.select().from(attempts).where(
-      and(eq(attempts.userId, userId), eq(attempts.testId, testId))
-    );
+  getAttemptsByUserAndTest(userId: string, testId: string): Promise<Attempt[]> {
+    return this.attemptsRepo.getAttemptsByUserAndTest(userId, testId);
   }
 
-  async deleteAttemptsByUserAndTest(userId: string, testId: string): Promise<void> {
-    await db.delete(attempts).where(
-      and(eq(attempts.userId, userId), eq(attempts.testId, testId))
-    );
+  deleteAttemptsByUserAndTest(userId: string, testId: string): Promise<void> {
+    return this.attemptsRepo.deleteAttemptsByUserAndTest(userId, testId);
   }
 
-  async annulInProgressAttempts(testId: string): Promise<number> {
-    // In-progress = finishedAt IS NULL. These were never completed, so they do
-    // not count toward the retake limit (PRD-6 counts completed only) — deleting
-    // them annuls without consuming an attempt (PRD-15 FR-14).
-    const result = await db
-      .delete(attempts)
-      .where(and(eq(attempts.testId, testId), isNull(attempts.finishedAt)));
-    return result.rowCount ?? 0;
+  annulInProgressAttempts(testId: string): Promise<number> {
+    return this.attemptsRepo.annulInProgressAttempts(testId);
   }
 
-  async getAllAttempts(): Promise<Attempt[]> {
-    return db.select().from(attempts);
+  getAllAttempts(): Promise<Attempt[]> {
+    return this.attemptsRepo.getAllAttempts();
   }
 
   // ============================================
