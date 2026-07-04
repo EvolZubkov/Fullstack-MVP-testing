@@ -20,11 +20,12 @@ import { QuestionsRepository } from "./storage/questions-repository";
 import { ScormRepository } from "./storage/scorm-repository";
 import { AdaptiveRepository } from "./storage/adaptive-repository";
 import { AttemptsRepository } from "./storage/attempts-repository";
+import { ScalesVariablesRepository } from "./storage/scales-variables-repository";
 import {
   topics, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks,
   testAssignments, passwordResetTokens, assignmentAccessTokens,
-  contentPages, resultVariables, scales, questionMeasurements, testQuestionScoring,
+  contentPages, questionMeasurements,
   testAccessGrants, testSnapshots,
   type User, type InsertUser,
   type Folder, type InsertFolder,
@@ -57,7 +58,7 @@ import {
   type TestQuestionScoring, type InsertTestQuestionScoring,
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
-import { validate, type ValidationResult, type ValueType } from "@shared/formula";
+import { type ValidationResult, type ValueType } from "@shared/formula";
 
 /**
  * Normalizes a test row from the DB for backward compatibility (PRD-7 §1.11).
@@ -364,6 +365,7 @@ export class DatabaseStorage implements IStorage {
   private readonly scormRepo = new ScormRepository();
   private readonly adaptiveRepo = new AdaptiveRepository();
   private readonly attemptsRepo = new AttemptsRepository();
+  private readonly scalesVariablesRepo = new ScalesVariablesRepository();
 
   // ============================================
   // Users (delegated to UsersRepository)
@@ -1161,14 +1163,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(testSections).where(eq(testSections.topicId, topicId));
   }
 
-  async getMeasurementsForQuestions(
+  getMeasurementsForQuestions(
     questionIds: string[],
   ): Promise<Array<{ testId: string; questionId: string }>> {
-    if (questionIds.length === 0) return [];
-    return db
-      .select({ testId: questionMeasurements.testId, questionId: questionMeasurements.questionId })
-      .from(questionMeasurements)
-      .where(inArray(questionMeasurements.questionId, questionIds));
+    return this.scalesVariablesRepo.getMeasurementsForQuestions(questionIds);
   }
 
   async getTopicPageRefs(topicId: string): Promise<Array<{ testId: string }>> {
@@ -1381,221 +1379,96 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  // ─── Result variables (PRD-2) ──────────────────────────────────────────────
-  async getResultVariables(testId: string): Promise<ResultVariable[]> {
-    return db.select().from(resultVariables)
-      .where(eq(resultVariables.testId, testId))
-      .orderBy(resultVariables.sortOrder);
+  // ============================================
+  // Scales / result variables / scoring (delegated to ScalesVariablesRepository)
+  // ============================================
+
+  getResultVariables(testId: string): Promise<ResultVariable[]> {
+    return this.scalesVariablesRepo.getResultVariables(testId);
   }
 
-  async createResultVariable(rv: InsertResultVariable): Promise<ResultVariable> {
-    const [created] = await db.insert(resultVariables).values(rv).returning();
-    return created;
+  createResultVariable(rv: InsertResultVariable): Promise<ResultVariable> {
+    return this.scalesVariablesRepo.createResultVariable(rv);
   }
 
-  async updateResultVariable(id: string, updates: Partial<InsertResultVariable>): Promise<ResultVariable | undefined> {
-    const [updated] = await db.update(resultVariables)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(resultVariables.id, id))
-      .returning();
-    return updated;
+  updateResultVariable(id: string, updates: Partial<InsertResultVariable>): Promise<ResultVariable | undefined> {
+    return this.scalesVariablesRepo.updateResultVariable(id, updates);
   }
 
-  async deleteResultVariable(id: string): Promise<boolean> {
-    const result = await db.delete(resultVariables).where(eq(resultVariables.id, id)).returning();
-    return result.length > 0;
+  deleteResultVariable(id: string): Promise<boolean> {
+    return this.scalesVariablesRepo.deleteResultVariable(id);
   }
 
-  async reorderResultVariables(updates: { id: string; sortOrder: number }[]): Promise<void> {
-    await db.transaction(async (tx) => {
-      for (const { id, sortOrder } of updates) {
-        await tx.update(resultVariables)
-          .set({ sortOrder, updatedAt: new Date() })
-          .where(eq(resultVariables.id, id));
-      }
-    });
+  reorderResultVariables(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    return this.scalesVariablesRepo.reorderResultVariables(updates);
   }
 
-  /**
-   * Validate a result-variable formula against a test's reference sets using the
-   * shared DSL. `topicById` resolves to the test's topics; `var()` may reference
-   * only variables with a smaller `sort_order` (DAG, scoring-model §10.9).
-   * `scaleById`/`countScales` resolve against the test's scales (PRD-5, B2).
-   */
-  async validateResultVariableFormula(
+  validateResultVariableFormula(
     testId: string,
     formula: string,
     type: ValueType,
     opts: { sortOrder?: number; excludeId?: string; extraScaleKeys?: string[]; extraVarNames?: string[] } = {},
   ): Promise<ValidationResult> {
-    const sections = await db.select().from(testSections).where(eq(testSections.testId, testId));
-    const sectionTopicIds = sections.map((s) => s.topicId);
-    // Valid `topicById` args = topic UUIDs plus their custom codes; `topicByName`
-    // args = topic names.
-    const topicRows = sectionTopicIds.length
-      ? await db
-          .select({ id: topics.id, name: topics.name, code: topics.code })
-          .from(topics)
-          .where(inArray(topics.id, sectionTopicIds))
-      : [];
-    const topicIds = new Set<string>(sectionTopicIds);
-    const topicNames = new Set<string>();
-    for (const t of topicRows) {
-      if (t.code) topicIds.add(t.code);
-      if (t.name) topicNames.add(t.name);
-    }
-    const existing = await this.getResultVariables(testId);
-    const prior = existing.filter(
-      (rv) => rv.id !== opts.excludeId && (opts.sortOrder === undefined || rv.sortOrder < opts.sortOrder),
-    );
-    // `extraScaleKeys`/`extraVarNames`: scales/variables defined in the SAME
-    // workbook but not yet persisted (PRD-14 FR-15 dry-run, and a brand-new
-    // target test). Without them, a formula referencing a fresh scale/variable
-    // would falsely fail validation while the plan is computed without writes.
-    const priorVarNames = new Set([...prior.map((rv) => rv.name), ...(opts.extraVarNames ?? [])]);
-    const scaleRows = await db.select().from(scales).where(eq(scales.testId, testId));
-    const scaleKeys = new Set([...scaleRows.map((s) => s.key), ...(opts.extraScaleKeys ?? [])]);
-    return validate(formula, type, { topicIds, topicNames, priorVarNames, scaleKeys });
+    return this.scalesVariablesRepo.validateResultVariableFormula(testId, formula, type, opts);
   }
 
-  // ─── PRD-5: scales ──────────────────────────────────────────────────────────
-
-  async getScales(testId: string): Promise<Scale[]> {
-    return db.select().from(scales)
-      .where(eq(scales.testId, testId))
-      .orderBy(scales.sortOrder);
+  getScales(testId: string): Promise<Scale[]> {
+    return this.scalesVariablesRepo.getScales(testId);
   }
 
-  async createScale(scale: InsertScale): Promise<Scale> {
-    const [created] = await db.insert(scales).values(scale).returning();
-    return created;
+  createScale(scale: InsertScale): Promise<Scale> {
+    return this.scalesVariablesRepo.createScale(scale);
   }
 
-  async updateScale(id: string, updates: Partial<InsertScale>): Promise<Scale | undefined> {
-    const [updated] = await db.update(scales)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(scales.id, id))
-      .returning();
-    return updated;
+  updateScale(id: string, updates: Partial<InsertScale>): Promise<Scale | undefined> {
+    return this.scalesVariablesRepo.updateScale(id, updates);
   }
 
-  async deleteScale(id: string): Promise<boolean> {
-    const result = await db.delete(scales).where(eq(scales.id, id)).returning();
-    return result.length > 0;
+  deleteScale(id: string): Promise<boolean> {
+    return this.scalesVariablesRepo.deleteScale(id);
   }
 
-  async reorderScales(updates: { id: string; sortOrder: number }[]): Promise<void> {
-    await db.transaction(async (tx) => {
-      for (const { id, sortOrder } of updates) {
-        await tx.update(scales)
-          .set({ sortOrder, updatedAt: new Date() })
-          .where(eq(scales.id, id));
-      }
-    });
+  reorderScales(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    return this.scalesVariablesRepo.reorderScales(updates);
   }
 
-  // ─── PRD-5: per-question measurements ─────────────────────────────────────────
-
-  async getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]> {
-    return db.select().from(questionMeasurements)
-      .where(eq(questionMeasurements.testId, testId))
-      .orderBy(questionMeasurements.sortOrder);
+  getQuestionMeasurements(testId: string): Promise<QuestionMeasurement[]> {
+    return this.scalesVariablesRepo.getQuestionMeasurements(testId);
   }
 
-  async getQuestionMeasurementsByQuestion(
-    testId: string,
-    questionId: string,
-  ): Promise<QuestionMeasurement[]> {
-    return db.select().from(questionMeasurements)
-      .where(and(
-        eq(questionMeasurements.testId, testId),
-        eq(questionMeasurements.questionId, questionId),
-      ))
-      .orderBy(questionMeasurements.sortOrder);
+  getQuestionMeasurementsByQuestion(testId: string, questionId: string): Promise<QuestionMeasurement[]> {
+    return this.scalesVariablesRepo.getQuestionMeasurementsByQuestion(testId, questionId);
   }
 
-  /**
-   * Replace all measurements of one question in one test with `rows`
-   * (delete-then-insert in a transaction). Returns the persisted rows. An empty
-   * `rows` clears the question's contributions.
-   */
-  async upsertQuestionMeasurements(
+  upsertQuestionMeasurements(
     testId: string,
     questionId: string,
     rows: InsertQuestionMeasurement[],
   ): Promise<QuestionMeasurement[]> {
-    return db.transaction(async (tx) => {
-      await tx.delete(questionMeasurements).where(and(
-        eq(questionMeasurements.testId, testId),
-        eq(questionMeasurements.questionId, questionId),
-      ));
-      if (rows.length === 0) return [];
-      return tx.insert(questionMeasurements)
-        .values(rows.map((r) => ({ ...r, testId, questionId })))
-        .returning();
-    });
+    return this.scalesVariablesRepo.upsertQuestionMeasurements(testId, questionId, rows);
   }
 
-  // ─── PRD-15 block D: per-(test, question) scoring overrides (FR-30) ──────────
-
-  async getTestQuestionScoring(testId: string): Promise<TestQuestionScoring[]> {
-    return db.select().from(testQuestionScoring)
-      .where(eq(testQuestionScoring.testId, testId));
+  getTestQuestionScoring(testId: string): Promise<TestQuestionScoring[]> {
+    return this.scalesVariablesRepo.getTestQuestionScoring(testId);
   }
 
-  /**
-   * Insert or update the single override row of one question in one test.
-   * All value columns are replaced as a unit — a null/undefined value clears
-   * that link of the chain.
-   */
-  async upsertTestQuestionScoring(
+  upsertTestQuestionScoring(
     testId: string,
     questionId: string,
     values: Omit<InsertTestQuestionScoring, "testId" | "questionId">,
   ): Promise<TestQuestionScoring> {
-    const patch = {
-      points: values.points ?? null,
-      scoringJson: values.scoringJson ?? null,
-      difficulty: values.difficulty ?? null,
-      pinnedContentHash: values.pinnedContentHash ?? null,
-    };
-    const [row] = await db.insert(testQuestionScoring)
-      .values({ testId, questionId, ...patch })
-      .onConflictDoUpdate({
-        target: [testQuestionScoring.testId, testQuestionScoring.questionId],
-        set: { ...patch, updatedAt: new Date() },
-      })
-      .returning();
-    return row;
+    return this.scalesVariablesRepo.upsertTestQuestionScoring(testId, questionId, values);
   }
 
-  async deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean> {
-    const result = await db.delete(testQuestionScoring)
-      .where(and(
-        eq(testQuestionScoring.testId, testId),
-        eq(testQuestionScoring.questionId, questionId),
-      ))
-      .returning();
-    return result.length > 0;
+  deleteTestQuestionScoring(testId: string, questionId: string): Promise<boolean> {
+    return this.scalesVariablesRepo.deleteTestQuestionScoring(testId, questionId);
   }
 
-  /**
-   * Replace ALL scoring overrides of a test with `rows` (delete-then-insert in
-   * a transaction) — the workbook «Оценка» sheet is authoritative for the
-   * test's override set (PRD-14/PRD-15 FR-36 round-trip). An empty `rows`
-   * clears every override.
-   */
-  async replaceTestQuestionScoring(
+  replaceTestQuestionScoring(
     testId: string,
     rows: Omit<InsertTestQuestionScoring, "testId">[],
   ): Promise<TestQuestionScoring[]> {
-    return db.transaction(async (tx) => {
-      await tx.delete(testQuestionScoring).where(eq(testQuestionScoring.testId, testId));
-      if (rows.length === 0) return [];
-      return tx.insert(testQuestionScoring)
-        .values(rows.map((r) => ({ ...r, testId })))
-        .returning();
-    });
+    return this.scalesVariablesRepo.replaceTestQuestionScoring(testId, rows);
   }
 }
 
