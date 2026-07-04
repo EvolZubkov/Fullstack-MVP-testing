@@ -357,6 +357,39 @@ password-моки тестов проведены через обёртки. З�
 вызывающая сторона (маршруты) не меняется; разбиение — инкрементальное, домен за
 доменом.
 
+**Выбранный подход — композиция-делегирование.** `DatabaseStorage` остаётся
+единственной точкой входа (`export const storage`) и продолжает
+`implements IStorage`, но методы извлечённого домена делегируют в приватный
+экземпляр репозитория (`getUser(id) { return this.usersRepo.getUser(id); }`).
+Это типобезопасно (компилятор проверяет и репозиторий, и делегат), читаемо и не
+затрагивает вызывающую сторону. Общие хелперы вынесены в `server/storage/shared.ts`
+(`pickDefined`), чтобы репозитории не дублировали их и не зависели друг от друга.
+
+Раскладка: доменные модули лежат в каталоге `server/storage/*`, фасад — по-прежнему
+файл `server/storage.ts`. Импорт `../storage` из маршрутов однозначно резолвится в
+файл-фасад (файл имеет приоритет над каталогом), поэтому `server/storage/index.ts`
+создавать нельзя — это внесло бы неоднозначность. Фасад сохраняет все экспорты
+(`IStorage`, `DatabaseStorage`, `TestUsageRef`, `storage`).
+
+**Статус: В РАБОТЕ (пилот выполнен).** Извлечён домен Users как образец паттерна:
+`server/storage/users-repository.ts` (`UsersRepository`, 10 методов —
+`getUser`/`getUserByEmail`/`createUser`/`validatePassword`/`updateUserLastLogin`/
+`getUsers`/`updateUser`/`updateUserPassword`/`deactivateUser`/`activateUser`),
+хеширование через шов `crypto`, шифрование email при хранении. Внутридоменные
+вызовы (`validatePassword`→`getUserByEmail`, `updateUser`→`getUser`) остались
+внутри репозитория; других доменов Users-методы не звали. Из фасада убран
+`encryptEmail`/`hashEmail`/`hashPassword`/`verifyPassword`/`dummyVerifyPassword`
+(остался только `decryptEmail` для `getGroupUsers`). Юнит-моки (`vi.mock` на
+`server/db` и `server/utils/crypto`) перехватывают импорты репозитория без
+изменений, так как модуль тот же. `tsc` чист; интеграционный (22) и главный (2940)
+сьюты зелёные; маршруты не тронуты.
+
+Оставшиеся домены (по одному, тем же паттерном): Groups, Access (роли + гранты
+тестов/тем), Topics, Questions, Tests (секции/снапшоты), Attempts, Scorm, Adaptive,
+ScalesVariables. Кросс-доменные оркестраторы (`getAssignedTestsForUser` →
+`getUserGroups`, глубокое `deleteTest`) остаются на фасаде либо получают
+зависимости явно при извлечении соответствующего домена.
+
 ### 6.2. Контракт `IStorage` неполон
 
 Часть публичных методов класса отсутствует в интерфейсе `IStorage`, из-за чего
