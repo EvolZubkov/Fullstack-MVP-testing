@@ -224,3 +224,13 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
     `testQuestionScoring` (deleteTest уносит по FK) и функция `validate`;
     `questionMeasurements` оставлена (нужна `getTestsUsingQuestion`). `tsc` + оба
     сьюта зелёные.
+  - [x] Финальная чистка импортов фасада. После извлечения всех 14 доменов тело
+    `DatabaseStorage` — чистая делегация без собственной query-логики. Из
+    `server/storage.ts` удалены ставшие мёртвыми импорты: `randomUUID` (`crypto`),
+    операторы `drizzle-orm` (`eq`/`inArray`/`and`/`sql`/`desc`), `db` (`./db`), все
+    табличные value-импорты из `@shared/schema` и три неиспользуемых `Insert`-типа
+    (`InsertUserGroup`/`InsertPasswordResetToken`/`InsertAssignmentAccessToken`);
+    schema-импорт сведён к `import type` (только типы сигнатур `IStorage`).
+    Module-doc переписан под делегирующий фасад. Проверка переудаления — `tsc`
+    (падает на «Cannot find name» при удалении используемого символа); `tsc` + оба
+    сьюта зелёные.
