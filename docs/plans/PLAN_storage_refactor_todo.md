@@ -69,9 +69,12 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
 
 ## Приоритет 3 — безопасность
 
-- [ ] 7. Белый список записываемых колонок в `updateUser`, `updateGroup`,
-  `updateAttempt` (убрать приведение к `any` и широкий `Partial<...>`); тест
-  игнорирования запрещённых колонок (раздел 5.1).
+- [x] 7. Белый список записываемых колонок в `updateUser`, `updateGroup`,
+  `updateAttempt` через хелпер `pickDefined` (убран `any`-каст; пустой набор →
+  no-op). Разрешено: user — `name/status/mustChangePassword/gdprConsent(+At)`
+  (email отдельно, `emailHash`/`passwordHash`/аудит недоступны); group —
+  `name/description`; attempt — `variantJson/answersJson/resultJson/finishedAt`.
+  Тест `tests/it/mass-assignment.it.test.ts` (раздел 5.1).
 - [ ] 8. Централизация хеширования пароля: тонкие обёртки `hashPassword(plain)`
   / `verifyPassword(plain, stored)` в `server/utils/crypto.ts` над текущим
   `bcryptjs`, провести через них все точки (`createUser`, `validatePassword`,

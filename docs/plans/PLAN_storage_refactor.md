@@ -244,6 +244,17 @@ CHECK-констрейнты миграций 008/009/022 (в живой БД и
 **Действие:** DAL должен явно перечислять записываемые колонки в каждом методе
 (белый список), а не доверять форме DTO.
 
+**Статус: ВЫПОЛНЕНО.** Введён хелпер `pickDefined(src, keys)` (копирует только
+разрешённые присутствующие ключи; `null` допустим, `undefined` пропускается).
+`updateUser` — whitelist `name/status/mustChangePassword/gdprConsent/gdprConsentAt`
+(email обрабатывается отдельно: шифрование + производный `emailHash`; сам
+`emailHash`/`passwordHash`/`id`/аудит-поля недоступны); `updateGroup` —
+`name/description`; `updateAttempt` — только изменяемые `variantJson/answersJson/
+resultJson/finishedAt` (владельческие/FK-поля и `startedAt` неизменны). Пустой
+набор → no-op (возврат текущей строки). Приведение к `any` убрано. Покрыто
+интеграционным тестом `tests/it/mass-assignment.it.test.ts` (запрещённые колонки
+игнорируются, разрешённые применяются).
+
 ### 5.2. Хеширование пароля рассредоточено и захардкожено
 
 Прямые вызовы примитива рассыпаны по слою: `bcrypt.hash(..., 10)` в `createUser`
