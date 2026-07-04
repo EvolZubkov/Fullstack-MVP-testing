@@ -1,3 +1,14 @@
+/**
+ * @module server/storage
+ * @description Data access layer for the whole application. Exposes the
+ * `IStorage` contract (the authoritative surface of all persistence
+ * operations) and its `DatabaseStorage` implementation over Drizzle ORM +
+ * PostgreSQL. Multi-step mutations run inside `db.transaction` so partial
+ * writes cannot leak; `update*` methods whitelist writable columns to prevent
+ * mass-assignment. Password hashing is delegated to the `server/utils/crypto`
+ * seam (`hashPassword`/`verifyPassword`), keeping the DAL crypto-agnostic.
+ * Routes depend only on `IStorage`, never on the concrete class.
+ */
 import { randomUUID } from "crypto";
 import { eq, inArray, and, sql, desc, isNull } from "drizzle-orm";
 import { db } from "./db";
@@ -172,31 +183,32 @@ export interface IStorage {
   createFolder(folder: InsertFolder): Promise<Folder>;
   updateFolder(id: string, folder: Partial<InsertFolder>): Promise<Folder | undefined>;
   /**
-   * Удаляет папку контента, предварительно переместив её темы и вложенные папки
-   * в указанное место (`moveTo`, по умолчанию `null` = корень) — вариант
-   * «Перенести содержимое» диалога удаления папки (s-folder-delete). Папки не
-   * несут прав, поэтому content-guard не нужен.
+   * Deletes a content folder after relocating its topics and nested folders
+   * to the given destination (`moveTo`, default `null` = root) — the
+   * "Move contents" variant of the folder-delete dialog (s-folder-delete).
+   * Folders carry no permissions, so no content-guard is needed.
    */
   deleteFolder(id: string, moveTo?: string | null): Promise<boolean>;
-  /** Идентификаторы папки и всех её потомков (включая саму), обход в ширину. */
+  /** IDs of the folder and all its descendants (including itself), BFS traversal. */
   getFolderSubtreeIds(id: string): Promise<string[]>;
-  /** Удаляет строки папок по id (судьбу их содержимого решает вызывающий). */
+  /** Deletes folder rows by id (the caller decides the fate of their contents). */
   deleteFoldersBulk(ids: string[]): Promise<number>;
 
   getTestFolders(): Promise<TestFolder[]>;
   createTestFolder(folder: InsertTestFolder): Promise<TestFolder>;
   updateTestFolder(id: string, updates: Partial<InsertTestFolder>): Promise<TestFolder | undefined>;
   /**
-   * Удаляет папку, предварительно переместив все тесты и вложенные папки
-   * в указанное место (`moveTo`, по умолчанию `null` = корень). Это вариант
-   * "Только папку" из эскиза prd7-tests-list.html (s-folder-delete-a).
+   * Deletes a folder after relocating all its tests and nested folders to the
+   * given destination (`moveTo`, default `null` = root). This is the
+   * "Folder only" variant from the prd7-tests-list.html wireframe
+   * (s-folder-delete-a).
    */
   deleteTestFolder(id: string, moveTo?: string | null): Promise<boolean>;
   /**
-   * Удаляет папку вместе со всеми тестами внутри неё (включая транзитивно
-   * через вложенные папки) и сами вложенные папки. Используется для варианта
-   * "Папку и все тесты" (s-folder-delete-b), требующего ввода точного имени
-   * для подтверждения на уровне route handler.
+   * Deletes a folder together with every test inside it (including transitively
+   * through nested folders) and the nested folders themselves. Used for the
+   * "Folder and all tests" variant (s-folder-delete-b), which requires typing
+   * the exact name to confirm at the route-handler level.
    */
   deleteTestFolderCascade(id: string): Promise<boolean>;
   moveTestToFolder(testId: string, folderId: string | null): Promise<boolean>;
@@ -208,7 +220,7 @@ export interface IStorage {
   renameTopicInFormulas(topicId: string, oldName: string, newName: string): Promise<void>;
   deleteTopic(id: string): Promise<boolean>;
   deleteTopicsBulk(ids: string[]): Promise<number>;
-  /** Массово переносит темы в папку (или в корень при `null`). Организационно. */
+  /** Bulk-moves topics into a folder (or to root when `null`). Organizational. */
   moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number>;
 
   // PRD-15 block C: topic ownership + access grants (grantees are users, TD-01).
@@ -312,7 +324,7 @@ export interface IStorage {
   deleteContentPage(id: string): Promise<boolean>;
   reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void>;
 
-  // PRD-2: user-defined result variables (показатели результата).
+  // PRD-2: user-defined result variables (result indicators).
   getResultVariables(testId: string): Promise<ResultVariable[]>;
   createResultVariable(rv: InsertResultVariable): Promise<ResultVariable>;
   updateResultVariable(id: string, updates: Partial<InsertResultVariable>): Promise<ResultVariable | undefined>;
@@ -800,17 +812,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAssignedTestsForUser(userId: string): Promise<Test[]> {
-    // Получаем группы пользователя
+    // Groups the user belongs to
     const userGroupsList = await this.getUserGroups(userId);
     const groupIds = userGroupsList.map(g => g.id);
 
-    // Получаем назначения напрямую пользователю
+    // Assignments made directly to the user
     const directAssignments = await db
       .select({ testId: testAssignments.testId })
       .from(testAssignments)
       .where(eq(testAssignments.userId, userId));
 
-    // Получаем назначения через группы
+    // Assignments made through groups
     let groupAssignments: { testId: string }[] = [];
     if (groupIds.length > 0) {
       groupAssignments = await db
@@ -819,7 +831,7 @@ export class DatabaseStorage implements IStorage {
         .where(inArray(testAssignments.groupId, groupIds));
     }
 
-    // Собираем уникальные testId
+    // Collect unique testIds
     const testIds = [...new Set([
       ...directAssignments.map(a => a.testId),
       ...groupAssignments.map(a => a.testId),
@@ -829,7 +841,7 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
 
-    // Получаем тесты
+    // Load the tests
     return db.select().from(tests).where(inArray(tests.id, testIds));
   }
 
@@ -839,7 +851,7 @@ export class DatabaseStorage implements IStorage {
 
   async createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken> {
     const id = randomUUID();
-    const expiresAt = new Date(Date.now() + (ttlMs ?? 30 * 60 * 1000)); // 30 минут по умолчанию
+    const expiresAt = new Date(Date.now() + (ttlMs ?? 30 * 60 * 1000)); // 30 minutes by default
     const [token] = await db.insert(passwordResetTokens).values({
       id,
       userId,
@@ -1420,11 +1432,6 @@ export class DatabaseStorage implements IStorage {
     });
   }
 
-  async getTopicByName(name: string): Promise<Topic | undefined> {
-    const [topic] = await db.select().from(topics).where(eq(topics.name, name));
-    return topic || undefined;
-  }
-
   async updateQuestion(id: string, updates: Partial<InsertQuestion>): Promise<Question | undefined> {
     const [updated] = await db.update(questions).set(updates).where(eq(questions.id, id)).returning();
     return updated || undefined;
@@ -1757,7 +1764,7 @@ export class DatabaseStorage implements IStorage {
     attemptNumber?: number
   ): Promise<ScormAttempt | undefined> {
     if (attemptNumber !== undefined) {
-      // Ищем конкретную попытку по номеру
+      // Look up a specific attempt by number
       const [attempt] = await db.select().from(scormAttempts)
         .where(and(
           eq(scormAttempts.packageId, packageId),
@@ -1767,7 +1774,7 @@ export class DatabaseStorage implements IStorage {
       return attempt || undefined;
     }
     
-    // Если attemptNumber не указан - вернуть последнюю попытку
+    // No attemptNumber given — return the latest attempt
     const [attempt] = await db.select().from(scormAttempts)
       .where(and(
         eq(scormAttempts.packageId, packageId),
