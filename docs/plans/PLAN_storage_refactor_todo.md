@@ -172,4 +172,13 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
     subquery, атомарно). Изолирован — внешних вызовов нет. Adaptive-таблицы
     оставлены в импорте фасада: их напрямую чистит `deleteTest` (та же таблица в
     одной транзакции; при извлечении Tests уедет туда). `tsc` + оба сьюта зелёные.
-  - [ ] 12.10. ScalesVariables (шкалы, показатели, скоринг).
+  - [x] 12.10. ScalesVariables — `server/storage/scales-variables-repository.ts`
+    (`ScalesVariablesRepository`, 19 методов: показатели PRD-2 `result_variables`,
+    шкалы+измерения PRD-5 `scales`/`question_measurements`, скоринг PRD-15 D
+    `test_question_scoring`, `validateResultVariableFormula`,
+    `getMeasurementsForQuestions`). `validate`-метод укоренён в показателе, читает
+    соседние `test_sections`/`topics`/`scales`; внутренний `getResultVariables`
+    остался в репозитории. Из фасада убраны таблицы `resultVariables`/`scales`/
+    `testQuestionScoring` (deleteTest уносит по FK) и функция `validate`;
+    `questionMeasurements` оставлена (нужна `getTestsUsingQuestion`). `tsc` + оба
+    сьюта зелёные.
