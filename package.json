@@ -13,6 +13,7 @@
     "reencrypt-emails": "tsx script/reencrypt-emails.ts",
     "changelog": "gen-changelog",
     "test": "vitest run",
+    "test:it": "vitest run --config vitest.it.config.ts",
     "lint:md": "npx --no-install markdownlint-cli2 \"docs/**/*.md\" \"client/src/**/*.md\" \"docker/*.md\" \"*.md\" \"!CHANGELOG.md\" \"!**/node_modules/**\"",
     "lint:md:fix": "npx --no-install markdownlint-cli2 --fix \"docs/**/*.md\" \"client/src/**/*.md\" \"docker/*.md\" \"*.md\" \"!CHANGELOG.md\" \"!**/node_modules/**\"",
     "check:wireframes:ds": "node scripts/check-wireframes-ds.mjs",

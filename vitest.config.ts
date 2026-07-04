@@ -14,7 +14,10 @@ export default defineConfig({
       "shared/**/*.{test,spec}.{js,ts}",
       "tests/**/*.{test,spec}.{js,ts}",
     ],
-    exclude: ["node_modules", "dist"],
+    // Integration tests (tests/it/*.it.test.ts) spin up an in-process pglite per
+    // file; run them separately via `npm run test:it` (vitest.it.config.ts) so
+    // several WASM Postgres instances do not contend under the parallel unit run.
+    exclude: ["node_modules", "dist", "tests/it/**"],
     coverage: {
       provider: "v8",
       enabled: true,
