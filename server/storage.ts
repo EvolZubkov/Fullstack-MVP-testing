@@ -12,13 +12,13 @@
 import { randomUUID } from "crypto";
 import { eq, inArray, and, sql, desc, isNull } from "drizzle-orm";
 import { db } from "./db";
-import { decryptEmail } from "./utils/crypto";
 import { pickDefined } from "./storage/shared";
 import { UsersRepository } from "./storage/users-repository";
+import { GroupsRepository } from "./storage/groups-repository";
 import {
-  users, topics, questions, tests, testSections, attempts, folders, testFolders,
+  topics, questions, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
-  groups, userGroups, testAssignments, passwordResetTokens, assignmentAccessTokens,
+  testAssignments, passwordResetTokens, assignmentAccessTokens,
   contentPages, resultVariables, scales, questionMeasurements, testQuestionScoring,
   userRoles, testAccessGrants, testSnapshots, topicAccessGrants,
   type User, type InsertUser,
@@ -354,6 +354,7 @@ export class DatabaseStorage implements IStorage {
   // Domain repositories behind the facade. The split is incremental: methods of
   // an extracted domain delegate here, the rest remain inline until migrated.
   private readonly usersRepo = new UsersRepository();
+  private readonly groupsRepo = new GroupsRepository();
 
   // ============================================
   // Users (delegated to UsersRepository)
@@ -400,103 +401,47 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ============================================
-  // Groups
+  // Groups + membership (delegated to GroupsRepository)
   // ============================================
 
-  async getGroups(): Promise<Group[]> {
-    return db.select().from(groups).orderBy(desc(groups.createdAt));
+  getGroups(): Promise<Group[]> {
+    return this.groupsRepo.getGroups();
   }
 
-  async getGroup(id: string): Promise<Group | undefined> {
-    const [group] = await db.select().from(groups).where(eq(groups.id, id));
-    return group || undefined;
+  getGroup(id: string): Promise<Group | undefined> {
+    return this.groupsRepo.getGroup(id);
   }
 
-  async createGroup(group: InsertGroup & { createdBy?: string }): Promise<Group> {
-    const id = randomUUID();
-    const [created] = await db.insert(groups).values({
-      id,
-      name: group.name,
-      description: group.description || null,
-      createdAt: new Date(),
-      createdBy: group.createdBy || null,
-    }).returning();
-    return created;
+  createGroup(group: InsertGroup & { createdBy?: string }): Promise<Group> {
+    return this.groupsRepo.createGroup(group);
   }
 
-  async updateGroup(id: string, data: Partial<Group>): Promise<Group | undefined> {
-    // Whitelist: id/createdAt/createdBy are not writable through updateGroup.
-    const set = pickDefined(data, ["name", "description"] as const);
-    if (Object.keys(set).length === 0) return this.getGroup(id);
-    const [updated] = await db.update(groups).set(set).where(eq(groups.id, id)).returning();
-    return updated || undefined;
+  updateGroup(id: string, data: Partial<Group>): Promise<Group | undefined> {
+    return this.groupsRepo.updateGroup(id, data);
   }
 
-  async deleteGroup(id: string): Promise<boolean> {
-    // Drop the user memberships and the group itself as one unit. Uses
-    // returning().length (the dominant idiom here) rather than rowCount so the
-    // result is portable across drivers.
-    return db.transaction(async (tx) => {
-      await tx.delete(userGroups).where(eq(userGroups.groupId, id));
-      const result = await tx.delete(groups).where(eq(groups.id, id)).returning();
-      return result.length > 0;
-    });
+  deleteGroup(id: string): Promise<boolean> {
+    return this.groupsRepo.deleteGroup(id);
   }
 
-  // ============================================
-  // User-Group relations
-  // ============================================
-
-  async getUserGroups(userId: string): Promise<Group[]> {
-    const result = await db
-      .select({ group: groups })
-      .from(userGroups)
-      .innerJoin(groups, eq(userGroups.groupId, groups.id))
-      .where(eq(userGroups.userId, userId));
-    return result.map(r => r.group);
+  getUserGroups(userId: string): Promise<Group[]> {
+    return this.groupsRepo.getUserGroups(userId);
   }
 
-  async getGroupUsers(groupId: string): Promise<User[]> {
-    const result = await db
-      .select({ user: users })
-      .from(userGroups)
-      .innerJoin(users, eq(userGroups.userId, users.id))
-      .where(eq(userGroups.groupId, groupId));
-    return Promise.all(result.map(async r => ({ ...r.user, email: await decryptEmail(r.user.email) })));
+  getGroupUsers(groupId: string): Promise<User[]> {
+    return this.groupsRepo.getGroupUsers(groupId);
   }
 
-  async addUserToGroup(userId: string, groupId: string): Promise<UserGroup> {
-    const id = randomUUID();
-    const [created] = await db.insert(userGroups).values({
-      id,
-      userId,
-      groupId,
-      addedAt: new Date(),
-    }).returning();
-    return created;
+  addUserToGroup(userId: string, groupId: string): Promise<UserGroup> {
+    return this.groupsRepo.addUserToGroup(userId, groupId);
   }
 
-  async removeUserFromGroup(userId: string, groupId: string): Promise<boolean> {
-    const result = await db.delete(userGroups)
-      .where(and(eq(userGroups.userId, userId), eq(userGroups.groupId, groupId)));
-    return (result.rowCount ?? 0) > 0;
+  removeUserFromGroup(userId: string, groupId: string): Promise<boolean> {
+    return this.groupsRepo.removeUserFromGroup(userId, groupId);
   }
 
-  async setUserGroups(userId: string, groupIds: string[]): Promise<void> {
-    // Replace the whole membership set atomically — a failed insert must not
-    // leave the user with zero groups.
-    await db.transaction(async (tx) => {
-      await tx.delete(userGroups).where(eq(userGroups.userId, userId));
-      if (groupIds.length > 0) {
-        const values = groupIds.map((groupId) => ({
-          id: randomUUID(),
-          userId,
-          groupId,
-          addedAt: new Date(),
-        }));
-        await tx.insert(userGroups).values(values);
-      }
-    });
+  setUserGroups(userId: string, groupIds: string[]): Promise<void> {
+    return this.groupsRepo.setUserGroups(userId, groupIds);
   }
 
   // ============================================
@@ -709,7 +654,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(testAssignments.testId, testId), eq(testAssignments.userId, userId)))
       .limit(1);
     if (direct) return true;
-    const groupIds = (await this.getUserGroups(userId)).map((g) => g.id);
+    const groupIds = (await this.groupsRepo.getUserGroups(userId)).map((g) => g.id);
     if (groupIds.length === 0) return false;
     const [viaGroup] = await db
       .select({ id: testAssignments.id })
@@ -740,7 +685,7 @@ export class DatabaseStorage implements IStorage {
 
   async getAssignedTestsForUser(userId: string): Promise<Test[]> {
     // Groups the user belongs to
-    const userGroupsList = await this.getUserGroups(userId);
+    const userGroupsList = await this.groupsRepo.getUserGroups(userId);
     const groupIds = userGroupsList.map(g => g.id);
 
     // Assignments made directly to the user
