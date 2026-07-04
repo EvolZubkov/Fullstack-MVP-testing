@@ -60,9 +60,12 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
   копируются с `contentHash`/`difficulty`/`createdBy`. Topic + вопросы копируются
   атомарно (одна транзакция, см. пункт 3). Маршрут передаёт `req.currentUser?.id`.
   Тест `tests/it/duplicate-topic.it.test.ts`. Раздел 3.3.
-- [ ] 6. Свести вставку секций к единому `writeSections(tx, testId, sections)`
-  (`formSetJson` + `sortOrder`); удалить неиспользуемую ветку `updateTest(sections)`;
-  тест round-trip секций на `pglite` (раздел 3.4).
+- [x] 6. Единый источник записи секций (раздел 3.4). Аудит: единственный живой
+  писатель — `TestSettingsService._insertSections` (с `formSetJson`+`sortOrder`);
+  обе storage-копии мёртвые. Консолидация удалением: убран мёртвый
+  `storage.createTest` (метод + декларация `IStorage` + импорт + мок-заглушки) и
+  параметр/ветка `sections` из `updateTest`. Round-trip на живом пути
+  `tests/it/section-roundtrip.it.test.ts` (`formSetJson`+`sortOrder` сохраняются).
 
 ## Приоритет 3 — безопасность
 
