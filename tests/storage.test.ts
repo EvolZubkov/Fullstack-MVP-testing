@@ -5,12 +5,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── Hoist mocks so they're available before imports ─────────────────────────
 const { dbMock } = vi.hoisted(() => {
-  const dbMock = {
+  const dbMock: any = {
     select: vi.fn(),
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
   };
+  // Multi-step methods run inside db.transaction; pass the mock itself as the tx
+  // so tx.delete/insert/update reuse the same chain stubs (individual tests may
+  // still override transaction with a bespoke tx).
+  dbMock.transaction = async (cb: (tx: unknown) => unknown) => cb(dbMock);
   return { dbMock };
 });
 

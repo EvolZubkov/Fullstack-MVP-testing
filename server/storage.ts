@@ -446,11 +446,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteGroup(id: string): Promise<boolean> {
-    // Сначала удаляем связи с пользователями
-    await db.delete(userGroups).where(eq(userGroups.groupId, id));
-    // Затем удаляем саму группу
-    const result = await db.delete(groups).where(eq(groups.id, id));
-    return (result.rowCount ?? 0) > 0;
+    // Drop the user memberships and the group itself as one unit. Uses
+    // returning().length (the dominant idiom here) rather than rowCount so the
+    // result is portable across drivers.
+    return db.transaction(async (tx) => {
+      await tx.delete(userGroups).where(eq(userGroups.groupId, id));
+      const result = await tx.delete(groups).where(eq(groups.id, id)).returning();
+      return result.length > 0;
+    });
   }
 
   // ============================================
@@ -493,19 +496,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setUserGroups(userId: string, groupIds: string[]): Promise<void> {
-    // Удаляем все текущие связи
-    await db.delete(userGroups).where(eq(userGroups.userId, userId));
-    
-    // Добавляем новые
-    if (groupIds.length > 0) {
-      const values = groupIds.map(groupId => ({
-        id: randomUUID(),
-        userId,
-        groupId,
-        addedAt: new Date(),
-      }));
-      await db.insert(userGroups).values(values);
-    }
+    // Replace the whole membership set atomically — a failed insert must not
+    // leave the user with zero groups.
+    await db.transaction(async (tx) => {
+      await tx.delete(userGroups).where(eq(userGroups.userId, userId));
+      if (groupIds.length > 0) {
+        const values = groupIds.map((groupId) => ({
+          id: randomUUID(),
+          userId,
+          groupId,
+          addedAt: new Date(),
+        }));
+        await tx.insert(userGroups).values(values);
+      }
+    });
   }
 
   // ============================================
@@ -518,18 +522,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setUserRoles(userId: string, roles: StoredRole[], grantedBy: string | null = null): Promise<void> {
-    // Replace the whole role set (mirrors setUserGroups).
-    await db.delete(userRoles).where(eq(userRoles.userId, userId));
-    const unique = Array.from(new Set(roles));
-    if (unique.length > 0) {
-      await db.insert(userRoles).values(unique.map((role) => ({
-        id: randomUUID(),
-        userId,
-        role,
-        grantedBy,
-        grantedAt: new Date(),
-      })));
-    }
+    // Replace the whole role set atomically (mirrors setUserGroups).
+    await db.transaction(async (tx) => {
+      await tx.delete(userRoles).where(eq(userRoles.userId, userId));
+      const unique = Array.from(new Set(roles));
+      if (unique.length > 0) {
+        await tx.insert(userRoles).values(unique.map((role) => ({
+          id: randomUUID(),
+          userId,
+          role,
+          grantedBy,
+          grantedAt: new Date(),
+        })));
+      }
+    });
   }
 
   async addUserRole(userId: string, role: StoredRole, grantedBy: string | null = null): Promise<void> {
@@ -898,12 +904,14 @@ export class DatabaseStorage implements IStorage {
 
   async deleteFolder(id: string, moveTo: string | null = null): Promise<boolean> {
     // "Folder only" mode: reparent the folder's topics and direct sub-folders to
-    // the chosen destination (`moveTo`, default null = root), then drop the row.
-    // Purely organizational — folders carry no ownership, so no content guard.
-    await db.update(topics).set({ folderId: moveTo }).where(eq(topics.folderId, id));
-    await db.update(folders).set({ parentId: moveTo }).where(eq(folders.parentId, id));
-    const result = await db.delete(folders).where(eq(folders.id, id)).returning();
-    return result.length > 0;
+    // the chosen destination (`moveTo`, default null = root), then drop the row —
+    // as one unit. Purely organizational — folders carry no ownership.
+    return db.transaction(async (tx) => {
+      await tx.update(topics).set({ folderId: moveTo }).where(eq(topics.folderId, id));
+      await tx.update(folders).set({ parentId: moveTo }).where(eq(folders.parentId, id));
+      const result = await tx.delete(folders).where(eq(folders.id, id)).returning();
+      return result.length > 0;
+    });
   }
 
   async getFolderSubtreeIds(id: string): Promise<string[]> {
@@ -951,12 +959,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTestFolder(id: string, moveTo: string | null = null): Promise<boolean> {
-    // Move direct tests to the requested destination (root by default).
-    await db.update(tests).set({ folderId: moveTo }).where(eq(tests.folderId, id));
-    // Reparent child folders to the requested destination.
-    await db.update(testFolders).set({ parentId: moveTo }).where(eq(testFolders.parentId, id));
-    const result = await db.delete(testFolders).where(eq(testFolders.id, id)).returning();
-    return result.length > 0;
+    // Move direct tests + reparent child folders to the destination, then drop
+    // the row — as one unit (root by default).
+    return db.transaction(async (tx) => {
+      await tx.update(tests).set({ folderId: moveTo }).where(eq(tests.folderId, id));
+      await tx.update(testFolders).set({ parentId: moveTo }).where(eq(testFolders.parentId, id));
+      const result = await tx.delete(testFolders).where(eq(testFolders.id, id)).returning();
+      return result.length > 0;
+    });
   }
 
   /**
@@ -983,12 +993,14 @@ export class DatabaseStorage implements IStorage {
       queue.push(...children);
     }
 
-    // Delete every test in any of those folders. Adaptive children rows are
-    // assumed cleaned up by the route handler before this call.
+    // Delete every test in any of those folders, then the folders — as one unit.
+    // Adaptive children rows are assumed cleaned up by the route handler first.
     if (descendantIds.length > 0) {
-      await db.delete(tests).where(inArray(tests.folderId, descendantIds));
-      const result = await db.delete(testFolders).where(inArray(testFolders.id, descendantIds)).returning();
-      return result.length > 0;
+      return db.transaction(async (tx) => {
+        await tx.delete(tests).where(inArray(tests.folderId, descendantIds));
+        const result = await tx.delete(testFolders).where(inArray(testFolders.id, descendantIds)).returning();
+        return result.length > 0;
+      });
     }
     return false;
   }
@@ -1152,21 +1164,25 @@ export class DatabaseStorage implements IStorage {
     // row). Deletion while published tests depend on it is gated upstream by the
     // draw-feasibility check (FR-05), so reaching this point means the caller
     // accepted the consequences.
-    await db.delete(questions).where(eq(questions.topicId, id));
-    await db.delete(testSections).where(eq(testSections.topicId, id));
-    await db.delete(contentPages).where(eq(contentPages.topicId, id));
-    const result = await db.delete(topics).where(eq(topics.id, id)).returning();
-    return result.length > 0;
+    return db.transaction(async (tx) => {
+      await tx.delete(questions).where(eq(questions.topicId, id));
+      await tx.delete(testSections).where(eq(testSections.topicId, id));
+      await tx.delete(contentPages).where(eq(contentPages.topicId, id));
+      const result = await tx.delete(topics).where(eq(topics.id, id)).returning();
+      return result.length > 0;
+    });
   }
 
   async deleteTopicsBulk(ids: string[]): Promise<number> {
     if (ids.length === 0) return 0;
-    // Same full cascade as deleteTopic (PRD-15 FR-07).
-    await db.delete(questions).where(inArray(questions.topicId, ids));
-    await db.delete(testSections).where(inArray(testSections.topicId, ids));
-    await db.delete(contentPages).where(inArray(contentPages.topicId, ids));
-    const result = await db.delete(topics).where(inArray(topics.id, ids)).returning();
-    return result.length;
+    // Same full cascade as deleteTopic (PRD-15 FR-07) — as one unit.
+    return db.transaction(async (tx) => {
+      await tx.delete(questions).where(inArray(questions.topicId, ids));
+      await tx.delete(testSections).where(inArray(testSections.topicId, ids));
+      await tx.delete(contentPages).where(inArray(contentPages.topicId, ids));
+      const result = await tx.delete(topics).where(inArray(topics.id, ids)).returning();
+      return result.length;
+    });
   }
 
   async moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number> {

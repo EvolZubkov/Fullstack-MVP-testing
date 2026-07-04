@@ -12,6 +12,11 @@
  *
  * Regenerate the schema after any change to `shared/schema.ts`:
  *   npx drizzle-kit export --sql | grep -v '^DATABASE_URL:' > tests/it/schema.sql
+ *
+ * Fidelity caveat: pglite does NOT populate `result.rowCount` for a DELETE/UPDATE
+ * without RETURNING (node-postgres does). Assert on observable side effects, or
+ * test DAL methods that use `.returning().length`; a few storage methods still
+ * read `.rowCount` and will read 0 here.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
