@@ -19,6 +19,7 @@ import { AccessRepository } from "./storage/access-repository";
 import { TopicsRepository } from "./storage/topics-repository";
 import { QuestionsRepository } from "./storage/questions-repository";
 import { ScormRepository } from "./storage/scorm-repository";
+import { AdaptiveRepository } from "./storage/adaptive-repository";
 import {
   topics, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks,
@@ -361,6 +362,7 @@ export class DatabaseStorage implements IStorage {
   private readonly topicsRepo = new TopicsRepository();
   private readonly questionsRepo = new QuestionsRepository();
   private readonly scormRepo = new ScormRepository();
+  private readonly adaptiveRepo = new AdaptiveRepository();
 
   // ============================================
   // Users (delegated to UsersRepository)
@@ -1238,86 +1240,64 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(attempts);
   }
 
-  // === Adaptive Testing Methods ===
+  // ============================================
+  // Adaptive delivery (delegated to AdaptiveRepository)
+  // ============================================
 
-  async getAdaptiveTopicSettings(testId: string, topicId: string): Promise<AdaptiveTopicSettings | undefined> {
-    const [settings] = await db.select().from(adaptiveTopicSettings)
-      .where(and(eq(adaptiveTopicSettings.testId, testId), eq(adaptiveTopicSettings.topicId, topicId)));
-    return settings || undefined;
+  getAdaptiveTopicSettings(testId: string, topicId: string): Promise<AdaptiveTopicSettings | undefined> {
+    return this.adaptiveRepo.getAdaptiveTopicSettings(testId, topicId);
   }
 
-  async getAdaptiveTopicSettingsByTest(testId: string): Promise<AdaptiveTopicSettings[]> {
-    return db.select().from(adaptiveTopicSettings).where(eq(adaptiveTopicSettings.testId, testId));
+  getAdaptiveTopicSettingsByTest(testId: string): Promise<AdaptiveTopicSettings[]> {
+    return this.adaptiveRepo.getAdaptiveTopicSettingsByTest(testId);
   }
 
-  async createAdaptiveTopicSettings(settings: InsertAdaptiveTopicSettings): Promise<AdaptiveTopicSettings> {
-    const id = randomUUID();
-    const [newSettings] = await db.insert(adaptiveTopicSettings).values({ id, ...settings }).returning();
-    return newSettings;
+  createAdaptiveTopicSettings(settings: InsertAdaptiveTopicSettings): Promise<AdaptiveTopicSettings> {
+    return this.adaptiveRepo.createAdaptiveTopicSettings(settings);
   }
 
-  async updateAdaptiveTopicSettings(id: string, settings: Partial<InsertAdaptiveTopicSettings>): Promise<AdaptiveTopicSettings | undefined> {
-    const [updated] = await db.update(adaptiveTopicSettings).set(settings).where(eq(adaptiveTopicSettings.id, id)).returning();
-    return updated || undefined;
+  updateAdaptiveTopicSettings(id: string, settings: Partial<InsertAdaptiveTopicSettings>): Promise<AdaptiveTopicSettings | undefined> {
+    return this.adaptiveRepo.updateAdaptiveTopicSettings(id, settings);
   }
 
-  async deleteAdaptiveTopicSettingsByTest(testId: string): Promise<void> {
-    await db.delete(adaptiveTopicSettings).where(eq(adaptiveTopicSettings.testId, testId));
+  deleteAdaptiveTopicSettingsByTest(testId: string): Promise<void> {
+    return this.adaptiveRepo.deleteAdaptiveTopicSettingsByTest(testId);
   }
 
-  async getAdaptiveLevels(testId: string, topicId: string): Promise<AdaptiveLevel[]> {
-    return db.select().from(adaptiveLevels)
-      .where(and(eq(adaptiveLevels.testId, testId), eq(adaptiveLevels.topicId, topicId)))
-      .orderBy(adaptiveLevels.levelIndex);
+  getAdaptiveLevels(testId: string, topicId: string): Promise<AdaptiveLevel[]> {
+    return this.adaptiveRepo.getAdaptiveLevels(testId, topicId);
   }
 
-  async getAdaptiveLevelsByTest(testId: string): Promise<AdaptiveLevel[]> {
-    return db.select().from(adaptiveLevels)
-      .where(eq(adaptiveLevels.testId, testId))
-      .orderBy(adaptiveLevels.levelIndex);
+  getAdaptiveLevelsByTest(testId: string): Promise<AdaptiveLevel[]> {
+    return this.adaptiveRepo.getAdaptiveLevelsByTest(testId);
   }
 
-  async createAdaptiveLevel(level: InsertAdaptiveLevel): Promise<AdaptiveLevel> {
-    const id = randomUUID();
-    const [newLevel] = await db.insert(adaptiveLevels).values({ id, ...level }).returning();
-    return newLevel;
+  createAdaptiveLevel(level: InsertAdaptiveLevel): Promise<AdaptiveLevel> {
+    return this.adaptiveRepo.createAdaptiveLevel(level);
   }
 
-  async updateAdaptiveLevel(id: string, level: Partial<InsertAdaptiveLevel>): Promise<AdaptiveLevel | undefined> {
-    const [updated] = await db.update(adaptiveLevels).set(level).where(eq(adaptiveLevels.id, id)).returning();
-    return updated || undefined;
+  updateAdaptiveLevel(id: string, level: Partial<InsertAdaptiveLevel>): Promise<AdaptiveLevel | undefined> {
+    return this.adaptiveRepo.updateAdaptiveLevel(id, level);
   }
 
-  async deleteAdaptiveLevelsByTest(testId: string): Promise<void> {
-    // Delete the levels' links (single subquery, no per-level loop) then the
-    // levels themselves — atomically.
-    await db.transaction(async (tx) => {
-      await tx.delete(adaptiveLevelLinks).where(
-        sql`${adaptiveLevelLinks.levelId} IN (SELECT ${adaptiveLevels.id} FROM ${adaptiveLevels} WHERE ${adaptiveLevels.testId} = ${testId})`,
-      );
-      await tx.delete(adaptiveLevels).where(eq(adaptiveLevels.testId, testId));
-    });
+  deleteAdaptiveLevelsByTest(testId: string): Promise<void> {
+    return this.adaptiveRepo.deleteAdaptiveLevelsByTest(testId);
   }
 
-  async getAdaptiveLevelLinks(levelId: string): Promise<AdaptiveLevelLink[]> {
-    return db.select().from(adaptiveLevelLinks).where(eq(adaptiveLevelLinks.levelId, levelId));
+  getAdaptiveLevelLinks(levelId: string): Promise<AdaptiveLevelLink[]> {
+    return this.adaptiveRepo.getAdaptiveLevelLinks(levelId);
   }
 
-  async createAdaptiveLevelLink(link: InsertAdaptiveLevelLink): Promise<AdaptiveLevelLink> {
-    const id = randomUUID();
-    const [newLink] = await db.insert(adaptiveLevelLinks).values({ id, ...link }).returning();
-    return newLink;
+  createAdaptiveLevelLink(link: InsertAdaptiveLevelLink): Promise<AdaptiveLevelLink> {
+    return this.adaptiveRepo.createAdaptiveLevelLink(link);
   }
 
-  async deleteAdaptiveLevelLinksByLevel(levelId: string): Promise<void> {
-    await db.delete(adaptiveLevelLinks).where(eq(adaptiveLevelLinks.levelId, levelId));
+  deleteAdaptiveLevelLinksByLevel(levelId: string): Promise<void> {
+    return this.adaptiveRepo.deleteAdaptiveLevelLinksByLevel(levelId);
   }
 
-  async deleteAdaptiveLevelLinksByTest(testId: string): Promise<void> {
-    // Single subquery delete over the test's levels — no per-level loop.
-    await db.delete(adaptiveLevelLinks).where(
-      sql`${adaptiveLevelLinks.levelId} IN (SELECT ${adaptiveLevels.id} FROM ${adaptiveLevels} WHERE ${adaptiveLevels.testId} = ${testId})`,
-    );
+  deleteAdaptiveLevelLinksByTest(testId: string): Promise<void> {
+    return this.adaptiveRepo.deleteAdaptiveLevelLinksByTest(testId);
   }
 
   // ============================================
