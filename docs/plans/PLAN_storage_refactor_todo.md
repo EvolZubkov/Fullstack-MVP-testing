@@ -152,7 +152,21 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
     доменов. Внешний `getQuestion` (`getTestsUsingQuestion`) перенаправлен на
     `this.questionsRepo`; таблица `questions` убрана из импорта фасада. `tsc` +
     оба сьюта зелёные.
-  - [ ] 12.6. Tests (тесты, секции, снапшоты).
+  - [x] 12.6. Tests — `server/storage/tests-repository.ts` (`TestsRepository`):
+    жизненный цикл `tests` (чтение с legacy-нормализацией, версионный `updateTest`,
+    `patchTestStatus`, глубокий `deleteTest`), чтение секций, публикационные
+    снапшоты, референс-запросы `getTestsUsingTopic`/`getTestsUsingQuestion`/
+    `getTestSectionsByTopic`/`getTopicPageRefs`, `getMigrationHealth`. Каскад
+    `deleteTest` (adaptive/sections/assignments/grants/attempts/snapshots) уехал
+    сюда по правилу корневого агрегата. `mapLegacyTest` и тип `TestUsageRef`
+    перенесены в репозиторий; фасад реэкспортирует `TestUsageRef` (потребитель —
+    `draw-feasibility`). В `getTestsUsingQuestion` вызов `questionsRepo.getQuestion`
+    заменён прямым чтением `questions`. `tsc` + оба сьюта зелёные.
+  - Остаток фасада (вне исходных 10 доменов, полный сплит по согласованию):
+    - [ ] 12.11. ContentPages (`content_pages` CRUD).
+    - [ ] 12.12. Assignments (назначения + токены доступа к назначениям).
+    - [ ] 12.13. Folders (папки контента + папки тестов).
+    - [ ] 12.14. PasswordResetTokens — в `UsersRepository` (токены пользователя).
   - [x] 12.7. Attempts — `server/storage/attempts-repository.ts`
     (`AttemptsRepository`, 8 методов на таблице `attempts`: create/lookup/
     whitelist-update/deletes; `annulInProgressAttempts` PRD-15 FR-14). Внутренний
