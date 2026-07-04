@@ -153,7 +153,13 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
     `this.questionsRepo`; таблица `questions` убрана из импорта фасада. `tsc` +
     оба сьюта зелёные.
   - [ ] 12.6. Tests (тесты, секции, снапшоты).
-  - [ ] 12.7. Attempts (попытки).
+  - [x] 12.7. Attempts — `server/storage/attempts-repository.ts`
+    (`AttemptsRepository`, 8 методов на таблице `attempts`: create/lookup/
+    whitelist-update/deletes; `annulInProgressAttempts` PRD-15 FR-14). Внутренний
+    `getAttempt` (в `updateAttempt`) остался в репозитории. Таблица `attempts`
+    оставлена на фасаде — её читает `getReferencedSnapshotIds` и чистит
+    `deleteTest`. `pickDefined` (последний потребитель — `updateAttempt`) и `isNull`
+    убраны из импортов фасада. `tsc` + оба сьюта зелёные.
   - [x] 12.8. Scorm — `server/storage/scorm-repository.ts` (`ScormRepository`,
     14 методов: пакеты/попытки/ответы SCORM-телеметрии). Полностью изолирован —
     ни внешних вызовов, ни использования `scorm*`-таблиц вне домена (`deleteTest`
