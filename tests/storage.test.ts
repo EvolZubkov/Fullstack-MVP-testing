@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── Hoist mocks so they're available before imports ─────────────────────────
-const { dbMock } = vi.hoisted(() => {
+const { dbMock, dummyVerifySpy } = vi.hoisted(() => {
   const dbMock: any = {
     select: vi.fn(),
     insert: vi.fn(),
@@ -15,7 +15,7 @@ const { dbMock } = vi.hoisted(() => {
   // so tx.delete/insert/update reuse the same chain stubs (individual tests may
   // still override transaction with a bespoke tx).
   dbMock.transaction = vi.fn(async (cb: (tx: unknown) => unknown) => cb(dbMock));
-  return { dbMock };
+  return { dbMock, dummyVerifySpy: vi.fn(async () => {}) };
 });
 
 vi.mock("../server/db", () => ({ db: dbMock }));
@@ -29,6 +29,7 @@ vi.mock("../server/utils/crypto", () => ({
   hashPassword: async (_pwd: string) => "hashed_password",
   verifyPassword: async (plain: string, stored: string) =>
     stored === "hashed_password" && plain === "correct",
+  dummyVerifyPassword: dummyVerifySpy,
 }));
 
 // Chainable mock — supports both await chain (thenable) and await chain.returning()
@@ -242,6 +243,8 @@ describe("DatabaseStorage — users", () => {
     setupSelectReturning([]);
     const user = await storage.validatePassword("nobody@test.com", "any");
     expect(user).toBeNull();
+    // A dummy verify still runs, so response time does not leak account existence.
+    expect(dummyVerifySpy).toHaveBeenCalled();
   });
 
   it("getUsers — decrypts all emails", async () => {

@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { eq, inArray, and, sql, desc, isNull } from "drizzle-orm";
 import { db } from "./db";
-import { encryptEmail, decryptEmail, hashEmail, hashPassword, verifyPassword } from "./utils/crypto";
+import { encryptEmail, decryptEmail, hashEmail, hashPassword, verifyPassword, dummyVerifyPassword } from "./utils/crypto";
 import {
   users, topics, questions, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
@@ -372,7 +372,12 @@ export class DatabaseStorage implements IStorage {
 
   async validatePassword(email: string, password: string): Promise<User | null> {
     const user = await this.getUserByEmail(email);
-    if (!user) return null;
+    if (!user) {
+      // Equalize timing with the found-user path so response time does not leak
+      // whether the account exists (anti-enumeration).
+      await dummyVerifyPassword(password);
+      return null;
+    }
     const valid = await verifyPassword(password, user.passwordHash);
     return valid ? user : null;
   }

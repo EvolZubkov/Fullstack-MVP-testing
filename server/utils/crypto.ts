@@ -111,3 +111,19 @@ export async function hashPassword(plain: string): Promise<string> {
 export async function verifyPassword(plain: string, stored: string): Promise<boolean> {
   return bcrypt.compare(plain, stored);
 }
+
+// A fixed hash (same cost as a real one) to compare against when the account
+// does not exist, so a failed login costs the same time whether or not the email
+// is registered. Computed once, lazily.
+let dummyHash: string | undefined;
+
+/**
+ * Spend the same time as a real password verification without an account —
+ * call it when the user is not found so response time does not leak whether the
+ * email exists (defeats timing-based user enumeration). Always resolves.
+ * @param plain - The submitted password (compared against a throwaway hash)
+ */
+export async function dummyVerifyPassword(plain: string): Promise<void> {
+  if (!dummyHash) dummyHash = await bcrypt.hash("dummy-password", PASSWORD_HASH_ROUNDS);
+  await bcrypt.compare(plain, dummyHash);
+}
