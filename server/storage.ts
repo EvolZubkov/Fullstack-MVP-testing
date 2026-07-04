@@ -1,8 +1,7 @@
 import { randomUUID } from "crypto";
-import bcrypt from "bcryptjs";
 import { eq, inArray, and, sql, desc, isNull } from "drizzle-orm";
 import { db } from "./db";
-import { encryptEmail, decryptEmail, hashEmail } from "./utils/crypto";
+import { encryptEmail, decryptEmail, hashEmail, hashPassword, verifyPassword } from "./utils/crypto";
 import {
   users, topics, questions, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
@@ -351,7 +350,7 @@ export class DatabaseStorage implements IStorage {
 
   async createUser(insertUser: InsertUser & { createdBy?: string }): Promise<User> {
     const id = randomUUID();
-    const hashedPassword = await bcrypt.hash(insertUser.passwordHash, 10);
+    const hashedPassword = await hashPassword(insertUser.passwordHash);
     const emailEncrypted = await encryptEmail(insertUser.email);
     const emailHashValue = hashEmail(insertUser.email);
 
@@ -374,7 +373,7 @@ export class DatabaseStorage implements IStorage {
   async validatePassword(email: string, password: string): Promise<User | null> {
     const user = await this.getUserByEmail(email);
     if (!user) return null;
-    const valid = await bcrypt.compare(password, user.passwordHash);
+    const valid = await verifyPassword(password, user.passwordHash);
     return valid ? user : null;
   }
 
@@ -412,7 +411,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserPassword(id: string, newPasswordHash: string): Promise<void> {
-    const hashed = await bcrypt.hash(newPasswordHash, 10);
+    const hashed = await hashPassword(newPasswordHash);
     await db.update(users).set({ 
       passwordHash: hashed,
       mustChangePassword: false,
@@ -2059,8 +2058,8 @@ export async function seedDatabase() {
   const existingUsers = await db.select().from(users);
   if (existingUsers.length > 0) return;
 
-  const adminPassword = await bcrypt.hash("admin123", 10);
-  const learnerPassword = await bcrypt.hash("learner123", 10);
+  const adminPassword = await hashPassword("admin123");
+  const learnerPassword = await hashPassword("learner123");
   const adminEmail = "admin@test.com";
   const learnerEmail = "learner@test.com";
 

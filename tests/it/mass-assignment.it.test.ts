@@ -22,6 +22,8 @@ vi.mock("../../server/utils/crypto", () => ({
   encryptEmail: async (e: string) => `enc:${e}`,
   decryptEmail: async (e: string) => e.replace(/^enc:/, ""),
   hashEmail: (e: string) => `hash:${e}`,
+  hashPassword: async (p: string) => `hashed:${p}`,
+  verifyPassword: async (plain: string, stored: string) => stored === `hashed:${plain}`,
 }));
 
 // eslint-disable-next-line import/first -- must import AFTER vi.mock

@@ -24,14 +24,11 @@ vi.mock("../server/utils/crypto", () => ({
   encryptEmail: (e: string) => `enc:${e}`,
   decryptEmail: (e: string) => e.replace("enc:", ""),
   hashEmail: (e: string) => `hash:${e}`,
-}));
-
-vi.mock("bcryptjs", () => ({
-  default: {
-    hash: async (_pwd: string, _rounds: number) => "hashed_password",
-    compare: async (plain: string, hashed: string) =>
-      hashed === "hashed_password" && plain === "correct",
-  },
+  // Password hashing now goes through crypto wrappers (storage no longer imports
+  // bcryptjs directly); mirror the previous bcrypt mock behaviour here.
+  hashPassword: async (_pwd: string) => "hashed_password",
+  verifyPassword: async (plain: string, stored: string) =>
+    stored === "hashed_password" && plain === "correct",
 }));
 
 // Chainable mock — supports both await chain (thenable) and await chain.returning()

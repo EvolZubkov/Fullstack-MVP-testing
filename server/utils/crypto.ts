@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import bcrypt from "bcryptjs";
 import { logger } from "../logger";
 import { config } from "../config";
 
@@ -85,4 +86,28 @@ export function hashEmail(email: string): string {
  */
 export function verifyEmailHash(email: string, hash: string): boolean {
   return hashEmail(email) === hash;
+}
+
+/** Cost factor for password hashing — the single point of configuration. */
+const PASSWORD_HASH_ROUNDS = 10;
+
+/**
+ * The single seam for password hashing: callers never touch the primitive
+ * directly, so the planned migration to `@vvlad1973/crypto` scrypt (PRD-9) is a
+ * change to this file alone. Hash a plaintext password for storage.
+ * @param plain - The plaintext password
+ * @returns The password hash for storage in `users.passwordHash`
+ */
+export async function hashPassword(plain: string): Promise<string> {
+  return bcrypt.hash(plain, PASSWORD_HASH_ROUNDS);
+}
+
+/**
+ * Verify a plaintext password against a stored hash.
+ * @param plain - The plaintext password to check
+ * @param stored - The stored password hash
+ * @returns True when the password matches
+ */
+export async function verifyPassword(plain: string, stored: string): Promise<boolean> {
+  return bcrypt.compare(plain, stored);
 }

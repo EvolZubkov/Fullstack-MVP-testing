@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-import bcrypt from "bcryptjs";
 import pg from "pg";
-import { encryptEmail, hashEmail } from "../server/utils/crypto";
+import { encryptEmail, hashEmail, hashPassword } from "../server/utils/crypto";
 import { config, initConfig } from "../server/config";
 import { loadEnv } from "../server/config-loader.mjs";
 
@@ -73,7 +72,7 @@ async function upsertAdmin(options: Options) {
   const pool = new Pool({ connectionString: config.database.url });
 
   try {
-    const passwordHash = await bcrypt.hash(options.password, 10);
+    const passwordHash = await hashPassword(options.password);
     const encryptedEmail = await encryptEmail(options.email);
     const emailHash = hashEmail(options.email);
     const gdprConsentAt = new Date();
