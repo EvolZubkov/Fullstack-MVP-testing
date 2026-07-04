@@ -140,7 +140,15 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
     `topicEventsFromFeedback`/`renameTopicByNameInFormula` (таблица `topics`
     оставлена — используется в `deleteFolder` и валидации формул). `tsc` + оба
     сьюта зелёные.
-  - [ ] 12.5. Questions (вопросы, измерения).
+  - [x] 12.5. Questions — `server/storage/questions-repository.ts`
+    (`QuestionsRepository`, 10 методов на таблице `questions`: CRUD, lookup
+    id/ids/topic, `duplicateQuestion`, `getContentHashesByTopic`). Справочные
+    запросы `getTestSectionsByTopic`/`getMeasurementsForQuestions`/
+    `getTopicPageRefs` читают чужие таблицы (testSections/questionMeasurements/
+    contentPages) — по правилу границы оставлены на фасаде до извлечения их
+    доменов. Внешний `getQuestion` (`getTestsUsingQuestion`) перенаправлен на
+    `this.questionsRepo`; таблица `questions` убрана из импорта фасада. `tsc` +
+    оба сьюта зелёные.
   - [ ] 12.6. Tests (тесты, секции, снапшоты).
   - [ ] 12.7. Attempts (попытки).
   - [ ] 12.8. Scorm (пакеты/попытки/ответы).
