@@ -160,5 +160,10 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
     сохраняет пакеты, nullable `testId`). Таблицы `scormPackages`/`scormAttempts`/
     `scormAnswers` убраны из импорта фасада. `tsc` + оба сьюта зелёные.
     (Извлечён раньше очереди — изолированный, low-risk.)
-  - [ ] 12.9. Adaptive (настройки/уровни/связи).
+  - [x] 12.9. Adaptive — `server/storage/adaptive-repository.ts`
+    (`AdaptiveRepository`, 14 методов: настройки `adaptive_topic_settings`, уровни
+    `adaptive_levels`, связи `adaptive_level_links`; by-test удаления через
+    subquery, атомарно). Изолирован — внешних вызовов нет. Adaptive-таблицы
+    оставлены в импорте фасада: их напрямую чистит `deleteTest` (та же таблица в
+    одной транзакции; при извлечении Tests уедет туда). `tsc` + оба сьюта зелёные.
   - [ ] 12.10. ScalesVariables (шкалы, показатели, скоринг).
