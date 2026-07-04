@@ -17,8 +17,9 @@ import { UsersRepository } from "./storage/users-repository";
 import { GroupsRepository } from "./storage/groups-repository";
 import { AccessRepository } from "./storage/access-repository";
 import { TopicsRepository } from "./storage/topics-repository";
+import { QuestionsRepository } from "./storage/questions-repository";
 import {
-  topics, questions, tests, testSections, attempts, folders, testFolders,
+  topics, tests, testSections, attempts, folders, testFolders,
   adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
   testAssignments, passwordResetTokens, assignmentAccessTokens,
   contentPages, resultVariables, scales, questionMeasurements, testQuestionScoring,
@@ -357,6 +358,7 @@ export class DatabaseStorage implements IStorage {
   private readonly groupsRepo = new GroupsRepository();
   private readonly accessRepo = new AccessRepository();
   private readonly topicsRepo = new TopicsRepository();
+  private readonly questionsRepo = new QuestionsRepository();
 
   // ============================================
   // Users (delegated to UsersRepository)
@@ -491,7 +493,7 @@ export class DatabaseStorage implements IStorage {
   async getTestsUsingQuestion(questionId: string): Promise<TestUsageRef[]> {
     // A question is delivered through its topic's sections; scale contributions
     // (question_measurements) add direct per-test dependencies (PRD-5).
-    const question = await this.getQuestion(questionId);
+    const question = await this.questionsRepo.getQuestion(questionId);
     const byTopic = question ? await this.getTestsUsingTopic(question.topicId) : [];
     const viaMeasurements = await db
       .selectDistinct({
@@ -995,79 +997,36 @@ export class DatabaseStorage implements IStorage {
     return this.topicsRepo.getTopicEvents(topicId);
   }
 
-  async getQuestions(): Promise<Question[]> {
-    return db.select().from(questions);
+  // ============================================
+  // Questions (delegated to QuestionsRepository)
+  // ============================================
+
+  getQuestions(): Promise<Question[]> {
+    return this.questionsRepo.getQuestions();
   }
 
-  async getQuestionsByTopic(topicId: string): Promise<Question[]> {
-    return db.select().from(questions).where(eq(questions.topicId, topicId));
+  getQuestionsByTopic(topicId: string): Promise<Question[]> {
+    return this.questionsRepo.getQuestionsByTopic(topicId);
   }
 
-  async getContentHashesByTopic(topicId: string): Promise<Set<string>> {
-    const rows = await db
-      .select({ contentHash: questions.contentHash })
-      .from(questions)
-      .where(and(eq(questions.topicId, topicId), sql`${questions.contentHash} IS NOT NULL`));
-    return new Set(rows.map((r) => r.contentHash!));
+  getContentHashesByTopic(topicId: string): Promise<Set<string>> {
+    return this.questionsRepo.getContentHashesByTopic(topicId);
   }
 
-  async getQuestion(id: string): Promise<Question | undefined> {
-    const [question] = await db.select().from(questions).where(eq(questions.id, id));
-    return question || undefined;
+  getQuestion(id: string): Promise<Question | undefined> {
+    return this.questionsRepo.getQuestion(id);
   }
 
-  async getQuestionsByIds(ids: string[]): Promise<Question[]> {
-    if (ids.length === 0) return [];
-    return db.select().from(questions).where(inArray(questions.id, ids));
+  getQuestionsByIds(ids: string[]): Promise<Question[]> {
+    return this.questionsRepo.getQuestionsByIds(ids);
   }
 
-  async createQuestion(question: InsertQuestion): Promise<Question> {
-    const id = randomUUID();
-    const [newQuestion] = await db.insert(questions).values({
-      id,
-      topicId: question.topicId,
-      type: question.type,
-      prompt: question.prompt,
-      dataJson: question.dataJson,
-      correctJson: question.correctJson,
-      difficulty: question.difficulty ?? 50,
-      mediaUrl: question.mediaUrl || null,
-      mediaType: question.mediaType || null,
-      shuffleAnswers: question.shuffleAnswers ?? true,
-      feedback: question.feedback || null,
-      feedbackMode: question.feedbackMode || "general",
-      feedbackCorrect: question.feedbackCorrect || null,
-      feedbackIncorrect: question.feedbackIncorrect || null,
-      contentHash: question.contentHash || null,
-      tags: question.tags ?? [],
-      createdBy: question.createdBy || null,
-    }).returning();
-    return newQuestion;
+  createQuestion(question: InsertQuestion): Promise<Question> {
+    return this.questionsRepo.createQuestion(question);
   }
 
-  async duplicateQuestion(id: string): Promise<Question | undefined> {
-    const original = await this.getQuestion(id);
-    if (!original) return undefined;
-
-    const newId = randomUUID();
-    const [newQuestion] = await db.insert(questions).values({
-      id: newId,
-      topicId: original.topicId,
-      type: original.type,
-      prompt: original.prompt + " (копия)",
-      dataJson: original.dataJson,
-      correctJson: original.correctJson,
-      difficulty: original.difficulty,
-      feedback: original.feedback,
-      feedbackMode: original.feedbackMode,
-      feedbackCorrect: original.feedbackCorrect,
-      feedbackIncorrect: original.feedbackIncorrect,
-      mediaUrl: original.mediaUrl,
-      mediaType: original.mediaType,
-      shuffleAnswers: original.shuffleAnswers,
-      tags: original.tags,
-    }).returning();
-    return newQuestion;
+  duplicateQuestion(id: string): Promise<Question | undefined> {
+    return this.questionsRepo.duplicateQuestion(id);
   }
 
   duplicateTopicWithQuestions(
@@ -1077,20 +1036,16 @@ export class DatabaseStorage implements IStorage {
     return this.topicsRepo.duplicateTopicWithQuestions(id, createdBy);
   }
 
-  async updateQuestion(id: string, updates: Partial<InsertQuestion>): Promise<Question | undefined> {
-    const [updated] = await db.update(questions).set(updates).where(eq(questions.id, id)).returning();
-    return updated || undefined;
+  updateQuestion(id: string, updates: Partial<InsertQuestion>): Promise<Question | undefined> {
+    return this.questionsRepo.updateQuestion(id, updates);
   }
 
-  async deleteQuestion(id: string): Promise<boolean> {
-    const result = await db.delete(questions).where(eq(questions.id, id)).returning();
-    return result.length > 0;
+  deleteQuestion(id: string): Promise<boolean> {
+    return this.questionsRepo.deleteQuestion(id);
   }
 
-  async deleteQuestionsBulk(ids: string[]): Promise<number> {
-    if (ids.length === 0) return 0;
-    const result = await db.delete(questions).where(inArray(questions.id, ids)).returning();
-    return result.length;
+  deleteQuestionsBulk(ids: string[]): Promise<number> {
+    return this.questionsRepo.deleteQuestionsBulk(ids);
   }
 
   async getTests(): Promise<Test[]> {
