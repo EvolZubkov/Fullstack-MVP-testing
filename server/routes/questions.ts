@@ -374,7 +374,7 @@ router.post(
   requirePermission("questions.manage"),
   async (req: Request, res: Response) => {
     try {
-      const result = await (storage as any).duplicateQuestion(req.params.id);
+      const result = await storage.duplicateQuestion(req.params.id);
       if (!result) {
         return res.status(404).json({ error: "Question not found" });
       }

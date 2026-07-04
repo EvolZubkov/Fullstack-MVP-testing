@@ -211,6 +211,25 @@ export interface IStorage {
   /** Массово переносит темы в папку (или в корень при `null`). Организационно. */
   moveTopicsToFolder(ids: string[], folderId: string | null): Promise<number>;
 
+  // PRD-15 block C: topic ownership + access grants (grantees are users, TD-01).
+  setTopicOwner(topicId: string, ownerId: string | null): Promise<void>;
+  setTopicVisibility(topicId: string, visibility: "private" | "shared"): Promise<void>;
+  getTopicIdsByOwner(ownerId: string): Promise<string[]>;
+  getSharedTopicIds(): Promise<string[]>;
+  getTopicGrants(topicId: string): Promise<TopicAccessGrant[]>;
+  getActiveTopicGrantsForGrantees(userId: string): Promise<TopicAccessGrant[]>;
+  getTopicGrantForGrantee(topicId: string, granteeId: string): Promise<TopicAccessGrant | undefined>;
+  upsertTopicGrant(grant: {
+    topicId: string;
+    granteeId: string;
+    accessLevel: "use" | "manage";
+    grantedBy: string | null;
+  }): Promise<TopicAccessGrant>;
+  setTopicGrantState(id: string, state: "active" | "revoked_in_use"): Promise<void>;
+  removeTopicGrant(id: string): Promise<void>;
+  /** Duplicate a topic and its questions; the copy is owned by `createdBy`. */
+  duplicateTopicWithQuestions(id: string, createdBy?: string): Promise<{ topic: Topic; questions: Question[] } | undefined>;
+
   // TD-02 r.3: recommended courses/events are derived from topics.feedback_json
   // (write paths removed). Only the read accessors remain, kept for delivery.
   getTopicCourses(topicId: string): Promise<TopicCourse[]>;
@@ -228,6 +247,8 @@ export interface IStorage {
   updateQuestion(id: string, question: Partial<InsertQuestion>): Promise<Question | undefined>;
   deleteQuestion(id: string): Promise<boolean>;
   deleteQuestionsBulk(ids: string[]): Promise<number>;
+  /** Duplicate a single question within its topic (prompt gets a « (копия)» suffix). */
+  duplicateQuestion(id: string): Promise<Question | undefined>;
 
   getTests(): Promise<Test[]>;
   getTest(id: string): Promise<Test | undefined>;
