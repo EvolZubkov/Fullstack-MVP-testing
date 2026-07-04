@@ -16,7 +16,7 @@ const { dbMock } = vi.hoisted(() => {
   };
   // Multi-step methods run inside db.transaction; pass the mock itself as the tx
   // so tx.delete/insert/update reuse the same chain stubs.
-  dbMock.transaction = async (cb: (tx: unknown) => unknown) => cb(dbMock);
+  dbMock.transaction = vi.fn(async (cb: (tx: unknown) => unknown) => cb(dbMock));
   return { dbMock };
 });
 
@@ -263,13 +263,10 @@ describe("DatabaseStorage — adaptive levels", () => {
     expect(await storage.updateAdaptiveLevel("x", {})).toBeUndefined();
   });
 
-  it("deleteAdaptiveLevelsByTest — cascades: deletes links then levels", async () => {
-    // First call: getAdaptiveLevelsByTest (select)
-    setupSelect([dbAdaptiveLevel]);
-    // Subsequent delete calls need the chain
+  it("deleteAdaptiveLevelsByTest — deletes links (subquery) then levels in a transaction", async () => {
     setupDelete();
     await storage.deleteAdaptiveLevelsByTest("test1");
-    expect(dbMock.select).toHaveBeenCalled();
+    expect(dbMock.transaction).toHaveBeenCalled();
     expect(dbMock.delete).toHaveBeenCalled();
   });
 });
@@ -305,11 +302,9 @@ describe("DatabaseStorage — adaptive level links", () => {
     expect(dbMock.delete).toHaveBeenCalled();
   });
 
-  it("deleteAdaptiveLevelLinksByTest — iterates levels and deletes links", async () => {
-    setupSelect([dbAdaptiveLevel]);
+  it("deleteAdaptiveLevelLinksByTest — deletes links via a subquery over the test's levels", async () => {
     setupDelete();
     await storage.deleteAdaptiveLevelLinksByTest("test1");
-    expect(dbMock.select).toHaveBeenCalled();
     expect(dbMock.delete).toHaveBeenCalled();
   });
 });

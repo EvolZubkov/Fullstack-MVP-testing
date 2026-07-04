@@ -581,7 +581,10 @@ router.post("/bulk-revoke", requirePermission("topics.access.grant"), async (req
 // POST /api/topics/:id/duplicate - Дублировать тему с вопросами
 router.post("/:id/duplicate", requirePermission("topics.manage"), async (req, res) => {
   try {
-    const result = await (storage as any).duplicateTopicWithQuestions(req.params.id);
+    const result = await (storage as any).duplicateTopicWithQuestions(
+      req.params.id,
+      req.currentUser?.id,
+    );
     if (!result) {
       return res.status(404).json({ error: "Topic not found" });
     }

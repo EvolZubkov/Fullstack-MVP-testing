@@ -1019,10 +1019,14 @@ export class DatabaseStorage implements IStorage {
     return topic || undefined;
   }
 
-  async createTopic(topic: InsertTopic): Promise<Topic> {
-    const id = randomUUID();
-    const [newTopic] = await db.insert(topics).values({
-      id,
+  /**
+   * Build a topic row, computing the PRD-15 invariants (owner, private-by-default
+   * visibility, normalized name) in ONE place so createTopic and the duplicate
+   * path cannot diverge.
+   */
+  private topicInsertValues(topic: InsertTopic) {
+    return {
+      id: randomUUID(),
       name: topic.name,
       code: topic.code ?? null,
       description: topic.description || null,
@@ -1036,7 +1040,11 @@ export class DatabaseStorage implements IStorage {
       visibility: topic.visibility ?? "private",
       // PRD-15 FR-27: keep the normalized name in sync with `name`.
       nameNormalized: normalizeTopicName(topic.name),
-    }).returning();
+    };
+  }
+
+  async createTopic(topic: InsertTopic): Promise<Topic> {
+    const [newTopic] = await db.insert(topics).values(this.topicInsertValues(topic)).returning();
     return newTopic;
   }
 
@@ -1065,15 +1073,20 @@ export class DatabaseStorage implements IStorage {
     const testIds = [...new Set(sections.map((s) => s.testId))];
     if (testIds.length === 0) return;
     const rvs = await db.select().from(resultVariables).where(inArray(resultVariables.testId, testIds));
-    for (const rv of rvs) {
-      const next = renameTopicByNameInFormula(rv.formula, oldName, newName);
-      if (next !== rv.formula) {
-        await db
+    const changed = rvs
+      .map((rv) => ({ id: rv.id, next: renameTopicByNameInFormula(rv.formula, oldName, newName), formula: rv.formula }))
+      .filter((r) => r.next !== r.formula);
+    if (changed.length === 0) return;
+    // Rewrite all affected formulas atomically — a partial rename would leave
+    // some references pointing at the old topic name.
+    await db.transaction(async (tx) => {
+      for (const { id, next } of changed) {
+        await tx
           .update(resultVariables)
           .set({ formula: next, updatedAt: new Date() })
-          .where(eq(resultVariables.id, rv.id));
+          .where(eq(resultVariables.id, id));
       }
-    }
+    });
   }
 
   // ─── Topic ownership and access grants (PRD-15 block C) ────────────────────
@@ -1282,46 +1295,81 @@ export class DatabaseStorage implements IStorage {
     return newQuestion;
   }
 
-  async duplicateTopicWithQuestions(id: string): Promise<{ topic: Topic; questions: Question[] } | undefined> {
+  /**
+   * A copy name unique among one owner's topics (owner-scoped uniqueness, PRD-15
+   * FR-27). Returns `base` unchanged for an unowned copy — owner NULL is excluded
+   * from the uniqueness index, so no collision is possible.
+   */
+  private async uniqueTopicName(ownerId: string | null, base: string): Promise<string> {
+    if (!ownerId) return base;
+    const owned = await db
+      .select({ nameNormalized: topics.nameNormalized })
+      .from(topics)
+      .where(eq(topics.ownerId, ownerId));
+    const taken = new Set(owned.map((t) => t.nameNormalized).filter(Boolean));
+    let name = base;
+    for (let n = 2; taken.has(normalizeTopicName(name)); n += 1) {
+      name = `${base} ${n}`;
+    }
+    return name;
+  }
+
+  async duplicateTopicWithQuestions(
+    id: string,
+    createdBy?: string,
+  ): Promise<{ topic: Topic; questions: Question[] } | undefined> {
     const originalTopic = await this.getTopic(id);
     if (!originalTopic) return undefined;
-
-    const newTopicId = randomUUID();
-    const [newTopic] = await db.insert(topics).values({
-      id: newTopicId,
-      name: originalTopic.name + " (копия)",
-      description: originalTopic.description,
-      feedback: originalTopic.feedback,
-      // TD-02 r.3: rich feedback (incl. recommended courses/events) travels with
-      // the copy; the legacy topic_courses copy is gone.
-      feedbackJson: originalTopic.feedbackJson,
-    }).returning();
-
     const originalQuestions = await this.getQuestionsByTopic(id);
-    const newQuestions: Question[] = [];
 
-    for (const q of originalQuestions) {
-      const [newQ] = await db.insert(questions).values({
-        id: randomUUID(),
-        topicId: newTopicId,
-        type: q.type,
-        prompt: q.prompt,
-        dataJson: q.dataJson,
-        correctJson: q.correctJson,
-        difficulty: q.difficulty,
-        mediaUrl: q.mediaUrl,
-        mediaType: q.mediaType,
-        shuffleAnswers: q.shuffleAnswers,
-        feedback: q.feedback,
-        feedbackMode: q.feedbackMode,
-        feedbackCorrect: q.feedbackCorrect,
-        feedbackIncorrect: q.feedbackIncorrect,
-        tags: q.tags,
-      }).returning();
-      newQuestions.push(newQ);
-    }
+    // Topic invariants come from the shared builder (same as createTopic): the
+    // copy is a fresh topic owned by the duplicator, private, and without the
+    // author code (a per-test formula alias, not to be shared). Name made unique
+    // within the owner. Topic + questions are copied atomically so a failed
+    // question insert cannot leave a half-copied topic.
+    const ownerId = createdBy ?? null;
+    const name = await this.uniqueTopicName(ownerId, originalTopic.name + " (копия)");
 
-    return { topic: newTopic, questions: newQuestions };
+    return db.transaction(async (tx) => {
+      const [newTopic] = await tx
+        .insert(topics)
+        .values(this.topicInsertValues({
+          name,
+          description: originalTopic.description ?? undefined,
+          feedback: originalTopic.feedback ?? undefined,
+          // TD-02 r.3: rich feedback (courses/events) travels with the copy.
+          feedbackJson: originalTopic.feedbackJson ?? undefined,
+          folderId: originalTopic.folderId ?? undefined,
+          createdBy,
+        } as InsertTopic))
+        .returning();
+
+      const newQuestions: Question[] = [];
+      for (const q of originalQuestions) {
+        const [newQ] = await tx.insert(questions).values({
+          id: randomUUID(),
+          topicId: newTopic.id,
+          type: q.type,
+          prompt: q.prompt,
+          dataJson: q.dataJson,
+          correctJson: q.correctJson,
+          difficulty: q.difficulty,
+          mediaUrl: q.mediaUrl,
+          mediaType: q.mediaType,
+          shuffleAnswers: q.shuffleAnswers,
+          feedback: q.feedback,
+          feedbackMode: q.feedbackMode,
+          feedbackCorrect: q.feedbackCorrect,
+          feedbackIncorrect: q.feedbackIncorrect,
+          contentHash: q.contentHash,
+          tags: q.tags,
+          createdBy: createdBy ?? null,
+        }).returning();
+        newQuestions.push(newQ);
+      }
+
+      return { topic: newTopic, questions: newQuestions };
+    });
   }
 
   async getTopicByName(name: string): Promise<Topic | undefined> {
@@ -1661,12 +1709,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAdaptiveLevelsByTest(testId: string): Promise<void> {
-    // First delete all links for levels of this test
-    const levels = await this.getAdaptiveLevelsByTest(testId);
-    for (const level of levels) {
-      await this.deleteAdaptiveLevelLinksByLevel(level.id);
-    }
-    await db.delete(adaptiveLevels).where(eq(adaptiveLevels.testId, testId));
+    // Delete the levels' links (single subquery, no per-level loop) then the
+    // levels themselves — atomically.
+    await db.transaction(async (tx) => {
+      await tx.delete(adaptiveLevelLinks).where(
+        sql`${adaptiveLevelLinks.levelId} IN (SELECT ${adaptiveLevels.id} FROM ${adaptiveLevels} WHERE ${adaptiveLevels.testId} = ${testId})`,
+      );
+      await tx.delete(adaptiveLevels).where(eq(adaptiveLevels.testId, testId));
+    });
   }
 
   async getAdaptiveLevelLinks(levelId: string): Promise<AdaptiveLevelLink[]> {
@@ -1684,10 +1734,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAdaptiveLevelLinksByTest(testId: string): Promise<void> {
-    const levels = await this.getAdaptiveLevelsByTest(testId);
-    for (const level of levels) {
-      await this.deleteAdaptiveLevelLinksByLevel(level.id);
-    }
+    // Single subquery delete over the test's levels — no per-level loop.
+    await db.delete(adaptiveLevelLinks).where(
+      sql`${adaptiveLevelLinks.levelId} IN (SELECT ${adaptiveLevels.id} FROM ${adaptiveLevels} WHERE ${adaptiveLevels.testId} = ${testId})`,
+    );
   }
 
   async createScormPackage(pkg: InsertScormPackage & { id: string }): Promise<ScormPackage> {

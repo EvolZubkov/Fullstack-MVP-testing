@@ -14,7 +14,7 @@ const { dbMock } = vi.hoisted(() => {
   // Multi-step methods run inside db.transaction; pass the mock itself as the tx
   // so tx.delete/insert/update reuse the same chain stubs (individual tests may
   // still override transaction with a bespoke tx).
-  dbMock.transaction = async (cb: (tx: unknown) => unknown) => cb(dbMock);
+  dbMock.transaction = vi.fn(async (cb: (tx: unknown) => unknown) => cb(dbMock));
   return { dbMock };
 });
 
