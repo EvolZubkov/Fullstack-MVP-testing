@@ -1490,10 +1490,38 @@ export class DatabaseStorage implements IStorage {
     return row ?? undefined;
   }
 
+  /**
+   * Delete a test and every row that has no meaning without it, atomically —
+   * the single owner of test deletion (callers no longer clean up adaptive rows
+   * themselves). FK ON DELETE CASCADE removes content_pages, scales,
+   * result_variables, question_measurements and test_question_scoring when the
+   * test row goes. SCORM packages/attempts/answers are deliberately KEPT:
+   * `scorm_packages.testId` is nullable by design — the exported package outlives
+   * the test in the LMS, so its telemetry is retained.
+   */
   async deleteTest(id: string): Promise<boolean> {
-    await db.delete(testSections).where(eq(testSections.testId, id));
-    const result = await db.delete(tests).where(eq(tests.id, id)).returning();
-    return result.length > 0;
+    return db.transaction(async (tx) => {
+      // Adaptive config: links carry no testId, so resolve them via their levels.
+      await tx.delete(adaptiveLevelLinks).where(
+        sql`${adaptiveLevelLinks.levelId} IN (SELECT ${adaptiveLevels.id} FROM ${adaptiveLevels} WHERE ${adaptiveLevels.testId} = ${id})`,
+      );
+      await tx.delete(adaptiveLevels).where(eq(adaptiveLevels.testId, id));
+      await tx.delete(adaptiveTopicSettings).where(eq(adaptiveTopicSettings.testId, id));
+
+      // Structural dependents.
+      await tx.delete(testSections).where(eq(testSections.testId, id));
+      await tx.delete(testAssignments).where(eq(testAssignments.testId, id));
+      await tx.delete(testAccessGrants).where(eq(testAccessGrants.testId, id));
+
+      // Delivery history. A hard delete is not restorable (archive is the
+      // retention path), so attempts and snapshots go too. Attempts pin
+      // snapshots, so drop attempts first.
+      await tx.delete(attempts).where(eq(attempts.testId, id));
+      await tx.delete(testSnapshots).where(eq(testSnapshots.testId, id));
+
+      const result = await tx.delete(tests).where(eq(tests.id, id)).returning();
+      return result.length > 0;
+    });
   }
 
   async getTestSections(testId: string): Promise<TestSection[]> {

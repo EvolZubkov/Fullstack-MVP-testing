@@ -943,9 +943,8 @@ router.delete("/:id", requirePermission("tests.delete"), requireTestScope("delet
       return res.status(400).json({ error: "title_mismatch", field: "confirmTitle" });
     }
 
-    await storage.deleteAdaptiveLevelLinksByTest(req.params.id);
-    await storage.deleteAdaptiveLevelsByTest(req.params.id);
-    await storage.deleteAdaptiveTopicSettingsByTest(req.params.id);
+    // deleteTest is now the single, atomic owner of test deletion (adaptive rows,
+    // sections, assignments, grants, attempts and snapshots all go with it).
     await storage.deleteTest(req.params.id);
     res.status(204).end();
   } catch (error) {
