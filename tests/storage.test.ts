@@ -588,8 +588,8 @@ describe("DatabaseStorage — attempts", () => {
   });
 
   it("updateAttempt — returns updated attempt", async () => {
-    setupUpdateReturning({ ...dbAttempt, score: 95 });
-    const a = await storage.updateAttempt("a1", { score: 95 });
+    setupUpdateReturning({ ...dbAttempt, finishedAt: now });
+    const a = await storage.updateAttempt("a1", { finishedAt: now });
     expect(a).toBeDefined();
   });
 

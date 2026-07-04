@@ -57,6 +57,21 @@ function mapLegacyTest(row: Test): Test {
 }
 
 /**
+ * Copy ONLY the whitelisted keys that are actually present (`null` is a valid
+ * value, `undefined` is skipped). Used by the `update*` methods so a broad
+ * `Partial<Row>` cannot mass-assign columns the caller must not touch
+ * (passwordHash, emailHash, ownership/audit fields, foreign keys, …).
+ */
+function pickDefined<T, K extends keyof T>(src: Partial<T>, keys: readonly K[]): Partial<Pick<T, K>> {
+  const out: Partial<Pick<T, K>> = {};
+  for (const k of keys) {
+    const v = src[k];
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
+/**
  * Minimal projection of a test that depends on a topic/question (PRD-15
  * FR-03): enough for the 409 referential-protection payload and for the
  * draw-feasibility policy (published vs draft, adaptive vs standard).
@@ -373,14 +388,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: string, data: Partial<User>): Promise<User | undefined> {
-    const updateData: any = { ...data };
+    // Whitelist: never accept passwordHash (use updateUserPassword), emailHash
+    // (derived from email), id/createdAt/createdBy/lastLoginAt through a broad
+    // Partial<User>. `email` is handled specially (encrypt + derive hash).
+    const set: Partial<User> = pickDefined(data, [
+      "name", "status", "mustChangePassword", "gdprConsent", "gdprConsentAt",
+    ] as const);
     if (data.email) {
-      updateData.email = await encryptEmail(data.email);
-      updateData.emailHash = hashEmail(data.email);
+      set.email = await encryptEmail(data.email);
+      set.emailHash = hashEmail(data.email);
     }
+    if (Object.keys(set).length === 0) return this.getUser(id);
 
     const [updated] = await db.update(users)
-      .set(updateData)
+      .set(set)
       .where(eq(users.id, id))
       .returning();
 
@@ -440,7 +461,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateGroup(id: string, data: Partial<Group>): Promise<Group | undefined> {
-    const [updated] = await db.update(groups).set(data).where(eq(groups.id, id)).returning();
+    // Whitelist: id/createdAt/createdBy are not writable through updateGroup.
+    const set = pickDefined(data, ["name", "description"] as const);
+    if (Object.keys(set).length === 0) return this.getGroup(id);
+    const [updated] = await db.update(groups).set(set).where(eq(groups.id, id)).returning();
     return updated || undefined;
   }
 
@@ -1540,7 +1564,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateAttempt(id: string, updates: Partial<Attempt>): Promise<Attempt | undefined> {
-    const [updated] = await db.update(attempts).set(updates).where(eq(attempts.id, id)).returning();
+    // Whitelist: only the mutable progress/result fields. userId/testId/
+    // testVersion/snapshotId/startedAt are fixed at creation and must not move.
+    const set = pickDefined(updates, [
+      "variantJson", "answersJson", "resultJson", "finishedAt",
+    ] as const);
+    if (Object.keys(set).length === 0) return this.getAttempt(id);
+    const [updated] = await db.update(attempts).set(set).where(eq(attempts.id, id)).returning();
     return updated || undefined;
   }
 
