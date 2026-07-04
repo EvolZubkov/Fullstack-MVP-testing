@@ -22,6 +22,7 @@ import { AdaptiveRepository } from "./storage/adaptive-repository";
 import { AttemptsRepository } from "./storage/attempts-repository";
 import { ScalesVariablesRepository } from "./storage/scales-variables-repository";
 import { TestsRepository, type TestUsageRef } from "./storage/tests-repository";
+import { ContentPagesRepository } from "./storage/content-pages-repository";
 
 export type { TestUsageRef };
 import {
@@ -345,6 +346,7 @@ export class DatabaseStorage implements IStorage {
   private readonly attemptsRepo = new AttemptsRepository();
   private readonly scalesVariablesRepo = new ScalesVariablesRepository();
   private readonly testsRepo = new TestsRepository();
+  private readonly contentPagesRepo = new ContentPagesRepository();
 
   // ============================================
   // Users (delegated to UsersRepository)
@@ -1193,46 +1195,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ============================================
-  // Content Pages (PRD-1)
+  // Content Pages (PRD-1) (delegated to ContentPagesRepository)
   // ============================================
 
-  async getContentPages(testId: string): Promise<ContentPage[]> {
-    return db.select().from(contentPages)
-      .where(eq(contentPages.testId, testId))
-      .orderBy(contentPages.topicId, contentPages.position, contentPages.sortOrder);
+  getContentPages(testId: string): Promise<ContentPage[]> {
+    return this.contentPagesRepo.getContentPages(testId);
   }
 
-  async getContentPage(id: string): Promise<ContentPage | undefined> {
-    const [page] = await db.select().from(contentPages).where(eq(contentPages.id, id));
-    return page;
+  getContentPage(id: string): Promise<ContentPage | undefined> {
+    return this.contentPagesRepo.getContentPage(id);
   }
 
-  async createContentPage(page: InsertContentPage): Promise<ContentPage> {
-    const [created] = await db.insert(contentPages).values(page).returning();
-    return created;
+  createContentPage(page: InsertContentPage): Promise<ContentPage> {
+    return this.contentPagesRepo.createContentPage(page);
   }
 
-  async updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined> {
-    const [updated] = await db.update(contentPages)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(contentPages.id, id))
-      .returning();
-    return updated;
+  updateContentPage(id: string, updates: Partial<InsertContentPage>): Promise<ContentPage | undefined> {
+    return this.contentPagesRepo.updateContentPage(id, updates);
   }
 
-  async deleteContentPage(id: string): Promise<boolean> {
-    const result = await db.delete(contentPages).where(eq(contentPages.id, id)).returning();
-    return result.length > 0;
+  deleteContentPage(id: string): Promise<boolean> {
+    return this.contentPagesRepo.deleteContentPage(id);
   }
 
-  async reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void> {
-    await db.transaction(async (tx) => {
-      for (const { id, sortOrder } of updates) {
-        await tx.update(contentPages)
-          .set({ sortOrder, updatedAt: new Date() })
-          .where(eq(contentPages.id, id));
-      }
-    });
+  reorderContentPages(updates: { id: string; sortOrder: number }[]): Promise<void> {
+    return this.contentPagesRepo.reorderContentPages(updates);
   }
 
   // ============================================
