@@ -122,7 +122,13 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
     вызовы `getUserGroups` (`isTestAssignedToUser`, `getAssignedTestsForUser`)
     перенаправлены на `this.groupsRepo`; из фасада убраны таблицы
     `users`/`groups`/`userGroups` и `decryptEmail`. `tsc` + оба сьюта зелёные.
-  - [ ] 12.3. Access (роли + гранты тестов/тем).
+  - [x] 12.3. Access — `server/storage/access-repository.ts` (`AccessRepository`,
+    21 метод: роли `user_roles`, владение+гранты тестов `tests.owner_id`/
+    `test_access_grants`, владение/видимость+гранты тем `topics`/
+    `topic_access_grants`). Слой RBAC пишет колонки владения `tests`/`topics`,
+    контент-CRUD остаётся в своих доменах. Внешних вызовов не было. Из фасада
+    убраны таблицы `userRoles`/`topicAccessGrants` (`testAccessGrants` оставлена —
+    её чистит `deleteTest`). `tsc` + оба сьюта зелёные.
   - [ ] 12.4. Topics (темы, владение, обратная связь).
   - [ ] 12.5. Questions (вопросы, измерения).
   - [ ] 12.6. Tests (тесты, секции, снапшоты).
