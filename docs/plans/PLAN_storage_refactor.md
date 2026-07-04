@@ -386,9 +386,17 @@ password-моки тестов проведены через обёртки. З�
 
 Оставшиеся домены (по одному, тем же паттерном): Groups, Access (роли + гранты
 тестов/тем), Topics, Questions, Tests (секции/снапшоты), Attempts, Scorm, Adaptive,
-ScalesVariables. Кросс-доменные оркестраторы (`getAssignedTestsForUser` →
-`getUserGroups`, глубокое `deleteTest`) остаются на фасаде либо получают
-зависимости явно при извлечении соответствующего домена.
+ScalesVariables.
+
+**Правило границы.** Метод живёт в репозитории своего корневого агрегата; каскады
+и дублирование, укоренённые в этом агрегате, следуют за корнем — даже если трогают
+соседние таблицы. Так `deleteTopic`/`deleteTopicsBulk` (каскад в questions/
+testSections/contentPages), `renameTopicInFormulas` (побочная правка resultVariables)
+и `duplicateTopicWithQuestions` (тема + вопросы) ушли в `TopicsRepository` целиком,
+и `TopicsRepository` импортирует затрагиваемые таблицы. Аналогично `deleteTest`
+уйдёт в `TestsRepository` при извлечении Tests. На фасаде остаются только истинно
+многоагрегатные операции без единого владельца (например `getAssignedTestsForUser`
+= назначения + группы + тесты), вызывающие нужные репозитории.
 
 ### 6.2. Контракт `IStorage` неполон
 

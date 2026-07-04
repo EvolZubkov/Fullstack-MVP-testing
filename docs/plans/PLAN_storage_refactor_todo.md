@@ -129,7 +129,17 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
     контент-CRUD остаётся в своих доменах. Внешних вызовов не было. Из фасада
     убраны таблицы `userRoles`/`topicAccessGrants` (`testAccessGrants` оставлена —
     её чистит `deleteTest`). `tsc` + оба сьюта зелёные.
-  - [ ] 12.4. Topics (темы, владение, обратная связь).
+  - [x] 12.4. Topics — `server/storage/topics-repository.ts` (`TopicsRepository`,
+    весь домен: CRUD, `moveTopicsToFolder`, feedback-аксессоры, каскадные
+    `deleteTopic`/`deleteTopicsBulk`, `renameTopicInFormulas`,
+    `duplicateTopicWithQuestions` + приватные `topicInsertValues`/`uniqueTopicName`).
+    Правило: каскады корневого агрегата (тема) следуют за корнем, репозиторий
+    импортирует затрагиваемые таблицы (questions/testSections/contentPages/
+    resultVariables); в `duplicate` вызов `getQuestionsByTopic` заменён прямым
+    запросом. Из фасада убраны импорты `normalizeTopicName`/`topicCoursesFromFeedback`/
+    `topicEventsFromFeedback`/`renameTopicByNameInFormula` (таблица `topics`
+    оставлена — используется в `deleteFolder` и валидации формул). `tsc` + оба
+    сьюта зелёные.
   - [ ] 12.5. Questions (вопросы, измерения).
   - [ ] 12.6. Tests (тесты, секции, снапшоты).
   - [ ] 12.7. Attempts (попытки).
