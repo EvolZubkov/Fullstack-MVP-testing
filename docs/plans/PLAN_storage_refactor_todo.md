@@ -113,7 +113,10 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
   `IStorage`, инкрементально по доменам (раздел 6.1). Подход —
   композиция-делегирование; общие хелперы в `server/storage/shared.ts`; фасад
   `server/storage.ts` сохраняет экспорты, доменные модули — в `server/storage/*`
-  (без `index.ts`, чтобы `../storage` резолвился в файл).
+  (без `index.ts`, чтобы `../storage` резолвился в файл). Порядок извлечения
+  скорректирован: изолированные/средние домены (Scorm/Adaptive/Attempts/
+  ScalesVariables) вперёд, самый связный **Tests** (глубокий `deleteTest`,
+  снапшоты, `mapLegacyTest`) — последним, на уже тонком фасаде.
   - [x] 12.1. Пилот **Users** — `server/storage/users-repository.ts` (10 методов),
     `pickDefined` вынесен в `shared.ts`, фасад делегирует. `tsc` + оба сьюта
     зелёные, маршруты не тронуты.
@@ -151,6 +154,11 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
     оба сьюта зелёные.
   - [ ] 12.6. Tests (тесты, секции, снапшоты).
   - [ ] 12.7. Attempts (попытки).
-  - [ ] 12.8. Scorm (пакеты/попытки/ответы).
+  - [x] 12.8. Scorm — `server/storage/scorm-repository.ts` (`ScormRepository`,
+    14 методов: пакеты/попытки/ответы SCORM-телеметрии). Полностью изолирован —
+    ни внешних вызовов, ни использования `scorm*`-таблиц вне домена (`deleteTest`
+    сохраняет пакеты, nullable `testId`). Таблицы `scormPackages`/`scormAttempts`/
+    `scormAnswers` убраны из импорта фасада. `tsc` + оба сьюта зелёные.
+    (Извлечён раньше очереди — изолированный, low-risk.)
   - [ ] 12.9. Adaptive (настройки/уровни/связи).
   - [ ] 12.10. ScalesVariables (шкалы, показатели, скоринг).
