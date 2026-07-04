@@ -68,7 +68,13 @@ export const testAssignments = pgTable("test_assignments", {
   linkExpiresAt: timestamp("link_expires_at"), // срок жизни magic link (если null → dueDate или +30 дней)
   assignedAt: timestamp("assigned_at").notNull().defaultNow(),
   assignedBy: varchar("assigned_by", { length: 36 }).notNull(),
-});
+}, (table) => ({
+  // Assignments are queried independently by test, by user, and by group
+  // (learner test-list, assignment management).
+  testIdIdx: index("test_assignments_test_id_idx").on(table.testId),
+  userIdIdx: index("test_assignments_user_id_idx").on(table.userId),
+  groupIdIdx: index("test_assignments_group_id_idx").on(table.groupId),
+}));
 
 // Magic-link токены для доступа к тесту без пароля
 export const assignmentAccessTokens = pgTable("assignment_access_tokens", {
@@ -91,7 +97,12 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   usedAt: timestamp("used_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   requestIp: text("request_ip"),
-});
+}, (table) => ({
+  // Every reset verification looks a token up by its hash; recent-request
+  // throttling counts a user's tokens over a time window.
+  tokenHashIdx: index("password_reset_tokens_token_hash_idx").on(table.tokenHash),
+  userIdIdx: index("password_reset_tokens_user_id_idx").on(table.userId),
+}));
 
 export const folders = pgTable("folders", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -253,7 +264,10 @@ export const questions = pgTable("questions", {
   tags: jsonb("tags").$type<string[]>().notNull().default([]),
   // PRD-15 FR-01: creation audit. NULL = legacy row (destructive ops admin-only).
   createdBy: varchar("created_by", { length: 36 }),
-});
+}, (table) => ({
+  // Questions are read/deleted by topic on every topic and delivery path.
+  topicIdIdx: index("questions_topic_id_idx").on(table.topicId),
+}));
 
 export const testFolders = pgTable("test_folders", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -346,7 +360,10 @@ export const tests = pgTable("tests", {
   // PRD-19 (FR-05a): show the section-results screen (optional system node, sectioned tests).
   // Default true; not applicable to linear_flat (no sections) — ignored by the runtime there.
   showSectionResults: boolean("show_section_results").notNull().default(true),
-});
+}, (table) => ({
+  // Test lists filter by lifecycle status (draft/published/archived).
+  statusIdx: index("tests_status_idx").on(table.status),
+}));
 
 /**
  * PRD-13 RBAC: explicit access to a test for a non-owner. `edit` lets an author
@@ -458,6 +475,8 @@ export const testSections = pgTable("test_sections", {
 }, (table) => ({
   // PRD-15 FR-03: powers the "where used" lookup (tests depending on a topic).
   topicIdIdx: index("test_sections_topic_id_idx").on(table.topicId),
+  // getTestSections filters by test_id and orders by sort_order (editor topic order).
+  testIdSortIdx: index("test_sections_test_id_sort_order_idx").on(table.testId, table.sortOrder),
 }));
 
 export const adaptiveTopicSettings = pgTable("adaptive_topic_settings", {
@@ -502,7 +521,15 @@ export const attempts = pgTable("attempts", {
   resultJson: jsonb("result_json"),
   startedAt: timestamp("started_at").notNull(),
   finishedAt: timestamp("finished_at"),
-});
+}, (table) => ({
+  // Attempts is the fastest-growing table; these back the hot read/delete paths.
+  // (user_id, test_id) also serves user-only lookups via the leading column.
+  userTestIdx: index("attempts_user_test_idx").on(table.userId, table.testId),
+  // testId filter: annul in-progress, snapshot reference scan, deep test delete.
+  testIdIdx: index("attempts_test_id_idx").on(table.testId),
+  // Snapshot referential lookups (PRD-15 block B).
+  snapshotIdIdx: index("attempts_snapshot_id_idx").on(table.snapshotId),
+}));
 
 // PRD-15 block B (FR-10): a frozen, self-contained snapshot of a test created
 // on publish/republish. Delivery of a published test reads ONLY from the
@@ -1150,7 +1177,10 @@ export const scormPackages = pgTable("scorm_packages", {
   exportedAt: timestamp("exported_at").notNull(),
   createdBy: varchar("created_by", { length: 36 }).notNull(),
   isActive: boolean("is_active").notNull().default(true),
-});
+}, (table) => ({
+  // Packages are listed per test (export history, telemetry).
+  testIdIdx: index("scorm_packages_test_id_idx").on(table.testId),
+}));
 
 export const scormAttempts = pgTable("scorm_attempts", {
   id: varchar("id", { length: 36 }).primaryKey(),
@@ -1220,7 +1250,10 @@ export const scormAnswers = pgTable("scorm_answers", {
   levelName: text("level_name"),
   
   answeredAt: timestamp("answered_at").notNull(),
-});
+}, (table) => ({
+  // Answers are always read for a given attempt.
+  attemptIdIdx: index("scorm_answers_attempt_id_idx").on(table.attemptId),
+}));
 
 // ============================================
 // Templates & Content Pages (PRD-1)
@@ -1283,7 +1316,15 @@ export const contentPages = pgTable("content_pages", {
   autoAdvanceDelayMs: integer("auto_advance_delay_ms"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  // getContentPages filters by test_id and orders by (topic_id, position, sort_order).
+  testTopicPositionSortIdx: index("content_pages_test_topic_position_sort_idx")
+    .on(table.testId, table.topicId, table.position, table.sortOrder),
+  // System-page lookups by kind within a test (PRD-1/PRD-19 boundary nodes).
+  testKindIdx: index("content_pages_test_kind_idx").on(table.testId, table.kind),
+  // getTopicPageRefs filters by topic_id alone (content-guard "where used").
+  topicIdIdx: index("content_pages_topic_id_idx").on(table.topicId),
+}));
 
 // Insert schemas
 export const insertScormPackageSchema = createInsertSchema(scormPackages).omit({ id: true });
@@ -1430,7 +1471,10 @@ export const resultVariables = pgTable("result_variables", {
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  // Result variables are always read for a given test.
+  testIdIdx: index("result_variables_test_id_idx").on(table.testId),
+}));
 
 export const insertResultVariableSchema = createInsertSchema(resultVariables)
   .omit({ id: true, createdAt: true, updatedAt: true })
@@ -1467,7 +1511,10 @@ export const scales = pgTable("scales", {
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  // Scales are always read for a given test.
+  testIdIdx: index("scales_test_id_idx").on(table.testId),
+}));
 
 export const insertScaleSchema = createInsertSchema(scales)
   .omit({ id: true, createdAt: true, updatedAt: true })
@@ -1499,7 +1546,12 @@ export const questionMeasurements = pgTable("question_measurements", {
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  // Measurements are read by test, by question (contribution edits), and by scale.
+  testIdIdx: index("question_measurements_test_id_idx").on(table.testId),
+  questionIdIdx: index("question_measurements_question_id_idx").on(table.questionId),
+  scaleIdIdx: index("question_measurements_scale_id_idx").on(table.scaleId),
+}));
 
 export const insertQuestionMeasurementSchema = createInsertSchema(questionMeasurements)
   .omit({ id: true, createdAt: true, updatedAt: true })
