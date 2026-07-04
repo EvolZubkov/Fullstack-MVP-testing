@@ -1,4 +1,4 @@
-import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, index, uuid, real } from "drizzle-orm/pg-core"
+import { pgTable, varchar, text, integer, boolean, timestamp, jsonb, uniqueIndex, index, check, uuid, real } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -1474,6 +1474,18 @@ export const resultVariables = pgTable("result_variables", {
 }, (table) => ({
   // Result variables are always read for a given test.
   testIdIdx: index("result_variables_test_id_idx").on(table.testId),
+  // A variable name is addressed by var() in formulas — it must be unique within
+  // a test, or the reference is ambiguous.
+  testNameUq: uniqueIndex("result_variables_test_id_name_uq").on(table.testId, table.name),
+  // At most one variable may drive success_status / completion_status per test.
+  oneSuccessPerTest: uniqueIndex("result_variables_one_success_per_test")
+    .on(table.testId)
+    .where(sql`${table.controlsStatus} = 'success'`),
+  oneCompletionPerTest: uniqueIndex("result_variables_one_completion_per_test")
+    .on(table.testId)
+    .where(sql`${table.controlsStatus} = 'completion'`),
+  // The name is a DSL identifier (lowercase, starts with a letter, <=64 chars).
+  nameFormat: check("result_variables_name_check", sql`${table.name} ~ '^[a-z][a-z0-9_]{0,63}$'`),
 }));
 
 export const insertResultVariableSchema = createInsertSchema(resultVariables)
@@ -1514,6 +1526,10 @@ export const scales = pgTable("scales", {
 }, (table) => ({
   // Scales are always read for a given test.
   testIdIdx: index("scales_test_id_idx").on(table.testId),
+  // A scale key is addressed in formulas — it must be unique within a test.
+  testKeyUq: uniqueIndex("scales_test_id_key_uq").on(table.testId, table.key),
+  // The key is a DSL identifier (lowercase, starts with a letter, <=64 chars).
+  keyFormat: check("scales_key_check", sql`${table.key} ~ '^[a-z][a-z0-9_]{0,63}$'`),
 }));
 
 export const insertScaleSchema = createInsertSchema(scales)

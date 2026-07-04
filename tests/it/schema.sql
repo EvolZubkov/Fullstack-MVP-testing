@@ -140,7 +140,8 @@ CREATE TABLE "result_variables" (
 	"controls_status" text DEFAULT 'none' NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "result_variables_name_check" CHECK ("result_variables"."name" ~ '^[a-z][a-z0-9_]{0,63}$')
 );
 
 CREATE TABLE "scales" (
@@ -158,7 +159,8 @@ CREATE TABLE "scales" (
 	"scorm_target" text DEFAULT 'none' NOT NULL,
 	"sort_order" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "scales_key_check" CHECK ("scales"."key" ~ '^[a-z][a-z0-9_]{0,63}$')
 );
 
 CREATE TABLE "scorm_answers" (
@@ -413,7 +415,11 @@ CREATE INDEX "question_measurements_question_id_idx" ON "question_measurements" 
 CREATE INDEX "question_measurements_scale_id_idx" ON "question_measurements" USING btree ("scale_id");
 CREATE INDEX "questions_topic_id_idx" ON "questions" USING btree ("topic_id");
 CREATE INDEX "result_variables_test_id_idx" ON "result_variables" USING btree ("test_id");
+CREATE UNIQUE INDEX "result_variables_test_id_name_uq" ON "result_variables" USING btree ("test_id","name");
+CREATE UNIQUE INDEX "result_variables_one_success_per_test" ON "result_variables" USING btree ("test_id") WHERE "result_variables"."controls_status" = 'success';
+CREATE UNIQUE INDEX "result_variables_one_completion_per_test" ON "result_variables" USING btree ("test_id") WHERE "result_variables"."controls_status" = 'completion';
 CREATE INDEX "scales_test_id_idx" ON "scales" USING btree ("test_id");
+CREATE UNIQUE INDEX "scales_test_id_key_uq" ON "scales" USING btree ("test_id","key");
 CREATE INDEX "scorm_answers_attempt_id_idx" ON "scorm_answers" USING btree ("attempt_id");
 CREATE UNIQUE INDEX "scorm_attempts_session_attempt_idx" ON "scorm_attempts" USING btree ("package_id","session_id","attempt_number");
 CREATE INDEX "scorm_packages_test_id_idx" ON "scorm_packages" USING btree ("test_id");
