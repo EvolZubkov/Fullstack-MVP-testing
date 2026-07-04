@@ -41,6 +41,10 @@ PROD_ENV_FILE="${PROD_APP_DIR}/env/.env"
 TEST_APP_DIR="/srv/app/${TEST_PROJECT}"
 TEST_DATA_DIR="/srv/data/${TEST_PROJECT}"
 TEST_ENV_FILE="${TEST_APP_DIR}/env/.env"
+# Optional operator-provided secrets, shipped by deploy-test.bat from the project's
+# .env.test. When present it becomes the test instance's .env (DATABASE_URL and the
+# encryption keys are still forced below to match the prod-cloned DB).
+PROVIDED_ENV="/tmp/deploy-test-${PROD_PROJECT}.env.test"
 # Host-side non-secret config, mounted over the image's baked copy so it can be
 # edited on the server and applied with a restart (no rebuild). Seeded from the
 # image on first deploy (see step 4b).
@@ -62,6 +66,18 @@ info()  { echo -e "${BLUE}[test-deploy]${NC} $*"; }
 ok()    { echo -e "${GREEN}[test-deploy]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[test-deploy]${NC} $*"; }
 error() { echo -e "${RED}[test-deploy] ERROR:${NC} $*" >&2; exit 1; }
+
+# Read the first value of KEY ($1) from an env file ($2), tolerating BOM/CRLF.
+read_env() {
+    sed 's/\r//' "$2" | sed '1s/^\xef\xbb\xbf//' | grep -m1 "^$1=" | cut -d'=' -f2- || true
+}
+# Set KEY ($1)=VALUE ($2) in an env file ($3): drop any existing line, append anew.
+# Line-based (not sed) so values with / & | (URLs, random keys) need no escaping.
+upsert_env() {
+    grep -v "^$1=" "$3" > "$3.tmp" 2>/dev/null || true
+    mv "$3.tmp" "$3"
+    printf '%s=%s\n' "$1" "$2" >> "$3"
+}
 
 trap 'error "Unexpected failure at line ${LINENO}. Run with bash -x for details."' ERR
 
@@ -199,19 +215,36 @@ ok "  data: ${TEST_DATA_DIR}  (uploads owned by UID ${APP_UID})"
 # ---------------------------------------------------------------------------
 info "[4/5] Writing .env..."
 
-if [ ! -f "${TEST_ENV_FILE}" ] || [ "${RESET_DB}" = true ]; then
+normalize_env() { sed -i '1s/^\xef\xbb\xbf//' "$1"; sed -i 's/\r$//' "$1"; }
+
+if [ -f "${PROVIDED_ENV}" ]; then
+    # Operator-provided secrets (project's .env.test, shipped by deploy-test.bat).
+    # Wins over the prod copy AND over an existing host file — shipping it is explicit
+    # intent, so it is the source of truth for the test instance's secrets.
+    cp "${PROVIDED_ENV}" "${TEST_ENV_FILE}"
+    normalize_env "${TEST_ENV_FILE}"
+    # The test DB is a CLONE of prod. Force the test DB URL (so the app hits the test
+    # DB) and the PROD encryption keys (so the cloned, prod-encrypted emails decrypt),
+    # regardless of what the provided file carried (e.g. a developer's local values).
+    upsert_env DATABASE_URL "${TEST_DB_URL}" "${TEST_ENV_FILE}"
+    PROD_ENC_PW=$(read_env ENCRYPTION_PASSWORD "${PROD_ENV_FILE}")
+    PROD_ENC_SALT=$(read_env ENCRYPTION_SALT "${PROD_ENV_FILE}")
+    [ -n "${PROD_ENC_PW}" ]   && upsert_env ENCRYPTION_PASSWORD "${PROD_ENC_PW}"   "${TEST_ENV_FILE}"
+    [ -n "${PROD_ENC_SALT}" ] && upsert_env ENCRYPTION_SALT     "${PROD_ENC_SALT}" "${TEST_ENV_FILE}"
+    # PORT / NODE_ENV are infra-controlled (compose + image) — strip them from the
+    # secrets file so a stray value can't make the app listen on the wrong port.
+    grep -vE '^(PORT|NODE_ENV)=' "${TEST_ENV_FILE}" > "${TEST_ENV_FILE}.tmp" || true
+    mv "${TEST_ENV_FILE}.tmp" "${TEST_ENV_FILE}"
+    rm -f "${PROVIDED_ENV}"   # don't leave secrets in /tmp
+    ok ".env written from provided .env.test (DATABASE_URL + ENCRYPTION_* aligned to the prod clone): ${TEST_ENV_FILE}"
+elif [ ! -f "${TEST_ENV_FILE}" ] || [ "${RESET_DB}" = true ]; then
+    # No provided file — derive from the prod .env (copy + swap DATABASE_URL).
     cp "${PROD_ENV_FILE}" "${TEST_ENV_FILE}"
-
-    # Normalize: remove BOM and CRLF so Docker/Node can read values cleanly
-    sed -i '1s/^\xef\xbb\xbf//' "${TEST_ENV_FILE}"
-    sed -i 's/\r$//' "${TEST_ENV_FILE}"
-
-    # Replace DATABASE_URL with test instance URL
+    normalize_env "${TEST_ENV_FILE}"
     sed -i "s|^DATABASE_URL=.*|DATABASE_URL=${TEST_DB_URL}|" "${TEST_ENV_FILE}"
-
-    ok ".env written: ${TEST_ENV_FILE}"
+    ok ".env written from prod copy: ${TEST_ENV_FILE}"
 else
-    warn ".env already exists — skipping (use --reset-db to overwrite)"
+    warn ".env already exists — skipping (ship .env.test or use --reset-db to overwrite)"
 fi
 
 # Sanity-check DATABASE_URL (file is already normalized at this point)
@@ -274,6 +307,10 @@ services:
     env_file:
       - ${TEST_ENV_FILE}
     environment:
+      # Infra-controlled: the app must listen on INTERNAL_PORT to match the port
+      # mapping and healthcheck. `environment` wins over env_file, so a stray PORT in
+      # the secrets file can't move the listener off ${INTERNAL_PORT}.
+      PORT: ${INTERNAL_PORT}
       NODE_ENV: test
     healthcheck:
       test: ["CMD", "sh", "-c", "wget -q --spider http://127.0.0.1:${INTERNAL_PORT}/api/me"]
