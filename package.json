@@ -10,6 +10,7 @@
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "create-admin": "tsx script/create-admin.ts",
+    "seed": "tsx script/seed-db.ts",
     "reencrypt-emails": "tsx script/reencrypt-emails.ts",
     "changelog": "gen-changelog",
     "test": "vitest run",

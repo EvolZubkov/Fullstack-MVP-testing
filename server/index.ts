@@ -2,7 +2,6 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { seedDatabase } from "./storage";
 import { provisionSuperadmins } from "./services/access";
 import { syncBuiltinTemplates, reconcileTemplates } from "./template-registry";
 import {
@@ -117,7 +116,8 @@ app.use((req, res, next) => {
 
   // Wait for database to be available before starting
   await waitForDatabase();
-  await seedDatabase();
+  // Demo data is seeded manually in dev via `npm run seed` (script/seed-db.ts) —
+  // never on startup, so a fresh production DB never gets default demo accounts.
 
   // PRD-13: ensure configured superadmins exist (best-effort, no stored roles).
   try {
