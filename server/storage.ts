@@ -1,17 +1,14 @@
 /**
  * @module server/storage
  * @description Data access layer for the whole application. Exposes the
- * `IStorage` contract (the authoritative surface of all persistence
- * operations) and its `DatabaseStorage` implementation over Drizzle ORM +
- * PostgreSQL. Multi-step mutations run inside `db.transaction` so partial
- * writes cannot leak; `update*` methods whitelist writable columns to prevent
- * mass-assignment. Password hashing is delegated to the `server/utils/crypto`
- * seam (`hashPassword`/`verifyPassword`), keeping the DAL crypto-agnostic.
- * Routes depend only on `IStorage`, never on the concrete class.
+ * `IStorage` contract (the authoritative surface of all persistence operations)
+ * and its `DatabaseStorage` implementation. `DatabaseStorage` is a thin
+ * delegating facade: every method forwards to a per-domain repository under
+ * `server/storage/*` that owns the Drizzle ORM + PostgreSQL queries for its
+ * aggregate (transactions, whitelisting, cascades and the crypto seam all live
+ * in the repositories). This file holds no query logic of its own — it exists so
+ * routes depend only on `IStorage`, never on the concrete repositories.
  */
-import { randomUUID } from "crypto";
-import { eq, inArray, and, sql, desc } from "drizzle-orm";
-import { db } from "./db";
 import { UsersRepository } from "./storage/users-repository";
 import { GroupsRepository } from "./storage/groups-repository";
 import { AccessRepository } from "./storage/access-repository";
@@ -27,41 +24,38 @@ import { AssignmentsRepository } from "./storage/assignments-repository";
 import { FoldersRepository } from "./storage/folders-repository";
 
 export type { TestUsageRef };
-import {
-  topics, tests, testSections, attempts, folders, testFolders,
-  adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks,
-  testAssignments, passwordResetTokens, assignmentAccessTokens,
-  contentPages, questionMeasurements,
-  testAccessGrants, testSnapshots,
-  type User, type InsertUser,
-  type Folder, type InsertFolder,
-  type TestFolder, type InsertTestFolder,
-  type Topic, type InsertTopic,
-  type TopicCourse,
-  type TopicEvent,
-  type Question, type InsertQuestion,
-  type Test, type InsertTest,
-  type TestSection,
-  type Attempt, type InsertAttempt,
-  type AdaptiveTopicSettings, type InsertAdaptiveTopicSettings,
-  type AdaptiveLevel, type InsertAdaptiveLevel,
-  type AdaptiveLevelLink, type InsertAdaptiveLevelLink,
-  type ScormPackage, type InsertScormPackage,
-  type ScormAttempt, type InsertScormAttempt,
-  type ScormAnswer, type InsertScormAnswer,
-  type Group, type InsertGroup,
-  type UserGroup, type InsertUserGroup,
-  type TestAccessGrant, type InsertTestAccessGrant,
-  type TestSnapshot,
-  type TopicAccessGrant,
-  type TestAssignment, type InsertTestAssignment,
-  type PasswordResetToken, type InsertPasswordResetToken,
-  type AssignmentAccessToken, type InsertAssignmentAccessToken,
-  type ContentPage, type InsertContentPage,
-  type ResultVariable, type InsertResultVariable,
-  type Scale, type InsertScale,
-  type QuestionMeasurement, type InsertQuestionMeasurement,
-  type TestQuestionScoring, type InsertTestQuestionScoring,
+// Type-only imports: the facade names these in `IStorage` and its delegating
+// method signatures. Table objects and query helpers live in the repositories.
+import type {
+  User, InsertUser,
+  Folder, InsertFolder,
+  TestFolder, InsertTestFolder,
+  Topic, InsertTopic,
+  TopicCourse,
+  TopicEvent,
+  Question, InsertQuestion,
+  Test, InsertTest,
+  TestSection,
+  Attempt, InsertAttempt,
+  AdaptiveTopicSettings, InsertAdaptiveTopicSettings,
+  AdaptiveLevel, InsertAdaptiveLevel,
+  AdaptiveLevelLink, InsertAdaptiveLevelLink,
+  ScormPackage, InsertScormPackage,
+  ScormAttempt, InsertScormAttempt,
+  ScormAnswer, InsertScormAnswer,
+  Group, InsertGroup,
+  UserGroup,
+  TestAccessGrant, InsertTestAccessGrant,
+  TestSnapshot,
+  TopicAccessGrant,
+  TestAssignment, InsertTestAssignment,
+  PasswordResetToken,
+  AssignmentAccessToken,
+  ContentPage, InsertContentPage,
+  ResultVariable, InsertResultVariable,
+  Scale, InsertScale,
+  QuestionMeasurement, InsertQuestionMeasurement,
+  TestQuestionScoring, InsertTestQuestionScoring,
 } from "@shared/schema";
 import type { StoredRole } from "@shared/access";
 import { type ValidationResult, type ValueType } from "@shared/formula";
