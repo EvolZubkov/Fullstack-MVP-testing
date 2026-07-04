@@ -23,6 +23,7 @@ import { AttemptsRepository } from "./storage/attempts-repository";
 import { ScalesVariablesRepository } from "./storage/scales-variables-repository";
 import { TestsRepository, type TestUsageRef } from "./storage/tests-repository";
 import { ContentPagesRepository } from "./storage/content-pages-repository";
+import { AssignmentsRepository } from "./storage/assignments-repository";
 
 export type { TestUsageRef };
 import {
@@ -347,6 +348,7 @@ export class DatabaseStorage implements IStorage {
   private readonly scalesVariablesRepo = new ScalesVariablesRepository();
   private readonly testsRepo = new TestsRepository();
   private readonly contentPagesRepo = new ContentPagesRepository();
+  private readonly assignmentsRepo = new AssignmentsRepository();
 
   // ============================================
   // Users (delegated to UsersRepository)
@@ -530,95 +532,39 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ============================================
-  // Test Assignments
+  // Test Assignments (delegated to AssignmentsRepository)
   // ============================================
 
-  async getAssignment(id: string): Promise<TestAssignment | undefined> {
-    const [a] = await db.select().from(testAssignments).where(eq(testAssignments.id, id));
-    return a;
+  getAssignment(id: string): Promise<TestAssignment | undefined> {
+    return this.assignmentsRepo.getAssignment(id);
   }
 
-  async getTestAssignments(testId: string): Promise<TestAssignment[]> {
-    return db.select().from(testAssignments).where(eq(testAssignments.testId, testId));
+  getTestAssignments(testId: string): Promise<TestAssignment[]> {
+    return this.assignmentsRepo.getTestAssignments(testId);
   }
 
-  async getUserAssignments(userId: string): Promise<TestAssignment[]> {
-    return db.select().from(testAssignments).where(eq(testAssignments.userId, userId));
+  getUserAssignments(userId: string): Promise<TestAssignment[]> {
+    return this.assignmentsRepo.getUserAssignments(userId);
   }
 
-  async getGroupAssignments(groupId: string): Promise<TestAssignment[]> {
-    return db.select().from(testAssignments).where(eq(testAssignments.groupId, groupId));
+  getGroupAssignments(groupId: string): Promise<TestAssignment[]> {
+    return this.assignmentsRepo.getGroupAssignments(groupId);
   }
 
-  async isTestAssignedToUser(testId: string, userId: string): Promise<boolean> {
-    // Direct assignment first (cheapest), then via the user's groups.
-    const [direct] = await db
-      .select({ id: testAssignments.id })
-      .from(testAssignments)
-      .where(and(eq(testAssignments.testId, testId), eq(testAssignments.userId, userId)))
-      .limit(1);
-    if (direct) return true;
-    const groupIds = (await this.groupsRepo.getUserGroups(userId)).map((g) => g.id);
-    if (groupIds.length === 0) return false;
-    const [viaGroup] = await db
-      .select({ id: testAssignments.id })
-      .from(testAssignments)
-      .where(and(eq(testAssignments.testId, testId), inArray(testAssignments.groupId, groupIds)))
-      .limit(1);
-    return !!viaGroup;
+  isTestAssignedToUser(testId: string, userId: string): Promise<boolean> {
+    return this.assignmentsRepo.isTestAssignedToUser(testId, userId);
   }
 
-  async createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment> {
-    const id = randomUUID();
-    const [created] = await db.insert(testAssignments).values({
-      id,
-      testId: assignment.testId,
-      userId: assignment.userId || null,
-      groupId: assignment.groupId || null,
-      dueDate: assignment.dueDate || null,
-      assignedAt: new Date(),
-      assignedBy: assignment.assignedBy,
-    }).returning();
-    return created;
+  createTestAssignment(assignment: InsertTestAssignment & { assignedBy: string }): Promise<TestAssignment> {
+    return this.assignmentsRepo.createTestAssignment(assignment);
   }
 
-  async deleteTestAssignment(id: string): Promise<boolean> {
-    const result = await db.delete(testAssignments).where(eq(testAssignments.id, id));
-    return (result.rowCount ?? 0) > 0;
+  deleteTestAssignment(id: string): Promise<boolean> {
+    return this.assignmentsRepo.deleteTestAssignment(id);
   }
 
-  async getAssignedTestsForUser(userId: string): Promise<Test[]> {
-    // Groups the user belongs to
-    const userGroupsList = await this.groupsRepo.getUserGroups(userId);
-    const groupIds = userGroupsList.map(g => g.id);
-
-    // Assignments made directly to the user
-    const directAssignments = await db
-      .select({ testId: testAssignments.testId })
-      .from(testAssignments)
-      .where(eq(testAssignments.userId, userId));
-
-    // Assignments made through groups
-    let groupAssignments: { testId: string }[] = [];
-    if (groupIds.length > 0) {
-      groupAssignments = await db
-        .select({ testId: testAssignments.testId })
-        .from(testAssignments)
-        .where(inArray(testAssignments.groupId, groupIds));
-    }
-
-    // Collect unique testIds
-    const testIds = [...new Set([
-      ...directAssignments.map(a => a.testId),
-      ...groupAssignments.map(a => a.testId),
-    ])];
-
-    if (testIds.length === 0) {
-      return [];
-    }
-
-    // Load the tests
-    return db.select().from(tests).where(inArray(tests.id, testIds));
+  getAssignedTestsForUser(userId: string): Promise<Test[]> {
+    return this.assignmentsRepo.getAssignedTestsForUser(userId);
   }
 
   // ============================================
@@ -663,54 +609,30 @@ export class DatabaseStorage implements IStorage {
     return Number(result[0]?.count || 0);
   }
 
-  // ── Assignment Access Tokens (magic links) ──────────────────────────────────
+  // ── Assignment Access Tokens (magic links) (delegated to AssignmentsRepository) ─
 
-  async createAssignmentAccessToken(data: { assignmentId: string; userId: string; testId: string; tokenHash: string; expiresAt: Date }): Promise<AssignmentAccessToken> {
-    const [token] = await db.insert(assignmentAccessTokens).values({
-      id: randomUUID(),
-      assignmentId: data.assignmentId,
-      userId: data.userId,
-      testId: data.testId,
-      tokenHash: data.tokenHash,
-      expiresAt: data.expiresAt,
-    }).returning();
-    return token;
+  createAssignmentAccessToken(data: { assignmentId: string; userId: string; testId: string; tokenHash: string; expiresAt: Date }): Promise<AssignmentAccessToken> {
+    return this.assignmentsRepo.createAssignmentAccessToken(data);
   }
 
-  async getAssignmentAccessToken(tokenHash: string): Promise<AssignmentAccessToken | undefined> {
-    const [token] = await db.select().from(assignmentAccessTokens)
-      .where(eq(assignmentAccessTokens.tokenHash, tokenHash));
-    return token;
+  getAssignmentAccessToken(tokenHash: string): Promise<AssignmentAccessToken | undefined> {
+    return this.assignmentsRepo.getAssignmentAccessToken(tokenHash);
   }
 
-  async getAssignmentAccessTokensByAssignment(assignmentId: string): Promise<AssignmentAccessToken[]> {
-    return db.select().from(assignmentAccessTokens)
-      .where(eq(assignmentAccessTokens.assignmentId, assignmentId));
+  getAssignmentAccessTokensByAssignment(assignmentId: string): Promise<AssignmentAccessToken[]> {
+    return this.assignmentsRepo.getAssignmentAccessTokensByAssignment(assignmentId);
   }
 
-  async revokeAssignmentAccessToken(id: string): Promise<void> {
-    await db.update(assignmentAccessTokens)
-      .set({ revokedAt: new Date() })
-      .where(eq(assignmentAccessTokens.id, id));
+  revokeAssignmentAccessToken(id: string): Promise<void> {
+    return this.assignmentsRepo.revokeAssignmentAccessToken(id);
   }
 
-  async revokeAssignmentAccessTokensByAssignment(assignmentId: string): Promise<void> {
-    await db.update(assignmentAccessTokens)
-      .set({ revokedAt: new Date() })
-      .where(and(
-        eq(assignmentAccessTokens.assignmentId, assignmentId),
-        sql`${assignmentAccessTokens.revokedAt} IS NULL`,
-      ));
+  revokeAssignmentAccessTokensByAssignment(assignmentId: string): Promise<void> {
+    return this.assignmentsRepo.revokeAssignmentAccessTokensByAssignment(assignmentId);
   }
 
-  async revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId: string, userId: string): Promise<void> {
-    await db.update(assignmentAccessTokens)
-      .set({ revokedAt: new Date() })
-      .where(and(
-        eq(assignmentAccessTokens.assignmentId, assignmentId),
-        eq(assignmentAccessTokens.userId, userId),
-        sql`${assignmentAccessTokens.revokedAt} IS NULL`,
-      ));
+  revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId: string, userId: string): Promise<void> {
+    return this.assignmentsRepo.revokeAssignmentAccessTokensByAssignmentAndUser(assignmentId, userId);
   }
 
   async getFolders(): Promise<Folder[]> {
