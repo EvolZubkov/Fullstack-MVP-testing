@@ -68,11 +68,29 @@
   строки, ссылающиеся на несуществующий тест (`attempts.testId` — `notNull` без
   `references`, `shared/schema.ts:491`).
 
-**Действие:** свести очистку в один транзакционный метод `deleteTestDeep(testId)`
-в DAL, явно и в корректном порядке удаляющий все зависимые строки (или, как
-альтернатива, добавить недостающие внешние ключи `onDelete: cascade`
-миграцией — решается отдельно, так как затрагивает форму БД). Один владелец
-операции вместо трёх.
+**Действие:** свести очистку в один транзакционный метод, явно и в корректном
+порядке удаляющий все зависимые строки.
+
+**Статус: ВЫПОЛНЕНО.** Реализовано усилением самого `deleteTest` (единственный
+владелец удаления теста, без отдельного «мелкого» варианта — чтобы не плодить
+footgun), а не отдельным методом. В одной транзакции удаляются adaptive-строки
+(links через подзапрос по их levels), `test_sections`, `test_assignments`,
+`test_access_grants`, `attempts`, `test_snapshots`; FK `onDelete: cascade` уносит
+`content_pages`/`scales`/`result_variables`/`question_measurements`/
+`test_question_scoring`. Из маршрута `DELETE /:id` убрана ручная очистка adaptive.
+
+Политика retention (согласована): `attempts` и `test_snapshots` **удаляются** —
+жёсткое удаление необратимо (archive — отдельный обратимый путь), осиротевшие
+попытки не нужны; `attempts.testId` `notNull` не может «висеть». SCORM
+(`scorm_packages`/`scorm_attempts`/`scorm_answers`) **сохраняется** —
+`scorm_packages.testId` nullable by design, экспортированный пакет живёт в LMS
+независимо от теста. Покрыто интеграционным тестом «ноль сирот»
+`tests/it/delete-test-deep.it.test.ts`.
+
+Инфраструктура тестов: интеграционные тесты вынесены в отдельный прогон
+`npm run test:it` (`vitest.it.config.ts`, `fileParallelism: false`) и исключены
+из основного `npm test` — несколько инстансов pglite (WASM) не должны
+конкурировать под параллельным юнит-прогоном.
 
 ### 3.3. `duplicateTopicWithQuestions` обходит инварианты темы
 

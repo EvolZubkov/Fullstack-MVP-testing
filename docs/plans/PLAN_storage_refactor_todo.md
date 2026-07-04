@@ -36,11 +36,14 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
   `deleteTopicsBulk`, `deleteGroup`, `deleteFolder`, `deleteTestFolder`,
   `deleteTestFolderCascade`, `setUserGroups`, `setUserRoles`; интеграционные
   тесты атомарности на `pglite` (раздел 3.1).
-- [ ] 4. Ввести транзакционный `deleteTestDeep(testId)`, явно чистящий все
-  зависимые строки (`attempts`, `test_assignments`, `test_access_grants`,
-  `test_snapshots`, `scorm_packages/attempts/answers`, adaptive, `test_sections`);
-  перенести очистку из обработчика маршрута в слой доступа к данным; тест
-  «ноль сирот» на `pglite` (раздел 3.2).
+- [x] 4. Атомарное глубокое удаление теста — реализовано усилением `deleteTest`
+  (единственный владелец, без «мелкого» варианта). В одной транзакции удаляются
+  adaptive, `test_sections`, `test_assignments`, `test_access_grants`, `attempts`,
+  `test_snapshots`; FK-каскад уносит content_pages/scales/result_variables/
+  question_measurements/test_question_scoring; SCORM сохраняется (nullable
+  testId — пакет живёт в LMS). Ручная очистка убрана из `DELETE /:id`. Тест «ноль
+  сирот» `tests/it/delete-test-deep.it.test.ts`. Интеграционные тесты вынесены в
+  `npm run test:it` (vitest.it.config.ts, последовательно). Раздел 3.2.
 - [ ] 5. Исправить `duplicateTopicWithQuestions`: проводить дублирование через
   путь `createTopic`, чтобы поддержать инварианты темы (`nameNormalized`,
   `ownerId`, `visibility`, `code`, `folderId`, `createdBy`); тест инвариантов на
