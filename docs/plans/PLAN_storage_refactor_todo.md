@@ -169,7 +169,14 @@ dev Docker PG для индексов, `npm run check` и `npm test` на каж
       `reorderContentPages` пакетом в транзакции). Полностью изолирован — каскад
       уносит FK при удалении теста, отдельного каскада нет. `tsc` + оба сьюта
       зелёные.
-    - [ ] 12.12. Assignments (назначения + токены доступа к назначениям).
+    - [x] 12.12. Assignments — `server/storage/assignments-repository.ts`
+      (`AssignmentsRepository`): назначения `test_assignments` (прямые и
+      групповые) + magic-link токены `assignment_access_tokens`. Мембершип-чтения
+      (`isTestAssignedToUser`/`getAssignedTestsForUser`) резолвят id групп прямым
+      запросом `user_groups` (нужны только id — без join на `groups`), а список
+      тестов грузится прямым foreign-read `tests` — кросс-доменные чтения
+      инлайнены, чтобы фасад остался чистой делегацией (не вызов `groupsRepo`).
+      Отзыв токена — мягкий (`revokedAt`), не удаление. `tsc` + оба сьюта зелёные.
     - [ ] 12.13. Folders (папки контента + папки тестов).
     - [ ] 12.14. PasswordResetTokens — в `UsersRepository` (токены пользователя).
   - [x] 12.7. Attempts — `server/storage/attempts-repository.ts`
