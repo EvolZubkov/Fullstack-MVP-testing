@@ -1,18 +1,24 @@
 /**
  * @module server/storage/users-repository
  * @description Data access for the user domain: lookup, creation, password
- * validation and profile/state updates. Emails are encrypted at rest and looked
- * up by a deterministic hash (`emailHash`); the plaintext email is decrypted
- * only on read. Password hashing goes through the `server/utils/crypto` seam
- * (`hashPassword`/`verifyPassword`), keeping this repository crypto-agnostic.
- * `validatePassword` performs a dummy verification on the not-found path to
- * equalize response timing (anti-enumeration). Exposed to the rest of the app
- * through the `IStorage` facade, never imported directly by routes.
+ * validation, profile/state updates and password-reset tokens
+ * (`password_reset_tokens`, which belong to the user aggregate). Emails are
+ * encrypted at rest and looked up by a deterministic hash (`emailHash`); the
+ * plaintext email is decrypted only on read. Password hashing goes through the
+ * `server/utils/crypto` seam (`hashPassword`/`verifyPassword`), keeping this
+ * repository crypto-agnostic. `validatePassword` performs a dummy verification
+ * on the not-found path to equalize response timing (anti-enumeration); reset
+ * tokens store only a hash and are consumed by marking `usedAt`, never deleted,
+ * so `getRecentTokensCount` can rate-limit requests. Exposed to the rest of the
+ * app through the `IStorage` facade, never imported directly by routes.
  */
 import { randomUUID } from "crypto";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { db } from "../db";
-import { users, type User, type InsertUser } from "@shared/schema";
+import {
+  users, passwordResetTokens,
+  type User, type InsertUser, type PasswordResetToken,
+} from "@shared/schema";
 import {
   encryptEmail,
   decryptEmail,
@@ -131,5 +137,45 @@ export class UsersRepository {
       .where(eq(users.id, id))
       .returning();
     return updated || undefined;
+  }
+
+  // ─── Password reset tokens (part of the user aggregate) ─────────────────────
+
+  async createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken> {
+    const id = randomUUID();
+    const expiresAt = new Date(Date.now() + (ttlMs ?? 30 * 60 * 1000)); // 30 minutes by default
+    const [token] = await db.insert(passwordResetTokens).values({
+      id,
+      userId,
+      tokenHash,
+      expiresAt,
+      requestIp,
+      createdAt: new Date(),
+    }).returning();
+    return token;
+  }
+
+  async getPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined> {
+    const [token] = await db.select().from(passwordResetTokens)
+      .where(eq(passwordResetTokens.tokenHash, tokenHash));
+    return token || undefined;
+  }
+
+  async markTokenAsUsed(id: string): Promise<void> {
+    await db.update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(passwordResetTokens.id, id));
+  }
+
+  async getRecentTokensCount(userId: string, hours: number): Promise<number> {
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(passwordResetTokens)
+      .where(and(
+        eq(passwordResetTokens.userId, userId),
+        sql`${passwordResetTokens.createdAt} > ${since}`
+      ));
+    return Number(result[0]?.count || 0);
   }
 }

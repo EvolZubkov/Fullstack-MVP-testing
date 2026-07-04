@@ -570,45 +570,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ============================================
-  // Password Reset Tokens
+  // Password Reset Tokens (delegated to UsersRepository)
   // ============================================
 
-  async createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken> {
-    const id = randomUUID();
-    const expiresAt = new Date(Date.now() + (ttlMs ?? 30 * 60 * 1000)); // 30 minutes by default
-    const [token] = await db.insert(passwordResetTokens).values({
-      id,
-      userId,
-      tokenHash,
-      expiresAt,
-      requestIp,
-      createdAt: new Date(),
-    }).returning();
-    return token;
+  createPasswordResetToken(userId: string, tokenHash: string, requestIp: string, ttlMs?: number): Promise<PasswordResetToken> {
+    return this.usersRepo.createPasswordResetToken(userId, tokenHash, requestIp, ttlMs);
   }
 
-  async getPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined> {
-    const [token] = await db.select().from(passwordResetTokens)
-      .where(eq(passwordResetTokens.tokenHash, tokenHash));
-    return token || undefined;
+  getPasswordResetToken(tokenHash: string): Promise<PasswordResetToken | undefined> {
+    return this.usersRepo.getPasswordResetToken(tokenHash);
   }
 
-  async markTokenAsUsed(id: string): Promise<void> {
-    await db.update(passwordResetTokens)
-      .set({ usedAt: new Date() })
-      .where(eq(passwordResetTokens.id, id));
+  markTokenAsUsed(id: string): Promise<void> {
+    return this.usersRepo.markTokenAsUsed(id);
   }
 
-  async getRecentTokensCount(userId: string, hours: number): Promise<number> {
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
-    const result = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(passwordResetTokens)
-      .where(and(
-        eq(passwordResetTokens.userId, userId),
-        sql`${passwordResetTokens.createdAt} > ${since}`
-      ));
-    return Number(result[0]?.count || 0);
+  getRecentTokensCount(userId: string, hours: number): Promise<number> {
+    return this.usersRepo.getRecentTokensCount(userId, hours);
   }
 
   // ── Assignment Access Tokens (magic links) (delegated to AssignmentsRepository) ─
