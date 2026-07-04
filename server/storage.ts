@@ -17,7 +17,7 @@ import {
   type TopicEvent,
   type Question, type InsertQuestion,
   type Test, type InsertTest,
-  type TestSection, type InsertTestSection,
+  type TestSection,
   type Attempt, type InsertAttempt,
   type AdaptiveTopicSettings, type InsertAdaptiveTopicSettings,
   type AdaptiveLevel, type InsertAdaptiveLevel,
@@ -218,8 +218,7 @@ export interface IStorage {
   getTests(): Promise<Test[]>;
   getTest(id: string): Promise<Test | undefined>;
   getMigrationHealth(): Promise<{ legacyStartPageCount: number }>;
-  createTest(test: InsertTest, sections: Omit<InsertTestSection, "testId">[]): Promise<Test>;
-  updateTest(id: string, test: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined>;
+  updateTest(id: string, test: Partial<InsertTest>): Promise<Test | undefined>;
   /** Updates only the status field without bumping the version counter (PRD-7 §9). */
   patchTestStatus(id: string, status: "draft" | "published" | "archived"): Promise<{ id: string; status: string; version: number } | undefined>;
   deleteTest(id: string): Promise<boolean>;
@@ -1426,72 +1425,7 @@ export class DatabaseStorage implements IStorage {
     return { legacyStartPageCount: count ?? 0 };
   }
 
-  async createTest(test: InsertTest, sections: Omit<InsertTestSection, "testId">[]): Promise<Test> {
-    return db.transaction(async (tx) => {
-      const id = randomUUID();
-      // PRD-7 §4.1: status is the source of truth; sync published from it.
-      const status = test.status ?? (test.published ? "published" : "draft");
-      const [newTest] = await tx.insert(tests).values({
-        id,
-        title: test.title,
-        description: test.description || null,
-        overallPassRuleJson: test.overallPassRuleJson,
-        webhookUrl: test.webhookUrl || null,
-        status,
-        published: status === "published",
-        telemetryEnabled: test.telemetryEnabled ?? false,
-        feedbackJson: test.feedbackJson ?? null,
-        flowPolicyJson: test.flowPolicyJson ?? null,
-        showCorrectAnswers: test.showCorrectAnswers || false,
-        timeLimitMinutes: test.timeLimitMinutes || null,
-        maxAttempts: test.maxAttempts || null,
-        startPageContent: test.startPageContent || null,
-        feedback: test.feedback || null,
-        mode: test.mode || "standard",
-        showDifficultyLevel: test.showDifficultyLevel ?? true,
-      }).returning();
-
-      for (const section of sections) {
-        await tx.insert(testSections).values({
-          id: randomUUID(),
-          testId: id,
-          topicId: section.topicId,
-          drawCount: section.drawCount,
-          drawAll: section.drawAll ?? false,
-          topicPassRuleJson: section.topicPassRuleJson ?? null,
-          required: section.required ?? true,
-          timeLimitMinutes: section.timeLimitMinutes ?? null,
-          feedbackJson: section.feedbackJson ?? null,
-          drawBlueprintJson: section.drawBlueprintJson ?? null,
-          formSetJson: section.formSetJson ?? null,
-          defaultPoints: section.defaultPoints ?? null,
-        });
-      }
-
-      // Safety net (§1.11): if legacy client passes startPageContent, create an
-      // intro content_page so new code can use it even without migration 003.
-      if (test.startPageContent?.trim()) {
-        await tx.insert(contentPages).values({
-          id: randomUUID(),
-          testId: id,
-          topicId: null,
-          position: "before",
-          mode: "html",
-          type: "intro",
-          kind: "intro",
-          templateKey: null,
-          sortOrder: 0,
-          valuesJson: { values: { html: test.startPageContent } },
-          autoAdvance: false,
-          autoAdvanceDelayMs: null,
-        });
-      }
-
-      return newTest;
-    });
-  }
-
-  async updateTest(id: string, updates: Partial<InsertTest>, sections?: Omit<InsertTestSection, "testId">[]): Promise<Test | undefined> {
+  async updateTest(id: string, updates: Partial<InsertTest>): Promise<Test | undefined> {
     return db.transaction(async (tx) => {
       // PRD-7 §4.1: keep status and published in sync on every write.
       const patch: Partial<InsertTest> = { ...updates };
@@ -1506,26 +1440,8 @@ export class DatabaseStorage implements IStorage {
         .where(eq(tests.id, id))
         .returning();
       if (!updated) return undefined;
-
-      if (sections) {
-        await tx.delete(testSections).where(eq(testSections.testId, id));
-        for (const section of sections) {
-          await tx.insert(testSections).values({
-            id: randomUUID(),
-            testId: id,
-            topicId: section.topicId,
-            drawCount: section.drawCount,
-            drawAll: section.drawAll ?? false,
-            topicPassRuleJson: section.topicPassRuleJson ?? null,
-            required: section.required ?? true,
-            timeLimitMinutes: section.timeLimitMinutes ?? null,
-            feedbackJson: section.feedbackJson ?? null,
-            drawBlueprintJson: section.drawBlueprintJson ?? null,
-            defaultPoints: section.defaultPoints ?? null,
-          });
-        }
-      }
-
+      // Section writes go exclusively through TestSettingsService (the single
+      // section writer). updateTest only patches the test row.
       return updated;
     });
   }

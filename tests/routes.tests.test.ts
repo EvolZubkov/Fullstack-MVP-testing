@@ -18,7 +18,6 @@ const { storageMock, serviceMock } = vi.hoisted(() => ({
   storageMock: {
     getTest: vi.fn(),
     getTests: vi.fn(),
-    createTest: vi.fn(),
     updateTest: vi.fn(),
     deleteTest: vi.fn(),
     patchTestStatus: vi.fn(),
