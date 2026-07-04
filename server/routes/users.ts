@@ -20,13 +20,6 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
 
 const router = Router();
 
-/** Attach the user's stored roles to a user object for API responses. */
-async function withStoredRoles<T extends { id: string }>(
-  user: T,
-): Promise<T & { roles: StoredRole[] }> {
-  return { ...user, roles: await storage.getUserRoles(user.id) };
-}
-
 // GET /api/users - Список пользователей
 router.get("/", requirePermission("users.read"), async (req, res) => {
   try {

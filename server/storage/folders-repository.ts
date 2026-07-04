@@ -145,14 +145,13 @@ export class FoldersRepository {
 
     // Delete every test in any of those folders, then the folders — as one unit.
     // Adaptive children rows are assumed cleaned up by the route handler first.
-    if (descendantIds.length > 0) {
-      return db.transaction(async (tx) => {
-        await tx.delete(tests).where(inArray(tests.folderId, descendantIds));
-        const result = await tx.delete(testFolders).where(inArray(testFolders.id, descendantIds)).returning();
-        return result.length > 0;
-      });
-    }
-    return false;
+    // `descendantIds` always contains at least `id` (the BFS seed), so an unknown
+    // id still runs the delete and reports false via the empty RETURNING set.
+    return db.transaction(async (tx) => {
+      await tx.delete(tests).where(inArray(tests.folderId, descendantIds));
+      const result = await tx.delete(testFolders).where(inArray(testFolders.id, descendantIds)).returning();
+      return result.length > 0;
+    });
   }
 
   async moveTestToFolder(testId: string, folderId: string | null): Promise<boolean> {
