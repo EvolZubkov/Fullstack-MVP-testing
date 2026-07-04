@@ -18,9 +18,10 @@ import { GroupsRepository } from "./storage/groups-repository";
 import { AccessRepository } from "./storage/access-repository";
 import { TopicsRepository } from "./storage/topics-repository";
 import { QuestionsRepository } from "./storage/questions-repository";
+import { ScormRepository } from "./storage/scorm-repository";
 import {
   topics, tests, testSections, attempts, folders, testFolders,
-  adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks, scormPackages, scormAttempts, scormAnswers,
+  adaptiveTopicSettings, adaptiveLevels, adaptiveLevelLinks,
   testAssignments, passwordResetTokens, assignmentAccessTokens,
   contentPages, resultVariables, scales, questionMeasurements, testQuestionScoring,
   testAccessGrants, testSnapshots,
@@ -359,6 +360,7 @@ export class DatabaseStorage implements IStorage {
   private readonly accessRepo = new AccessRepository();
   private readonly topicsRepo = new TopicsRepository();
   private readonly questionsRepo = new QuestionsRepository();
+  private readonly scormRepo = new ScormRepository();
 
   // ============================================
   // Users (delegated to UsersRepository)
@@ -1318,110 +1320,68 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
-  async createScormPackage(pkg: InsertScormPackage & { id: string }): Promise<ScormPackage> {
-    const [created] = await db.insert(scormPackages).values(pkg).returning();
-    return created;
-  }
-
-  async getScormPackage(id: string): Promise<ScormPackage | undefined> {
-    const [pkg] = await db.select().from(scormPackages).where(eq(scormPackages.id, id));
-    return pkg || undefined;
-  }
-
-  async getScormPackagesByTest(testId: string): Promise<ScormPackage[]> {
-    return db.select().from(scormPackages).where(eq(scormPackages.testId, testId));
-  }
-
-  async getScormPackages(): Promise<ScormPackage[]> {
-    return db.select().from(scormPackages);
-  }
-
-  async updateScormPackage(id: string, data: Partial<ScormPackage>): Promise<ScormPackage | undefined> {
-    const [updated] = await db.update(scormPackages)
-      .set(data)
-      .where(eq(scormPackages.id, id))
-      .returning();
-    return updated || undefined;
-  }
-
   // ============================================
-  // SCORM Attempts
+  // SCORM telemetry (delegated to ScormRepository)
   // ============================================
 
-  async createScormAttempt(attempt: InsertScormAttempt & { id: string }): Promise<ScormAttempt> {
-    const [created] = await db.insert(scormAttempts).values(attempt).returning();
-    return created;
+  createScormPackage(pkg: InsertScormPackage & { id: string }): Promise<ScormPackage> {
+    return this.scormRepo.createScormPackage(pkg);
   }
 
-  async getScormAttempt(id: string): Promise<ScormAttempt | undefined> {
-    const [attempt] = await db.select().from(scormAttempts).where(eq(scormAttempts.id, id));
-    return attempt || undefined;
+  getScormPackage(id: string): Promise<ScormPackage | undefined> {
+    return this.scormRepo.getScormPackage(id);
   }
 
-  async getScormAttemptBySession(
-    packageId: string, 
-    sessionId: string, 
-    attemptNumber?: number
+  getScormPackagesByTest(testId: string): Promise<ScormPackage[]> {
+    return this.scormRepo.getScormPackagesByTest(testId);
+  }
+
+  getScormPackages(): Promise<ScormPackage[]> {
+    return this.scormRepo.getScormPackages();
+  }
+
+  updateScormPackage(id: string, data: Partial<ScormPackage>): Promise<ScormPackage | undefined> {
+    return this.scormRepo.updateScormPackage(id, data);
+  }
+
+  createScormAttempt(attempt: InsertScormAttempt & { id: string }): Promise<ScormAttempt> {
+    return this.scormRepo.createScormAttempt(attempt);
+  }
+
+  getScormAttempt(id: string): Promise<ScormAttempt | undefined> {
+    return this.scormRepo.getScormAttempt(id);
+  }
+
+  getScormAttemptBySession(
+    packageId: string,
+    sessionId: string,
+    attemptNumber?: number,
   ): Promise<ScormAttempt | undefined> {
-    if (attemptNumber !== undefined) {
-      // Look up a specific attempt by number
-      const [attempt] = await db.select().from(scormAttempts)
-        .where(and(
-          eq(scormAttempts.packageId, packageId),
-          eq(scormAttempts.sessionId, sessionId),
-          eq(scormAttempts.attemptNumber, attemptNumber)
-        ));
-      return attempt || undefined;
-    }
-    
-    // No attemptNumber given — return the latest attempt
-    const [attempt] = await db.select().from(scormAttempts)
-      .where(and(
-        eq(scormAttempts.packageId, packageId),
-        eq(scormAttempts.sessionId, sessionId)
-      ))
-      .orderBy(desc(scormAttempts.attemptNumber));
-    return attempt || undefined;
+    return this.scormRepo.getScormAttemptBySession(packageId, sessionId, attemptNumber);
   }
 
-  async getNextAttemptNumber(packageId: string, sessionId: string): Promise<number> {
-    const [result] = await db
-      .select({ maxNum: sql<number>`COALESCE(MAX(${scormAttempts.attemptNumber}), 0)` })
-      .from(scormAttempts)
-      .where(and(
-        eq(scormAttempts.packageId, packageId),
-        eq(scormAttempts.sessionId, sessionId)
-      ));
-    return (result?.maxNum || 0) + 1;
+  getNextAttemptNumber(packageId: string, sessionId: string): Promise<number> {
+    return this.scormRepo.getNextAttemptNumber(packageId, sessionId);
   }
 
-  async getScormAttemptsByPackage(packageId: string): Promise<ScormAttempt[]> {
-    return db.select().from(scormAttempts).where(eq(scormAttempts.packageId, packageId));
+  getScormAttemptsByPackage(packageId: string): Promise<ScormAttempt[]> {
+    return this.scormRepo.getScormAttemptsByPackage(packageId);
   }
 
-  async updateScormAttempt(id: string, data: Partial<ScormAttempt>): Promise<ScormAttempt | undefined> {
-    const [updated] = await db.update(scormAttempts)
-      .set(data)
-      .where(eq(scormAttempts.id, id))
-      .returning();
-    return updated || undefined;
+  updateScormAttempt(id: string, data: Partial<ScormAttempt>): Promise<ScormAttempt | undefined> {
+    return this.scormRepo.updateScormAttempt(id, data);
   }
 
-  async getAllScormAttempts(): Promise<ScormAttempt[]> {
-    return db.select().from(scormAttempts);
+  getAllScormAttempts(): Promise<ScormAttempt[]> {
+    return this.scormRepo.getAllScormAttempts();
   }
 
-  // ============================================
-  // SCORM Answers
-  // ============================================
-
-  async createScormAnswer(answer: InsertScormAnswer & { id: string }): Promise<ScormAnswer> {
-    const [created] = await db.insert(scormAnswers).values(answer).returning();
-    return created;
+  createScormAnswer(answer: InsertScormAnswer & { id: string }): Promise<ScormAnswer> {
+    return this.scormRepo.createScormAnswer(answer);
   }
 
-  async getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]> {
-    return db.select().from(scormAnswers).where(eq(scormAnswers.attemptId, attemptId));
+  getScormAnswersByAttempt(attemptId: string): Promise<ScormAnswer[]> {
+    return this.scormRepo.getScormAnswersByAttempt(attemptId);
   }
 
   // ============================================
