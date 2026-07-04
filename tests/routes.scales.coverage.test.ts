@@ -130,6 +130,47 @@ describe("scales catch/500 branches", () => {
   });
 });
 
+// ─── handler-level defensive "test not found" re-check ────────────────────────
+// Each handler re-fetches the test and guards `if (!test) 404` independently of
+// requireTestScope. To reach that guard we let the middleware see the test
+// (first getTest) and the handler see it gone (second getTest).
+describe("scales handler-level test-missing 404", () => {
+  const missAfterScope = () => storageMock.getTest.mockReset().mockResolvedValueOnce(baseTest).mockResolvedValue(undefined);
+
+  it("GET scales", async () => {
+    missAfterScope();
+    expect((await request(makeApp()).get("/api/tests/test-1/scales")).status).toBe(404);
+  });
+  it("POST scales", async () => {
+    missAfterScope();
+    expect((await request(makeApp()).post("/api/tests/test-1/scales").send(validScale)).status).toBe(404);
+  });
+  it("reorder", async () => {
+    missAfterScope();
+    expect((await request(makeApp()).put("/api/tests/test-1/scales/reorder").send([])).status).toBe(404);
+  });
+  it("PUT scale", async () => {
+    missAfterScope();
+    expect((await request(makeApp()).put("/api/tests/test-1/scales/scale-1").send({})).status).toBe(404);
+  });
+  it("DELETE scale", async () => {
+    missAfterScope();
+    expect((await request(makeApp()).delete("/api/tests/test-1/scales/scale-1")).status).toBe(404);
+  });
+  it("GET measurements", async () => {
+    missAfterScope();
+    expect((await request(makeApp()).get("/api/tests/test-1/measurements")).status).toBe(404);
+  });
+  it("PUT measurements", async () => {
+    missAfterScope();
+    expect((await request(makeApp()).put("/api/tests/test-1/measurements/q1").send([])).status).toBe(404);
+  });
+  it("preview", async () => {
+    missAfterScope();
+    expect((await request(makeApp()).post("/api/tests/test-1/scales/preview").send({ answers: {} })).status).toBe(404);
+  });
+});
+
 // ─── POST scales — explicit sortOrder branch ─────────────────────────────────
 describe("POST /api/tests/:id/scales (coverage)", () => {
   it("honours an explicit sortOrder in the body", async () => {
