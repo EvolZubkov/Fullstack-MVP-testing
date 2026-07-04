@@ -58,7 +58,7 @@ describe("update* — whitelist blocks mass-assignment", () => {
     expect(updated!.status).toBe("active");
 
     const [after] = await h.current!.db.select().from(users).where(eq(users.id, user.id));
-    expect(after.passwordHash).toBe(before.passwordHash); // still bcrypt("pw")
+    expect(after.passwordHash).toBe(before.passwordHash); // hash untouched by updateUser
     expect(after.passwordHash).not.toBe("HACKED");
     expect(after.createdBy).toBe(before.createdBy);
     expect(after.emailHash).toBe(before.emailHash); // not clobbered by a forbidden value

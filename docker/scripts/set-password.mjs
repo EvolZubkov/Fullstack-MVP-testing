@@ -2,7 +2,7 @@
  * @module docker/scripts/set-password
  * @description Sets (resets) the password for a single user account, identified
  * by email. Designed to run INSIDE the application container via `docker exec`,
- * so it reuses the container's `DATABASE_URL`, `bcryptjs` and `pg` — no
+ * so it reuses the container's `DATABASE_URL`, `@vvlad1973/crypto` and `pg` — no
  * superuser DB access required (the app role owns the `users` table).
  *
  * The account is looked up by `email_hash` (SHA-256 of the normalized email),
@@ -19,7 +19,7 @@
  * Exit codes: 0 ok, 1 bad input/env, 2 user not found, 3 DB error.
  */
 import { createHash } from "node:crypto";
-import bcrypt from "bcryptjs";
+import { hashPassword } from "@vvlad1973/crypto";
 import pg from "pg";
 // Runs from /app inside the container (docker cp -> /app/set-password.mjs), so
 // the baked config loader (server/config-loader.mjs) and config file (config/) are
@@ -57,8 +57,8 @@ const emailHash = createHash("sha256")
   .update(EMAIL.toLowerCase().trim())
   .digest("hex");
 
-// Mirror server/storage.ts: bcrypt.hash(password, 10).
-const passwordHash = await bcrypt.hash(password, 10);
+// Mirror server/utils/crypto.ts#hashPassword: scrypt via @vvlad1973/crypto (PRD-9).
+const passwordHash = await hashPassword(password);
 
 const client = new pg.Client({ connectionString: DATABASE_URL });
 

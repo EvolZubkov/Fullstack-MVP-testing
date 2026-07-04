@@ -9,7 +9,7 @@ export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey(),
   email: text("email").notNull(), // Зашифрованный email
   emailHash: varchar("email_hash", { length: 64 }).unique(), // SHA-256 хеш для поиска
-  passwordHash: text("password_hash").notNull(), // bcrypt hash
+  passwordHash: text("password_hash").notNull(), // scrypt hash (PRD-9); legacy bcrypt during migration
   name: text("name"), // заполняется при первом входе
   // PRD-13 (T-10): the legacy single `role` column was dropped — roles live in
   // `user_roles` (many-to-many) plus the configuration-derived superadmin.

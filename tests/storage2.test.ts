@@ -28,14 +28,6 @@ vi.mock("../server/utils/crypto", () => ({
   hashEmail: (e: string) => `hash:${e}`,
 }));
 
-vi.mock("bcryptjs", () => ({
-  default: {
-    hash: async (_p: string, _r: number) => "hashed_password",
-    compare: async (plain: string, hashed: string) =>
-      hashed === "hashed_password" && plain === "correct",
-  },
-}));
-
 // ─── Chainable mock helpers ───────────────────────────────────────────────────
 const makeChain = (returnValue: any) => {
   const chain: any = {};

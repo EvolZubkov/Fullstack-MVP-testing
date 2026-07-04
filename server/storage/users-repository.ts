@@ -26,7 +26,10 @@ import {
   hashPassword,
   verifyPassword,
   dummyVerifyPassword,
+  isLegacyBcryptHash,
 } from "../utils/crypto";
+import { logger } from "../logger";
+import { incrementCounter } from "../metrics";
 import { pickDefined } from "./shared";
 
 /** Repository for the `users` table (PRD-13 identities, encrypted emails). */
@@ -79,7 +82,21 @@ export class UsersRepository {
       return null;
     }
     const valid = await verifyPassword(password, user.passwordHash);
-    return valid ? user : null;
+    if (!valid) return null;
+
+    // PRD-9 Этап 2: transparently migrate a legacy bcrypt hash to scrypt on the
+    // first successful login. The plaintext is only available here, so this is the
+    // one point where re-hashing is possible without a password reset. Only the
+    // hash is touched — `mustChangePassword` and other state stay as-is (a rehash
+    // is not a password change). Remove this branch in Этап 3 once the metric is 0.
+    if (isLegacyBcryptHash(user.passwordHash)) {
+      const rehashed = await hashPassword(password);
+      await db.update(users).set({ passwordHash: rehashed }).where(eq(users.id, user.id));
+      incrementCounter("auth.legacy_bcrypt_rehash");
+      logger.info(`Rehashed legacy bcrypt password to scrypt for user ${user.id}`, "auth");
+      return { ...user, passwordHash: rehashed };
+    }
+    return user;
   }
 
   async updateUserLastLogin(id: string): Promise<void> {
