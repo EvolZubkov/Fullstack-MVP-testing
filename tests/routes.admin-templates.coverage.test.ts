@@ -529,7 +529,7 @@ describe("GET /:id/smoke-bundle", () => {
     expect(res.status).toBe(404);
   });
 
-  it("200 includes rules, null demo when absent, and no template.js", async () => {
+  it("200 with null demo when absent and no template.js", async () => {
     dbMock.__state.selectResult = [
       {
         id: "acme",
@@ -544,11 +544,9 @@ describe("GET /:id/smoke-bundle", () => {
     pkgState.dirEntries = new Map<string, Buffer>([
       ["layouts/question.html", Buffer.from('<div data-slot="question-text"></div>')],
       ["styles/base.css", Buffer.from("body{color:blue}")],
-      ["template-rules.json", Buffer.from('{"rule":1}')],
     ]);
     const res = await asAdmin(request(makeApp()).get("/api/admin/templates/acme/smoke-bundle"));
     expect(res.status).toBe(200);
-    expect(res.body.rulesJson).toContain('"rule"');
     expect(res.body.demo).toBeNull();
     expect(res.body.templateJs).toBeUndefined();
     expect(res.body.layouts.shell).toBeUndefined();

@@ -451,15 +451,12 @@ router.get("/:id/preview-image", requirePermission("adminTemplates.manage"), asy
   }
 });
 
-/** A rules file is conventional, not declared in the manifest; probed by path. */
-const RULES_ENTRY_CANDIDATES = ["template-rules.json", "rules.json"];
-
 /**
  * GET /api/admin/templates/:id/smoke-bundle — returns everything the admin
  * browser needs to render preview screens and run the smoke-test (NFR-03)
  * entirely client-side: the manifest, the demo dataset, the layout HTML keyed by
  * `manifest.layouts` key, the concatenated CSS, and (when present) the
- * `template.js` and rules sources for the compile/parse checks. The server only
+ * `template.js` source for the compile check. The server only
  * reads files here — it never executes them (NFR-02).
  */
 router.get("/:id/smoke-bundle", requirePermission("adminTemplates.manage"), async (req, res) => {
@@ -506,16 +503,7 @@ router.get("/:id/smoke-bundle", requirePermission("adminTemplates.manage"), asyn
     const scriptRel = manifest.assets?.scripts?.[0];
     const templateJs = scriptRel ? read(scriptRel) : undefined;
 
-    let rulesJson: string | undefined;
-    for (const cand of RULES_ENTRY_CANDIDATES) {
-      const raw = read(cand);
-      if (raw != null) {
-        rulesJson = raw;
-        break;
-      }
-    }
-
-    res.json({ manifest, demo, layouts, css, templateJs, rulesJson });
+    res.json({ manifest, demo, layouts, css, templateJs });
   } catch (error) {
     logger.error("Smoke-bundle error: " + (error as Error).message);
     res.status(500).json({ error: "Failed to build smoke bundle" });

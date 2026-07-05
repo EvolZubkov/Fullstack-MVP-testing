@@ -195,16 +195,14 @@ describe("runSmokeChecks — default template passes its own smoke-test", () => 
     expect(router.status).not.toBe("fail");
   });
 
-  it("passes a valid template.js and rules file as extra rows", () => {
+  it("passes a valid template.js as an extra row", () => {
     const report = runSmokeChecks({
       dataset: demo,
       manifest,
       layouts,
       templateJs: "(function(){ var x = 1; return x; })();",
-      rulesJson: '{"rules":[]}',
     });
     expect(report.routes.find((r) => r.route === "template.js")!.status).toBe("pass");
-    expect(report.routes.find((r) => r.route === "rules")!.status).toBe("pass");
     expect(report.ok).toBe(true);
   });
 });
@@ -238,16 +236,14 @@ describe("runSmokeChecks — broken templates fail", () => {
     expect(res.errors.join(" ")).toContain("макет");
   });
 
-  it("fails on a template.js syntax error and invalid rules JSON", () => {
+  it("fails on a template.js syntax error", () => {
     const report = runSmokeChecks({
       dataset: demo,
       manifest,
       layouts,
       templateJs: "function (){ this is not valid",
-      rulesJson: "{ broken",
     });
     expect(report.routes.find((r) => r.route === "template.js")!.status).toBe("fail");
-    expect(report.routes.find((r) => r.route === "rules")!.status).toBe("fail");
     expect(report.ok).toBe(false);
   });
 });

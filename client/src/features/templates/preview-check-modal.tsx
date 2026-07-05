@@ -94,7 +94,6 @@ export function PreviewCheckModal({ open, onClose, template, onActivated }: Prev
           manifest: bundle.manifest,
           layouts: bundle.layouts,
           templateJs: bundle.templateJs,
-          rulesJson: bundle.rulesJson,
         });
         setReport(rep);
         const firstFail = rep.routes.find((r) => r.status === "fail");

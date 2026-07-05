@@ -72,7 +72,6 @@ export interface SmokeBundle {
   layouts: Record<string, string>;
   css: string;
   templateJs?: string;
-  rulesJson?: string;
 }
 
 export interface TemplateDetails {
