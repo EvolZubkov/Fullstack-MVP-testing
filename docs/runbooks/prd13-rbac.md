@@ -2,9 +2,8 @@
 
 Порядок включения ролевой модели (5 ролей, владелец и гранты тестов, конфиг-суперадмин) с
 возможностью поэтапного отката (BR-13). Нормативные документы:
-[role-model.md](specs/access-control/role-model.md),
-[implementation-plan.md](specs/access-control/implementation-plan.md),
-[acceptance-matrix.md](specs/access-control/acceptance-matrix.md).
+[role-model.md](../specs/access-control/role-model.md),
+[acceptance-matrix.md](../specs/access-control/acceptance-matrix.md).
 
 ## Принцип безопасной выкладки
 
@@ -44,7 +43,7 @@
 
 ## Шаг 3. Приёмка
 
-Прогнать автотесты трека и сверить [acceptance-matrix.md](specs/access-control/acceptance-matrix.md):
+Прогнать автотесты трека и сверить [acceptance-matrix.md](../specs/access-control/acceptance-matrix.md):
 
 ```bash
 npx vitest run tests/access client/src/features/tests/list/__tests__/tests-list.test.tsx

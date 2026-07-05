@@ -9,8 +9,8 @@
 порядок и перемешивание вариантов ответа. Переопределение выдачи на уровне теста отложено до гипотезы.
 **Дата актуализации:** 2026-07-01
 **Связанные документы:** [BRD оси контента](../brd-content-axis.md),
-[Аудит UX авторских разделов](../../AUDIT_UX_AUTHOR_CONTENT.md),
-[План реализации](../../PLAN_content_axis_implementation.md),
+[Аудит UX авторских разделов](../../reports/AUDIT_UX_AUTHOR_CONTENT.md),
+[План реализации](../../plans/PLAN_content_axis_implementation.md),
 [Утверждённый эскиз раздела](../../wireframes/approved/content-bank-explorer.html),
 [Эскиз вкладки «Оценка»](../../wireframes/approved/prd15-test-scoring.html),
 [PRD-7 — редактор тестов](../../architecture/test-editor-contracts.md),

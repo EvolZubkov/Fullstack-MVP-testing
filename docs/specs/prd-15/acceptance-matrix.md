@@ -2,9 +2,9 @@
 
 Документ фиксирует приёмку трека PRD-15 (фаза 5, задача T-41): соответствие функциональным
 требованиям `FR-01`..`FR-36`, матрице граничных случаев деградации `E-1`..`E-13`
-([аудит](../../AUDIT_DATA_OWNERSHIP.md), раздел 4.1) и критериям приёмки PRD
+([аудит](../../reports/AUDIT_DATA_OWNERSHIP.md), раздел 4.1) и критериям приёмки PRD
 ([content-ownership.md](./content-ownership.md), раздел 8). Нормативная модель прав -
-[role-model.md](../access-control/role-model.md); план - [implementation-plan.md](./implementation-plan.md).
+[role-model.md](../access-control/role-model.md).
 
 Обозначения столбца «Проверка»:
 

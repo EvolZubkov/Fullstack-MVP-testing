@@ -5,11 +5,10 @@
 C (владение темами) + техдолг TD-01/TD-02, блок D (оценка в тесте, включая T-40 —
 удаление колонок оценки из `questions`, миграция 028, 2026-06-13) и фаза
 закрытия (приёмка, [матрица](./acceptance-matrix.md),
-[RUNBOOK](../../RUNBOOK_prd15_content_ownership.md)) выполнены 2026-06-11/13
-([план, раздел 7](./implementation-plan.md))
+[RUNBOOK](../../runbooks/prd15-content-ownership.md)) выполнены 2026-06-11/13
 **Дата актуализации:** 2026-06-13
 **Связанные документы:** [BRD](../brd-content-ownership.md),
-[Аудит владения данными](../../AUDIT_DATA_OWNERSHIP.md),
+[Аудит владения данными](../../reports/AUDIT_DATA_OWNERSHIP.md),
 [Ролевая модель и матрица](../access-control/role-model.md),
 [PRD-13](../prd-13/role-based-access-control.md),
 [PRD-14](../prd-14/questions-import-export.md),

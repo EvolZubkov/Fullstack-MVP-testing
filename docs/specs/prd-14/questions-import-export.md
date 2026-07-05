@@ -203,7 +203,7 @@ DAL `storage` ([server/storage.ts](../../../server/storage.ts))
   **Экспорт ВОПРОСОВ** — со страницы «Вопросы», НЕ в этом разделе.
 
 Заголовок страницы пока в контенте (`PageHeader`); переедет в шапку оболочки в рамках задачи
-header-title (см. [PLAN_appshell_migration.md](../../PLAN_appshell_migration.md) §9).
+header-title (отложенная задача перевода авторской оболочки на DS AppShell).
 
 ### 5.6 Структура теста — листы `Структура` + `Квоты` (FR-16, реализовано 2026-06-11)
 
@@ -297,7 +297,7 @@ header-title (см. [PLAN_appshell_migration.md](../../PLAN_appshell_migration.m
 Бывшие OQ-1..3 касались импорта медиа и перенесены в отдельный будущий PRD «Медиатека и
 импорт медиа» (см. §5.3): ссылка по `assetId`/имени; источник файлов (медиатека или
 companion-ZIP); закрытие публичной раздачи `/uploads`
-(см. [AUDIT_ARCHITECTURE_REQUIREMENTS.md](../../AUDIT_ARCHITECTURE_REQUIREMENTS.md)).
+(см. [AUDIT_ARCHITECTURE_REQUIREMENTS.md](../../reports/AUDIT_ARCHITECTURE_REQUIREMENTS.md)).
 
 ## 9. Вне охвата
 

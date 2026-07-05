@@ -2,7 +2,7 @@
 
 **Статус:** реализовано и локально верифицировано 2026-07-02 (коммит `2632991`,
 2932 теста + Playwright); LMS-валидация reload/suspend-семантики целевой LMS —
-техдолг ДО включения в прод. Спека: [PRD-20](specs/prd-20/timer-integrity-resume.md).
+техдолг ДО включения в прод. Спека: [PRD-20](../specs/prd-20/timer-integrity-resume.md).
 
 Фаза 1 сделана и верифицирована (монотонный `performance.now()`, `stopTestTimer`,
 удаление `updateTimerDisplay`). Валидация reload/suspend-семантики на целевой LMS

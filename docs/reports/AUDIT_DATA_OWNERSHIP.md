@@ -2,8 +2,8 @@
 
 > Исторический документ: снимок состояния на дату аудита (2026-06-11). По итогам аудита закрыт
 > трек PRD-15 (владение контентом, целостность, публикация) и «оценка -- свойство теста» (T-40);
-> текущее состояние -- в [ROADMAP](./ROADMAP.md) и [CHANGELOG](../CHANGELOG.md), выкладка -- в
-> [RUNBOOK_prd15_content_ownership.md](./RUNBOOK_prd15_content_ownership.md).
+> текущее состояние -- в [ROADMAP](../ROADMAP.md) и [CHANGELOG](../../CHANGELOG.md), выкладка -- в
+> [RUNBOOK_prd15_content_ownership.md](../runbooks/prd15-content-ownership.md).
 
 ## Метаданные
 

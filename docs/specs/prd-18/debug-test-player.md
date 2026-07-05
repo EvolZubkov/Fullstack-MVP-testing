@@ -10,7 +10,7 @@
 `window.TBInspector` compute + тонкий `inspector.js` (Фаза 2); роутер `debug-player.ts`, пакет verbatim,
 шим в окне-плеере (Фаза 3); клиент-окно `client/src/features/tests/debug-player/` с 7 DS-вкладками + «Эталон»
 (Фаза 4, проверено живым DEV-прогоном). Эскиз согласован
-([docs/wireframes/prd18-debug-player.html](../../wireframes/prd18-debug-player.html)); см. §11.  
+([docs/wireframes/prd18-debug-player.html](../../wireframes/approved/prd18-debug-player.html)); см. §11.  
 **Дата актуализации:** 2026-06-27  
 **Связанные документы:** [BRD](../brd-scorm-enhancements.md) (BR-13, NFR-18/19, NFR-17),
 [PRD-3](../prd-3/external-templates.md) (реестр шаблонов, `resolveTemplateDir`, smoke-предпросмотр),
@@ -334,7 +334,7 @@ SCORM-хостов. Маркеры — на токенах DS (success/accent); 
 
 ## 7. UI и эскизы
 
-Эскиз СОГЛАСОВАН (2026-06-27): [docs/wireframes/prd18-debug-player.html](../../wireframes/prd18-debug-player.html)
+Эскиз СОГЛАСОВАН (2026-06-27): [docs/wireframes/prd18-debug-player.html](../../wireframes/approved/prd18-debug-player.html)
 (на DS-композиции `ou-*`/`tb-*`; faux-chrome окна `wf-*` как `.wf-drawer` в prd17 — в ПРОД-КОД не
 переносятся, там каркас на DS-примитивах раскладки; DS-gate — на уровне канона). Фаза 0 ЗАКРЫТА;
 UI-реализация РАЗБЛОКИРОВАНА (NFR-14, BR-13-09).

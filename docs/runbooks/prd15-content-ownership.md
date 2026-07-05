@@ -2,10 +2,9 @@
 
 Порядок включения трека PRD-15 (целостность общего контента, публикация через снапшоты, владение
 темами, оценка как свойство теста) с возможностью поэтапного отката. Нормативные документы:
-[content-ownership.md](specs/prd-15/content-ownership.md),
-[implementation-plan.md](specs/prd-15/implementation-plan.md),
-[acceptance-matrix.md](specs/prd-15/acceptance-matrix.md),
-[role-model.md](specs/access-control/role-model.md).
+[content-ownership.md](../specs/prd-15/content-ownership.md),
+[acceptance-matrix.md](../specs/prd-15/acceptance-matrix.md),
+[role-model.md](../specs/access-control/role-model.md).
 
 ## Принцип безопасной выкладки
 
@@ -147,7 +146,7 @@ docker-стенде 2026-06-13: `test_question_scoring` 1 → 9 строк, ав
 
 ## Приёмка
 
-Прогнать автотесты трека и сверить [acceptance-matrix.md](specs/prd-15/acceptance-matrix.md):
+Прогнать автотесты трека и сверить [acceptance-matrix.md](../specs/prd-15/acceptance-matrix.md):
 
 ```bash
 npm run check
