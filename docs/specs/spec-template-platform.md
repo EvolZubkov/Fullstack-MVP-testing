@@ -1,7 +1,15 @@
 # Техническая спецификация: платформа SCORM-шаблонов
 
-**Статус:** актуально (контракт реализованной платформы шаблонов)  
-**Дата актуализации:** 2026-06-06  
+**Статус:** контракт платформы шаблонов. Документ описывает целевой формат и включает будущие
+фазы; фактический статус реализации помечен врезками «Реализация» в соответствующих разделах.
+Реализованный MVP: браузерный рендер `shell`/макетов, единый манифест, path-only DSL,
+`resultField` с рендерерами `core.*`, `textFit` (SCORM-рантайм), структурная валидация и
+smoke-проверка, системные узлы раздела PRD-19 (`review`, `section-results`). Вне охвата
+платформы: движок правил, переменные времени прохождения и правило-ориентированный Runtime
+API — логика теста задаётся сценарием (`flowPolicy`, PRD-4/PRD-8/PRD-19), результат — шкалами
+(PRD-5) и показателями (PRD-2). Будущие фазы (НЕ реализованы): система renderer-плагинов
+(§8.2.1.3), расширенные интерактивы (§3, Фаза 2).  
+**Дата актуализации:** 2026-07-05  
 **Связанные документы:** [BRD](brd-scorm-enhancements.md),
 [PRD-1](prd-1/templates-content-pages.md),
 [PRD-2](prd-2/result-variables.md),
@@ -23,7 +31,7 @@
 - исполнение шаблона только в браузере внутри сгенерированного SCORM-пакета;
 - полную настройку макетов страниц, а не только цветов и шрифтов;
 - контролируемую ответственность Core за оценку, состояние навигации, SCORM-состояние и стандартные интерактивы вопросов;
-- расширение через `template.js`, Runtime API и правила курса.
+- расширение через `template.js` и Runtime API.
 
 ## 2. Базовые принципы
 
@@ -71,8 +79,7 @@ Core владеет:
 - макетом оболочки;
 - макетами страниц;
 - визуальным представлением;
-- опциональным клиентским поведением через `template.js`;
-- опциональными декларативными правилами шаблона для технического/визуального поведения.
+- опциональным клиентским поведением через `template.js`.
 
 ## 3. Фазы поставки
 
@@ -86,7 +93,6 @@ Core владеет:
 - минимальный path-only DSL шаблонов;
 - ресурсы шаблона из манифеста;
 - Runtime API MVP;
-- практичный MVP правил курса;
 - renderer registry для динамических placeholders;
 - структурная валидация и браузерная smoke-проверка;
 - стандартные интерактивы вопросов под управлением Core.
@@ -135,26 +141,6 @@ MVP сохраняет выбранный `templateVersion` для диагно�
 
 Будущий enterprise-режим может закреплять тесты за точными файловыми версиями шаблонов.
 
-### Будущее: оценка расширенного движка правил
-
-Нужно создать отдельный оценочный документ для Storyline-подобных расширенных возможностей:
-
-- layers;
-- timeline;
-- object states;
-- shape clicks;
-- hotspots;
-- drag triggers;
-- random variables;
-- complex triggers;
-- object intersection;
-- media timeline events;
-- animation events;
-- conditional branching by UI object state.
-
-Цель документа - решить, должны ли эти возможности стать полноценным авторским движком или
-оставаться покрытыми через `template.js` и кастомные интерактивы.
-
 ## 4. Структура ZIP шаблона
 
 Рекомендуемая структура:
@@ -187,9 +173,6 @@ template-id/
 
   scripts/
     template.js
-
-  rules/
-    template-rules.json
 
   assets/
     fonts/
@@ -389,10 +372,6 @@ template-id/
     "questionTypes": ["single", "multiple", "matching", "ranking"],
     "customInteractions": false,
     "runtimeApi": "1.0"
-  },
-
-  "rules": {
-    "template": "rules/template-rules.json"
   }
 }
 ```
@@ -405,6 +384,7 @@ template-id/
 - `name`
 - `version`
 - `templateApiVersion`
+- `contentTemplates` (непустой массив, минимум один элемент — требует схема манифеста)
 - `layouts.shell`
 - `layouts.question`
 - `layouts.content`
@@ -421,11 +401,9 @@ template-id/
 - `layouts.start`
 - детализированные макеты вопросов, например `question.single`
 - детализированные макеты контентных страниц, например `content.info`
-- `contentTemplates`
 - `rendererPlugins`
 - `partials`
 - `systemPages`
-- `rules.template`
 
 ### 5.3 Резервный выбор макетов
 
@@ -476,6 +454,12 @@ custom
 Системные страницы не влияют на оценку. `countInProgress` и `allowNavBack` определяют поведение
 прогресса и навигации.
 
+> **Реализация.** Встроенный `default` объявляет системные экраны не массивом `systemPages[]`, а
+> ключами в `layouts`: `system.blocked` (PRD-6), `system.transition` (адаптивный переход), а
+> также узлы раздела PRD-19 `review`, `section-results`, `section-intro`. Полный массив
+> `systemPages[]` с `purpose`/`countInProgress`/`allowNavBack` схемно не валидируется — это
+> целевой контракт.
+
 ### 5.5 Контракт предпросмотра и демонстрационного набора данных
 
 Предпросмотр является частью контракта шаблона, а не произвольной страницей шаблона. Он нужен для
@@ -522,6 +506,8 @@ type PreviewRoute =
   | "question.multiple"
   | "question.matching"
   | "question.ranking"
+  | "review"
+  | "section-results"
   | "results"
   | `system.${string}`;
 ```
@@ -833,9 +819,15 @@ Core управляет состоянием кнопок навигации/д�
 
 Core вставляет:
 
-- формулировку вопроса в `question-prompt`;
+- формулировку вопроса в `question-text`;
 - стандартный рендерер интерактива в `question-interaction`;
-- медиа, обратную связь, подсказки, счётчики и метаданные только если опциональные слоты существуют.
+- медиа в `question-media` и обратную связь в `question-feedback`, если эти слоты присутствуют.
+
+> **Реализация.** Из опциональных слотов рантайм реально заполняет только `question-media` и
+> `question-feedback`. Слоты `question-hint` / `question-counter` / `question-topic` /
+> `question-difficulty` управляемыми НЕ являются: подсказка приходит внутри
+> `question-interaction` (элемент с классом `question-hint`), а счётчик выводится через
+> `data-path` (`state.questionCounterLabel`).
 
 ### 8.2 Макеты и шаблоны контентных страниц
 
@@ -869,12 +861,18 @@ Core вставляет:
 | `content.summary` | «Итог раздела» (`after_topic`) — по одной на тему; показывает результат РАЗДЕЛА | `layouts["content.summary"]` | `layouts.content` |
 | `content.router` | Меню тем (`router_by_topics`) | `layouts["content.router"]` | `layouts.content` |
 | `results` | «Итоги теста» — итоговый результат всего теста, тест-уровневый, всегда | `layouts.results` | — |
+| `review` | «Обзор раздела/теста» перед завершением (PRD-19) — системный узел | `layouts.review` | — |
+| `section-results` | Вычисляемые «Итоги раздела» (PRD-19) — системный узел | `layouts["section-results"]` | — |
 | `content.html` | Санитизированный HTML-блок | `layouts["content.html"]` | `layouts.content` |
-| `system.blocked` | Системная страница блокировки | `systemPages[].layout` | `layouts.content` |
+| `system.blocked` | Системная страница блокировки | `systemPages[].layout` / `layouts["system.blocked"]` | `layouts.content` |
 
-`start` и `results` — тест-уровневые системные экраны (по одному на тест, в любом режиме);
-`content.intro` / `content.summary` — закладки раздела (по одной на тему, только в режимах
-по темам). Семантика `variant.kind` и жизненный цикл — [PRD-1 §4.3](prd-1/templates-content-pages.md).
+`start` и `results` — тест-уровневые системные экраны (по одному на тест, в любом режиме).
+`review` и `section-results` (PRD-19) — системные узлы раздела: «Обзор» перед завершением и
+вычисляемые «Итоги раздела» после него; они рендерятся своими рантайм-фазами и исключены из
+потока контентных страниц. `content.intro` — «Введение раздела» перед его вопросами (по одной
+на тему, только в режимах по темам). `content.summary` — устаревшая per-topic закладка «Итог
+раздела»: остаётся валидной для обратной совместимости, но её роль выполняет вычисляемый
+`section-results`. Семантика `variant.kind` и жизненный цикл — [PRD-1 §4.3](prd-1/templates-content-pages.md).
 
 ### 8.2.1 `contentTemplates[]`
 
@@ -882,8 +880,11 @@ Core вставляет:
 Один SCORM-шаблонный пакет может содержать несколько content templates. Это штатный механизм для
 вариантов страниц: например несколько `content.info`, несколько `content.summary`, разные варианты
 стартового экрана (`start`) или итогов теста (`results`). Стандартный (`default`) шаблон обязан
-объявить хотя бы по одному варианту каждого системного `kind`: `start`, `intro`, `summary`,
-`results`, `router`, `questions` (он — системный fallback, [PRD-1 §4.3.2](prd-1/templates-content-pages.md)).
+объявить хотя бы по одному варианту каждого системного `kind`: `start`, `results`, `router`,
+`questions`, `intro`, `review`, `section-results` (он — системный fallback,
+[PRD-1 §4.3.2](prd-1/templates-content-pages.md); `review` и `section-results` — узлы раздела
+PRD-19; `summary` остаётся валидным `kind` для обратной совместимости, но в обязательный набор
+уже не входит).
 
 Множественность работает так:
 
@@ -950,6 +951,12 @@ Core вставляет:
 }
 ```
 
+> **Реализация.** Схема манифеста (`contentTemplateEntrySchema`) требует у элемента `key`,
+> `label` и `kind` (виды из §8.2 / PRD-1); `pageKind` и `placeholders[]` опциональны. Путь к
+> макету указывается полем `layoutFile` (относительный путь к файлу, напр.
+> `"layouts/start.html"`), а не ключом `layout`, показанным в примерах выше. См. эталонный
+> `server/scorm/templates/default/manifest.json`.
+
 Поддерживаемые типы placeholders MVP:
 
 ```text
@@ -970,6 +977,12 @@ actionLabel
 
 Для placeholders типов `text`, `textarea` и `richText` шаблон должен явно определить поведение
 текста при переполнении блока. Модель следует логике PowerPoint text box:
+
+> **Реализация.** Подгонку размера текста (`autoFitFont`, `growBox`, `overflow`) реально
+> применяет только SCORM-рантайм (`applyTextFit` в `templateCore.js`, покрыто тестами).
+> Веб-хост (единый рендерер `renderScreenInto`) `textFit` пока НЕ применяет — там это только
+> метаданные плейсхолдера. Значение `allowAuthorFontSize`/ручной размер сохраняются на сервере
+> независимо от хоста.
 
 | `textFit.mode` | Поведение | Когда использовать |
 | --- | --- | --- |
@@ -1151,6 +1164,12 @@ Core выполняет безопасный pipeline:
 | `core.sectionList` | Список разделов со статусами/процентами | Для тестов с явными разделами |
 | `core.scaleBars` | Несколько горизонтальных шкал | Для компетенций и многошкальных результатов |
 
+> **Реализация.** Реально зарегистрированы пять рендереров: `core.textMetric`, `core.badge`,
+> `core.progressBar`, `core.ringChart`, `core.segmentedProgress` (`shared/template/renderers.ts`).
+> `core.questionTiles`, `core.sectionList`, `core.scaleBars` пока НЕ реализованы (целевой набор).
+> Реестр устойчив к ошибкам: рендерер не из `allowedRenderers`, неизвестный или упавший
+> откатывается к `core.textMetric`; `path` не из `allowedPaths` даёт пустое значение.
+
 Рекомендации:
 
 - для обычного текущего прогресса использовать `progressBar`;
@@ -1167,6 +1186,16 @@ Core выполняет безопасный pipeline:
 Renderer plugin - расширение, которое добавляет один или несколько контролируемых renderers для
 `resultField`. Он отвечает только за визуальное представление уже рассчитанных данных. Plugin не
 может менять ответы, результат, SCORM-статусы, навигацию, `TEST_DATA` или runtime state.
+
+> **Реализация (будущая фаза).** Полноценная система плагинов ниже пока НЕ реализована.
+> Фактически: доступны только встроенные `core.*` (см. §8.2.1.2). SCORM-рантайм содержит
+> рудиментарный загрузчик `manifest.rendererPlugins` (инжект `<script>` по `plugin.path`/`src`)
+> и хук регистрации `TestBuilder.renderers.register(id, fn)`, где рендерер — чистая функция
+> `(value, options) => string`, а не `mount()`-инстанс из контракта ниже. Реестр/`source`
+> (`core`/`template`/`registry`), проверка `version`, валидация `optionsSchema` и тип
+> `RendererRegistry`/`DynamicRenderer` НЕ реализованы. Веб-хост (единый рендерер) загрузки
+> плагинов не имеет вовсе — там доступны только пять `core.*`. Эталон объявляет
+> `"rendererPlugins": []`.
 
 Источники renderer plugins:
 
@@ -1528,9 +1557,21 @@ data-slot="question-feedback"
 
 ## 10. Публичный контекст рендера
 
-Все макеты получают общий публичный контекст с типизированным `page`.
+Все макеты получают общий публичный контекст.
 
-Пример:
+> **Реализация.** Реализованный типизированный контракт — `PublicRenderContext`
+> (`shared/template/context.ts`) с неймспейсами `course`, `state`, `result`, `retake`,
+> `transition`, `design`, `review`, `sectionResult`, `sectionIntro`. Именно против него
+> резолвятся `{{ path }}` и `data-path` в макетах (`data-path="course.title"`,
+> `{{ result.scorePercent }}`, `{{#if state.canResume}}`). Форма ниже (`test`/`page`/
+> `sections`/`nav`/`progress`/`assets`/`runtime` с типизированным `page`, `answerState`,
+> `feedback`) — ранний черновик и НЕ соответствует реализации; полный справочник полей — в
+> [руководстве §7](../guides/template-development.md). Пути `progress.*` доступны
+> `resultField`-плейсхолдерам только в SCORM-рантайме (резолв против внутреннего `TEST_DATA`);
+> на веб-хосте `resultField` резолвится против `PublicRenderContext`, где `progress.*` как
+> топ-уровневого пути нет (есть `result.*` и `sectionResult.*`).
+
+Пример ранней (нереализованной) формы контекста:
 
 ```json
 {
@@ -1686,310 +1727,46 @@ effective mode = test navigationPolicy, ограниченная возможн�
 
 `template.js` опционален и исполняется в браузере обучающегося.
 
-API MVP:
+Реализованный API:
 
 ```js
-TestBuilder.template.on(event, handler);
-
-TestBuilder.context.get();
-
-TestBuilder.vars.get(name);
-TestBuilder.vars.set(name, value, options);
-TestBuilder.vars.increment(name, by);
-
-TestBuilder.nav.next();
-TestBuilder.nav.prev();
-TestBuilder.nav.goToPage(pageId);
-TestBuilder.nav.goToTopic(topicId);
-TestBuilder.nav.lock(reason);
-TestBuilder.nav.unlock(reason);
-
-TestBuilder.ui.setState(key, value);
-TestBuilder.ui.toast(message, options);
+TestBuilder.template.on(event, handler);   // события жизненного цикла
+TestBuilder.template.emit(event, data);
+TestBuilder.context.get();                 // { params } — эффективные значения параметров
+TestBuilder.scorm.commit();                // фиксация SCORM-состояния
+TestBuilder.ui.toast(message);             // заглушки: только console.warn
 TestBuilder.ui.modal(options);
-
-TestBuilder.timer.start(id, options);
-TestBuilder.timer.stop(id);
-TestBuilder.timer.reset(id);
-
-TestBuilder.scorm.commit();
-TestBuilder.scorm.setSuspendData(namespace, value);
-TestBuilder.scorm.addInteraction(payload);
+TestBuilder.renderers.register(id, fn);    // рендерер для resultField
+TestBuilder.renderers.render(field, context, allowed);
 ```
 
-Прямой доступ к `window.API_1484_11` не входит в поддерживаемый контракт. Все поддерживаемые
+Реально эмитируется одно событие — `page:enter` (на контентных страницах).
+
+Вне охвата (логика теста задаётся сценарием, см. §14): `vars.*` (переменные времени
+прохождения), `nav.*` (программная навигация), `timer.*`, `ui.setState`, а также
+`scorm.setSuspendData` / `scorm.addInteraction`.
+
+Прямой доступ к `window.API_1484_11` не входит в поддерживаемый контракт. Поддерживаемые
 SCORM-операции идут через `TestBuilder.scorm`.
 
-## 13. Переменные
+## 13. Переменные (вне охвата)
 
-Пространства имён:
+Изменяемые переменные времени прохождения и их сохранение в `suspend_data` в платформу не входят
+и не реализованы. Тест не оперирует произвольным мутабельным стейтом: логика прохождения задаётся
+декларативным сценарием (`flowPolicy`, PRD-4/PRD-8/PRD-19), а вычисляемые результаты — это шкалы
+(`scale.*`, PRD-5) и показатели (`result.*`, PRD-2), которые Core публикует сам. Пространство
+`result.*` (показатели PRD-2, публикуются после расчёта результата) — единственное реально
+существующее; оно описано в PRD-2, а не здесь.
 
-```text
-template.*
-test.*
-result.*
-system.*
-learner.*
-```
+## 14. Логика прохождения (сценарий)
 
-Типизация MVP:
-
-- переменные `test.*` явно типизируются в конфигурации теста;
-- переменные `result.*` типизируются через определения пользовательских показателей результата;
-- `template.*`, `system.*` и `learner.*` могут быть динамическими, если не указано иное.
-
-Пользовательские показатели результата остаются отдельной сущностью, но после `result:calculated`
-вычисленные значения публикуются в `result.*`.
-
-### 13.1 Сохранение
-
-В SCORM `suspend_data` сохраняются только persistent-переменные.
-
-Политика по умолчанию:
-
-```text
-template.*  не сохраняется по умолчанию
-test.*      сохраняется
-result.*    сохраняется после result:calculated
-system.*    не сохраняется
-learner.*   сохраняется или доступно только для чтения, где применимо
-```
-
-Код шаблона может запросить сохранение для конкретных переменных шаблона:
-
-```js
-TestBuilder.vars.set("template.sidebarCollapsed", true, { persist: true });
-```
-
-## 14. Правила курса
-
-Платформа поддерживает гибридную модель логики:
-
-- декларативные правила курса для настраиваемой автором no-code логики;
-- `template.js` для расширенного поведения в коде.
-
-### 14.1 Источники правил
-
-Правила шаблона:
-
-- находятся в `rules/template-rules.json`;
-- указываются через `manifest.rules.template`;
-- ограничены техническим/визуальным поведением.
-
-Правила теста:
-
-- хранятся в таблице БД `course_rules`;
-- представляют бизнес-логику курса/теста;
-- экспортируются в SCORM-пакет как единый массив правил.
-
-### 14.2 Порядок исполнения
-
-Глобальный конвейер событий:
-
-```text
-1. Core обновляет базовое состояние события
-2. template.js получает событие beforeRules
-3. Выполняются правила шаблона
-4. Выполняются правила теста
-5. template.js получает событие afterRules
-6. Core применяет финальные защиты и фиксирует состояние
-```
-
-Правила шаблона выполняются до правил теста. Бизнес-правила теста имеют приоритет над значениями
-шаблона по умолчанию.
-
-### 14.3 Области разрешений
-
-Правила шаблона могут выполнять только технические/визуальные действия, например:
-
-```text
-ui.setState
-ui.toast
-timer.start/stop/reset
-nav.lock/unlock с причиной от шаблона
-nav.next только для страниц с автопереходом
-vars.set только внутри template.*
-```
-
-Правила теста могут выполнять бизнес-действия:
-
-```text
-vars.set test.*
-vars.set result.* там, где разрешено
-nav.goToPage
-nav.goToTopic
-scorm.setSuspendData
-scorm.addInteraction
-result.calculate
-test.complete
-```
-
-### 14.4 Практичные события MVP
-
-```text
-course:start
-course:resume
-page:enter
-page:leave
-question:answerChanged
-question:submitted
-topic:started
-topic:completed
-timer:expired
-test:completed
-result:calculated
-```
-
-### 14.5 Отменяемые события действий
-
-Отменяемые события разрешены только для закрытого списка:
-
-```text
-nav:beforeNext
-nav:beforePrev
-nav:beforeGoToPage
-question:beforeSubmit
-test:beforeFinish
-```
-
-Конвейер отложенного действия:
-
-```text
-1. Core создаёт отложенное действие
-2. template.js action:beforeRules может отменить действие, задать поведение по умолчанию или установить переменные
-3. Выполняются правила шаблона
-4. Выполняются правила теста
-5. template.js action:afterRules может отменить действие или отреагировать
-6. Финальные защиты Core могут отменить действие
-7. Core фиксирует действие
-8. Если произошла навигация, запускается page lifecycle pipeline
-```
-
-Пример:
-
-```js
-TestBuilder.template.on("nav:beforeNext:beforeRules", (ctx) => {
-  if (ctx.vars.get("template.blockNext")) {
-    ctx.preventDefault("template.blockNext");
-    ctx.ui.modal({ message: "Переход временно недоступен" });
-  }
-});
-```
-
-### 14.6 Формат условий правил
-
-Канонический формат хранения - JSON-дерево выражений.
-
-Пример:
-
-```json
-{
-  "and": [
-    { "gte": [{ "var": "test.Blocks_Done" }, 6] },
-    { "eq": [{ "var": "result.Result_Tech" }, true] }
-  ]
-}
-```
-
-Операторы MVP:
-
-```text
-eq / neq
-gt / gte / lt / lte
-and / or / not
-exists / empty
-includes
-```
-
-### 14.7 Формат действий правил
-
-Канонический формат действий - JSON-объекты действий.
-
-Пример:
-
-```json
-{
-  "actions": [
-    {
-      "type": "vars.set",
-      "name": "test.Blocks_Done",
-      "value": {
-        "add": [{ "var": "test.Blocks_Done" }, 1]
-      }
-    },
-    {
-      "type": "nav.goToTopic",
-      "topicId": "finance"
-    }
-  ]
-}
-```
-
-Значения действий могут быть деревом выражений. Сокращённые действия вроде `vars.increment` остаются
-поддержанными для удобства UI.
-
-Действия MVP:
-
-```text
-vars.set
-vars.increment
-vars.append
-nav.next
-nav.goToPage
-nav.goToTopic
-nav.lock
-nav.unlock
-ui.modal
-ui.toast
-ui.setState
-timer.start
-timer.stop
-timer.reset
-scorm.commit
-scorm.setSuspendData
-scorm.addInteraction
-```
-
-### 14.8 UI правил
-
-MVP:
-
-- визуальный конструктор правил;
-- readonly-предпросмотр JSON.
-
-Будущее:
-
-- расширенный JSON-редактор с валидацией.
-
-### 14.9 Хранение правил
-
-Test rules хранятся в `course_rules`.
-
-Рекомендуемая таблица MVP:
-
-```sql
-CREATE TABLE course_rules (
-  id             uuid PRIMARY KEY,
-  test_id        uuid NOT NULL REFERENCES tests(id) ON DELETE CASCADE,
-  name           text NOT NULL,
-  description    text,
-  event          text NOT NULL,
-  condition_json jsonb,
-  actions_json   jsonb NOT NULL,
-  enabled        boolean NOT NULL DEFAULT true,
-  sort_order     integer NOT NULL DEFAULT 0,
-  created_at     timestamp NOT NULL DEFAULT now(),
-  updated_at     timestamp NOT NULL DEFAULT now()
-);
-```
-
-В MVP нет колонки `scope`. Таблица хранит только правила теста.
-
-Разрешение конфликтов:
-
-- детерминированное исполнение по `sort_order`;
-- последнее применённое состояние побеждает;
-- будущий UI может предупреждать о вероятных конфликтах.
+Логика прохождения теста задаётся декларативным **сценарием**, а не движком правил.
+Универсальный движок правил (события → условия → действия, таблица `course_rules`, конвейер
+`beforeRules`/`afterRules`) в платформу НЕ входит и не реализован. Ветвление и завершение
+выражаются структурными настройками сценария — `flowPolicy` (`flowMode`, `completionPolicy`,
+`sectionUnlockRules`, `passDecisionPolicy`; PRD-4 / PRD-8 / PRD-19), а условия по результату —
+показателями (PRD-2) и адаптивными уровнями (adaptive). Файл `rules/template-rules.json` в
+контракт не входит и валидатором не обрабатывается.
 
 ## 15. Реестр шаблонов
 
@@ -2059,12 +1836,9 @@ MVP не требует строгого закрепления файловой
 - отсутствующий, невалидный или несовместимый `preview.demoData`;
 - route в `preview.routes`, для которого нет layout/template/capability;
 - внешние URL в ресурсах/макетах/скриптах/стилях, на которые ссылается манифест;
-- невалидный `template-rules.json`;
-- невалидные определения параметров;
-- невалидные `contentTemplates[]`: отсутствует `key`, `label`, `pageKind`, `layout` или
-  `placeholders[]`;
-- невалидные возможности (`capabilities`);
-- невалидные объявления системных страниц.
+- невалидный DSL в макете (незакрытый блок, `{{{ }}}`, выражение) — код `LAYOUT_TEMPLATE_SYNTAX`;
+- невалидные `contentTemplates[]`: отсутствует `key`, `label` или `kind` (по схеме манифеста);
+- невалидные возможности (`capabilities`).
 
 Предупреждения:
 
@@ -2077,26 +1851,39 @@ MVP не требует строгого закрепления файловой
 - отсутствующее покрытие необязательного route в demo dataset;
 - возможность объявлена, но опциональный partial отсутствует там, где существует резервный рендерер Core.
 
+> **Реализация.** Фактические блокирующие коды структурного валидатора
+> (`server/services/template-validation.ts`): `ZIP_TOO_LARGE`, `MANIFEST_MISSING`,
+> `MANIFEST_INVALID_JSON`, `MANIFEST_SCHEMA`, `ID_PATTERN`, `API_VERSION_UNSUPPORTED`,
+> `ID_EXISTS`, `ID_MISMATCH`, `REQUIRED_FIELD_MISSING`, `FILE_MISSING`, `LAYOUT_TEMPLATE_SYNTAX`,
+> `SHELL_CONTRACT`, `QUESTION_CONTRACT`, `EXTERNAL_URL`, `DEMODATA_INVALID_JSON`.
+> Предупреждения: `CONTENT_CONTRACT` (нет `data-slot="page-content"`),
+> `OPTIONAL_LAYOUT_MISSING` (нет `layouts.start`), `UNUSED_FILE`. Определения `params` и
+> объявления `systemPages` схемно НЕ валидируются (проходят через `passthrough`); их наличие в
+> списках выше — целевой контракт. Полное описание — в
+> [руководстве §13](../guides/template-development.md).
+
 ### 17.2 Валидация макетов
 
-Обязательные элементы `shell.html`:
+Реально проверяемые структурным валидатором обязательные элементы (согласовано с §7 и §8.1).
+
+Оболочка `shell.html` — только область страницы (иначе `SHELL_CONTRACT`):
 
 ```html
 <div data-slot="page"></div>
-<button data-nav="next"></button>
-<button data-action="answer-submit"></button>
-<button data-action="test-finish"></button>
 ```
 
-Обязательные элементы макетов вопросов:
+Макет вопроса — два слота (иначе `QUESTION_CONTRACT`):
 
 ```html
-<div data-slot="question-prompt"></div>
+<div data-slot="question-text"></div>
 <div data-slot="question-interaction"></div>
 ```
 
-Слоты контентных страниц и результатов опциональны, если будущие возможности (`capabilities`) не потребуют
-обратного.
+Кнопки `data-nav="next"` / `data-action="answer-submit"` / `data-action="test-finish"`
+валидатор в оболочке **не требует** (Core привязывает их делегированием, когда они есть) —
+это целевой контракт фазы расширенных интерактивов. Дополнительно валидатор компилирует
+каждый макет: невалидный DSL (незакрытый блок, `{{{ }}}`, выражение) даёт блокирующую
+ошибку `LAYOUT_TEMPLATE_SYNTAX`. Слоты контентных страниц и результатов опциональны.
 
 ### 17.3 Браузерная smoke-проверка
 
@@ -2118,7 +1905,6 @@ system.locked, если объявлен
 topicNav, если объявлен
 progress.active
 кнопки навигации/действий
-парсинг/исполнение правил шаблона
 загрузка template.js
 ```
 
@@ -2131,6 +1917,13 @@ next/answer-submit/test-finish привязаны
 ответы сохранены в состояние Core
 страница результатов открывается
 ```
+
+> **Реализация.** Фактическая smoke-проверка рендерит каждый маршрут из `preview.routes` на
+> демо-данных общим рендерером и помечает экран проваленным при исключении рендера, пустом
+> результате, незаполненном обязательном слоте или `console.error` (`console.warn` —
+> предупреждение). Дополнительно компилируется `template.js`. Привязка
+> `next/answer-submit/test-finish` критерием прохождения НЕ является (целевой контракт фазы
+> расширенных интерактивов).
 
 Загрузка/обновление шаблона также должны предоставлять:
 
@@ -2173,15 +1966,11 @@ Core владеет:
 - слиянием `suspend_data`;
 - telemetry payload при завершении.
 
-Правила шаблона/теста могут запрашивать поддерживаемые операции:
+Шаблонный код (`template.js`) может запрашивать поддерживаемую SCORM-операцию:
 
 ```js
 TestBuilder.scorm.commit();
-TestBuilder.scorm.setSuspendData("template.someNamespace", value);
-TestBuilder.scorm.addInteraction(payload);
 ```
-
-Core должен предотвращать конфликты пространств имён и индексов interactions.
 
 ## 20. Согласование PRD/BRD
 
@@ -2191,8 +1980,8 @@ Core должен предотвращать конфликты простран
 - для внутренних и внешних шаблонов используется одна общая механика;
 - этот манифест и структура ZIP являются источником истины;
 - используется контракт слотов оболочки/страниц вместо устаревшего DOM-контракта;
-- правила курса являются отдельной продуктовой и технической возможностью;
-- расширенные шаблонные интерактивы и расширенный движок правил остаются будущими фазами;
+- логика теста задаётся сценарием (`flowPolicy`); движок правил и переменные вне охвата;
+- расширенные шаблонные интерактивы остаются будущей фазой;
 - внешние URL в ресурсах SCORM-шаблона запрещены;
 - выбранный SCORM ZIP включает только один выбранный шаблон;
 - `result_variables` публикуются в `result.*`.

@@ -8,7 +8,8 @@
 
 **Статус:** актуально; соответствует движку рендера `shared/template/`, эталонному шаблону
 `server/scorm/templates/default/` и админ-реестру PRD-3 (`server/routes/admin-templates.ts`).
-**Дата актуализации:** 2026-07-01
+Учтены системные узлы раздела PRD-19 (`review`, `section-results`).
+**Дата актуализации:** 2026-07-05
 
 Связанные документы:
 
@@ -246,8 +247,14 @@ my-template/
 | --- | --- |
 | `start` | Стартовая страница (если нет — используется `content`) |
 | `results.adaptive` | Результаты адаптивного теста (уровни вместо баллов) |
+| `section-intro` | «Введение раздела» — экран перед вопросами темы (PRD-1 §4.3) |
+| `review` | «Обзор раздела/теста» перед завершением (PRD-19, FR-08) |
+| `section-results` | «Итоги раздела» — вычисляемый экран после завершения раздела (PRD-19, FR-05a) |
 | `system.blocked` | Экран блокировки повторного прохождения (PRD-6) |
 | `system.transition` | Межуровневый переход в адаптивном тесте |
+
+Эталонный `default` объявляет все перечисленные ключи. При отсутствии
+опционального макета соответствующий экран берётся из встроенного `default`.
 
 ## 4. Макеты и слоты
 
@@ -292,8 +299,15 @@ my-template/
 </div>
 ```
 
-Обязательные слоты вопроса: `question-text`, `question-interaction`. Опциональные:
-`question-media`, `question-feedback`, `question-hint`, `question-counter`.
+Ядро заполняет ровно четыре слота вопроса. Обязательные: `question-text`,
+`question-interaction`. Опциональные управляемые: `question-media` (медиа вопроса),
+`question-feedback` (обратная связь). Больше управляемых слотов у экрана вопроса нет.
+
+Подсказку и счётчик отдельными слотами объявлять не нужно — ядро их не заполняет:
+подсказка приходит уже внутри `question-interaction` (в разметке интерактива, элемент
+с классом `question-hint`), а счётчик выводится через `data-path` (`state.questionCounterLabel`).
+Если объявить `data-slot="question-hint"` или `data-slot="question-counter"`, слот
+останется пустым.
 
 ### 4.3 Контентная страница (content.html)
 
@@ -354,9 +368,10 @@ my-template/
 | `{{#each path}}...{{/each}}` | Перебор массива |
 | `{{> name}}` | Подключение частичного шаблона (partial) |
 
-Внутри `{{#each}}` доступны: текущий элемент как контекст, `{{@index}}`,
-`{{@number}}` (индекс + 1), `{{@first}}`, `{{@last}}`, а также `{{@root}}` для
-корневого контекста.
+Внутри `{{#each}}` доступны: текущий элемент как контекст (его поля — `{{fieldName}}`;
+сам элемент-примитив — `{{ this }}` или `{{ . }}`), `{{@index}}`, `{{@number}}`
+(индекс + 1), `{{@first}}`, `{{@last}}`, а также `{{@root}}` — корневой контекст, от
+которого можно идти вглубь по пути (`{{ @root.course.title }}`).
 
 ```html
 {{#each result.topicResults}}
@@ -375,9 +390,11 @@ my-template/
 - Любой `{{ ... }}` экранируется как текст. Богатый HTML вставляется только через
   управляемые `data-slot` / `data-placeholder`, не через DSL.
 
-Невалидный шаблон (незакрытый блок, `{{{ }}}`, выражение с пробелом) выбрасывает
-ошибку на этапе компиляции — экран будет помечен проваленным в проверке
-работоспособности.
+Невалидный шаблон (незакрытый блок, `{{{ }}}`, выражение с пробелом) отклоняется
+блокирующей структурной ошибкой `LAYOUT_TEMPLATE_SYNTAX` уже при загрузке пакета:
+сервер компилирует каждый макет (layout / partial / системную страницу /
+`contentTemplates[].layoutFile`), и невалидный DSL не даёт активировать шаблон. Это
+происходит до проверки работоспособности, а не в ней.
 
 ## 6. Привязка данных: четыре механизма
 
@@ -394,8 +411,10 @@ my-template/
 
 ## 7. Публичный контекст рендера
 
-Макеты читают только эти пространства имён. Каждое присутствует лишь на тех
-экранах, где применимо.
+Макеты читают только публичный контекст (`shared/template/context.ts`). Каждое
+пространство имён присутствует лишь на тех экранах, где применимо. Всего их девять:
+`course`, `state`, `result`, `retake`, `transition`, `design`, `review`,
+`sectionResult`, `sectionIntro`.
 
 ### 7.1 `course.*` (старт, вопрос, результаты)
 
@@ -407,6 +426,7 @@ my-template/
 | `passPercent` | number\|null | Проходной балл, % |
 | `timeLimitMinutes` | number\|null | Лимит времени |
 | `maxAttempts` | number\|null | Разрешено попыток |
+| `startPageContent` | string | Легаси-текст введения (перенесён в контентную страницу; обычно пустой) |
 
 ### 7.2 `state.*` (старт, вопрос)
 
@@ -417,6 +437,17 @@ my-template/
 | `canResume` / `resumeLabel` / `resumeNote` | Возобновление попытки |
 | `canRestart` / `canViewResults` | Перезапуск / просмотр сохранённого результата |
 | `exhausted` | Попытки закончились |
+| `showBack` | Веб-действие «назад к списку» (SCORM опускает) |
+| `questionsProgress` | Кликабельные пилюли прогресса текущего охвата (PRD-19, см. ниже) |
+| `cooldown` | Кулдаун на старте: `{ availableDateHuman, daysUntil? }`; при наличии кнопка старта отключена и показана карточка кулдауна (FR-20) |
+| `priorResult` | Сводка прошлой попытки: `{ percent, verdictLabel, verdictClass, attemptsLabel }` (FR-20) |
+| `canDownloadReport` | Показать «Скачать отчёт» по прошлой попытке (FR-20) |
+
+`state.questionsProgress` (PRD-19 Block C) — карта пилюль текущего охвата навигации:
+`scopeLabel`, `total`, `answeredCount`, `skippedCount` и массив `states[]`. Каждая
+пилюля: `index` (абсолютный 0-based индекс — цель перехода `goto:<index>`), `number`
+(1-based в охвате), `statusClass` (`is-answered`/`is-current`/`is-skipped`/… ),
+`ariaLabel`, `clickable` (достижима ли для перехода).
 
 ### 7.3 `result.*` (результаты)
 
@@ -427,17 +458,41 @@ my-template/
 | `statusLabel` | Готовая подпись статуса |
 | `scorePercent` | Процент результата |
 | `ringDashoffset` | Готовое смещение для SVG-кольца |
-| `totalQuestions` / `correct` / `earnedPoints` | Сводка |
-| `topicResults[]` | Результаты по темам (`topicName`, `correct`, `total`, `percent`, `passClass`, `statusLabel`) |
+| `totalQuestions` / `correct` / `earnedPoints` / `possiblePoints` | Сводка баллов |
+| `topicResults[]` | Результаты по темам (`topicId`, `topicName`, `correct`, `total`, `percent`, `passClass`, `statusLabel`; SCORM-доп.: `pointsLabel`, `requiredLabel`, `topicFeedback`) |
+| `adaptive` | Признак адаптивного режима; при `true` строки `topicResults[]` имеют форму уровней (`levelLabel`, `levelClass`, `feedback`, `hasFeedback`, `hasLinks`, `links[]`) вместо баллов |
+| `recommendedCourses[]` / `recommendedEvents[]` | Рекомендации по проваленным темам (SCORM; веб опускает) |
+| `backAction` / `backLabel` | Действие и подпись «назад» (SCORM) |
+| `showPdf` / `canRetry` / `showFinish` / `hasScormActions` | Флаги действий экрана результатов (SCORM) |
+
+Помимо перечисленного, `result.*` несёт кастомные переменные результата PRD-2 (ядро
+добавляет их по ключу — их можно подставлять по имени пути).
 
 Важно: классы и подписи (`passClass`, `statusLabel`, `ringDashoffset`) уже
 вычислены ядром. DSL не считает их сам — просто подставляйте готовые значения.
 
 ### 7.4 `retake.*` (экран блокировки) и `transition.*` (адаптивный переход)
 
-`retake`: `cooldownPeriodDays`, `availableDateHuman`, `reason`.
-`transition`: `isCorrect`, `iconClass`, `title`, `level.{class,message,...}`,
-`topic.toTopic`, `showContinue`.
+`retake`: `cooldownPeriodDays`, `availableDate`, `availableDateHuman`, `reason`.
+`transition`: `isCorrect`, `iconClass`, `title`,
+`level.{class,isUp,isDown,isComplete,message}`, `topic.toTopic`, `showContinue`.
+
+### 7.5 `design.*`, `review.*`, `sectionResult.*`, `sectionIntro.*`
+
+`design.*` (везде, где показывается брендинг): `logoUrl` — URL логотипа (уже разрешён в
+строку). Блок `{{#if design.logoUrl}}` скрывается при отсутствии.
+
+`review.*` (экран «Обзор раздела/теста», PRD-19 Block D / FR-08): `scopeLabel`, `isTest`
+(обзор теста или раздела), `finishLabel` («Завершить …»), `unanswered[]` (`index`,
+`number`, `prompt`), `unansweredCount`, `answeredCount`, `total`, `hint`.
+
+`sectionResult.*` (вычисляемый экран «Итоги раздела», PRD-19 Block D / FR-05a):
+`topicName`, `scorePercent`, `ringDashoffset`, `passClass`, `statusLabel`, `hasVerdict`,
+`correct`, `total`, `summaryLabel` (напр. «6 из 8 верно · 75%»), `continueLabel`.
+
+`sectionIntro.*` (экран «Введение раздела», PRD-1 §4.3): `eyebrow` («Раздел N»),
+`topicName`, `description`, `hasDescription`, `questionCount`, `questionCountLabel`
+(напр. «16 вопросов»), `hasTimeLimit`, `timeLimitLabel`, `hasInstruction`, `continueLabel`.
 
 ## 8. Контентные шаблоны и placeholders
 
@@ -456,17 +511,27 @@ my-template/
 | `info` | Учебная/информационная страница, любой контент | Сколько угодно |
 | `questions` | Макет страницы вопроса | Одна в плоском режиме / по одной на тему |
 | `router` | Страница-маршрутизатор (меню тем) | Одна, только `router_by_topics` |
-| `summary` | «Итог раздела» (`after_topic`); показывает **результат раздела** (Core кладёт его в `result.*`) | По одной на тему (только в режимах по темам) |
+| `review` | «Обзор раздела/теста» перед завершением: список неотвеченных + «Завершить» (PRD-19) | Системный узел; своя рантайм-фаза |
+| `section-results` | Вычисляемый «Итог раздела» после завершения (PRD-19; кладётся в `sectionResult.*`) | Системный узел; вне потока контентных страниц |
 | `results` | «Итоги теста» — итоговый результат всего теста | Одна на тест, всегда |
+| `summary` | Легаси per-topic «Итог раздела» (`after_topic`): результат раздела кладётся в `result.*`. Оставлен для обратной совместимости, роль перешла к `section-results` | Устаревший; в новых шаблонах не требуется |
 
 `start` и `results` — тест-уровневые системные экраны (лендинг и итоги теста); они
 присутствуют всегда и рисуются собственными рантайм-экранами (в поток контентных
-страниц не входят). `intro` и `summary` — симметричные «закладки» раздела (одна перед
-вопросами раздела, другая после его результата) и существуют **только** при делении на
-темы; в плоском тесте (`linear_flat`) их нет, а их роль на уровне теста выполняют `start`
-и `results`. Стандартный шаблон обязан объявить по одному варианту каждого системного
-`kind` (`start`/`intro`/`summary`/`results`/`router`/`questions`). Несколько вариантов
-одного `kind` (напр. два варианта `start`) — допустимы; автор выбирает нужный.
+страниц не входят). Аналогично `review` и `section-results` (PRD-19) — системные узлы
+раздела: «Обзор» перед завершением и вычисляемые «Итоги раздела» после него; они тоже
+рендерятся своими рантайм-фазами и **исключены** из потока контентных страниц. `intro` —
+«Введение раздела» перед его вопросами (по одной на тему, только в режимах по темам).
+`summary` — устаревший per-topic «Итог раздела»: остаётся валидным `kind` для обратной
+совместимости, но его роль выполняет вычисляемый `section-results`; в новых шаблонах его
+объявлять не нужно.
+
+Встроенный шаблон `default` обязан объявить хотя бы по одному варианту каждого системного
+`kind`: `start`, `results`, `router`, `questions`, `intro`, `review`, `section-results`
+(`defaultTemplateManifestSchema`, `shared/schema.ts`). Внешним шаблонам это структурно не
+навязывается, но при отсутствии варианта системного `kind` соответствующий экран берётся
+из `default`. Несколько вариантов одного `kind` (напр. два варианта `start`) — допустимы;
+автор выбирает нужный.
 
 Типы placeholders и как они отрисовываются в `data-placeholder`:
 
@@ -479,9 +544,19 @@ my-template/
 | `boolean` | Галочка или пусто |
 | `resultField` | Показатель результата через реестр рендереров (см. ниже) |
 
+Кроме `type`, у плейсхолдера могут быть дополнительные свойства, влияющие на редактор
+контента (не на рендер): `maxLength`, `required`, `textFit` (режим подгонки текста —
+`autoFitFont`/`growBox`/`fixed` плюс размеры и `overflow`), `allowedMarks` (разрешённые
+инлайн-стили для `richText`: `bold`/`italic`/`link`), `allowedBlocks` (разрешённые блоки:
+`paragraph`/`bulletedList`/`numberedList`). Пример — эталонный `manifest.json` (варианты
+`intro.standard`, `info.text`).
+
 Встроенные рендереры `resultField` (`shared/template/renderers.ts`): `core.textMetric`,
 `core.badge`, `core.progressBar`, `core.ringChart` (кольцевая диаграмма),
-`core.segmentedProgress`. Шаблон ограничивает выбор через `allowedRenderers` плейсхолдера.
+`core.segmentedProgress`. Шаблон ограничивает выбор рендерера через `allowedRenderers`, а
+путь данных — через `allowedPaths` плейсхолдера. Реестр устойчив к ошибкам: рендерер не из
+`allowedRenderers`, неизвестный или упавший откатывается к `core.textMetric`; путь не из
+`allowedPaths` даёт пустое значение.
 
 Пример `resultField` в наборе данных автора (значение `values.result`) — кольцо:
 
@@ -500,8 +575,10 @@ my-template/
 ## 9. Параметры (params)
 
 Параметры — это настройки оформления, которые автор теста меняет во вкладке
-«Оформление». Типы: `color`, `select`, `boolean`, `number`, `image`, `text`,
-`url` и др. Значения автора пробрасываются:
+«Оформление». Поддерживаемые типы (`DesignParamType`): `text`, `color`, `boolean`,
+`select`, `multiselect`, `number`, `url`, `image`, `asset`, `file`, `downloadLink`.
+Медиа-типы (`image`/`asset`/`file`/`downloadLink`) сериализуются в единый media-конверт.
+Значения автора пробрасываются:
 
 - в CSS — как переменные (цвета хранятся как HSL-компоненты, см. ниже);
 - в `template.js` — через `window.TestBuilder.context.get().params`.
@@ -564,10 +641,13 @@ HSL-компоненты** (без `hsl(...)`), чтобы их можно бы�
 | `TestBuilder.template.emit(event, data)` | Отправка события |
 | `TestBuilder.context.get()` | `{ params }` — эффективные значения параметров |
 | `TestBuilder.scorm.commit()` | Принудительная фиксация SCORM-состояния |
-| `TestBuilder.ui.toast(msg)` / `ui.modal(opts)` | UI-хелперы |
+| `TestBuilder.ui.toast(msg)` / `ui.modal(opts)` | UI-хелперы — сейчас заглушки: только `console.warn`, реального тоста/модалки не рендерят |
 
-Главное событие — `page:enter` (вход на новый экран). Минимальный скрипт,
-обновляющий полосу прогресса:
+Событие `page:enter` (с полезной нагрузкой `{ page }`) эмитится при рендере контентной
+страницы; на экранах вопроса, старта и результатов оно не срабатывает. Событийная шина
+также эмитит события маршрутизатора: `router:shown`, `router:sectionSelected`,
+`router:finalResultUnlocked`, `router:finalResultOpened`. Минимальный скрипт, обновляющий
+полосу прогресса:
 
 ```javascript
 /**
@@ -651,6 +731,12 @@ HSL-компоненты** (без `hsl(...)`), чтобы их можно бы�
     ]
   },
   "runtime": {
+    "route": "start",
+    "progress": {
+      "active": { "current": 2, "total": 4, "percent": 50 },
+      "question": { "current": 2, "total": 4, "percent": 50 },
+      "page": { "current": 4, "total": 9, "percent": 44 }
+    },
     "result": {
       "scorePercent": 86, "passed": true, "status": "passed",
       "totalQuestions": 4, "correct": 3, "earnedPoints": "8.6",
@@ -669,11 +755,17 @@ HSL-компоненты** (без `hsl(...)`), чтобы их можно бы�
 Соответствие маршрут → данные:
 
 - `start`, `results` — берут `course.*` и `runtime.result` (итог всего теста);
-- `content.summary` («Итог раздела») — берёт `runtime.sectionResult` (результат
+- `content.summary` (легаси «Итог раздела») — берёт `runtime.sectionResult` (результат
   раздела) в `result.*`;
+- `section-results` — берёт `runtime.sectionResult` в `sectionResult.*`; `review` —
+  строит `review.*` из неотвеченных вопросов;
 - `question.<type>` — ищут вопрос по `questionId` из маршрута, иначе первый
   вопрос подходящего типа;
 - `content.<kind>` — берут страницу по `templateKey`/`route` из `contentPages`.
+
+Помимо этого `runtime` может нести `route` (стартовый маршрут предпросмотра), `progress`
+(значения прогресса; доступны в `template.js` как `TEST_DATA.progress.*`) и `state`
+(служебное состояние). Их показывает эталонный `demo/course.json`.
 
 ## 13. Валидация и проверка работоспособности
 
@@ -693,10 +785,11 @@ HSL-компоненты** (без `hsl(...)`), чтобы их можно бы�
 | `ID_EXISTS` / `ID_MISMATCH` | Конфликт id при создании / несовпадение при обновлении |
 | `REQUIRED_FIELD_MISSING` | Нет обязательного `layouts.{shell,question,content,results}`, `assets.preview`, `preview`, `params` или `capabilities` |
 | `FILE_MISSING` | Файл, на который ссылается манифест, отсутствует |
+| `LAYOUT_TEMPLATE_SYNTAX` | Макет содержит невалидный DSL (незакрытый блок, `{{{ }}}`, выражение) — не компилируется |
 | `SHELL_CONTRACT` | В оболочке нет `data-slot="page"` |
 | `QUESTION_CONTRACT` | В макете вопроса нет `question-text` или `question-interaction` |
 | `EXTERNAL_URL` | Внешняя ссылка/CDN в ресурсах, CSS, HTML или JS |
-| `RULES_INVALID_JSON` / `DEMODATA_INVALID_JSON` | Невалидный JSON правил / демо-данных |
+| `DEMODATA_INVALID_JSON` | Невалидный JSON демо-данных |
 | `ZIP_TOO_LARGE` | Архив больше лимита (по умолчанию 20 МБ) |
 
 Предупреждения (не блокируют): нет `data-slot="page-content"` в контенте, не
@@ -708,8 +801,8 @@ HSL-компоненты** (без `hsl(...)`), чтобы их можно бы�
 `preview.routes` на демо-данных через общий рендерер. Экран помечается
 проваленным при: исключении рендера, пустом результате, незаполненном
 обязательном слоте, `console.error` во время рендера. `console.warn` даёт
-неблокирующее предупреждение. Дополнительно проверяются `template.js`
-(компиляция) и файл правил (`JSON.parse`).
+неблокирующее предупреждение. Дополнительно проверяется `template.js`
+(компиляция).
 
 ## 14. Жизненный цикл в системе
 
